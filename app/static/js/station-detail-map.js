@@ -1,21 +1,23 @@
 (function () {
-    const root = document.getElementById("station-detail-map-root");
-    const canvas = document.getElementById("station-detail-map-canvas");
-    if (!root || !canvas || typeof window.L === "undefined") {
+    const pageRoot = document.getElementById("station-detail-page");
+    const mapRoot = document.getElementById("station-detail-map-root");
+    const mapCanvas = document.getElementById("station-detail-map-canvas");
+    const mapPlaceholder = document.getElementById("station-map-placeholder");
+    const title = document.getElementById("station-detail-title");
+    const meta = document.getElementById("station-detail-meta");
+    const fields = document.getElementById("station-detail-fields");
+    const recentPackets = document.getElementById("station-recent-packets");
+    const relatedSsids = document.getElementById("station-related-ssids");
+
+    if (!pageRoot) {
         return;
     }
 
-    const latitude = Number.parseFloat(root.dataset.latitude || "");
-    const longitude = Number.parseFloat(root.dataset.longitude || "");
-    const zoom = Number.parseInt(root.dataset.zoom || "10", 10);
-    const tileUrl = root.dataset.tileUrl || "";
-    const tileAttribution = root.dataset.tileAttribution || "";
-    const displayCallsign = root.dataset.displayCallsign || "";
-    const symbolIcon = root.dataset.symbolIcon ? `/static/${root.dataset.symbolIcon}` : "/static/icons/verG/x.gif";
-
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        return;
-    }
+    const stationEndpoint = pageRoot.dataset.stationEndpoint || "";
+    const refreshMs = Number.parseInt(pageRoot.dataset.refreshMs || "30000", 10);
+    let map = null;
+    let marker = null;
+    let tileLayer = null;
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -26,35 +28,193 @@
             .replaceAll("'", "&#39;");
     }
 
-    const map = window.L.map(canvas, {
-        center: [latitude, longitude],
-        zoom: Number.isInteger(zoom) ? zoom : 10,
-        zoomControl: true,
-        attributionControl: true,
-    });
+    function renderMeta(station) {
+        if (!meta) return;
+        const parts = [];
+        if (station.last_heard_date) {
+            let heard = `Last heard ${escapeHtml(station.last_heard_date)}`;
+            if (station.last_heard_relative) {
+                heard += ` <span class="muted">(${escapeHtml(station.last_heard_relative)})</span>`;
+            }
+            parts.push(heard);
+        }
+        if (station.source) {
+            parts.push(`<span class="muted">• Source ${escapeHtml(station.source)}</span>`);
+        }
+        if (station.path) {
+            parts.push(`<span class="muted">• Path ${escapeHtml(station.path)}</span>`);
+        }
+        meta.innerHTML = parts.join(" ");
+    }
 
-    window.L.tileLayer(tileUrl, {
-        attribution: tileAttribution,
-        maxZoom: 19,
-    }).addTo(map);
+    function renderFields(station) {
+        if (!fields) return;
+        fields.innerHTML = (station.fields || []).map((field) => `
+            <dt>${escapeHtml(field.label)}</dt>
+            <dd>${field.label === "Latest raw packet" ? `<code>${escapeHtml(field.value)}</code>` : escapeHtml(field.value)}</dd>
+        `).join("");
+    }
 
-    const marker = window.L.marker([latitude, longitude], {
-        icon: window.L.divIcon({
+    function renderRecentPackets(packets) {
+        if (!recentPackets) return;
+        if (!packets || !packets.length) {
+            recentPackets.innerHTML = '<p class="muted">No stored packet history is available for this station yet.</p>';
+            return;
+        }
+        recentPackets.innerHTML = `
+            <table class="data-table compact-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Source</th>
+                        <th>Destination</th>
+                        <th>Path</th>
+                        <th>Decoded summary</th>
+                        <th>Raw packet</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${packets.map((packet) => `
+                        <tr>
+                            <td>
+                                <div class="last-heard-cell">
+                                    <span>${escapeHtml(packet.timestamp_label || "")}</span>
+                                    ${packet.timestamp_relative ? `<span class="muted">${escapeHtml(packet.timestamp_relative)}</span>` : ""}
+                                </div>
+                            </td>
+                            <td>${escapeHtml(packet.source || "")}</td>
+                            <td>${escapeHtml(packet.destination || "")}</td>
+                            <td>${escapeHtml(packet.path || "-")}</td>
+                            <td>${escapeHtml(packet.decoded_summary || "-")}</td>
+                            <td><code>${escapeHtml(packet.raw_packet || "")}</code></td>
+                        </tr>
+                    `).join("")}
+                </tbody>
+            </table>
+        `;
+    }
+
+    function renderRelatedSsids(station, items) {
+        if (!relatedSsids) return;
+        if (!items || items.length <= 1) {
+            relatedSsids.innerHTML = `<p class="muted">No other known SSIDs are currently available for ${escapeHtml(station.base_callsign || "")}.</p>`;
+            return;
+        }
+        relatedSsids.innerHTML = `
+            <div class="station-ssid-list">
+                ${items.map((item) => `
+                    <a href="${escapeHtml(item.detail_href || "#")}" class="station-ssid-chip${item.is_current ? " current" : ""}">
+                        <span>${escapeHtml(item.display_callsign || "")}</span>
+                        ${item.is_current ? '<span class="muted">current</span>' : ""}
+                    </a>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    function buildIconHtml(displayCallsign, symbolIcon) {
+        return `
+            <img class="map-station-aprs-icon" src="${escapeHtml(symbolIcon)}" alt="">
+            <span class="map-station-label">${escapeHtml(displayCallsign)}</span>
+        `;
+    }
+
+    function ensureMap(station, mapConfig) {
+        const hasCoordinates = Number.isFinite(Number(station.latitude_float)) && Number.isFinite(Number(station.longitude_float));
+        if (!hasCoordinates) {
+            if (mapRoot) {
+                mapRoot.hidden = true;
+            }
+            if (mapPlaceholder) {
+                mapPlaceholder.hidden = false;
+            }
+            return;
+        }
+
+        if (!mapRoot || !mapCanvas || typeof window.L === "undefined") {
+            return;
+        }
+
+        if (mapPlaceholder) {
+            mapPlaceholder.hidden = true;
+        }
+        mapRoot.hidden = false;
+        mapRoot.dataset.latitude = String(station.latitude_float);
+        mapRoot.dataset.longitude = String(station.longitude_float);
+        mapRoot.dataset.displayCallsign = station.display_callsign || "";
+        mapRoot.dataset.symbolIcon = mapConfig.symbol_icon || "";
+
+        const latLng = [Number(station.latitude_float), Number(station.longitude_float)];
+        const symbolIcon = mapConfig.symbol_icon ? `/static/${mapConfig.symbol_icon}` : "/static/icons/verG/x.gif";
+        const icon = window.L.divIcon({
             className: "map-station-icon",
-            html: `
-                <img class="map-station-aprs-icon" src="${escapeHtml(symbolIcon)}" alt="">
-                <span class="map-station-label">${escapeHtml(displayCallsign)}</span>
-            `,
+            html: buildIconHtml(station.display_callsign || "", symbolIcon),
             iconSize: [36, 24],
             iconAnchor: [8, 8],
-        }),
-        keyboard: false,
-    });
-    marker.addTo(map);
+        });
 
-    map.whenReady(function () {
-        window.setTimeout(function () {
-            map.invalidateSize();
-        }, 0);
-    });
+        if (!map) {
+            map = window.L.map(mapCanvas, {
+                center: latLng,
+                zoom: Number.isInteger(mapConfig.zoom) ? mapConfig.zoom : 10,
+                zoomControl: true,
+                attributionControl: true,
+            });
+            tileLayer = window.L.tileLayer(mapConfig.tile_url || "", {
+                attribution: mapConfig.tile_attribution || "",
+                maxZoom: 19,
+            }).addTo(map);
+            marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);
+            map.whenReady(function () {
+                window.setTimeout(function () {
+                    map.invalidateSize();
+                }, 0);
+            });
+            return;
+        }
+
+        marker.setLatLng(latLng);
+        marker.setIcon(icon);
+        map.setView(latLng, map.getZoom(), { animate: false });
+        if (tileLayer && tileLayer._url !== (mapConfig.tile_url || "")) {
+            tileLayer.setUrl(mapConfig.tile_url || "");
+        }
+    }
+
+    async function refreshStation() {
+        if (!stationEndpoint) return;
+        try {
+            const response = await fetch(stationEndpoint, { headers: { Accept: "application/json" } });
+            if (!response.ok) return;
+            const payload = await response.json();
+            const station = payload.station || {};
+            const mapConfig = payload.station_map_config || {};
+            if (title) {
+                title.textContent = station.display_callsign || "";
+            }
+            renderMeta(station);
+            renderFields(station);
+            renderRecentPackets(payload.recent_packets || []);
+            renderRelatedSsids(station, payload.related_ssids || []);
+            ensureMap(station, mapConfig);
+        } catch (_error) {
+        }
+    }
+
+    const initialStation = mapRoot ? {
+        display_callsign: mapRoot.dataset.displayCallsign || "",
+        latitude_float: Number.parseFloat(mapRoot.dataset.latitude || ""),
+        longitude_float: Number.parseFloat(mapRoot.dataset.longitude || ""),
+    } : { latitude_float: NaN, longitude_float: NaN };
+    const initialMapConfig = mapRoot ? {
+        zoom: Number.parseInt(mapRoot.dataset.zoom || "10", 10),
+        tile_url: mapRoot.dataset.tileUrl || "",
+        tile_attribution: mapRoot.dataset.tileAttribution || "",
+        symbol_icon: mapRoot.dataset.symbolIcon || "",
+    } : {};
+
+    ensureMap(initialStation, initialMapConfig);
+    if (Number.isInteger(refreshMs) && refreshMs > 0) {
+        window.setInterval(refreshStation, refreshMs);
+    }
 })();

@@ -6,20 +6,17 @@
 {% endblock %}
 
 {% block content %}
+<div id="station-detail-page" data-station-endpoint="/api{{ station.detail_href }}" data-refresh-ms="30000">
 <section class="panel">
     <div class="station-detail-header">
         <div>
-            <h2>{{ station.display_callsign }}</h2>
-            <p class="section-lead">
+            <h2 id="station-detail-title">{{ station.display_callsign }}</h2>
+            <p class="section-lead" id="station-detail-meta">
                 Last heard {{ station.last_heard_date }}
                 {% if station.last_heard_relative %}<span class="muted">({{ station.last_heard_relative }})</span>{% endif %}
                 {% if station.source %}<span class="muted"> • Source {{ station.source }}</span>{% endif %}
                 {% if station.path %}<span class="muted"> • Path {{ station.path }}</span>{% endif %}
             </p>
-        </div>
-        <div class="station-detail-actions">
-            <a class="button button-secondary" href="/stations">Back to Stations</a>
-            <a class="button button-secondary" href="/map">Open Map</a>
         </div>
     </div>
 </section>
@@ -27,7 +24,7 @@
 <section class="station-detail-hero">
     <article class="panel">
         <h2>Station Details</h2>
-        <dl class="station-detail-fields">
+        <dl class="station-detail-fields" id="station-detail-fields">
             {% for field in station.fields %}
             <dt>{{ field.label }}</dt>
             <dd>
@@ -43,7 +40,6 @@
 
     <article class="panel">
         <h2>Station Map</h2>
-        {% if station.latitude_float is not none and station.longitude_float is not none %}
         <div
             id="station-detail-map-root"
             class="station-detail-map-root"
@@ -54,15 +50,14 @@
             data-tile-attribution="{{ station_map_config.tile_attribution }}"
             data-display-callsign="{{ station_map_config.display_callsign }}"
             data-symbol-icon="{{ station_map_config.symbol_icon }}"
+            {% if station.latitude_float is none or station.longitude_float is none %}hidden{% endif %}
         >
             <div id="station-detail-map-canvas" class="station-detail-map-canvas" aria-label="Station detail map"></div>
         </div>
-        {% else %}
-        <div class="station-map-placeholder">
+        <div class="station-map-placeholder" id="station-map-placeholder" {% if station.latitude_float is not none and station.longitude_float is not none %}hidden{% endif %}>
             <strong>No position available</strong>
             <span class="muted">No position available for this station.</span>
         </div>
-        {% endif %}
     </article>
 </section>
 
@@ -87,6 +82,7 @@
 
 <section class="panel">
     <h2>Recent Packets / Frames</h2>
+    <div id="station-recent-packets">
     {% if recent_packets %}
     <table class="data-table compact-table">
         <thead>
@@ -120,10 +116,12 @@
     {% else %}
     <p class="muted">No stored packet history is available for this station yet.</p>
     {% endif %}
+    </div>
 </section>
 
 <section class="panel">
     <h2>Other Known SSIDs</h2>
+    <div id="station-related-ssids">
     {% if related_ssids|length > 1 %}
     <div class="station-ssid-list">
         {% for item in related_ssids %}
@@ -136,7 +134,9 @@
     {% else %}
     <p class="muted">No other known SSIDs are currently available for {{ station.base_callsign }}.</p>
     {% endif %}
+    </div>
 </section>
+    </div>
 {% endblock %}
 
 {% block extra_scripts %}

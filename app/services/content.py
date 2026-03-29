@@ -1020,6 +1020,7 @@ def _parse_weather_fields(text: str) -> dict[str, float | int] | None:
 def _attach_comment_extensions(result: dict[str, Any]) -> None:
     comment = result.get("comment", "") or ""
     data: dict[str, Any] = dict(result.get("data", {}) or {})
+    preserve_qsy_callsign_in_comment = False
     if result.get("symbol", "").endswith("_"):
         weather = _parse_weather_fields(comment)
         if weather:
@@ -1044,12 +1045,13 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     if qsy:
         if result.get("entity_class") == "mobile":
             qsy.pop("qsy_callsign", None)
+            preserve_qsy_callsign_in_comment = True
         data.update(qsy)
 
     if data:
         result["data"] = data
     if comment:
-        cleaned_comment = _clean_decoded_tokens(comment)
+        cleaned_comment = _clean_decoded_tokens(comment, preserve_qsy_callsign=preserve_qsy_callsign_in_comment)
         if data or cleaned_comment != comment:
             result["comment"] = cleaned_comment
 
@@ -1173,7 +1175,7 @@ def _parse_qsy_fields(text: str) -> dict[str, Any] | None:
     return result
 
 
-def _clean_decoded_tokens(text: str) -> str:
+def _clean_decoded_tokens(text: str, *, preserve_qsy_callsign: bool = False) -> str:
     cleaned = text
     cleaned = re.sub(r'^[A-Za-z`"\',}\]>{<\[\(0-9-]{1,6}(?=\d{3}\.\d{3,4}(?i:mhz))', " ", cleaned)
     cleaned = re.sub(r'^(?:[/\\`"\',}{\]\[\(\)!@#$%^&*+=:;?.<>0-9-]{2,8})\s*(?=[A-Za-zĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż_])', " ", cleaned)
@@ -1185,11 +1187,11 @@ def _clean_decoded_tokens(text: str) -> str:
     cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
     cleaned = re.sub(r"(?:^|[\s/])A=\d{6}", " ", cleaned)
     cleaned = re.sub(r"[0-9][0-9]{2}/[0-9][0-9]{2}", " ", cleaned)
-    cleaned = re.sub(
-        r"(?i)\d{3}\.\d{3,4}mhz(?:\s+[CT]\d{3})?(?:\s+[+-]\d{3,4})?(?:\s+R\d+(?:\.\d+)?k)?(?:\s+[A-Z0-9-]{3,10})?",
-        " ",
-        cleaned,
-    )
+    qsy_pattern = r"(?i)\d{3}\.\d{3,4}mhz(?:\s+[CT]\d{3})?(?:\s+[+-]\d{3,4})?(?:\s+R\d+(?:\.\d+)?k)?"
+    if preserve_qsy_callsign:
+        cleaned = re.sub(qsy_pattern, " ", cleaned)
+    else:
+        cleaned = re.sub(qsy_pattern + r"(?:\s+[A-Z0-9-]{3,10})?", " ", cleaned)
     cleaned = re.sub(r'^(?:[/\\`"\',}{\]\[\(\)!@#$%^&*+=:;?.<>0-9-]{2,8})\s*(?=[A-Za-zĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż_])', " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip(" /|,;:-")
