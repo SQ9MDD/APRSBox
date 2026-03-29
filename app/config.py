@@ -23,6 +23,12 @@ class Settings:
     gui_update_branch: str = os.getenv("APRSBOX_GIT_BRANCH", "main")
     core_host: str = os.getenv("APRSBOX_CORE_HOST", "127.0.0.1")
     core_port: int = int(os.getenv("APRSBOX_CORE_PORT", "18081"))
+    map_tile_url: str = os.getenv("APRSBOX_MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+    map_tile_attribution: str = os.getenv(
+        "APRSBOX_MAP_TILE_ATTRIBUTION",
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    )
+    map_tile_source_name: str = os.getenv("APRSBOX_MAP_TILE_SOURCE_NAME", "OpenStreetMap")
 
     @property
     def runtime_root(self) -> Path:

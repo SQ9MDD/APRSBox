@@ -11,6 +11,7 @@
         })();
     </script>
     <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
 </head>
 <body class="app-shell">
     {% if current_user %}
@@ -76,5 +77,6 @@
             });
         })();
     </script>
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>
