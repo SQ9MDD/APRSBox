@@ -498,6 +498,55 @@ textarea {
     background: rgba(109, 189, 128, 0.08);
 }
 
+.stations-table {
+    table-layout: auto;
+}
+
+.stations-table th:nth-child(1),
+.stations-table td:nth-child(1) {
+    width: 11rem;
+    min-width: 11rem;
+}
+
+.stations-table th:nth-child(2),
+.stations-table td:nth-child(2) {
+    width: 4.5rem;
+    min-width: 4.5rem;
+}
+
+.stations-table th:nth-child(3),
+.stations-table td:nth-child(3) {
+    width: 8.5rem;
+    min-width: 8.5rem;
+}
+
+.stations-table th:nth-child(4),
+.stations-table td:nth-child(4) {
+    width: 4.5rem;
+    min-width: 4.5rem;
+    text-align: center;
+}
+
+.stations-table th:nth-child(5),
+.stations-table td:nth-child(5),
+.stations-table th:nth-child(6),
+.stations-table td:nth-child(6) {
+    width: 6.75rem;
+    min-width: 6.75rem;
+    white-space: nowrap;
+}
+
+.stations-table th:nth-child(7),
+.stations-table td:nth-child(7) {
+    width: 14rem;
+    min-width: 14rem;
+}
+
+.stations-table th:nth-child(8),
+.stations-table td:nth-child(8) {
+    min-width: 18rem;
+}
+
 .callsign-cell {
     white-space: nowrap;
 }
