@@ -40,6 +40,13 @@
             <span>Symbol Code</span>
             <input type="text" name="symbol_code" value="{{ station.symbol_code }}">
         </label>
+        <label>
+            <span>Domyślne jednostki</span>
+            <select name="default_units">
+                <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>Nasze (metryczne)</option>
+                <option value="imperial" {% if station.default_units == "imperial" %}selected{% endif %}>Imperialne</option>
+            </select>
+        </label>
         <label class="checkbox-row">
             <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
             <span>Transmission Enabled Placeholder</span>
@@ -54,9 +61,9 @@
         <dt>Latitude</dt><dd>{{ station.latitude }}</dd>
         <dt>Longitude</dt><dd>{{ station.longitude }}</dd>
         <dt>Symbol</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
+        <dt>Domyślne jednostki</dt><dd>{{ "Imperialne" if station.default_units == "imperial" else "Nasze (metryczne)" }}</dd>
         <dt>TX Enabled</dt><dd>{{ station.tx_enabled }}</dd>
     </dl>
     {% endif %}
 </section>
 {% endblock %}
-

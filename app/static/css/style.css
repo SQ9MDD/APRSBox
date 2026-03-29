@@ -492,6 +492,43 @@ textarea {
     flex: 0 0 auto;
 }
 
+.frame-type-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.9rem;
+    padding: 0.18rem 0.42rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.weather-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.32rem;
+}
+
+.weather-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    padding: 0.18rem 0.42rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    white-space: nowrap;
+}
+
+.weather-chip img {
+    width: 0.9rem;
+    height: 0.9rem;
+    opacity: 0.82;
+    filter: var(--icon-filter);
+}
+
 .alert {
     padding: 0.65rem 0.78rem;
     border-radius: 8px;

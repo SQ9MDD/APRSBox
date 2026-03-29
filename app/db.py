@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS station_settings (
     longitude TEXT,
     symbol_table TEXT,
     symbol_code TEXT,
+    default_units TEXT NOT NULL DEFAULT 'metric' CHECK (default_units IN ('metric', 'imperial')),
     tx_enabled INTEGER NOT NULL DEFAULT 0 CHECK (tx_enabled IN (0, 1)),
     updated_at TEXT NOT NULL
 );
@@ -189,13 +190,22 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(creat
 def init_db() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA)
+        station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
+        if "default_units" not in station_columns:
+            connection.execute(
+                """
+                ALTER TABLE station_settings
+                ADD COLUMN default_units TEXT NOT NULL DEFAULT 'metric'
+                CHECK (default_units IN ('metric', 'imperial'))
+                """
+            )
         connection.execute(
             """
             INSERT INTO station_settings (
                 id, callsign, ssid, beacon_comment, latitude, longitude,
-                symbol_table, symbol_code, tx_enabled, updated_at
+                symbol_table, symbol_code, default_units, tx_enabled, updated_at
             )
-            VALUES (1, '', '', '', '', '', '/', '>', 0, ?)
+            VALUES (1, '', '', '', '', '', '/', '>', 'metric', 0, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),

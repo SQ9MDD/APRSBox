@@ -79,12 +79,14 @@ def stations_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
+    station_settings = get_station_settings()
     context = build_template_context(
         request,
         page_title="Stations",
         current_user=current_user,
         active_nav="stations",
-        stations=heard_stations(),
+        stations=heard_stations(unit_system=station_settings.get("default_units", "metric")),
+        default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
 
@@ -453,6 +455,7 @@ def station_update(
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
+    default_units: str = Form("metric"),
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
@@ -465,6 +468,7 @@ def station_update(
             "longitude": longitude.strip(),
             "symbol_table": symbol_table.strip(),
             "symbol_code": symbol_code.strip(),
+            "default_units": default_units.strip(),
             "tx_enabled": tx_enabled,
         }
     )

@@ -105,10 +105,17 @@ def delete_section_row(slug: str, row_id: int) -> None:
 
 def get_station_settings() -> dict[str, Any]:
     row = fetch_one("SELECT * FROM station_settings WHERE id = 1")
-    return dict(row) if row else {}
+    if not row:
+        return {}
+    result = dict(row)
+    result.setdefault("default_units", "metric")
+    return result
 
 
 def update_station_settings(payload: dict[str, Any]) -> None:
+    default_units = payload.get("default_units", "metric")
+    if default_units not in {"metric", "imperial"}:
+        default_units = "metric"
     values = {
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
@@ -117,6 +124,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
         "longitude": payload.get("longitude", ""),
         "symbol_table": payload.get("symbol_table", "/"),
         "symbol_code": payload.get("symbol_code", ">"),
+        "default_units": default_units,
         "tx_enabled": int(bool(payload.get("tx_enabled"))),
         "updated_at": utc_now(),
     }
@@ -131,6 +139,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
                 longitude = :longitude,
                 symbol_table = :symbol_table,
                 symbol_code = :symbol_code,
+                default_units = :default_units,
                 tx_enabled = :tx_enabled,
                 updated_at = :updated_at
             WHERE id = 1
@@ -203,7 +212,7 @@ def dashboard_summary() -> dict[str, Any]:
     return metrics
 
 
-def heard_stations(limit: int = 500) -> list[dict[str, Any]]:
+def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
     rows = fetch_all(
         """
         SELECT line, created_at
@@ -219,38 +228,54 @@ def heard_stations(limit: int = 500) -> list[dict[str, Any]]:
         if parsed is None:
             continue
 
-        callsign = parsed["source"]
-        if callsign not in stations:
-            stations[callsign] = {
-                "callsign": callsign,
-                "last_heard_at": row["created_at"],
-                "last_heard_label": _format_last_heard(row["created_at"]),
-                "symbol": "",
-                "symbol_icon": "icons/verG/x.gif",
-                "comment": "",
-                "weather": "",
-                "latitude": "",
-                "longitude": "",
-            }
+        callsign = parsed["source"].strip()
+        if callsign and callsign not in stations:
+            stations[callsign] = _new_station_entry(callsign, row["created_at"])
 
         aprs_data = _parse_aprs_packet(parsed)
         if aprs_data is None:
             continue
 
-        station = stations[callsign]
+        station_key = (aprs_data.get("entity_name") or callsign).strip()
+        if not station_key:
+            continue
+
+        if station_key not in stations:
+            stations[station_key] = _new_station_entry(station_key, row["created_at"])
+
+        station = stations[station_key]
+        if not station["frame_type"] and aprs_data.get("frame_type"):
+            station["frame_type"] = aprs_data["frame_type"]
+            station["frame_type_label"] = aprs_data.get("frame_type_label", "")
         if not station["symbol"] and aprs_data.get("symbol"):
             station["symbol"] = aprs_data["symbol"]
             station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
         if not station["comment"] and aprs_data.get("comment"):
             station["comment"] = aprs_data["comment"]
         if not station["weather"] and aprs_data.get("weather"):
-            station["weather"] = aprs_data["weather"]
+            station["weather"] = _format_weather_for_display(aprs_data["weather"], unit_system)
         if not station["latitude"] and aprs_data.get("latitude"):
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
             station["longitude"] = aprs_data["longitude"]
 
     return list(stations.values())[:limit]
+
+
+def _new_station_entry(name: str, created_at: str) -> dict[str, Any]:
+    return {
+        "callsign": name,
+        "last_heard_at": created_at,
+        "last_heard_label": _format_last_heard(created_at),
+        "frame_type": "",
+        "frame_type_label": "",
+        "symbol": "",
+        "symbol_icon": "icons/verG/x.gif",
+        "comment": "",
+        "weather": [],
+        "latitude": "",
+        "longitude": "",
+    }
 
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+)>(?P<destination>[^,:]+)(?:,(?P<path>[^:]+))?:(?P<info>.*)$")
@@ -300,7 +325,7 @@ def _pluralize_hours(value: int) -> str:
     return "godzin"
 
 
-def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, str] | None:
+def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     info = packet["info"]
     if not info:
         return None
@@ -314,10 +339,12 @@ def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, str] | None:
         return _parse_mic_e_packet(packet)
     if packet_type == "_":
         return _parse_weather_only_packet(info)
+    if packet_type == ";":
+        return _parse_object_packet(info)
     return None
 
 
-def _parse_position_without_timestamp(info: str) -> dict[str, str] | None:
+def _parse_position_without_timestamp(info: str) -> dict[str, Any] | None:
     if len(info) >= 14 and _looks_like_compressed_position(info, with_timestamp=False):
         compressed = _parse_compressed_position(info, with_timestamp=False)
         if compressed is not None:
@@ -332,18 +359,21 @@ def _parse_position_without_timestamp(info: str) -> dict[str, str] | None:
     if latitude is None or longitude is None:
         return None
     result = {
+        "frame_type": "M",
+        "frame_type_label": "M - ruch",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[20:].strip(),
     }
-    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else ""
+    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else None
     if weather:
         result["weather"] = weather
+        result["comment"] = _strip_weather_fields(result["comment"])
     return result
 
 
-def _parse_position_with_timestamp(info: str) -> dict[str, str] | None:
+def _parse_position_with_timestamp(info: str) -> dict[str, Any] | None:
     if len(info) >= 21 and _looks_like_compressed_position(info, with_timestamp=True):
         compressed = _parse_compressed_position(info, with_timestamp=True)
         if compressed is not None:
@@ -358,14 +388,17 @@ def _parse_position_with_timestamp(info: str) -> dict[str, str] | None:
     if latitude is None or longitude is None:
         return None
     result = {
+        "frame_type": "M",
+        "frame_type_label": "M - ruch",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[27:].strip(),
     }
-    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else ""
+    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else None
     if weather:
         result["weather"] = weather
+        result["comment"] = _strip_weather_fields(result["comment"])
     return result
 
 
@@ -426,7 +459,7 @@ def _looks_like_compressed_position(info: str, *, with_timestamp: bool) -> bool:
     return 33 <= ord(symbol_code) <= 126
 
 
-def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, str] | None:
+def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, Any] | None:
     if with_timestamp:
         symbol_table = info[8]
         lat_block = info[9:13]
@@ -449,18 +482,21 @@ def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, 
     latitude = 90.0 - (lat_value / 380926.0)
     longitude = -180.0 + (lon_value / 190463.0)
     result = {
+        "frame_type": "M",
+        "frame_type_label": "M - ruch",
         "latitude": f"{latitude:.5f}",
         "longitude": f"{longitude:.5f}",
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": comment,
     }
-    weather = _parse_weather_fields(comment) if symbol_code == "_" else ""
+    weather = _parse_weather_fields(comment) if symbol_code == "_" else None
     if weather:
         result["weather"] = weather
+        result["comment"] = _strip_weather_fields(comment)
     return result
 
 
-def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, str] | None:
+def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     info = packet["info"]
     destination = packet["destination"]
     if len(destination) != 6 or len(info) < 8:
@@ -475,14 +511,17 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, str] | None:
     symbol_table = info[7] if len(info) > 7 else "/"
     comment = info[8:].strip() if len(info) > 8 else ""
     result = {
+        "frame_type": "M",
+        "frame_type_label": "M - ruch",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
         "comment": comment,
     }
-    weather = _parse_weather_fields(comment) if result["symbol"].endswith("_") else ""
+    weather = _parse_weather_fields(comment) if result["symbol"].endswith("_") else None
     if weather:
         result["weather"] = weather
+        result["comment"] = _strip_weather_fields(comment)
     return result
 
 
@@ -542,22 +581,55 @@ def _mic_e_flag(char: str) -> bool:
     return ("A" <= char <= "J") or ("P" <= char <= "Z")
 
 
-def _parse_weather_only_packet(info: str) -> dict[str, str] | None:
+def _parse_weather_only_packet(info: str) -> dict[str, Any] | None:
     weather = _parse_weather_fields(info)
     if not weather:
         return None
     return {
+        "frame_type": "W",
+        "frame_type_label": "W - pogoda",
         "symbol": "/_",
-        "comment": info.strip(),
+        "comment": _strip_weather_fields(info),
         "weather": weather,
     }
 
 
-def _parse_weather_fields(text: str) -> str:
-    if not text:
-        return ""
+def _parse_object_packet(info: str) -> dict[str, Any] | None:
+    if len(info) < 37:
+        return None
 
-    parts: list[str] = []
+    name = info[1:10].strip()
+    if not name:
+        return None
+
+    latitude = _parse_latitude(info[18:26])
+    symbol_table = info[26]
+    longitude = _parse_longitude(info[27:36])
+    symbol_code = info[36]
+    if latitude is None or longitude is None:
+        return None
+
+    result = {
+        "entity_name": name,
+        "frame_type": "O",
+        "frame_type_label": "O - obiekt",
+        "latitude": latitude,
+        "longitude": longitude,
+        "symbol": f"{symbol_table}{symbol_code}",
+        "comment": info[37:].strip(),
+    }
+    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else None
+    if weather:
+        result["weather"] = weather
+        result["comment"] = _strip_weather_fields(result["comment"])
+    return result
+
+
+def _parse_weather_fields(text: str) -> dict[str, float | int] | None:
+    if not text:
+        return None
+
+    metrics: dict[str, float | int] = {}
     wind_dir = _match_group(text, r"c(\d{3})")
     wind_speed = _match_group(text, r"s(\d{3})")
     wind_gust = _match_group(text, r"g(\d{3})")
@@ -568,31 +640,95 @@ def _parse_weather_fields(text: str) -> str:
     humidity = _match_group(text, r"h(\d{2})")
     pressure = _match_group(text, r"b(\d{5})")
 
-    if wind_dir or wind_speed:
-        wind_text = "wiatr"
-        if wind_dir:
-            wind_text = f"{wind_text} {int(wind_dir)}°"
-        if wind_speed:
-            wind_text = f"{wind_text} {int(wind_speed)} mph"
-        if wind_gust:
-            wind_text = f"{wind_text} porywy {int(wind_gust)} mph"
-        parts.append(wind_text)
-
+    if wind_dir:
+        metrics["wind_dir"] = int(wind_dir)
+    if wind_speed:
+        metrics["wind_speed_mph"] = int(wind_speed)
+    if wind_gust:
+        metrics["wind_gust_mph"] = int(wind_gust)
     if temperature:
-        parts.append(f"temp {int(temperature)}F")
+        metrics["temperature_f"] = int(temperature)
     if rain_1h:
-        parts.append(f"deszcz 1h {int(rain_1h) / 100:.2f}in")
+        metrics["rain_1h_in"] = int(rain_1h) / 100
     if rain_24h:
-        parts.append(f"deszcz 24h {int(rain_24h) / 100:.2f}in")
+        metrics["rain_24h_in"] = int(rain_24h) / 100
     if rain_midnight:
-        parts.append(f"deszcz od polnocy {int(rain_midnight) / 100:.2f}in")
+        metrics["rain_since_midnight_in"] = int(rain_midnight) / 100
     if humidity:
         humidity_value = 100 if humidity == "00" else int(humidity)
-        parts.append(f"wilgotnosc {humidity_value}%")
+        metrics["humidity_percent"] = humidity_value
     if pressure:
-        parts.append(f"cisnienie {int(pressure) / 10:.1f} hPa")
+        metrics["pressure_hpa"] = int(pressure) / 10
 
-    return " | ".join(parts)
+    return metrics or None
+
+
+def _strip_weather_fields(text: str) -> str:
+    cleaned = text
+    cleaned = re.sub(r"^_?\d{8}", "", cleaned)
+    cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip(" /|,;:-")
+
+
+def _format_weather_for_display(metrics: dict[str, float | int], unit_system: str) -> list[dict[str, str]]:
+    if not metrics:
+        return []
+
+    use_imperial = unit_system == "imperial"
+    items: list[dict[str, str]] = []
+
+    wind_dir = metrics.get("wind_dir")
+    if wind_dir is not None:
+        items.append(_weather_item("compass-outline.svg", "Kierunek wiatru", f"{int(wind_dir)}°"))
+
+    wind_speed_mph = metrics.get("wind_speed_mph")
+    if wind_speed_mph is not None:
+        wind_value = f"{float(wind_speed_mph):.0f} mph" if use_imperial else f"{float(wind_speed_mph) * 1.609344:.0f} km/h"
+        items.append(_weather_item("weather-windy.svg", "Prędkość wiatru", wind_value))
+
+    wind_gust_mph = metrics.get("wind_gust_mph")
+    if wind_gust_mph is not None:
+        gust_value = f"{float(wind_gust_mph):.0f} mph" if use_imperial else f"{float(wind_gust_mph) * 1.609344:.0f} km/h"
+        items.append(_weather_item("weather-windy-variant.svg", "Porywy", gust_value))
+
+    temperature_f = metrics.get("temperature_f")
+    if temperature_f is not None:
+        temperature_value = f"{float(temperature_f):.0f}°F" if use_imperial else f"{(float(temperature_f) - 32) * 5 / 9:.1f}°C"
+        items.append(_weather_item("thermometer.svg", "Temperatura", temperature_value))
+
+    rain_1h_in = metrics.get("rain_1h_in")
+    if rain_1h_in is not None:
+        rain_value = f"{float(rain_1h_in):.2f} in" if use_imperial else f"{float(rain_1h_in) * 25.4:.1f} mm"
+        items.append(_weather_item("weather-rainy.svg", "Deszcz 1h", rain_value))
+
+    rain_24h_in = metrics.get("rain_24h_in")
+    if rain_24h_in is not None:
+        rain_value = f"{float(rain_24h_in):.2f} in" if use_imperial else f"{float(rain_24h_in) * 25.4:.1f} mm"
+        items.append(_weather_item("weather-pouring.svg", "Deszcz 24h", rain_value))
+
+    rain_since_midnight_in = metrics.get("rain_since_midnight_in")
+    if rain_since_midnight_in is not None:
+        rain_value = (
+            f"{float(rain_since_midnight_in):.2f} in"
+            if use_imperial
+            else f"{float(rain_since_midnight_in) * 25.4:.1f} mm"
+        )
+        items.append(_weather_item("cup-water.svg", "Deszcz od północy", rain_value))
+
+    humidity_percent = metrics.get("humidity_percent")
+    if humidity_percent is not None:
+        items.append(_weather_item("water-percent.svg", "Wilgotność", f"{int(humidity_percent)}%"))
+
+    pressure_hpa = metrics.get("pressure_hpa")
+    if pressure_hpa is not None:
+        items.append(_weather_item("gauge.svg", "Ciśnienie", f"{float(pressure_hpa):.1f} hPa"))
+
+    return items
+
+
+def _weather_item(icon: str, label: str, value: str) -> dict[str, str]:
+    return {"icon": icon, "label": label, "value": value}
 
 
 def _match_group(text: str, pattern: str) -> str:
