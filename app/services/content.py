@@ -29,6 +29,12 @@ def get_section_rows(slug: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
+    definition = SECTION_DEFINITIONS[slug]
+    row = fetch_one(f"SELECT * FROM {definition.table_name} WHERE id = ?", (row_id,))
+    return dict(row) if row else None
+
+
 def create_section_row(slug: str, payload: dict[str, Any]) -> None:
     definition = SECTION_DEFINITIONS[slug]
     timestamp = utc_now()
@@ -39,6 +45,8 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
             values[name] = int(bool(payload.get(name)))
         else:
             values[name] = payload.get(name)
+    if slug == "modems" and values.get("modem_type") == "TCP":
+        values["baud_rate"] = None
     if slug in {"modems", "servers"}:
         values.setdefault("notes", "")
         columns = list(values.keys()) + ["created_at", "updated_at"]
@@ -54,6 +62,42 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
             tuple(params),
         )
     log_event("INFO", "config", f"Created record in {definition.table_name}")
+
+
+def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
+    definition = SECTION_DEFINITIONS[slug]
+    values: dict[str, Any] = {}
+    for field in definition.fields:
+        name = field["name"]
+        if field["type"] == "checkbox":
+            values[name] = int(bool(payload.get(name)))
+        else:
+            values[name] = payload.get(name)
+    if slug == "modems" and values.get("modem_type") == "TCP":
+        values["baud_rate"] = None
+    if slug in {"modems", "servers"}:
+        values.setdefault("notes", "")
+    values["updated_at"] = utc_now()
+    values["id"] = row_id
+    assignments = ", ".join(f"{field['name']} = :{field['name']}" for field in definition.fields)
+    with get_connection() as connection:
+        connection.execute(
+            f"""
+            UPDATE {definition.table_name}
+            SET {assignments},
+                updated_at = :updated_at
+            WHERE id = :id
+            """,
+            values,
+        )
+    log_event("INFO", "config", f"Updated record {row_id} in {definition.table_name}")
+
+
+def delete_section_row(slug: str, row_id: int) -> None:
+    definition = SECTION_DEFINITIONS[slug]
+    with get_connection() as connection:
+        connection.execute(f"DELETE FROM {definition.table_name} WHERE id = ?", (row_id,))
+    log_event("INFO", "config", f"Deleted record {row_id} from {definition.table_name}")
 
 
 def get_station_settings() -> dict[str, Any]:
@@ -205,6 +249,14 @@ def worker_statuses() -> list[dict[str, str]]:
 def safe_create_section_row(slug: str, payload: dict[str, Any]) -> tuple[bool, str | None]:
     try:
         create_section_row(slug, payload)
+    except sqlite3.IntegrityError as exc:
+        return False, str(exc)
+    return True, None
+
+
+def safe_update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> tuple[bool, str | None]:
+    try:
+        update_section_row(slug, row_id, payload)
     except sqlite3.IntegrityError as exc:
         return False, str(exc)
     return True, None

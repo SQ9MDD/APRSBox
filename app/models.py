@@ -25,4 +25,8 @@ class SectionDefinition:
     readonly_message: str
     nav_key: str
     create_roles: tuple[str, ...] = ("admin", "operator")
-
+    list_title: str = "Existing Records"
+    create_title: str = "Add Record"
+    edit_title: str = "Edit Record"
+    supports_editing: bool = False
+    supports_delete: bool = False

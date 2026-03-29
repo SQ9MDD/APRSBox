@@ -7,20 +7,30 @@ from app.dependencies import get_current_user, require_roles
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
+    delete_section_row,
     dashboard_summary,
+    get_section_row,
     get_section_rows,
     get_station_settings,
     recent_event_logs,
     safe_create_section_row,
+    safe_update_section_row,
     update_station_settings,
     worker_statuses,
 )
+from app.services.system import current_gui_version, latest_gui_version, start_gui_update
 from app.template_helpers import build_template_context
 
 router = APIRouter()
 
 
-def _section_template_context(request: Request, current_user: UserIdentity, slug: str, flash: str | None = None) -> dict:
+def _section_template_context(
+    request: Request,
+    current_user: UserIdentity,
+    slug: str,
+    flash: str | None = None,
+    edit_row: dict | None = None,
+) -> dict:
     definition = SECTION_DEFINITIONS[slug]
     return build_template_context(
         request,
@@ -31,6 +41,7 @@ def _section_template_context(request: Request, current_user: UserIdentity, slug
         rows=get_section_rows(slug),
         flash=flash,
         can_edit=current_user.role in definition.create_roles,
+        edit_row=edit_row,
     )
 
 
@@ -61,15 +72,18 @@ def dashboard(
 def modems_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    edit: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "modems"))
+    edit_row = get_section_row("modems", edit) if edit is not None else None
+    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "modems", edit_row=edit_row))
 
 
 @router.post("/settings/modems")
 def modems_create(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    record_id: int | None = Form(None),
     name: str = Form(...),
     modem_type: str = Form(...),
     device_path: str = Form(""),
@@ -78,19 +92,35 @@ def modems_create(
     notes: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
-    success, error = safe_create_section_row(
-        "modems",
-        {
-            "name": name.strip(),
-            "modem_type": modem_type.strip(),
-            "device_path": device_path.strip(),
-            "baud_rate": baud_rate,
-            "enabled": enabled,
-            "notes": notes.strip(),
-        },
-    )
-    context = _section_template_context(request, current_user, "modems", flash=None if success else error)
+    normalized_modem_type = modem_type.strip().upper()
+    if normalized_modem_type not in {"SERIALL", "TCP"}:
+        context = _section_template_context(request, current_user, "modems", flash="Unsupported TNC type.")
+        return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    payload = {
+        "name": name.strip(),
+        "modem_type": normalized_modem_type,
+        "device_path": device_path.strip(),
+        "baud_rate": baud_rate,
+        "enabled": enabled,
+        "notes": notes.strip(),
+    }
+    if record_id is None:
+        success, error = safe_create_section_row("modems", payload)
+        edit_row = None
+    else:
+        success, error = safe_update_section_row("modems", record_id, payload)
+        edit_row = get_section_row("modems", record_id) if error else None
+    context = _section_template_context(request, current_user, "modems", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/settings/modems/{record_id}/delete")
+def modems_delete(
+    record_id: int,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    delete_section_row("modems", record_id)
+    return RedirectResponse(url="/settings/modems", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/settings/servers")
@@ -100,6 +130,77 @@ def servers_page(
 ) -> object:
     templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "servers"))
+
+
+@router.get("/settings")
+def settings_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Settings",
+        current_user=current_user,
+        active_nav="settings",
+        current_gui_version=current_gui_version(),
+        gui_update_url=request.app.state.settings.gui_update_url,
+        gui_update_branch=request.app.state.settings.gui_update_branch,
+        latest_version_result=None,
+        flash=None,
+        can_manage_updates=current_user.role in {"admin", "operator"},
+    )
+    return templates.TemplateResponse("settings.html", context)
+
+
+@router.post("/settings/check-gui-version")
+def settings_check_gui_version(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    result = latest_gui_version()
+    flash = None if result.get("ok") else result.get("error")
+    context = build_template_context(
+        request,
+        page_title="Settings",
+        current_user=current_user,
+        active_nav="settings",
+        current_gui_version=current_gui_version(),
+        gui_update_url=request.app.state.settings.gui_update_url,
+        gui_update_branch=request.app.state.settings.gui_update_branch,
+        latest_version_result=result,
+        flash=flash,
+        can_manage_updates=current_user.role in {"admin", "operator"},
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if flash else 200)
+
+
+@router.post("/settings/update-gui")
+def settings_update_gui(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = start_gui_update()
+    flash = None
+    if not result.get("ok"):
+        flash = result.get("error")
+    else:
+        flash = f"GUI update started in background. Log: {result['log_file']}"
+    context = build_template_context(
+        request,
+        page_title="Settings",
+        current_user=current_user,
+        active_nav="settings",
+        current_gui_version=current_gui_version(),
+        gui_update_url=request.app.state.settings.gui_update_url,
+        gui_update_branch=request.app.state.settings.gui_update_branch,
+        latest_version_result=None,
+        flash=flash,
+        can_manage_updates=True,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
 
 
 @router.post("/settings/servers")

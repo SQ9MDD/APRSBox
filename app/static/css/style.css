@@ -378,6 +378,11 @@ textarea {
     padding: 0.5rem 0.75rem;
 }
 
+.button-danger {
+    border-color: rgba(201, 122, 122, 0.35);
+    color: var(--danger);
+}
+
 .status-pill {
     display: inline-flex;
     align-items: center;
@@ -426,6 +431,14 @@ textarea {
     font-weight: 600;
     color: var(--text);
     background: var(--panel-soft);
+}
+
+.clickable-row {
+    cursor: pointer;
+}
+
+.clickable-row:hover td {
+    background: var(--accent-soft);
 }
 
 .alert {

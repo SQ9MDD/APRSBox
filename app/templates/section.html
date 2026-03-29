@@ -12,7 +12,7 @@
 
 <section class="grid two">
     <div class="panel">
-        <h2>Existing Records</h2>
+        <h2>{{ section.list_title }}</h2>
         <table class="data-table">
             <thead>
                 <tr>
@@ -20,19 +20,35 @@
                     <th>{{ field.label }}</th>
                     {% endfor %}
                     <th>Updated</th>
+                    {% if can_edit and section.supports_delete %}
+                    <th>Actions</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for row in rows %}
-                <tr>
+                <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                     {% for field in section.fields %}
-                    <td>{{ row[field.name] }}</td>
+                    <td>
+                        {% if field.type == 'checkbox' %}
+                        {{ 'Yes' if row[field.name] else 'No' }}
+                        {% else %}
+                        {{ row[field.name] if row[field.name] is not none else '' }}
+                        {% endif %}
+                    </td>
                     {% endfor %}
                     <td>{{ row.updated_at or row.created_at }}</td>
+                    {% if can_edit and section.supports_delete %}
+                    <td>
+                        <form method="post" action="/settings/{{ section.slug }}/{{ row.id }}/delete" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this record?');">
+                            <button type="submit" class="button button-secondary button-danger">Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ section.fields|length + 1 }}">No records yet.</td>
+                    <td colspan="{{ section.fields|length + 1 + (1 if can_edit and section.supports_delete else 0) }}">No records yet.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -40,27 +56,70 @@
     </div>
 
     <div class="panel">
-        <h2>Add Record</h2>
+        <h2>{{ section.edit_title if section.supports_editing and edit_row else section.create_title }}</h2>
         {% if can_edit %}
-        <form method="post" class="form-grid">
+        <form method="post" class="form-grid" id="{{ section.slug }}-form">
+            {% if section.supports_editing and edit_row %}
+            <input type="hidden" name="record_id" value="{{ edit_row.id }}">
+            {% endif %}
             {% for field in section.fields %}
             <label class="{% if field.type == 'textarea' %}full{% endif %}">
                 <span>{{ field.label }}</span>
                 {% if field.type == 'textarea' %}
-                <textarea name="{{ field.name }}" {% if field.required %}required{% endif %}></textarea>
+                <textarea name="{{ field.name }}" {% if field.required %}required{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
                 {% elif field.type == 'checkbox' %}
-                <input type="checkbox" name="{{ field.name }}" value="1">
+                <input type="checkbox" name="{{ field.name }}" value="1" {% if edit_row and edit_row[field.name] %}checked{% endif %}>
+                {% elif field.type == 'select' %}
+                <select name="{{ field.name }}" {% if field.required %}required{% endif %}>
+                    {% for option in field.options %}
+                    <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name] == option.value) or (not edit_row and loop.first) %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
                 {% else %}
-                <input type="{{ field.type }}" name="{{ field.name }}" {% if field.required %}required{% endif %}>
+                <input type="{{ field.type }}" name="{{ field.name }}" value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}" {% if field.required %}required{% endif %}>
                 {% endif %}
             </label>
             {% endfor %}
             <button type="submit" class="button">Save</button>
+            {% if section.supports_editing and edit_row %}
+            <a href="/settings/{{ section.slug }}" class="button button-secondary">Cancel</a>
+            {% endif %}
         </form>
         {% else %}
         <p class="muted">Your role is read-only for this section.</p>
         {% endif %}
     </div>
 </section>
-{% endblock %}
+<script>
+    (() => {
+        const rows = document.querySelectorAll(".clickable-row");
+        for (const row of rows) {
+            row.addEventListener("click", () => {
+                const href = row.dataset.href;
+                if (href) {
+                    window.location.href = href;
+                }
+            });
+        }
 
+        const form = document.getElementById("modems-form");
+        if (!form) return;
+        const typeSelect = form.querySelector('select[name="modem_type"]');
+        const baudInput = form.querySelector('input[name="baud_rate"]');
+        if (!typeSelect || !baudInput) return;
+
+        const syncBaudState = () => {
+            const isTcp = typeSelect.value === "TCP";
+            baudInput.disabled = isTcp;
+            if (isTcp) {
+                baudInput.value = "";
+            }
+        };
+
+        typeSelect.addEventListener("change", syncBaudState);
+        syncBaudState();
+    })();
+</script>
+{% endblock %}

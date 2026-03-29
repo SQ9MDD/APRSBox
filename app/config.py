@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from app import __version__
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -12,11 +14,13 @@ def _repo_root() -> Path:
 @dataclass(slots=True)
 class Settings:
     app_name: str = "APRSBox"
-    app_version: str = "0.1.0"
+    app_version: str = __version__
     app_env: str = os.getenv("APRSBOX_ENV", "development")
     secret_key: str = os.getenv("APRSBOX_SECRET_KEY", "change-me-in-production")
     install_root: Path = Path(os.getenv("APRSBOX_INSTALL_ROOT", "/opt/aprsbox"))
     repo_root: Path = _repo_root()
+    gui_update_url: str = os.getenv("APRSBOX_GIT_URL", "https://github.com/SQ9MDD/APRSBox.git")
+    gui_update_branch: str = os.getenv("APRSBOX_GIT_BRANCH", "main")
 
     @property
     def runtime_root(self) -> Path:
@@ -52,6 +56,9 @@ class Settings:
     def backups_dir(self) -> Path:
         return Path(os.getenv("APRSBOX_BACKUPS_DIR", self.runtime_root / "backups"))
 
+    @property
+    def version_file(self) -> Path:
+        return self.repo_root / "VERSION"
+
 
 settings = Settings()
-

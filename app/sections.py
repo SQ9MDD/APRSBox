@@ -6,15 +6,29 @@ from app.models import SectionDefinition
 SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
     "modems": SectionDefinition(
         slug="modems",
-        title="Modems",
-        description="Manage modem definitions and serial device assignments. APRS modem handling is not implemented yet.",
+        title="TNC",
+        description="Manage TNC definitions for the split APRSBox core/web architecture. Runtime TNC handling is not implemented yet.",
         table_name="modems",
         nav_key="modems",
-        readonly_message="Modem management is present as a skeleton. Runtime modem control comes later.",
+        readonly_message="TNC configuration is stored in SQLite for APRSBox core and web integration. Runtime TNC control comes later.",
+        list_title="Configured TNC",
+        create_title="Add TNC",
+        edit_title="Edit TNC",
+        supports_editing=True,
+        supports_delete=True,
         fields=[
             {"name": "name", "label": "Name", "type": "text", "required": True},
-            {"name": "modem_type", "label": "Type", "type": "text", "required": True},
-            {"name": "device_path", "label": "Device Path", "type": "text", "required": False},
+            {
+                "name": "modem_type",
+                "label": "Type",
+                "type": "select",
+                "required": True,
+                "options": [
+                    {"value": "SERIALL", "label": "SERIALL"},
+                    {"value": "TCP", "label": "TCP"},
+                ],
+            },
+            {"name": "device_path", "label": "Path / Adress", "type": "text", "required": False},
             {"name": "baud_rate", "label": "Baud Rate", "type": "number", "required": False},
             {"name": "enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "notes", "label": "Notes", "type": "textarea", "required": False},
@@ -114,4 +128,3 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
         ],
     ),
 }
-
