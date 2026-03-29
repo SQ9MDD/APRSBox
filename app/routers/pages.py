@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.dependencies import get_current_user, require_roles
 from app.models import UserIdentity
@@ -481,13 +481,23 @@ def traffic_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
+    traffic_snapshot = request.app.state.traffic_monitor.snapshot()
     context = build_template_context(
         request,
         page_title="Traffic Monitor",
         current_user=current_user,
         active_nav="traffic",
+        traffic_snapshot=traffic_snapshot,
     )
-    return templates.TemplateResponse("placeholder.html", context)
+    return templates.TemplateResponse("traffic.html", context)
+
+
+@router.get("/api/traffic")
+async def traffic_snapshot(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(request.app.state.traffic_monitor.snapshot())
 
 
 @router.get("/map")

@@ -11,13 +11,20 @@ from app import __version__
 from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
+from app.services.traffic import TrafficMonitorService
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app_instance: FastAPI):
     init_db()
+    traffic_monitor = TrafficMonitorService()
+    app_instance.state.traffic_monitor = traffic_monitor
+    await traffic_monitor.start()
     log_event("INFO", "system", "APRSBox web application started")
-    yield
+    try:
+        yield
+    finally:
+        await traffic_monitor.stop()
 
 
 app = FastAPI(title="APRSBox", version=__version__, lifespan=lifespan)

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <h2>Traffic Monitor</h2>
+    <p class="section-lead">Read-only monitor for the first enabled TCP TNC. The monitor shows raw chunks received from the socket and reconnects automatically when the endpoint changes or the connection drops.</p>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <h2>Connection</h2>
+        <div class="traffic-status-row">
+            <span class="status-pill {{ 'status-running' if traffic_snapshot.status == 'connected' else ('status-unknown' if traffic_snapshot.status == 'connecting' else 'status-stopped') }}">
+                <span id="traffic-status-label">{{ traffic_snapshot.status }}</span>
+            </span>
+            <span class="muted small" id="traffic-updated-at">{{ traffic_snapshot.updated_at }}</span>
+        </div>
+        <dl class="details-grid traffic-details">
+            <dt>Active TNC</dt>
+            <dd id="traffic-modem-name">{{ traffic_snapshot.active_modem.name if traffic_snapshot.active_modem else 'None' }}</dd>
+            <dt>Endpoint</dt>
+            <dd id="traffic-modem-endpoint">{{ traffic_snapshot.active_modem.device_path if traffic_snapshot.active_modem else '-' }}</dd>
+            <dt>Detail</dt>
+            <dd id="traffic-status-detail">{{ traffic_snapshot.status_detail }}</dd>
+            <dt>Last Error</dt>
+            <dd id="traffic-last-error">{{ traffic_snapshot.last_error or '-' }}</dd>
+        </dl>
+    </div>
+
+    <div class="panel">
+        <h2>Monitor State</h2>
+        <ul class="simple-list">
+            <li>Source: the first enabled modem with type <code>TCP</code>.</li>
+            <li>Address format: <code>ip:port</code> in the existing <code>Path / Adress</code> field.</li>
+            <li>Display: newest chunks first, text preview plus raw hex bytes.</li>
+        </ul>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="traffic-toolbar">
+        <h2>Raw Frames</h2>
+        <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} entries</span>
+    </div>
+    <div class="traffic-stream" id="traffic-stream">
+        {% if traffic_snapshot.frames %}
+        {% for frame in traffic_snapshot.frames %}
+        <article class="traffic-frame">
+            <div class="traffic-frame-meta">{{ frame.timestamp }} | {{ frame.length }} bytes</div>
+            <pre class="traffic-frame-text">{{ frame.text }}</pre>
+            <pre class="traffic-frame-hex">{{ frame.hex }}</pre>
+        </article>
+        {% endfor %}
+        {% else %}
+        <div class="muted" id="traffic-empty-state">No frames received yet.</div>
+        {% endif %}
+    </div>
+</section>
+
+<script>
+    (() => {
+        const stream = document.getElementById("traffic-stream");
+        const count = document.getElementById("traffic-frame-count");
+        const statusLabel = document.getElementById("traffic-status-label");
+        const updatedAt = document.getElementById("traffic-updated-at");
+        const modemName = document.getElementById("traffic-modem-name");
+        const modemEndpoint = document.getElementById("traffic-modem-endpoint");
+        const statusDetail = document.getElementById("traffic-status-detail");
+        const lastError = document.getElementById("traffic-last-error");
+
+        const renderFrames = (frames) => {
+            if (!frames.length) {
+                stream.innerHTML = '<div class="muted" id="traffic-empty-state">No frames received yet.</div>';
+                return;
+            }
+
+            stream.innerHTML = frames.map((frame) => `
+                <article class="traffic-frame">
+                    <div class="traffic-frame-meta">${frame.timestamp} | ${frame.length} bytes</div>
+                    <pre class="traffic-frame-text"></pre>
+                    <pre class="traffic-frame-hex"></pre>
+                </article>
+            `).join("");
+
+            const textNodes = stream.querySelectorAll(".traffic-frame-text");
+            const hexNodes = stream.querySelectorAll(".traffic-frame-hex");
+            frames.forEach((frame, index) => {
+                textNodes[index].textContent = frame.text;
+                hexNodes[index].textContent = frame.hex;
+            });
+        };
+
+        const syncStatusClass = (status) => {
+            const pill = statusLabel.closest(".status-pill");
+            if (!pill) return;
+            pill.classList.remove("status-running", "status-stopped", "status-unknown");
+            if (status === "connected") {
+                pill.classList.add("status-running");
+            } else if (status === "connecting") {
+                pill.classList.add("status-unknown");
+            } else {
+                pill.classList.add("status-stopped");
+            }
+        };
+
+        const refresh = async () => {
+            try {
+                const response = await fetch("/api/traffic", { headers: { "Accept": "application/json" } });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const snapshot = await response.json();
+                statusLabel.textContent = snapshot.status;
+                updatedAt.textContent = snapshot.updated_at;
+                modemName.textContent = snapshot.active_modem ? snapshot.active_modem.name : "None";
+                modemEndpoint.textContent = snapshot.active_modem ? snapshot.active_modem.device_path : "-";
+                statusDetail.textContent = snapshot.status_detail;
+                lastError.textContent = snapshot.last_error || "-";
+                count.textContent = `${snapshot.frames.length} entries`;
+                syncStatusClass(snapshot.status);
+                renderFrames(snapshot.frames);
+            } catch (error) {
+                statusLabel.textContent = "error";
+                statusDetail.textContent = `Traffic API refresh failed: ${error}`;
+                lastError.textContent = "GUI polling error";
+                syncStatusClass("error");
+            }
+        };
+
+        syncStatusClass(statusLabel.textContent);
+        window.setInterval(refresh, 2000);
+    })();
+</script>
+{% endblock %}
