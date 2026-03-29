@@ -794,7 +794,7 @@ def _parse_course_speed_fields(text: str) -> dict[str, Any] | None:
 
 
 def _parse_altitude_fields(text: str) -> dict[str, Any] | None:
-    match = re.search(r"/A=(\d{6})", text)
+    match = re.search(r"(?:^|[\s/])A=(\d{6})", text)
     if not match:
         return None
     return {"altitude_ft": int(match.group(1))}
@@ -848,7 +848,7 @@ def _parse_object_extension(symbol: str, text: str) -> dict[str, Any] | None:
 
 def _parse_qsy_fields(text: str) -> dict[str, Any] | None:
     match = re.search(
-        r"(?P<frequency>\d{3}\.\d{3,4})MHz(?:\s+(?P<tone>[CT]\d{3}))?(?:\s+(?P<offset>[+-]\d{3,4}))?(?:\s+R(?P<range>\d+(?:\.\d+)?)k)?(?:\s+(?P<callsign>[A-Z0-9-]{3,10}))?",
+        r"(?i)(?P<frequency>\d{3}\.\d{3,4})mhz(?:\s+(?P<tone>[CT]\d{3}))?(?:\s+(?P<offset>[+-]\d{3,4}))?(?:\s+R(?P<range>\d+(?:\.\d+)?)k)?(?:\s+(?P<callsign>[A-Z0-9-]{3,10}))?",
         text,
     )
     if not match:
@@ -874,7 +874,7 @@ def _parse_qsy_fields(text: str) -> dict[str, Any] | None:
 
 def _clean_decoded_tokens(text: str) -> str:
     cleaned = text
-    cleaned = re.sub(r'^[`"\',}0-9]{1,6}(?=\d{3}\.\d{3,4}MHz)', " ", cleaned)
+    cleaned = re.sub(r'^[A-Za-z`"\',}\]>{<\[\(0-9-]{1,6}(?=\d{3}\.\d{3,4}(?i:mhz))', " ", cleaned)
     cleaned = re.sub(r'^(?:[/\\`"\',}{\]\[\(\)!@#$%^&*+=:;?.<>0-9-]{2,8})\s*(?=[A-Za-zĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż_])', " ", cleaned)
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
     cleaned = re.sub(r"\|[!-{]{4,14}\|", " ", cleaned)
@@ -882,10 +882,10 @@ def _clean_decoded_tokens(text: str) -> str:
     cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
     cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
     cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
-    cleaned = re.sub(r"/A=\d{6}", " ", cleaned)
+    cleaned = re.sub(r"(?:^|[\s/])A=\d{6}", " ", cleaned)
     cleaned = re.sub(r"[0-9][0-9]{2}/[0-9][0-9]{2}", " ", cleaned)
     cleaned = re.sub(
-        r"\d{3}\.\d{3,4}MHz(?:\s+[CT]\d{3})?(?:\s+[+-]\d{3,4})?(?:\s+R\d+(?:\.\d+)?k)?(?:\s+[A-Z0-9-]{3,10})?",
+        r"(?i)\d{3}\.\d{3,4}mhz(?:\s+[CT]\d{3})?(?:\s+[+-]\d{3,4})?(?:\s+R\d+(?:\.\d+)?k)?(?:\s+[A-Z0-9-]{3,10})?",
         " ",
         cleaned,
     )
