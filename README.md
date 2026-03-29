@@ -160,7 +160,7 @@ curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install
   APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git sh
 ```
 
-On Raspberry Pi OS / Debian-like systems, run it with `sudo`:
+On Raspberry Pi OS / Debian-like systems, `sudo` must be part of the bootstrap command itself:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
