@@ -75,7 +75,7 @@ obtain_source_tree() {
         exit 1
     fi
     BOOTSTRAP_WORKDIR="$(mktemp -d)"
-    git clone --depth 1 --branch "$BOOTSTRAP_GIT_BRANCH" "$BOOTSTRAP_WORKDIR/repo"
+    git clone --depth 1 --branch "$BOOTSTRAP_GIT_BRANCH" "$BOOTSTRAP_GIT_URL" "$BOOTSTRAP_WORKDIR/repo"
     REPO_ROOT="$BOOTSTRAP_WORKDIR/repo"
     DEPLOY_DIR="$REPO_ROOT/deploy/openrc"
 }
