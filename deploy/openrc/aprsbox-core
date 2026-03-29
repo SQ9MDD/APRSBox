@@ -2,8 +2,8 @@
 
 name="APRSBox Core"
 description="APRSBox APRS core service"
-command="/opt/aprsbox/venv/bin/gunicorn"
-command_args="--bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - app.core_main:app"
+command="/opt/aprsbox/venv/bin/python"
+command_args="-m gunicorn --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - app.core_main:app"
 command_user="aprsbox:aprsbox"
 directory="/opt/aprsbox/app"
 pidfile="/run/aprsbox-core.pid"
