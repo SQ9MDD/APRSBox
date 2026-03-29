@@ -20,8 +20,10 @@
     const resetButton = document.getElementById("map-reset-view");
     const maskElement = document.getElementById("map-mask");
     const maskToggleButton = document.getElementById("map-mask-toggle");
+    const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const stationLayer = window.L.layerGroup();
     const maskStorageKey = "aprsbox-map-mask-mode";
+    const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
     let refreshTimer = null;
 
     const map = window.L.map("map-canvas", {
@@ -61,6 +63,25 @@
         maskToggleButton.textContent = normalizedMode === "day" ? "Day mask" : "Night mask";
         maskToggleButton.setAttribute("aria-pressed", normalizedMode === "night" ? "true" : "false");
         window.localStorage.setItem(maskStorageKey, normalizedMode);
+    }
+
+    function resolveDefaultMaskOpacity() {
+        const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey) || "", 10);
+        if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
+            return storedOpacity;
+        }
+        return 20;
+    }
+
+    function applyMaskOpacity(opacityPercent) {
+        const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
+            ? opacityPercent - (opacityPercent % 10)
+            : 20;
+        root.style.setProperty("--map-mask-opacity", String(normalizedOpacity / 100));
+        if (maskOpacitySelect) {
+            maskOpacitySelect.value = String(normalizedOpacity);
+        }
+        window.localStorage.setItem(maskOpacityStorageKey, String(normalizedOpacity));
     }
 
     function escapeHtml(value) {
@@ -121,6 +142,13 @@
         maskToggleButton.addEventListener("click", function () {
             const nextMode = maskElement.classList.contains("map-mask-night") ? "day" : "night";
             applyMaskMode(nextMode);
+        });
+    }
+
+    if (maskOpacitySelect) {
+        applyMaskOpacity(resolveDefaultMaskOpacity());
+        maskOpacitySelect.addEventListener("change", function () {
+            applyMaskOpacity(Number.parseInt(maskOpacitySelect.value || "", 10));
         });
     }
 
