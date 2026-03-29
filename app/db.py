@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -159,7 +159,20 @@ CREATE TABLE IF NOT EXISTS event_logs (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS traffic_frames (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    format TEXT NOT NULL,
+    line TEXT NOT NULL,
+    port TEXT,
+    command TEXT,
+    length INTEGER NOT NULL,
+    hex TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 """
 
 
@@ -200,3 +213,6 @@ def log_event(level: str, category: str, message: str) -> None:
         (level, category, message, utc_now()),
     )
 
+
+def traffic_retention_cutoff() -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=1)).replace(microsecond=0).isoformat()

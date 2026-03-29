@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
 from threading import Lock
 from typing import Any
 
-from app.db import fetch_one, log_event, utc_now
+from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
 
 KISS_FEND = 0xC0
 KISS_FESC = 0xDB
@@ -18,7 +17,7 @@ AX25_PID_NO_LAYER3 = 0xF0
 class TrafficMonitorService:
     def __init__(self, *, reconnect_delay: float = 5.0, max_frames: int = 400) -> None:
         self._reconnect_delay = reconnect_delay
-        self._frames: deque[dict[str, str]] = deque(maxlen=max_frames)
+        self._max_frames = max_frames
         self._lock = Lock()
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
@@ -49,15 +48,40 @@ class TrafficMonitorService:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             active_modem = dict(self._active_modem) if self._active_modem else None
-            frames = [dict(frame) for frame in reversed(self._frames)]
-            return {
-                "status": self._status,
-                "status_detail": self._status_detail,
-                "active_modem": active_modem,
-                "last_error": self._last_error,
-                "updated_at": self._updated_at,
-                "frames": frames,
+            status = self._status
+            status_detail = self._status_detail
+            last_error = self._last_error
+            updated_at = self._updated_at
+        rows = fetch_all(
+            """
+            SELECT source, format, line, port, command, length, hex, created_at
+            FROM traffic_frames
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (self._max_frames,),
+        )
+        frames = [
+            {
+                "timestamp": row["created_at"],
+                "source": row["source"],
+                "format": row["format"],
+                "line": row["line"],
+                "port": row["port"] or "",
+                "command": row["command"] or "",
+                "length": str(row["length"]),
+                "hex": row["hex"] or "",
             }
+            for row in rows
+        ]
+        return {
+            "status": status,
+            "status_detail": status_detail,
+            "active_modem": active_modem,
+            "last_error": last_error,
+            "updated_at": updated_at,
+            "frames": frames,
+        }
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
@@ -216,8 +240,8 @@ class TrafficMonitorService:
             entry["format"] = "KISS-CMD"
             entry["line"] = f"port={port} KISS command 0x{command_id:X} len={len(payload)}"
 
+        self._persist_frame(entry, timestamp)
         with self._lock:
-            self._frames.append(entry)
             self._updated_at = timestamp
 
     def _kiss_unescape(self, payload: bytes) -> bytes:
@@ -319,6 +343,27 @@ class TrafficMonitorService:
         if not modem:
             return "TNC"
         return str(modem.get("name") or "TNC").strip()
+
+    def _persist_frame(self, entry: dict[str, str], timestamp: str) -> None:
+        cutoff = traffic_retention_cutoff()
+        with get_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO traffic_frames(source, format, line, port, command, length, hex, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entry["source"],
+                    entry["format"],
+                    entry["line"],
+                    entry["port"],
+                    entry["command"],
+                    int(entry["length"]),
+                    entry["hex"],
+                    timestamp,
+                ),
+            )
+            connection.execute("DELETE FROM traffic_frames WHERE created_at < ?", (cutoff,))
 
     async def _sleep(self, delay: float) -> None:
         try:
