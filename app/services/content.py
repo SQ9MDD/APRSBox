@@ -1042,6 +1042,8 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
 
     qsy = _parse_qsy_fields(comment)
     if qsy:
+        if result.get("entity_class") == "mobile":
+            qsy.pop("qsy_callsign", None)
         data.update(qsy)
 
     if data:
