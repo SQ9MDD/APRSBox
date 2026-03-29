@@ -20,10 +20,8 @@
     const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
     const maskElement = document.getElementById("map-mask");
-    const maskToggleButton = document.getElementById("map-mask-toggle");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const stationLayer = window.L.layerGroup();
-    const maskStorageKey = "aprsbox-map-mask-mode";
     const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
     let refreshTimer = null;
 
@@ -45,25 +43,14 @@
         tileSourceOutput.textContent = tileSourceName;
     }
 
-    function resolveDefaultMaskMode() {
-        const storedMode = window.localStorage.getItem(maskStorageKey);
-        if (storedMode === "day" || storedMode === "night") {
-            return storedMode;
-        }
-        const theme = document.documentElement.getAttribute("data-theme");
-        return theme === "dark" ? "night" : "day";
-    }
-
-    function applyMaskMode(mode) {
-        if (!maskElement || !maskToggleButton) {
+    function syncMaskModeWithTheme() {
+        if (!maskElement) {
             return;
         }
-        const normalizedMode = mode === "night" ? "night" : "day";
-        maskElement.classList.toggle("map-mask-day", normalizedMode === "day");
-        maskElement.classList.toggle("map-mask-night", normalizedMode === "night");
-        maskToggleButton.textContent = normalizedMode === "day" ? "Day mask" : "Night mask";
-        maskToggleButton.setAttribute("aria-pressed", normalizedMode === "night" ? "true" : "false");
-        window.localStorage.setItem(maskStorageKey, normalizedMode);
+        const theme = document.documentElement.getAttribute("data-theme");
+        const isNight = theme === "dark";
+        maskElement.classList.toggle("map-mask-day", !isNight);
+        maskElement.classList.toggle("map-mask-night", isNight);
     }
 
     function resolveDefaultMaskOpacity() {
@@ -140,15 +127,10 @@
         });
     }
 
-    if (maskElement && maskToggleButton) {
-        applyMaskMode(resolveDefaultMaskMode());
-        maskToggleButton.addEventListener("click", function () {
-            const nextMode = maskElement.classList.contains("map-mask-night") ? "day" : "night";
-            applyMaskMode(nextMode);
-        });
+    if (maskElement) {
+        syncMaskModeWithTheme();
         const themeObserver = new MutationObserver(function () {
-            const theme = document.documentElement.getAttribute("data-theme");
-            applyMaskMode(theme === "dark" ? "night" : "day");
+            syncMaskModeWithTheme();
         });
         themeObserver.observe(document.documentElement, {
             attributes: true,

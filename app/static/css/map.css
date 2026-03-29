@@ -67,10 +67,6 @@
     background: rgba(0, 0, 0, var(--map-mask-opacity));
 }
 
-.map-mask-toggle {
-    min-width: 5.75rem;
-}
-
 .map-mask-opacity-control {
     display: inline-flex;
     align-items: center;
