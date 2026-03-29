@@ -156,16 +156,9 @@ create_admin_user() {
         return
     fi
     prompt_admin
-    credentials_file="$(mktemp)"
-    chmod 600 "$credentials_file"
-    {
-        printf '%s\n' "$ADMIN_USER"
-        printf '%s\n' "$ADMIN_PASSWORD"
-    } > "$credentials_file"
     su -s /bin/sh -c \
-        "admin_user=\$(sed -n '1p' '$credentials_file'); admin_password=\$(sed -n '2p' '$credentials_file'); PYTHONPATH='$TARGET_APP_DIR' APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli create-admin --username \"\$admin_user\" --password \"\$admin_password\"" \
+        "PYTHONPATH='$TARGET_APP_DIR' APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' APRSBOX_BOOTSTRAP_ADMIN_USER='$ADMIN_USER' APRSBOX_BOOTSTRAP_ADMIN_PASSWORD='$ADMIN_PASSWORD' '$VENV_DIR/bin/python' -m app.cli create-admin --username \"\$APRSBOX_BOOTSTRAP_ADMIN_USER\" --password \"\$APRSBOX_BOOTSTRAP_ADMIN_PASSWORD\"" \
         "$APP_USER"
-    rm -f "$credentials_file"
 }
 
 install_openrc_services() {
