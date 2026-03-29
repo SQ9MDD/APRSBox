@@ -873,6 +873,7 @@ def _parse_qsy_fields(text: str) -> dict[str, Any] | None:
 def _clean_decoded_tokens(text: str) -> str:
     cleaned = text
     cleaned = re.sub(r'^[`"\',}0-9]{1,6}(?=\d{3}\.\d{3,4}MHz)', " ", cleaned)
+    cleaned = re.sub(r'^(?:[/\\`"\',}{\]\[\(\)!@#$%^&*+=:;?.<>0-9-]{2,8})\s*(?=[A-Za-zĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż_])', " ", cleaned)
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
     cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
     cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
@@ -884,6 +885,7 @@ def _clean_decoded_tokens(text: str) -> str:
         " ",
         cleaned,
     )
+    cleaned = re.sub(r'^(?:[/\\`"\',}{\]\[\(\)!@#$%^&*+=:;?.<>0-9-]{2,8})\s*(?=[A-Za-zĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż_])', " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip(" /|,;:-")
 
