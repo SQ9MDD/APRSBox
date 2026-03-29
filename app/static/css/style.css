@@ -843,12 +843,23 @@ select:focus-visible,
 .station-detail-page {
     display: grid;
     gap: var(--space-4);
+    width: 100%;
+    min-width: 0;
+}
+
+.station-detail-page > * {
+    min-width: 0;
 }
 
 .station-detail-hero {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
     gap: var(--space-4);
+    min-width: 0;
+}
+
+.station-detail-hero > * {
+    min-width: 0;
 }
 
 .station-detail-fields {
