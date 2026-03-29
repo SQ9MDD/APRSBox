@@ -91,6 +91,8 @@ Requirements:
 Create a local environment and run the web app:
 
 ```bash
+git clone https://github.com/SQ9MDD/APRSBox.git
+cd APRSBox
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
@@ -202,6 +204,29 @@ rc-service aprsbox-core status
 ```
 
 The web service listens on port `8000` by default.
+
+## Manual Checks On An Installed System
+
+After native installation, the application source tree is under `/opt/aprsbox/app` and the production virtual environment is `/opt/aprsbox/venv`.
+
+Do not run development commands from `/opt/aprsbox`, because that directory only contains runtime folders and not the repository root files such as `requirements.txt`.
+
+Correct manual checks on an installed host:
+
+```bash
+cd /opt/aprsbox/app
+/opt/aprsbox/venv/bin/pip install -r requirements.txt
+/opt/aprsbox/venv/bin/python -m app.cli init-db
+/opt/aprsbox/venv/bin/python -m app.cli admin-exists
+/opt/aprsbox/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir /opt/aprsbox/app
+```
+
+If you need to reset the admin password on an installed host:
+
+```bash
+cd /opt/aprsbox/app
+PYTHONPATH=/opt/aprsbox/app /opt/aprsbox/venv/bin/python -m app.cli set-password --username admin
+```
 
 ## GUI Sections Included In This Skeleton
 
