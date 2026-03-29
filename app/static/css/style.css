@@ -678,6 +678,11 @@ textarea {
     border: 1px solid var(--border);
 }
 
+.station-detail-map-root[hidden],
+.station-map-placeholder[hidden] {
+    display: none !important;
+}
+
 .station-map-placeholder {
     min-height: 22rem;
     border-radius: 10px;
