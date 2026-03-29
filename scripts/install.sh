@@ -4,14 +4,18 @@ set -eu
 APP_NAME="aprsbox"
 APP_USER="aprsbox"
 INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
-REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-APP_SRC_DIR="$REPO_ROOT/app"
+BOOTSTRAP_GIT_URL="${APRSBOX_GIT_URL:-}"
+REPO_ROOT="$(pwd)"
+if [ -n "${0:-}" ] && [ -f "${0:-}" ]; then
+    REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+fi
 DEPLOY_DIR="$REPO_ROOT/deploy/openrc"
 VENV_DIR="$INSTALL_ROOT/venv"
 TARGET_APP_DIR="$INSTALL_ROOT/app"
 DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
 ADMIN_USER="${APRSBOX_ADMIN_USER:-}"
 ADMIN_PASSWORD="${APRSBOX_ADMIN_PASSWORD:-}"
+BOOTSTRAP_WORKDIR=""
 
 log() {
     printf '%s\n' "$*"
@@ -37,17 +41,17 @@ detect_os() {
 install_system_packages() {
     case "$OS_ID" in
         alpine)
-            apk add --no-cache python3 py3-pip py3-virtualenv sqlite openrc shadow
+            apk add --no-cache python3 py3-pip py3-virtualenv sqlite openrc shadow curl git rsync ca-certificates
             ;;
         debian|raspbian)
             apt-get update
-            apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync
+            apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync curl git ca-certificates
             ;;
         *)
             case "$OS_LIKE" in
                 *debian*)
                     apt-get update
-                    apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync
+                    apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync curl git ca-certificates
                     ;;
                 *)
                     log "Unsupported operating system: $OS_ID"
@@ -56,6 +60,21 @@ install_system_packages() {
             esac
             ;;
     esac
+}
+
+obtain_source_tree() {
+    if [ -d "$REPO_ROOT/app" ] && [ -f "$REPO_ROOT/requirements.txt" ]; then
+        return
+    fi
+    if [ -z "$BOOTSTRAP_GIT_URL" ]; then
+        log "No local repository checkout detected."
+        log "Set APRSBOX_GIT_URL when running the installer from a downloaded script."
+        exit 1
+    fi
+    BOOTSTRAP_WORKDIR="$(mktemp -d)"
+    git clone --depth 1 "$BOOTSTRAP_GIT_URL" "$BOOTSTRAP_WORKDIR/repo"
+    REPO_ROOT="$BOOTSTRAP_WORKDIR/repo"
+    DEPLOY_DIR="$REPO_ROOT/deploy/openrc"
 }
 
 ensure_user() {
@@ -130,9 +149,16 @@ prompt_admin() {
 
 create_admin_user() {
     prompt_admin
+    credentials_file="$(mktemp)"
+    chmod 600 "$credentials_file"
+    {
+        printf '%s\n' "$ADMIN_USER"
+        printf '%s\n' "$ADMIN_PASSWORD"
+    } > "$credentials_file"
     su -s /bin/sh -c \
-        "APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli create-admin --username '$ADMIN_USER' --password '$ADMIN_PASSWORD'" \
+        "admin_user=\$(sed -n '1p' '$credentials_file'); admin_password=\$(sed -n '2p' '$credentials_file'); APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli create-admin --username \"\$admin_user\" --password \"\$admin_password\"" \
         "$APP_USER"
+    rm -f "$credentials_file"
 }
 
 install_openrc_services() {
@@ -154,6 +180,7 @@ main() {
     require_root
     detect_os
     install_system_packages
+    obtain_source_tree
     ensure_user
     prepare_directories
     sync_application_files
@@ -165,7 +192,9 @@ main() {
     log "APRSBox installation finished."
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"
+    if [ -n "$BOOTSTRAP_WORKDIR" ]; then
+        rm -rf "$BOOTSTRAP_WORKDIR"
+    fi
 }
 
 main "$@"
-

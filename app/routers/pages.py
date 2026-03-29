@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from app.dependencies import get_current_user, require_roles
 from app.models import UserIdentity
@@ -42,9 +41,9 @@ def root() -> RedirectResponse:
 @router.get("/dashboard")
 def dashboard(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     context = build_template_context(
         request,
         page_title="Dashboard",
@@ -59,16 +58,15 @@ def dashboard(
 @router.get("/settings/modems")
 def modems_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "modems"))
 
 
 @router.post("/settings/modems")
 def modems_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     name: str = Form(...),
     modem_type: str = Form(...),
@@ -77,6 +75,7 @@ def modems_create(
     enabled: str | None = Form(None),
     notes: str = Form(""),
 ) -> object:
+    templates = request.app.state.templates
     success, error = safe_create_section_row(
         "modems",
         {
@@ -95,16 +94,15 @@ def modems_create(
 @router.get("/settings/servers")
 def servers_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "servers"))
 
 
 @router.post("/settings/servers")
 def servers_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     name: str = Form(...),
     host: str = Form(...),
@@ -113,6 +111,7 @@ def servers_create(
     enabled: str | None = Form(None),
     notes: str = Form(""),
 ) -> object:
+    templates = request.app.state.templates
     success, error = safe_create_section_row(
         "servers",
         {
@@ -131,22 +130,22 @@ def servers_create(
 @router.get("/igate")
 def igate_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "igate"))
 
 
 @router.post("/igate")
 def igate_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     name: str = Form(...),
     direction: str = Form(...),
     is_enabled: str | None = Form(None),
     policy_text: str = Form(""),
 ) -> object:
+    templates = request.app.state.templates
     success, error = safe_create_section_row(
         "igate",
         {
@@ -163,16 +162,15 @@ def igate_create(
 @router.get("/digi")
 def digi_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "digi"))
 
 
 @router.post("/digi")
 def digi_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     name: str = Form(...),
     source_match: str = Form(""),
@@ -180,6 +178,7 @@ def digi_create(
     path_rewrite: str = Form(""),
     is_enabled: str | None = Form(None),
 ) -> object:
+    templates = request.app.state.templates
     success, error = safe_create_section_row(
         "digi",
         {
@@ -197,16 +196,15 @@ def digi_create(
 @router.get("/objects")
 def objects_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "objects"))
 
 
 @router.post("/objects")
 def objects_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     name: str = Form(...),
     latitude: str = Form(""),
@@ -216,6 +214,7 @@ def objects_create(
     is_enabled: str | None = Form(None),
     comment: str = Form(""),
 ) -> object:
+    templates = request.app.state.templates
     success, error = safe_create_section_row(
         "objects",
         {
@@ -235,16 +234,15 @@ def objects_create(
 @router.get("/items")
 def items_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "items"))
 
 
 @router.post("/items")
 def items_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     name: str = Form(...),
     latitude: str = Form(""),
@@ -254,6 +252,7 @@ def items_create(
     is_enabled: str | None = Form(None),
     comment: str = Form(""),
 ) -> object:
+    templates = request.app.state.templates
     success, error = safe_create_section_row(
         "items",
         {
@@ -273,22 +272,22 @@ def items_create(
 @router.get("/bulletins")
 def bulletins_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "bulletins"))
 
 
 @router.post("/bulletins")
 def bulletins_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     name: str = Form(...),
     body: str = Form(...),
     cadence_minutes: int | None = Form(None),
     is_enabled: str | None = Form(None),
 ) -> object:
+    templates = request.app.state.templates
     success, error = safe_create_section_row(
         "bulletins",
         {
@@ -305,9 +304,9 @@ def bulletins_create(
 @router.get("/station")
 def station_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     context = build_template_context(
         request,
         page_title="Station Settings",
@@ -322,7 +321,6 @@ def station_page(
 @router.post("/station")
 def station_update(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     callsign: str = Form(""),
     ssid: str = Form(""),
@@ -333,6 +331,7 @@ def station_update(
     symbol_code: str = Form(">"),
     tx_enabled: str | None = Form(None),
 ) -> object:
+    templates = request.app.state.templates
     update_station_settings(
         {
             "callsign": callsign.strip(),
@@ -360,9 +359,9 @@ def station_update(
 @router.get("/logs")
 def logs_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     context = build_template_context(
         request,
         page_title="Logs",
@@ -376,9 +375,9 @@ def logs_page(
 @router.get("/traffic")
 def traffic_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     context = build_template_context(
         request,
         page_title="Traffic Monitor",
@@ -391,9 +390,9 @@ def traffic_page(
 @router.get("/map")
 def map_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
+    templates = request.app.state.templates
     context = build_template_context(
         request,
         page_title="Map",
@@ -401,4 +400,3 @@ def map_page(
         active_nav="map",
     )
     return templates.TemplateResponse("placeholder.html", context)
-

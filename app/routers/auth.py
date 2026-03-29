@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Form, Request, status
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from app.auth import authenticate_user
 from app.db import log_event
@@ -12,7 +11,8 @@ router = APIRouter()
 
 
 @router.get("/login")
-def login_page(request: Request, templates: Jinja2Templates) -> object:
+def login_page(request: Request) -> object:
+    templates = request.app.state.templates
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
     context = build_template_context(request, page_title="Login", login_error=None)
@@ -22,10 +22,10 @@ def login_page(request: Request, templates: Jinja2Templates) -> object:
 @router.post("/login")
 def login_submit(
     request: Request,
-    templates: Jinja2Templates,
     username: str = Form(...),
     password: str = Form(...),
 ) -> object:
+    templates = request.app.state.templates
     user = authenticate_user(username=username.strip(), password=password)
     if not user:
         context = build_template_context(
@@ -36,6 +36,8 @@ def login_submit(
         return templates.TemplateResponse("login.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     request.session["user_id"] = user.id
+    request.session["username"] = user.username
+    request.session["role"] = user.role
     log_event("INFO", "auth", f"User {user.username} logged in")
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -46,4 +48,3 @@ def logout(request: Request) -> RedirectResponse:
     request.session.clear()
     log_event("INFO", "auth", f"Session ended for {username}")
     return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-

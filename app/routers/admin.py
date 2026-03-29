@@ -3,7 +3,6 @@ from __future__ import annotations
 import sqlite3
 
 from fastapi import APIRouter, Depends, Form, Request, status
-from fastapi.templating import Jinja2Templates
 
 from app.auth import create_user, list_users, set_user_active
 from app.dependencies import require_roles
@@ -16,9 +15,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @router.get("/users")
 def users_page(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin")),
 ) -> object:
+    templates = request.app.state.templates
     context = build_template_context(
         request,
         page_title="Users / Roles",
@@ -34,13 +33,13 @@ def users_page(
 @router.post("/users")
 def users_create(
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin")),
     username: str = Form(...),
     password: str = Form(...),
     role: str = Form(...),
     is_active: str | None = Form(None),
 ) -> object:
+    templates = request.app.state.templates
     flash = "User created."
     status_code = status.HTTP_200_OK
     try:
@@ -64,10 +63,10 @@ def users_create(
 def users_toggle(
     user_id: int,
     request: Request,
-    templates: Jinja2Templates,
     current_user: UserIdentity = Depends(require_roles("admin")),
     is_active: int = Form(...),
 ) -> object:
+    templates = request.app.state.templates
     set_user_active(user_id, bool(is_active))
     context = build_template_context(
         request,
@@ -79,4 +78,3 @@ def users_toggle(
         flash="User status updated.",
     )
     return templates.TemplateResponse("users.html", context)
-

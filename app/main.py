@@ -25,6 +25,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site=
 app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
 
 templates = Jinja2Templates(directory=str(settings.templates_dir))
+app.state.templates = templates
 
 app.include_router(auth.router)
 app.include_router(pages.router)
@@ -39,4 +40,3 @@ def health() -> dict[str, str]:
 @app.get("/version")
 def version() -> dict[str, str]:
     return {"version": __version__}
-
