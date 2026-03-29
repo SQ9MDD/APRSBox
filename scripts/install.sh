@@ -129,7 +129,7 @@ setup_venv() {
 
 initialize_database() {
     su -s /bin/sh -c \
-        "APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli init-db" \
+        "cd '$TARGET_APP_DIR' && APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli init-db" \
         "$APP_USER"
 }
 
@@ -149,7 +149,7 @@ prompt_admin() {
 
 create_admin_user() {
     if su -s /bin/sh -c \
-        "APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli admin-exists" \
+        "cd '$TARGET_APP_DIR' && APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli admin-exists" \
         "$APP_USER"
     then
         log "Active admin user already present. Skipping initial admin creation."
@@ -163,7 +163,7 @@ create_admin_user() {
         printf '%s\n' "$ADMIN_PASSWORD"
     } > "$credentials_file"
     su -s /bin/sh -c \
-        "admin_user=\$(sed -n '1p' '$credentials_file'); admin_password=\$(sed -n '2p' '$credentials_file'); APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli create-admin --username \"\$admin_user\" --password \"\$admin_password\"" \
+        "cd '$TARGET_APP_DIR' && admin_user=\$(sed -n '1p' '$credentials_file'); admin_password=\$(sed -n '2p' '$credentials_file'); APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli create-admin --username \"\$admin_user\" --password \"\$admin_password\"" \
         "$APP_USER"
     rm -f "$credentials_file"
 }
