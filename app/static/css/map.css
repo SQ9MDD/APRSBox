@@ -56,10 +56,16 @@
     inset: 0;
 }
 
+.map-mask-pane {
+    z-index: 550;
+    pointer-events: none;
+}
+
 .map-mask {
     position: absolute;
     inset: 0;
-    z-index: 550;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
     background: #000;
     opacity: 0.2;

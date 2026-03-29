@@ -32,7 +32,11 @@
     });
 
     if (maskElement) {
-        map.getContainer().appendChild(maskElement);
+        const maskPane = map.createPane("mask-pane");
+        maskPane.classList.add("map-mask-pane");
+        maskPane.style.zIndex = "550";
+        maskPane.style.pointerEvents = "none";
+        maskPane.appendChild(maskElement);
     }
 
     // Keep the tile endpoint configurable from the backend so the frontend can
