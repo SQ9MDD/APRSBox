@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 from shutil import which
 from typing import Any
+from urllib.parse import quote
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
@@ -243,9 +244,145 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
                 "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
                 "latitude": snapshot["latitude"],
                 "longitude": snapshot["longitude"],
+                "detail_href": build_station_detail_href(snapshot["display_callsign"]),
             }
         )
     return stations
+
+
+def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, Any] | None:
+    normalized_callsign = callsign.strip()
+    if not normalized_callsign:
+        return None
+
+    snapshot = _find_station_snapshot(normalized_callsign)
+    if snapshot is None:
+        return None
+
+    latitude = _parse_coordinate(snapshot.get("latitude"))
+    longitude = _parse_coordinate(snapshot.get("longitude"))
+    return {
+        "callsign": snapshot["callsign"],
+        "ssid": snapshot["ssid"],
+        "display_callsign": snapshot["display_callsign"],
+        "detail_href": build_station_detail_href(snapshot["display_callsign"]),
+        "base_callsign": snapshot["callsign"],
+        "source": snapshot["source"],
+        "destination": snapshot["destination"],
+        "path": snapshot["path"],
+        "entity_class": snapshot["entity_class"],
+        "packet_type": snapshot["frame_type"],
+        "packet_type_label": snapshot["frame_type_label"],
+        "symbol": snapshot["symbol"],
+        "symbol_icon": snapshot["symbol_icon"],
+        "symbol_table": snapshot["symbol_table"],
+        "symbol_code": snapshot["symbol_code"],
+        "comment": snapshot["comment"],
+        "raw_latest_packet": snapshot["raw_text"],
+        "last_heard_at": snapshot["last_heard_at"],
+        "last_heard_label": snapshot["last_heard_label"],
+        "last_heard_date": snapshot["last_heard_date"],
+        "last_heard_relative": snapshot["last_heard_relative"],
+        "last_heard_age_s": snapshot["last_heard_age_s"],
+        "latitude": snapshot["latitude"],
+        "longitude": snapshot["longitude"],
+        "latitude_float": latitude,
+        "longitude_float": longitude,
+        "messaging_capable": _messaging_capable(snapshot),
+        "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
+        "fields": _station_detail_fields(snapshot, unit_system),
+    }
+
+
+def get_recent_station_packets(callsign: str, limit: int = 10) -> list[dict[str, Any]]:
+    snapshot = _find_station_snapshot(callsign.strip())
+    if snapshot is None:
+        return []
+
+    station_key = snapshot["display_callsign"]
+    rows = fetch_all(
+        """
+        SELECT source, line, created_at
+        FROM traffic_frames
+        WHERE format = 'TNC2'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 500
+        """
+    )
+
+    packets: list[dict[str, Any]] = []
+    for row in rows:
+        parsed = _parse_tnc2_line(row["line"])
+        if parsed is None:
+            continue
+        aprs_data = _parse_aprs_packet(parsed)
+        if aprs_data is None:
+            continue
+        row_station_key = (aprs_data.get("entity_name") or parsed["source"]).strip()
+        if row_station_key.casefold() != station_key.casefold():
+            continue
+
+        heard_date, heard_relative = _format_last_heard_parts(row["created_at"])
+        decoded_summary = aprs_data.get("comment", "")
+        if not decoded_summary and aprs_data.get("data"):
+            decoded_items = _format_decoded_data_for_display(aprs_data["data"], "metric")
+            decoded_summary = ", ".join(item["value"] for item in decoded_items[:4])
+
+        packets.append(
+            {
+                "timestamp": row["created_at"],
+                "timestamp_label": heard_date,
+                "timestamp_relative": heard_relative,
+                "source": parsed["source"],
+                "destination": parsed["destination"],
+                "path": parsed["path"],
+                "decoded_summary": decoded_summary,
+                "raw_packet": row["line"],
+            }
+        )
+        if len(packets) >= limit:
+            break
+    return packets
+
+
+def get_related_ssids(base_callsign: str) -> list[dict[str, Any]]:
+    normalized_base = base_callsign.strip()
+    if not normalized_base:
+        return []
+
+    related: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for snapshot in get_heard_station_snapshots():
+        if snapshot["callsign"].casefold() != normalized_base.casefold():
+            continue
+        display_callsign = snapshot["display_callsign"]
+        dedupe_key = display_callsign.casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        related.append(
+            {
+                "display_callsign": display_callsign,
+                "detail_href": build_station_detail_href(display_callsign),
+                "is_current": False,
+                "last_heard_label": snapshot["last_heard_label"],
+            }
+        )
+    return related
+
+
+def _find_station_snapshot(callsign: str) -> dict[str, Any] | None:
+    normalized = callsign.strip().casefold()
+    if not normalized:
+        return None
+    snapshots = get_heard_station_snapshots()
+    for snapshot in snapshots:
+        if snapshot["display_callsign"].casefold() == normalized:
+            return snapshot
+    for snapshot in snapshots:
+        if snapshot["callsign"].casefold() == normalized:
+            return snapshot
+    return None
 
 
 def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
@@ -416,6 +553,82 @@ def _split_symbol(symbol: str) -> tuple[str, str]:
     if symbol:
         return symbol[0], ""
     return "", ""
+
+
+def build_station_detail_href(display_callsign: str) -> str:
+    return f"/stations/{quote(display_callsign, safe='')}"
+
+
+def _parse_coordinate(value: Any) -> float | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _messaging_capable(snapshot: dict[str, Any]) -> bool | None:
+    if snapshot.get("entity_class") == "object":
+        return False
+    return None
+
+
+def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[dict[str, str]]:
+    metrics = dict(snapshot.get("data_raw", {}) or {})
+    fields: list[dict[str, str]] = []
+    display_callsign = snapshot.get("display_callsign")
+    if display_callsign:
+        fields.append({"label": "Display callsign", "value": str(display_callsign)})
+    if snapshot.get("callsign"):
+        fields.append({"label": "Base callsign", "value": str(snapshot["callsign"])})
+    if snapshot.get("ssid"):
+        fields.append({"label": "SSID", "value": str(snapshot["ssid"])})
+    if snapshot.get("source"):
+        fields.append({"label": "Source", "value": str(snapshot["source"])})
+    if snapshot.get("destination"):
+        fields.append({"label": "Destination", "value": str(snapshot["destination"])})
+    if snapshot.get("last_heard_date"):
+        fields.append({"label": "Last heard", "value": str(snapshot["last_heard_date"])})
+    if snapshot.get("last_heard_relative"):
+        fields.append({"label": "Last heard age", "value": str(snapshot["last_heard_relative"])})
+    if snapshot.get("latitude"):
+        fields.append({"label": "Latitude", "value": str(snapshot["latitude"])})
+    if snapshot.get("longitude"):
+        fields.append({"label": "Longitude", "value": str(snapshot["longitude"])})
+    if snapshot.get("symbol_table"):
+        fields.append({"label": "Symbol table", "value": str(snapshot["symbol_table"])})
+    if snapshot.get("symbol_code"):
+        fields.append({"label": "Symbol code", "value": str(snapshot["symbol_code"])})
+    if snapshot.get("comment"):
+        fields.append({"label": "Comment", "value": str(snapshot["comment"])})
+    if snapshot.get("path"):
+        fields.append({"label": "Path", "value": str(snapshot["path"])})
+    if snapshot.get("frame_type"):
+        fields.append({"label": "Packet type", "value": str(snapshot["frame_type"])})
+
+    speed_knots = metrics.get("speed_knots")
+    if speed_knots is not None:
+        speed_value = f"{int(round(float(speed_knots) * 1.15078))} mph" if unit_system == "imperial" else f"{int(round(float(speed_knots) * 1.852))} km/h"
+        fields.append({"label": "Speed", "value": speed_value})
+    course_deg = metrics.get("course_deg")
+    if course_deg is not None:
+        fields.append({"label": "Course", "value": f"{int(course_deg)}°"})
+    altitude_ft = metrics.get("altitude_ft")
+    if altitude_ft is not None:
+        altitude_value = f"{int(altitude_ft)} ft" if unit_system == "imperial" else f"{int(round(float(altitude_ft) * 0.3048))} m"
+        fields.append({"label": "Altitude", "value": altitude_value})
+
+    messaging_capable = _messaging_capable(snapshot)
+    if messaging_capable is not None:
+        fields.append({"label": "Messaging capability", "value": "Yes" if messaging_capable else "No"})
+    if snapshot.get("raw_text"):
+        fields.append({"label": "Latest raw packet", "value": str(snapshot["raw_text"])})
+
+    for item in _format_decoded_data_for_display(metrics, unit_system):
+        if item.get("value"):
+            fields.append({"label": item["label"], "value": item["value"]})
+    return fields
 
 
 def station_summary(stations: list[dict[str, Any]]) -> dict[str, int]:

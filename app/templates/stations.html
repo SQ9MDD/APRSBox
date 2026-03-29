@@ -47,8 +47,8 @@
         </thead>
         <tbody id="stations-table-body">
             {% for row in stations %}
-            <tr>
-                <td class="callsign-cell"><strong>{{ row.display_callsign or row.callsign }}</strong></td>
+            <tr class="clickable-row" data-href="{{ row.detail_href }}">
+                <td class="callsign-cell"><strong><a class="station-link" href="{{ row.detail_href }}">{{ row.display_callsign or row.callsign }}</a></strong></td>
                 <td>
                     {% if row.frame_type %}
                     <span class="frame-type-badge" title="{{ row.frame_type_label or row.frame_type }}">{{ row.frame_type }}</span>
@@ -139,8 +139,8 @@
             return;
         }
         tbody.innerHTML = stations.map((row) => `
-            <tr>
-                <td class="callsign-cell"><strong>${escapeHtml(row.display_callsign || row.callsign || "-")}</strong></td>
+            <tr class="clickable-row" data-href="${escapeHtml(row.detail_href || "")}">
+                <td class="callsign-cell"><strong><a class="station-link" href="${escapeHtml(row.detail_href || "#")}">${escapeHtml(row.display_callsign || row.callsign || "-")}</a></strong></td>
                 <td>${row.frame_type ? `<span class="frame-type-badge" title="${escapeHtml(row.frame_type_label || row.frame_type)}">${escapeHtml(row.frame_type)}</span>` : '<span class="muted">-</span>'}</td>
                 <td>
                     <div class="last-heard-cell">
@@ -156,6 +156,16 @@
             </tr>
         `).join("");
     }
+
+    tbody.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const link = target.closest("a");
+        if (link) return;
+        const row = target.closest("tr[data-href]");
+        if (!row || !row.dataset.href) return;
+        window.location.href = row.dataset.href;
+    });
 
     async function refreshStations() {
         try {

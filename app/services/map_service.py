@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import settings
-from app.services.content import get_heard_station_snapshots, get_station_settings
+from app.services.content import build_station_detail_href, get_heard_station_snapshots, get_station_settings
 
 DEFAULT_STATION_ZOOM = 10
 FALLBACK_CENTER = {"latitude": 52.1, "longitude": 19.4, "zoom": 6}
@@ -55,9 +55,24 @@ def get_map_station_payload() -> dict[str, Any]:
                 "destination": station["destination"],
                 "packet_type": station["frame_type"],
                 "stale": bool((station["last_heard_age_s"] or 0) >= STALE_AFTER_SECONDS),
+                "detail_href": build_station_detail_href(station["display_callsign"]),
             }
         )
     return {"stations": stations}
+
+
+def get_station_detail_map_config(station: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "latitude": station.get("latitude_float"),
+        "longitude": station.get("longitude_float"),
+        "zoom": DEFAULT_STATION_ZOOM,
+        "tile_url": settings.map_tile_url,
+        "tile_attribution": settings.map_tile_attribution,
+        "tile_source_name": settings.map_tile_source_name,
+        "display_callsign": station.get("display_callsign", ""),
+        "symbol_icon": station.get("symbol_icon", "icons/verG/x.gif"),
+        "detail_href": station.get("detail_href", ""),
+    }
 
 
 def _resolve_default_view(station_settings: dict[str, Any]) -> dict[str, float | int]:

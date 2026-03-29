@@ -457,6 +457,15 @@ textarea {
     white-space: nowrap;
 }
 
+.station-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.station-link:hover {
+    text-decoration: underline;
+}
+
 .last-heard-cell {
     display: flex;
     flex-direction: column;
@@ -626,6 +635,89 @@ textarea {
     gap: 0.45rem 0.9rem;
 }
 
+.station-detail-header,
+.station-detail-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.station-detail-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+    gap: 0.9rem;
+}
+
+.station-detail-fields {
+    display: grid;
+    grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
+    gap: 0.5rem 0.85rem;
+    margin: 0.8rem 0 0;
+}
+
+.station-detail-fields dt {
+    color: var(--muted);
+}
+
+.station-detail-fields dd {
+    margin: 0;
+    word-break: break-word;
+}
+
+.station-detail-map-root,
+.station-detail-map-canvas {
+    width: 100%;
+}
+
+.station-detail-map-canvas {
+    min-height: 22rem;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.station-map-placeholder {
+    min-height: 22rem;
+    border-radius: 10px;
+    border: 1px dashed var(--border);
+    background: var(--panel-alt);
+    display: grid;
+    place-items: center;
+    text-align: center;
+    gap: 0.35rem;
+    padding: 1rem;
+}
+
+.station-message-form {
+    margin-top: 0.8rem;
+}
+
+.station-ssid-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.75rem;
+}
+
+.station-ssid-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.38rem 0.62rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    color: inherit;
+    text-decoration: none;
+}
+
+.station-ssid-chip.current {
+    background: var(--accent-soft);
+    border-color: rgba(109, 189, 128, 0.28);
+}
+
 .traffic-status-row,
 .traffic-toolbar {
     display: flex;
@@ -713,7 +805,8 @@ code {
 
 @media (max-width: 720px) {
     .grid.two,
-    .form-grid {
+    .form-grid,
+    .station-detail-hero {
         grid-template-columns: 1fr;
     }
 
@@ -730,5 +823,9 @@ code {
     .traffic-log-row {
         grid-template-columns: 1fr;
         gap: 0.2rem;
+    }
+
+    .station-detail-fields {
+        grid-template-columns: 1fr;
     }
 }

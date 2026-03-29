@@ -161,9 +161,13 @@
 
     function tooltipHtml(station) {
         const lines = [];
+        const detailHref = station.detail_href || "";
+        const title = detailHref
+            ? `<a class="map-station-link" href="${escapeHtml(detailHref)}">${escapeHtml(station.display_callsign || station.callsign || "")}</a>`
+            : `<strong>${escapeHtml(station.display_callsign || station.callsign || "")}</strong>`;
         const heardAt = formatTimestamp(station.last_heard_at);
         const heardAge = formatAge(station.last_heard_age_s);
-        lines.push(`<strong>${escapeHtml(station.display_callsign || station.callsign || "")}</strong>`);
+        lines.push(title);
         if (heardAt || heardAge) {
             const heardLabel = [heardAt, heardAge ? `(${heardAge})` : ""].filter(Boolean).join(" ");
             lines.push(`<span><strong>Last heard:</strong> ${escapeHtml(heardLabel)}</span>`);
@@ -227,6 +231,11 @@
                 opacity: 0.96,
                 sticky: true,
             });
+            if (station.detail_href) {
+                marker.on("click", function () {
+                    window.location.href = station.detail_href;
+                });
+            }
             stationLayer.addLayer(marker);
         }
     }

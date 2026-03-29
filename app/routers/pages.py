@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
@@ -12,9 +12,12 @@ from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
     delete_section_row,
     dashboard_summary,
+    get_recent_station_packets,
     heard_stations,
     get_section_row,
     get_section_rows,
+    get_related_ssids,
+    get_station_detail,
     get_station_settings,
     recent_event_logs,
     station_summary,
@@ -24,7 +27,7 @@ from app.services.content import (
     update_station_settings,
     worker_statuses,
 )
-from app.services.map_service import get_map_page_config, get_map_station_payload
+from app.services.map_service import get_map_page_config, get_map_station_payload, get_station_detail_map_config
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
 from app.template_helpers import build_template_context
 
@@ -93,6 +96,70 @@ def stations_page(
         default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
+
+
+@router.get("/stations/{callsign:path}")
+def station_detail_page(
+    callsign: str,
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    station_settings = get_station_settings()
+    detail = get_station_detail(callsign, unit_system=station_settings.get("default_units", "metric"))
+    if detail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
+    related_ssids = get_related_ssids(detail["base_callsign"])
+    for item in related_ssids:
+        item["is_current"] = item["display_callsign"].casefold() == detail["display_callsign"].casefold()
+    context = build_template_context(
+        request,
+        page_title=detail["display_callsign"],
+        current_user=current_user,
+        active_nav="stations",
+        station=detail,
+        station_map_config=get_station_detail_map_config(detail),
+        recent_packets=get_recent_station_packets(detail["display_callsign"]),
+        related_ssids=related_ssids,
+        message_flash=None,
+        message_form=None,
+    )
+    return templates.TemplateResponse("station_detail.html", context)
+
+
+@router.post("/stations/{callsign:path}/message")
+def station_detail_message(
+    callsign: str,
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+    destination_callsign: str = Form(""),
+    message_text: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    station_settings = get_station_settings()
+    detail = get_station_detail(callsign, unit_system=station_settings.get("default_units", "metric"))
+    if detail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
+    related_ssids = get_related_ssids(detail["base_callsign"])
+    for item in related_ssids:
+        item["is_current"] = item["display_callsign"].casefold() == detail["display_callsign"].casefold()
+    message_flash = "APRS message transmit is not implemented yet. The form is present as UI scaffolding only."
+    context = build_template_context(
+        request,
+        page_title=detail["display_callsign"],
+        current_user=current_user,
+        active_nav="stations",
+        station=detail,
+        station_map_config=get_station_detail_map_config(detail),
+        recent_packets=get_recent_station_packets(detail["display_callsign"]),
+        related_ssids=related_ssids,
+        message_flash=message_flash,
+        message_form={
+            "destination_callsign": (destination_callsign or detail["display_callsign"]).strip(),
+            "message_text": message_text.strip(),
+        },
+    )
+    return templates.TemplateResponse("station_detail.html", context, status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
 
 @router.get("/api/stations")
