@@ -199,8 +199,16 @@ body {
     margin-top: 1rem;
 }
 
+.form-stack {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-top: 1.25rem;
+}
+
 .form-grid .full,
 .form-grid button,
+.form-stack button,
 .alert,
 .data-table,
 .checkbox-row {
@@ -331,4 +339,3 @@ code {
         align-items: flex-start;
     }
 }
-

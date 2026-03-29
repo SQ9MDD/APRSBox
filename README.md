@@ -188,6 +188,12 @@ sudo ./scripts/install.sh
 
 The installer is designed to be idempotent where practical. It does not intentionally wipe existing database, logs, config, or backups on reinstall.
 
+Current reinstall behavior:
+
+- `/opt/aprsbox/app` is rebuilt on each installer run
+- `/opt/aprsbox/venv` is rebuilt on each installer run
+- the SQLite database in `/opt/aprsbox/data/aprsbox.db` is preserved
+
 ## Running The Installed Web Service
 
 OpenRC service names:

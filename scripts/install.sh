@@ -93,12 +93,17 @@ ensure_user() {
 prepare_directories() {
     mkdir -p \
         "$INSTALL_ROOT" \
-        "$TARGET_APP_DIR" \
         "$INSTALL_ROOT/data" \
         "$INSTALL_ROOT/config" \
         "$INSTALL_ROOT/logs" \
         "$INSTALL_ROOT/backups"
     chown -R "$APP_USER":"$APP_USER" "$INSTALL_ROOT"
+}
+
+reset_application_installation() {
+    rm -rf "$TARGET_APP_DIR"
+    rm -rf "$VENV_DIR"
+    mkdir -p "$TARGET_APP_DIR"
 }
 
 sync_application_files() {
@@ -191,6 +196,7 @@ main() {
     obtain_source_tree
     ensure_user
     prepare_directories
+    reset_application_installation
     sync_application_files
     setup_venv
     initialize_database
