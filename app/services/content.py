@@ -6,7 +6,9 @@ import sqlite3
 import subprocess
 from shutil import which
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.sections import SECTION_DEFINITIONS
 
@@ -177,11 +179,10 @@ def heard_stations(limit: int = 500) -> list[dict[str, Any]]:
         if callsign not in stations:
             stations[callsign] = {
                 "callsign": callsign,
-                "base_callsign": _base_callsign(callsign),
-                "ssid": _ssid_value(callsign),
                 "last_heard_at": row["created_at"],
-                "last_heard_label": _relative_time_label(row["created_at"]),
+                "last_heard_label": _format_last_heard(row["created_at"]),
                 "symbol": "",
+                "symbol_icon": "icons/verG/x.gif",
                 "comment": "",
                 "latitude": "",
                 "longitude": "",
@@ -194,6 +195,7 @@ def heard_stations(limit: int = 500) -> list[dict[str, Any]]:
         station = stations[callsign]
         if not station["symbol"] and aprs_data.get("symbol"):
             station["symbol"] = aprs_data["symbol"]
+            station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
         if not station["comment"] and aprs_data.get("comment"):
             station["comment"] = aprs_data["comment"]
         if not station["latitude"] and aprs_data.get("latitude"):
@@ -214,31 +216,42 @@ def _parse_tnc2_line(line: str) -> dict[str, str] | None:
     return match.groupdict(default="")
 
 
-def _base_callsign(callsign: str) -> str:
-    return callsign.split("-", 1)[0]
-
-
-def _ssid_value(callsign: str) -> str:
-    if "-" not in callsign:
-        return ""
-    return callsign.split("-", 1)[1]
-
-
-def _relative_time_label(timestamp: str) -> str:
+def _format_last_heard(timestamp: str) -> str:
     try:
         heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
     except ValueError:
         return timestamp
 
+    local_zone = ZoneInfo("Europe/Warsaw")
+    local_time = heard_at.astimezone(local_zone)
     now = datetime.now(timezone.utc)
     delta_seconds = max(0, int((now - heard_at).total_seconds()))
+    relative = "teraz"
     if delta_seconds < 60:
-        return "teraz"
-    if delta_seconds < 3600:
+        relative = "teraz"
+    elif delta_seconds < 3600:
         minutes = delta_seconds // 60
-        return f"{minutes} min temu"
-    hours = delta_seconds // 3600
-    return f"{hours} h temu"
+        relative = f"{minutes} {_pluralize_minutes(minutes)} temu"
+    else:
+        hours = delta_seconds // 3600
+        relative = f"{hours} {_pluralize_hours(hours)} temu"
+    return f"{local_time.strftime('%Y.%m.%d %H:%M')} ({relative})"
+
+
+def _pluralize_minutes(value: int) -> str:
+    if value == 1:
+        return "minutę"
+    if value % 10 in {2, 3, 4} and value % 100 not in {12, 13, 14}:
+        return "minuty"
+    return "minut"
+
+
+def _pluralize_hours(value: int) -> str:
+    if value == 1:
+        return "godzinę"
+    if value % 10 in {2, 3, 4} and value % 100 not in {12, 13, 14}:
+        return "godziny"
+    return "godzin"
 
 
 def _parse_aprs_payload(info: str) -> dict[str, str] | None:
@@ -254,6 +267,11 @@ def _parse_aprs_payload(info: str) -> dict[str, str] | None:
 
 
 def _parse_position_without_timestamp(info: str) -> dict[str, str] | None:
+    if len(info) >= 14 and _looks_like_compressed_position(info, with_timestamp=False):
+        compressed = _parse_compressed_position(info, with_timestamp=False)
+        if compressed is not None:
+            return compressed
+
     if len(info) < 20:
         return None
     latitude = _parse_latitude(info[1:9])
@@ -271,6 +289,11 @@ def _parse_position_without_timestamp(info: str) -> dict[str, str] | None:
 
 
 def _parse_position_with_timestamp(info: str) -> dict[str, str] | None:
+    if len(info) >= 21 and _looks_like_compressed_position(info, with_timestamp=True):
+        compressed = _parse_compressed_position(info, with_timestamp=True)
+        if compressed is not None:
+            return compressed
+
     if len(info) < 27:
         return None
     latitude = _parse_latitude(info[8:16])
@@ -319,6 +342,89 @@ def _parse_longitude(value: str) -> str | None:
     elif hemisphere != "E":
         return None
     return f"{decimal:.5f}"
+
+
+def _looks_like_compressed_position(info: str, *, with_timestamp: bool) -> bool:
+    if with_timestamp:
+        if len(info) < 21:
+            return False
+        symbol_table = info[8]
+        lat_block = info[9:13]
+        lon_block = info[13:17]
+        symbol_code = info[17]
+    else:
+        if len(info) < 14:
+            return False
+        symbol_table = info[1]
+        lat_block = info[2:6]
+        lon_block = info[6:10]
+        symbol_code = info[10]
+
+    if symbol_table not in {"/", "\\"}:
+        return False
+    if not _is_base91_block(lat_block) or not _is_base91_block(lon_block):
+        return False
+    return 33 <= ord(symbol_code) <= 126
+
+
+def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, str] | None:
+    if with_timestamp:
+        symbol_table = info[8]
+        lat_block = info[9:13]
+        lon_block = info[13:17]
+        symbol_code = info[17]
+        comment = info[21:].strip() if len(info) > 21 else ""
+    else:
+        symbol_table = info[1]
+        lat_block = info[2:6]
+        lon_block = info[6:10]
+        symbol_code = info[10]
+        comment = info[14:].strip() if len(info) > 14 else ""
+
+    try:
+        lat_value = _base91_value(lat_block)
+        lon_value = _base91_value(lon_block)
+    except ValueError:
+        return None
+
+    latitude = 90.0 - (lat_value / 380926.0)
+    longitude = -180.0 + (lon_value / 190463.0)
+    return {
+        "latitude": f"{latitude:.5f}",
+        "longitude": f"{longitude:.5f}",
+        "symbol": f"{symbol_table}{symbol_code}",
+        "comment": comment,
+    }
+
+
+def _is_base91_block(value: str) -> bool:
+    return len(value) == 4 and all(33 <= ord(char) <= 123 for char in value)
+
+
+def _base91_value(value: str) -> int:
+    total = 0
+    for char in value:
+        code = ord(char)
+        if code < 33 or code > 123:
+            raise ValueError("Out of base91 range")
+        total = total * 91 + (code - 33)
+    return total
+
+
+def _aprs_symbol_icon_path(symbol: str) -> str:
+    if len(symbol) != 2:
+        return "icons/verG/x.gif"
+
+    table, code = symbol[0], symbol[1]
+    index = ord(code) - 33
+    if index < 0 or index > 93:
+        return "icons/verG/x.gif"
+
+    filename = f"{index:02d}.gif" if table == "/" else (f"a{index:02d}.gif" if table == "\\" else "x.gif")
+    candidate = settings.static_dir / "icons" / "verG" / filename
+    if candidate.exists():
+        return f"icons/verG/{filename}"
+    return "icons/verG/x.gif"
 
 
 def _status_from_openrc(service_name: str) -> dict[str, str] | None:

@@ -20,7 +20,15 @@ trap cleanup EXIT INT TERM
 mkdir -p "$LOG_DIR"
 printf '%s Starting GUI update from %s (%s)\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$REPO_URL" "$REPO_BRANCH"
 
+if [ -f "$APP_DIR/VERSION" ]; then
+    printf '%s Current installed GUI version: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$(cat "$APP_DIR/VERSION")"
+fi
+
 git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$CHECKOUT_DIR"
+
+if [ -f "$CHECKOUT_DIR/VERSION" ]; then
+    printf '%s Downloaded GUI version: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$(cat "$CHECKOUT_DIR/VERSION")"
+fi
 
 if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete \
@@ -31,6 +39,13 @@ if command -v rsync >/dev/null 2>&1; then
         "$CHECKOUT_DIR/" "$APP_DIR/"
 else
     printf '%s rsync is required for GUI updates\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    exit 1
+fi
+
+if [ -f "$APP_DIR/VERSION" ]; then
+    printf '%s Installed GUI version after sync: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$(cat "$APP_DIR/VERSION")"
+else
+    printf '%s ERROR: VERSION file missing after sync\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     exit 1
 fi
 
@@ -49,7 +64,9 @@ fi
 printf '%s Files updated successfully\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 if command -v rc-service >/dev/null 2>&1; then
-    rc-service aprsbox-web restart
+    rc-service aprsbox-core restart || rc-service aprsbox-core start
+    printf '%s aprsbox-core restarted\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    rc-service aprsbox-web restart || rc-service aprsbox-web start
     printf '%s aprsbox-web restarted\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 else
     printf '%s rc-service not available, restart skipped\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import __version__
+from app import __version__, get_version
 from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
@@ -45,4 +45,4 @@ def health() -> dict[str, str]:
 
 @app.get("/version")
 def version() -> dict[str, str]:
-    return {"version": __version__}
+    return {"version": get_version()}

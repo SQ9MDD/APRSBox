@@ -6,12 +6,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app import __version__
+from app import get_version
 from app.config import settings
 
 
 def current_gui_version() -> str:
-    return __version__
+    return get_version()
 
 
 def latest_gui_version() -> dict[str, Any]:

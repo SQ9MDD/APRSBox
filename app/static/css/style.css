@@ -485,6 +485,19 @@ textarea {
     font-size: 0.78rem;
 }
 
+.aprs-symbol-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.aprs-symbol-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    image-rendering: pixelated;
+    flex: 0 0 auto;
+}
+
 .alert {
     padding: 0.65rem 0.78rem;
     border-radius: 8px;

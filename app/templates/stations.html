@@ -11,7 +11,6 @@
         <thead>
             <tr>
                 <th>Callsign</th>
-                <th>SSID</th>
                 <th>Last Heard</th>
                 <th>APRS Icon</th>
                 <th>Latitude</th>
@@ -22,15 +21,16 @@
         <tbody>
             {% for row in stations %}
             <tr>
-                <td><strong>{{ row.base_callsign }}</strong></td>
-                <td>{{ row.ssid or "-" }}</td>
+                <td><strong>{{ row.callsign }}</strong></td>
                 <td>
-                    <div>{{ row.last_heard_label }}</div>
-                    <div class="muted small">{{ row.last_heard_at }}</div>
+                    {{ row.last_heard_label }}
                 </td>
                 <td>
                     {% if row.symbol %}
-                    <span class="aprs-symbol-badge">{{ row.symbol }}</span>
+                    <div class="aprs-symbol-cell">
+                        <img class="aprs-symbol-icon" src="{{ url_for('static', path=row.symbol_icon) }}" alt="{{ row.symbol }}">
+                        <span class="aprs-symbol-badge">{{ row.symbol }}</span>
+                    </div>
                     {% else %}
                     <span class="muted">-</span>
                     {% endif %}
@@ -41,7 +41,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="7">No decoded APRS stations heard yet.</td>
+                <td colspan="6">No decoded APRS stations heard yet.</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app import __version__
+from app import get_version
 
 
 PRIMARY_NAV = [
@@ -42,7 +42,7 @@ def build_template_context(
     return {
         "request": request,
         "page_title": page_title,
-        "app_version": __version__,
+        "app_version": get_version(),
         "current_user": current_user,
         "active_nav": active_nav,
         "navigation": navigation,
