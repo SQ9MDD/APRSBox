@@ -748,7 +748,9 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     if data:
         result["data"] = data
     if comment:
-        result["comment"] = _clean_decoded_tokens(comment) if data else comment
+        cleaned_comment = _clean_decoded_tokens(comment)
+        if data or cleaned_comment != comment:
+            result["comment"] = cleaned_comment
 
 
 def _parse_phg_fields(text: str) -> dict[str, Any] | None:
@@ -875,6 +877,8 @@ def _clean_decoded_tokens(text: str) -> str:
     cleaned = re.sub(r'^[`"\',}0-9]{1,6}(?=\d{3}\.\d{3,4}MHz)', " ", cleaned)
     cleaned = re.sub(r'^(?:[/\\`"\',}{\]\[\(\)!@#$%^&*+=:;?.<>0-9-]{2,8})\s*(?=[A-Za-zĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż_])', " ", cleaned)
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
+    cleaned = re.sub(r"\|[!-{]{4,14}\|", " ", cleaned)
+    cleaned = re.sub(r"![Ww][!-{]{2}!", " ", cleaned)
     cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
     cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
     cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
