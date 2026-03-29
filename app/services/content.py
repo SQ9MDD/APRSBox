@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import re
 import sqlite3
 import subprocess
 from shutil import which
@@ -153,6 +155,170 @@ def dashboard_summary() -> dict[str, Any]:
     metrics["users"] = fetch_one("SELECT COUNT(*) AS total FROM users")["total"]
     metrics["logs"] = fetch_one("SELECT COUNT(*) AS total FROM event_logs")["total"]
     return metrics
+
+
+def heard_stations(limit: int = 500) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT line, created_at
+        FROM traffic_frames
+        WHERE format = 'TNC2'
+        ORDER BY created_at DESC, id DESC
+        """
+    )
+    stations: dict[str, dict[str, Any]] = {}
+
+    for row in rows:
+        parsed = _parse_tnc2_line(row["line"])
+        if parsed is None:
+            continue
+
+        callsign = parsed["source"]
+        if callsign not in stations:
+            stations[callsign] = {
+                "callsign": callsign,
+                "base_callsign": _base_callsign(callsign),
+                "ssid": _ssid_value(callsign),
+                "last_heard_at": row["created_at"],
+                "last_heard_label": _relative_time_label(row["created_at"]),
+                "symbol": "",
+                "comment": "",
+                "latitude": "",
+                "longitude": "",
+            }
+
+        aprs_data = _parse_aprs_payload(parsed["info"])
+        if aprs_data is None:
+            continue
+
+        station = stations[callsign]
+        if not station["symbol"] and aprs_data.get("symbol"):
+            station["symbol"] = aprs_data["symbol"]
+        if not station["comment"] and aprs_data.get("comment"):
+            station["comment"] = aprs_data["comment"]
+        if not station["latitude"] and aprs_data.get("latitude"):
+            station["latitude"] = aprs_data["latitude"]
+        if not station["longitude"] and aprs_data.get("longitude"):
+            station["longitude"] = aprs_data["longitude"]
+
+    return list(stations.values())[:limit]
+
+
+_TNC2_RE = re.compile(r"^(?P<source>[^>]+)>(?P<destination>[^,:]+)(?:,(?P<path>[^:]+))?:(?P<info>.*)$")
+
+
+def _parse_tnc2_line(line: str) -> dict[str, str] | None:
+    match = _TNC2_RE.match(line.strip())
+    if not match:
+        return None
+    return match.groupdict(default="")
+
+
+def _base_callsign(callsign: str) -> str:
+    return callsign.split("-", 1)[0]
+
+
+def _ssid_value(callsign: str) -> str:
+    if "-" not in callsign:
+        return ""
+    return callsign.split("-", 1)[1]
+
+
+def _relative_time_label(timestamp: str) -> str:
+    try:
+        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return timestamp
+
+    now = datetime.now(timezone.utc)
+    delta_seconds = max(0, int((now - heard_at).total_seconds()))
+    if delta_seconds < 60:
+        return "teraz"
+    if delta_seconds < 3600:
+        minutes = delta_seconds // 60
+        return f"{minutes} min temu"
+    hours = delta_seconds // 3600
+    return f"{hours} h temu"
+
+
+def _parse_aprs_payload(info: str) -> dict[str, str] | None:
+    if not info:
+        return None
+
+    packet_type = info[0]
+    if packet_type in {"!", "="}:
+        return _parse_position_without_timestamp(info)
+    if packet_type in {"/", "@"}:
+        return _parse_position_with_timestamp(info)
+    return None
+
+
+def _parse_position_without_timestamp(info: str) -> dict[str, str] | None:
+    if len(info) < 20:
+        return None
+    latitude = _parse_latitude(info[1:9])
+    symbol_table = info[9]
+    longitude = _parse_longitude(info[10:19])
+    symbol_code = info[19]
+    if latitude is None or longitude is None:
+        return None
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "symbol": f"{symbol_table}{symbol_code}",
+        "comment": info[20:].strip(),
+    }
+
+
+def _parse_position_with_timestamp(info: str) -> dict[str, str] | None:
+    if len(info) < 27:
+        return None
+    latitude = _parse_latitude(info[8:16])
+    symbol_table = info[16]
+    longitude = _parse_longitude(info[17:26])
+    symbol_code = info[26]
+    if latitude is None or longitude is None:
+        return None
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "symbol": f"{symbol_table}{symbol_code}",
+        "comment": info[27:].strip(),
+    }
+
+
+def _parse_latitude(value: str) -> str | None:
+    if len(value) != 8 or value[4] != ".":
+        return None
+    try:
+        degrees = int(value[0:2])
+        minutes = float(value[2:7])
+    except ValueError:
+        return None
+    hemisphere = value[7]
+    decimal = degrees + (minutes / 60.0)
+    if hemisphere == "S":
+        decimal *= -1
+    elif hemisphere != "N":
+        return None
+    return f"{decimal:.5f}"
+
+
+def _parse_longitude(value: str) -> str | None:
+    if len(value) != 9 or value[5] != ".":
+        return None
+    try:
+        degrees = int(value[0:3])
+        minutes = float(value[3:8])
+    except ValueError:
+        return None
+    hemisphere = value[8]
+    decimal = degrees + (minutes / 60.0)
+    if hemisphere == "W":
+        decimal *= -1
+    elif hemisphere != "E":
+        return None
+    return f"{decimal:.5f}"
 
 
 def _status_from_openrc(service_name: str) -> dict[str, str] | None:

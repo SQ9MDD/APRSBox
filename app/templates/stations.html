@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <h2>Heard Stations</h2>
+    <p class="section-lead">Unique station list built from decoded APRS frames stored in the local traffic database. The newest frame sets <em>last heard</em>, and the newest position-capable frame fills comment, symbol, and coordinates.</p>
+</section>
+
+<section class="panel">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Callsign</th>
+                <th>SSID</th>
+                <th>Last Heard</th>
+                <th>APRS Icon</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+                <th>Comment</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in stations %}
+            <tr>
+                <td><strong>{{ row.base_callsign }}</strong></td>
+                <td>{{ row.ssid or "-" }}</td>
+                <td>
+                    <div>{{ row.last_heard_label }}</div>
+                    <div class="muted small">{{ row.last_heard_at }}</div>
+                </td>
+                <td>
+                    {% if row.symbol %}
+                    <span class="aprs-symbol-badge">{{ row.symbol }}</span>
+                    {% else %}
+                    <span class="muted">-</span>
+                    {% endif %}
+                </td>
+                <td>{{ row.latitude or "-" }}</td>
+                <td>{{ row.longitude or "-" }}</td>
+                <td>{{ row.comment or "-" }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7">No decoded APRS stations heard yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

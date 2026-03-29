@@ -9,6 +9,7 @@ from app import __version__
 
 PRIMARY_NAV = [
     {"key": "dashboard", "label": "Dashboard", "href": "/dashboard", "roles": ("admin", "operator", "viewer"), "icon": "view-dashboard-outline.svg"},
+    {"key": "stations", "label": "Stations", "href": "/stations", "roles": ("admin", "operator", "viewer"), "icon": "account-multiple.svg"},
     {"key": "modems", "label": "TNC", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
     {"key": "servers", "label": "Settings / APRS-IS Servers", "href": "/settings/servers", "roles": ("admin", "operator", "viewer"), "icon": "server-network.svg"},
     {"key": "station", "label": "Station Settings", "href": "/station", "roles": ("admin", "operator", "viewer"), "icon": "antenna.svg"},

@@ -472,6 +472,19 @@ textarea {
     color: var(--danger);
 }
 
+.aprs-symbol-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.8rem;
+    padding: 0.18rem 0.42rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+}
+
 .alert {
     padding: 0.65rem 0.78rem;
     border-radius: 8px;

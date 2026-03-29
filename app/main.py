@@ -11,11 +11,18 @@ from app import __version__
 from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
+from app.services.core_proxy import CoreTrafficProxy
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app_instance: FastAPI):
     init_db()
+    core_proxy = CoreTrafficProxy()
+    app_instance.state.core_proxy = core_proxy
+    await core_proxy.start()
     log_event("INFO", "system", "APRSBox web application started")
-    yield
+    try:
+        yield
+    finally:
+        await core_proxy.stop()
 
 
 app = FastAPI(title="APRSBox", version=__version__, lifespan=lifespan)
