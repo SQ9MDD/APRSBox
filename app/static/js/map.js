@@ -18,7 +18,10 @@
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
     const resetButton = document.getElementById("map-reset-view");
+    const maskElement = document.getElementById("map-mask");
+    const maskToggleButton = document.getElementById("map-mask-toggle");
     const stationLayer = window.L.layerGroup();
+    const maskStorageKey = "aprsbox-map-mask-mode";
     let refreshTimer = null;
 
     const map = window.L.map("map-canvas", {
@@ -37,6 +40,27 @@
 
     if (tileSourceOutput) {
         tileSourceOutput.textContent = tileSourceName;
+    }
+
+    function resolveDefaultMaskMode() {
+        const storedMode = window.localStorage.getItem(maskStorageKey);
+        if (storedMode === "day" || storedMode === "night") {
+            return storedMode;
+        }
+        const theme = document.documentElement.getAttribute("data-theme");
+        return theme === "dark" ? "night" : "day";
+    }
+
+    function applyMaskMode(mode) {
+        if (!maskElement || !maskToggleButton) {
+            return;
+        }
+        const normalizedMode = mode === "night" ? "night" : "day";
+        maskElement.classList.toggle("map-mask-day", normalizedMode === "day");
+        maskElement.classList.toggle("map-mask-night", normalizedMode === "night");
+        maskToggleButton.textContent = normalizedMode === "day" ? "Day mask" : "Night mask";
+        maskToggleButton.setAttribute("aria-pressed", normalizedMode === "night" ? "true" : "false");
+        window.localStorage.setItem(maskStorageKey, normalizedMode);
     }
 
     function escapeHtml(value) {
@@ -89,6 +113,14 @@
     if (resetButton) {
         resetButton.addEventListener("click", function () {
             map.setView([defaultView.latitude, defaultView.longitude], defaultView.zoom);
+        });
+    }
+
+    if (maskElement && maskToggleButton) {
+        applyMaskMode(resolveDefaultMaskMode());
+        maskToggleButton.addEventListener("click", function () {
+            const nextMode = maskElement.classList.contains("map-mask-night") ? "day" : "night";
+            applyMaskMode(nextMode);
         });
     }
 
