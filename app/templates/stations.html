@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
     <h2>Heard Stations</h2>
-    <p class="section-lead">Lista unikalnych stacji, obiektów i ramek pogodowych zdekodowanych z lokalnej bazy APRS. Pogoda wyświetla się zgodnie z ustawionymi jednostkami: <strong>{{ "imperialne" if default_units == "imperial" else "nasze (metryczne)" }}</strong>.</p>
+    <p class="section-lead">Lista unikalnych stacji, obiektów i ramek pogodowych zdekodowanych z lokalnej bazy APRS. Komentarz pokazuje już tylko czysty opis, bez zdekodowanych rozszerzeń APRS.</p>
 </section>
 
 <section class="panel">
@@ -16,7 +16,7 @@
                 <th>APRS Icon</th>
                 <th>Latitude</th>
                 <th>Longitude</th>
-                <th>Weather</th>
+                <th>Dane</th>
                 <th>Comment</th>
             </tr>
         </thead>
@@ -44,9 +44,9 @@
                 <td>{{ row.latitude or "-" }}</td>
                 <td>{{ row.longitude or "-" }}</td>
                 <td>
-                    {% if row.weather %}
+                    {% if row.data %}
                     <div class="weather-inline">
-                        {% for item in row.weather %}
+                        {% for item in row.data %}
                         <span class="weather-chip" title="{{ item.label }}: {{ item.value }}">
                             <img src="{{ url_for('static', path='icons/' ~ item.icon) }}" alt="{{ item.label }}">
                             <span>{{ item.value }}</span>

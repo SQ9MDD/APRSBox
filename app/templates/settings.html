@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
     <h2>GUI Update</h2>
-    <p class="section-lead">Check the installed GUI version and trigger an update from GitHub for the web interface package.</p>
+    <p class="section-lead">Check version and, when a newer release is available, update the installed GUI from GitHub.</p>
     {% if flash %}
     <div class="alert">{{ flash }}</div>
     {% endif %}
@@ -21,16 +21,16 @@
             <dd><code>{{ gui_update_branch }}</code></dd>
         </dl>
         <form method="post" action="/settings/check-gui-version" class="form-stack">
-            <button type="submit" class="button">Check Latest GUI Version</button>
+            <button type="submit" class="button">Check version</button>
         </form>
     </div>
 
     <div class="panel">
         <h2>Update GUI</h2>
         {% if can_manage_updates %}
-        <p class="muted">This action downloads the latest files from GitHub, syncs them into the installed GUI, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-web</code>.</p>
+        <p class="muted">This action downloads all GUI files from GitHub, replaces installed files, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.</p>
         <form method="post" action="/settings/update-gui" class="form-stack" onsubmit="return confirm('Start GUI update now?');">
-            <button type="submit" class="button">Update GUI From GitHub</button>
+            <button type="submit" class="button">Update</button>
         </form>
         {% else %}
         <p class="muted">Your role can view GUI version information but cannot start updates.</p>

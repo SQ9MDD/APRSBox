@@ -61,7 +61,7 @@ if [ -x "$VENV_DIR/bin/python" ]; then
         "$VENV_DIR/bin/python" -m app.cli init-db
 fi
 
-printf '%s Files updated successfully\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+printf '%s All replacement files downloaded and synchronized successfully\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 if command -v rc-service >/dev/null 2>&1; then
     rc-service aprsbox-core restart || rc-service aprsbox-core start
@@ -69,5 +69,5 @@ if command -v rc-service >/dev/null 2>&1; then
     rc-service aprsbox-web restart || rc-service aprsbox-web start
     printf '%s aprsbox-web restarted\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 else
-    printf '%s rc-service not available, restart skipped\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    printf '%s rc-service not available, service restart skipped\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 fi

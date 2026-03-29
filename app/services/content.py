@@ -229,9 +229,6 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
             continue
 
         callsign = parsed["source"].strip()
-        if callsign and callsign not in stations:
-            stations[callsign] = _new_station_entry(callsign, row["created_at"])
-
         aprs_data = _parse_aprs_packet(parsed)
         if aprs_data is None:
             continue
@@ -252,8 +249,8 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
             station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
         if not station["comment"] and aprs_data.get("comment"):
             station["comment"] = aprs_data["comment"]
-        if not station["weather"] and aprs_data.get("weather"):
-            station["weather"] = _format_weather_for_display(aprs_data["weather"], unit_system)
+        if not station["data"] and aprs_data.get("data"):
+            station["data"] = _format_decoded_data_for_display(aprs_data["data"], unit_system)
         if not station["latitude"] and aprs_data.get("latitude"):
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
@@ -272,7 +269,7 @@ def _new_station_entry(name: str, created_at: str) -> dict[str, Any]:
         "symbol": "",
         "symbol_icon": "icons/verG/x.gif",
         "comment": "",
-        "weather": [],
+        "data": [],
         "latitude": "",
         "longitude": "",
     }
@@ -341,6 +338,8 @@ def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         return _parse_weather_only_packet(info)
     if packet_type == ";":
         return _parse_object_packet(info)
+    if packet_type == ":":
+        return None
     return None
 
 
@@ -366,10 +365,7 @@ def _parse_position_without_timestamp(info: str) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[20:].strip(),
     }
-    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else None
-    if weather:
-        result["weather"] = weather
-        result["comment"] = _strip_weather_fields(result["comment"])
+    _attach_comment_extensions(result)
     return result
 
 
@@ -395,10 +391,7 @@ def _parse_position_with_timestamp(info: str) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[27:].strip(),
     }
-    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else None
-    if weather:
-        result["weather"] = weather
-        result["comment"] = _strip_weather_fields(result["comment"])
+    _attach_comment_extensions(result)
     return result
 
 
@@ -489,10 +482,7 @@ def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, 
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": comment,
     }
-    weather = _parse_weather_fields(comment) if symbol_code == "_" else None
-    if weather:
-        result["weather"] = weather
-        result["comment"] = _strip_weather_fields(comment)
+    _attach_comment_extensions(result)
     return result
 
 
@@ -518,10 +508,7 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
         "comment": comment,
     }
-    weather = _parse_weather_fields(comment) if result["symbol"].endswith("_") else None
-    if weather:
-        result["weather"] = weather
-        result["comment"] = _strip_weather_fields(comment)
+    _attach_comment_extensions(result)
     return result
 
 
@@ -589,8 +576,8 @@ def _parse_weather_only_packet(info: str) -> dict[str, Any] | None:
         "frame_type": "W",
         "frame_type_label": "W - pogoda",
         "symbol": "/_",
-        "comment": _strip_weather_fields(info),
-        "weather": weather,
+        "comment": _clean_decoded_tokens(info),
+        "data": weather,
     }
 
 
@@ -618,10 +605,7 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[37:].strip(),
     }
-    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else None
-    if weather:
-        result["weather"] = weather
-        result["comment"] = _strip_weather_fields(result["comment"])
+    _attach_comment_extensions(result)
     return result
 
 
@@ -663,19 +647,96 @@ def _parse_weather_fields(text: str) -> dict[str, float | int] | None:
     return metrics or None
 
 
-def _strip_weather_fields(text: str) -> str:
+def _attach_comment_extensions(result: dict[str, Any]) -> None:
+    comment = result.get("comment", "") or ""
+    if not comment:
+        return
+
+    data: dict[str, Any] = {}
+    if result.get("symbol", "").endswith("_"):
+        weather = _parse_weather_fields(comment)
+        if weather:
+            data.update(weather)
+
+    phg = _parse_phg_fields(comment)
+    if phg:
+        data.update(phg)
+
+    movement = _parse_course_speed_fields(comment)
+    if movement:
+        data.update(movement)
+
+    altitude = _parse_altitude_fields(comment)
+    if altitude:
+        data.update(altitude)
+
+    if data:
+        result["data"] = data
+        result["comment"] = _clean_decoded_tokens(comment)
+
+
+def _parse_phg_fields(text: str) -> dict[str, Any] | None:
+    match = re.search(r"PHG(\d)(\d)(\d)(\d)", text)
+    if not match:
+        return None
+
+    power_code, height_code, gain_code, direction_code = (int(value) for value in match.groups())
+    direction_map = {
+        0: "omni",
+        1: "NE",
+        2: "E",
+        3: "SE",
+        4: "S",
+        5: "SW",
+        6: "W",
+        7: "NW",
+        8: "N",
+    }
+    result: dict[str, Any] = {
+        "phg_power_w": power_code * power_code,
+        "phg_height_ft": 10 * (2**height_code),
+        "phg_gain_dbi": gain_code,
+        "phg_direction": direction_map.get(direction_code, str(direction_code)),
+    }
+    return result
+
+
+def _parse_course_speed_fields(text: str) -> dict[str, Any] | None:
+    match = re.search(r"(?<!\d)(\d{3})/(\d{3})(?!\d)", text)
+    if not match:
+        return None
+
+    course, speed = (int(value) for value in match.groups())
+    if course > 360:
+        return None
+    return {
+        "course_deg": course,
+        "speed_knots": speed,
+    }
+
+
+def _parse_altitude_fields(text: str) -> dict[str, Any] | None:
+    match = re.search(r"/A=(\d{6})", text)
+    if not match:
+        return None
+    return {"altitude_ft": int(match.group(1))}
+
+
+def _clean_decoded_tokens(text: str) -> str:
     cleaned = text
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
     cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
+    cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
+    cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
+    cleaned = re.sub(r"/A=\d{6}", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip(" /|,;:-")
 
 
-def _format_weather_for_display(metrics: dict[str, float | int], unit_system: str) -> list[dict[str, str]]:
+def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit_system: str) -> list[dict[str, str]]:
     if not metrics:
         return []
 
-    use_imperial = unit_system == "imperial"
     items: list[dict[str, str]] = []
 
     wind_dir = metrics.get("wind_dir")
@@ -684,37 +745,27 @@ def _format_weather_for_display(metrics: dict[str, float | int], unit_system: st
 
     wind_speed_mph = metrics.get("wind_speed_mph")
     if wind_speed_mph is not None:
-        wind_value = f"{float(wind_speed_mph):.0f} mph" if use_imperial else f"{float(wind_speed_mph) * 1.609344:.0f} km/h"
-        items.append(_weather_item("weather-windy.svg", "Prędkość wiatru", wind_value))
+        items.append(_weather_item("weather-windy.svg", "Prędkość wiatru", f"{float(wind_speed_mph):.0f} mph"))
 
     wind_gust_mph = metrics.get("wind_gust_mph")
     if wind_gust_mph is not None:
-        gust_value = f"{float(wind_gust_mph):.0f} mph" if use_imperial else f"{float(wind_gust_mph) * 1.609344:.0f} km/h"
-        items.append(_weather_item("weather-windy-variant.svg", "Porywy", gust_value))
+        items.append(_weather_item("weather-windy-variant.svg", "Porywy", f"{float(wind_gust_mph):.0f} mph"))
 
     temperature_f = metrics.get("temperature_f")
     if temperature_f is not None:
-        temperature_value = f"{float(temperature_f):.0f}°F" if use_imperial else f"{(float(temperature_f) - 32) * 5 / 9:.1f}°C"
-        items.append(_weather_item("thermometer.svg", "Temperatura", temperature_value))
+        items.append(_weather_item("thermometer.svg", "Temperatura", f"{float(temperature_f):.0f}°F"))
 
     rain_1h_in = metrics.get("rain_1h_in")
     if rain_1h_in is not None:
-        rain_value = f"{float(rain_1h_in):.2f} in" if use_imperial else f"{float(rain_1h_in) * 25.4:.1f} mm"
-        items.append(_weather_item("weather-rainy.svg", "Deszcz 1h", rain_value))
+        items.append(_weather_item("weather-rainy.svg", "Deszcz 1h", f"{float(rain_1h_in):.2f} in"))
 
     rain_24h_in = metrics.get("rain_24h_in")
     if rain_24h_in is not None:
-        rain_value = f"{float(rain_24h_in):.2f} in" if use_imperial else f"{float(rain_24h_in) * 25.4:.1f} mm"
-        items.append(_weather_item("weather-pouring.svg", "Deszcz 24h", rain_value))
+        items.append(_weather_item("weather-pouring.svg", "Deszcz 24h", f"{float(rain_24h_in):.2f} in"))
 
     rain_since_midnight_in = metrics.get("rain_since_midnight_in")
     if rain_since_midnight_in is not None:
-        rain_value = (
-            f"{float(rain_since_midnight_in):.2f} in"
-            if use_imperial
-            else f"{float(rain_since_midnight_in) * 25.4:.1f} mm"
-        )
-        items.append(_weather_item("cup-water.svg", "Deszcz od północy", rain_value))
+        items.append(_weather_item("cup-water.svg", "Deszcz od północy", f"{float(rain_since_midnight_in):.2f} in"))
 
     humidity_percent = metrics.get("humidity_percent")
     if humidity_percent is not None:
@@ -723,6 +774,34 @@ def _format_weather_for_display(metrics: dict[str, float | int], unit_system: st
     pressure_hpa = metrics.get("pressure_hpa")
     if pressure_hpa is not None:
         items.append(_weather_item("gauge.svg", "Ciśnienie", f"{float(pressure_hpa):.1f} hPa"))
+
+    phg_power_w = metrics.get("phg_power_w")
+    if phg_power_w is not None:
+        items.append(_weather_item("gauge.svg", "Moc PHG", f"{int(phg_power_w)} W"))
+
+    phg_height_ft = metrics.get("phg_height_ft")
+    if phg_height_ft is not None:
+        items.append(_weather_item("arrow-up.svg", "Wysokość PHG", f"{int(phg_height_ft)} ft"))
+
+    phg_gain_dbi = metrics.get("phg_gain_dbi")
+    if phg_gain_dbi is not None:
+        items.append(_weather_item("speedometer.svg", "Zysk PHG", f"{int(phg_gain_dbi)} dBi"))
+
+    phg_direction = metrics.get("phg_direction")
+    if phg_direction is not None:
+        items.append(_weather_item("compass-outline.svg", "Kierunek PHG", str(phg_direction)))
+
+    course_deg = metrics.get("course_deg")
+    if course_deg is not None:
+        items.append(_weather_item("navigation-outline.svg", "Kurs", f"{int(course_deg)}°"))
+
+    speed_knots = metrics.get("speed_knots")
+    if speed_knots is not None:
+        items.append(_weather_item("speedometer.svg", "Prędkość", f"{int(speed_knots)} kn"))
+
+    altitude_ft = metrics.get("altitude_ft")
+    if altitude_ft is not None:
+        items.append(_weather_item("arrow-up.svg", "Wysokość", f"{int(altitude_ft)} ft"))
 
     return items
 
