@@ -1,13 +1,27 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="panel">
+<section class="panel stations-summary-panel">
     <h2>Heard Stations</h2>
     <p class="section-lead">Lista unikalnych stacji, obiektów i ramek pogodowych zdekodowanych z lokalnej bazy APRS. Komentarz pokazuje już tylko czysty opis, bez zdekodowanych rozszerzeń APRS.</p>
+    <div class="stations-summary" id="stations-summary">
+        <div class="metric-card">
+            <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
+            <span class="metric-label">Stacje stałe</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
+            <span class="metric-label">Stacje mobilne</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
+            <span class="metric-label">Obiekty</span>
+        </div>
+    </div>
 </section>
 
 <section class="panel">
-    <table class="data-table">
+    <table class="data-table compact-table stations-table">
         <thead>
             <tr>
                 <th>Callsign</th>
@@ -20,10 +34,10 @@
                 <th>Comment</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="stations-table-body">
             {% for row in stations %}
             <tr>
-                <td><strong>{{ row.callsign }}</strong></td>
+                <td class="callsign-cell"><strong>{{ row.callsign }}</strong></td>
                 <td>
                     {% if row.frame_type %}
                     <span class="frame-type-badge" title="{{ row.frame_type_label or row.frame_type }}">{{ row.frame_type }}</span>
@@ -32,7 +46,10 @@
                     {% endif %}
                 </td>
                 <td>
-                    {{ row.last_heard_label }}
+                    <div class="last-heard-cell">
+                        <span>{{ row.last_heard_date }}</span>
+                        <span class="muted">{{ row.last_heard_relative }}</span>
+                    </div>
                 </td>
                 <td>
                     {% if row.symbol %}
@@ -61,10 +78,85 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="8">No decoded APRS stations heard yet.</td>
+                <td colspan="8" class="muted">No decoded APRS stations heard yet.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </section>
+
+<script>
+(() => {
+    const tbody = document.getElementById("stations-table-body");
+    if (!tbody) return;
+
+    const summaryStationary = document.getElementById("summary-stationary");
+    const summaryMobile = document.getElementById("summary-mobile");
+    const summaryObjects = document.getElementById("summary-objects");
+
+    function escapeHtml(value) {
+        return String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;")
+            .replaceAll("'", "&#39;");
+    }
+
+    function renderWeather(items) {
+        if (!items || !items.length) {
+            return '<span class="muted">-</span>';
+        }
+        return `
+            <div class="weather-inline">
+                ${items.map((item) => `
+                    <span class="weather-chip" title="${escapeHtml(item.label)}: ${escapeHtml(item.value)}">
+                        <img src="/static/icons/${escapeHtml(item.icon)}" alt="${escapeHtml(item.label)}">
+                        <span>${escapeHtml(item.value)}</span>
+                    </span>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    function renderRows(stations) {
+        if (!stations.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="muted">No decoded APRS stations heard yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = stations.map((row) => `
+            <tr>
+                <td class="callsign-cell"><strong>${escapeHtml(row.callsign || "-")}</strong></td>
+                <td>${row.frame_type ? `<span class="frame-type-badge" title="${escapeHtml(row.frame_type_label || row.frame_type)}">${escapeHtml(row.frame_type)}</span>` : '<span class="muted">-</span>'}</td>
+                <td>
+                    <div class="last-heard-cell">
+                        <span>${escapeHtml(row.last_heard_date || "")}</span>
+                        <span class="muted">${escapeHtml(row.last_heard_relative || "")}</span>
+                    </div>
+                </td>
+                <td>${row.symbol ? `<img class="aprs-symbol-icon" src="/static/${escapeHtml(row.symbol_icon)}" alt="${escapeHtml(row.symbol)}">` : '<span class="muted">-</span>'}</td>
+                <td>${escapeHtml(row.latitude || "-")}</td>
+                <td>${escapeHtml(row.longitude || "-")}</td>
+                <td>${renderWeather(row.data || [])}</td>
+                <td>${escapeHtml(row.comment || "-")}</td>
+            </tr>
+        `).join("");
+    }
+
+    async function refreshStations() {
+        try {
+            const response = await fetch("/api/stations", { headers: { "Accept": "application/json" } });
+            if (!response.ok) return;
+            const payload = await response.json();
+            renderRows(payload.stations || []);
+            if (summaryStationary) summaryStationary.textContent = String(payload.summary?.stationary ?? 0);
+            if (summaryMobile) summaryMobile.textContent = String(payload.summary?.mobile ?? 0);
+            if (summaryObjects) summaryObjects.textContent = String(payload.summary?.objects ?? 0);
+        } catch (_error) {
+        }
+    }
+
+    window.setInterval(refreshStations, 5000);
+})();
+</script>
 {% endblock %}

@@ -17,6 +17,7 @@ from app.services.content import (
     get_section_rows,
     get_station_settings,
     recent_event_logs,
+    station_summary,
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
     safe_update_section_row,
@@ -80,15 +81,32 @@ def stations_page(
 ) -> object:
     templates = request.app.state.templates
     station_settings = get_station_settings()
+    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
     context = build_template_context(
         request,
         page_title="Stations",
         current_user=current_user,
         active_nav="stations",
-        stations=heard_stations(unit_system=station_settings.get("default_units", "metric")),
+        stations=stations,
+        station_summary=station_summary(stations),
         default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
+
+
+@router.get("/api/stations")
+def stations_snapshot(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    station_settings = get_station_settings()
+    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
+    return JSONResponse(
+        {
+            "stations": stations,
+            "summary": station_summary(stations),
+            "default_units": station_settings.get("default_units", "metric"),
+        }
+    )
 
 
 @router.get("/settings/modems")

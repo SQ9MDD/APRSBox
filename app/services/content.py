@@ -241,6 +241,8 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
             stations[station_key] = _new_station_entry(station_key, row["created_at"])
 
         station = stations[station_key]
+        if not station["entity_class"] and aprs_data.get("entity_class"):
+            station["entity_class"] = aprs_data["entity_class"]
         if not station["frame_type"] and aprs_data.get("frame_type"):
             station["frame_type"] = aprs_data["frame_type"]
             station["frame_type_label"] = aprs_data.get("frame_type_label", "")
@@ -260,10 +262,14 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
 
 
 def _new_station_entry(name: str, created_at: str) -> dict[str, Any]:
+    heard_date, heard_relative = _format_last_heard_parts(created_at)
     return {
         "callsign": name,
         "last_heard_at": created_at,
         "last_heard_label": _format_last_heard(created_at),
+        "last_heard_date": heard_date,
+        "last_heard_relative": heard_relative,
+        "entity_class": "",
         "frame_type": "",
         "frame_type_label": "",
         "symbol": "",
@@ -304,6 +310,39 @@ def _format_last_heard(timestamp: str) -> str:
         hours = delta_seconds // 3600
         relative = f"{hours} {_pluralize_hours(hours)} temu"
     return f"{local_time.strftime('%Y.%m.%d %H:%M')} ({relative})"
+
+
+def _format_last_heard_parts(timestamp: str) -> tuple[str, str]:
+    try:
+        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return timestamp, ""
+
+    local_time = heard_at.astimezone()
+    now = datetime.now(timezone.utc)
+    delta_seconds = max(0, int((now - heard_at).total_seconds()))
+    if delta_seconds < 60:
+        relative = "teraz"
+    elif delta_seconds < 3600:
+        minutes = delta_seconds // 60
+        relative = f"{minutes} {_pluralize_minutes(minutes)} temu"
+    else:
+        hours = delta_seconds // 3600
+        relative = f"{hours} {_pluralize_hours(hours)} temu"
+    return local_time.strftime("%Y.%m.%d %H:%M"), relative
+
+
+def station_summary(stations: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {"stationary": 0, "mobile": 0, "objects": 0}
+    for station in stations:
+        entity_class = station.get("entity_class")
+        if entity_class == "object":
+            summary["objects"] += 1
+        elif entity_class == "mobile":
+            summary["mobile"] += 1
+        else:
+            summary["stationary"] += 1
+    return summary
 
 
 def _pluralize_minutes(value: int) -> str:
@@ -358,6 +397,7 @@ def _parse_position_without_timestamp(info: str) -> dict[str, Any] | None:
     if latitude is None or longitude is None:
         return None
     result = {
+        "entity_class": "stationary",
         "frame_type": "M",
         "frame_type_label": "M - ruch",
         "latitude": latitude,
@@ -384,6 +424,7 @@ def _parse_position_with_timestamp(info: str) -> dict[str, Any] | None:
     if latitude is None or longitude is None:
         return None
     result = {
+        "entity_class": "stationary",
         "frame_type": "M",
         "frame_type_label": "M - ruch",
         "latitude": latitude,
@@ -475,6 +516,7 @@ def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, 
     latitude = 90.0 - (lat_value / 380926.0)
     longitude = -180.0 + (lon_value / 190463.0)
     result = {
+        "entity_class": "stationary",
         "frame_type": "M",
         "frame_type_label": "M - ruch",
         "latitude": f"{latitude:.5f}",
@@ -501,6 +543,7 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     symbol_table = info[8] if len(info) > 8 else "/"
     comment = info[9:].strip() if len(info) > 9 else ""
     result = {
+        "entity_class": "mobile",
         "frame_type": "M",
         "frame_type_label": "M - ruch",
         "latitude": latitude,
@@ -595,6 +638,7 @@ def _parse_weather_only_packet(info: str) -> dict[str, Any] | None:
     if not weather:
         return None
     return {
+        "entity_class": "stationary",
         "frame_type": "W",
         "frame_type_label": "W - pogoda",
         "symbol": "/_",
@@ -620,6 +664,7 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
 
     result = {
         "entity_name": name,
+        "entity_class": "object",
         "frame_type": "O",
         "frame_type_label": "O - obiekt",
         "latitude": latitude,
@@ -627,6 +672,10 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[37:].strip(),
     }
+    object_extension = _parse_object_extension(result["symbol"], result["comment"])
+    if object_extension:
+        result["data"] = object_extension
+        result["comment"] = _clean_decoded_tokens(result["comment"])
     _attach_comment_extensions(result)
     return result
 
@@ -684,6 +733,7 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     movement = _parse_course_speed_fields(comment)
     if movement:
         data.update(movement)
+        result["entity_class"] = "mobile"
 
     altitude = _parse_altitude_fields(comment)
     if altitude:
@@ -742,6 +792,52 @@ def _parse_altitude_fields(text: str) -> dict[str, Any] | None:
     return {"altitude_ft": int(match.group(1))}
 
 
+def _parse_object_extension(symbol: str, text: str) -> dict[str, Any] | None:
+    if symbol != "\\l":
+        return None
+    match = re.search(r"([0-9])([0-9]{2})/([0-9A-F])([0-9]{2})", text)
+    if not match:
+        return None
+
+    shape_code, lat_offset, color_code, lon_offset = match.groups()
+    shape_map = {
+        "0": "Okrąg otwarty",
+        "1": "Linia prawa-dół",
+        "2": "Elipsa otwarta",
+        "3": "Trójkąt otwarty",
+        "4": "Prostokąt otwarty",
+        "5": "Okrąg wypełniony",
+        "6": "Linia lewa-dół",
+        "7": "Elipsa wypełniona",
+        "8": "Trójkąt wypełniony",
+        "9": "Prostokąt wypełniony",
+    }
+    color_map = {
+        "0": "Czarny jasny",
+        "1": "Niebieski jasny",
+        "2": "Zielony jasny",
+        "3": "Cyjan jasny",
+        "4": "Czerwony jasny",
+        "5": "Fiolet jasny",
+        "6": "Żółty jasny",
+        "7": "Szary jasny",
+        "8": "Czarny ciemny",
+        "9": "Niebieski ciemny",
+        "A": "Zielony ciemny",
+        "B": "Cyjan ciemny",
+        "C": "Czerwony ciemny",
+        "D": "Fiolet ciemny",
+        "E": "Żółty ciemny",
+        "F": "Szary ciemny",
+    }
+    return {
+        "object_shape": shape_map.get(shape_code, shape_code),
+        "object_color": color_map.get(color_code, color_code),
+        "object_lat_offset_hundredths": int(lat_offset),
+        "object_lon_offset_hundredths": int(lon_offset),
+    }
+
+
 def _clean_decoded_tokens(text: str) -> str:
     cleaned = text
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
@@ -749,6 +845,7 @@ def _clean_decoded_tokens(text: str) -> str:
     cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
     cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
     cleaned = re.sub(r"/A=\d{6}", " ", cleaned)
+    cleaned = re.sub(r"[0-9][0-9]{2}/[0-9][0-9]{2}", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip(" /|,;:-")
 
@@ -818,6 +915,22 @@ def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit
     phg_direction = metrics.get("phg_direction")
     if phg_direction is not None:
         items.append(_weather_item("compass-outline.svg", "Kierunek PHG", str(phg_direction)))
+
+    object_shape = metrics.get("object_shape")
+    if object_shape is not None:
+        items.append(_weather_item("shape-outline.svg", "Kształt obiektu", str(object_shape)))
+
+    object_color = metrics.get("object_color")
+    if object_color is not None:
+        items.append(_weather_item("palette.svg", "Kolor obiektu", str(object_color)))
+
+    object_lat_offset_hundredths = metrics.get("object_lat_offset_hundredths")
+    if object_lat_offset_hundredths is not None:
+        items.append(_weather_item("arrow-down.svg", "Offset Y", f"{int(object_lat_offset_hundredths) / 100:.2f}°"))
+
+    object_lon_offset_hundredths = metrics.get("object_lon_offset_hundredths")
+    if object_lon_offset_hundredths is not None:
+        items.append(_weather_item("arrow-right.svg", "Offset X", f"{int(object_lon_offset_hundredths) / 100:.2f}°"))
 
     course_deg = metrics.get("course_deg")
     if course_deg is not None:
