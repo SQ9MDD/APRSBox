@@ -31,6 +31,10 @@
         zoomControl: true,
     });
 
+    if (maskElement) {
+        map.getContainer().appendChild(maskElement);
+    }
+
     // Keep the tile endpoint configurable from the backend so the frontend can
     // switch later from the public development tiles to a local cache/proxy.
     window.L.tileLayer(tileUrl, {
