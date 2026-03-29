@@ -128,9 +128,12 @@ setup_venv() {
 }
 
 initialize_database() {
-    su -s /bin/sh -c \
-        "PYTHONPATH='$TARGET_APP_DIR' APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli init-db" \
-        "$APP_USER"
+    PYTHONPATH="$TARGET_APP_DIR" \
+        APRSBOX_ENV=production \
+        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
+        APRSBOX_DB_PATH="$DB_PATH" \
+        "$VENV_DIR/bin/python" -m app.cli init-db
+    chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 }
 
 prompt_admin() {
@@ -148,17 +151,22 @@ prompt_admin() {
 }
 
 create_admin_user() {
-    if su -s /bin/sh -c \
-        "PYTHONPATH='$TARGET_APP_DIR' APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli admin-exists" \
-        "$APP_USER"
+    if PYTHONPATH="$TARGET_APP_DIR" \
+        APRSBOX_ENV=production \
+        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
+        APRSBOX_DB_PATH="$DB_PATH" \
+        "$VENV_DIR/bin/python" -m app.cli admin-exists
     then
         log "Active admin user already present. Skipping initial admin creation."
         return
     fi
     prompt_admin
-    su -s /bin/sh -c \
-        "PYTHONPATH='$TARGET_APP_DIR' APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' APRSBOX_BOOTSTRAP_ADMIN_USER='$ADMIN_USER' APRSBOX_BOOTSTRAP_ADMIN_PASSWORD='$ADMIN_PASSWORD' '$VENV_DIR/bin/python' -m app.cli create-admin --username \"\$APRSBOX_BOOTSTRAP_ADMIN_USER\" --password \"\$APRSBOX_BOOTSTRAP_ADMIN_PASSWORD\"" \
-        "$APP_USER"
+    PYTHONPATH="$TARGET_APP_DIR" \
+        APRSBOX_ENV=production \
+        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
+        APRSBOX_DB_PATH="$DB_PATH" \
+        "$VENV_DIR/bin/python" -m app.cli create-admin --username "$ADMIN_USER" --password "$ADMIN_PASSWORD"
+    chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 }
 
 install_openrc_services() {
