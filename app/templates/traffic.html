@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
     <h2>Traffic Monitor</h2>
-    <p class="section-lead">Read-only monitor for the first enabled TCP TNC. The monitor shows raw chunks received from the socket and reconnects automatically when the endpoint changes or the connection drops.</p>
+    <p class="section-lead">Read-only monitor for the first enabled TCP TNC. The backend assembles KISS frames from the TCP stream and renders each complete frame as a single log row. When the frame is APRS UI, it is decoded to TNC2 form similar to <code>aprx-rf.log</code>.</p>
 </section>
 
 <section class="grid two">
@@ -32,24 +32,24 @@
         <ul class="simple-list">
             <li>Source: the first enabled modem with type <code>TCP</code>.</li>
             <li>Address format: <code>ip:port</code> in the existing <code>Path / Adress</code> field.</li>
-            <li>Display: newest chunks first, text preview plus raw hex bytes.</li>
+            <li>Display: one row per complete KISS frame, newest first.</li>
         </ul>
     </div>
 </section>
 
 <section class="panel">
     <div class="traffic-toolbar">
-        <h2>Raw Frames</h2>
+        <h2>Traffic Log</h2>
         <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} entries</span>
     </div>
     <div class="traffic-stream" id="traffic-stream">
         {% if traffic_snapshot.frames %}
         {% for frame in traffic_snapshot.frames %}
-        <article class="traffic-frame">
-            <div class="traffic-frame-meta">{{ frame.timestamp }} | {{ frame.length }} bytes</div>
-            <pre class="traffic-frame-text">{{ frame.text }}</pre>
-            <pre class="traffic-frame-hex">{{ frame.hex }}</pre>
-        </article>
+        <div class="traffic-log-row">
+            <span class="traffic-log-time">{{ frame.timestamp }}</span>
+            <span class="traffic-log-format">{{ frame.format }}</span>
+            <span class="traffic-log-line">{{ frame.line }}</span>
+        </div>
         {% endfor %}
         {% else %}
         <div class="muted" id="traffic-empty-state">No frames received yet.</div>
@@ -75,18 +75,20 @@
             }
 
             stream.innerHTML = frames.map((frame) => `
-                <article class="traffic-frame">
-                    <div class="traffic-frame-meta">${frame.timestamp} | ${frame.length} bytes</div>
-                    <pre class="traffic-frame-text"></pre>
-                    <pre class="traffic-frame-hex"></pre>
-                </article>
+                <div class="traffic-log-row">
+                    <span class="traffic-log-time"></span>
+                    <span class="traffic-log-format"></span>
+                    <span class="traffic-log-line"></span>
+                </div>
             `).join("");
 
-            const textNodes = stream.querySelectorAll(".traffic-frame-text");
-            const hexNodes = stream.querySelectorAll(".traffic-frame-hex");
+            const timeNodes = stream.querySelectorAll(".traffic-log-time");
+            const formatNodes = stream.querySelectorAll(".traffic-log-format");
+            const lineNodes = stream.querySelectorAll(".traffic-log-line");
             frames.forEach((frame, index) => {
-                textNodes[index].textContent = frame.text;
-                hexNodes[index].textContent = frame.hex;
+                timeNodes[index].textContent = frame.timestamp;
+                formatNodes[index].textContent = frame.format;
+                lineNodes[index].textContent = frame.line;
             });
         };
 
