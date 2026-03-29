@@ -15,6 +15,7 @@
                 <th>APRS Icon</th>
                 <th>Latitude</th>
                 <th>Longitude</th>
+                <th>Weather</th>
                 <th>Comment</th>
             </tr>
         </thead>
@@ -27,21 +28,19 @@
                 </td>
                 <td>
                     {% if row.symbol %}
-                    <div class="aprs-symbol-cell">
-                        <img class="aprs-symbol-icon" src="{{ url_for('static', path=row.symbol_icon) }}" alt="{{ row.symbol }}">
-                        <span class="aprs-symbol-badge">{{ row.symbol }}</span>
-                    </div>
+                    <img class="aprs-symbol-icon" src="{{ url_for('static', path=row.symbol_icon) }}" alt="{{ row.symbol }}">
                     {% else %}
                     <span class="muted">-</span>
                     {% endif %}
                 </td>
                 <td>{{ row.latitude or "-" }}</td>
                 <td>{{ row.longitude or "-" }}</td>
+                <td>{{ row.weather or "-" }}</td>
                 <td>{{ row.comment or "-" }}</td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="6">No decoded APRS stations heard yet.</td>
+                <td colspan="7">No decoded APRS stations heard yet.</td>
             </tr>
             {% endfor %}
         </tbody>

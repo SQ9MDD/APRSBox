@@ -228,11 +228,12 @@ def heard_stations(limit: int = 500) -> list[dict[str, Any]]:
                 "symbol": "",
                 "symbol_icon": "icons/verG/x.gif",
                 "comment": "",
+                "weather": "",
                 "latitude": "",
                 "longitude": "",
             }
 
-        aprs_data = _parse_aprs_payload(parsed["info"])
+        aprs_data = _parse_aprs_packet(parsed)
         if aprs_data is None:
             continue
 
@@ -242,6 +243,8 @@ def heard_stations(limit: int = 500) -> list[dict[str, Any]]:
             station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
         if not station["comment"] and aprs_data.get("comment"):
             station["comment"] = aprs_data["comment"]
+        if not station["weather"] and aprs_data.get("weather"):
+            station["weather"] = aprs_data["weather"]
         if not station["latitude"] and aprs_data.get("latitude"):
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
@@ -297,7 +300,8 @@ def _pluralize_hours(value: int) -> str:
     return "godzin"
 
 
-def _parse_aprs_payload(info: str) -> dict[str, str] | None:
+def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, str] | None:
+    info = packet["info"]
     if not info:
         return None
 
@@ -306,6 +310,10 @@ def _parse_aprs_payload(info: str) -> dict[str, str] | None:
         return _parse_position_without_timestamp(info)
     if packet_type in {"/", "@"}:
         return _parse_position_with_timestamp(info)
+    if packet_type in {"`", "'"}:
+        return _parse_mic_e_packet(packet)
+    if packet_type == "_":
+        return _parse_weather_only_packet(info)
     return None
 
 
@@ -323,12 +331,16 @@ def _parse_position_without_timestamp(info: str) -> dict[str, str] | None:
     symbol_code = info[19]
     if latitude is None or longitude is None:
         return None
-    return {
+    result = {
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[20:].strip(),
     }
+    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else ""
+    if weather:
+        result["weather"] = weather
+    return result
 
 
 def _parse_position_with_timestamp(info: str) -> dict[str, str] | None:
@@ -345,12 +357,16 @@ def _parse_position_with_timestamp(info: str) -> dict[str, str] | None:
     symbol_code = info[26]
     if latitude is None or longitude is None:
         return None
-    return {
+    result = {
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": info[27:].strip(),
     }
+    weather = _parse_weather_fields(result["comment"]) if result["symbol"].endswith("_") else ""
+    if weather:
+        result["weather"] = weather
+    return result
 
 
 def _parse_latitude(value: str) -> str | None:
@@ -432,12 +448,156 @@ def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, 
 
     latitude = 90.0 - (lat_value / 380926.0)
     longitude = -180.0 + (lon_value / 190463.0)
-    return {
+    result = {
         "latitude": f"{latitude:.5f}",
         "longitude": f"{longitude:.5f}",
         "symbol": f"{symbol_table}{symbol_code}",
         "comment": comment,
     }
+    weather = _parse_weather_fields(comment) if symbol_code == "_" else ""
+    if weather:
+        result["weather"] = weather
+    return result
+
+
+def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, str] | None:
+    info = packet["info"]
+    destination = packet["destination"]
+    if len(destination) != 6 or len(info) < 8:
+        return None
+
+    latitude = _decode_mic_e_latitude(destination)
+    longitude = _decode_mic_e_longitude(destination, info)
+    if latitude is None or longitude is None:
+        return None
+
+    symbol_code = info[6] if len(info) > 6 else ""
+    symbol_table = info[7] if len(info) > 7 else "/"
+    comment = info[8:].strip() if len(info) > 8 else ""
+    result = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
+        "comment": comment,
+    }
+    weather = _parse_weather_fields(comment) if result["symbol"].endswith("_") else ""
+    if weather:
+        result["weather"] = weather
+    return result
+
+
+def _decode_mic_e_latitude(destination: str) -> str | None:
+    digits: list[int] = []
+    for char in destination:
+        digit = _decode_mic_e_dest_digit(char)
+        if digit is None:
+            return None
+        digits.append(digit)
+
+    latitude = (digits[0] * 10 + digits[1]) + ((digits[2] * 10 + digits[3]) + (digits[4] * 10 + digits[5]) / 100.0) / 60.0
+    if not _mic_e_flag(destination[3]):
+        latitude *= -1
+    return f"{latitude:.5f}"
+
+
+def _decode_mic_e_longitude(destination: str, info: str) -> str | None:
+    if len(info) < 4:
+        return None
+    try:
+        degrees = ord(info[1]) - 28
+        if _mic_e_flag(destination[4]):
+            degrees += 100
+        if 180 <= degrees <= 189:
+            degrees -= 80
+        elif 190 <= degrees <= 199:
+            degrees -= 190
+
+        minutes = ord(info[2]) - 28
+        if minutes >= 60:
+            minutes -= 60
+
+        hundredths = ord(info[3]) - 28
+        if hundredths >= 60:
+            hundredths -= 60
+    except (IndexError, TypeError):
+        return None
+
+    longitude = degrees + (minutes + hundredths / 100.0) / 60.0
+    if _mic_e_flag(destination[5]):
+        longitude *= -1
+    return f"{longitude:.5f}"
+
+
+def _decode_mic_e_dest_digit(char: str) -> int | None:
+    if "0" <= char <= "9":
+        return ord(char) - ord("0")
+    if "A" <= char <= "J":
+        return ord(char) - ord("A")
+    if "P" <= char <= "Y":
+        return ord(char) - ord("P")
+    return None
+
+
+def _mic_e_flag(char: str) -> bool:
+    return ("A" <= char <= "J") or ("P" <= char <= "Z")
+
+
+def _parse_weather_only_packet(info: str) -> dict[str, str] | None:
+    weather = _parse_weather_fields(info)
+    if not weather:
+        return None
+    return {
+        "symbol": "/_",
+        "comment": info.strip(),
+        "weather": weather,
+    }
+
+
+def _parse_weather_fields(text: str) -> str:
+    if not text:
+        return ""
+
+    parts: list[str] = []
+    wind_dir = _match_group(text, r"c(\d{3})")
+    wind_speed = _match_group(text, r"s(\d{3})")
+    wind_gust = _match_group(text, r"g(\d{3})")
+    temperature = _match_group(text, r"t(-?\d{3})")
+    rain_1h = _match_group(text, r"r(\d{3})")
+    rain_24h = _match_group(text, r"p(\d{3})")
+    rain_midnight = _match_group(text, r"P(\d{3})")
+    humidity = _match_group(text, r"h(\d{2})")
+    pressure = _match_group(text, r"b(\d{5})")
+
+    if wind_dir or wind_speed:
+        wind_text = "wiatr"
+        if wind_dir:
+            wind_text = f"{wind_text} {int(wind_dir)}°"
+        if wind_speed:
+            wind_text = f"{wind_text} {int(wind_speed)} mph"
+        if wind_gust:
+            wind_text = f"{wind_text} porywy {int(wind_gust)} mph"
+        parts.append(wind_text)
+
+    if temperature:
+        parts.append(f"temp {int(temperature)}F")
+    if rain_1h:
+        parts.append(f"deszcz 1h {int(rain_1h) / 100:.2f}in")
+    if rain_24h:
+        parts.append(f"deszcz 24h {int(rain_24h) / 100:.2f}in")
+    if rain_midnight:
+        parts.append(f"deszcz od polnocy {int(rain_midnight) / 100:.2f}in")
+    if humidity:
+        humidity_value = 100 if humidity == "00" else int(humidity)
+        parts.append(f"wilgotnosc {humidity_value}%")
+    if pressure:
+        parts.append(f"cisnienie {int(pressure) / 10:.1f} hPa")
+
+    return " | ".join(parts)
+
+
+def _match_group(text: str, pattern: str) -> str:
+    match = re.search(pattern, text)
+    return match.group(1) if match else ""
 
 
 def _is_base91_block(value: str) -> bool:
