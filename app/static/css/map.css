@@ -59,7 +59,7 @@
 .map-mask {
     position: absolute;
     inset: 0;
-    z-index: 750;
+    z-index: 550;
     pointer-events: none;
     background: #000;
     opacity: 0.2;
