@@ -181,8 +181,9 @@ install_openrc_services() {
 
 enable_services() {
     if command -v rc-update >/dev/null 2>&1; then
-        rc-update add aprsbox-web default || true
         rc-update add aprsbox-core default || true
+        rc-update add aprsbox-web default || true
+        rc-service aprsbox-core restart || rc-service aprsbox-core start
         rc-service aprsbox-web restart || rc-service aprsbox-web start
     else
         log "OpenRC not available on this host. Service files were installed but not enabled."

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import json
+
 from fastapi import APIRouter, Depends, Form, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
+from app.services.core_client import get_core_traffic_snapshot
 from app.services.content import (
     delete_section_row,
     dashboard_summary,
@@ -481,7 +485,7 @@ def traffic_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    traffic_snapshot = request.app.state.traffic_monitor.snapshot()
+    traffic_snapshot = get_core_traffic_snapshot()
     context = build_template_context(
         request,
         page_title="Traffic Monitor",
@@ -494,10 +498,29 @@ def traffic_page(
 
 @router.get("/api/traffic")
 async def traffic_snapshot(
-    request: Request,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
-    return JSONResponse(request.app.state.traffic_monitor.snapshot())
+    return JSONResponse(get_core_traffic_snapshot())
+
+
+@router.get("/api/traffic/stream")
+async def traffic_stream(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> StreamingResponse:
+    async def event_generator():
+        previous_payload = ""
+        while True:
+            if await request.is_disconnected():
+                break
+            snapshot = get_core_traffic_snapshot()
+            payload = json.dumps(snapshot, separators=(",", ":"))
+            if payload != previous_payload:
+                previous_payload = payload
+                yield f"data: {payload}\n\n"
+            await asyncio.sleep(1)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/map")

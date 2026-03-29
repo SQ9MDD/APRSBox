@@ -21,6 +21,8 @@ class Settings:
     repo_root: Path = _repo_root()
     gui_update_url: str = os.getenv("APRSBOX_GIT_URL", "https://github.com/SQ9MDD/APRSBox.git")
     gui_update_branch: str = os.getenv("APRSBOX_GIT_BRANCH", "main")
+    core_host: str = os.getenv("APRSBOX_CORE_HOST", "127.0.0.1")
+    core_port: int = int(os.getenv("APRSBOX_CORE_PORT", "18081"))
 
     @property
     def runtime_root(self) -> Path:
@@ -59,6 +61,13 @@ class Settings:
     @property
     def version_file(self) -> Path:
         return self.repo_root / "VERSION"
+
+    @property
+    def core_base_url(self) -> str:
+        override = os.getenv("APRSBOX_CORE_URL", "").strip()
+        if override:
+            return override.rstrip("/")
+        return f"http://{self.core_host}:{self.core_port}"
 
 
 settings = Settings()

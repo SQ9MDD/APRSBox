@@ -15,9 +15,11 @@ export APRSBOX_ENV="production"
 export APRSBOX_INSTALL_ROOT="/opt/aprsbox"
 export APRSBOX_DB_PATH="/opt/aprsbox/data/aprsbox.db"
 export APRSBOX_LOG_DIR="/opt/aprsbox/logs"
+export APRSBOX_CORE_HOST="127.0.0.1"
+export APRSBOX_CORE_PORT="18081"
 
 depend() {
     need localmount
+    after aprsbox-core
     use net
 }
-

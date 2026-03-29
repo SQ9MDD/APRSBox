@@ -318,11 +318,7 @@ class TrafficMonitorService:
             modem = dict(self._active_modem) if self._active_modem else None
         if not modem:
             return "TNC"
-        name = str(modem.get("name") or "TNC").strip()
-        endpoint = str(modem.get("device_path") or "").strip()
-        if endpoint:
-            return f"{name} ({endpoint})"
-        return name
+        return str(modem.get("name") or "TNC").strip()
 
     async def _sleep(self, delay: float) -> None:
         try:

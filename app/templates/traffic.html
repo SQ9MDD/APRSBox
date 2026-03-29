@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
     <h2>Traffic Monitor</h2>
-    <p class="section-lead">Read-only monitor for the first enabled TCP TNC. The backend assembles KISS frames from the TCP stream and renders each complete frame as a single log row. When the frame is APRS UI, it is decoded to TNC2 form similar to <code>aprx-rf.log</code>.</p>
+    <p class="section-lead">Read-only monitor backed by <code>aprs-core</code>. The core process assembles KISS frames from the TCP stream and the browser receives live updates over an event stream exposed by the web UI.</p>
 </section>
 
 <section class="grid two">
@@ -33,6 +33,7 @@
             <li>Source: the first enabled modem with type <code>TCP</code>.</li>
             <li>Address format: <code>ip:port</code> in the existing <code>Path / Adress</code> field.</li>
             <li>Display: one row per complete KISS frame, newest first.</li>
+            <li>Decoded APRS UI frames are rendered in TNC2 form by <code>aprs-core</code>.</li>
         </ul>
     </div>
 </section>
@@ -59,7 +60,7 @@
 
 <script>
     (() => {
-        const stream = document.getElementById("traffic-stream");
+        const streamContainer = document.getElementById("traffic-stream");
         const count = document.getElementById("traffic-frame-count");
         const statusLabel = document.getElementById("traffic-status-label");
         const updatedAt = document.getElementById("traffic-updated-at");
@@ -70,11 +71,11 @@
 
         const renderFrames = (frames) => {
             if (!frames.length) {
-                stream.innerHTML = '<div class="muted" id="traffic-empty-state">No frames received yet.</div>';
+                streamContainer.innerHTML = '<div class="muted" id="traffic-empty-state">No frames received yet.</div>';
                 return;
             }
 
-            stream.innerHTML = frames.map((frame) => `
+            streamContainer.innerHTML = frames.map((frame) => `
                 <div class="traffic-log-row">
                     <span class="traffic-log-time"></span>
                     <span class="traffic-log-source"></span>
@@ -82,9 +83,9 @@
                 </div>
             `).join("");
 
-            const timeNodes = stream.querySelectorAll(".traffic-log-time");
-            const sourceNodes = stream.querySelectorAll(".traffic-log-source");
-            const lineNodes = stream.querySelectorAll(".traffic-log-line");
+            const timeNodes = streamContainer.querySelectorAll(".traffic-log-time");
+            const sourceNodes = streamContainer.querySelectorAll(".traffic-log-source");
+            const lineNodes = streamContainer.querySelectorAll(".traffic-log-line");
             frames.forEach((frame, index) => {
                 timeNodes[index].textContent = frame.timestamp;
                 sourceNodes[index].textContent = frame.source;
@@ -105,32 +106,28 @@
             }
         };
 
-        const refresh = async () => {
-            try {
-                const response = await fetch("/api/traffic", { headers: { "Accept": "application/json" } });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                const snapshot = await response.json();
-                statusLabel.textContent = snapshot.status;
-                updatedAt.textContent = snapshot.updated_at;
-                modemName.textContent = snapshot.active_modem ? snapshot.active_modem.name : "None";
-                modemEndpoint.textContent = snapshot.active_modem ? snapshot.active_modem.device_path : "-";
-                statusDetail.textContent = snapshot.status_detail;
-                lastError.textContent = snapshot.last_error || "-";
-                count.textContent = `${snapshot.frames.length} entries`;
-                syncStatusClass(snapshot.status);
-                renderFrames(snapshot.frames);
-            } catch (error) {
-                statusLabel.textContent = "error";
-                statusDetail.textContent = `Traffic API refresh failed: ${error}`;
-                lastError.textContent = "GUI polling error";
-                syncStatusClass("error");
-            }
+        const applySnapshot = (snapshot) => {
+            statusLabel.textContent = snapshot.status;
+            updatedAt.textContent = snapshot.updated_at || "-";
+            modemName.textContent = snapshot.active_modem ? snapshot.active_modem.name : "None";
+            modemEndpoint.textContent = snapshot.active_modem ? snapshot.active_modem.device_path : "-";
+            statusDetail.textContent = snapshot.status_detail;
+            lastError.textContent = snapshot.last_error || "-";
+            count.textContent = `${snapshot.frames.length} entries`;
+            syncStatusClass(snapshot.status);
+            renderFrames(snapshot.frames);
         };
 
         syncStatusClass(statusLabel.textContent);
-        window.setInterval(refresh, 2000);
+        const eventSource = new EventSource("/api/traffic/stream");
+        eventSource.onmessage = (event) => {
+            applySnapshot(JSON.parse(event.data));
+        };
+        eventSource.onerror = () => {
+            statusLabel.textContent = "unavailable";
+            statusDetail.textContent = "Lost live connection to aprs-core stream. Waiting for reconnect.";
+            syncStatusClass("error");
+        };
     })();
 </script>
 {% endblock %}

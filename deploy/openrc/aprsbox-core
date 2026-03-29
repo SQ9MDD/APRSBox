@@ -1,8 +1,9 @@
 #!/sbin/openrc-run
 
 name="APRSBox Core"
-description="APRSBox core placeholder service"
-command="/opt/aprsbox/app/scripts/aprsbox-core-placeholder.sh"
+description="APRSBox APRS core service"
+command="/opt/aprsbox/venv/bin/uvicorn"
+command_args="app.core_main:app --host 127.0.0.1 --port 18081 --app-dir /opt/aprsbox/app"
 command_user="aprsbox:aprsbox"
 directory="/opt/aprsbox/app"
 pidfile="/run/aprsbox-core.pid"
@@ -10,9 +11,14 @@ command_background="yes"
 output_log="/opt/aprsbox/logs/aprsbox-core.log"
 error_log="/opt/aprsbox/logs/aprsbox-core.error.log"
 
+export APRSBOX_ENV="production"
+export APRSBOX_INSTALL_ROOT="/opt/aprsbox"
+export APRSBOX_DB_PATH="/opt/aprsbox/data/aprsbox.db"
 export APRSBOX_LOG_DIR="/opt/aprsbox/logs"
+export APRSBOX_CORE_HOST="127.0.0.1"
+export APRSBOX_CORE_PORT="18081"
 
 depend() {
     need localmount
+    use net
 }
-
