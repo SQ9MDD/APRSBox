@@ -17,7 +17,12 @@
             <thead>
                 <tr>
                     {% for field in section.fields %}
+                    {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'notes'] %}
+                    {% elif section.slug == 'modems' and field.name == 'enabled' %}
+                    <th>Status</th>
+                    {% else %}
                     <th>{{ field.label }}</th>
+                    {% endif %}
                     {% endfor %}
                     {% if section.slug != 'modems' %}
                     <th>Updated</th>
@@ -31,33 +36,23 @@
                 {% for row in rows %}
                 <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                     {% for field in section.fields %}
+                    {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'notes'] %}
+                    {% elif section.slug == 'modems' and field.name == 'enabled' %}
                     <td>
-                        {% if section.slug == 'modems' and field.name == 'device_path' %}
-                        <span class="tnc-badge">
-                            <img src="{{ url_for('static', path='icons/serial-port.svg') }}" alt="">
-                            <span>{{ row[field.name] if row[field.name] else 'Not set' }}</span>
-                        </span>
-                        {% elif section.slug == 'modems' and field.name == 'baud_rate' %}
-                        <span class="tnc-badge">
-                            <img src="{{ url_for('static', path='icons/usb.svg') }}" alt="">
-                            <span>{{ row[field.name] if row[field.name] is not none else 'Auto' }}</span>
-                        </span>
-                        {% elif section.slug == 'modems' and field.name == 'notes' %}
-                        <span class="tnc-badge">
-                            <img src="{{ url_for('static', path='icons/note-text.svg') }}" alt="">
-                            <span>{{ 'Added' if row[field.name] else 'Empty' }}</span>
-                        </span>
-                        {% elif section.slug == 'modems' and field.name == 'enabled' %}
                         <span class="tnc-badge {{ 'tnc-badge-enabled' if row[field.name] else 'tnc-badge-disabled' }}">
                             <img src="{{ url_for('static', path='icons/' ~ ('check-circle.svg' if row[field.name] else 'close-circle.svg')) }}" alt="">
                             <span>{{ 'Enabled' if row[field.name] else 'Disabled' }}</span>
                         </span>
-                        {% elif field.type == 'checkbox' %}
+                    </td>
+                    {% else %}
+                    <td>
+                        {% if field.type == 'checkbox' %}
                         {{ 'Yes' if row[field.name] else 'No' }}
                         {% else %}
                         {{ row[field.name] if row[field.name] is not none else '' }}
                         {% endif %}
                     </td>
+                    {% endif %}
                     {% endfor %}
                     {% if section.slug != 'modems' %}
                     <td>{{ row.updated_at or row.created_at }}</td>
@@ -72,7 +67,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ section.fields|length + (0 if section.slug == 'modems' else 1) + (1 if can_edit and section.supports_delete else 0) }}">No records yet.</td>
+                    <td colspan="{{ (3 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">No records yet.</td>
                 </tr>
                 {% endfor %}
             </tbody>
