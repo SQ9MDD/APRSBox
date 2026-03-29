@@ -330,6 +330,25 @@ class TrafficMonitorService:
         modem: dict[str, Any] | None,
         error: str | None,
     ) -> None:
+        modem_name = str(modem.get("name") or "").strip() if modem else None
+        modem_endpoint = str(modem.get("device_path") or "").strip() if modem else None
+        with get_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO traffic_runtime_state(
+                    id, status, status_detail, active_modem_name, active_modem_endpoint, last_error, updated_at
+                )
+                VALUES (1, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    status_detail = excluded.status_detail,
+                    active_modem_name = excluded.active_modem_name,
+                    active_modem_endpoint = excluded.active_modem_endpoint,
+                    last_error = excluded.last_error,
+                    updated_at = excluded.updated_at
+                """,
+                (status, detail, modem_name, modem_endpoint, error, utc_now()),
+            )
         with self._lock:
             self._status = status
             self._status_detail = detail

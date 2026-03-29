@@ -17,6 +17,7 @@ from app.services.content import (
     get_section_rows,
     get_station_settings,
     recent_event_logs,
+    traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
     safe_update_section_row,
     update_station_settings,
@@ -501,7 +502,7 @@ def traffic_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    traffic_snapshot = request.app.state.core_proxy.snapshot()
+    traffic_snapshot = get_traffic_snapshot()
     context = build_template_context(
         request,
         page_title="Traffic Monitor",
@@ -514,10 +515,9 @@ def traffic_page(
 
 @router.get("/api/traffic")
 async def traffic_snapshot(
-    request: Request,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
-    return JSONResponse(request.app.state.core_proxy.snapshot())
+    return JSONResponse(get_traffic_snapshot())
 
 
 @router.get("/api/traffic/stream")
@@ -526,14 +526,16 @@ async def traffic_stream(
     _: UserIdentity = Depends(get_current_user),
 ) -> StreamingResponse:
     async def event_generator():
-        proxy = request.app.state.core_proxy
-        revision = -1
+        previous_payload = ""
         while True:
             if await request.is_disconnected():
                 break
-            revision, snapshot = await proxy.wait_for_update(revision)
+            snapshot = get_traffic_snapshot()
             payload = json.dumps(snapshot, separators=(",", ":"))
-            yield f"data: {payload}\n\n"
+            if payload != previous_payload:
+                previous_payload = payload
+                yield f"data: {payload}\n\n"
+            await asyncio.sleep(1)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

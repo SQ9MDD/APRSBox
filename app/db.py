@@ -171,6 +171,16 @@ CREATE TABLE IF NOT EXISTS traffic_frames (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS traffic_runtime_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    status TEXT NOT NULL,
+    status_detail TEXT NOT NULL,
+    active_modem_name TEXT,
+    active_modem_endpoint TEXT,
+    last_error TEXT,
+    updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 """
@@ -186,6 +196,16 @@ def init_db() -> None:
                 symbol_table, symbol_code, tx_enabled, updated_at
             )
             VALUES (1, '', '', '', '', '', '/', '>', 0, ?)
+            ON CONFLICT(id) DO NOTHING
+            """,
+            (utc_now(),),
+        )
+        connection.execute(
+            """
+            INSERT INTO traffic_runtime_state (
+                id, status, status_detail, active_modem_name, active_modem_endpoint, last_error, updated_at
+            )
+            VALUES (1, 'idle', 'Traffic monitor is starting.', NULL, NULL, NULL, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),

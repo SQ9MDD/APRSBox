@@ -149,6 +149,51 @@ def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
+    state_row = fetch_one(
+        """
+        SELECT status, status_detail, active_modem_name, active_modem_endpoint, last_error, updated_at
+        FROM traffic_runtime_state
+        WHERE id = 1
+        """
+    )
+    frame_rows = fetch_all(
+        """
+        SELECT source, format, line, port, command, length, hex, created_at
+        FROM traffic_frames
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    active_modem = None
+    if state_row and (state_row["active_modem_name"] or state_row["active_modem_endpoint"]):
+        active_modem = {
+            "name": state_row["active_modem_name"] or "",
+            "device_path": state_row["active_modem_endpoint"] or "",
+        }
+    return {
+        "status": state_row["status"] if state_row else "idle",
+        "status_detail": state_row["status_detail"] if state_row else "Traffic monitor state unavailable.",
+        "active_modem": active_modem,
+        "last_error": state_row["last_error"] if state_row else None,
+        "updated_at": state_row["updated_at"] if state_row else None,
+        "frames": [
+            {
+                "timestamp": row["created_at"],
+                "source": row["source"],
+                "format": row["format"],
+                "line": row["line"],
+                "port": row["port"] or "",
+                "command": row["command"] or "",
+                "length": str(row["length"]),
+                "hex": row["hex"] or "",
+            }
+            for row in frame_rows
+        ],
+    }
+
+
 def dashboard_summary() -> dict[str, Any]:
     metrics: dict[str, Any] = {}
     for slug, definition in SECTION_DEFINITIONS.items():
