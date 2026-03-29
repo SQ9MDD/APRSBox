@@ -18,7 +18,6 @@
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
     const mapCanvas = document.getElementById("map-canvas");
-    const maskElement = document.getElementById("map-mask");
     const resetButton = document.getElementById("map-reset-view");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const stationLayer = window.L.layerGroup();
@@ -30,14 +29,6 @@
         zoom: defaultView.zoom,
         zoomControl: true,
     });
-
-    if (maskElement) {
-        const maskPane = map.createPane("mask-pane");
-        maskPane.classList.add("map-mask-pane");
-        maskPane.style.zIndex = "550";
-        maskPane.style.pointerEvents = "none";
-        maskPane.appendChild(maskElement);
-    }
 
     // Keep the tile endpoint configurable from the backend so the frontend can
     // switch later from the public development tiles to a local cache/proxy.
@@ -63,8 +54,8 @@
         const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
             ? opacityPercent - (opacityPercent % 10)
             : 20;
-        if (maskElement) {
-            maskElement.style.opacity = String(normalizedOpacity / 100);
+        if (mapCanvas) {
+            mapCanvas.style.setProperty("--map-pane-opacity", String(1 - (normalizedOpacity / 100)));
         }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);
