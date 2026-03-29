@@ -15,6 +15,7 @@
 
     const stationEndpoint = pageRoot.dataset.stationEndpoint || "";
     const refreshMs = Number.parseInt(pageRoot.dataset.refreshMs || "30000", 10);
+    const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
     let map = null;
     let marker = null;
     let tileLayer = null;
@@ -119,6 +120,20 @@
         `;
     }
 
+    function resolveMaskOpacity() {
+        const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey) || "", 10);
+        if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
+            return storedOpacity;
+        }
+        return 20;
+    }
+
+    function applyMaskOpacity() {
+        if (!mapCanvas) return;
+        const opacityPercent = resolveMaskOpacity();
+        mapCanvas.style.setProperty("--map-pane-opacity", String(1 - (opacityPercent / 100)));
+    }
+
     function ensureMap(station, mapConfig) {
         const hasCoordinates = Number.isFinite(Number(station.latitude_float)) && Number.isFinite(Number(station.longitude_float));
         if (!hasCoordinates) {
@@ -213,6 +228,7 @@
         symbol_icon: mapRoot.dataset.symbolIcon || "",
     } : {};
 
+    applyMaskOpacity();
     ensureMap(initialStation, initialMapConfig);
     if (Number.isInteger(refreshMs) && refreshMs > 0) {
         window.setInterval(refreshStation, refreshMs);
