@@ -185,10 +185,10 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         "status_detail": state_row["status_detail"] if state_row else "Traffic monitor state unavailable.",
         "active_modem": active_modem,
         "last_error": state_row["last_error"] if state_row else None,
-        "updated_at": state_row["updated_at"] if state_row else None,
+        "updated_at": _format_monitor_timestamp(state_row["updated_at"]) if state_row else None,
         "frames": [
             {
-                "timestamp": row["created_at"],
+                "timestamp": _format_monitor_timestamp(row["created_at"]),
                 "source": row["source"],
                 "format": row["format"],
                 "line": row["line"],
@@ -200,6 +200,16 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             for row in frame_rows
         ],
     }
+
+
+def _format_monitor_timestamp(timestamp: str | None) -> str:
+    if not timestamp:
+        return "-"
+    try:
+        local_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone()
+    except ValueError:
+        return timestamp
+    return local_time.strftime("%Y.%m.%d %H:%M:%S")
 
 
 def dashboard_summary() -> dict[str, Any]:
