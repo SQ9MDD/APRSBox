@@ -149,26 +149,25 @@ sudo -u aprsbox /opt/aprsbox/venv/bin/python -m app.cli set-password --username 
 - Alpine Linux: first-class target
 - Raspberry Pi OS / Debian-like systems: supported, but currently a secondary target
 
-### One-Line Bootstrap
+### Online Bootstrap
 
-The intended deployment model is a one-line bootstrap that downloads and runs `install.sh` on a clean target host. Because a raw shell script does not contain the full application tree by itself, standalone bootstrap mode expects a repository URL via `APRSBOX_GIT_URL`.
+The intended deployment model is an online bootstrap that downloads and runs `install.sh` on a clean target host. Because a raw shell script does not contain the full application tree by itself, bootstrap mode expects a repository URL via `APRSBOX_GIT_URL`.
 
-After publishing the repository on GitHub, the pattern is:
+General bootstrap:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
   APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git sh
 ```
 
-If you do not provide admin credentials, the installer uses the default initial login `admin` and password `aprs`.
-
-If you prefer to clone first:
+On Raspberry Pi OS / Debian-like systems, run it with `sudo`:
 
 ```bash
-git clone https://github.com/SQ9MDD/APRSBox.git
-cd APRSBox
-sudo ./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
+  sudo APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git sh
 ```
+
+If you do not provide admin credentials, the installer uses the default initial login `admin` and password `aprs`.
 
 ### What `install.sh` Does
 
