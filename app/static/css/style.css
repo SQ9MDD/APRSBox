@@ -441,6 +441,37 @@ textarea {
     background: var(--accent-soft);
 }
 
+.tnc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    max-width: 100%;
+    padding: 0.24rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tnc-badge img {
+    width: 0.95rem;
+    height: 0.95rem;
+    opacity: 0.82;
+    filter: var(--icon-filter);
+}
+
+.tnc-badge-enabled {
+    background: rgba(107, 170, 121, 0.14);
+    color: var(--success);
+}
+
+.tnc-badge-disabled {
+    background: rgba(201, 122, 122, 0.14);
+    color: var(--danger);
+}
+
 .alert {
     padding: 0.65rem 0.78rem;
     border-radius: 8px;
