@@ -130,15 +130,17 @@
 
     function buildStationIcon(station) {
         const staleClass = station.stale ? " map-station-icon-stale" : "";
+        const iconPath = station.symbol_icon ? `/static/${station.symbol_icon}` : "/static/icons/verG/x.gif";
+        const iconAlt = station.symbol_table || station.symbol_code ? `${station.symbol_table || ""}${station.symbol_code || ""}` : "";
         return window.L.divIcon({
             className: `map-station-icon${staleClass}`,
             html: `
-                <span class="map-station-dot" aria-hidden="true"></span>
+                <img class="map-station-aprs-icon" src="${escapeHtml(iconPath)}" alt="${escapeHtml(iconAlt)}">
                 <span class="map-station-label">${escapeHtml(station.display_callsign || station.callsign || "")}</span>
             `,
-            iconSize: [12, 12],
-            iconAnchor: [6, 6],
-            tooltipAnchor: [0, -8],
+            iconSize: [36, 24],
+            iconAnchor: [8, 8],
+            tooltipAnchor: [0, -10],
         });
     }
 

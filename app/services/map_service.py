@@ -41,6 +41,7 @@ def get_map_station_payload() -> dict[str, Any]:
                 "display_callsign": station["display_callsign"],
                 "latitude": latitude,
                 "longitude": longitude,
+                "symbol_icon": station["symbol_icon"],
                 "symbol_table": station["symbol_table"],
                 "symbol_code": station["symbol_code"],
                 "comment": station["comment"],
