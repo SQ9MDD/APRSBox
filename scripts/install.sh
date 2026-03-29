@@ -216,6 +216,30 @@ setup_venv() {
     "$STAGING_VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"
 }
 
+verify_python_runtime() {
+    if [ ! -x "$STAGING_VENV_DIR/bin/gunicorn" ]; then
+        fail "gunicorn was not installed into $STAGING_VENV_DIR"
+    fi
+
+    PYTHONPATH="$STAGING_APP_DIR" \
+        APRSBOX_ENV=production \
+        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
+        APRSBOX_DB_PATH="$DB_PATH" \
+        "$STAGING_VENV_DIR/bin/python" -c "import app.main, app.core_main"
+
+    PYTHONPATH="$STAGING_APP_DIR" \
+        APRSBOX_ENV=production \
+        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
+        APRSBOX_DB_PATH="$DB_PATH" \
+        "$STAGING_VENV_DIR/bin/gunicorn" --check-config --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
+
+    PYTHONPATH="$STAGING_APP_DIR" \
+        APRSBOX_ENV=production \
+        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
+        APRSBOX_DB_PATH="$DB_PATH" \
+        "$STAGING_VENV_DIR/bin/gunicorn" --check-config --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
+}
+
 activate_staged_installation() {
     rm -rf "$TARGET_APP_DIR" "$VENV_DIR"
     mv "$STAGING_APP_DIR" "$TARGET_APP_DIR"
@@ -330,6 +354,7 @@ main() {
     prepare_staging_installation
     sync_application_files
     setup_venv
+    verify_python_runtime
     initialize_database
     create_admin_user
     activate_staged_installation
