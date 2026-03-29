@@ -121,7 +121,7 @@ Useful endpoints:
 Initial admin account creation:
 
 - The installer creates the initial admin user
-- Default credentials are `admin` / `aprs` unless overridden
+- Default credentials are `admin` / `aprs`
 - You can provide credentials interactively
 - Or you can set environment variables:
   - `APRSBOX_ADMIN_USER`
@@ -158,24 +158,14 @@ curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install
   APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git sh
 ```
 
-When using the one-line bootstrap, it is strongly recommended to pass admin credentials via environment variables, for example:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
-  APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git \
-  APRSBOX_ADMIN_USER=admin \
-  APRSBOX_ADMIN_PASSWORD='change-me' \
-  sh
-```
-
-If you do not provide `APRSBOX_ADMIN_PASSWORD`, the installer uses the default initial password `aprs`.
+If you do not provide admin credentials, the installer uses the default initial login `admin` and password `aprs`.
 
 If you prefer to clone first:
 
 ```bash
 git clone https://github.com/SQ9MDD/APRSBox.git
 cd APRSBox
-sudo APRSBOX_ADMIN_USER=admin APRSBOX_ADMIN_PASSWORD='change-me' ./scripts/install.sh
+sudo ./scripts/install.sh
 ```
 
 ### What `install.sh` Does
