@@ -504,8 +504,8 @@ textarea {
 
 .stations-table th:nth-child(1),
 .stations-table td:nth-child(1) {
-    width: 11rem;
-    min-width: 11rem;
+    width: 5.5rem;
+    min-width: 5.5rem;
 }
 
 .stations-table th:nth-child(2),
@@ -538,8 +538,8 @@ textarea {
 
 .stations-table th:nth-child(7),
 .stations-table td:nth-child(7) {
-    width: 14rem;
-    min-width: 14rem;
+    width: 28rem;
+    min-width: 28rem;
 }
 
 .stations-table th:nth-child(8),
