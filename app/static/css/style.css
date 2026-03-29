@@ -763,37 +763,45 @@ textarea {
 
 .station-packets-table th:nth-child(1),
 .station-packets-table td:nth-child(1) {
-    width: 8.5rem;
-    min-width: 8.5rem;
+    width: 7rem;
+    min-width: 7rem;
 }
 
 .station-packets-table th:nth-child(2),
 .station-packets-table td:nth-child(2),
 .station-packets-table th:nth-child(3),
 .station-packets-table td:nth-child(3) {
-    width: 7.5rem;
-    min-width: 7.5rem;
+    width: 5.5rem;
+    min-width: 5.5rem;
     white-space: nowrap;
 }
 
 .station-packets-table th:nth-child(4),
 .station-packets-table td:nth-child(4) {
-    width: 12rem;
-    min-width: 12rem;
+    width: 8rem;
+    min-width: 8rem;
     white-space: nowrap;
 }
 
 .station-packets-table th:nth-child(5),
 .station-packets-table td:nth-child(5) {
-    width: 24rem;
-    min-width: 24rem;
+    width: 12rem;
+    min-width: 12rem;
     white-space: nowrap;
 }
 
 .station-packets-table th:nth-child(6),
 .station-packets-table td:nth-child(6) {
-    min-width: 28rem;
+    min-width: 32rem;
     white-space: nowrap;
+}
+
+.station-packets-table td:nth-child(6) code {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: top;
 }
 
 .station-detail-map-root,
