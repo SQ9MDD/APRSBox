@@ -4,11 +4,20 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login | APRSBox</title>
+    <script>
+        (() => {
+            const storedTheme = localStorage.getItem("aprsbox-theme");
+            document.documentElement.setAttribute("data-theme", storedTheme || "dark");
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
 </head>
 <body class="login-shell">
     <main class="login-card">
-        <h1>APRSBox</h1>
+        <div class="login-topbar">
+            <h1>APRSBox</h1>
+            <button type="button" class="theme-toggle" id="theme-toggle">Night Mode</button>
+        </div>
         {% if login_error %}
         <div class="alert">{{ login_error }}</div>
         {% endif %}
@@ -24,5 +33,22 @@
             <button type="submit" class="button">Sign In</button>
         </form>
     </main>
+    <script>
+        (() => {
+            const root = document.documentElement;
+            const button = document.getElementById("theme-toggle");
+            if (!button) return;
+            const syncLabel = () => {
+                button.textContent = root.getAttribute("data-theme") === "light" ? "Day Mode" : "Night Mode";
+            };
+            syncLabel();
+            button.addEventListener("click", () => {
+                const nextTheme = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+                root.setAttribute("data-theme", nextTheme);
+                localStorage.setItem("aprsbox-theme", nextTheme);
+                syncLabel();
+            });
+        })();
+    </script>
 </body>
 </html>

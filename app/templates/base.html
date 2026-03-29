@@ -4,21 +4,32 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ page_title }} | APRSBox</title>
+    <script>
+        (() => {
+            const storedTheme = localStorage.getItem("aprsbox-theme");
+            document.documentElement.setAttribute("data-theme", storedTheme || "dark");
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
 </head>
 <body class="app-shell">
     {% if current_user %}
     <aside class="sidebar">
         <div class="brand">
-            <div class="brand-mark">AB</div>
+            <div class="brand-mark">
+                <img src="{{ url_for('static', path='icons/radio-tower.svg') }}" alt="">
+            </div>
             <div>
                 <strong>APRSBox</strong>
-                <div class="muted">Operational center skeleton</div>
+                <div class="muted">Native APRS console</div>
             </div>
         </div>
         <nav class="nav-list">
             {% for item in navigation %}
-            <a href="{{ item.href }}" class="nav-link {% if active_nav == item.key %}active{% endif %}">{{ item.label }}</a>
+            <a href="{{ item.href }}" class="nav-link {% if active_nav == item.key %}active{% endif %}">
+                <img class="nav-icon" src="{{ url_for('static', path='icons/' ~ item.icon) }}" alt="">
+                <span>{{ item.label }}</span>
+            </a>
             {% endfor %}
         </nav>
         <div class="sidebar-footer">
@@ -34,6 +45,7 @@
                 <h1>{{ page_title }}</h1>
             </div>
             <div class="topbar-user">
+                <button type="button" class="theme-toggle" id="theme-toggle">Night Mode</button>
                 <span>{{ current_user.username }}</span>
                 <span class="role-badge">{{ current_user.role }}</span>
                 <form action="/logout" method="post">
@@ -47,5 +59,22 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    <script>
+        (() => {
+            const root = document.documentElement;
+            const button = document.getElementById("theme-toggle");
+            if (!button) return;
+            const syncLabel = () => {
+                button.textContent = root.getAttribute("data-theme") === "light" ? "Day Mode" : "Night Mode";
+            };
+            syncLabel();
+            button.addEventListener("click", () => {
+                const nextTheme = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+                root.setAttribute("data-theme", nextTheme);
+                localStorage.setItem("aprsbox-theme", nextTheme);
+                syncLabel();
+            });
+        })();
+    </script>
 </body>
 </html>
