@@ -110,7 +110,15 @@
         if (Number.isNaN(date.getTime())) {
             return String(value);
         }
-        return date.toLocaleString("sv-SE", { hour12: false }).replace("T", " ");
+        return date.toLocaleString("pl-PL", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+        });
     }
 
     function formatAge(seconds) {
@@ -118,12 +126,15 @@
             return "";
         }
         if (seconds < 60) {
-            return `${seconds}s ago`;
+            return seconds <= 1 ? "teraz" : `${seconds} s temu`;
         }
         if (seconds < 3600) {
-            return `${Math.floor(seconds / 60)}m ago`;
+            return `${Math.floor(seconds / 60)} min temu`;
         }
-        return `${Math.floor(seconds / 3600)}h ago`;
+        if (seconds < 86400) {
+            return `${Math.floor(seconds / 3600)} h temu`;
+        }
+        return `${Math.floor(seconds / 86400)} d temu`;
     }
 
     function syncStatus() {
@@ -168,33 +179,35 @@
         const heardAt = formatTimestamp(station.last_heard_at);
         const heardAge = formatAge(station.last_heard_age_s);
         lines.push(title);
-        if (heardAt || heardAge) {
-            const heardLabel = [heardAt, heardAge ? `(${heardAge})` : ""].filter(Boolean).join(" ");
-            lines.push(`<span><strong>Last heard:</strong> ${escapeHtml(heardLabel)}</span>`);
+        if (heardAt) {
+            lines.push(`<span><strong>Słyszana:</strong> ${escapeHtml(heardAt)}</span>`);
+        }
+        if (heardAge) {
+            lines.push(`<span><strong>Jak dawno:</strong> ${escapeHtml(heardAge)}</span>`);
         }
         if (station.source) {
-            lines.push(`<span><strong>Source:</strong> ${escapeHtml(station.source)}</span>`);
+            lines.push(`<span><strong>Źródło:</strong> ${escapeHtml(station.source)}</span>`);
         }
         if (station.path) {
-            lines.push(`<span><strong>Path:</strong> ${escapeHtml(station.path)}</span>`);
+            lines.push(`<span><strong>Ścieżka:</strong> ${escapeHtml(station.path)}</span>`);
         }
         if (station.destination) {
-            lines.push(`<span><strong>Destination:</strong> ${escapeHtml(station.destination)}</span>`);
+            lines.push(`<span><strong>Cel:</strong> ${escapeHtml(station.destination)}</span>`);
         }
         if (station.comment) {
-            lines.push(`<span><strong>Comment:</strong> ${escapeHtml(station.comment)}</span>`);
+            lines.push(`<span><strong>Komentarz:</strong> ${escapeHtml(station.comment)}</span>`);
         }
         if (Number.isFinite(station.speed)) {
-            lines.push(`<span><strong>Speed:</strong> ${escapeHtml(`${station.speed} km/h`)}</span>`);
+            lines.push(`<span><strong>Prędkość:</strong> ${escapeHtml(`${station.speed} km/h`)}</span>`);
         }
         if (Number.isFinite(station.course)) {
-            lines.push(`<span><strong>Course:</strong> ${escapeHtml(`${station.course}°`)}</span>`);
+            lines.push(`<span><strong>Kurs:</strong> ${escapeHtml(`${station.course}°`)}</span>`);
         }
         if (Number.isFinite(station.altitude)) {
-            lines.push(`<span><strong>Altitude:</strong> ${escapeHtml(`${station.altitude} m`)}</span>`);
+            lines.push(`<span><strong>Wysokość:</strong> ${escapeHtml(`${station.altitude} m`)}</span>`);
         }
         if (station.packet_type) {
-            lines.push(`<span><strong>Packet:</strong> ${escapeHtml(station.packet_type)}</span>`);
+            lines.push(`<span><strong>Typ pakietu:</strong> ${escapeHtml(station.packet_type)}</span>`);
         }
         return `<div class="map-station-tooltip">${lines.join("")}</div>`;
     }
