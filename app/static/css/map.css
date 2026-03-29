@@ -42,7 +42,6 @@
 }
 
 .map-stage {
-    --map-mask-opacity: 0.2;
     position: relative;
     min-height: 68vh;
     width: 100%;
@@ -62,11 +61,12 @@
     inset: 0;
     z-index: 350;
     pointer-events: none;
-    background: rgba(0, 0, 0, var(--map-mask-opacity));
+    background: #000;
+    opacity: 0.2;
 }
 
 :root[data-theme="light"] .map-mask {
-    background: rgba(255, 255, 255, var(--map-mask-opacity));
+    background: #fff;
 }
 
 .map-mask-opacity-control {
