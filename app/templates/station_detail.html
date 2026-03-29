@@ -95,7 +95,9 @@
                 <span>Message text</span>
                 <textarea name="message_text" placeholder="APRS message transmit is not implemented yet.">{{ message_form.message_text if message_form else '' }}</textarea>
             </label>
-            <button type="submit" class="button">Send Message</button>
+            <div class="form-actions">
+                <button type="submit" class="button">Send Message</button>
+            </div>
         </form>
     </div>
 </section>

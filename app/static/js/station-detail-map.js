@@ -63,35 +63,45 @@
             return;
         }
         recentPackets.innerHTML = `
-            <table class="data-table compact-table">
-                <thead>
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Source</th>
-                        <th>Destination</th>
-                        <th>Path</th>
-                        <th>Decoded summary</th>
-                        <th>Raw packet</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${packets.map((packet) => `
+            <div class="table-wrap">
+                <table class="data-table compact-table station-packets-table">
+                    <colgroup>
+                        <col style="width: 7rem">
+                        <col style="width: 5.5rem">
+                        <col style="width: 5.5rem">
+                        <col style="width: 8rem">
+                        <col style="width: 12rem">
+                        <col style="width: 32rem">
+                    </colgroup>
+                    <thead>
                         <tr>
-                            <td>
-                                <div class="last-heard-cell">
-                                    <span>${escapeHtml(packet.timestamp_label || "")}</span>
-                                    ${packet.timestamp_relative ? `<span class="muted">${escapeHtml(packet.timestamp_relative)}</span>` : ""}
-                                </div>
-                            </td>
-                            <td>${escapeHtml(packet.source || "")}</td>
-                            <td>${escapeHtml(packet.destination || "")}</td>
-                            <td>${escapeHtml(packet.path || "-")}</td>
-                            <td>${escapeHtml(packet.decoded_summary || "-")}</td>
-                            <td><code>${escapeHtml(packet.raw_packet || "")}</code></td>
+                            <th>Timestamp</th>
+                            <th>Source</th>
+                            <th>Destination</th>
+                            <th>Path</th>
+                            <th>Decoded summary</th>
+                            <th>Raw packet</th>
                         </tr>
-                    `).join("")}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        ${packets.map((packet) => `
+                            <tr>
+                                <td>
+                                    <div class="last-heard-cell">
+                                        <span>${escapeHtml(packet.timestamp_label || "")}</span>
+                                        ${packet.timestamp_relative ? `<span class="muted">${escapeHtml(packet.timestamp_relative)}</span>` : ""}
+                                    </div>
+                                </td>
+                                <td>${escapeHtml(packet.source || "")}</td>
+                                <td>${escapeHtml(packet.destination || "")}</td>
+                                <td>${escapeHtml(packet.path || "-")}</td>
+                                <td>${escapeHtml(packet.decoded_summary || "-")}</td>
+                                <td><code>${escapeHtml(packet.raw_packet || "")}</code></td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
         `;
     }
 

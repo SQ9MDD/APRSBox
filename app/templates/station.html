@@ -58,7 +58,9 @@
                 <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
                 <span>Transmission Enabled Placeholder</span>
             </label>
-            <button type="submit" class="button">Save Station Settings</button>
+            <div class="form-actions">
+                <button type="submit" class="button">Save Station Settings</button>
+            </div>
         </form>
         {% else %}
         <dl class="details-grid">

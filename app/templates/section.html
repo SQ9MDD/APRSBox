@@ -120,10 +120,12 @@
                     {% endif %}
                 </label>
                 {% endfor %}
-                <button type="submit" class="button">Save</button>
-                {% if section.supports_editing and edit_row %}
-                <a href="/settings/{{ section.slug }}" class="button button-secondary">Cancel</a>
-                {% endif %}
+                <div class="form-actions">
+                    <button type="submit" class="button">Save</button>
+                    {% if section.supports_editing and edit_row %}
+                    <a href="/settings/{{ section.slug }}" class="button button-secondary">Cancel</a>
+                    {% endif %}
+                </div>
             </form>
             {% else %}
             <p class="muted">Your role is read-only for this section.</p>
