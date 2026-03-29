@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', path='css/map.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}?v={{ app_version }}">
+<link rel="stylesheet" href="{{ url_for('static', path='css/map.css') }}?v={{ app_version }}">
 {% endblock %}
 
 {% block content %}
@@ -45,6 +45,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}"></script>
-<script src="{{ url_for('static', path='js/map.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', path='js/map.js') }}?v={{ app_version }}"></script>
 {% endblock %}
