@@ -24,6 +24,7 @@ from app.services.content import (
     update_station_settings,
     worker_statuses,
 )
+from app.services.map_service import get_map_page_config, get_map_station_payload
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
 from app.template_helpers import build_template_context
 
@@ -460,6 +461,29 @@ def station_page(
         can_edit=current_user.role in {"admin", "operator"},
     )
     return templates.TemplateResponse("station.html", context)
+
+
+@router.get("/map")
+def map_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Map",
+        current_user=current_user,
+        active_nav="map",
+        map_config=get_map_page_config(),
+    )
+    return templates.TemplateResponse("map.html", context)
+
+
+@router.get("/api/map/stations")
+def map_stations(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_map_station_payload())
 
 
 @router.post("/station")
