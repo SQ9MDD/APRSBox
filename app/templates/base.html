@@ -27,10 +27,14 @@
         </div>
         <nav class="nav-list">
             {% for item in navigation %}
+            {% if item.separator %}
+            <div class="nav-separator" aria-hidden="true"></div>
+            {% else %}
             <a href="{{ item.href }}" class="nav-link {% if active_nav == item.key %}active{% endif %}">
                 <img class="nav-icon" src="{{ url_for('static', path='icons/' ~ item.icon) }}" alt="">
                 <span>{{ item.label }}</span>
             </a>
+            {% endif %}
             {% endfor %}
         </nav>
         <div class="sidebar-footer">

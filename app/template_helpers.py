@@ -10,7 +10,10 @@ from app import get_version
 PRIMARY_NAV = [
     {"key": "dashboard", "label": "Dashboard", "href": "/dashboard", "roles": ("admin", "operator", "viewer"), "icon": "view-dashboard-outline.svg"},
     {"key": "stations", "label": "Stations", "href": "/stations", "roles": ("admin", "operator", "viewer"), "icon": "account-multiple.svg"},
+    {"key": "map", "label": "Map", "href": "/map", "roles": ("admin", "operator", "viewer"), "icon": "map-outline.svg"},
     {"key": "modems", "label": "TNC", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
+    {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
+    {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator", "viewer")},
     {"key": "servers", "label": "Settings / APRS-IS Servers", "href": "/settings/servers", "roles": ("admin", "operator", "viewer"), "icon": "server-network.svg"},
     {"key": "station", "label": "Station Settings", "href": "/station", "roles": ("admin", "operator", "viewer"), "icon": "antenna.svg"},
     {"key": "igate", "label": "iGate Rules", "href": "/igate", "roles": ("admin", "operator", "viewer"), "icon": "router-network.svg"},
@@ -19,8 +22,6 @@ PRIMARY_NAV = [
     {"key": "items", "label": "Items", "href": "/items", "roles": ("admin", "operator", "viewer"), "icon": "playlist-check.svg"},
     {"key": "bulletins", "label": "Bulletins", "href": "/bulletins", "roles": ("admin", "operator", "viewer"), "icon": "message-text-outline.svg"},
     {"key": "logs", "label": "Logs", "href": "/logs", "roles": ("admin", "operator", "viewer"), "icon": "book-open-variant.svg"},
-    {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
-    {"key": "map", "label": "Map", "href": "/map", "roles": ("admin", "operator", "viewer"), "icon": "map-outline.svg"},
     {"key": "users", "label": "Users / Roles", "href": "/admin/users", "roles": ("admin",), "icon": "account-cog.svg"},
     {"key": "settings", "label": "Settings", "href": "/settings", "roles": ("admin", "operator", "viewer"), "icon": "cog.svg"},
 ]
