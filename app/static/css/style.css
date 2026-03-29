@@ -757,6 +757,45 @@ textarea {
     word-break: break-word;
 }
 
+.station-packets-table {
+    table-layout: auto;
+}
+
+.station-packets-table th:nth-child(1),
+.station-packets-table td:nth-child(1) {
+    width: 8.5rem;
+    min-width: 8.5rem;
+}
+
+.station-packets-table th:nth-child(2),
+.station-packets-table td:nth-child(2),
+.station-packets-table th:nth-child(3),
+.station-packets-table td:nth-child(3) {
+    width: 7.5rem;
+    min-width: 7.5rem;
+    white-space: nowrap;
+}
+
+.station-packets-table th:nth-child(4),
+.station-packets-table td:nth-child(4) {
+    width: 12rem;
+    min-width: 12rem;
+    white-space: nowrap;
+}
+
+.station-packets-table th:nth-child(5),
+.station-packets-table td:nth-child(5) {
+    width: 24rem;
+    min-width: 24rem;
+    white-space: nowrap;
+}
+
+.station-packets-table th:nth-child(6),
+.station-packets-table td:nth-child(6) {
+    min-width: 28rem;
+    white-space: nowrap;
+}
+
 .station-detail-map-root,
 .station-detail-map-canvas {
     width: 100%;
