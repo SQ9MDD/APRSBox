@@ -6,7 +6,7 @@ import sqlite3
 import subprocess
 from shutil import which
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
@@ -267,8 +267,7 @@ def _format_last_heard(timestamp: str) -> str:
     except ValueError:
         return timestamp
 
-    local_zone = ZoneInfo("Europe/Warsaw")
-    local_time = heard_at.astimezone(local_zone)
+    local_time = heard_at.astimezone(_display_timezone())
     now = datetime.now(timezone.utc)
     delta_seconds = max(0, int((now - heard_at).total_seconds()))
     relative = "teraz"
@@ -281,6 +280,13 @@ def _format_last_heard(timestamp: str) -> str:
         hours = delta_seconds // 3600
         relative = f"{hours} {_pluralize_hours(hours)} temu"
     return f"{local_time.strftime('%Y.%m.%d %H:%M')} ({relative})"
+
+
+def _display_timezone():
+    try:
+        return ZoneInfo("Europe/Warsaw")
+    except ZoneInfoNotFoundError:
+        return datetime.now().astimezone().tzinfo or timezone.utc
 
 
 def _pluralize_minutes(value: int) -> str:
