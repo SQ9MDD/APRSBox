@@ -219,6 +219,7 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
         stations.append(
             {
                 "callsign": snapshot["callsign"],
+                "display_callsign": snapshot["display_callsign"],
                 "last_heard_at": snapshot["last_heard_at"],
                 "last_heard_label": snapshot["last_heard_label"],
                 "last_heard_date": snapshot["last_heard_date"],
@@ -1121,7 +1122,7 @@ def _aprs_symbol_icon_path(symbol: str) -> str:
     if index < 0 or index > 93:
         return "icons/verG/x.gif"
 
-    filename = f"{index:02d}.gif" if table == "/" else (f"a{index:02d}.gif" if table == "\\" else "x.gif")
+    filename = f"{index:02d}.gif" if table == "/" else f"a{index:02d}.gif"
     candidate = settings.static_dir / "icons" / "verG" / filename
     if candidate.exists():
         return f"icons/verG/{filename}"

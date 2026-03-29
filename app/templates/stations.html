@@ -48,7 +48,7 @@
         <tbody id="stations-table-body">
             {% for row in stations %}
             <tr>
-                <td class="callsign-cell"><strong>{{ row.callsign }}</strong></td>
+                <td class="callsign-cell"><strong>{{ row.display_callsign or row.callsign }}</strong></td>
                 <td>
                     {% if row.frame_type %}
                     <span class="frame-type-badge" title="{{ row.frame_type_label or row.frame_type }}">{{ row.frame_type }}</span>
@@ -140,7 +140,7 @@
         }
         tbody.innerHTML = stations.map((row) => `
             <tr>
-                <td class="callsign-cell"><strong>${escapeHtml(row.callsign || "-")}</strong></td>
+                <td class="callsign-cell"><strong>${escapeHtml(row.display_callsign || row.callsign || "-")}</strong></td>
                 <td>${row.frame_type ? `<span class="frame-type-badge" title="${escapeHtml(row.frame_type_label || row.frame_type)}">${escapeHtml(row.frame_type)}</span>` : '<span class="muted">-</span>'}</td>
                 <td>
                     <div class="last-heard-cell">
