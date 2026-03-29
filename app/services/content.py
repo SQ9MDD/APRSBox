@@ -398,8 +398,8 @@ def _parse_position_without_timestamp(info: str) -> dict[str, Any] | None:
         return None
     result = {
         "entity_class": "stationary",
-        "frame_type": "M",
-        "frame_type_label": "M - ruch",
+        "frame_type": "S",
+        "frame_type_label": "S - stała",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
@@ -425,8 +425,8 @@ def _parse_position_with_timestamp(info: str) -> dict[str, Any] | None:
         return None
     result = {
         "entity_class": "stationary",
-        "frame_type": "M",
-        "frame_type_label": "M - ruch",
+        "frame_type": "S",
+        "frame_type_label": "S - stała",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
@@ -517,8 +517,8 @@ def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, 
     longitude = -180.0 + (lon_value / 190463.0)
     result = {
         "entity_class": "stationary",
-        "frame_type": "M",
-        "frame_type_label": "M - ruch",
+        "frame_type": "S",
+        "frame_type_label": "S - stała",
         "latitude": f"{latitude:.5f}",
         "longitude": f"{longitude:.5f}",
         "symbol": f"{symbol_table}{symbol_code}",
@@ -734,6 +734,8 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     if movement:
         data.update(movement)
         result["entity_class"] = "mobile"
+        result["frame_type"] = "M"
+        result["frame_type_label"] = "M - ruch"
 
     altitude = _parse_altitude_fields(comment)
     if altitude:
