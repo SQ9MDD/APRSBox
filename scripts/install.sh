@@ -5,6 +5,7 @@ APP_NAME="aprsbox"
 APP_USER="aprsbox"
 INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
 BOOTSTRAP_GIT_URL="${APRSBOX_GIT_URL:-}"
+BOOTSTRAP_GIT_BRANCH="${APRSBOX_GIT_BRANCH:-main}"
 REPO_ROOT="$(pwd)"
 if [ -n "${0:-}" ] && [ -f "${0:-}" ]; then
     REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -16,6 +17,8 @@ DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
 ADMIN_USER="${APRSBOX_ADMIN_USER:-}"
 ADMIN_PASSWORD="${APRSBOX_ADMIN_PASSWORD:-}"
 BOOTSTRAP_WORKDIR=""
+CORE_PIDFILE="/run/aprsbox-core.pid"
+WEB_PIDFILE="/run/aprsbox-web.pid"
 
 log() {
     printf '%s\n' "$*"
@@ -72,7 +75,7 @@ obtain_source_tree() {
         exit 1
     fi
     BOOTSTRAP_WORKDIR="$(mktemp -d)"
-    git clone --depth 1 "$BOOTSTRAP_GIT_URL" "$BOOTSTRAP_WORKDIR/repo"
+    git clone --depth 1 --branch "$BOOTSTRAP_GIT_BRANCH" "$BOOTSTRAP_WORKDIR/repo"
     REPO_ROOT="$BOOTSTRAP_WORKDIR/repo"
     DEPLOY_DIR="$REPO_ROOT/deploy/openrc"
 }
@@ -98,6 +101,55 @@ prepare_directories() {
         "$INSTALL_ROOT/logs" \
         "$INSTALL_ROOT/backups"
     chown -R "$APP_USER":"$APP_USER" "$INSTALL_ROOT"
+}
+
+stop_services() {
+    if ! command -v rc-service >/dev/null 2>&1; then
+        return
+    fi
+
+    if [ -x /etc/init.d/aprsbox-web ]; then
+        rc-service aprsbox-web stop || true
+    fi
+    if [ -x /etc/init.d/aprsbox-core ]; then
+        rc-service aprsbox-core stop || true
+    fi
+
+    cleanup_stale_pidfile "$WEB_PIDFILE"
+    cleanup_stale_pidfile "$CORE_PIDFILE"
+}
+
+cleanup_stale_pidfile() {
+    pidfile="$1"
+    if [ ! -f "$pidfile" ]; then
+        return
+    fi
+
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -TERM "$pid" 2>/dev/null || true
+        sleep 2
+    fi
+
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null || true
+        sleep 1
+    fi
+
+    rm -f "$pidfile"
+}
+
+backup_database() {
+    if [ ! -f "$DB_PATH" ]; then
+        return
+    fi
+
+    timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
+    backup_path="$INSTALL_ROOT/backups/aprsbox-db-$timestamp.sqlite3"
+    cp "$DB_PATH" "$backup_path"
+    chown "$APP_USER":"$APP_USER" "$backup_path" 2>/dev/null || true
+    log "Database backup created: $backup_path"
 }
 
 reset_application_installation() {
@@ -190,6 +242,17 @@ enable_services() {
     fi
 }
 
+verify_services() {
+    if ! command -v curl >/dev/null 2>&1; then
+        log "curl not available, health checks skipped."
+        return
+    fi
+
+    curl -fsS http://127.0.0.1:18081/health >/dev/null
+    curl -fsS http://127.0.0.1:8000/health >/dev/null
+    log "Health checks passed for aprsbox-core and aprsbox-web."
+}
+
 main() {
     require_root
     detect_os
@@ -197,6 +260,8 @@ main() {
     obtain_source_tree
     ensure_user
     prepare_directories
+    stop_services
+    backup_database
     reset_application_installation
     sync_application_files
     setup_venv
@@ -204,6 +269,7 @@ main() {
     create_admin_user
     install_openrc_services
     enable_services
+    verify_services
     log "APRSBox installation finished."
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"

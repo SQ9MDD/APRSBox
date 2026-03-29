@@ -2,14 +2,15 @@
 
 name="APRSBox Web"
 description="APRSBox FastAPI web GUI"
-command="/opt/aprsbox/venv/bin/uvicorn"
-command_args="app.main:app --host 0.0.0.0 --port 8000 --app-dir /opt/aprsbox/app"
+command="/opt/aprsbox/venv/bin/gunicorn"
+command_args="--bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - app.main:app"
 command_user="aprsbox:aprsbox"
 directory="/opt/aprsbox/app"
 pidfile="/run/aprsbox-web.pid"
 command_background="yes"
 output_log="/opt/aprsbox/logs/aprsbox-web.log"
 error_log="/opt/aprsbox/logs/aprsbox-web.error.log"
+retry="TERM/30/KILL/5"
 
 export APRSBOX_ENV="production"
 export APRSBOX_INSTALL_ROOT="/opt/aprsbox"

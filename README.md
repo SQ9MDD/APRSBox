@@ -177,13 +177,16 @@ If you do not provide admin credentials, the installer uses the default initial 
 - Installs required system packages
 - Creates the `aprsbox` system user
 - Creates `/opt/aprsbox` runtime directories
+- Stops existing `aprsbox-core` and `aprsbox-web` services before replacing files
+- Creates a timestamped backup of the SQLite database under `/opt/aprsbox/backups` when a database already exists
 - Creates a Python virtual environment under `/opt/aprsbox/venv`
 - Installs Python requirements
 - Copies the repository into `/opt/aprsbox/app`
 - Initializes the SQLite database if needed
 - Creates the initial admin user if an active admin does not already exist
 - Installs OpenRC service scripts for `aprsbox-web` and `aprsbox-core`
-- Enables and starts `aprsbox-web` when OpenRC tooling is available
+- Enables and starts `aprsbox-core` and `aprsbox-web` when OpenRC tooling is available
+- Runs local health checks for both services when `curl` is available
 
 The installer is designed to be idempotent where practical. It does not intentionally wipe existing database, logs, config, or backups on reinstall.
 
@@ -192,6 +195,9 @@ Current reinstall behavior:
 - `/opt/aprsbox/app` is rebuilt on each installer run
 - `/opt/aprsbox/venv` is rebuilt on each installer run
 - the SQLite database in `/opt/aprsbox/data/aprsbox.db` is preserved
+- a fresh backup copy of the database is created before reinstall work starts
+
+Operationally, the bootstrap command from this README is intended to be both first install and "repair/update everything" command for the host.
 
 ## Running The Installed Web Service
 
@@ -223,7 +229,7 @@ cd /opt/aprsbox/app
 /opt/aprsbox/venv/bin/pip install -r requirements.txt
 /opt/aprsbox/venv/bin/python -m app.cli init-db
 /opt/aprsbox/venv/bin/python -m app.cli admin-exists
-/opt/aprsbox/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir /opt/aprsbox/app
+/opt/aprsbox/venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
 ```
 
 If you need to reset the admin password on an installed host:
