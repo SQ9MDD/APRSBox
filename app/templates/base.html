@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }} | APRSBox</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+</head>
+<body class="app-shell">
+    {% if current_user %}
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-mark">AB</div>
+            <div>
+                <strong>APRSBox</strong>
+                <div class="muted">Operational center skeleton</div>
+            </div>
+        </div>
+        <nav class="nav-list">
+            {% for item in navigation %}
+            <a href="{{ item.href }}" class="nav-link {% if active_nav == item.key %}active{% endif %}">{{ item.label }}</a>
+            {% endfor %}
+        </nav>
+        <div class="sidebar-footer">
+            <div class="muted">Version {{ app_version }}</div>
+        </div>
+    </aside>
+    {% endif %}
+
+    <div class="main-area">
+        {% if current_user %}
+        <header class="topbar">
+            <div>
+                <h1>{{ page_title }}</h1>
+            </div>
+            <div class="topbar-user">
+                <span>{{ current_user.username }}</span>
+                <span class="role-badge">{{ current_user.role }}</span>
+                <form action="/logout" method="post">
+                    <button type="submit" class="button button-secondary">Logout</button>
+                </form>
+            </div>
+        </header>
+        {% endif %}
+
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>
+

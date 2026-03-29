@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login | APRSBox</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+</head>
+<body class="login-shell">
+    <main class="login-card">
+        <div class="login-header">
+            <div class="brand-mark large">AB</div>
+            <div>
+                <h1>APRSBox</h1>
+                <p class="muted">Web GUI skeleton for native Raspberry Pi deployment.</p>
+            </div>
+        </div>
+        {% if login_error %}
+        <div class="alert">{{ login_error }}</div>
+        {% endif %}
+        <form action="/login" method="post" class="form-grid">
+            <label>
+                <span>Username</span>
+                <input type="text" name="username" autocomplete="username" required>
+            </label>
+            <label>
+                <span>Password</span>
+                <input type="password" name="password" autocomplete="current-password" required>
+            </label>
+            <button type="submit" class="button">Sign In</button>
+        </form>
+        <p class="muted small">Current stage: GUI, auth, and data skeleton only. APRS runtime logic is not implemented yet.</p>
+    </main>
+</body>
+</html>
+

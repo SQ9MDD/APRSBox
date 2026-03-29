@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Form, Request, status
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from app.auth import authenticate_user
+from app.db import log_event
+from app.template_helpers import build_template_context
+
+router = APIRouter()
+
+
+@router.get("/login")
+def login_page(request: Request, templates: Jinja2Templates) -> object:
+    if request.session.get("user_id"):
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    context = build_template_context(request, page_title="Login", login_error=None)
+    return templates.TemplateResponse("login.html", context)
+
+
+@router.post("/login")
+def login_submit(
+    request: Request,
+    templates: Jinja2Templates,
+    username: str = Form(...),
+    password: str = Form(...),
+) -> object:
+    user = authenticate_user(username=username.strip(), password=password)
+    if not user:
+        context = build_template_context(
+            request,
+            page_title="Login",
+            login_error="Invalid username or password.",
+        )
+        return templates.TemplateResponse("login.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    request.session["user_id"] = user.id
+    log_event("INFO", "auth", f"User {user.username} logged in")
+    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/logout")
+def logout(request: Request) -> RedirectResponse:
+    username = request.session.get("username", "unknown")
+    request.session.clear()
+    log_event("INFO", "auth", f"Session ended for {username}")
+    return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <p class="section-lead">This is the first APRSBox web GUI skeleton. The configuration model, authentication, and navigation are in place. APRS traffic handling, KISS, APRS-IS, iGate, DIGI, object transmission, bulletins, and map engine logic are intentionally not implemented yet.</p>
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <h2>Configuration Summary</h2>
+        <div class="metrics-grid">
+            {% for key, value in summary.items() %}
+            <div class="metric-card">
+                <span class="metric-value">{{ value }}</span>
+                <span class="metric-label">{{ key.replace('_', ' ').title() }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="panel">
+        <h2>System Notes</h2>
+        <ul class="simple-list">
+            <li>Native install target: <code>/opt/aprsbox</code></li>
+            <li>Primary init system target: OpenRC</li>
+            <li>Database backend: SQLite</li>
+            <li>UI mode: server-rendered Jinja2 templates</li>
+            <li>Target platforms: Alpine first, Raspberry Pi OS supported</li>
+        </ul>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Recent Events</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Level</th>
+                <th>Category</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in recent_logs %}
+            <tr>
+                <td>{{ row.created_at }}</td>
+                <td>{{ row.level }}</td>
+                <td>{{ row.category }}</td>
+                <td>{{ row.message }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4">No events recorded yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
+

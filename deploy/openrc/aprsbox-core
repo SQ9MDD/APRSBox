@@ -1,0 +1,18 @@
+#!/sbin/openrc-run
+
+name="APRSBox Core"
+description="APRSBox core placeholder service"
+command="/opt/aprsbox/app/scripts/aprsbox-core-placeholder.sh"
+command_user="aprsbox:aprsbox"
+directory="/opt/aprsbox/app"
+pidfile="/run/aprsbox-core.pid"
+command_background="yes"
+output_log="/opt/aprsbox/logs/aprsbox-core.log"
+error_log="/opt/aprsbox/logs/aprsbox-core.error.log"
+
+export APRSBOX_LOG_DIR="/opt/aprsbox/logs"
+
+depend() {
+    need localmount
+}
+

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <h2>User Management</h2>
+    <p class="section-lead">Session-based authentication is active. Admin users can create accounts and assign one of the built-in roles: <code>admin</code>, <code>operator</code>, or <code>viewer</code>.</p>
+    {% if flash %}
+    <div class="alert">{{ flash }}</div>
+    {% endif %}
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <h2>Existing Users</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.role }}</td>
+                    <td>{{ "active" if user.is_active else "disabled" }}</td>
+                    <td>{{ user.created_at }}</td>
+                    <td>
+                        <form method="post" action="/admin/users/{{ user.id }}/toggle">
+                            <input type="hidden" name="is_active" value="{{ 0 if user.is_active else 1 }}">
+                            <button type="submit" class="button button-secondary">
+                                {{ "Disable" if user.is_active else "Enable" }}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <h2>Create User</h2>
+        <form method="post" action="/admin/users" class="form-grid">
+            <label>
+                <span>Username</span>
+                <input type="text" name="username" required>
+            </label>
+            <label>
+                <span>Password</span>
+                <input type="password" name="password" required>
+            </label>
+            <label>
+                <span>Role</span>
+                <select name="role" required>
+                    {% for role in roles %}
+                    <option value="{{ role }}">{{ role }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="checkbox-row">
+                <input type="checkbox" name="is_active" value="1" checked>
+                <span>User is active</span>
+            </label>
+            <button type="submit" class="button">Create User</button>
+        </form>
+    </div>
+</section>
+{% endblock %}
+

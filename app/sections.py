@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+from app.models import SectionDefinition
+
+
+SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
+    "modems": SectionDefinition(
+        slug="modems",
+        title="Modems",
+        description="Manage modem definitions and serial device assignments. APRS modem handling is not implemented yet.",
+        table_name="modems",
+        nav_key="modems",
+        readonly_message="Modem management is present as a skeleton. Runtime modem control comes later.",
+        fields=[
+            {"name": "name", "label": "Name", "type": "text", "required": True},
+            {"name": "modem_type", "label": "Type", "type": "text", "required": True},
+            {"name": "device_path", "label": "Device Path", "type": "text", "required": False},
+            {"name": "baud_rate", "label": "Baud Rate", "type": "number", "required": False},
+            {"name": "enabled", "label": "Enabled", "type": "checkbox", "required": False},
+            {"name": "notes", "label": "Notes", "type": "textarea", "required": False},
+        ],
+    ),
+    "servers": SectionDefinition(
+        slug="servers",
+        title="APRS-IS Servers",
+        description="Store APRS-IS upstream definitions for later engine integration.",
+        table_name="aprsis_servers",
+        nav_key="servers",
+        readonly_message="Server definitions can be entered now, but APRS-IS connectivity is not implemented yet.",
+        fields=[
+            {"name": "name", "label": "Name", "type": "text", "required": True},
+            {"name": "host", "label": "Host", "type": "text", "required": True},
+            {"name": "port", "label": "Port", "type": "number", "required": True},
+            {"name": "use_tls", "label": "Use TLS", "type": "checkbox", "required": False},
+            {"name": "enabled", "label": "Enabled", "type": "checkbox", "required": False},
+            {"name": "notes", "label": "Notes", "type": "textarea", "required": False},
+        ],
+    ),
+    "igate": SectionDefinition(
+        slug="igate",
+        title="iGate Rules",
+        description="Define future iGate policy entries. No packet transfer logic is implemented in this stage.",
+        table_name="igate_rules",
+        nav_key="igate",
+        readonly_message="These records are placeholders for future iGate rule evaluation.",
+        fields=[
+            {"name": "name", "label": "Rule Name", "type": "text", "required": True},
+            {"name": "direction", "label": "Direction", "type": "text", "required": True},
+            {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
+            {"name": "policy_text", "label": "Policy Notes", "type": "textarea", "required": False},
+        ],
+    ),
+    "digi": SectionDefinition(
+        slug="digi",
+        title="DIGI Rules",
+        description="Prepare digipeating rule definitions without implementing digipeating itself.",
+        table_name="digi_rules",
+        nav_key="digi",
+        readonly_message="DIGI policy storage exists; packet path handling will be added later.",
+        fields=[
+            {"name": "name", "label": "Rule Name", "type": "text", "required": True},
+            {"name": "source_match", "label": "Source Match", "type": "text", "required": False},
+            {"name": "destination_match", "label": "Destination Match", "type": "text", "required": False},
+            {"name": "path_rewrite", "label": "Path Rewrite", "type": "text", "required": False},
+            {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
+        ],
+    ),
+    "objects": SectionDefinition(
+        slug="objects",
+        title="Objects",
+        description="Manage APRS object records for future transmission support.",
+        table_name="aprs_objects",
+        nav_key="objects",
+        readonly_message="Object storage is ready, but object generation/transmission is not implemented yet.",
+        fields=[
+            {"name": "name", "label": "Object Name", "type": "text", "required": True},
+            {"name": "latitude", "label": "Latitude", "type": "text", "required": False},
+            {"name": "longitude", "label": "Longitude", "type": "text", "required": False},
+            {"name": "symbol_table", "label": "Symbol Table", "type": "text", "required": False},
+            {"name": "symbol_code", "label": "Symbol Code", "type": "text", "required": False},
+            {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
+            {"name": "comment", "label": "Comment", "type": "textarea", "required": False},
+        ],
+    ),
+    "items": SectionDefinition(
+        slug="items",
+        title="Items",
+        description="Manage APRS item records for future transmission support.",
+        table_name="aprs_items",
+        nav_key="items",
+        readonly_message="Item storage is ready, but item generation/transmission is not implemented yet.",
+        fields=[
+            {"name": "name", "label": "Item Name", "type": "text", "required": True},
+            {"name": "latitude", "label": "Latitude", "type": "text", "required": False},
+            {"name": "longitude", "label": "Longitude", "type": "text", "required": False},
+            {"name": "symbol_table", "label": "Symbol Table", "type": "text", "required": False},
+            {"name": "symbol_code", "label": "Symbol Code", "type": "text", "required": False},
+            {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
+            {"name": "comment", "label": "Comment", "type": "textarea", "required": False},
+        ],
+    ),
+    "bulletins": SectionDefinition(
+        slug="bulletins",
+        title="Bulletins",
+        description="Store bulletin text and cadence metadata for future APRS scheduling.",
+        table_name="bulletins",
+        nav_key="bulletins",
+        readonly_message="Bulletin definitions can be stored now. Broadcast scheduling comes later.",
+        fields=[
+            {"name": "name", "label": "Bulletin Name", "type": "text", "required": True},
+            {"name": "body", "label": "Body", "type": "textarea", "required": True},
+            {"name": "cadence_minutes", "label": "Cadence (minutes)", "type": "number", "required": False},
+            {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
+        ],
+    ),
+}
+

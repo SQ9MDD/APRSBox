@@ -1,0 +1,23 @@
+#!/sbin/openrc-run
+
+name="APRSBox Web"
+description="APRSBox FastAPI web GUI"
+command="/opt/aprsbox/venv/bin/uvicorn"
+command_args="app.main:app --host 0.0.0.0 --port 8000 --app-dir /opt/aprsbox/app"
+command_user="aprsbox:aprsbox"
+directory="/opt/aprsbox/app"
+pidfile="/run/aprsbox-web.pid"
+command_background="yes"
+output_log="/opt/aprsbox/logs/aprsbox-web.log"
+error_log="/opt/aprsbox/logs/aprsbox-web.error.log"
+
+export APRSBOX_ENV="production"
+export APRSBOX_INSTALL_ROOT="/opt/aprsbox"
+export APRSBOX_DB_PATH="/opt/aprsbox/data/aprsbox.db"
+export APRSBOX_LOG_DIR="/opt/aprsbox/logs"
+
+depend() {
+    need localmount
+    use net
+}
+

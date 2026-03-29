@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <h2>{{ section.title }}</h2>
+    <p class="section-lead">{{ section.description }}</p>
+    <div class="notice">{{ section.readonly_message }}</div>
+    {% if flash %}
+    <div class="alert">{{ flash }}</div>
+    {% endif %}
+</section>
+
+<section class="grid two">
+    <div class="panel">
+        <h2>Existing Records</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    {% for field in section.fields %}
+                    <th>{{ field.label }}</th>
+                    {% endfor %}
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    {% for field in section.fields %}
+                    <td>{{ row[field.name] }}</td>
+                    {% endfor %}
+                    <td>{{ row.updated_at or row.created_at }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ section.fields|length + 1 }}">No records yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <h2>Add Record</h2>
+        {% if can_edit %}
+        <form method="post" class="form-grid">
+            {% for field in section.fields %}
+            <label class="{% if field.type == 'textarea' %}full{% endif %}">
+                <span>{{ field.label }}</span>
+                {% if field.type == 'textarea' %}
+                <textarea name="{{ field.name }}" {% if field.required %}required{% endif %}></textarea>
+                {% elif field.type == 'checkbox' %}
+                <input type="checkbox" name="{{ field.name }}" value="1">
+                {% else %}
+                <input type="{{ field.type }}" name="{{ field.name }}" {% if field.required %}required{% endif %}>
+                {% endif %}
+            </label>
+            {% endfor %}
+            <button type="submit" class="button">Save</button>
+        </form>
+        {% else %}
+        <p class="muted">Your role is read-only for this section.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+
