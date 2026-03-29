@@ -17,6 +17,7 @@
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
+    const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
     const maskElement = document.getElementById("map-mask");
     const maskToggleButton = document.getElementById("map-mask-toggle");
@@ -77,7 +78,9 @@
         const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
             ? opacityPercent - (opacityPercent % 10)
             : 20;
-        root.style.setProperty("--map-mask-opacity", String(normalizedOpacity / 100));
+        if (mapCanvas) {
+            mapCanvas.style.setProperty("--map-mask-opacity", String(normalizedOpacity / 100));
+        }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);
         }
@@ -142,6 +145,14 @@
         maskToggleButton.addEventListener("click", function () {
             const nextMode = maskElement.classList.contains("map-mask-night") ? "day" : "night";
             applyMaskMode(nextMode);
+        });
+        const themeObserver = new MutationObserver(function () {
+            const theme = document.documentElement.getAttribute("data-theme");
+            applyMaskMode(theme === "dark" ? "night" : "day");
+        });
+        themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ["data-theme"],
         });
     }
 
