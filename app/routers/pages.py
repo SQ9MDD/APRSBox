@@ -13,6 +13,7 @@ from app.services.content import (
     recent_event_logs,
     safe_create_section_row,
     update_station_settings,
+    worker_statuses,
 )
 from app.template_helpers import build_template_context
 
@@ -50,6 +51,7 @@ def dashboard(
         current_user=current_user,
         active_nav="dashboard",
         summary=dashboard_summary(),
+        worker_statuses=worker_statuses(),
         recent_logs=recent_event_logs(limit=8),
     )
     return templates.TemplateResponse("dashboard.html", context)

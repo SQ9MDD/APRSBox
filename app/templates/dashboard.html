@@ -30,6 +30,32 @@
 </section>
 
 <section class="panel">
+    <h2>Worker Status</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Worker</th>
+                <th>Status</th>
+                <th>Source</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for worker in worker_statuses %}
+            <tr>
+                <td><code>{{ worker.label }}</code></td>
+                <td>
+                    <span class="status-pill status-{{ worker.state }}">{{ worker.state }}</span>
+                </td>
+                <td>{{ worker.source }}</td>
+                <td>{{ worker.detail }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="panel">
     <h2>Recent Events</h2>
     <table class="data-table">
         <thead>
@@ -57,4 +83,3 @@
     </table>
 </section>
 {% endblock %}
-
