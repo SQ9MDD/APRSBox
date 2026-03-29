@@ -57,14 +57,11 @@
     inset: 0;
     z-index: 350;
     pointer-events: none;
-}
-
-.map-mask-day {
-    background: rgba(255, 255, 255, var(--map-mask-opacity));
-}
-
-.map-mask-night {
     background: rgba(0, 0, 0, var(--map-mask-opacity));
+}
+
+:root[data-theme="light"] .map-mask {
+    background: rgba(255, 255, 255, var(--map-mask-opacity));
 }
 
 .map-mask-opacity-control {

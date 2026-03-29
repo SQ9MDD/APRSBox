@@ -19,7 +19,6 @@
     const tileSourceOutput = document.getElementById("map-tile-source");
     const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
-    const maskElement = document.getElementById("map-mask");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const stationLayer = window.L.layerGroup();
     const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
@@ -41,16 +40,6 @@
 
     if (tileSourceOutput) {
         tileSourceOutput.textContent = tileSourceName;
-    }
-
-    function syncMaskModeWithTheme() {
-        if (!maskElement) {
-            return;
-        }
-        const theme = document.documentElement.getAttribute("data-theme");
-        const isNight = theme === "dark";
-        maskElement.classList.toggle("map-mask-day", !isNight);
-        maskElement.classList.toggle("map-mask-night", isNight);
     }
 
     function resolveDefaultMaskOpacity() {
@@ -124,17 +113,6 @@
     if (resetButton) {
         resetButton.addEventListener("click", function () {
             map.setView([defaultView.latitude, defaultView.longitude], defaultView.zoom);
-        });
-    }
-
-    if (maskElement) {
-        syncMaskModeWithTheme();
-        const themeObserver = new MutationObserver(function () {
-            syncMaskModeWithTheme();
-        });
-        themeObserver.observe(document.documentElement, {
-            attributes: true,
-            attributeFilter: ["data-theme"],
         });
     }
 
