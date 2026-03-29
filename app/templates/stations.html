@@ -2,7 +2,19 @@
 
 {% block content %}
 <section class="panel stations-summary-panel">
-    <h2>Heard Stations</h2>
+    <div class="stations-summary-header">
+        <h2>Heard Stations</h2>
+        <label class="stations-refresh-control">
+            <span class="muted">Refresh rate</span>
+            <select id="stations-refresh-rate">
+                <option value="5000">5s</option>
+                <option value="10000">10s</option>
+                <option value="30000">30s</option>
+                <option value="60000">1min</option>
+                <option value="300000">5min</option>
+            </select>
+        </label>
+    </div>
     <p class="section-lead">Lista unikalnych stacji, obiektów i ramek pogodowych zdekodowanych z lokalnej bazy APRS. Komentarz pokazuje już tylko czysty opis, bez zdekodowanych rozszerzeń APRS.</p>
     <div class="stations-summary" id="stations-summary">
         <div class="metric-card">
@@ -93,6 +105,9 @@
     const summaryStationary = document.getElementById("summary-stationary");
     const summaryMobile = document.getElementById("summary-mobile");
     const summaryObjects = document.getElementById("summary-objects");
+    const refreshSelect = document.getElementById("stations-refresh-rate");
+    const refreshStorageKey = "aprsbox-stations-refresh-ms";
+    let refreshTimer = null;
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -156,7 +171,26 @@
         }
     }
 
-    window.setInterval(refreshStations, 5000);
+    function startRefreshTimer(intervalMs) {
+        if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+        }
+        refreshTimer = window.setInterval(refreshStations, intervalMs);
+    }
+
+    const savedRefreshRate = window.localStorage.getItem(refreshStorageKey);
+    if (refreshSelect) {
+        const initialValue = savedRefreshRate || refreshSelect.value || "5000";
+        refreshSelect.value = initialValue;
+        startRefreshTimer(Number(initialValue));
+        refreshSelect.addEventListener("change", () => {
+            const interval = Number(refreshSelect.value || "5000");
+            window.localStorage.setItem(refreshStorageKey, String(interval));
+            startRefreshTimer(interval);
+        });
+    } else {
+        startRefreshTimer(5000);
+    }
 })();
 </script>
 {% endblock %}

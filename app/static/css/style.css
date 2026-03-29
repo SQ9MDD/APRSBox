@@ -562,6 +562,24 @@ textarea {
     margin-top: 0.85rem;
 }
 
+.stations-summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.stations-refresh-control {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.22rem;
+}
+
+.stations-refresh-control select {
+    min-width: 6rem;
+}
+
 .stations-summary-panel .metric-card {
     padding: 0.62rem 0.7rem;
 }

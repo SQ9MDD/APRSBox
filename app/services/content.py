@@ -739,6 +739,10 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     if altitude:
         data.update(altitude)
 
+    qsy = _parse_qsy_fields(comment)
+    if qsy:
+        data.update(qsy)
+
     if data:
         result["data"] = data
     if comment:
@@ -838,14 +842,46 @@ def _parse_object_extension(symbol: str, text: str) -> dict[str, Any] | None:
     }
 
 
+def _parse_qsy_fields(text: str) -> dict[str, Any] | None:
+    match = re.search(
+        r"(?P<frequency>\d{3}\.\d{3,4})MHz(?:\s+(?P<tone>[CT]\d{3}))?(?:\s+(?P<offset>[+-]\d{3,4}))?(?:\s+R(?P<range>\d+(?:\.\d+)?)k)?(?:\s+(?P<callsign>[A-Z0-9-]{3,10}))?",
+        text,
+    )
+    if not match:
+        return None
+
+    result: dict[str, Any] = {
+        "qsy_frequency_mhz": float(match.group("frequency")),
+    }
+    tone = match.group("tone")
+    if tone:
+        result["qsy_tone"] = tone
+    offset = match.group("offset")
+    if offset:
+        result["qsy_offset_khz"] = int(offset)
+    qsy_range = match.group("range")
+    if qsy_range:
+        result["qsy_range_km"] = float(qsy_range)
+    qsy_callsign = match.group("callsign")
+    if qsy_callsign:
+        result["qsy_callsign"] = qsy_callsign
+    return result
+
+
 def _clean_decoded_tokens(text: str) -> str:
     cleaned = text
+    cleaned = re.sub(r'^[`"\',}0-9]{1,6}(?=\d{3}\.\d{3,4}MHz)', " ", cleaned)
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
     cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
     cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
     cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
     cleaned = re.sub(r"/A=\d{6}", " ", cleaned)
     cleaned = re.sub(r"[0-9][0-9]{2}/[0-9][0-9]{2}", " ", cleaned)
+    cleaned = re.sub(
+        r"\d{3}\.\d{3,4}MHz(?:\s+[CT]\d{3})?(?:\s+[+-]\d{3,4})?(?:\s+R\d+(?:\.\d+)?k)?(?:\s+[A-Z0-9-]{3,10})?",
+        " ",
+        cleaned,
+    )
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip(" /|,;:-")
 
@@ -931,6 +967,27 @@ def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit
     object_lon_offset_hundredths = metrics.get("object_lon_offset_hundredths")
     if object_lon_offset_hundredths is not None:
         items.append(_weather_item("arrow-right.svg", "Offset X", f"{int(object_lon_offset_hundredths) / 100:.2f}°"))
+
+    qsy_frequency_mhz = metrics.get("qsy_frequency_mhz")
+    if qsy_frequency_mhz is not None:
+        items.append(_weather_item("radio-handheld.svg", "QSY", f"{float(qsy_frequency_mhz):.3f} MHz"))
+
+    qsy_tone = metrics.get("qsy_tone")
+    if qsy_tone is not None:
+        items.append(_weather_item("radio.svg", "Ton", str(qsy_tone)))
+
+    qsy_offset_khz = metrics.get("qsy_offset_khz")
+    if qsy_offset_khz is not None:
+        sign = "+" if int(qsy_offset_khz) > 0 else ""
+        items.append(_weather_item("signal-distance-variant.svg", "Offset", f"{sign}{int(qsy_offset_khz)} kHz"))
+
+    qsy_range_km = metrics.get("qsy_range_km")
+    if qsy_range_km is not None:
+        items.append(_weather_item("map-marker-distance.svg", "Zasięg", f"{float(qsy_range_km):g} km"))
+
+    qsy_callsign = metrics.get("qsy_callsign")
+    if qsy_callsign is not None:
+        items.append(_weather_item("antenna.svg", "Przemiennik", str(qsy_callsign)))
 
     course_deg = metrics.get("course_deg")
     if course_deg is not None:
