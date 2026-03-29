@@ -213,9 +213,34 @@ def dashboard_summary() -> dict[str, Any]:
 
 
 def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
+    snapshots = get_heard_station_snapshots(limit=limit)
+    stations: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        stations.append(
+            {
+                "callsign": snapshot["callsign"],
+                "last_heard_at": snapshot["last_heard_at"],
+                "last_heard_label": snapshot["last_heard_label"],
+                "last_heard_date": snapshot["last_heard_date"],
+                "last_heard_relative": snapshot["last_heard_relative"],
+                "entity_class": snapshot["entity_class"],
+                "frame_type": snapshot["frame_type"],
+                "frame_type_label": snapshot["frame_type_label"],
+                "symbol": snapshot["symbol"],
+                "symbol_icon": snapshot["symbol_icon"],
+                "comment": snapshot["comment"],
+                "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
+                "latitude": snapshot["latitude"],
+                "longitude": snapshot["longitude"],
+            }
+        )
+    return stations
+
+
+def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     rows = fetch_all(
         """
-        SELECT line, created_at
+        SELECT source, line, created_at
         FROM traffic_frames
         WHERE format = 'TNC2'
         ORDER BY created_at DESC, id DESC
@@ -238,7 +263,14 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
             continue
 
         if station_key not in stations:
-            stations[station_key] = _new_station_entry(station_key, row["created_at"])
+            stations[station_key] = _new_station_snapshot(
+                station_key,
+                row["created_at"],
+                row["source"],
+                parsed["destination"],
+                parsed["path"],
+                row["line"],
+            )
 
         station = stations[station_key]
         if not station["entity_class"] and aprs_data.get("entity_class"):
@@ -249,10 +281,13 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
         if not station["symbol"] and aprs_data.get("symbol"):
             station["symbol"] = aprs_data["symbol"]
             station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
+            symbol_table, symbol_code = _split_symbol(aprs_data["symbol"])
+            station["symbol_table"] = symbol_table
+            station["symbol_code"] = symbol_code
         if not station["comment"] and aprs_data.get("comment"):
             station["comment"] = aprs_data["comment"]
-        if not station["data"] and aprs_data.get("data"):
-            station["data"] = _format_decoded_data_for_display(aprs_data["data"], unit_system)
+        if not station["data_raw"] and aprs_data.get("data"):
+            station["data_raw"] = dict(aprs_data["data"])
         if not station["latitude"] and aprs_data.get("latitude"):
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
@@ -261,21 +296,38 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
     return list(stations.values())[:limit]
 
 
-def _new_station_entry(name: str, created_at: str) -> dict[str, Any]:
+def _new_station_snapshot(
+    name: str,
+    created_at: str,
+    source: str,
+    destination: str,
+    path: str,
+    raw_text: str,
+) -> dict[str, Any]:
     heard_date, heard_relative = _format_last_heard_parts(created_at)
+    base_callsign, ssid = _split_ssid(name)
     return {
-        "callsign": name,
+        "callsign": base_callsign,
+        "ssid": ssid,
+        "display_callsign": name,
         "last_heard_at": created_at,
+        "last_heard_age_s": _last_heard_age_seconds(created_at),
         "last_heard_label": _format_last_heard(created_at),
         "last_heard_date": heard_date,
         "last_heard_relative": heard_relative,
+        "source": source,
+        "destination": destination,
+        "path": path,
+        "raw_text": raw_text,
         "entity_class": "",
         "frame_type": "",
         "frame_type_label": "",
         "symbol": "",
+        "symbol_table": "",
+        "symbol_code": "",
         "symbol_icon": "icons/verG/x.gif",
         "comment": "",
-        "data": [],
+        "data_raw": {},
         "latitude": "",
         "longitude": "",
     }
@@ -330,6 +382,29 @@ def _format_last_heard_parts(timestamp: str) -> tuple[str, str]:
         hours = delta_seconds // 3600
         relative = f"{hours} {_pluralize_hours(hours)} temu"
     return local_time.strftime("%Y.%m.%d %H:%M"), relative
+
+
+def _last_heard_age_seconds(timestamp: str) -> int | None:
+    try:
+        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, int((datetime.now(timezone.utc) - heard_at).total_seconds()))
+
+
+def _split_ssid(value: str) -> tuple[str, str]:
+    base, separator, suffix = value.partition("-")
+    if separator and suffix.isdigit():
+        return base, suffix
+    return value, ""
+
+
+def _split_symbol(symbol: str) -> tuple[str, str]:
+    if len(symbol) >= 2:
+        return symbol[0], symbol[1]
+    if symbol:
+        return symbol[0], ""
+    return "", ""
 
 
 def station_summary(stations: list[dict[str, Any]]) -> dict[str, int]:

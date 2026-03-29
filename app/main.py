@@ -10,7 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import __version__, get_version
 from app.config import settings
 from app.db import init_db, log_event
-from app.routers import admin, auth, pages
+from app.routers import admin, auth, map, pages
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
@@ -28,6 +28,7 @@ app.state.settings = settings
 
 app.include_router(auth.router)
 app.include_router(pages.router)
+app.include_router(map.router)
 app.include_router(admin.router)
 
 

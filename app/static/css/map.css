@@ -48,6 +48,78 @@
     background: var(--panel-soft);
 }
 
+.map-station-icon {
+    background: transparent;
+    border: 0;
+}
+
+.map-station-dot {
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--accent);
+    border: 1px solid rgba(15, 23, 18, 0.72);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.map-station-label {
+    position: absolute;
+    left: 14px;
+    top: -6px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.38rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(15, 19, 17, 0.88);
+    color: #f0f5f1;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+}
+
+:root[data-theme="light"] .map-station-label {
+    background: rgba(245, 248, 245, 0.95);
+    color: var(--text);
+}
+
+.map-station-icon-stale .map-station-dot {
+    background: var(--muted);
+}
+
+.map-station-icon-stale .map-station-label {
+    color: var(--muted);
+}
+
+.map-station-tooltip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    min-width: 11rem;
+}
+
+.map-station-tooltip strong {
+    color: var(--text);
+}
+
+.leaflet-tooltip.aprs-tooltip {
+    padding: 0.55rem 0.65rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: var(--shadow);
+}
+
+.leaflet-tooltip.aprs-tooltip::before {
+    display: none;
+}
+
 @media (max-width: 900px) {
     .map-canvas {
         min-height: 56vh;
