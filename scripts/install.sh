@@ -17,6 +17,9 @@ DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
 ADMIN_USER="${APRSBOX_ADMIN_USER:-}"
 ADMIN_PASSWORD="${APRSBOX_ADMIN_PASSWORD:-}"
 BOOTSTRAP_WORKDIR=""
+STAGING_APP_DIR=""
+STAGING_VENV_DIR=""
+SERVICES_STARTED="0"
 CORE_PIDFILE="/run/aprsbox-core.pid"
 WEB_PIDFILE="/run/aprsbox-web.pid"
 
@@ -24,17 +27,34 @@ log() {
     printf '%s\n' "$*"
 }
 
+fail() {
+    log "ERROR: $*"
+    exit 1
+}
+
+cleanup() {
+    if [ -n "$BOOTSTRAP_WORKDIR" ] && [ -d "$BOOTSTRAP_WORKDIR" ]; then
+        rm -rf "$BOOTSTRAP_WORKDIR"
+    fi
+    if [ -n "$STAGING_APP_DIR" ] && [ -d "$STAGING_APP_DIR" ]; then
+        rm -rf "$STAGING_APP_DIR"
+    fi
+    if [ -n "$STAGING_VENV_DIR" ] && [ -d "$STAGING_VENV_DIR" ]; then
+        rm -rf "$STAGING_VENV_DIR"
+    fi
+}
+
+trap cleanup EXIT INT TERM
+
 require_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        log "This installer must run as root."
-        exit 1
+        fail "This installer must run as root."
     fi
 }
 
 detect_os() {
     if [ ! -f /etc/os-release ]; then
-        log "Cannot detect operating system."
-        exit 1
+        fail "Cannot detect operating system."
     fi
     . /etc/os-release
     OS_ID="${ID:-unknown}"
@@ -57,16 +77,28 @@ install_system_packages() {
                     apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync curl git ca-certificates
                     ;;
                 *)
-                    log "Unsupported operating system: $OS_ID"
-                    exit 1
+                    fail "Unsupported operating system: $OS_ID"
                     ;;
             esac
             ;;
     esac
 }
 
+validate_source_tree() {
+    if [ ! -d "$REPO_ROOT/app" ]; then
+        fail "Source tree is missing directory: $REPO_ROOT/app"
+    fi
+    if [ ! -f "$REPO_ROOT/requirements.txt" ]; then
+        fail "Source tree is missing file: $REPO_ROOT/requirements.txt"
+    fi
+    if [ ! -d "$REPO_ROOT/deploy/openrc" ]; then
+        fail "Source tree is missing directory: $REPO_ROOT/deploy/openrc"
+    fi
+}
+
 obtain_source_tree() {
     if [ -d "$REPO_ROOT/app" ] && [ -f "$REPO_ROOT/requirements.txt" ]; then
+        validate_source_tree
         return
     fi
     if [ -z "$BOOTSTRAP_GIT_URL" ]; then
@@ -78,6 +110,7 @@ obtain_source_tree() {
     git clone --depth 1 --branch "$BOOTSTRAP_GIT_BRANCH" "$BOOTSTRAP_GIT_URL" "$BOOTSTRAP_WORKDIR/repo"
     REPO_ROOT="$BOOTSTRAP_WORKDIR/repo"
     DEPLOY_DIR="$REPO_ROOT/deploy/openrc"
+    validate_source_tree
 }
 
 ensure_user() {
@@ -152,10 +185,11 @@ backup_database() {
     log "Database backup created: $backup_path"
 }
 
-reset_application_installation() {
-    rm -rf "$TARGET_APP_DIR"
-    rm -rf "$VENV_DIR"
-    mkdir -p "$TARGET_APP_DIR"
+prepare_staging_installation() {
+    STAGING_APP_DIR="$INSTALL_ROOT/app.new.$$"
+    STAGING_VENV_DIR="$INSTALL_ROOT/venv.new.$$"
+    rm -rf "$STAGING_APP_DIR" "$STAGING_VENV_DIR"
+    mkdir -p "$STAGING_APP_DIR"
 }
 
 sync_application_files() {
@@ -165,31 +199,38 @@ sync_application_files() {
             --exclude '.venv' \
             --exclude '__pycache__' \
             --exclude '.pytest_cache' \
-            "$REPO_ROOT/" "$TARGET_APP_DIR/"
+            "$REPO_ROOT/" "$STAGING_APP_DIR/"
     else
-        cp -R "$REPO_ROOT/app" "$TARGET_APP_DIR/"
-        cp "$REPO_ROOT/requirements.txt" "$TARGET_APP_DIR/"
-        cp -R "$REPO_ROOT/scripts" "$TARGET_APP_DIR/"
-        cp -R "$REPO_ROOT/deploy" "$TARGET_APP_DIR/"
-        cp "$REPO_ROOT/README.md" "$TARGET_APP_DIR/"
+        cp -R "$REPO_ROOT/app" "$STAGING_APP_DIR/"
+        cp "$REPO_ROOT/requirements.txt" "$STAGING_APP_DIR/"
+        cp -R "$REPO_ROOT/scripts" "$STAGING_APP_DIR/"
+        cp -R "$REPO_ROOT/deploy" "$STAGING_APP_DIR/"
+        cp "$REPO_ROOT/README.md" "$STAGING_APP_DIR/"
     fi
-    chown -R "$APP_USER":"$APP_USER" "$TARGET_APP_DIR"
+    chown -R "$APP_USER":"$APP_USER" "$STAGING_APP_DIR"
 }
 
 setup_venv() {
-    if [ ! -d "$VENV_DIR" ]; then
-        python3 -m venv "$VENV_DIR"
-    fi
-    "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel
-    "$VENV_DIR/bin/pip" install -r "$TARGET_APP_DIR/requirements.txt"
+    python3 -m venv "$STAGING_VENV_DIR"
+    "$STAGING_VENV_DIR/bin/pip" install --upgrade pip setuptools wheel
+    "$STAGING_VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"
+}
+
+activate_staged_installation() {
+    rm -rf "$TARGET_APP_DIR" "$VENV_DIR"
+    mv "$STAGING_APP_DIR" "$TARGET_APP_DIR"
+    mv "$STAGING_VENV_DIR" "$VENV_DIR"
+    STAGING_APP_DIR=""
+    STAGING_VENV_DIR=""
+    chown -R "$APP_USER":"$APP_USER" "$TARGET_APP_DIR" "$VENV_DIR"
 }
 
 initialize_database() {
-    PYTHONPATH="$TARGET_APP_DIR" \
+    PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m app.cli init-db
+        "$STAGING_VENV_DIR/bin/python" -m app.cli init-db
     chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 }
 
@@ -208,21 +249,21 @@ prompt_admin() {
 }
 
 create_admin_user() {
-    if PYTHONPATH="$TARGET_APP_DIR" \
+    if PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m app.cli admin-exists
+        "$STAGING_VENV_DIR/bin/python" -m app.cli admin-exists
     then
         log "Active admin user already present. Skipping initial admin creation."
         return
     fi
     prompt_admin
-    PYTHONPATH="$TARGET_APP_DIR" \
+    PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m app.cli create-admin --username "$ADMIN_USER" --password "$ADMIN_PASSWORD"
+        "$STAGING_VENV_DIR/bin/python" -m app.cli create-admin --username "$ADMIN_USER" --password "$ADMIN_PASSWORD"
     chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 }
 
@@ -235,22 +276,46 @@ enable_services() {
     if command -v rc-update >/dev/null 2>&1; then
         rc-update add aprsbox-core default || true
         rc-update add aprsbox-web default || true
-        rc-service aprsbox-core restart || rc-service aprsbox-core start
-        rc-service aprsbox-web restart || rc-service aprsbox-web start
+        if rc-service aprsbox-core restart || rc-service aprsbox-core start; then
+            if rc-service aprsbox-web restart || rc-service aprsbox-web start; then
+                SERVICES_STARTED="1"
+                return
+            fi
+        fi
+        log "OpenRC commands are available, but services could not be started automatically."
+        log "Check 'rc-service aprsbox-core status' and 'rc-service aprsbox-web status' after install."
     else
         log "OpenRC not available on this host. Service files were installed but not enabled."
     fi
 }
 
 verify_services() {
+    if [ "$SERVICES_STARTED" != "1" ]; then
+        log "Service health checks skipped because services were not started by the installer."
+        return
+    fi
     if ! command -v curl >/dev/null 2>&1; then
         log "curl not available, health checks skipped."
         return
     fi
 
-    curl -fsS http://127.0.0.1:18081/health >/dev/null
-    curl -fsS http://127.0.0.1:8000/health >/dev/null
+    wait_for_http http://127.0.0.1:18081/health aprsbox-core
+    wait_for_http http://127.0.0.1:8000/health aprsbox-web
     log "Health checks passed for aprsbox-core and aprsbox-web."
+}
+
+wait_for_http() {
+    url="$1"
+    service_name="$2"
+    attempt=1
+    while [ "$attempt" -le 30 ]; do
+        if curl -fsS "$url" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    fail "Health check failed for $service_name ($url)"
 }
 
 main() {
@@ -262,20 +327,18 @@ main() {
     prepare_directories
     stop_services
     backup_database
-    reset_application_installation
+    prepare_staging_installation
     sync_application_files
     setup_venv
     initialize_database
     create_admin_user
+    activate_staged_installation
     install_openrc_services
     enable_services
     verify_services
     log "APRSBox installation finished."
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"
-    if [ -n "$BOOTSTRAP_WORKDIR" ]; then
-        rm -rf "$BOOTSTRAP_WORKDIR"
-    fi
 }
 
 main "$@"
