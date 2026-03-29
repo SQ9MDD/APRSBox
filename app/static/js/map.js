@@ -22,11 +22,37 @@
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const stationLayer = window.L.layerGroup();
     const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
+    const mapViewStorageKey = "aprsbox-map-view";
     let refreshTimer = null;
 
+    function resolveInitialView() {
+        try {
+            const raw = window.localStorage.getItem(mapViewStorageKey);
+            if (!raw) {
+                return defaultView;
+            }
+            const parsed = JSON.parse(raw);
+            const latitude = Number(parsed?.latitude);
+            const longitude = Number(parsed?.longitude);
+            const zoom = Number.parseInt(String(parsed?.zoom ?? ""), 10);
+            if (
+                Number.isFinite(latitude)
+                && Number.isFinite(longitude)
+                && Number.isInteger(zoom)
+                && zoom >= 0
+            ) {
+                return { latitude, longitude, zoom };
+            }
+        } catch (_error) {
+        }
+        return defaultView;
+    }
+
+    const initialView = resolveInitialView();
+
     const map = window.L.map("map-canvas", {
-        center: [defaultView.latitude, defaultView.longitude],
-        zoom: defaultView.zoom,
+        center: [initialView.latitude, initialView.longitude],
+        zoom: initialView.zoom,
         zoomControl: true,
     });
 
@@ -110,8 +136,18 @@
         }
     }
 
+    function persistView() {
+        const center = map.getCenter();
+        window.localStorage.setItem(mapViewStorageKey, JSON.stringify({
+            latitude: center.lat,
+            longitude: center.lng,
+            zoom: map.getZoom(),
+        }));
+    }
+
     if (resetButton) {
         resetButton.addEventListener("click", function () {
+            window.localStorage.removeItem(mapViewStorageKey);
             map.setView([defaultView.latitude, defaultView.longitude], defaultView.zoom);
         });
     }
@@ -216,7 +252,10 @@
         refreshTimer = window.setInterval(refreshStations, 10000);
     }
 
-    map.on("moveend zoomend", syncStatus);
+    map.on("moveend zoomend", function () {
+        syncStatus();
+        persistView();
+    });
     map.whenReady(function () {
         window.setTimeout(function () {
             map.invalidateSize();
