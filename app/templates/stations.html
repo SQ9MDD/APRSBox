@@ -2,98 +2,106 @@
 
 {% block content %}
 <section class="panel stations-summary-panel">
-    <div class="stations-summary-header">
-        <h2>Heard Stations</h2>
-        <label class="stations-refresh-control">
-            <span class="muted">Refresh rate</span>
-            <select id="stations-refresh-rate">
-                <option value="5000">5s</option>
-                <option value="10000">10s</option>
-                <option value="30000">30s</option>
-                <option value="60000">1min</option>
-                <option value="300000">5min</option>
-            </select>
-        </label>
-    </div>
-    <div class="stations-summary" id="stations-summary">
-        <div class="metric-card">
-            <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
-            <span class="metric-label">Stacje stałe</span>
+    <div class="panel-body">
+        <div class="stations-summary-header">
+            <div class="panel-header-copy">
+                <h2>Heard Stations</h2>
+            </div>
+            <label class="stations-refresh-control">
+                <span class="muted">Refresh rate</span>
+                <select id="stations-refresh-rate">
+                    <option value="5000">5s</option>
+                    <option value="10000">10s</option>
+                    <option value="30000">30s</option>
+                    <option value="60000">1min</option>
+                    <option value="300000">5min</option>
+                </select>
+            </label>
         </div>
-        <div class="metric-card">
-            <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
-            <span class="metric-label">Stacje mobilne</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
-            <span class="metric-label">Obiekty</span>
+        <div class="stations-summary" id="stations-summary">
+            <div class="metric-card">
+                <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
+                <span class="metric-label">Stacje stałe</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
+                <span class="metric-label">Stacje mobilne</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
+                <span class="metric-label">Obiekty</span>
+            </div>
         </div>
     </div>
 </section>
 
 <section class="panel">
-    <table class="data-table compact-table stations-table">
-        <thead>
-            <tr>
-                <th>Callsign</th>
-                <th>Typ</th>
-                <th>Last Heard</th>
-                <th>APRS Icon</th>
-                <th>Latitude</th>
-                <th>Longitude</th>
-                <th>Dane</th>
-                <th>Comment</th>
-            </tr>
-        </thead>
-        <tbody id="stations-table-body">
-            {% for row in stations %}
-            <tr class="clickable-row" data-href="{{ row.detail_href }}">
-                <td class="callsign-cell"><strong><a class="station-link" href="{{ row.detail_href }}">{{ row.display_callsign or row.callsign }}</a></strong></td>
-                <td>
-                    {% if row.frame_type %}
-                    <span class="frame-type-badge" title="{{ row.frame_type_label or row.frame_type }}">{{ row.frame_type }}</span>
+    <div class="panel-body">
+        <div class="table-wrap">
+            <table class="data-table compact-table stations-table">
+                <thead>
+                    <tr>
+                        <th>Callsign</th>
+                        <th>Typ</th>
+                        <th>Last Heard</th>
+                        <th>APRS Icon</th>
+                        <th>Latitude</th>
+                        <th>Longitude</th>
+                        <th>Dane</th>
+                        <th>Comment</th>
+                    </tr>
+                </thead>
+                <tbody id="stations-table-body">
+                    {% for row in stations %}
+                    <tr class="clickable-row" data-href="{{ row.detail_href }}">
+                        <td class="callsign-cell"><strong><a class="station-link" href="{{ row.detail_href }}">{{ row.display_callsign or row.callsign }}</a></strong></td>
+                        <td>
+                            {% if row.frame_type %}
+                            <span class="frame-type-badge" title="{{ row.frame_type_label or row.frame_type }}">{{ row.frame_type }}</span>
+                            {% else %}
+                            <span class="muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="last-heard-cell">
+                                <span>{{ row.last_heard_date }}</span>
+                                <span class="muted">{{ row.last_heard_relative }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if row.symbol %}
+                            <img class="aprs-symbol-icon" src="{{ url_for('static', path=row.symbol_icon) }}" alt="{{ row.symbol }}">
+                            {% else %}
+                            <span class="muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.latitude or "-" }}</td>
+                        <td>{{ row.longitude or "-" }}</td>
+                        <td>
+                            {% if row.data %}
+                            <div class="weather-inline">
+                                {% for item in row.data %}
+                                <span class="weather-chip" title="{{ item.label }}: {{ item.value }}">
+                                    <img src="{{ url_for('static', path='icons/' ~ item.icon) }}" alt="{{ item.label }}">
+                                    <span>{{ item.value }}</span>
+                                </span>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.comment or "-" }}</td>
+                    </tr>
                     {% else %}
-                    <span class="muted">-</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="last-heard-cell">
-                        <span>{{ row.last_heard_date }}</span>
-                        <span class="muted">{{ row.last_heard_relative }}</span>
-                    </div>
-                </td>
-                <td>
-                    {% if row.symbol %}
-                    <img class="aprs-symbol-icon" src="{{ url_for('static', path=row.symbol_icon) }}" alt="{{ row.symbol }}">
-                    {% else %}
-                    <span class="muted">-</span>
-                    {% endif %}
-                </td>
-                <td>{{ row.latitude or "-" }}</td>
-                <td>{{ row.longitude or "-" }}</td>
-                <td>
-                    {% if row.data %}
-                    <div class="weather-inline">
-                        {% for item in row.data %}
-                        <span class="weather-chip" title="{{ item.label }}: {{ item.value }}">
-                            <img src="{{ url_for('static', path='icons/' ~ item.icon) }}" alt="{{ item.label }}">
-                            <span>{{ item.value }}</span>
-                        </span>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <span class="muted">-</span>
-                    {% endif %}
-                </td>
-                <td>{{ row.comment or "-" }}</td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="8" class="muted">No decoded APRS stations heard yet.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    <tr>
+                        <td colspan="8" class="muted">No decoded APRS stations heard yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </section>
 
 <script>

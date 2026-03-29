@@ -8,9 +8,16 @@
 
 :root {
     --font-ui: "Space Grotesk", "Segoe UI", sans-serif;
-    --radius: 10px;
+    --radius: 12px;
+    --radius-sm: 9px;
     --sidebar-width: 248px;
     --shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+    --space-1: 0.32rem;
+    --space-2: 0.5rem;
+    --space-3: 0.7rem;
+    --space-4: 0.95rem;
+    --space-5: 1.2rem;
+    --space-6: 1.55rem;
 }
 
 :root[data-theme="dark"] {
@@ -67,7 +74,7 @@ body {
     margin: 0;
     font-family: var(--font-ui);
     font-size: 13px;
-    line-height: 1.4;
+    line-height: 1.45;
     background:
         radial-gradient(circle at top left, rgba(109, 189, 128, 0.08), transparent 24%),
         linear-gradient(180deg, var(--bg) 0%, var(--bg-layer) 100%);
@@ -90,10 +97,10 @@ body {
     width: var(--sidebar-width);
     background: var(--sidebar);
     border-right: 1px solid var(--border);
-    padding: 1rem;
+    padding: var(--space-5);
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
+    gap: var(--space-4);
     position: sticky;
     top: 0;
     min-height: 100vh;
@@ -110,7 +117,7 @@ body {
 }
 
 .brand {
-    padding: 0.25rem 0.2rem 0.5rem;
+    padding: 0.1rem 0.1rem var(--space-2);
 }
 
 .brand strong {
@@ -140,12 +147,12 @@ body {
 .nav-list {
     display: flex;
     flex-direction: column;
-    gap: 0.18rem;
+    gap: 0.12rem;
 }
 
 .nav-separator {
     height: 1px;
-    margin: 0.55rem 0.3rem;
+    margin: var(--space-2) 0.3rem;
     background: var(--border);
     opacity: 0.7;
 }
@@ -156,8 +163,8 @@ body {
     gap: 0.65rem;
     color: var(--muted);
     text-decoration: none;
-    padding: 0.46rem 0.58rem;
-    border-radius: 8px;
+    padding: 0.48rem 0.62rem;
+    border-radius: var(--radius-sm);
     font-size: 0.82rem;
     letter-spacing: 0.01em;
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
@@ -173,7 +180,7 @@ body {
 
 .sidebar-footer {
     margin-top: auto;
-    padding: 0.35rem 0.2rem 0;
+    padding: var(--space-2) 0.2rem 0;
     font-size: 0.76rem;
 }
 
@@ -188,7 +195,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.95rem 1.2rem 0;
+    padding: var(--space-5) var(--space-5) 0;
     gap: 1rem;
 }
 
@@ -200,15 +207,15 @@ body {
 
 .topbar h1,
 .login-card h1 {
-    font-size: 1.18rem;
+    font-size: 1.22rem;
     font-weight: 600;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
 }
 
 .panel h2 {
-    font-size: 0.98rem;
+    font-size: 0.96rem;
     font-weight: 600;
-    margin-bottom: 0.45rem;
+    letter-spacing: 0.01em;
 }
 
 .topbar-user {
@@ -221,7 +228,7 @@ body {
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    padding: 0.22rem 0.58rem;
+    padding: 0.24rem 0.58rem;
     background: var(--accent-soft);
     color: var(--accent);
     border: 1px solid rgba(109, 189, 128, 0.24);
@@ -240,14 +247,14 @@ body {
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--border);
-    padding: 0.4rem 0.65rem;
+    padding: 0.42rem 0.68rem;
 }
 
 .content {
-    padding: 1rem 1.2rem 1.2rem;
+    padding: var(--space-4) var(--space-5) var(--space-5);
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
+    gap: var(--space-4);
 }
 
 .panel,
@@ -259,37 +266,70 @@ body {
 }
 
 .panel {
-    padding: 0.95rem;
+    padding: var(--space-5);
 }
 
 .login-card {
     width: min(100%, 380px);
-    padding: 1rem;
+    padding: var(--space-5);
 }
 
 .login-topbar {
     justify-content: space-between;
-    margin-bottom: 0.35rem;
+    margin-bottom: var(--space-2);
+}
+
+.page-header,
+.panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.panel-header + .panel-body,
+.page-header + .panel-body {
+    margin-top: var(--space-4);
+}
+
+.page-header-copy,
+.panel-header-copy {
+    display: grid;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.panel-body,
+.stack-md {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.stack-sm {
+    display: grid;
+    gap: var(--space-3);
 }
 
 .grid.two {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.9rem;
+    gap: var(--space-4);
 }
 
 .metrics-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(98px, 1fr));
-    gap: 0.65rem;
-    margin-top: 0.7rem;
+    gap: var(--space-3);
 }
 
 .metric-card {
     background: var(--panel-alt);
     border: 1px solid var(--border);
-    border-radius: 9px;
-    padding: 0.75rem;
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    display: grid;
+    gap: 0.18rem;
 }
 
 .metric-value {
@@ -308,20 +348,19 @@ body {
 
 .section-lead {
     margin: 0;
+    max-width: 72ch;
 }
 
 .form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.8rem;
-    margin-top: 0.8rem;
+    gap: var(--space-3);
 }
 
 .form-stack {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 0.8rem;
-    margin-top: 0.95rem;
+    gap: var(--space-3);
 }
 
 .form-grid .full,
@@ -336,7 +375,10 @@ body {
 label {
     display: flex;
     flex-direction: column;
-    gap: 0.28rem;
+    gap: 0.34rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+    letter-spacing: 0.01em;
 }
 
 input,
@@ -350,8 +392,9 @@ input,
 textarea,
 select {
     width: 100%;
-    padding: 0.58rem 0.7rem;
-    border-radius: 8px;
+    min-height: 2.45rem;
+    padding: 0.58rem 0.72rem;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--panel-alt);
     color: var(--text);
@@ -374,7 +417,7 @@ textarea {
     background: linear-gradient(180deg, var(--accent), var(--accent-strong));
     color: #0f1712;
     border: 0;
-    padding: 0.58rem 0.84rem;
+    padding: 0.6rem 0.86rem;
     font-weight: 600;
 }
 
@@ -382,7 +425,7 @@ textarea {
     background: transparent;
     color: var(--text);
     border: 1px solid var(--border);
-    padding: 0.5rem 0.75rem;
+    padding: 0.52rem 0.76rem;
 }
 
 .button-danger {
@@ -422,22 +465,24 @@ textarea {
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 0.7rem;
     font-size: 0.86rem;
+    table-layout: fixed;
 }
 
 .data-table th,
 .data-table td {
-    padding: 0.58rem 0.55rem;
+    padding: 0.62rem 0.65rem;
     border-bottom: 1px solid var(--border);
     text-align: left;
     vertical-align: top;
+    word-break: break-word;
 }
 
 .data-table th {
     font-weight: 600;
     color: var(--text);
     background: var(--panel-soft);
+    white-space: nowrap;
 }
 
 .compact-table {
@@ -446,7 +491,7 @@ textarea {
 
 .compact-table th,
 .compact-table td {
-    padding: 0.38rem 0.45rem;
+    padding: 0.44rem 0.5rem;
 }
 
 .stations-table tbody tr:hover td {
@@ -469,9 +514,7 @@ textarea {
 .last-heard-cell {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 0.08rem;
+    gap: 0.1rem;
     white-space: nowrap;
 }
 
@@ -488,7 +531,7 @@ textarea {
     align-items: center;
     gap: 0.38rem;
     max-width: 100%;
-    padding: 0.24rem 0.5rem;
+    padding: 0.24rem 0.48rem;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--panel-soft);
@@ -574,15 +617,14 @@ textarea {
 .stations-summary {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.5rem;
-    margin-top: 0.55rem;
+    gap: var(--space-3);
 }
 
 .stations-summary-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--space-3);
 }
 
 .stations-summary-header h2 {
@@ -594,7 +636,7 @@ textarea {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 0.15rem;
+    gap: 0.2rem;
     line-height: 1.1;
 }
 
@@ -603,7 +645,7 @@ textarea {
 }
 
 .stations-summary-panel .metric-card {
-    padding: 0.48rem 0.58rem;
+    padding: 0.56rem 0.62rem;
 }
 
 .stations-summary-panel .metric-value {
@@ -612,7 +654,7 @@ textarea {
 
 .alert {
     padding: 0.65rem 0.78rem;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     background: rgba(201, 122, 122, 0.1);
     border: 1px solid rgba(201, 122, 122, 0.24);
     color: var(--danger);
@@ -626,13 +668,13 @@ textarea {
 
 .simple-list {
     padding-left: 1rem;
-    margin: 0.6rem 0 0;
+    margin: 0;
 }
 
 .details-grid {
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 0.45rem 0.9rem;
+    gap: 0.45rem 1rem;
 }
 
 .station-detail-header,
@@ -647,14 +689,14 @@ textarea {
 .station-detail-hero {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
-    gap: 0.9rem;
+    gap: var(--space-4);
 }
 
 .station-detail-fields {
     display: grid;
     grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
     gap: 0.5rem 0.85rem;
-    margin: 0.8rem 0 0;
+    margin: 0;
 }
 
 .station-detail-fields dt {
@@ -708,14 +750,13 @@ textarea {
 }
 
 .station-message-form {
-    margin-top: 0.8rem;
+    margin-top: 0;
 }
 
 .station-ssid-list {
     display: flex;
     flex-wrap: wrap;
     gap: 0.45rem;
-    margin-top: 0.75rem;
 }
 
 .station-ssid-chip {
@@ -744,17 +785,16 @@ textarea {
 }
 
 .traffic-details {
-    margin-top: 0.85rem;
+    margin-top: 0;
 }
 
 .traffic-stream {
     display: grid;
-    gap: 0.75rem;
-    margin-top: 0.85rem;
+    gap: 0;
     max-height: 60vh;
     overflow: auto;
     border: 1px solid var(--border);
-    border-radius: 9px;
+    border-radius: var(--radius-sm);
     background: var(--panel-alt);
 }
 
@@ -764,7 +804,7 @@ textarea {
     column-gap: 0.38rem;
     row-gap: 0.15rem;
     align-items: start;
-    padding: 0.35rem 0.55rem;
+    padding: 0.45rem 0.6rem;
     border-bottom: 1px solid var(--border);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.74rem;
@@ -800,6 +840,29 @@ code {
     padding: 0.1rem 0.3rem;
 }
 
+.table-wrap {
+    overflow-x: auto;
+}
+
+.table-wrap .data-table {
+    min-width: 100%;
+}
+
+.empty-state {
+    padding: var(--space-4);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+}
+
+.toolbar-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
 @media (max-width: 980px) {
     .app-shell {
         flex-direction: column;
@@ -832,6 +895,15 @@ code {
         align-items: flex-start;
     }
 
+    .page-header,
+    .panel-header,
+    .stations-summary-header,
+    .traffic-status-row,
+    .traffic-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
     .login-topbar {
         align-items: flex-start;
         flex-direction: column;
@@ -843,6 +915,10 @@ code {
     }
 
     .station-detail-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .stations-summary {
         grid-template-columns: 1fr;
     }
 }

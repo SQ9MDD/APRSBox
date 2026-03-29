@@ -2,68 +2,76 @@
 
 {% block content %}
 <section class="panel">
-    <h2>Station Settings</h2>
-    <p class="section-lead">This page stores the station profile and later transmission defaults. Saving data here does not enable APRS traffic by itself.</p>
-    {% if flash %}
-    <div class="alert success">{{ flash }}</div>
-    {% endif %}
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Station Settings</h2>
+                <p class="section-lead">This page stores the station profile and later transmission defaults. Saving data here does not enable APRS traffic by itself.</p>
+            </div>
+        </div>
+        {% if flash %}
+        <div class="alert success">{{ flash }}</div>
+        {% endif %}
+    </div>
 </section>
 
 <section class="panel">
-    {% if can_edit %}
-    <form method="post" class="form-grid">
-        <label>
-            <span>Callsign</span>
-            <input type="text" name="callsign" value="{{ station.callsign }}">
-        </label>
-        <label>
-            <span>SSID</span>
-            <input type="text" name="ssid" value="{{ station.ssid }}">
-        </label>
-        <label class="full">
-            <span>Beacon Comment</span>
-            <input type="text" name="beacon_comment" value="{{ station.beacon_comment }}">
-        </label>
-        <label>
-            <span>Latitude</span>
-            <input type="text" name="latitude" value="{{ station.latitude }}">
-        </label>
-        <label>
-            <span>Longitude</span>
-            <input type="text" name="longitude" value="{{ station.longitude }}">
-        </label>
-        <label>
-            <span>Symbol Table</span>
-            <input type="text" name="symbol_table" value="{{ station.symbol_table }}">
-        </label>
-        <label>
-            <span>Symbol Code</span>
-            <input type="text" name="symbol_code" value="{{ station.symbol_code }}">
-        </label>
-        <label>
-            <span>Domyślne jednostki</span>
-            <select name="default_units">
-                <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>Nasze (metryczne)</option>
-                <option value="imperial" {% if station.default_units == "imperial" %}selected{% endif %}>Imperialne</option>
-            </select>
-        </label>
-        <label class="checkbox-row">
-            <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
-            <span>Transmission Enabled Placeholder</span>
-        </label>
-        <button type="submit" class="button">Save Station Settings</button>
-    </form>
-    {% else %}
-    <dl class="details-grid">
-        <dt>Callsign</dt><dd>{{ station.callsign }}</dd>
-        <dt>SSID</dt><dd>{{ station.ssid }}</dd>
-        <dt>Beacon Comment</dt><dd>{{ station.beacon_comment }}</dd>
-        <dt>Latitude</dt><dd>{{ station.latitude }}</dd>
-        <dt>Longitude</dt><dd>{{ station.longitude }}</dd>
-        <dt>Symbol</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
-        <dt>Domyślne jednostki</dt><dd>{{ "Imperialne" if station.default_units == "imperial" else "Nasze (metryczne)" }}</dd>
-        <dt>TX Enabled</dt><dd>{{ station.tx_enabled }}</dd>
-    </dl>
-    {% endif %}
+    <div class="panel-body">
+        {% if can_edit %}
+        <form method="post" class="form-grid">
+            <label>
+                <span>Callsign</span>
+                <input type="text" name="callsign" value="{{ station.callsign }}">
+            </label>
+            <label>
+                <span>SSID</span>
+                <input type="text" name="ssid" value="{{ station.ssid }}">
+            </label>
+            <label class="full">
+                <span>Beacon Comment</span>
+                <input type="text" name="beacon_comment" value="{{ station.beacon_comment }}">
+            </label>
+            <label>
+                <span>Latitude</span>
+                <input type="text" name="latitude" value="{{ station.latitude }}">
+            </label>
+            <label>
+                <span>Longitude</span>
+                <input type="text" name="longitude" value="{{ station.longitude }}">
+            </label>
+            <label>
+                <span>Symbol Table</span>
+                <input type="text" name="symbol_table" value="{{ station.symbol_table }}">
+            </label>
+            <label>
+                <span>Symbol Code</span>
+                <input type="text" name="symbol_code" value="{{ station.symbol_code }}">
+            </label>
+            <label>
+                <span>Domyślne jednostki</span>
+                <select name="default_units">
+                    <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>Nasze (metryczne)</option>
+                    <option value="imperial" {% if station.default_units == "imperial" %}selected{% endif %}>Imperialne</option>
+                </select>
+            </label>
+            <label class="checkbox-row">
+                <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
+                <span>Transmission Enabled Placeholder</span>
+            </label>
+            <button type="submit" class="button">Save Station Settings</button>
+        </form>
+        {% else %}
+        <dl class="details-grid">
+            <dt>Callsign</dt><dd>{{ station.callsign }}</dd>
+            <dt>SSID</dt><dd>{{ station.ssid }}</dd>
+            <dt>Beacon Comment</dt><dd>{{ station.beacon_comment }}</dd>
+            <dt>Latitude</dt><dd>{{ station.latitude }}</dd>
+            <dt>Longitude</dt><dd>{{ station.longitude }}</dd>
+            <dt>Symbol</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
+            <dt>Domyślne jednostki</dt><dd>{{ "Imperialne" if station.default_units == "imperial" else "Nasze (metryczne)" }}</dd>
+            <dt>TX Enabled</dt><dd>{{ station.tx_enabled }}</dd>
+        </dl>
+        {% endif %}
+    </div>
 </section>
 {% endblock %}

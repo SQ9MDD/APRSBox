@@ -7,37 +7,39 @@
 
 {% block content %}
 <section class="panel map-panel">
-    <div
-        id="map-root"
-        class="map-page"
-        data-station-latitude="{{ map_config.station_latitude }}"
-        data-station-longitude="{{ map_config.station_longitude }}"
-        data-default-zoom="{{ map_config.default_zoom }}"
-        data-stations-endpoint="{{ map_config.stations_endpoint }}"
-        data-tile-url="{{ map_config.tile_url }}"
-        data-tile-attribution="{{ map_config.tile_attribution }}"
-        data-tile-source-name="{{ map_config.tile_source_name }}"
-    >
-        <div class="map-toolbar" role="toolbar" aria-label="Map controls">
-            <div class="map-toolbar-actions">
-                <button type="button" class="button button-secondary" id="map-reset-view">Reset view</button>
-                <label class="map-mask-opacity-control" for="map-mask-opacity">
-                    <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="Mask opacity">
-                        {% for value in range(0, 101, 10) %}
-                        <option value="{{ value }}">{{ value }}%</option>
-                        {% endfor %}
-                    </select>
-                </label>
+    <div class="panel-body">
+        <div
+            id="map-root"
+            class="map-page"
+            data-station-latitude="{{ map_config.station_latitude }}"
+            data-station-longitude="{{ map_config.station_longitude }}"
+            data-default-zoom="{{ map_config.default_zoom }}"
+            data-stations-endpoint="{{ map_config.stations_endpoint }}"
+            data-tile-url="{{ map_config.tile_url }}"
+            data-tile-attribution="{{ map_config.tile_attribution }}"
+            data-tile-source-name="{{ map_config.tile_source_name }}"
+        >
+            <div class="map-toolbar" role="toolbar" aria-label="Map controls">
+                <div class="map-toolbar-actions">
+                    <button type="button" class="button button-secondary" id="map-reset-view">Reset view</button>
+                    <label class="map-mask-opacity-control" for="map-mask-opacity">
+                        <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="Mask opacity">
+                            {% for value in range(0, 101, 10) %}
+                            <option value="{{ value }}">{{ value }}%</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                </div>
+                <div class="map-info-strip" aria-live="polite">
+                    <span><strong>Tiles:</strong> <span id="map-tile-source">{{ map_config.tile_source_name }}</span></span>
+                    <span><strong>Center:</strong> <span id="map-center">--</span></span>
+                    <span><strong>Zoom:</strong> <span id="map-zoom">--</span></span>
+                </div>
             </div>
-            <div class="map-info-strip" aria-live="polite">
-                <span><strong>Tiles:</strong> <span id="map-tile-source">{{ map_config.tile_source_name }}</span></span>
-                <span><strong>Center:</strong> <span id="map-center">--</span></span>
-                <span><strong>Zoom:</strong> <span id="map-zoom">--</span></span>
+            <div id="map-stage" class="map-stage">
+                <div id="map-canvas" class="map-canvas" aria-label="Map viewer"></div>
+                <div id="map-mask" class="map-mask" aria-hidden="true"></div>
             </div>
-        </div>
-        <div id="map-stage" class="map-stage">
-            <div id="map-canvas" class="map-canvas" aria-label="Map viewer"></div>
-            <div id="map-mask" class="map-mask" aria-hidden="true"></div>
         </div>
     </div>
 </section>

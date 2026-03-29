@@ -2,55 +2,79 @@
 
 {% block content %}
 <section class="panel">
-    <h2>GUI Update</h2>
-    <p class="section-lead">Check version and, when a newer release is available, update the installed GUI from GitHub.</p>
-    {% if flash %}
-    <div class="alert">{{ flash }}</div>
-    {% endif %}
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>GUI Update</h2>
+                <p class="section-lead">Check version and, when a newer release is available, update the installed GUI from GitHub.</p>
+            </div>
+        </div>
+        {% if flash %}
+        <div class="alert">{{ flash }}</div>
+        {% endif %}
+    </div>
 </section>
 
 <section class="grid two">
     <div class="panel">
-        <h2>Installed GUI</h2>
-        <dl class="details-grid">
-            <dt>Current version</dt>
-            <dd><code>{{ current_gui_version }}</code></dd>
-            <dt>Repository</dt>
-            <dd><code>{{ gui_update_url }}</code></dd>
-            <dt>Branch</dt>
-            <dd><code>{{ gui_update_branch }}</code></dd>
-        </dl>
-        <form method="post" action="/settings/check-gui-version" class="form-stack">
-            <button type="submit" class="button">Check version</button>
-        </form>
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Installed GUI</h2>
+                </div>
+            </div>
+            <dl class="details-grid">
+                <dt>Current version</dt>
+                <dd><code>{{ current_gui_version }}</code></dd>
+                <dt>Repository</dt>
+                <dd><code>{{ gui_update_url }}</code></dd>
+                <dt>Branch</dt>
+                <dd><code>{{ gui_update_branch }}</code></dd>
+            </dl>
+            <form method="post" action="/settings/check-gui-version" class="form-stack">
+                <button type="submit" class="button">Check version</button>
+            </form>
+        </div>
     </div>
 
     <div class="panel">
-        <h2>Update GUI</h2>
-        {% if can_manage_updates %}
-        <p class="muted">This action downloads all GUI files from GitHub, replaces installed files, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.</p>
-        <form method="post" action="/settings/update-gui" class="form-stack" onsubmit="return confirm('Start GUI update now?');">
-            <button type="submit" class="button">Update</button>
-        </form>
-        {% else %}
-        <p class="muted">Your role can view GUI version information but cannot start updates.</p>
-        {% endif %}
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Update GUI</h2>
+                </div>
+            </div>
+            {% if can_manage_updates %}
+            <p class="muted">This action downloads all GUI files from GitHub, replaces installed files, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.</p>
+            <form method="post" action="/settings/update-gui" class="form-stack" onsubmit="return confirm('Start GUI update now?');">
+                <button type="submit" class="button">Update</button>
+            </form>
+            {% else %}
+            <p class="muted">Your role can view GUI version information but cannot start updates.</p>
+            {% endif %}
+        </div>
     </div>
 </section>
 
 {% if latest_version_result and latest_version_result.ok %}
 <section class="panel">
-    <h2>Latest GUI Version</h2>
-    <dl class="details-grid">
-        <dt>Installed</dt>
-        <dd><code>{{ latest_version_result.current_version }}</code></dd>
-        <dt>GitHub</dt>
-        <dd><code>{{ latest_version_result.latest_version }}</code></dd>
-        <dt>Status</dt>
-        <dd>{{ "Up to date" if latest_version_result.up_to_date else "Update available" }}</dd>
-        <dt>Source</dt>
-        <dd><code>{{ latest_version_result.source }}</code></dd>
-    </dl>
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Latest GUI Version</h2>
+            </div>
+        </div>
+        <dl class="details-grid">
+            <dt>Installed</dt>
+            <dd><code>{{ latest_version_result.current_version }}</code></dd>
+            <dt>GitHub</dt>
+            <dd><code>{{ latest_version_result.latest_version }}</code></dd>
+            <dt>Status</dt>
+            <dd>{{ "Up to date" if latest_version_result.up_to_date else "Update available" }}</dd>
+            <dt>Source</dt>
+            <dd><code>{{ latest_version_result.source }}</code></dd>
+        </dl>
+    </div>
 </section>
 {% endif %}
 {% endblock %}

@@ -2,22 +2,39 @@
 
 {% block content %}
 <section class="panel">
-    <h2>{{ page_title }}</h2>
-    <p class="section-lead">This section is part of the APRSBox skeleton. The GUI route and navigation are ready, but runtime APRS features behind this page are intentionally deferred.</p>
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ page_title }}</h2>
+                <p class="section-lead">This section is part of the APRSBox skeleton. The GUI route and navigation are ready, but runtime APRS features behind this page are intentionally deferred.</p>
+            </div>
+        </div>
+    </div>
 </section>
 <section class="grid two">
     <div class="panel">
-        <h2>Planned Direction</h2>
-        <ul class="simple-list">
-            <li>Expose live APRS engine state once the core process exists.</li>
-            <li>Keep this web UI independent from transport-specific implementation details.</li>
-            <li>Add read-only diagnostics first, then editing controls where it makes sense.</li>
-        </ul>
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Planned Direction</h2>
+                </div>
+            </div>
+            <ul class="simple-list">
+                <li>Expose live APRS engine state once the core process exists.</li>
+                <li>Keep this web UI independent from transport-specific implementation details.</li>
+                <li>Add read-only diagnostics first, then editing controls where it makes sense.</li>
+            </ul>
+        </div>
     </div>
     <div class="panel">
-        <h2>Status</h2>
-        <div class="notice">Coming later: live APRS traffic, map rendering, and engine-backed telemetry.</div>
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Status</h2>
+                </div>
+            </div>
+            <div class="notice">Coming later: live APRS traffic, map rendering, and engine-backed telemetry.</div>
+        </div>
     </div>
 </section>
 {% endblock %}
-

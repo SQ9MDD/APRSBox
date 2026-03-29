@@ -8,132 +8,166 @@
 {% block content %}
 <div id="station-detail-page" data-station-endpoint="/api{{ station.detail_href }}" data-refresh-ms="30000">
 <section class="panel">
-    <div class="station-detail-header">
-        <div>
-            <h2 id="station-detail-title">{{ station.display_callsign }}</h2>
-            <p class="section-lead" id="station-detail-meta">
-                Last heard {{ station.last_heard_date }}
-                {% if station.last_heard_relative %}<span class="muted">({{ station.last_heard_relative }})</span>{% endif %}
-                {% if station.source %}<span class="muted"> • Source {{ station.source }}</span>{% endif %}
-                {% if station.path %}<span class="muted"> • Path {{ station.path }}</span>{% endif %}
-            </p>
+    <div class="panel-body">
+        <div class="station-detail-header">
+            <div class="panel-header-copy">
+                <h2 id="station-detail-title">{{ station.display_callsign }}</h2>
+                <p class="section-lead" id="station-detail-meta">
+                    Last heard {{ station.last_heard_date }}
+                    {% if station.last_heard_relative %}<span class="muted">({{ station.last_heard_relative }})</span>{% endif %}
+                    {% if station.source %}<span class="muted"> • Source {{ station.source }}</span>{% endif %}
+                    {% if station.path %}<span class="muted"> • Path {{ station.path }}</span>{% endif %}
+                </p>
+            </div>
         </div>
     </div>
 </section>
 
 <section class="station-detail-hero">
     <article class="panel">
-        <h2>Station Details</h2>
-        <dl class="station-detail-fields" id="station-detail-fields">
-            {% for field in station.fields %}
-            <dt>{{ field.label }}</dt>
-            <dd>
-                {% if field.label == "Latest raw packet" %}
-                <code>{{ field.value }}</code>
-                {% else %}
-                {{ field.value }}
-                {% endif %}
-            </dd>
-            {% endfor %}
-        </dl>
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Station Details</h2>
+                </div>
+            </div>
+            <dl class="station-detail-fields" id="station-detail-fields">
+                {% for field in station.fields %}
+                <dt>{{ field.label }}</dt>
+                <dd>
+                    {% if field.label == "Latest raw packet" %}
+                    <code>{{ field.value }}</code>
+                    {% else %}
+                    {{ field.value }}
+                    {% endif %}
+                </dd>
+                {% endfor %}
+            </dl>
+        </div>
     </article>
 
     <article class="panel">
-        <h2>Station Map</h2>
-        <div
-            id="station-detail-map-root"
-            class="station-detail-map-root"
-            data-latitude="{{ station_map_config.latitude }}"
-            data-longitude="{{ station_map_config.longitude }}"
-            data-zoom="{{ station_map_config.zoom }}"
-            data-tile-url="{{ station_map_config.tile_url }}"
-            data-tile-attribution="{{ station_map_config.tile_attribution }}"
-            data-display-callsign="{{ station_map_config.display_callsign }}"
-            data-symbol-icon="{{ station_map_config.symbol_icon }}"
-            {% if station.latitude_float is none or station.longitude_float is none %}hidden{% endif %}
-        >
-            <div id="station-detail-map-canvas" class="station-detail-map-canvas" aria-label="Station detail map"></div>
-        </div>
-        <div class="station-map-placeholder" id="station-map-placeholder" {% if station.latitude_float is not none and station.longitude_float is not none %}hidden{% endif %}>
-            <strong>No position available</strong>
-            <span class="muted">No position available for this station.</span>
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Station Map</h2>
+                </div>
+            </div>
+            <div
+                id="station-detail-map-root"
+                class="station-detail-map-root"
+                data-latitude="{{ station_map_config.latitude }}"
+                data-longitude="{{ station_map_config.longitude }}"
+                data-zoom="{{ station_map_config.zoom }}"
+                data-tile-url="{{ station_map_config.tile_url }}"
+                data-tile-attribution="{{ station_map_config.tile_attribution }}"
+                data-display-callsign="{{ station_map_config.display_callsign }}"
+                data-symbol-icon="{{ station_map_config.symbol_icon }}"
+                {% if station.latitude_float is none or station.longitude_float is none %}hidden{% endif %}
+            >
+                <div id="station-detail-map-canvas" class="station-detail-map-canvas" aria-label="Station detail map"></div>
+            </div>
+            <div class="station-map-placeholder" id="station-map-placeholder" {% if station.latitude_float is not none and station.longitude_float is not none %}hidden{% endif %}>
+                <strong>No position available</strong>
+                <span class="muted">No position available for this station.</span>
+            </div>
         </div>
     </article>
 </section>
 
 <section class="panel">
-    <h2>Send Message To Station</h2>
-    <p class="section-lead">Message transmit is not implemented yet. This form is backend-backed scaffolding only.</p>
-    {% if message_flash %}
-    <div class="alert">{{ message_flash }}</div>
-    {% endif %}
-    <form method="post" action="{{ station.detail_href }}/message" class="form-stack station-message-form">
-        <label>
-            <span>Destination callsign</span>
-            <input type="text" name="destination_callsign" value="{{ (message_form.destination_callsign if message_form else station.display_callsign) }}">
-        </label>
-        <label>
-            <span>Message text</span>
-            <textarea name="message_text" placeholder="APRS message transmit is not implemented yet.">{{ message_form.message_text if message_form else '' }}</textarea>
-        </label>
-        <button type="submit" class="button">Send Message</button>
-    </form>
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Send Message To Station</h2>
+                <p class="section-lead">Message transmit is not implemented yet. This form is backend-backed scaffolding only.</p>
+            </div>
+        </div>
+        {% if message_flash %}
+        <div class="alert">{{ message_flash }}</div>
+        {% endif %}
+        <form method="post" action="{{ station.detail_href }}/message" class="form-stack station-message-form">
+            <label>
+                <span>Destination callsign</span>
+                <input type="text" name="destination_callsign" value="{{ (message_form.destination_callsign if message_form else station.display_callsign) }}">
+            </label>
+            <label>
+                <span>Message text</span>
+                <textarea name="message_text" placeholder="APRS message transmit is not implemented yet.">{{ message_form.message_text if message_form else '' }}</textarea>
+            </label>
+            <button type="submit" class="button">Send Message</button>
+        </form>
+    </div>
 </section>
 
 <section class="panel">
-    <h2>Recent Packets / Frames</h2>
-    <div id="station-recent-packets">
-    {% if recent_packets %}
-    <table class="data-table compact-table">
-        <thead>
-            <tr>
-                <th>Timestamp</th>
-                <th>Source</th>
-                <th>Destination</th>
-                <th>Path</th>
-                <th>Decoded summary</th>
-                <th>Raw packet</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for packet in recent_packets %}
-            <tr>
-                <td>
-                    <div class="last-heard-cell">
-                        <span>{{ packet.timestamp_label }}</span>
-                        {% if packet.timestamp_relative %}<span class="muted">{{ packet.timestamp_relative }}</span>{% endif %}
-                    </div>
-                </td>
-                <td>{{ packet.source }}</td>
-                <td>{{ packet.destination }}</td>
-                <td>{{ packet.path or "-" }}</td>
-                <td>{{ packet.decoded_summary or "-" }}</td>
-                <td><code>{{ packet.raw_packet }}</code></td>
-            </tr>
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Recent Packets / Frames</h2>
+            </div>
+        </div>
+        <div id="station-recent-packets">
+        {% if recent_packets %}
+        <div class="table-wrap">
+            <table class="data-table compact-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Source</th>
+                        <th>Destination</th>
+                        <th>Path</th>
+                        <th>Decoded summary</th>
+                        <th>Raw packet</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for packet in recent_packets %}
+                    <tr>
+                        <td>
+                            <div class="last-heard-cell">
+                                <span>{{ packet.timestamp_label }}</span>
+                                {% if packet.timestamp_relative %}<span class="muted">{{ packet.timestamp_relative }}</span>{% endif %}
+                            </div>
+                        </td>
+                        <td>{{ packet.source }}</td>
+                        <td>{{ packet.destination }}</td>
+                        <td>{{ packet.path or "-" }}</td>
+                        <td>{{ packet.decoded_summary or "-" }}</td>
+                        <td><code>{{ packet.raw_packet }}</code></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="muted">No stored packet history is available for this station yet.</p>
+        {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Other Known SSIDs</h2>
+            </div>
+        </div>
+        <div id="station-related-ssids">
+        {% if related_ssids|length > 1 %}
+        <div class="station-ssid-list">
+            {% for item in related_ssids %}
+            <a href="{{ item.detail_href }}" class="station-ssid-chip {% if item.is_current %}current{% endif %}">
+                <span>{{ item.display_callsign }}</span>
+                {% if item.is_current %}<span class="muted">current</span>{% endif %}
+            </a>
             {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No stored packet history is available for this station yet.</p>
-    {% endif %}
-    </div>
-</section>
-
-<section class="panel">
-    <h2>Other Known SSIDs</h2>
-    <div id="station-related-ssids">
-    {% if related_ssids|length > 1 %}
-    <div class="station-ssid-list">
-        {% for item in related_ssids %}
-        <a href="{{ item.detail_href }}" class="station-ssid-chip {% if item.is_current %}current{% endif %}">
-            <span>{{ item.display_callsign }}</span>
-            {% if item.is_current %}<span class="muted">current</span>{% endif %}
-        </a>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p class="muted">No other known SSIDs are currently available for {{ station.base_callsign }}.</p>
-    {% endif %}
+        </div>
+        {% else %}
+        <p class="muted">No other known SSIDs are currently available for {{ station.base_callsign }}.</p>
+        {% endif %}
+        </div>
     </div>
 </section>
     </div>
