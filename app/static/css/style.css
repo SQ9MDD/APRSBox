@@ -672,10 +672,22 @@ textarea {
 }
 
 .station-detail-map-canvas {
+    --map-pane-opacity: 0.8;
     min-height: 22rem;
     border-radius: 10px;
     overflow: hidden;
     border: 1px solid var(--border);
+    background: #000;
+}
+
+:root[data-theme="light"] .station-detail-map-canvas {
+    background: #fff;
+}
+
+.station-detail-map-canvas .leaflet-tile-pane,
+.station-detail-map-canvas .leaflet-overlay-pane,
+.station-detail-map-canvas .leaflet-shadow-pane {
+    opacity: var(--map-pane-opacity);
 }
 
 .station-detail-map-root[hidden],

@@ -156,7 +156,7 @@
         if (!map) {
             map = window.L.map(mapCanvas, {
                 center: latLng,
-                zoom: Number.isInteger(mapConfig.zoom) ? mapConfig.zoom : 10,
+                zoom: Number.isInteger(mapConfig.zoom) ? mapConfig.zoom : 14,
                 zoomControl: true,
                 attributionControl: true,
             });
@@ -207,7 +207,7 @@
         longitude_float: Number.parseFloat(mapRoot.dataset.longitude || ""),
     } : { latitude_float: NaN, longitude_float: NaN };
     const initialMapConfig = mapRoot ? {
-        zoom: Number.parseInt(mapRoot.dataset.zoom || "10", 10),
+        zoom: Number.parseInt(mapRoot.dataset.zoom || "14", 10),
         tile_url: mapRoot.dataset.tileUrl || "",
         tile_attribution: mapRoot.dataset.tileAttribution || "",
         symbol_icon: mapRoot.dataset.symbolIcon || "",

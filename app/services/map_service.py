@@ -6,6 +6,7 @@ from app.config import settings
 from app.services.content import build_station_detail_href, get_heard_station_snapshots, get_station_settings
 
 DEFAULT_STATION_ZOOM = 10
+DETAIL_STATION_ZOOM = 14
 FALLBACK_CENTER = {"latitude": 52.1, "longitude": 19.4, "zoom": 6}
 STALE_AFTER_SECONDS = 30 * 60
 
@@ -65,7 +66,7 @@ def get_station_detail_map_config(station: dict[str, Any]) -> dict[str, Any]:
     return {
         "latitude": station.get("latitude_float"),
         "longitude": station.get("longitude_float"),
-        "zoom": DEFAULT_STATION_ZOOM,
+        "zoom": DETAIL_STATION_ZOOM,
         "tile_url": settings.map_tile_url,
         "tile_attribution": settings.map_tile_attribution,
         "tile_source_name": settings.map_tile_source_name,
