@@ -18,7 +18,7 @@ ADMIN_USER="${APRSBOX_ADMIN_USER:-}"
 ADMIN_PASSWORD="${APRSBOX_ADMIN_PASSWORD:-}"
 BOOTSTRAP_WORKDIR=""
 STAGING_APP_DIR=""
-STAGING_VENV_DIR=""
+PREVIOUS_VENV_DIR=""
 SERVICES_STARTED="0"
 CORE_PIDFILE="/run/aprsbox-core.pid"
 WEB_PIDFILE="/run/aprsbox-web.pid"
@@ -39,8 +39,12 @@ cleanup() {
     if [ -n "$STAGING_APP_DIR" ] && [ -d "$STAGING_APP_DIR" ]; then
         rm -rf "$STAGING_APP_DIR"
     fi
-    if [ -n "$STAGING_VENV_DIR" ] && [ -d "$STAGING_VENV_DIR" ]; then
-        rm -rf "$STAGING_VENV_DIR"
+    if [ -n "$PREVIOUS_VENV_DIR" ] && [ -d "$PREVIOUS_VENV_DIR" ] && [ ! -d "$VENV_DIR" ]; then
+        mv "$PREVIOUS_VENV_DIR" "$VENV_DIR"
+        PREVIOUS_VENV_DIR=""
+    fi
+    if [ -n "$PREVIOUS_VENV_DIR" ] && [ -d "$PREVIOUS_VENV_DIR" ]; then
+        rm -rf "$PREVIOUS_VENV_DIR"
     fi
 }
 
@@ -187,8 +191,7 @@ backup_database() {
 
 prepare_staging_installation() {
     STAGING_APP_DIR="$INSTALL_ROOT/app.new.$$"
-    STAGING_VENV_DIR="$INSTALL_ROOT/venv.new.$$"
-    rm -rf "$STAGING_APP_DIR" "$STAGING_VENV_DIR"
+    rm -rf "$STAGING_APP_DIR"
     mkdir -p "$STAGING_APP_DIR"
 }
 
@@ -211,42 +214,51 @@ sync_application_files() {
 }
 
 setup_venv() {
-    python3 -m venv "$STAGING_VENV_DIR"
-    "$STAGING_VENV_DIR/bin/pip" install --upgrade pip setuptools wheel
-    "$STAGING_VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"
+    PREVIOUS_VENV_DIR=""
+    if [ -d "$VENV_DIR" ]; then
+        PREVIOUS_VENV_DIR="$INSTALL_ROOT/venv.old.$$"
+        rm -rf "$PREVIOUS_VENV_DIR"
+        mv "$VENV_DIR" "$PREVIOUS_VENV_DIR"
+    fi
+
+    python3 -m venv "$VENV_DIR"
+    "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel
+    "$VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"
 }
 
 verify_python_runtime() {
-    if [ ! -x "$STAGING_VENV_DIR/bin/gunicorn" ]; then
-        fail "gunicorn was not installed into $STAGING_VENV_DIR"
+    if [ ! -x "$VENV_DIR/bin/gunicorn" ]; then
+        fail "gunicorn was not installed into $VENV_DIR"
     fi
 
     PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$STAGING_VENV_DIR/bin/python" -c "import app.main, app.core_main"
+        "$VENV_DIR/bin/python" -c "import app.main, app.core_main"
 
     PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$STAGING_VENV_DIR/bin/gunicorn" --check-config --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
+        "$VENV_DIR/bin/gunicorn" --check-config --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
 
     PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$STAGING_VENV_DIR/bin/gunicorn" --check-config --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
+        "$VENV_DIR/bin/gunicorn" --check-config --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
 }
 
 activate_staged_installation() {
-    rm -rf "$TARGET_APP_DIR" "$VENV_DIR"
+    rm -rf "$TARGET_APP_DIR"
     mv "$STAGING_APP_DIR" "$TARGET_APP_DIR"
-    mv "$STAGING_VENV_DIR" "$VENV_DIR"
     STAGING_APP_DIR=""
-    STAGING_VENV_DIR=""
     chown -R "$APP_USER":"$APP_USER" "$TARGET_APP_DIR" "$VENV_DIR"
+    if [ -n "$PREVIOUS_VENV_DIR" ] && [ -d "$PREVIOUS_VENV_DIR" ]; then
+        rm -rf "$PREVIOUS_VENV_DIR"
+        PREVIOUS_VENV_DIR=""
+    fi
 }
 
 initialize_database() {
@@ -254,7 +266,7 @@ initialize_database() {
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$STAGING_VENV_DIR/bin/python" -m app.cli init-db
+        "$VENV_DIR/bin/python" -m app.cli init-db
     chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 }
 
@@ -277,7 +289,7 @@ create_admin_user() {
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$STAGING_VENV_DIR/bin/python" -m app.cli admin-exists
+        "$VENV_DIR/bin/python" -m app.cli admin-exists
     then
         log "Active admin user already present. Skipping initial admin creation."
         return
@@ -287,7 +299,7 @@ create_admin_user() {
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$STAGING_VENV_DIR/bin/python" -m app.cli create-admin --username "$ADMIN_USER" --password "$ADMIN_PASSWORD"
+        "$VENV_DIR/bin/python" -m app.cli create-admin --username "$ADMIN_USER" --password "$ADMIN_PASSWORD"
     chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 }
 
