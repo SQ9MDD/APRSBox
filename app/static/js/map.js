@@ -17,6 +17,7 @@
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
+    const mapStage = document.getElementById("map-stage");
     const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
@@ -54,8 +55,8 @@
         const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
             ? opacityPercent - (opacityPercent % 10)
             : 20;
-        if (mapCanvas) {
-            mapCanvas.style.setProperty("--map-mask-opacity", String(normalizedOpacity / 100));
+        if (mapStage) {
+            mapStage.style.setProperty("--map-mask-opacity", String(normalizedOpacity / 100));
         }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);

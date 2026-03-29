@@ -41,7 +41,7 @@
     font-weight: 600;
 }
 
-.map-canvas {
+.map-stage {
     --map-mask-opacity: 0.2;
     position: relative;
     min-height: 68vh;
@@ -50,6 +50,11 @@
     overflow: hidden;
     border: 1px solid var(--border);
     background: var(--panel-soft);
+}
+
+.map-canvas {
+    position: absolute;
+    inset: 0;
 }
 
 .map-mask {
@@ -159,7 +164,7 @@
 }
 
 @media (max-width: 900px) {
-    .map-canvas {
+    .map-stage {
         min-height: 56vh;
     }
 }
