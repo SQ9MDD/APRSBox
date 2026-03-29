@@ -522,7 +522,7 @@ textarea {
 
 .traffic-log-row {
     display: grid;
-    grid-template-columns: 11rem 4.5rem minmax(0, 1fr);
+    grid-template-columns: 11rem 16rem minmax(0, 1fr);
     gap: 0.75rem;
     align-items: start;
     padding: 0.55rem 0.75rem;
@@ -537,13 +537,9 @@ textarea {
 }
 
 .traffic-log-time,
-.traffic-log-format {
+.traffic-log-source {
     color: var(--muted);
-    white-space: nowrap;
-}
-
-.traffic-log-format {
-    font-weight: 600;
+    word-break: break-word;
 }
 
 .traffic-log-line {

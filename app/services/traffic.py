@@ -194,6 +194,7 @@ class TrafficMonitorService:
 
         entry: dict[str, str] = {
             "timestamp": timestamp,
+            "source": self._format_modem_label(),
             "port": str(port),
             "command": f"0x{command_id:X}",
             "length": str(len(payload)),
@@ -311,6 +312,17 @@ class TrafficMonitorService:
             self._active_modem = dict(modem) if modem else None
             self._last_error = error
             self._updated_at = utc_now()
+
+    def _format_modem_label(self) -> str:
+        with self._lock:
+            modem = dict(self._active_modem) if self._active_modem else None
+        if not modem:
+            return "TNC"
+        name = str(modem.get("name") or "TNC").strip()
+        endpoint = str(modem.get("device_path") or "").strip()
+        if endpoint:
+            return f"{name} ({endpoint})"
+        return name
 
     async def _sleep(self, delay: float) -> None:
         try:

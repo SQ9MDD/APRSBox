@@ -47,7 +47,7 @@
         {% for frame in traffic_snapshot.frames %}
         <div class="traffic-log-row">
             <span class="traffic-log-time">{{ frame.timestamp }}</span>
-            <span class="traffic-log-format">{{ frame.format }}</span>
+            <span class="traffic-log-source">{{ frame.source }}</span>
             <span class="traffic-log-line">{{ frame.line }}</span>
         </div>
         {% endfor %}
@@ -77,17 +77,17 @@
             stream.innerHTML = frames.map((frame) => `
                 <div class="traffic-log-row">
                     <span class="traffic-log-time"></span>
-                    <span class="traffic-log-format"></span>
+                    <span class="traffic-log-source"></span>
                     <span class="traffic-log-line"></span>
                 </div>
             `).join("");
 
             const timeNodes = stream.querySelectorAll(".traffic-log-time");
-            const formatNodes = stream.querySelectorAll(".traffic-log-format");
+            const sourceNodes = stream.querySelectorAll(".traffic-log-source");
             const lineNodes = stream.querySelectorAll(".traffic-log-line");
             frames.forEach((frame, index) => {
                 timeNodes[index].textContent = frame.timestamp;
-                formatNodes[index].textContent = frame.format;
+                sourceNodes[index].textContent = frame.source;
                 lineNodes[index].textContent = frame.line;
             });
         };
