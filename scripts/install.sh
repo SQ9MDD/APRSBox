@@ -135,15 +135,15 @@ initialize_database() {
 
 prompt_admin() {
     if [ -z "$ADMIN_USER" ]; then
-        printf 'Initial admin username: '
-        read -r ADMIN_USER
+        if [ -r /dev/tty ]; then
+            printf 'Initial admin username [admin]: ' >/dev/tty
+            read -r ADMIN_USER </dev/tty
+        fi
+        ADMIN_USER="${ADMIN_USER:-admin}"
     fi
     if [ -z "$ADMIN_PASSWORD" ]; then
-        printf 'Initial admin password: '
-        stty -echo
-        read -r ADMIN_PASSWORD
-        stty echo
-        printf '\n'
+        ADMIN_PASSWORD="aprs"
+        log "Initial admin password not provided. Using default password: aprs"
     fi
 }
 
