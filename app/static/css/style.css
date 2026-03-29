@@ -840,6 +840,11 @@ select:focus-visible,
     flex-wrap: wrap;
 }
 
+.station-detail-page {
+    display: grid;
+    gap: var(--space-4);
+}
+
 .station-detail-hero {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
