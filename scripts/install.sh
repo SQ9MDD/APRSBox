@@ -148,6 +148,13 @@ prompt_admin() {
 }
 
 create_admin_user() {
+    if su -s /bin/sh -c \
+        "APRSBOX_ENV=production APRSBOX_INSTALL_ROOT='$INSTALL_ROOT' APRSBOX_DB_PATH='$DB_PATH' '$VENV_DIR/bin/python' -m app.cli admin-exists" \
+        "$APP_USER"
+    then
+        log "Active admin user already present. Skipping initial admin creation."
+        return
+    fi
     prompt_admin
     credentials_file="$(mktemp)"
     chmod 600 "$credentials_file"

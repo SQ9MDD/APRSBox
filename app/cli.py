@@ -5,7 +5,7 @@ import getpass
 import sys
 
 from app.auth import create_user, ensure_admin_user, update_user_password
-from app.db import init_db
+from app.db import fetch_one, init_db
 
 
 def init_db_command(_: argparse.Namespace) -> int:
@@ -39,6 +39,12 @@ def set_password_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def admin_exists_command(_: argparse.Namespace) -> int:
+    init_db()
+    row = fetch_one("SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND is_active = 1")
+    return 0 if row and row["total"] > 0 else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="APRSBox administration helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -63,6 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
     password_parser.add_argument("--password")
     password_parser.set_defaults(func=set_password_command)
 
+    exists_parser = subparsers.add_parser("admin-exists", help="Exit 0 when an active admin user exists")
+    exists_parser.set_defaults(func=admin_exists_command)
+
     return parser
 
 
@@ -74,4 +83,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

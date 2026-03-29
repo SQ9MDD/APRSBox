@@ -147,16 +147,19 @@ sudo -u aprsbox /opt/aprsbox/venv/bin/python -m app.cli set-password --username 
 
 ### One-Line Bootstrap
 
-The intended deployment model is a one-line bootstrap that downloads and runs `install.sh` on a clean target host. After publishing the repository on GitHub, the pattern is:
+The intended deployment model is a one-line bootstrap that downloads and runs `install.sh` on a clean target host. Because a raw shell script does not contain the full application tree by itself, standalone bootstrap mode expects a repository URL via `APRSBOX_GIT_URL`.
+
+After publishing the repository on GitHub, the pattern is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<your-org-or-user>/APRSBox/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
+  APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git sh
 ```
 
 If you prefer to clone first:
 
 ```bash
-git clone https://github.com/<your-org-or-user>/APRSBox.git
+git clone https://github.com/SQ9MDD/APRSBox.git
 cd APRSBox
 sudo APRSBOX_ADMIN_USER=admin APRSBOX_ADMIN_PASSWORD='change-me' ./scripts/install.sh
 ```
@@ -173,7 +176,7 @@ sudo APRSBOX_ADMIN_USER=admin APRSBOX_ADMIN_PASSWORD='change-me' ./scripts/insta
 - Installs Python requirements
 - Copies the repository into `/opt/aprsbox/app`
 - Initializes the SQLite database if needed
-- Creates the initial admin user if it does not already exist
+- Creates the initial admin user if an active admin does not already exist
 - Installs OpenRC service scripts for `aprsbox-web` and `aprsbox-core`
 - Enables and starts `aprsbox-web` when OpenRC tooling is available
 
@@ -246,4 +249,3 @@ SQLite pragmas currently enabled on connection:
 - User editing is intentionally minimal in this first skeleton
 - There is no migration framework yet; the `migrations/` directory is reserved for future work
 - No Docker deployment is provided or recommended for this project
-
