@@ -157,14 +157,14 @@ General bootstrap:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
-  APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git sh
+  env APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git APRSBOX_GIT_BRANCH=main sh
 ```
 
 On Raspberry Pi OS / Debian-like systems, `sudo` must be part of the bootstrap command itself:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
-  sudo APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git sh
+  sudo env APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git APRSBOX_GIT_BRANCH=main sh
 ```
 
 If you do not provide admin credentials, the installer uses the default initial login `admin` and password `aprs`.
