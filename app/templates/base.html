@@ -38,29 +38,30 @@
             {% endfor %}
         </nav>
         <div class="sidebar-footer">
+            <div class="sidebar-user">
+                <button type="button" class="theme-toggle sidebar-theme-toggle" id="theme-toggle">Night Mode</button>
+                <div class="sidebar-user-meta">
+                    <span class="sidebar-user-name">{{ current_user.username }}</span>
+                    <span class="role-badge">{{ current_user.role }}</span>
+                </div>
+                <form action="/logout" method="post" class="sidebar-logout-form">
+                    <button type="submit" class="button button-secondary sidebar-logout">Logout</button>
+                </form>
+            </div>
             <div class="muted">Version {{ app_version }}</div>
         </div>
     </aside>
     {% endif %}
 
     <div class="main-area">
-        {% if current_user %}
-        <header class="topbar">
-            <div class="page-header-copy">
-                <h1>{{ page_title }}</h1>
-            </div>
-            <div class="topbar-user">
-                <button type="button" class="theme-toggle" id="theme-toggle">Night Mode</button>
-                <span>{{ current_user.username }}</span>
-                <span class="role-badge">{{ current_user.role }}</span>
-                <form action="/logout" method="post">
-                    <button type="submit" class="button button-secondary">Logout</button>
-                </form>
-            </div>
-        </header>
-        {% endif %}
-
         <main class="content">
+            {% if current_user %}
+            <section class="page-title-bar">
+                <div class="page-header-copy">
+                    <h1>{{ page_title }}</h1>
+                </div>
+            </section>
+            {% endif %}
             {% block content %}{% endblock %}
         </main>
     </div>
