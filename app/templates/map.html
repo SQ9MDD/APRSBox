@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}?v={{ app_version }}">
-<link rel="stylesheet" href="{{ url_for('static', path='css/map.css') }}?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
 {% endblock %}
 
 {% block content %}
@@ -18,7 +18,7 @@
             data-tile-url="{{ map_config.tile_url }}"
             data-tile-attribution="{{ map_config.tile_attribution }}"
             data-tile-source-name="{{ map_config.tile_source_name }}"
-            data-static-root="{{ url_for('static', path='') }}"
+            data-static-root="{{ request.scope.root_path }}/static/"
             data-root-path="{{ request.scope.root_path }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="Map controls">
@@ -48,6 +48,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}?v={{ app_version }}"></script>
-<script src="{{ url_for('static', path='js/map.js') }}?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}"></script>
 {% endblock %}

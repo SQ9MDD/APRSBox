@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% set traffic_stream_url = url_for('traffic_stream') %}
+{% set traffic_stream_url = request.scope.root_path ~ '/api/traffic/stream' %}
 <section class="grid two">
     <div class="panel">
         <div class="panel-body">

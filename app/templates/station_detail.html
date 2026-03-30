@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}?v={{ app_version }}">
-<link rel="stylesheet" href="{{ url_for('static', path='css/map.css') }}?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
 {% endblock %}
 
 {% block content %}
-<div id="station-detail-page" class="station-detail-page" data-station-endpoint="{{ station_api_endpoint }}" data-static-root="{{ url_for('static', path='') }}" data-root-path="{{ request.scope.root_path }}" data-refresh-ms="30000">
+<div id="station-detail-page" class="station-detail-page" data-station-endpoint="{{ station_api_endpoint }}" data-static-root="{{ request.scope.root_path }}/static/" data-root-path="{{ request.scope.root_path }}" data-refresh-ms="30000">
 <section class="panel">
     <div class="panel-body">
         <div class="station-detail-header">
@@ -175,6 +175,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}?v={{ app_version }}"></script>
-<script src="{{ url_for('static', path='js/station-detail-map.js') }}?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/station-detail-map.js?v={{ app_version }}"></script>
 {% endblock %}

@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% set stations_snapshot_url = url_for('stations_snapshot') %}
-{% set static_root = url_for('static', path='') %}
 {% set root_path = request.scope.root_path %}
+{% set stations_snapshot_url = root_path ~ '/api/stations' %}
+{% set static_root = root_path ~ '/static/' %}
 <section class="panel stations-summary-panel">
     <div class="panel-body">
         <div class="stations-summary-header">
@@ -89,7 +89,7 @@
                         </td>
                         <td>
                             {% if row.symbol %}
-                            <img class="aprs-symbol-icon" src="{{ url_for('static', path=row.symbol_icon) }}" alt="{{ row.symbol }}">
+                            <img class="aprs-symbol-icon" src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol }}">
                             {% else %}
                             <span class="muted">-</span>
                             {% endif %}
@@ -101,7 +101,7 @@
                             <div class="weather-inline">
                                 {% for item in row.data %}
                                 <span class="weather-chip" title="{{ item.label }}: {{ item.value }}">
-                                    <img src="{{ url_for('static', path='icons/' ~ item.icon) }}" alt="{{ item.label }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="{{ item.label }}">
                                     <span>{{ item.value }}</span>
                                 </span>
                                 {% endfor %}

@@ -52,7 +52,7 @@
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <td>
                                 <span class="tnc-badge {{ 'tnc-badge-enabled' if row[field.name] else 'tnc-badge-disabled' }}">
-                                    <img src="{{ url_for('static', path='icons/' ~ ('check-circle.svg' if row[field.name] else 'close-circle.svg')) }}" alt="">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row[field.name] else 'close-circle.svg' }}" alt="">
                                     <span>{{ 'Enabled' if row[field.name] else 'Disabled' }}</span>
                                 </span>
                             </td>

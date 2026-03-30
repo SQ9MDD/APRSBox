@@ -70,9 +70,13 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
     }
 
 
+def _path(request: Request, suffix: str) -> str:
+    return f"{request.scope.get('root_path', '')}{suffix}"
+
+
 @router.get("/")
 def root(request: Request) -> RedirectResponse:
-    return RedirectResponse(url=str(request.url_for("dashboard")), status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/dashboard")
@@ -131,7 +135,7 @@ def station_detail_page(
         active_nav="stations",
         station=station_context["station"],
         station_map_config=station_context["station_map_config"],
-        station_api_endpoint=request.url_for("station_detail_snapshot", callsign=station_context["station"]["display_callsign"]),
+        station_api_endpoint=_path(request, f"/api{station_context['station']['detail_href']}"),
         recent_packets=station_context["recent_packets"],
         related_ssids=station_context["related_ssids"],
         message_flash=None,
@@ -161,7 +165,7 @@ def station_detail_message(
         active_nav="stations",
         station=station_context["station"],
         station_map_config=station_context["station_map_config"],
-        station_api_endpoint=request.url_for("station_detail_snapshot", callsign=station_context["station"]["display_callsign"]),
+        station_api_endpoint=_path(request, f"/api{station_context['station']['detail_href']}"),
         recent_packets=station_context["recent_packets"],
         related_ssids=station_context["related_ssids"],
         message_flash=message_flash,
@@ -253,7 +257,7 @@ def modems_delete(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
     delete_section_row("modems", record_id)
-    return RedirectResponse(url=str(request.url_for("modems_page")), status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_path(request, "/settings/modems"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/settings/servers")
@@ -566,7 +570,7 @@ def map_page(
         current_user=current_user,
         active_nav="map",
         map_config=get_map_page_config(),
-        map_stations_endpoint=request.url_for("map_stations"),
+        map_stations_endpoint=_path(request, "/api/map/stations"),
     )
     return templates.TemplateResponse("map.html", context)
 

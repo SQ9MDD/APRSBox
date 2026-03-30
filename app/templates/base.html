@@ -10,7 +10,7 @@
             document.documentElement.setAttribute("data-theme", storedTheme || "dark");
         })();
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="app-shell">
@@ -18,7 +18,7 @@
     <aside class="sidebar">
         <div class="brand">
             <div class="brand-mark">
-                <img src="{{ url_for('static', path='icons/radio-tower.svg') }}" alt="">
+                <img src="{{ request.scope.root_path }}/static/icons/radio-tower.svg" alt="">
             </div>
             <div>
                 <strong>APRSBox</strong>
@@ -31,7 +31,7 @@
             <div class="nav-separator" aria-hidden="true"></div>
             {% else %}
             <a href="{{ request.scope.root_path }}{{ item.href }}" class="nav-link {% if active_nav == item.key %}active{% endif %}">
-                <img class="nav-icon" src="{{ url_for('static', path='icons/' ~ item.icon) }}" alt="">
+                <img class="nav-icon" src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="">
                 <span>{{ item.label }}</span>
             </a>
             {% endif %}

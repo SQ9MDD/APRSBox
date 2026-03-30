@@ -10,11 +10,15 @@ from app.template_helpers import build_template_context
 router = APIRouter()
 
 
+def _path(request: Request, suffix: str) -> str:
+    return f"{request.scope.get('root_path', '')}{suffix}"
+
+
 @router.get("/login")
 def login_page(request: Request) -> object:
     templates = request.app.state.templates
     if request.session.get("user_id"):
-        return RedirectResponse(url=str(request.url_for("dashboard")), status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
     context = build_template_context(request, page_title="Login", login_error=None)
     return templates.TemplateResponse("login.html", context)
 
@@ -42,7 +46,7 @@ def login_submit(
     request.session["role"] = user.role
     mark_user_login(user.id)
     log_event("INFO", "auth", f"User {user.username} logged in from {client_ip}")
-    return RedirectResponse(url=str(request.url_for("dashboard")), status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/logout")
@@ -51,4 +55,4 @@ def logout(request: Request) -> RedirectResponse:
     client_ip = request.app.state.get_client_ip(request)
     request.session.clear()
     log_event("INFO", "auth", f"Session ended for {username} from {client_ip}")
-    return RedirectResponse(url=str(request.url_for("login_page")), status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_path(request, "/login"), status_code=status.HTTP_303_SEE_OTHER)
