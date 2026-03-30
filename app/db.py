@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('admin', 'operator', 'viewer')),
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    last_login_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -191,6 +192,14 @@ def init_db() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
+        user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+        if "last_login_at" not in user_columns:
+            connection.execute(
+                """
+                ALTER TABLE users
+                ADD COLUMN last_login_at TEXT
+                """
+            )
         if "default_units" not in station_columns:
             connection.execute(
                 """

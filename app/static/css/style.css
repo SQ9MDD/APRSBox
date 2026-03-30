@@ -620,6 +620,47 @@ select:focus-visible,
     padding: 0.44rem 0.5rem;
 }
 
+.users-table {
+    table-layout: auto;
+}
+
+.users-table th:nth-child(1),
+.users-table td:nth-child(1) {
+    width: 11rem;
+    min-width: 11rem;
+}
+
+.users-table th:nth-child(2),
+.users-table td:nth-child(2) {
+    width: 7rem;
+    min-width: 7rem;
+}
+
+.users-table th:nth-child(3),
+.users-table td:nth-child(3) {
+    width: 8rem;
+    min-width: 8rem;
+}
+
+.users-table th:nth-child(4),
+.users-table td:nth-child(4) {
+    width: 13rem;
+    min-width: 13rem;
+    white-space: nowrap;
+}
+
+.users-table th:nth-child(5),
+.users-table td:nth-child(5) {
+    width: 7rem;
+    min-width: 7rem;
+}
+
+.users-table .status-pill {
+    min-width: 6.2rem;
+    font-size: 0.72rem;
+    padding: 0.22rem 0.48rem;
+}
+
 .stations-table tbody tr:hover td {
     background: rgba(109, 189, 128, 0.08);
 }

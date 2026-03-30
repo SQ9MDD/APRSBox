@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, Request, status
 from fastapi.responses import RedirectResponse
 
-from app.auth import authenticate_user
+from app.auth import authenticate_user, mark_user_login
 from app.db import log_event
 from app.template_helpers import build_template_context
 
@@ -38,6 +38,7 @@ def login_submit(
     request.session["user_id"] = user.id
     request.session["username"] = user.username
     request.session["role"] = user.role
+    mark_user_login(user.id)
     log_event("INFO", "auth", f"User {user.username} logged in")
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
