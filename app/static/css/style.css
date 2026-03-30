@@ -238,11 +238,12 @@ body {
 }
 
 .sidebar-role-icon {
-    width: 1.7rem;
-    height: 1.7rem;
+    width: 1.9rem;
+    height: 1.9rem;
     flex: 0 0 auto;
-    display: grid;
-    place-items: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 999px;
     background: var(--panel-emphasis);
     border: 1px solid var(--border);
@@ -250,50 +251,65 @@ body {
 }
 
 .sidebar-role-icon img {
-    width: 0.82rem;
-    height: 0.82rem;
+    width: 0.92rem;
+    height: 0.92rem;
     filter: var(--icon-filter);
 }
 
 .sidebar-user-actions {
     display: flex;
     align-items: center;
-    gap: 0.38rem;
+    gap: 0.45rem;
     flex: 0 0 auto;
 }
 
 .sidebar-user-actions .sidebar-logout-form {
-    width: 1.7rem;
-    height: 1.7rem;
-}
-
-.sidebar-icon-button img {
-    width: 0.78rem;
-    height: 0.78rem;
-    filter: var(--icon-filter);
+    display: flex;
+    margin: 0;
 }
 
 .sidebar-logout-form {
     display: flex;
 }
 
-.sidebar-icon-button {
-    width: 1.7rem;
-    min-width: 1.7rem;
-    height: 1.7rem;
-    min-height: 1.7rem;
+.sidebar-action-button {
+    width: 1.9rem;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    min-height: 1.9rem;
     padding: 0;
+    border: 1px solid var(--border);
     border-radius: 999px;
+    background: var(--panel-emphasis);
+    color: var(--text);
+    box-shadow: var(--shadow-soft);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
-.sidebar-user-actions .sidebar-logout-form,
-.sidebar-user-actions .sidebar-logout {
-    width: 1.7rem;
-    height: 1.7rem;
+.sidebar-action-button img {
+    width: 0.92rem;
+    height: 0.92rem;
+    filter: var(--icon-filter);
+}
+
+.sidebar-action-button:hover {
+    background: var(--panel-alt);
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
+}
+
+.sidebar-action-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.sidebar-action-button:active {
+    transform: translateY(0);
 }
 
 .page-header-copy {
