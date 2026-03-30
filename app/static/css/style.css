@@ -979,6 +979,17 @@ select:focus-visible,
     gap: var(--space-4);
 }
 
+.band-condition-layout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.band-condition-layout-full {
+    grid-column: 1 / -1;
+}
+
 .band-condition-card {
     min-width: 0;
 }
@@ -1003,6 +1014,22 @@ select:focus-visible,
 
 .band-condition-confidence strong {
     font-size: 1.2rem;
+}
+
+.band-condition-confidence-panel {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.band-condition-confidence-score {
+    display: grid;
+    gap: var(--space-2);
+    justify-items: start;
+}
+
+.band-condition-confidence-score strong {
+    font-size: clamp(2rem, 5vw, 3rem);
+    line-height: 1;
 }
 
 .band-condition-status {
@@ -1441,6 +1468,7 @@ code {
 
 @media (max-width: 720px) {
     .grid.two,
+    .band-condition-layout,
     .form-grid,
     .station-detail-hero {
         grid-template-columns: 1fr;
