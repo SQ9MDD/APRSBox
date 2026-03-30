@@ -527,15 +527,10 @@ def get_band_condition_page_data(*, edit_reference_id: int | None = None) -> dic
 def _known_bands() -> list[str]:
     rows = fetch_all(
         """
-        SELECT band
-        FROM (
-            SELECT DISTINCT band FROM band_condition_reference_stations WHERE enabled = 1
-            UNION
-            SELECT DISTINCT band FROM modems WHERE enabled = 1 AND TRIM(COALESCE(band, '')) <> ''
-            UNION
-            SELECT DISTINCT band FROM band_condition_activity_buckets
-        )
-        WHERE TRIM(COALESCE(band, '')) <> ''
+        SELECT DISTINCT band
+        FROM modems
+        WHERE enabled = 1
+          AND TRIM(COALESCE(band, '')) <> ''
         ORDER BY band ASC
         """
     )

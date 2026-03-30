@@ -151,7 +151,14 @@
                             {% if current_user.role in ("admin", "operator") %}
                             <td>
                                 <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this reference station?');">
-                                    <button type="submit" class="button button-secondary button-danger">Delete</button>
+                                    <button
+                                        type="submit"
+                                        class="table-icon-button"
+                                        title="Delete reference station"
+                                        aria-label="Delete reference station {{ row.station_key }}"
+                                    >
+                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                    </button>
                                 </form>
                             </td>
                             {% endif %}
