@@ -1,18 +1,45 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>Band Condition</h2>
-                <p class="section-lead">Estimated from long-term audibility of fixed reference stations. Mobile traffic is used only as a channel-load correction, not as the propagation baseline.</p>
+<section class="grid two">
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Band Condition</h2>
+                    <p class="section-lead">Estimated from long-term audibility of fixed reference stations. Mobile traffic is used only as a channel-load correction, not as the propagation baseline.</p>
+                </div>
+            </div>
+            <div class="notice">This is an estimate, not a propagation forecast. Activity buckets are assigned to the band configured on the active TNC. Current monitored band: {{ monitored_band }}.</div>
+            {% if flash %}
+            <div class="alert">{{ flash }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Algorithm</h2>
+                    <p class="section-lead">Short explanation of what drives the estimate.</p>
+                </div>
+            </div>
+            <div class="stack-sm">
+                <div class="empty-state">
+                    <strong>Condition comes from fixed reference stations.</strong>
+                    <p class="section-lead">Only configured fixed stations build the long-term audibility baseline used to judge whether the band is worse or better than normal.</p>
+                </div>
+                <div class="empty-state">
+                    <strong>Mobile traffic is only a congestion correction.</strong>
+                    <p class="section-lead">Mobile stations do not define propagation. Their traffic is used to soften or qualify degraded results when the channel is unusually busy.</p>
+                </div>
+                <div class="empty-state">
+                    <strong>Confidence depends on history and coverage.</strong>
+                    <p class="section-lead">Confidence rises with enough reference stations and enough baseline samples, and falls when data is sparse.</p>
+                </div>
             </div>
         </div>
-        <div class="notice">This is an estimate, not a propagation forecast. Activity buckets are assigned to the band configured on the active TNC. Current monitored band: {{ monitored_band }}.</div>
-        {% if flash %}
-        <div class="alert">{{ flash }}</div>
-        {% endif %}
     </div>
 </section>
 
@@ -227,64 +254,6 @@
         </div>
     </div>
 
-</section>
-
-<section class="band-condition-info-grid">
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Baseline</h2>
-                </div>
-            </div>
-            <div class="empty-state">
-                <strong>Fixed reference stations define condition.</strong>
-                <p class="section-lead">Only configured fixed stations build the long-term audibility baseline. This is the primary signal used to decide whether the band is below normal, normal, or enhanced.</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Congestion</h2>
-                </div>
-            </div>
-            <div class="empty-state">
-                <strong>Mobile traffic adjusts channel load.</strong>
-                <p class="section-lead">Mobile stations are not used as the propagation baseline. Their traffic is used as a channel-load correction, because heavy mobile activity can reduce effective audibility.</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Confidence</h2>
-                </div>
-            </div>
-            <div class="empty-state">
-                <strong>Confidence depends on history and coverage.</strong>
-                <p class="section-lead">Confidence rises when there are enough reference stations and enough historical samples. It drops when data is sparse or congestion is unusually high.</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Scope</h2>
-                </div>
-            </div>
-            <div class="empty-state">
-                <strong>This is an estimate, not a forecast.</strong>
-                <p class="section-lead">The page describes recent band behavior from persisted APRS observations on the configured TNC bands. It does not predict future propagation.</p>
-            </div>
-        </div>
-    </div>
 </section>
 
 <script>
