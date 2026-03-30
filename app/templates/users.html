@@ -78,7 +78,13 @@
                 </label>
                 <label>
                     <span>{{ "New password" if edit_user else "Password" }}</span>
-                    <input type="password" name="password" {% if not edit_user %}required{% endif %}>
+                    <div class="password-field-group">
+                        <input id="user-password" type="password" name="password" {% if not edit_user %}required{% endif %}>
+                        <div class="password-field-actions">
+                            <button type="button" class="button button-secondary" id="generate-password">Generate</button>
+                            <button type="button" class="button button-secondary" id="toggle-password-visibility">Show</button>
+                        </div>
+                    </div>
                 </label>
                 <label>
                     <span>Role</span>
@@ -114,6 +120,41 @@
                 }
             });
         }
+
+        const passwordInput = document.getElementById("user-password");
+        const generateButton = document.getElementById("generate-password");
+        const toggleVisibilityButton = document.getElementById("toggle-password-visibility");
+        if (!passwordInput || !generateButton || !toggleVisibilityButton) {
+            return;
+        }
+
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        const passwordLength = 16;
+
+        const syncPasswordVisibilityLabel = () => {
+            toggleVisibilityButton.textContent = passwordInput.type === "password" ? "Show" : "Hide";
+        };
+
+        const buildPassword = () => {
+            const values = new Uint32Array(passwordLength);
+            window.crypto.getRandomValues(values);
+            return Array.from(values, (value) => alphabet[value % alphabet.length]).join("");
+        };
+
+        generateButton.addEventListener("click", () => {
+            passwordInput.value = buildPassword();
+            passwordInput.type = "text";
+            syncPasswordVisibilityLabel();
+            passwordInput.focus();
+            passwordInput.select();
+        });
+
+        toggleVisibilityButton.addEventListener("click", () => {
+            passwordInput.type = passwordInput.type === "password" ? "text" : "password";
+            syncPasswordVisibilityLabel();
+        });
+
+        syncPasswordVisibilityLabel();
     })();
 </script>
 {% endblock %}
