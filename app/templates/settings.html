@@ -31,7 +31,7 @@
                 <dt>Branch</dt>
                 <dd><code>{{ gui_update_branch }}</code></dd>
             </dl>
-            <form method="post" action="/settings/check-gui-version" class="form-stack">
+            <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack">
                 <button type="submit" class="button">Check version</button>
             </form>
         </div>
@@ -46,7 +46,7 @@
             </div>
             {% if can_manage_updates %}
             <p class="muted">This action downloads all GUI files from GitHub, replaces installed files, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.</p>
-            <form method="post" action="/settings/update-gui" class="form-stack" onsubmit="return confirm('Start GUI update now?');">
+            <form method="post" action="{{ request.scope.root_path }}/settings/update-gui" class="form-stack" onsubmit="return confirm('Start GUI update now?');">
                 <button type="submit" class="button">Update</button>
             </form>
             {% else %}

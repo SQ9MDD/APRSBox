@@ -23,6 +23,8 @@ class Settings:
     gui_update_branch: str = os.getenv("APRSBOX_GIT_BRANCH", "main")
     core_host: str = os.getenv("APRSBOX_CORE_HOST", "127.0.0.1")
     core_port: int = int(os.getenv("APRSBOX_CORE_PORT", "18081"))
+    root_path: str = os.getenv("APRSBOX_ROOT_PATH", "").rstrip("/")
+    proxy_trusted_ips: str = os.getenv("APRSBOX_PROXY_TRUSTED_IPS", "127.0.0.1")
     map_tile_url: str = os.getenv("APRSBOX_MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
     map_tile_attribution: str = os.getenv(
         "APRSBOX_MAP_TILE_ATTRIBUTION",

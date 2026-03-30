@@ -6,7 +6,7 @@
 {% endblock %}
 
 {% block content %}
-<div id="station-detail-page" class="station-detail-page" data-station-endpoint="/api{{ station.detail_href }}" data-refresh-ms="30000">
+<div id="station-detail-page" class="station-detail-page" data-station-endpoint="{{ station_api_endpoint }}" data-static-root="{{ url_for('static', path='') }}" data-root-path="{{ request.scope.root_path }}" data-refresh-ms="30000">
 <section class="panel">
     <div class="panel-body">
         <div class="station-detail-header">
@@ -86,7 +86,7 @@
         {% if message_flash %}
         <div class="alert">{{ message_flash }}</div>
         {% endif %}
-        <form method="post" action="{{ station.detail_href }}/message" class="form-stack station-message-form">
+        <form method="post" action="{{ request.scope.root_path }}{{ station.detail_href }}/message" class="form-stack station-message-form">
             <label>
                 <span>Destination callsign</span>
                 <input type="text" name="destination_callsign" value="{{ (message_form.destination_callsign if message_form else station.display_callsign) }}">
@@ -159,7 +159,7 @@
         {% if related_ssids|length > 1 %}
         <div class="station-ssid-list">
             {% for item in related_ssids %}
-            <a href="{{ item.detail_href }}" class="station-ssid-chip {% if item.is_current %}current{% endif %}">
+            <a href="{{ request.scope.root_path }}{{ item.detail_href }}" class="station-ssid-chip {% if item.is_current %}current{% endif %}">
                 <span>{{ item.display_callsign }}</span>
                 {% if item.is_current %}<span class="muted">current</span>{% endif %}
             </a>

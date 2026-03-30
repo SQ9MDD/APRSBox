@@ -22,7 +22,7 @@
             {% if login_error %}
             <div class="alert">{{ login_error }}</div>
             {% endif %}
-            <form action="/login" method="post" class="form-stack">
+            <form action="{{ request.scope.root_path }}/login" method="post" class="form-stack">
                 <label class="full">
                     <span>Username</span>
                     <input type="text" name="username" autocomplete="username" required>

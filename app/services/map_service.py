@@ -18,7 +18,6 @@ def get_map_page_config() -> dict[str, Any]:
         "station_latitude": default_view["latitude"],
         "station_longitude": default_view["longitude"],
         "default_zoom": default_view["zoom"],
-        "stations_endpoint": "/api/map/stations",
         # The default public OSM tiles are acceptable for development/testing.
         # Keep the URL in backend config so production can switch to a local
         # cache/proxy or another provider without touching the frontend code.

@@ -71,7 +71,7 @@
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
                             <td>
-                                <form method="post" action="/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this record?');">
+                                <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this record?');">
                                     <button type="submit" class="button button-secondary button-danger">Delete</button>
                                 </form>
                             </td>
@@ -126,7 +126,7 @@
                 <div class="form-actions">
                     <button type="submit" class="button">Save</button>
                     {% if section.supports_editing and edit_row %}
-                    <a href="/settings/{{ section.slug }}" class="button button-secondary">Cancel</a>
+                    <a href="{{ request.scope.root_path }}/settings/{{ section.slug }}" class="button button-secondary">Cancel</a>
                     {% endif %}
                 </div>
             </form>

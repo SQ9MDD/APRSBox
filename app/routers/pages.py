@@ -71,8 +71,8 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
 
 
 @router.get("/")
-def root() -> RedirectResponse:
-    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+def root(request: Request) -> RedirectResponse:
+    return RedirectResponse(url=str(request.url_for("dashboard")), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/dashboard")
@@ -131,6 +131,7 @@ def station_detail_page(
         active_nav="stations",
         station=station_context["station"],
         station_map_config=station_context["station_map_config"],
+        station_api_endpoint=request.url_for("station_detail_snapshot", callsign=station_context["station"]["display_callsign"]),
         recent_packets=station_context["recent_packets"],
         related_ssids=station_context["related_ssids"],
         message_flash=None,
@@ -160,6 +161,7 @@ def station_detail_message(
         active_nav="stations",
         station=station_context["station"],
         station_map_config=station_context["station_map_config"],
+        station_api_endpoint=request.url_for("station_detail_snapshot", callsign=station_context["station"]["display_callsign"]),
         recent_packets=station_context["recent_packets"],
         related_ssids=station_context["related_ssids"],
         message_flash=message_flash,
@@ -247,10 +249,11 @@ def modems_create(
 @router.post("/settings/modems/{record_id}/delete")
 def modems_delete(
     record_id: int,
+    request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
     delete_section_row("modems", record_id)
-    return RedirectResponse(url="/settings/modems", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=str(request.url_for("modems_page")), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/settings/servers")
@@ -563,6 +566,7 @@ def map_page(
         current_user=current_user,
         active_nav="map",
         map_config=get_map_page_config(),
+        map_stations_endpoint=request.url_for("map_stations"),
     )
     return templates.TemplateResponse("map.html", context)
 

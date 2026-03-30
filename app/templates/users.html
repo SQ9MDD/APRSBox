@@ -46,7 +46,7 @@
                             </td>
                             <td>{{ user.last_login_display }}</td>
                             <td>
-                                <form method="post" action="/admin/users/{{ user.id }}/toggle" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation();">
+                                <form method="post" action="{{ request.scope.root_path }}/admin/users/{{ user.id }}/toggle" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation();">
                                     <input type="hidden" name="is_active" value="{{ 0 if user.is_active else 1 }}">
                                     <button type="submit" class="button button-secondary">
                                         {{ "Disable" if user.is_active else "Enable" }}
@@ -68,7 +68,7 @@
                     <h2>{{ "Edit User" if edit_user else "Create User" }}</h2>
                 </div>
             </div>
-            <form method="post" action="/admin/users" class="form-grid">
+            <form method="post" action="{{ request.scope.root_path }}/admin/users" class="form-grid">
                 {% if edit_user %}
                 <input type="hidden" name="record_id" value="{{ edit_user.id }}">
                 {% endif %}
@@ -95,7 +95,7 @@
                 <div class="form-actions">
                     <button type="submit" class="button">{{ "Save Changes" if edit_user else "Create User" }}</button>
                     {% if edit_user %}
-                    <a href="/admin/users" class="button button-secondary">Cancel</a>
+                    <a href="{{ request.scope.root_path }}/admin/users" class="button button-secondary">Cancel</a>
                     {% endif %}
                 </div>
             </form>

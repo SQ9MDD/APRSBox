@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% set stations_snapshot_url = url_for('stations_snapshot') %}
+{% set static_root = url_for('static', path='') %}
+{% set root_path = request.scope.root_path %}
 <section class="panel stations-summary-panel">
     <div class="panel-body">
         <div class="stations-summary-header">
@@ -69,8 +72,8 @@
                 </thead>
                 <tbody id="stations-table-body">
                     {% for row in stations %}
-                    <tr class="clickable-row" data-href="{{ row.detail_href }}">
-                        <td class="callsign-cell"><strong><a class="station-link" href="{{ row.detail_href }}">{{ row.display_callsign or row.callsign }}</a></strong></td>
+                    <tr class="clickable-row" data-href="{{ root_path }}{{ row.detail_href }}">
+                        <td class="callsign-cell"><strong><a class="station-link" href="{{ root_path }}{{ row.detail_href }}">{{ row.display_callsign or row.callsign }}</a></strong></td>
                         <td>
                             {% if row.frame_type %}
                             <span class="frame-type-badge" title="{{ row.frame_type_label or row.frame_type }}">{{ row.frame_type }}</span>
@@ -124,6 +127,9 @@
 (() => {
     const tbody = document.getElementById("stations-table-body");
     if (!tbody) return;
+    const stationsSnapshotUrl = {{ stations_snapshot_url|tojson }};
+    const staticRoot = {{ static_root|tojson }};
+    const rootPath = {{ root_path|tojson }};
 
     const summaryTotal = document.getElementById("summary-total");
     const summaryStationary = document.getElementById("summary-stationary");
@@ -150,7 +156,7 @@
             <div class="weather-inline">
                 ${items.map((item) => `
                     <span class="weather-chip" title="${escapeHtml(item.label)}: ${escapeHtml(item.value)}">
-                        <img src="/static/icons/${escapeHtml(item.icon)}" alt="${escapeHtml(item.label)}">
+                        <img src="${staticRoot}icons/${escapeHtml(item.icon)}" alt="${escapeHtml(item.label)}">
                         <span>${escapeHtml(item.value)}</span>
                     </span>
                 `).join("")}
@@ -163,9 +169,10 @@
             tbody.innerHTML = '<tr><td colspan="8" class="muted">No decoded APRS stations heard yet.</td></tr>';
             return;
         }
+        const resolvePath = (value) => value && value.startsWith("/") ? `${rootPath}${value}` : (value || "");
         tbody.innerHTML = stations.map((row) => `
-            <tr class="clickable-row" data-href="${escapeHtml(row.detail_href || "")}">
-                <td class="callsign-cell"><strong><a class="station-link" href="${escapeHtml(row.detail_href || "#")}">${escapeHtml(row.display_callsign || row.callsign || "-")}</a></strong></td>
+            <tr class="clickable-row" data-href="${escapeHtml(resolvePath(row.detail_href))}">
+                <td class="callsign-cell"><strong><a class="station-link" href="${escapeHtml(resolvePath(row.detail_href) || "#")}">${escapeHtml(row.display_callsign || row.callsign || "-")}</a></strong></td>
                 <td>${row.frame_type ? `<span class="frame-type-badge" title="${escapeHtml(row.frame_type_label || row.frame_type)}">${escapeHtml(row.frame_type)}</span>` : '<span class="muted">-</span>'}</td>
                 <td>
                     <div class="last-heard-cell">
@@ -173,7 +180,7 @@
                         <span class="muted">${escapeHtml(row.last_heard_relative || "")}</span>
                     </div>
                 </td>
-                <td>${row.symbol ? `<img class="aprs-symbol-icon" src="/static/${escapeHtml(row.symbol_icon)}" alt="${escapeHtml(row.symbol)}">` : '<span class="muted">-</span>'}</td>
+                <td>${row.symbol ? `<img class="aprs-symbol-icon" src="${staticRoot}${escapeHtml(row.symbol_icon)}" alt="${escapeHtml(row.symbol)}">` : '<span class="muted">-</span>'}</td>
                 <td>${escapeHtml(row.latitude || "-")}</td>
                 <td>${escapeHtml(row.longitude || "-")}</td>
                 <td>${renderWeather(row.data || [])}</td>
@@ -194,7 +201,7 @@
 
     async function refreshStations() {
         try {
-            const response = await fetch("/api/stations", { headers: { "Accept": "application/json" } });
+            const response = await fetch(stationsSnapshotUrl, { headers: { "Accept": "application/json" } });
             if (!response.ok) return;
             const payload = await response.json();
             renderRows(payload.stations || []);

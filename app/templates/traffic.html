@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% set traffic_stream_url = url_for('traffic_stream') %}
 <section class="grid two">
     <div class="panel">
         <div class="panel-body">
@@ -128,7 +129,7 @@
         };
 
         syncStatusClass(statusLabel.textContent);
-        const eventSource = new EventSource("/api/traffic/stream");
+        const eventSource = new EventSource({{ traffic_stream_url|tojson }});
         eventSource.onmessage = (event) => {
             applySnapshot(JSON.parse(event.data));
         };

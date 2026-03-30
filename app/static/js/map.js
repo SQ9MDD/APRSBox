@@ -20,6 +20,8 @@
     const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
+    const staticRoot = root.dataset.staticRoot || "/static/";
+    const rootPath = root.dataset.rootPath || "";
     const stationLayer = window.L.layerGroup();
     const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
     const mapViewStorageKey = "aprsbox-map-view";
@@ -176,7 +178,7 @@
 
     function tooltipHtml(station) {
         const lines = [];
-        const detailHref = station.detail_href || "";
+        const detailHref = station.detail_href && station.detail_href.startsWith("/") ? `${rootPath}${station.detail_href}` : (station.detail_href || "");
         const title = detailHref
             ? `<a class="map-station-link" href="${escapeHtml(detailHref)}">${escapeHtml(station.display_callsign || station.callsign || "")}</a>`
             : `<strong>${escapeHtml(station.display_callsign || station.callsign || "")}</strong>`;
@@ -218,7 +220,7 @@
 
     function buildStationIcon(station) {
         const staleClass = station.stale ? " map-station-icon-stale" : "";
-        const iconPath = station.symbol_icon ? `/static/${station.symbol_icon}` : "/static/icons/verG/x.gif";
+        const iconPath = station.symbol_icon ? `${staticRoot}${station.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
         const iconAlt = station.symbol_table || station.symbol_code ? `${station.symbol_table || ""}${station.symbol_code || ""}` : "";
         return window.L.divIcon({
             className: `map-station-icon${staleClass}`,

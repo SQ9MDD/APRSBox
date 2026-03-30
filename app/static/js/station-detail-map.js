@@ -14,6 +14,8 @@
     }
 
     const stationEndpoint = pageRoot.dataset.stationEndpoint || "";
+    const staticRoot = pageRoot.dataset.staticRoot || "/static/";
+    const rootPath = pageRoot.dataset.rootPath || "";
     const refreshMs = Number.parseInt(pageRoot.dataset.refreshMs || "30000", 10);
     const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
     let map = null;
@@ -68,18 +70,12 @@
                     <colgroup>
                         <col style="width: 7rem">
                         <col style="width: 5.5rem">
-                        <col style="width: 5.5rem">
-                        <col style="width: 8rem">
-                        <col style="width: 12rem">
                         <col style="width: 32rem">
                     </colgroup>
                     <thead>
                         <tr>
                             <th>Timestamp</th>
-                            <th>Source</th>
                             <th>Destination</th>
-                            <th>Path</th>
-                            <th>Decoded summary</th>
                             <th>Raw packet</th>
                         </tr>
                     </thead>
@@ -92,10 +88,7 @@
                                         ${packet.timestamp_relative ? `<span class="muted">${escapeHtml(packet.timestamp_relative)}</span>` : ""}
                                     </div>
                                 </td>
-                                <td>${escapeHtml(packet.source || "")}</td>
                                 <td>${escapeHtml(packet.destination || "")}</td>
-                                <td>${escapeHtml(packet.path || "-")}</td>
-                                <td>${escapeHtml(packet.decoded_summary || "-")}</td>
                                 <td><code>${escapeHtml(packet.raw_packet || "")}</code></td>
                             </tr>
                         `).join("")}
@@ -114,7 +107,7 @@
         relatedSsids.innerHTML = `
             <div class="station-ssid-list">
                 ${items.map((item) => `
-                    <a href="${escapeHtml(item.detail_href || "#")}" class="station-ssid-chip${item.is_current ? " current" : ""}">
+                    <a href="${escapeHtml(item.detail_href && item.detail_href.startsWith("/") ? `${rootPath}${item.detail_href}` : (item.detail_href || "#"))}" class="station-ssid-chip${item.is_current ? " current" : ""}">
                         <span>${escapeHtml(item.display_callsign || "")}</span>
                         ${item.is_current ? '<span class="muted">current</span>' : ""}
                     </a>
@@ -170,7 +163,7 @@
         mapRoot.dataset.symbolIcon = mapConfig.symbol_icon || "";
 
         const latLng = [Number(station.latitude_float), Number(station.longitude_float)];
-        const symbolIcon = mapConfig.symbol_icon ? `/static/${mapConfig.symbol_icon}` : "/static/icons/verG/x.gif";
+        const symbolIcon = mapConfig.symbol_icon ? `${staticRoot}${mapConfig.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
         const icon = window.L.divIcon({
             className: "map-station-icon",
             html: buildIconHtml(station.display_callsign || "", symbolIcon),

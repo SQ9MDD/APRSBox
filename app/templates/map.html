@@ -14,10 +14,12 @@
             data-station-latitude="{{ map_config.station_latitude }}"
             data-station-longitude="{{ map_config.station_longitude }}"
             data-default-zoom="{{ map_config.default_zoom }}"
-            data-stations-endpoint="{{ map_config.stations_endpoint }}"
+            data-stations-endpoint="{{ map_stations_endpoint }}"
             data-tile-url="{{ map_config.tile_url }}"
             data-tile-attribution="{{ map_config.tile_attribution }}"
             data-tile-source-name="{{ map_config.tile_source_name }}"
+            data-static-root="{{ url_for('static', path='') }}"
+            data-root-path="{{ request.scope.root_path }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="Map controls">
                 <div class="map-toolbar-actions">
