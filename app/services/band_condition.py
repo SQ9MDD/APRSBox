@@ -755,6 +755,25 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         dx_station_count=len(dx_station_details),
     )
     label = _label_for_scores(condition_score, confidence_score)
+    diagnosis = _diagnosis_for_scores(
+        condition_score=condition_score,
+        dx_opening_score=dx_opening_score,
+        occupancy_score=occupancy_score,
+        confidence_score=confidence_score,
+    )
+    opening_summary = _opening_summary(dx_opening_score)
+    load_summary = _load_summary(occupancy_score)
+    reference_summary = _reference_summary(local_reference_score)
+    why_items = _why_items(
+        active_reference_station_count=active_reference_station_count,
+        reference_count=reference_count,
+        dx_station_count=len(dx_station_details),
+        current_mobile_activity=current_mobile_activity,
+        baseline_mobile_activity=baseline_mobile_activity,
+        current_total_activity=current_total_activity,
+        baseline_total_activity=baseline_total_activity,
+        local_reference_score=local_reference_score,
+    )
     explanation = _build_explanation(
         local_reference_score=local_reference_score,
         dx_opening_score=dx_opening_score,
@@ -770,10 +789,19 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         "band": normalized_band,
         "band_label": format_band_label(normalized_band),
         "label": label,
+        "diagnosis_title": diagnosis["title"],
+        "diagnosis_summary": diagnosis["summary"],
+        "diagnosis_tone": diagnosis["tone"],
         "condition_score": round(condition_score, 3),
         "occupancy_score": round(occupancy_score, 3),
         "dx_opening_score": round(dx_opening_score, 3),
         "local_reference_score": round(local_reference_score, 3),
+        "opening_label": opening_summary["label"],
+        "opening_tone": opening_summary["tone"],
+        "load_label": load_summary["label"],
+        "load_tone": load_summary["tone"],
+        "reference_label": reference_summary["label"],
+        "reference_tone": reference_summary["tone"],
         "confidence_score": round(confidence_score, 3),
         "reference_station_count": reference_count,
         "active_reference_station_count": active_reference_station_count,
@@ -785,6 +813,7 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         "dx_station_count": len(dx_station_details),
         "baseline_activity_samples": baseline_activity_samples,
         "explanation": explanation,
+        "why_items": why_items,
         "per_reference": per_reference,
         "dx_station_details": dx_station_details,
     }
@@ -802,10 +831,19 @@ def _insufficient_band_snapshot(
         "band": band,
         "band_label": format_band_label(band),
         "label": "Insufficient data",
+        "diagnosis_title": "Band uncertain",
+        "diagnosis_summary": "Not enough stable history yet to describe the band confidently.",
+        "diagnosis_tone": "caution",
         "condition_score": 0.0,
         "occupancy_score": 0.0,
         "dx_opening_score": 0.0,
         "local_reference_score": 0.0,
+        "opening_label": "Unknown",
+        "opening_tone": "caution",
+        "load_label": "Unknown",
+        "load_tone": "caution",
+        "reference_label": "Unknown",
+        "reference_tone": "caution",
         "confidence_score": 0.0,
         "reference_station_count": reference_station_count,
         "active_reference_station_count": active_reference_station_count,
@@ -817,6 +855,7 @@ def _insufficient_band_snapshot(
         "dx_station_count": 0,
         "baseline_activity_samples": 0,
         "explanation": explanation,
+        "why_items": [],
         "per_reference": per_reference or [],
         "dx_station_details": [],
     }
@@ -1046,6 +1085,116 @@ def _occupancy_score(
 def _condition_score(*, dx_opening_score: float, local_reference_score: float, occupancy_score: float) -> float:
     occupancy_penalty = occupancy_score * max(0.15, 0.4 - (dx_opening_score * 0.25))
     return _clamp((dx_opening_score * 0.65) + (local_reference_score * 0.35) - occupancy_penalty, -1.0, 1.0)
+
+
+def _diagnosis_for_scores(
+    *,
+    condition_score: float,
+    dx_opening_score: float,
+    occupancy_score: float,
+    confidence_score: float,
+) -> dict[str, str]:
+    if confidence_score < INSUFFICIENT_CONFIDENCE:
+        return {
+            "title": "Band uncertain",
+            "summary": "History is still too thin to classify the band confidently.",
+            "tone": "caution",
+        }
+    if dx_opening_score >= 0.7 and condition_score >= 0.25:
+        return {
+            "title": "Band open",
+            "summary": "Rare fixed stations are present and propagation looks wider than normal.",
+            "tone": "good",
+        }
+    if occupancy_score >= 0.65 and dx_opening_score < 0.35:
+        return {
+            "title": "Band busy locally",
+            "summary": "Traffic load is elevated and there is little evidence of a wider opening.",
+            "tone": "busy",
+        }
+    if condition_score <= -0.2:
+        return {
+            "title": "Band degraded",
+            "summary": "Local references are underperforming and the band looks worse than usual.",
+            "tone": "bad",
+        }
+    if condition_score >= 0.2:
+        return {
+            "title": "Band above normal",
+            "summary": "References are healthy and there are signs of better-than-normal reach.",
+            "tone": "good",
+        }
+    return {
+        "title": "Band normal",
+        "summary": "Current hearing pattern is close to the usual local baseline.",
+        "tone": "neutral",
+    }
+
+
+def _opening_summary(score: float) -> dict[str, str]:
+    if score >= 0.8:
+        return {"label": "Very strong", "tone": "good"}
+    if score >= 0.55:
+        return {"label": "Strong", "tone": "good"}
+    if score >= 0.3:
+        return {"label": "Noticeable", "tone": "neutral"}
+    if score >= 0.12:
+        return {"label": "Weak", "tone": "caution"}
+    return {"label": "Quiet", "tone": "muted"}
+
+
+def _load_summary(score: float) -> dict[str, str]:
+    if score >= 0.72:
+        return {"label": "High", "tone": "bad"}
+    if score >= 0.45:
+        return {"label": "Moderate", "tone": "caution"}
+    if score >= 0.2:
+        return {"label": "Light", "tone": "neutral"}
+    return {"label": "Low", "tone": "good"}
+
+
+def _reference_summary(score: float) -> dict[str, str]:
+    if score >= 0.4:
+        return {"label": "Above normal", "tone": "good"}
+    if score >= 0.1:
+        return {"label": "Healthy", "tone": "good"}
+    if score > -0.12:
+        return {"label": "Near normal", "tone": "neutral"}
+    if score > -0.4:
+        return {"label": "Weak", "tone": "caution"}
+    return {"label": "Poor", "tone": "bad"}
+
+
+def _why_items(
+    *,
+    active_reference_station_count: int,
+    reference_count: int,
+    dx_station_count: int,
+    current_mobile_activity: float,
+    baseline_mobile_activity: float,
+    current_total_activity: float,
+    baseline_total_activity: float,
+    local_reference_score: float,
+) -> list[str]:
+    items: list[str] = []
+    items.append(f"{active_reference_station_count}/{reference_count} local references are baseline-backed")
+    if dx_station_count > 0:
+        items.append(f"{dx_station_count} rare fixed stations are present now")
+    else:
+        items.append("No rare fixed stations are visible right now")
+    if current_total_activity > baseline_total_activity * 1.35 and current_total_activity > 0:
+        items.append("Total traffic is above its normal level")
+    elif current_total_activity < baseline_total_activity * 0.75 and baseline_total_activity > 0:
+        items.append("Total traffic is below its normal level")
+    else:
+        items.append("Total traffic is close to its normal level")
+    if current_mobile_activity > baseline_mobile_activity * 1.35 and current_mobile_activity > 0:
+        items.append("Mobile traffic suggests elevated local channel load")
+    elif local_reference_score >= 0.1:
+        items.append("Local references are being heard at or above their normal level")
+    else:
+        items.append("Local references are not outperforming their usual baseline")
+    return items[:4]
 
 
 def _average_numeric(values: list[float]) -> float:

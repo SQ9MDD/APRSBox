@@ -199,28 +199,46 @@
                 </div>
             </div>
 
-            <div class="metrics-grid">
-                <div class="metric-card" title="Końcowy wynik kondycji pasma zbudowany z lokalnej słyszalności referencji, zajętości kanału i openingu wykrytego przez rzadkie stałe stacje.">
-                    <span class="metric-value">{{ "%.2f"|format(item.condition_score) }}</span>
-                    <span class="metric-label">Condition score</span>
+            <section class="band-condition-hero band-condition-hero-{{ item.diagnosis_tone }}">
+                <div class="band-condition-hero-copy">
+                    <span class="band-condition-eyebrow">{{ item.band_label }}</span>
+                    <strong>{{ item.diagnosis_title }}</strong>
+                    <p>{{ item.diagnosis_summary }}</p>
                 </div>
-                <div class="metric-card" title="Wskaźnik openingu wyliczony z obecności stałych stacji, które historycznie są słyszane rzadko albo wcale o tej porze na tym paśmie.">
-                    <span class="metric-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
-                    <span class="metric-label">DX opening score</span>
+                <div class="band-condition-hero-score" title="Końcowy wynik kondycji pasma zbudowany z lokalnej słyszalności referencji, zajętości kanału i openingu wykrytego przez rzadkie stałe stacje.">
+                    <span class="muted">Condition</span>
+                    <strong>{{ "%.2f"|format(item.condition_score) }}</strong>
                 </div>
-                <div class="metric-card" title="Wskaźnik zajętości kanału wyliczony z korelacji ruchu całkowitego, mobilnego i lokalnej słyszalności referencji.">
-                    <span class="metric-value">{{ "%.2f"|format(item.occupancy_score) }}</span>
-                    <span class="metric-label">Occupancy score</span>
+            </section>
+
+            <div class="band-condition-pill-grid">
+                <div class="band-condition-pill band-condition-pill-{{ item.opening_tone }}" title="Wskaźnik openingu wyliczony z obecności stałych stacji, które historycznie są słyszane rzadko albo wcale o tej porze na tym paśmie.">
+                    <span class="band-condition-pill-label">Opening</span>
+                    <strong>{{ item.opening_label }}</strong>
+                    <span class="band-condition-pill-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
                 </div>
-                <div class="metric-card" title="Liczba aktywnych stacji referencyjnych z wystarczającym baseline'em względem wszystkich skonfigurowanych referencji dla tego pasma.">
-                    <span class="metric-value">{{ item.active_reference_station_count }}/{{ item.reference_station_count }}</span>
-                    <span class="metric-label">Active references</span>
+                <div class="band-condition-pill band-condition-pill-{{ item.load_tone }}" title="Wskaźnik zajętości kanału wyliczony z korelacji ruchu całkowitego, mobilnego i lokalnej słyszalności referencji.">
+                    <span class="band-condition-pill-label">Load</span>
+                    <strong>{{ item.load_label }}</strong>
+                    <span class="band-condition-pill-value">{{ "%.2f"|format(item.occupancy_score) }}</span>
                 </div>
-                <div class="metric-card" title="Znormalizowany wynik pokazujący, czy lokalne stacje referencyjne są słyszane gorzej lub lepiej niż zwykle o tej porze dla tego pasma.">
-                    <span class="metric-value">{{ "%.2f"|format(item.local_reference_score) }}</span>
-                    <span class="metric-label">Local reference score</span>
+                <div class="band-condition-pill band-condition-pill-{{ item.reference_tone }}" title="Znormalizowany wynik pokazujący, czy lokalne stacje referencyjne są słyszane gorzej lub lepiej niż zwykle o tej porze dla tego pasma.">
+                    <span class="band-condition-pill-label">References</span>
+                    <strong>{{ item.reference_label }}</strong>
+                    <span class="band-condition-pill-value">{{ "%.2f"|format(item.local_reference_score) }}</span>
                 </div>
             </div>
+
+            {% if item.why_items %}
+            <div class="band-condition-why">
+                <span class="band-condition-why-title">Why</span>
+                <ul class="band-condition-why-list">
+                    {% for reason in item.why_items %}
+                    <li>{{ reason }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
 
             <dl class="band-condition-stats">
                 <div title="Liczba unikalnych stałych stacji słyszanych w bieżącym krótkim oknie oceny, niezależnie od tego czy są referencjami.">
@@ -249,7 +267,36 @@
                 </div>
             </dl>
 
-            <p class="section-lead">{{ item.explanation }}</p>
+            <details class="band-condition-details">
+                <summary>Technical summary</summary>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-value">{{ "%.2f"|format(item.condition_score) }}</span>
+                        <span class="metric-label">Condition score</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
+                        <span class="metric-label">DX opening score</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">{{ "%.2f"|format(item.occupancy_score) }}</span>
+                        <span class="metric-label">Occupancy score</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">{{ "%.2f"|format(item.local_reference_score) }}</span>
+                        <span class="metric-label">Local reference score</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">{{ item.active_reference_station_count }}/{{ item.reference_station_count }}</span>
+                        <span class="metric-label">Active references</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">{{ "%.1f"|format(item.current_mobile_activity) }}</span>
+                        <span class="metric-label">Mobile activity / 5 min</span>
+                    </div>
+                </div>
+                <p class="section-lead">{{ item.explanation }}</p>
+            </details>
 
             {% if item.per_reference %}
             <details class="band-condition-details">
