@@ -83,6 +83,15 @@ def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
 
 
+def _dashboard_band_condition_card() -> dict | None:
+    snapshot = get_band_condition_snapshot()
+    bands = snapshot.get("bands") or []
+    if not bands:
+        return None
+    preferred = next((item for item in bands if item.get("band") == "2m"), None)
+    return preferred or bands[0]
+
+
 @router.get("/")
 def root(request: Request) -> RedirectResponse:
     return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
@@ -94,6 +103,7 @@ def dashboard(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
+    dashboard_band = _dashboard_band_condition_card()
     context = build_template_context(
         request,
         page_title="Dashboard",
@@ -103,6 +113,7 @@ def dashboard(
         traffic_summary=dashboard_traffic_summary(),
         worker_statuses=worker_statuses(),
         recent_logs=recent_event_logs(limit=8),
+        dashboard_band=dashboard_band,
     )
     return templates.TemplateResponse("dashboard.html", context)
 

@@ -38,6 +38,38 @@
     </div>
 </section>
 
+{% if dashboard_band %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Band Condition</h2>
+                <p class="section-lead">Quick view of the current estimated condition for {{ dashboard_band.band_label }}.</p>
+            </div>
+            <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Open Band Condition</a>
+        </div>
+        <div class="stack-sm">
+            <div class="band-condition-card-heading">
+                <div>
+                    <h2>{{ dashboard_band.band_label }}</h2>
+                    <span class="status-pill band-condition-status {% if dashboard_band.label == 'Insufficient data' %}status-unknown{% elif dashboard_band.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ dashboard_band.label }}</span>
+                </div>
+            </div>
+            <section class="band-condition-hero band-condition-hero-{{ dashboard_band.diagnosis_tone }}">
+                <div class="band-condition-hero-copy">
+                    <strong>{{ dashboard_band.diagnosis_title }}</strong>
+                    <p>{{ dashboard_band.diagnosis_summary }}</p>
+                </div>
+                <div class="band-condition-hero-score">
+                    <span class="muted">Condition</span>
+                    <strong>{{ "%.2f"|format(dashboard_band.condition_score) }}</strong>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endif %}
+
 <section class="panel">
     <div class="panel-body">
         <div class="panel-header">
