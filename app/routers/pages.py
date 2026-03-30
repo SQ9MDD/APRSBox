@@ -315,7 +315,7 @@ def modems_create(
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     payload = {
         "name": name.strip(),
-        "band": band.strip(),
+        "band": band.strip().lower(),
         "modem_type": normalized_modem_type,
         "device_path": device_path.strip(),
         "baud_rate": baud_rate,

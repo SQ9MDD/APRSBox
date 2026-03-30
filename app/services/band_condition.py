@@ -13,6 +13,7 @@ MIN_BASELINE_SAMPLES = 12
 EMA_ALPHA = 0.2
 INSUFFICIENT_CONFIDENCE = 0.2
 FIXED_REFERENCE_STATION_TYPES = ("home", "digi", "igate", "wx-fixed", "fixed")
+BAND_OPTIONS = ("2m", "70cm", "6m")
 
 
 def normalize_band(value: str) -> str:
@@ -77,6 +78,47 @@ def station_type_options() -> list[dict[str, str]]:
     ]
 
 
+def band_options() -> list[dict[str, str]]:
+    return [{"value": band, "label": band} for band in BAND_OPTIONS]
+
+
+def split_station_key(station_key: str) -> tuple[str, str]:
+    normalized = station_key.strip().upper()
+    if not normalized:
+        return "", ""
+    base, separator, suffix = normalized.partition("-")
+    if separator and suffix.isdigit():
+        return base, suffix
+    return normalized, ""
+
+
+def list_reference_station_candidates() -> list[dict[str, str]]:
+    rows = fetch_all(
+        """
+        SELECT DISTINCT band, station_key
+        FROM band_condition_activity_station_buckets
+        WHERE is_fixed = 1
+          AND TRIM(COALESCE(band, '')) <> ''
+          AND TRIM(COALESCE(station_key, '')) <> ''
+        ORDER BY band ASC, station_key ASC
+        """
+    )
+    result: list[dict[str, str]] = []
+    for row in rows:
+        callsign, ssid = split_station_key(str(row["station_key"]))
+        if not callsign:
+            continue
+        result.append(
+            {
+                "band": normalize_band(str(row["band"])),
+                "callsign": callsign,
+                "ssid": ssid,
+                "station_key": build_station_key(callsign, ssid),
+            }
+        )
+    return result
+
+
 def list_reference_stations(*, band: str | None = None) -> list[dict[str, Any]]:
     params: list[Any] = []
     where = ""
@@ -126,6 +168,8 @@ def save_reference_station(payload: dict[str, Any], record_id: int | None = None
 
     if not band:
         return False, "Band is required."
+    if band not in BAND_OPTIONS:
+        return False, "Band must be one of: 2m, 70cm, 6m."
     if not callsign:
         return False, "Callsign is required."
     if station_type not in FIXED_REFERENCE_STATION_TYPES:
@@ -468,7 +512,9 @@ def get_band_condition_page_data(*, edit_reference_id: int | None = None) -> dic
         "bands": snapshot["bands"],
         "references": references,
         "edit_reference": edit_reference,
+        "band_options": band_options(),
         "station_type_options": station_type_options(),
+        "reference_station_candidates": list_reference_station_candidates(),
         "monitored_band": format_band_label(monitored_band_for_active_modem()),
     }
 

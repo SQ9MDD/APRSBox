@@ -175,21 +175,25 @@
                 </div>
             </div>
             {% if current_user.role in ("admin", "operator") %}
-            <form method="post" class="form-grid">
+            <form method="post" class="form-grid" id="reference-station-form">
                 {% if edit_reference %}
                 <input type="hidden" name="record_id" value="{{ edit_reference.id }}">
                 {% endif %}
                 <label>
                     <span>Band</span>
-                    <input type="text" name="band" value="{{ edit_reference.band if edit_reference else '' }}" required>
+                    <select name="band" id="reference-band" required>
+                        {% for option in band_options %}
+                        <option value="{{ option.value }}" {% if (edit_reference and edit_reference.band == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
                 </label>
                 <label>
                     <span>Callsign</span>
-                    <input type="text" name="callsign" value="{{ edit_reference.callsign if edit_reference else '' }}" required>
+                    <select name="callsign" id="reference-callsign" required></select>
                 </label>
                 <label>
                     <span>SSID</span>
-                    <input type="text" name="ssid" value="{{ edit_reference.ssid if edit_reference else '' }}">
+                    <select name="ssid" id="reference-ssid"></select>
                 </label>
                 <label>
                     <span>Station type</span>
@@ -223,6 +227,12 @@
 
 <script>
 (() => {
+    const referenceCandidates = {{ reference_station_candidates|tojson }};
+    const selectedCallsign = {{ (edit_reference.callsign if edit_reference else '')|tojson }};
+    const selectedSsid = {{ (edit_reference.ssid if edit_reference else '')|tojson }};
+    const bandSelect = document.getElementById("reference-band");
+    const callsignSelect = document.getElementById("reference-callsign");
+    const ssidSelect = document.getElementById("reference-ssid");
     const rows = document.querySelectorAll(".clickable-row");
     for (const row of rows) {
         row.addEventListener("click", () => {
@@ -231,6 +241,46 @@
                 window.location.href = href;
             }
         });
+    }
+
+    if (bandSelect && callsignSelect && ssidSelect) {
+        let initialCallsign = selectedCallsign || "";
+        let initialSsid = selectedSsid || "";
+        const fixedCandidatesForBand = (band) => referenceCandidates.filter((item) => item.band === band);
+
+        const fillSelect = (select, values, preferredValue, emptyLabel) => {
+            const options = values.length ? values : [{ value: "", label: emptyLabel }];
+            select.innerHTML = options.map((item) => `<option value="${item.value}">${item.label}</option>`).join("");
+            if (preferredValue && options.some((item) => item.value === preferredValue)) {
+                select.value = preferredValue;
+            }
+        };
+
+        const syncCandidateSelects = () => {
+            const candidates = fixedCandidatesForBand(bandSelect.value);
+            const callsigns = [...new Set(candidates.map((item) => item.callsign))].map((item) => ({ value: item, label: item }));
+            fillSelect(callsignSelect, callsigns, initialCallsign || callsignSelect.value, "No fixed stations heard");
+
+            const ssids = candidates
+                .filter((item) => item.callsign === callsignSelect.value)
+                .map((item) => item.ssid);
+            const uniqueSsids = [...new Set(ssids)];
+            const ssidOptions = uniqueSsids.map((item) => ({
+                value: item,
+                label: item ? item : "(no SSID)",
+            }));
+            fillSelect(ssidSelect, ssidOptions, initialSsid || ssidSelect.value, "(no SSID)");
+            initialCallsign = "";
+            initialSsid = "";
+        };
+
+        bandSelect.addEventListener("change", () => {
+            callsignSelect.value = "";
+            ssidSelect.value = "";
+            syncCandidateSelects();
+        });
+        callsignSelect.addEventListener("change", syncCandidateSelects);
+        syncCandidateSelects();
     }
 })();
 </script>
