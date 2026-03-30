@@ -25,6 +25,38 @@
                 <div class="muted">Native APRS console</div>
             </div>
         </div>
+        <div class="sidebar-user-panel">
+            <div class="sidebar-user-meta">
+                <div class="sidebar-user-avatar" aria-hidden="true">
+                    <img src="{{ request.scope.root_path }}/static/icons/account-circle-outline.svg" alt="">
+                </div>
+                <div class="sidebar-user-copy">
+                    <span class="sidebar-user-name">{{ current_user.username }}</span>
+                    <span class="role-badge">{{ current_user.role }}</span>
+                </div>
+            </div>
+            <div class="sidebar-user-actions">
+                <button
+                    type="button"
+                    class="theme-toggle sidebar-icon-button"
+                    id="theme-toggle"
+                    aria-label="Switch theme"
+                    title="Switch theme"
+                >
+                    <img id="theme-toggle-icon" src="{{ request.scope.root_path }}/static/icons/theme-light-dark.svg" alt="">
+                </button>
+                <form action="{{ request.scope.root_path }}/logout" method="post" class="sidebar-logout-form">
+                    <button
+                        type="submit"
+                        class="button button-secondary sidebar-icon-button sidebar-logout"
+                        aria-label="Logout"
+                        title="Logout"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/logout-variant.svg" alt="">
+                    </button>
+                </form>
+            </div>
+        </div>
         <nav class="nav-list">
             {% for item in navigation %}
             {% if item.separator %}
@@ -38,17 +70,8 @@
             {% endfor %}
         </nav>
         <div class="sidebar-footer">
-            <div class="sidebar-user">
-                <button type="button" class="theme-toggle sidebar-theme-toggle" id="theme-toggle">Night Mode</button>
-                <div class="sidebar-user-meta">
-                    <span class="sidebar-user-name">{{ current_user.username }}</span>
-                    <span class="role-badge">{{ current_user.role }}</span>
-                </div>
-                <form action="{{ request.scope.root_path }}/logout" method="post" class="sidebar-logout-form">
-                    <button type="submit" class="button button-secondary sidebar-logout">Logout</button>
-                </form>
-            </div>
             <div class="muted">Version {{ app_version }}</div>
+            <div class="muted">Copyright SQ9MDD</div>
         </div>
     </aside>
     {% endif %}
@@ -62,9 +85,16 @@
         (() => {
             const root = document.documentElement;
             const button = document.getElementById("theme-toggle");
+            const icon = document.getElementById("theme-toggle-icon");
             if (!button) return;
             const syncLabel = () => {
-                button.textContent = root.getAttribute("data-theme") === "light" ? "Day Mode" : "Night Mode";
+                const isLight = root.getAttribute("data-theme") === "light";
+                const nextMode = isLight ? "night" : "day";
+                button.setAttribute("aria-label", `Switch to ${nextMode} mode`);
+                button.setAttribute("title", `Switch to ${nextMode} mode`);
+                if (icon) {
+                    icon.src = `${request.scope.root_path}/static/icons/${isLight ? "weather-night" : "white-balance-sunny"}.svg`;
+                }
             };
             syncLabel();
             button.addEventListener("click", () => {

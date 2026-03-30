@@ -204,7 +204,9 @@ body {
     padding: var(--space-2) 0.2rem 0;
     font-size: 0.76rem;
     display: grid;
-    gap: var(--space-3);
+    gap: var(--space-1);
+    text-align: center;
+    justify-items: center;
 }
 
 .main-area {
@@ -214,7 +216,7 @@ body {
     min-width: 0;
 }
 
-.sidebar-user {
+.sidebar-user-panel {
     display: grid;
     gap: var(--space-3);
     padding: var(--space-3);
@@ -228,23 +230,62 @@ body {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.sidebar-user-avatar {
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--panel-emphasis);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-soft);
+}
+
+.sidebar-user-avatar img,
+.sidebar-icon-button img {
+    width: 1.1rem;
+    height: 1.1rem;
+    filter: var(--icon-filter);
+}
+
+.sidebar-user-copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.28rem;
 }
 
 .sidebar-user-name {
     font-size: 0.88rem;
     font-weight: 600;
     color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.sidebar-theme-toggle,
-.sidebar-logout-form,
-.sidebar-logout {
-    width: 100%;
+.sidebar-user-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 
 .sidebar-logout-form {
     display: flex;
+}
+
+.sidebar-icon-button {
+    width: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0;
+}
+
+.sidebar-user-actions .sidebar-logout-form,
+.sidebar-user-actions .sidebar-logout {
+    width: auto;
 }
 
 .page-header-copy {
@@ -1276,5 +1317,10 @@ code {
 
     .stations-summary {
         grid-template-columns: 1fr;
+    }
+
+    .sidebar-user-meta,
+    .sidebar-user-actions {
+        flex-wrap: wrap;
     }
 }
