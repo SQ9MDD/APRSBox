@@ -27,7 +27,10 @@
         </div>
         <div class="sidebar-user-panel">
             <div class="sidebar-user-meta">
-                <span class="role-badge">{{ current_user.role }}</span>
+                <span class="role-badge">{{ current_user.username }}</span>
+                <span class="sidebar-role-icon" title="{{ current_user.role }}" aria-label="{{ current_user.role }}">
+                    <img src="{{ request.scope.root_path }}/static/icons/shield-account-outline.svg" alt="">
+                </span>
             </div>
             <div class="sidebar-user-actions">
                 <button
