@@ -736,8 +736,9 @@ select:focus-visible,
 
 .users-table th:nth-child(5),
 .users-table td:nth-child(5) {
-    width: 7rem;
-    min-width: 7rem;
+    width: 3.2rem;
+    min-width: 3.2rem;
+    text-align: center;
 }
 
 .users-table .status-pill {
@@ -1276,6 +1277,48 @@ code {
 
 .table-action-form .button {
     width: 100%;
+}
+
+.users-action-cell {
+    text-align: center;
+}
+
+.table-icon-button {
+    width: 1.9rem;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    min-height: 1.9rem;
+    padding: 0;
+    border: 1px solid rgba(201, 122, 122, 0.35);
+    border-radius: 999px;
+    background: rgba(201, 122, 122, 0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+.table-icon-button img {
+    width: 0.9rem;
+    height: 0.9rem;
+    filter: var(--icon-filter);
+}
+
+.table-icon-button:hover:not(:disabled) {
+    background: rgba(201, 122, 122, 0.16);
+    border-color: rgba(201, 122, 122, 0.5);
+    transform: translateY(-1px);
+}
+
+.table-icon-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.table-icon-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
 }
 
 .checkbox-row {

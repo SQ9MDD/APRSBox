@@ -31,7 +31,7 @@
                             <th>Role</th>
                             <th>Status</th>
                             <th>Last login</th>
-                            <th>Action</th>
+                            <th>Delete</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -45,11 +45,22 @@
                                 </span>
                             </td>
                             <td>{{ user.last_login_display }}</td>
-                            <td>
-                                <form method="post" action="{{ request.scope.root_path }}/admin/users/{{ user.id }}/toggle" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation();">
-                                    <input type="hidden" name="is_active" value="{{ 0 if user.is_active else 1 }}">
-                                    <button type="submit" class="button button-secondary">
-                                        {{ "Disable" if user.is_active else "Enable" }}
+                            <td class="users-action-cell">
+                                <form
+                                    method="post"
+                                    action="{{ request.scope.root_path }}/admin/users/{{ user.id }}/delete"
+                                    class="table-action-form"
+                                    onclick="event.stopPropagation();"
+                                    onsubmit="event.stopPropagation(); return confirm('Delete user {{ user.username }}?');"
+                                >
+                                    <button
+                                        type="submit"
+                                        class="table-icon-button"
+                                        title="Delete user"
+                                        aria-label="Delete user {{ user.username }}"
+                                        {% if user.is_current_user %}disabled{% endif %}
+                                    >
+                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                     </button>
                                 </form>
                             </td>

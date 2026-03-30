@@ -55,6 +55,14 @@ def set_user_active(user_id: int, is_active: bool) -> None:
     )
 
 
+def delete_user(user_id: int) -> None:
+    user = fetch_one("SELECT username FROM users WHERE id = ?", (user_id,))
+    if not user:
+        raise ValueError("User not found.")
+    execute("DELETE FROM users WHERE id = ?", (user_id,))
+    log_event("INFO", "auth", f"Deleted user {user['username']}")
+
+
 def update_user(user_id: int, *, role: str, is_active: bool, password: str | None = None) -> None:
     if role not in ROLES:
         raise ValueError(f"Unsupported role: {role}")

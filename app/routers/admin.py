@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, Request, status
 
-from app.auth import create_user, get_user_record_by_id, list_users, set_user_active, update_user
+from app.auth import create_user, delete_user, get_user_record_by_id, list_users, set_user_active, update_user
 from app.dependencies import require_roles
 from app.models import ROLES, UserIdentity
 from app.template_helpers import build_template_context
@@ -35,6 +35,7 @@ def _users_template_context(
     users = list_users()
     for user in users:
         user["last_login_display"] = _format_user_datetime(user.get("last_login_at"))
+        user["is_current_user"] = user["id"] == current_user.id
     context = build_template_context(
         request,
         page_title="Users / Roles",
@@ -95,3 +96,28 @@ def users_toggle(
 ) -> object:
     set_user_active(user_id, bool(is_active))
     return _users_template_context(request, current_user, flash="User status updated.")
+
+
+@router.post("/users/{user_id}/delete")
+def users_delete(
+    user_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin")),
+) -> object:
+    if user_id == current_user.id:
+        return _users_template_context(
+            request,
+            current_user,
+            flash="You cannot delete the currently signed-in account.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        delete_user(user_id)
+    except ValueError as exc:
+        return _users_template_context(
+            request,
+            current_user,
+            flash=str(exc),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    return _users_template_context(request, current_user, flash="User deleted.")
