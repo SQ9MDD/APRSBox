@@ -979,6 +979,12 @@ select:focus-visible,
     gap: var(--space-4);
 }
 
+.band-condition-lower-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+}
+
 .band-condition-card {
     min-width: 0;
 }
@@ -1479,6 +1485,10 @@ code {
     }
 
     .band-condition-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .band-condition-lower-grid {
         grid-template-columns: 1fr;
     }
 
