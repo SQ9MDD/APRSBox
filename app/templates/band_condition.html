@@ -117,7 +117,7 @@
     {% endfor %}
 </section>
 
-<section class="band-condition-lower-grid">
+<section class="grid two">
     <div class="panel">
         <div class="panel-body">
             <div class="panel-header">
@@ -227,27 +227,61 @@
         </div>
     </div>
 
+</section>
+
+<section class="band-condition-info-grid">
     <div class="panel">
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>How It Works</h2>
-                    <p class="section-lead">Short summary of what this estimate uses and what it does not use.</p>
+                    <h2>Baseline</h2>
                 </div>
             </div>
-            <div class="stack-sm">
-                <div class="empty-state">
-                    <strong>1. Fixed reference stations define condition.</strong>
-                    <p class="section-lead">Only configured fixed stations build the long-term audibility baseline. This is the core signal used to decide whether the band is below normal, normal, or enhanced.</p>
+            <div class="empty-state">
+                <strong>Fixed reference stations define condition.</strong>
+                <p class="section-lead">Only configured fixed stations build the long-term audibility baseline. This is the primary signal used to decide whether the band is below normal, normal, or enhanced.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Congestion</h2>
                 </div>
-                <div class="empty-state">
-                    <strong>2. Mobile traffic adjusts congestion only.</strong>
-                    <p class="section-lead">Mobile stations are not used as the propagation baseline. Their traffic is used as a channel-load correction, because heavy mobile traffic can reduce effective audibility.</p>
+            </div>
+            <div class="empty-state">
+                <strong>Mobile traffic adjusts channel load.</strong>
+                <p class="section-lead">Mobile stations are not used as the propagation baseline. Their traffic is used as a channel-load correction, because heavy mobile activity can reduce effective audibility.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Confidence</h2>
                 </div>
-                <div class="empty-state">
-                    <strong>3. Confidence depends on history and coverage.</strong>
-                    <p class="section-lead">Confidence goes up when there are enough reference stations and enough baseline samples. It drops when data is sparse or when mobile congestion is unusually high.</p>
+            </div>
+            <div class="empty-state">
+                <strong>Confidence depends on history and coverage.</strong>
+                <p class="section-lead">Confidence rises when there are enough reference stations and enough historical samples. It drops when data is sparse or congestion is unusually high.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Scope</h2>
                 </div>
+            </div>
+            <div class="empty-state">
+                <strong>This is an estimate, not a forecast.</strong>
+                <p class="section-lead">The page describes recent band behavior from persisted APRS observations on the configured TNC bands. It does not predict future propagation.</p>
             </div>
         </div>
     </div>
