@@ -72,7 +72,14 @@
                             {% if can_edit and section.supports_delete %}
                             <td>
                                 <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this record?');">
-                                    <button type="submit" class="button button-secondary button-danger">Delete</button>
+                                    <button
+                                        type="submit"
+                                        class="table-icon-button"
+                                        title="Delete record"
+                                        aria-label="Delete record {{ row.id }}"
+                                    >
+                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                    </button>
                                 </form>
                             </td>
                             {% endif %}
