@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% set primary_band = bands[0] if bands else none %}
+{% set primary_band = none %}
+{% for item in bands %}
+    {% if item.band == "2m" %}
+        {% set primary_band = item %}
+    {% endif %}
+{% endfor %}
+{% if primary_band is none and bands %}
+    {% set primary_band = bands[0] %}
+{% endif %}
 
 <section class="band-condition-layout">
     <div class="panel band-condition-layout-full">
@@ -25,7 +33,7 @@
             <div class="panel-header">
                 <div class="panel-header-copy">
                     <h2>Confidence</h2>
-                    <p class="section-lead">Confidence summary for the first band on the list: {{ primary_band.band_label }}.</p>
+                    <p class="section-lead">Confidence summary for {{ primary_band.band_label }}.</p>
                 </div>
             </div>
             <div class="band-condition-confidence-panel">
