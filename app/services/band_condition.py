@@ -588,14 +588,16 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
 
     baseline_rows = fetch_all(
         """
-        SELECT station_key, sample_count, heard_ratio, ema_heard_ratio
+        SELECT station_key, hour_of_day, sample_count, heard_ratio, ema_heard_ratio
         FROM band_condition_audibility_baseline
         WHERE band = ?
-          AND hour_of_day = ?
         """,
-        (normalized_band, baseline_hour),
+        (normalized_band,),
     )
-    baseline_map = {str(row["station_key"]): dict(row) for row in baseline_rows}
+    baseline_by_station_hour = {(str(row["station_key"]), int(row["hour_of_day"])): dict(row) for row in baseline_rows}
+    baseline_rows_by_station: dict[str, list[dict[str, Any]]] = {}
+    for row in baseline_rows:
+        baseline_rows_by_station.setdefault(str(row["station_key"]), []).append(dict(row))
     reference_keys = {str(row["station_key"]) for row in reference_rows}
 
     activity_rows = fetch_all(
@@ -609,25 +611,38 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         """,
         (normalized_band, window_start, current_bucket),
     )
-    activity_baseline = fetch_one(
+    activity_baseline_rows = fetch_all(
         """
-        SELECT sample_count, avg_mobile_frames, avg_total_frames
+        SELECT hour_of_day, sample_count, avg_mobile_frames, avg_total_frames
         FROM band_condition_activity_baseline
         WHERE band = ?
-          AND hour_of_day = ?
         """,
-        (normalized_band, baseline_hour),
+        (normalized_band,),
+    )
+    current_hour_activity_baseline = next(
+        (dict(row) for row in activity_baseline_rows if int(row["hour_of_day"]) == baseline_hour),
+        None,
+    )
+    use_current_hour_activity_baseline = bool(
+        current_hour_activity_baseline and int(current_hour_activity_baseline["sample_count"]) >= MIN_BASELINE_SAMPLES
+    )
+    activity_baseline = _select_activity_baseline(
+        activity_baseline_rows,
+        current_hour_activity_baseline=current_hour_activity_baseline,
     )
     fixed_station_baseline_rows = fetch_all(
         """
-        SELECT station_key, heard_count
+        SELECT station_key, hour_of_day, heard_count
         FROM band_condition_fixed_station_baseline
         WHERE band = ?
-          AND hour_of_day = ?
         """,
-        (normalized_band, baseline_hour),
+        (normalized_band,),
     )
-    fixed_station_baseline_map = {str(row["station_key"]): int(row["heard_count"]) for row in fixed_station_baseline_rows}
+    fixed_station_baseline_map = _select_fixed_station_baseline_map(
+        fixed_station_baseline_rows,
+        baseline_hour=baseline_hour,
+        use_current_hour=use_current_hour_activity_baseline,
+    )
     current_fixed_station_rows = fetch_all(
         """
         SELECT station_key, COUNT(*) AS bucket_hits
@@ -651,7 +666,12 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
 
     for reference in reference_rows:
         station_key = reference["station_key"]
-        baseline = baseline_map.get(station_key)
+        baseline = _select_reference_baseline(
+            baseline_by_station_hour=baseline_by_station_hour,
+            baseline_rows_by_station=baseline_rows_by_station,
+            station_key=station_key,
+            baseline_hour=baseline_hour,
+        )
         samples = int(baseline["sample_count"]) if baseline else 0
         if samples < MIN_BASELINE_SAMPLES:
             per_reference.append(
@@ -925,6 +945,74 @@ def _build_dx_station_details(
         )
     details.sort(key=lambda item: (-float(item["rarity_score"]), -int(item["bucket_hits"]), str(item["station_key"])))
     return details[:8]
+
+
+def _select_reference_baseline(
+    *,
+    baseline_by_station_hour: dict[tuple[str, int], dict[str, Any]],
+    baseline_rows_by_station: dict[str, list[dict[str, Any]]],
+    station_key: str,
+    baseline_hour: int,
+) -> dict[str, Any] | None:
+    current_hour_row = baseline_by_station_hour.get((station_key, baseline_hour))
+    if current_hour_row and int(current_hour_row["sample_count"]) >= MIN_BASELINE_SAMPLES:
+        return current_hour_row
+    rows = baseline_rows_by_station.get(station_key, [])
+    if not rows:
+        return current_hour_row
+    total_samples = sum(int(row["sample_count"]) for row in rows)
+    if total_samples <= 0:
+        return current_hour_row
+    heard_ratio = sum(float(row["heard_ratio"]) * int(row["sample_count"]) for row in rows) / float(total_samples)
+    ema_candidates = [row for row in rows if row.get("ema_heard_ratio") is not None]
+    ema_ratio = None
+    if ema_candidates:
+        ema_weight = sum(int(row["sample_count"]) for row in ema_candidates)
+        if ema_weight > 0:
+            ema_ratio = sum(float(row["ema_heard_ratio"]) * int(row["sample_count"]) for row in ema_candidates) / float(ema_weight)
+    return {
+        "sample_count": total_samples,
+        "heard_ratio": heard_ratio,
+        "ema_heard_ratio": ema_ratio,
+    }
+
+
+def _select_activity_baseline(
+    rows: list[dict[str, Any]],
+    *,
+    current_hour_activity_baseline: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    current_hour_row = current_hour_activity_baseline
+    if current_hour_row and int(current_hour_row["sample_count"]) >= MIN_BASELINE_SAMPLES:
+        return current_hour_row
+    if not rows:
+        return current_hour_row
+    total_samples = sum(int(row["sample_count"]) for row in rows)
+    if total_samples <= 0:
+        return current_hour_row
+    return {
+        "sample_count": total_samples,
+        "avg_mobile_frames": sum(float(row["avg_mobile_frames"]) * int(row["sample_count"]) for row in rows) / float(total_samples),
+        "avg_total_frames": sum(float(row["avg_total_frames"]) * int(row["sample_count"]) for row in rows) / float(total_samples),
+    }
+
+
+def _select_fixed_station_baseline_map(
+    rows: list[dict[str, Any]],
+    *,
+    baseline_hour: int,
+    use_current_hour: bool,
+) -> dict[str, int]:
+    current_hour_rows = [dict(row) for row in rows if int(row["hour_of_day"]) == baseline_hour]
+    if use_current_hour and current_hour_rows:
+        station_map = {str(row["station_key"]): int(row["heard_count"]) for row in current_hour_rows}
+        if station_map:
+            return station_map
+    station_map: dict[str, int] = {}
+    for row in rows:
+        station_key = str(row["station_key"])
+        station_map[station_key] = station_map.get(station_key, 0) + int(row["heard_count"])
+    return station_map
 
 
 def _dx_station_score(baseline_ratio: float, heard_count: int) -> float:

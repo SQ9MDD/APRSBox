@@ -4,6 +4,8 @@ from app.services.band_condition import (
     _condition_score,
     _dx_station_score,
     _occupancy_score,
+    _select_activity_baseline,
+    _select_reference_baseline,
     build_station_key,
     format_band_label,
 )
@@ -48,6 +50,34 @@ class BandConditionHelpersTests(unittest.TestCase):
         crowded_no_dx = _condition_score(dx_opening_score=0.0, local_reference_score=-0.2, occupancy_score=0.5)
         self.assertGreater(dx_condition, 0.25)
         self.assertLess(crowded_no_dx, 0.0)
+
+    def test_reference_baseline_falls_back_to_all_hours_when_current_hour_is_sparse(self) -> None:
+        baseline = _select_reference_baseline(
+            baseline_by_station_hour={("SQ5AAG-2", 12): {"sample_count": 11, "heard_ratio": 0.5, "ema_heard_ratio": 0.45}},
+            baseline_rows_by_station={
+                "SQ5AAG-2": [
+                    {"hour_of_day": 12, "sample_count": 11, "heard_ratio": 0.5, "ema_heard_ratio": 0.45},
+                    {"hour_of_day": 13, "sample_count": 14, "heard_ratio": 0.6, "ema_heard_ratio": 0.55},
+                ]
+            },
+            station_key="SQ5AAG-2",
+            baseline_hour=12,
+        )
+        assert baseline is not None
+        self.assertEqual(baseline["sample_count"], 25)
+        self.assertGreater(baseline["heard_ratio"], 0.5)
+
+    def test_activity_baseline_falls_back_to_all_hours_when_current_hour_is_sparse(self) -> None:
+        baseline = _select_activity_baseline(
+            [
+                {"hour_of_day": 12, "sample_count": 11, "avg_mobile_frames": 2.0, "avg_total_frames": 5.0},
+                {"hour_of_day": 13, "sample_count": 20, "avg_mobile_frames": 3.0, "avg_total_frames": 7.0},
+            ],
+            current_hour_activity_baseline={"hour_of_day": 12, "sample_count": 11, "avg_mobile_frames": 2.0, "avg_total_frames": 5.0},
+        )
+        assert baseline is not None
+        self.assertEqual(baseline["sample_count"], 31)
+        self.assertGreater(baseline["avg_total_frames"], 6.0)
 
 
 if __name__ == "__main__":
