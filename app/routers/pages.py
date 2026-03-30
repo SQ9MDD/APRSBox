@@ -133,6 +133,7 @@ def band_condition_snapshot(
     return JSONResponse(get_band_condition_snapshot())
 
 
+@router.post("/band-condition")
 @router.post("/band-condition/reference-stations")
 def band_condition_reference_station_save(
     request: Request,
