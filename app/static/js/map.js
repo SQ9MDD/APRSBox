@@ -23,9 +23,16 @@
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
     const stationLayer = window.L.layerGroup();
-    const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
     const mapViewStorageKey = "aprsbox-map-view";
     let refreshTimer = null;
+
+    function currentThemeName() {
+        return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    }
+
+    function maskOpacityStorageKey() {
+        return `aprsbox-map-mask-opacity-${currentThemeName()}`;
+    }
 
     function resolveInitialView() {
         try {
@@ -71,7 +78,7 @@
     }
 
     function resolveDefaultMaskOpacity() {
-        const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey) || "", 10);
+        const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey()) || "", 10);
         if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
             return storedOpacity;
         }
@@ -88,7 +95,7 @@
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);
         }
-        window.localStorage.setItem(maskOpacityStorageKey, String(normalizedOpacity));
+        window.localStorage.setItem(maskOpacityStorageKey(), String(normalizedOpacity));
     }
 
     function escapeHtml(value) {
@@ -171,6 +178,16 @@
             applyMaskOpacity(Number.parseInt(maskOpacitySelect.value || "", 10));
         });
     }
+
+    const themeObserver = new window.MutationObserver(function (mutations) {
+        for (const mutation of mutations) {
+            if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
+                applyMaskOpacity(resolveDefaultMaskOpacity());
+                break;
+            }
+        }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     window.addEventListener("resize", function () {
         map.invalidateSize();
