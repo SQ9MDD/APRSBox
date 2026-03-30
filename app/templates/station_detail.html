@@ -116,18 +116,12 @@
                 <colgroup>
                     <col style="width: 7rem">
                     <col style="width: 5.5rem">
-                    <col style="width: 5.5rem">
-                    <col style="width: 8rem">
-                    <col style="width: 12rem">
                     <col style="width: 32rem">
                 </colgroup>
                 <thead>
                     <tr>
                         <th>Timestamp</th>
-                        <th>Source</th>
                         <th>Destination</th>
-                        <th>Path</th>
-                        <th>Decoded summary</th>
                         <th>Raw packet</th>
                     </tr>
                 </thead>
@@ -140,10 +134,7 @@
                                 {% if packet.timestamp_relative %}<span class="muted">{{ packet.timestamp_relative }}</span>{% endif %}
                             </div>
                         </td>
-                        <td>{{ packet.source }}</td>
                         <td>{{ packet.destination }}</td>
-                        <td>{{ packet.path or "-" }}</td>
-                        <td>{{ packet.decoded_summary or "-" }}</td>
                         <td><code>{{ packet.raw_packet }}</code></td>
                     </tr>
                     {% endfor %}
