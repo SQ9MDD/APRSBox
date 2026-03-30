@@ -152,7 +152,12 @@ def get_reference_station(record_id: int) -> dict[str, Any] | None:
         """,
         (record_id,),
     )
-    return dict(row) if row else None
+    if not row:
+        return None
+    item = dict(row)
+    item["station_key"] = build_station_key(item["callsign"], item["ssid"])
+    item["band_label"] = format_band_label(item["band"])
+    return item
 
 
 def save_reference_station(payload: dict[str, Any], record_id: int | None = None) -> tuple[bool, str | None]:

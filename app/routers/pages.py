@@ -29,10 +29,12 @@ from app.services.content import (
     worker_statuses,
 )
 from app.services.band_condition import (
+    build_station_key,
     delete_reference_station,
     get_band_condition_page_data,
     get_band_condition_snapshot,
     save_reference_station,
+    split_station_key,
 )
 from app.services.map_service import get_map_page_config, get_map_station_payload, get_station_detail_map_config
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
@@ -137,13 +139,18 @@ def band_condition_reference_station_save(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     record_id: int | None = Form(None),
     band: str = Form(...),
-    callsign: str = Form(...),
-    ssid: str = Form(""),
+    station_key: str = Form(""),
     station_type: str = Form(...),
     enabled: str | None = Form(None),
     weight: str = Form("1.0"),
 ) -> object:
     templates = request.app.state.templates
+    callsign, ssid = split_station_key(station_key)
+    if not callsign and record_id is not None:
+        page_data = get_band_condition_page_data(edit_reference_id=record_id)
+        edit_reference = page_data.get("edit_reference") or {}
+        callsign = str(edit_reference.get("callsign") or "")
+        ssid = str(edit_reference.get("ssid") or "")
     success, error = save_reference_station(
         {
             "band": band,
@@ -162,6 +169,7 @@ def band_condition_reference_station_save(
         current_user=current_user,
         active_nav="band-condition",
         flash=None if success else error,
+        selected_station_key=build_station_key(callsign, ssid),
         **page_data,
     )
     return templates.TemplateResponse("band_condition.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)

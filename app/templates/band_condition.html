@@ -188,12 +188,8 @@
                     </select>
                 </label>
                 <label>
-                    <span>Callsign</span>
-                    <select name="callsign" id="reference-callsign" required></select>
-                </label>
-                <label>
-                    <span>SSID</span>
-                    <select name="ssid" id="reference-ssid"></select>
+                    <span>Station</span>
+                    <select name="station_key" id="reference-station-key" required></select>
                 </label>
                 <label>
                     <span>Station type</span>
@@ -228,11 +224,9 @@
 <script>
 (() => {
     const referenceCandidates = {{ reference_station_candidates|tojson }};
-    const selectedCallsign = {{ (edit_reference.callsign if edit_reference else '')|tojson }};
-    const selectedSsid = {{ (edit_reference.ssid if edit_reference else '')|tojson }};
+    const selectedStationKey = {{ (selected_station_key if selected_station_key is defined else (edit_reference.station_key if edit_reference else ''))|tojson }};
     const bandSelect = document.getElementById("reference-band");
-    const callsignSelect = document.getElementById("reference-callsign");
-    const ssidSelect = document.getElementById("reference-ssid");
+    const stationKeySelect = document.getElementById("reference-station-key");
     const rows = document.querySelectorAll(".clickable-row");
     for (const row of rows) {
         row.addEventListener("click", () => {
@@ -243,9 +237,8 @@
         });
     }
 
-    if (bandSelect && callsignSelect && ssidSelect) {
-        let initialCallsign = selectedCallsign || "";
-        let initialSsid = selectedSsid || "";
+    if (bandSelect && stationKeySelect) {
+        let initialStationKey = selectedStationKey || "";
         const fixedCandidatesForBand = (band) => referenceCandidates.filter((item) => item.band === band);
 
         const fillSelect = (select, values, preferredValue, emptyLabel) => {
@@ -258,28 +251,15 @@
 
         const syncCandidateSelects = () => {
             const candidates = fixedCandidatesForBand(bandSelect.value);
-            const callsigns = [...new Set(candidates.map((item) => item.callsign))].map((item) => ({ value: item, label: item }));
-            fillSelect(callsignSelect, callsigns, initialCallsign || callsignSelect.value, "No fixed stations heard");
-
-            const ssids = candidates
-                .filter((item) => item.callsign === callsignSelect.value)
-                .map((item) => item.ssid);
-            const uniqueSsids = [...new Set(ssids)];
-            const ssidOptions = uniqueSsids.map((item) => ({
-                value: item,
-                label: item ? item : "(no SSID)",
+            const stationOptions = candidates.map((item) => ({
+                value: item.station_key,
+                label: item.station_key,
             }));
-            fillSelect(ssidSelect, ssidOptions, initialSsid || ssidSelect.value, "(no SSID)");
-            initialCallsign = "";
-            initialSsid = "";
+            fillSelect(stationKeySelect, stationOptions, initialStationKey || stationKeySelect.value, "No fixed stations heard");
+            initialStationKey = "";
         };
 
-        bandSelect.addEventListener("change", () => {
-            callsignSelect.value = "";
-            ssidSelect.value = "";
-            syncCandidateSelects();
-        });
-        callsignSelect.addEventListener("change", syncCandidateSelects);
+        bandSelect.addEventListener("change", syncCandidateSelects);
         syncCandidateSelects();
     }
 })();
