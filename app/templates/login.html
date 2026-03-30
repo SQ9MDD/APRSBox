@@ -10,7 +10,7 @@
             document.documentElement.setAttribute("data-theme", storedTheme || "dark");
         })();
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}">
 </head>
 <body class="login-shell">
     <main class="login-card">

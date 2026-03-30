@@ -10,7 +10,7 @@
             document.documentElement.setAttribute("data-theme", storedTheme || "dark");
         })();
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="app-shell">
@@ -27,7 +27,6 @@
         </div>
         <div class="sidebar-user-panel">
             <div class="sidebar-user-meta">
-                <span class="sidebar-user-name">{{ current_user.username }}</span>
                 <span class="role-badge">{{ current_user.role }}</span>
             </div>
             <div class="sidebar-user-actions">
