@@ -170,6 +170,10 @@
         });
     }
 
+    window.addEventListener("resize", function () {
+        map.invalidateSize();
+    });
+
     function tooltipHtml(station) {
         const lines = [];
         const detailHref = station.detail_href || "";

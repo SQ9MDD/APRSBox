@@ -71,7 +71,7 @@
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
                             <td>
-                                <form method="post" action="/settings/{{ section.slug }}/{{ row.id }}/delete" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this record?');">
+                                <form method="post" action="/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this record?');">
                                     <button type="submit" class="button button-secondary button-danger">Delete</button>
                                 </form>
                             </td>
@@ -101,13 +101,15 @@
                 <input type="hidden" name="record_id" value="{{ edit_row.id }}">
                 {% endif %}
                 {% for field in section.fields %}
-                <label class="{% if field.type == 'textarea' %}full{% endif %}">
-                    <span>{{ field.label }}</span>
+                <label class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}">
                     {% if field.type == 'textarea' %}
+                    <span>{{ field.label }}</span>
                     <textarea name="{{ field.name }}" {% if field.required %}required{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if edit_row and edit_row[field.name] %}checked{% endif %}>
+                    <span>{{ field.label }}</span>
                     {% elif field.type == 'select' %}
+                    <span>{{ field.label }}</span>
                     <select name="{{ field.name }}" {% if field.required %}required{% endif %}>
                         {% for option in field.options %}
                         <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name] == option.value) or (not edit_row and loop.first) %}selected{% endif %}>
@@ -116,6 +118,7 @@
                         {% endfor %}
                     </select>
                     {% else %}
+                    <span>{{ field.label }}</span>
                     <input type="{{ field.type }}" name="{{ field.name }}" value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}" {% if field.required %}required{% endif %}>
                     {% endif %}
                 </label>

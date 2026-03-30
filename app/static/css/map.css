@@ -44,7 +44,8 @@
 
 .map-stage {
     position: relative;
-    min-height: calc(68vh + 100px);
+    height: clamp(24rem, calc(100vh - 12.5rem), 72rem);
+    min-height: 24rem;
     width: 100%;
     border-radius: var(--radius);
     overflow: hidden;
@@ -175,6 +176,6 @@
 
 @media (max-width: 900px) {
     .map-stage {
-        min-height: calc(56vh + 100px);
+        height: clamp(22rem, calc(100vh - 10rem), 60rem);
     }
 }

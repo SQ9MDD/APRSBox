@@ -7,29 +7,35 @@
             <div class="panel-header-copy">
                 <h2>Heard Stations</h2>
             </div>
-            <label class="stations-refresh-control">
-                <span class="muted">Refresh rate</span>
-                <select id="stations-refresh-rate">
-                    <option value="5000">5s</option>
-                    <option value="10000">10s</option>
-                    <option value="30000">30s</option>
-                    <option value="60000">1min</option>
-                    <option value="300000">5min</option>
-                </select>
-            </label>
-        </div>
-        <div class="stations-summary" id="stations-summary">
-            <div class="metric-card">
-                <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
-                <span class="metric-label">Stacje stałe</span>
-            </div>
-            <div class="metric-card">
-                <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
-                <span class="metric-label">Stacje mobilne</span>
-            </div>
-            <div class="metric-card">
-                <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
-                <span class="metric-label">Obiekty</span>
+            <div class="stations-summary-toolbar">
+                <div class="stations-summary" id="stations-summary">
+                    <div class="metric-card">
+                        <span class="metric-value" id="summary-total">{{ station_summary.total }}</span>
+                        <span class="metric-label">Wszystkie stacje</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
+                        <span class="metric-label">Stacje mobilne</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
+                        <span class="metric-label">Stacje stałe</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
+                        <span class="metric-label">Obiekty</span>
+                    </div>
+                </div>
+                <label class="stations-refresh-control">
+                    <span class="muted">Refresh rate</span>
+                    <select id="stations-refresh-rate">
+                        <option value="5000">5s</option>
+                        <option value="10000">10s</option>
+                        <option value="30000">30s</option>
+                        <option value="60000">1min</option>
+                        <option value="300000">5min</option>
+                    </select>
+                </label>
             </div>
         </div>
     </div>
@@ -119,6 +125,7 @@
     const tbody = document.getElementById("stations-table-body");
     if (!tbody) return;
 
+    const summaryTotal = document.getElementById("summary-total");
     const summaryStationary = document.getElementById("summary-stationary");
     const summaryMobile = document.getElementById("summary-mobile");
     const summaryObjects = document.getElementById("summary-objects");
@@ -191,6 +198,7 @@
             if (!response.ok) return;
             const payload = await response.json();
             renderRows(payload.stations || []);
+            if (summaryTotal) summaryTotal.textContent = String(payload.summary?.total ?? 0);
             if (summaryStationary) summaryStationary.textContent = String(payload.summary?.stationary ?? 0);
             if (summaryMobile) summaryMobile.textContent = String(payload.summary?.mobile ?? 0);
             if (summaryObjects) summaryObjects.textContent = String(payload.summary?.objects ?? 0);

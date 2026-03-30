@@ -241,13 +241,13 @@ verify_python_runtime() {
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m gunicorn --check-config --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
+        "$VENV_DIR/bin/python" -m gunicorn --check-config --reload --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
 
     PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m gunicorn --check-config --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
+        "$VENV_DIR/bin/python" -m gunicorn --check-config --reload --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
 }
 
 activate_staged_installation() {

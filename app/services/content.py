@@ -632,8 +632,9 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
 
 
 def station_summary(stations: list[dict[str, Any]]) -> dict[str, int]:
-    summary = {"stationary": 0, "mobile": 0, "objects": 0}
+    summary = {"total": 0, "stationary": 0, "mobile": 0, "objects": 0}
     for station in stations:
+        summary["total"] += 1
         entity_class = station.get("entity_class")
         if entity_class == "object":
             summary["objects"] += 1

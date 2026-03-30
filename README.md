@@ -229,7 +229,7 @@ cd /opt/aprsbox/app
 /opt/aprsbox/venv/bin/pip install -r requirements.txt
 /opt/aprsbox/venv/bin/python -m app.cli init-db
 /opt/aprsbox/venv/bin/python -m app.cli admin-exists
-/opt/aprsbox/venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
+/opt/aprsbox/venv/bin/gunicorn --reload --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
 ```
 
 If you need to reset the admin password on an installed host:

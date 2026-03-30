@@ -704,9 +704,11 @@ select:focus-visible,
 .tnc-badge {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.38rem;
     max-width: 100%;
-    padding: 0.24rem 0.48rem;
+    min-height: var(--control-height);
+    padding: 0.42rem 0.7rem;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--panel-soft);
@@ -792,14 +794,21 @@ select:focus-visible,
 
 .stations-summary {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(9rem, 1fr));
     gap: var(--space-3);
+    flex: 1;
 }
 
 .stations-summary-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+}
+
+.stations-summary-toolbar {
+    display: flex;
+    align-items: stretch;
     gap: var(--space-3);
 }
 
@@ -811,13 +820,22 @@ select:focus-visible,
 .stations-refresh-control {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 0.2rem;
+    justify-content: center;
+    align-items: stretch;
+    gap: 0.32rem;
     line-height: 1.1;
+    min-width: 6rem;
+    padding: 0.56rem 0.62rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+    box-shadow: var(--shadow-soft);
 }
 
 .stations-refresh-control select {
     min-width: 4.75rem;
+    min-height: auto;
+    padding: 0.42rem 0.56rem;
 }
 
 .stations-summary-panel .metric-card {
@@ -1053,8 +1071,8 @@ select:focus-visible,
 
 .traffic-log-row {
     display: grid;
-    grid-template-columns: 11rem max-content minmax(0, 1fr);
-    column-gap: 0.38rem;
+    grid-template-columns: 11rem fit-content(14rem) minmax(0, 1fr);
+    column-gap: 0;
     row-gap: 0.15rem;
     align-items: start;
     padding: 0.45rem 0.6rem;
@@ -1076,6 +1094,7 @@ select:focus-visible,
 
 .traffic-log-source {
     white-space: nowrap;
+    padding-inline: 0.55rem;
 }
 
 .traffic-log-line {
@@ -1125,23 +1144,33 @@ code {
     padding-top: var(--space-1);
 }
 
+.table-action-form {
+    display: flex;
+}
+
+.table-action-form .button {
+    width: 100%;
+}
+
 .checkbox-row {
     flex-direction: row;
     align-items: center;
-    gap: 0.6rem;
-    min-height: var(--control-height);
-    padding: 0.58rem 0.72rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--panel-alt);
-    box-shadow: var(--shadow-soft);
+    justify-content: flex-start;
+    gap: 0.5rem;
+    min-height: auto;
+    padding: 0.3rem 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .checkbox-row input {
     width: auto;
-    min-height: 1rem;
+    min-height: auto;
     margin: 0;
     box-shadow: none;
+    accent-color: var(--accent);
+    transform: scale(0.92);
 }
 
 .checkbox-row span {
@@ -1182,6 +1211,11 @@ code {
     .traffic-toolbar {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .stations-summary-toolbar {
+        flex-direction: column;
+        width: 100%;
     }
 
     .login-topbar {

@@ -298,9 +298,9 @@ class TrafficMonitorService:
         for repeater, has_been_repeated, _reserved in addresses[2:]:
             via.append(f"{repeater}{'*' if has_been_repeated else ''}")
 
-        header = f"{source}>{destination}"
+        header = f"{source} > {destination}"
         if via:
-            header = f"{header},{','.join(via)}"
+            header = f"{header} , {','.join(via)}"
 
         info_text = info.decode("utf-8", errors="replace")
         return f"{header}:{info_text}"
