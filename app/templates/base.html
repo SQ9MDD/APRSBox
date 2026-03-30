@@ -55,13 +55,6 @@
 
     <div class="main-area">
         <main class="content">
-            {% if current_user %}
-            <section class="page-title-bar">
-                <div class="page-header-copy">
-                    <h1>{{ page_title }}</h1>
-                </div>
-            </section>
-            {% endif %}
             {% block content %}{% endblock %}
         </main>
     </div>

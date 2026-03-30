@@ -246,10 +246,6 @@ body {
     display: flex;
 }
 
-.page-title-bar {
-    padding-bottom: var(--space-1);
-}
-
 .page-header-copy {
     display: grid;
     gap: var(--space-1);
@@ -260,13 +256,13 @@ body {
     font-size: 0.84rem;
 }
 
-.page-title-bar h1,
+.page-header-copy h1,
 .panel h2,
 .login-card h1 {
     margin: 0;
 }
 
-.page-title-bar h1,
+.page-header-copy h1,
 .login-card h1 {
     font-size: 1.22rem;
     font-weight: 600;
