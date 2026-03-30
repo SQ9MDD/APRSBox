@@ -41,9 +41,10 @@
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(primary_band.condition_score) }}</span>
-                        <span class="metric-label">Condition score</span>
+                        <span class="metric-label">Condition index</span>
                     </div>
                 </div>
+                <p class="muted small">Scale: <code>-1.00</code> weak, <code>0.00</code> typical for this band and hour, <code>+1.00</code> unusually good.</p>
                 <p class="section-lead">{{ primary_band.explanation }}</p>
             </div>
         </div>
@@ -188,14 +189,10 @@
     {% for item in bands %}
     <article class="panel band-condition-card">
         <div class="panel-body">
-            <div class="band-condition-card-header">
+            <div class="band-condition-card-heading">
                 <div>
                     <h2>{{ item.band_label }}</h2>
                     <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}" title="Ogólna ocena pasma wyliczona z połączenia lokalnej słyszalności referencji, zajętości kanału i pojawiania się rzadkich stałych stacji.">{{ item.label }}</span>
-                </div>
-                <div class="band-condition-confidence" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
-                    <span class="muted">Confidence</span>
-                    <strong>{{ "%.0f"|format(item.confidence_score * 100) }}%</strong>
                 </div>
             </div>
 
@@ -210,6 +207,17 @@
                     <strong>{{ "%.2f"|format(item.condition_score) }}</strong>
                 </div>
             </section>
+
+            <div class="band-condition-card-header">
+                <div class="band-condition-confidence" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
+                    <span class="muted">{{ item.band_label }} {{ item.label }}</span>
+                    <strong>Confidence {{ "%.0f"|format(item.confidence_score * 100) }}%</strong>
+                </div>
+                <div class="band-condition-score-explainer">
+                    <span class="muted">Condition index</span>
+                    <span>Scale <code>-1.00</code> to <code>+1.00</code>. <code>0.00</code> = typical, minus = worse than usual, plus = better than usual.</span>
+                </div>
+            </div>
 
             <div class="band-condition-pill-grid">
                 <div class="band-condition-pill band-condition-pill-{{ item.opening_tone }}" title="Wskaźnik openingu wyliczony z obecności stałych stacji, które historycznie są słyszane rzadko albo wcale o tej porze na tym paśmie.">
@@ -272,7 +280,7 @@
                 <div class="metrics-grid">
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(item.condition_score) }}</span>
-                        <span class="metric-label">Condition score</span>
+                        <span class="metric-label">Condition index</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
