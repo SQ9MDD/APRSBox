@@ -175,7 +175,7 @@
                 </div>
             </div>
             {% if current_user.role in ("admin", "operator") %}
-            <form method="post" class="form-grid" id="reference-station-form">
+            <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations" class="form-grid" id="reference-station-form">
                 {% if edit_reference %}
                 <input type="hidden" name="record_id" value="{{ edit_reference.id }}">
                 {% endif %}
