@@ -26,171 +26,6 @@
             {% endif %}
         </div>
     </div>
-
-    {% if primary_band %}
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Confidence</h2>
-                    <p class="section-lead">Confidence summary for {{ primary_band.band_label }}.</p>
-                </div>
-            </div>
-            <div class="band-condition-confidence-panel">
-                <div class="band-condition-confidence-score" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
-                    <span class="muted">{{ primary_band.band_label }}</span>
-                    <strong>{{ "%.0f"|format(primary_band.confidence_score * 100) }}%</strong>
-                    <span class="status-pill band-condition-status {% if primary_band.label == 'Insufficient data' %}status-unknown{% elif primary_band.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ primary_band.label }}</span>
-                </div>
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <span class="metric-value">{{ primary_band.active_reference_station_count }}/{{ primary_band.reference_station_count }}</span>
-                        <span class="metric-label">Active references</span>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-value">{{ "%.2f"|format(primary_band.condition_score) }}</span>
-                        <span class="metric-label">Condition index</span>
-                    </div>
-                </div>
-                <p class="muted small">Scale: <code>-1.00</code> weak, <code>0.00</code> typical for this band and hour, <code>+1.00</code> unusually good.</p>
-                <p class="section-lead">{{ primary_band.explanation }}</p>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Algorithm</h2>
-                    <p class="section-lead">Short explanation of what drives the estimate.</p>
-                </div>
-            </div>
-            <div class="stack-sm">
-                <div class="empty-state">
-                    <strong>Reference stations estimate the local baseline.</strong>
-                    <p class="section-lead">Configured fixed stations show whether local audibility is below, near, or above its long-term norm for this hour.</p>
-                </div>
-                <div class="empty-state">
-                    <strong>Traffic estimates occupancy, not opening by itself.</strong>
-                    <p class="section-lead">Total and mobile traffic are compared against their hour-of-day baseline to detect likely channel load or local congestion.</p>
-                </div>
-                <div class="empty-state">
-                    <strong>Rare fixed stations indicate opening.</strong>
-                    <p class="section-lead">If fixed stations that are usually absent begin to appear, they raise the opening score and can outweigh pure occupancy effects.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Reference Stations</h2>
-                    <p class="section-lead">Only fixed/reference stations should be configured here. Mobile stations do not belong in the baseline table.</p>
-                </div>
-            </div>
-            <div class="table-wrap">
-                <table class="data-table compact-table">
-                    <thead>
-                        <tr>
-                            <th>Band</th>
-                            <th>Station</th>
-                            <th>Type</th>
-                            <th>Weight</th>
-                            <th>Status</th>
-                            {% if current_user.role in ("admin", "operator") %}
-                            <th>Actions</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in references %}
-                        <tr {% if current_user.role in ("admin", "operator") %}class="clickable-row" data-href="?edit_reference={{ row.id }}"{% endif %}>
-                            <td>{{ row.band_label }}</td>
-                            <td><code>{{ row.station_key }}</code></td>
-                            <td>{{ row.station_type }}</td>
-                            <td>{{ "%.1f"|format(row.weight) }}</td>
-                            <td>{{ "Enabled" if row.enabled else "Disabled" }}</td>
-                            {% if current_user.role in ("admin", "operator") %}
-                            <td>
-                                <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this reference station?');">
-                                    <button
-                                        type="submit"
-                                        class="table-icon-button"
-                                        title="Delete reference station"
-                                        aria-label="Delete reference station {{ row.station_key }}"
-                                    >
-                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
-                                    </button>
-                                </form>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="{{ 6 if current_user.role in ('admin', 'operator') else 5 }}" class="muted">No reference stations configured yet.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>{% if edit_reference %}Edit Reference Station{% else %}Add Reference Station{% endif %}</h2>
-                </div>
-            </div>
-            {% if current_user.role in ("admin", "operator") %}
-            <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations" class="form-grid" id="reference-station-form">
-                {% if edit_reference %}
-                <input type="hidden" name="record_id" value="{{ edit_reference.id }}">
-                {% endif %}
-                <label>
-                    <span>Band</span>
-                    <select name="band" id="reference-band" required>
-                        {% for option in band_options %}
-                        <option value="{{ option.value }}" {% if (edit_reference and edit_reference.band == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ option.label }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label>
-                    <span>Station</span>
-                    <select name="station_key" id="reference-station-key" required></select>
-                </label>
-                <label>
-                    <span>Station type</span>
-                    <select name="station_type" required>
-                        {% for option in station_type_options %}
-                        <option value="{{ option.value }}" {% if (edit_reference and edit_reference.station_type == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ option.label }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label>
-                    <span>Weight</span>
-                    <input type="number" step="0.1" min="0.1" name="weight" value="{{ edit_reference.weight if edit_reference else '1.0' }}" required>
-                </label>
-                <label class="full checkbox-row">
-                    <input type="checkbox" name="enabled" value="1" {% if not edit_reference or edit_reference.enabled %}checked{% endif %}>
-                    <span>Enabled</span>
-                </label>
-                <div class="form-actions">
-                    <button type="submit" class="button">Save</button>
-                    {% if edit_reference %}
-                    <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Cancel</a>
-                    {% endif %}
-                </div>
-            </form>
-            {% else %}
-            <p class="muted">Your role is read-only for reference station management.</p>
-            {% endif %}
-        </div>
-    </div>
 </section>
 
 <section class="band-condition-grid">
@@ -392,6 +227,176 @@
         </div>
     </article>
     {% endfor %}
+</section>
+
+<section class="band-condition-layout">
+    {% if primary_band %}
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Confidence</h2>
+                    <p class="section-lead">Confidence summary for {{ primary_band.band_label }}.</p>
+                </div>
+            </div>
+            <div class="band-condition-confidence-panel">
+                <div class="band-condition-confidence-score" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
+                    <span class="muted">{{ primary_band.band_label }}</span>
+                    <strong>{{ "%.0f"|format(primary_band.confidence_score * 100) }}%</strong>
+                    <span class="status-pill band-condition-status {% if primary_band.label == 'Insufficient data' %}status-unknown{% elif primary_band.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ primary_band.label }}</span>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-value">{{ primary_band.active_reference_station_count }}/{{ primary_band.reference_station_count }}</span>
+                        <span class="metric-label">Active references</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">{{ "%.2f"|format(primary_band.condition_score) }}</span>
+                        <span class="metric-label">Condition index</span>
+                    </div>
+                </div>
+                <p class="muted small">Scale: <code>-1.00</code> weak, <code>0.00</code> typical for this band and hour, <code>+1.00</code> unusually good.</p>
+                <p class="section-lead">{{ primary_band.explanation }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Algorithm</h2>
+                    <p class="section-lead">Short explanation of what drives the estimate.</p>
+                </div>
+            </div>
+            <div class="stack-sm">
+                <div class="empty-state">
+                    <strong>Reference stations estimate the local baseline.</strong>
+                    <p class="section-lead">Configured fixed stations show whether local audibility is below, near, or above its long-term norm for this hour.</p>
+                </div>
+                <div class="empty-state">
+                    <strong>Traffic estimates occupancy, not opening by itself.</strong>
+                    <p class="section-lead">Total and mobile traffic are compared against their hour-of-day baseline to detect likely channel load or local congestion.</p>
+                </div>
+                <div class="empty-state">
+                    <strong>Rare fixed stations indicate opening.</strong>
+                    <p class="section-lead">If fixed stations that are usually absent begin to appear, they raise the opening score and can outweigh pure occupancy effects.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Reference Stations</h2>
+                    <p class="section-lead">Only fixed/reference stations should be configured here. Mobile stations do not belong in the baseline table.</p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>Band</th>
+                            <th>Station</th>
+                            <th>Type</th>
+                            <th>Weight</th>
+                            <th>Status</th>
+                            {% if current_user.role in ("admin", "operator") %}
+                            <th>Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in references %}
+                        <tr {% if current_user.role in ("admin", "operator") %}class="clickable-row" data-href="?edit_reference={{ row.id }}"{% endif %}>
+                            <td>{{ row.band_label }}</td>
+                            <td><code>{{ row.station_key }}</code></td>
+                            <td>{{ row.station_type }}</td>
+                            <td>{{ "%.1f"|format(row.weight) }}</td>
+                            <td>{{ "Enabled" if row.enabled else "Disabled" }}</td>
+                            {% if current_user.role in ("admin", "operator") %}
+                            <td>
+                                <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this reference station?');">
+                                    <button
+                                        type="submit"
+                                        class="table-icon-button"
+                                        title="Delete reference station"
+                                        aria-label="Delete reference station {{ row.station_key }}"
+                                    >
+                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                    </button>
+                                </form>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 6 if current_user.role in ('admin', 'operator') else 5 }}" class="muted">No reference stations configured yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>{% if edit_reference %}Edit Reference Station{% else %}Add Reference Station{% endif %}</h2>
+                </div>
+            </div>
+            {% if current_user.role in ("admin", "operator") %}
+            <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations" class="form-grid" id="reference-station-form">
+                {% if edit_reference %}
+                <input type="hidden" name="record_id" value="{{ edit_reference.id }}">
+                {% endif %}
+                <label>
+                    <span>Band</span>
+                    <select name="band" id="reference-band" required>
+                        {% for option in band_options %}
+                        <option value="{{ option.value }}" {% if (edit_reference and edit_reference.band == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    <span>Station</span>
+                    <select name="station_key" id="reference-station-key" required></select>
+                </label>
+                <label>
+                    <span>Station type</span>
+                    <select name="station_type" required>
+                        {% for option in station_type_options %}
+                        <option value="{{ option.value }}" {% if (edit_reference and edit_reference.station_type == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    <span>Weight</span>
+                    <input type="number" step="0.1" min="0.1" name="weight" value="{{ edit_reference.weight if edit_reference else '1.0' }}" required>
+                </label>
+                <label class="full checkbox-row">
+                    <input type="checkbox" name="enabled" value="1" {% if not edit_reference or edit_reference.enabled %}checked{% endif %}>
+                    <span>Enabled</span>
+                </label>
+                <div class="form-actions">
+                    <button type="submit" class="button">Save</button>
+                    {% if edit_reference %}
+                    <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+            {% else %}
+            <p class="muted">Your role is read-only for reference station management.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="band-condition-grid">
 </section>
 
 <script>
