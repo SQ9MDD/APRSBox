@@ -41,7 +41,8 @@
             const button = document.getElementById("theme-toggle");
             if (!button) return;
             const syncLabel = () => {
-                button.textContent = root.getAttribute("data-theme") === "light" ? "Day Mode" : "Night Mode";
+                const isLight = root.getAttribute("data-theme") === "light";
+                button.textContent = isLight ? "Switch to Night Mode" : "Switch to Day Mode";
             };
             syncLabel();
             button.addEventListener("click", () => {

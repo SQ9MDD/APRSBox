@@ -292,7 +292,8 @@ body {
     transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
-.sidebar-action-button img {
+.sidebar-action-button img,
+.table-icon-button img {
     width: 0.92rem;
     height: 0.92rem;
     filter: var(--icon-filter);
@@ -484,6 +485,7 @@ body {
 .section-lead {
     margin: 0;
     max-width: 72ch;
+    overflow-wrap: anywhere;
 }
 
 .form-grid {
@@ -510,7 +512,7 @@ body {
 }
 
 .password-field-actions .button {
-    min-height: 2.2rem;
+    min-height: var(--control-height);
 }
 
 .form-grid .full,
@@ -925,6 +927,7 @@ select:focus-visible,
     grid-template-columns: repeat(4, minmax(9rem, 1fr));
     gap: var(--space-3);
     flex: 1;
+    min-width: 0;
 }
 
 .stations-summary-header {
@@ -938,6 +941,8 @@ select:focus-visible,
     display: flex;
     align-items: stretch;
     gap: var(--space-3);
+    min-width: 0;
+    flex-wrap: wrap;
 }
 
 .stations-summary-header h2 {
@@ -958,6 +963,7 @@ select:focus-visible,
     border-radius: var(--radius-sm);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
     box-shadow: var(--shadow-soft);
+    flex: 0 0 auto;
 }
 
 .stations-refresh-control select {
@@ -1042,7 +1048,7 @@ select:focus-visible,
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-3);
     padding: 1rem 1.05rem;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-soft);
 }
@@ -1285,6 +1291,7 @@ select:focus-visible,
 .station-detail-fields dd {
     margin: 0;
     word-break: break-word;
+    min-width: 0;
 }
 
 .station-packets-table {
@@ -1342,7 +1349,7 @@ select:focus-visible,
 .station-detail-map-canvas {
     --map-pane-opacity: 0.8;
     min-height: 22rem;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     border: 1px solid var(--border);
     background: #000;
@@ -1365,7 +1372,7 @@ select:focus-visible,
 
 .station-map-placeholder {
     min-height: 22rem;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
     border: 1px dashed var(--border);
     background: var(--panel-alt);
     display: grid;
@@ -1395,6 +1402,13 @@ select:focus-visible,
     background: var(--panel-soft);
     color: inherit;
     text-decoration: none;
+    transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.station-ssid-chip:hover {
+    background: var(--panel-emphasis);
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
 }
 
 .station-ssid-chip.current {
@@ -1532,20 +1546,15 @@ code {
     height: var(--icon-control-size);
     min-height: var(--icon-control-size);
     padding: 0;
-    border: 1px solid rgba(201, 122, 122, 0.35);
-    border-radius: var(--radius-sm);
-    background: rgba(201, 122, 122, 0.08);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
-}
-
-.table-icon-button img {
-    width: 0.9rem;
-    height: 0.9rem;
-    filter: var(--icon-filter);
+    box-shadow: var(--shadow-soft);
+    transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+    border: 1px solid rgba(201, 122, 122, 0.35);
+    background: rgba(201, 122, 122, 0.08);
 }
 
 .table-icon-button:hover:not(:disabled) {
@@ -1628,6 +1637,10 @@ code {
 
     .stations-summary-toolbar {
         flex-direction: column;
+        width: 100%;
+    }
+
+    .stations-refresh-control {
         width: 100%;
     }
 

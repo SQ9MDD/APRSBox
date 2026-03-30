@@ -1,11 +1,8 @@
-.map-panel {
-    padding: 0.9rem;
-}
-
 .map-page {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    min-width: 0;
 }
 
 .map-toolbar-actions {
@@ -13,6 +10,7 @@
     align-items: center;
     gap: 0.55rem;
     flex-wrap: wrap;
+    min-width: 0;
 }
 
 .map-toolbar {
@@ -21,6 +19,7 @@
     justify-content: space-between;
     gap: 0.85rem;
     flex-wrap: wrap;
+    min-width: 0;
     padding: 0.84rem 0.96rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -33,6 +32,7 @@
     align-items: center;
     gap: 1rem;
     flex-wrap: wrap;
+    min-width: 0;
     color: var(--muted);
     font-size: 0.82rem;
 }
@@ -82,6 +82,7 @@
     color: var(--muted);
     font-size: 0.78rem;
     font-weight: 600;
+    flex-wrap: wrap;
 }
 
 .map-mask-opacity-select {
@@ -177,5 +178,11 @@
 @media (max-width: 900px) {
     .map-stage {
         height: clamp(22rem, calc(100vh - 10rem), 60rem);
+    }
+
+    .map-toolbar,
+    .map-toolbar-actions,
+    .map-info-strip {
+        align-items: flex-start;
     }
 }
