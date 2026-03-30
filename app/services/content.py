@@ -223,6 +223,25 @@ def dashboard_summary() -> dict[str, Any]:
     return metrics
 
 
+def dashboard_traffic_summary() -> dict[str, Any]:
+    total_frames_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames")
+    decoded_frames_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames WHERE format = 'TNC2'")
+    unique_sources_row = fetch_one(
+        """
+        SELECT COUNT(DISTINCT source) AS total
+        FROM traffic_frames
+        WHERE COALESCE(source, '') <> ''
+        """
+    )
+
+    return {
+        "received_frames": total_frames_row["total"] if total_frames_row else 0,
+        "decoded_aprs": decoded_frames_row["total"] if decoded_frames_row else 0,
+        "unique_sources": unique_sources_row["total"] if unique_sources_row else 0,
+        "heard_stations": len(get_heard_station_snapshots()),
+    }
+
+
 def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
     snapshots = get_heard_station_snapshots(limit=limit)
     stations: list[dict[str, Any]] = []

@@ -29,7 +29,13 @@
             <div class="sidebar-user-meta">
                 <span class="role-badge">{{ current_user.username }}</span>
                 <span class="sidebar-role-icon" title="{{ current_user.role }}" aria-label="{{ current_user.role }}">
+                    {% if current_user.role == "admin" %}
+                    <img src="{{ request.scope.root_path }}/static/icons/shield-crown-outline.svg" alt="">
+                    {% elif current_user.role == "operator" %}
                     <img src="{{ request.scope.root_path }}/static/icons/shield-account-outline.svg" alt="">
+                    {% else %}
+                    <img src="{{ request.scope.root_path }}/static/icons/eye-circle-outline.svg" alt="">
+                    {% endif %}
                 </span>
             </div>
             <div class="sidebar-user-actions">

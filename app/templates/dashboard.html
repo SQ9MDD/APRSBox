@@ -23,16 +23,17 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>System Notes</h2>
+                    <h2>Received Frames</h2>
                 </div>
             </div>
-            <ul class="simple-list">
-                <li>Native install target: <code>/opt/aprsbox</code></li>
-                <li>Primary init system target: OpenRC</li>
-                <li>Database backend: SQLite</li>
-                <li>UI mode: server-rendered Jinja2 templates</li>
-                <li>Target platforms: Alpine first, Raspberry Pi OS supported</li>
-            </ul>
+            <div class="metrics-grid">
+                {% for key, value in traffic_summary.items() %}
+                <div class="metric-card">
+                    <span class="metric-value">{{ value }}</span>
+                    <span class="metric-label">{{ key.replace('_', ' ').title() }}</span>
+                </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </section>

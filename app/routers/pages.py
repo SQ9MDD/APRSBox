@@ -12,6 +12,7 @@ from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
     delete_section_row,
     dashboard_summary,
+    dashboard_traffic_summary,
     get_recent_station_packets,
     heard_stations,
     get_section_row,
@@ -91,6 +92,7 @@ def dashboard(
         current_user=current_user,
         active_nav="dashboard",
         summary=dashboard_summary(),
+        traffic_summary=dashboard_traffic_summary(),
         worker_statuses=worker_statuses(),
         recent_logs=recent_event_logs(limit=8),
     )
