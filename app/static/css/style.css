@@ -711,14 +711,14 @@ select:focus-visible,
 
 .users-table th:nth-child(1),
 .users-table td:nth-child(1) {
-    width: 11rem;
-    min-width: 11rem;
+    width: 9.9rem;
+    min-width: 9.9rem;
 }
 
 .users-table th:nth-child(2),
 .users-table td:nth-child(2) {
-    width: 7rem;
-    min-width: 7rem;
+    width: 4.9rem;
+    min-width: 4.9rem;
 }
 
 .users-table th:nth-child(3),
