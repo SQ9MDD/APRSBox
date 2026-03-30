@@ -18,6 +18,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
         supports_delete=True,
         fields=[
             {"name": "name", "label": "Name", "type": "text", "required": True},
+            {"name": "band", "label": "Band", "type": "text", "required": False},
             {
                 "name": "modem_type",
                 "label": "Type",

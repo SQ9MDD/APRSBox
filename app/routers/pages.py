@@ -28,6 +28,12 @@ from app.services.content import (
     update_station_settings,
     worker_statuses,
 )
+from app.services.band_condition import (
+    delete_reference_station,
+    get_band_condition_page_data,
+    get_band_condition_snapshot,
+    save_reference_station,
+)
 from app.services.map_service import get_map_page_config, get_map_station_payload, get_station_detail_map_config
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
 from app.template_helpers import build_template_context
@@ -97,6 +103,78 @@ def dashboard(
         recent_logs=recent_event_logs(limit=8),
     )
     return templates.TemplateResponse("dashboard.html", context)
+
+
+@router.get("/band-condition")
+def band_condition_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+    edit_reference: int | None = None,
+) -> object:
+    templates = request.app.state.templates
+    page_data = get_band_condition_page_data(edit_reference_id=edit_reference)
+    context = build_template_context(
+        request,
+        page_title="Band Condition",
+        current_user=current_user,
+        active_nav="band-condition",
+        flash=None,
+        **page_data,
+    )
+    return templates.TemplateResponse("band_condition.html", context)
+
+
+@router.get("/api/band-condition")
+def band_condition_snapshot(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_band_condition_snapshot())
+
+
+@router.post("/band-condition/reference-stations")
+def band_condition_reference_station_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    record_id: int | None = Form(None),
+    band: str = Form(...),
+    callsign: str = Form(...),
+    ssid: str = Form(""),
+    station_type: str = Form(...),
+    enabled: str | None = Form(None),
+    weight: str = Form("1.0"),
+) -> object:
+    templates = request.app.state.templates
+    success, error = save_reference_station(
+        {
+            "band": band,
+            "callsign": callsign,
+            "ssid": ssid,
+            "station_type": station_type,
+            "enabled": enabled,
+            "weight": weight,
+        },
+        record_id=record_id,
+    )
+    page_data = get_band_condition_page_data(edit_reference_id=record_id if error else None)
+    context = build_template_context(
+        request,
+        page_title="Band Condition",
+        current_user=current_user,
+        active_nav="band-condition",
+        flash=None if success else error,
+        **page_data,
+    )
+    return templates.TemplateResponse("band_condition.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/band-condition/reference-stations/{record_id}/delete")
+def band_condition_reference_station_delete(
+    record_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    delete_reference_station(record_id)
+    return RedirectResponse(url=_path(request, "/band-condition"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/stations")
@@ -223,6 +301,7 @@ def modems_create(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     record_id: int | None = Form(None),
     name: str = Form(...),
+    band: str = Form(""),
     modem_type: str = Form(...),
     device_path: str = Form(""),
     baud_rate: int | None = Form(None),
@@ -236,6 +315,7 @@ def modems_create(
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     payload = {
         "name": name.strip(),
+        "band": band.strip(),
         "modem_type": normalized_modem_type,
         "device_path": device_path.strip(),
         "baud_rate": baud_rate,

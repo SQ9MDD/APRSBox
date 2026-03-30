@@ -500,14 +500,48 @@ def _new_station_snapshot(
     }
 
 
-_TNC2_RE = re.compile(r"^(?P<source>[^>]+)>(?P<destination>[^,:]+)(?:,(?P<path>[^:]+))?:(?P<info>.*)$")
+_TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 
 
 def _parse_tnc2_line(line: str) -> dict[str, str] | None:
     match = _TNC2_RE.match(line.strip())
     if not match:
         return None
-    return match.groupdict(default="")
+    parsed = match.groupdict(default="")
+    return {key: value.strip() for key, value in parsed.items()}
+
+
+def parse_tnc2_frame(line: str) -> dict[str, Any] | None:
+    parsed = _parse_tnc2_line(line)
+    if parsed is None:
+        return None
+
+    aprs_data = _parse_aprs_packet(parsed)
+    source_key = parsed["source"].strip()
+    source_callsign, source_ssid = _split_ssid(source_key)
+    entity_name = (aprs_data or {}).get("entity_name")
+    entity_class = str((aprs_data or {}).get("entity_class") or "").strip()
+    classification = "unknown"
+    if entity_class == "mobile":
+        classification = "mobile"
+    elif entity_class == "object":
+        classification = "object"
+    elif entity_class:
+        classification = "fixed"
+
+    return {
+        "source": parsed["source"],
+        "destination": parsed["destination"],
+        "path": parsed["path"],
+        "info": parsed["info"],
+        "source_key": source_key,
+        "source_callsign": source_callsign,
+        "source_ssid": source_ssid,
+        "entity_name": str(entity_name or "").strip(),
+        "entity_class": entity_class,
+        "classification": classification,
+        "aprs_data": aprs_data,
+    }
 
 
 def _format_last_heard(timestamp: str) -> str:

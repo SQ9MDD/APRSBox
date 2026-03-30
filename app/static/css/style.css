@@ -973,6 +973,79 @@ select:focus-visible,
     font-size: 1.12rem;
 }
 
+.band-condition-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--space-4);
+}
+
+.band-condition-card {
+    min-width: 0;
+}
+
+.band-condition-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.band-condition-card-header h2 {
+    margin: 0 0 0.45rem;
+}
+
+.band-condition-confidence {
+    display: grid;
+    gap: 0.15rem;
+    justify-items: end;
+}
+
+.band-condition-confidence strong {
+    font-size: 1.2rem;
+}
+
+.band-condition-status {
+    min-width: 0;
+}
+
+.band-condition-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin: 0;
+}
+
+.band-condition-stats div {
+    padding: 0.62rem 0.72rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+    box-shadow: var(--shadow-soft);
+}
+
+.band-condition-stats dt {
+    color: var(--muted);
+    margin: 0 0 0.24rem;
+}
+
+.band-condition-stats dd {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.band-condition-details summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 600;
+}
+
+.band-condition-details[open] {
+    display: grid;
+    gap: var(--space-3);
+}
+
 .alert {
     padding: 0.65rem 0.78rem;
     border-radius: var(--radius-sm);
@@ -1402,6 +1475,10 @@ code {
     }
 
     .stations-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .band-condition-stats {
         grid-template-columns: 1fr;
     }
 

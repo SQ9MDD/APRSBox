@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS modems (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     modem_type TEXT NOT NULL,
+    band TEXT NOT NULL DEFAULT '',
     device_path TEXT,
     baud_rate INTEGER,
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
@@ -183,8 +184,81 @@ CREATE TABLE IF NOT EXISTS traffic_runtime_state (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS band_condition_reference_stations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    band TEXT NOT NULL,
+    callsign TEXT NOT NULL,
+    ssid TEXT NOT NULL DEFAULT '',
+    station_type TEXT NOT NULL CHECK (station_type IN ('home', 'digi', 'igate', 'wx-fixed', 'fixed')),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    weight REAL NOT NULL DEFAULT 1.0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (band, callsign, ssid)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_audibility_buckets (
+    bucket_start_utc TEXT NOT NULL,
+    band TEXT NOT NULL,
+    station_key TEXT NOT NULL,
+    heard_flag INTEGER NOT NULL DEFAULT 0 CHECK (heard_flag IN (0, 1)),
+    frame_count INTEGER NOT NULL DEFAULT 0,
+    baseline_processed_at TEXT,
+    PRIMARY KEY (bucket_start_utc, band, station_key)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_activity_station_buckets (
+    bucket_start_utc TEXT NOT NULL,
+    band TEXT NOT NULL,
+    station_key TEXT NOT NULL,
+    is_mobile INTEGER NOT NULL DEFAULT 0 CHECK (is_mobile IN (0, 1)),
+    is_fixed INTEGER NOT NULL DEFAULT 0 CHECK (is_fixed IN (0, 1)),
+    PRIMARY KEY (bucket_start_utc, band, station_key)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_activity_buckets (
+    bucket_start_utc TEXT NOT NULL,
+    band TEXT NOT NULL,
+    total_frames INTEGER NOT NULL DEFAULT 0,
+    total_unique_stations INTEGER NOT NULL DEFAULT 0,
+    mobile_frames INTEGER NOT NULL DEFAULT 0,
+    mobile_unique_stations INTEGER NOT NULL DEFAULT 0,
+    fixed_frames INTEGER NOT NULL DEFAULT 0,
+    fixed_unique_stations INTEGER NOT NULL DEFAULT 0,
+    baseline_processed_at TEXT,
+    PRIMARY KEY (bucket_start_utc, band)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_audibility_baseline (
+    band TEXT NOT NULL,
+    station_key TEXT NOT NULL,
+    hour_of_day INTEGER NOT NULL CHECK (hour_of_day BETWEEN 0 AND 23),
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    heard_sum REAL NOT NULL DEFAULT 0,
+    heard_ratio REAL NOT NULL DEFAULT 0,
+    ema_heard_ratio REAL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (band, station_key, hour_of_day)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_activity_baseline (
+    band TEXT NOT NULL,
+    hour_of_day INTEGER NOT NULL CHECK (hour_of_day BETWEEN 0 AND 23),
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    avg_mobile_frames REAL NOT NULL DEFAULT 0,
+    avg_total_frames REAL NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (band, hour_of_day)
+);
+
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_band_condition_refs_band_enabled
+    ON band_condition_reference_stations(band, enabled);
+CREATE INDEX IF NOT EXISTS idx_band_condition_audibility_processed
+    ON band_condition_audibility_buckets(baseline_processed_at, bucket_start_utc);
+CREATE INDEX IF NOT EXISTS idx_band_condition_activity_processed
+    ON band_condition_activity_buckets(baseline_processed_at, bucket_start_utc);
 """
 
 
@@ -193,6 +267,7 @@ def init_db() -> None:
         connection.executescript(SCHEMA)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+        modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -206,6 +281,13 @@ def init_db() -> None:
                 ALTER TABLE station_settings
                 ADD COLUMN default_units TEXT NOT NULL DEFAULT 'metric'
                 CHECK (default_units IN ('metric', 'imperial'))
+                """
+            )
+        if "band" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN band TEXT NOT NULL DEFAULT ''
                 """
             )
         connection.execute(

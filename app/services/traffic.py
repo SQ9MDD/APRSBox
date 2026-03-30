@@ -5,6 +5,7 @@ from threading import Lock
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
+from app.services.band_condition import process_incoming_frame
 
 KISS_FEND = 0xC0
 KISS_FESC = 0xDB
@@ -365,6 +366,10 @@ class TrafficMonitorService:
 
     def _persist_frame(self, entry: dict[str, str], timestamp: str) -> None:
         cutoff = traffic_retention_cutoff()
+        active_band = ""
+        with self._lock:
+            if self._active_modem:
+                active_band = str(self._active_modem.get("band") or "").strip()
         with get_connection() as connection:
             connection.execute(
                 """
@@ -383,6 +388,8 @@ class TrafficMonitorService:
                 ),
             )
             connection.execute("DELETE FROM traffic_frames WHERE created_at < ?", (cutoff,))
+        if entry["format"] == "TNC2":
+            process_incoming_frame(entry["line"], band=active_band, timestamp=timestamp)
 
     async def _sleep(self, delay: float) -> None:
         try:
@@ -393,7 +400,7 @@ class TrafficMonitorService:
     def _load_active_tcp_modem(self) -> dict[str, Any] | None:
         row = fetch_one(
             """
-            SELECT id, name, modem_type, device_path, baud_rate, enabled, notes, created_at, updated_at
+            SELECT id, name, band, modem_type, device_path, baud_rate, enabled, notes, created_at, updated_at
             FROM modems
             WHERE enabled = 1 AND modem_type = 'TCP'
             ORDER BY id ASC
