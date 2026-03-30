@@ -27,13 +27,8 @@
         </div>
         <div class="sidebar-user-panel">
             <div class="sidebar-user-meta">
-                <div class="sidebar-user-avatar" aria-hidden="true">
-                    <img src="{{ request.scope.root_path }}/static/icons/account-circle-outline.svg" alt="">
-                </div>
-                <div class="sidebar-user-copy">
-                    <span class="sidebar-user-name">{{ current_user.username }}</span>
-                    <span class="role-badge">{{ current_user.role }}</span>
-                </div>
+                <span class="sidebar-user-name">{{ current_user.username }}</span>
+                <span class="role-badge">{{ current_user.role }}</span>
             </div>
             <div class="sidebar-user-actions">
                 <button
@@ -43,7 +38,13 @@
                     aria-label="Switch theme"
                     title="Switch theme"
                 >
-                    <img id="theme-toggle-icon" src="{{ request.scope.root_path }}/static/icons/theme-light-dark.svg" alt="">
+                    <img
+                        id="theme-toggle-icon"
+                        src="{{ request.scope.root_path }}/static/icons/theme-light-dark.svg"
+                        data-day-icon="{{ request.scope.root_path }}/static/icons/white-balance-sunny.svg"
+                        data-night-icon="{{ request.scope.root_path }}/static/icons/weather-night.svg"
+                        alt=""
+                    >
                 </button>
                 <form action="{{ request.scope.root_path }}/logout" method="post" class="sidebar-logout-form">
                     <button
@@ -93,7 +94,7 @@
                 button.setAttribute("aria-label", `Switch to ${nextMode} mode`);
                 button.setAttribute("title", `Switch to ${nextMode} mode`);
                 if (icon) {
-                    icon.src = `${request.scope.root_path}/static/icons/${isLight ? "weather-night" : "white-balance-sunny"}.svg`;
+                    icon.src = isLight ? icon.dataset.nightIcon : icon.dataset.dayIcon;
                 }
             };
             syncLabel();
