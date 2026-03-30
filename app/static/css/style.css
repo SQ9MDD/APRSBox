@@ -104,8 +104,9 @@ body {
     place-items: center;
     padding: 1.5rem;
     background:
-        radial-gradient(circle at top, rgba(109, 189, 128, 0.14), transparent 28%),
-        radial-gradient(circle at bottom right, rgba(109, 189, 128, 0.08), transparent 22%);
+        radial-gradient(circle at top, var(--accent-soft), transparent 28%),
+        radial-gradient(circle at bottom right, var(--hover-layer), transparent 22%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-layer) 100%);
 }
 
 .sidebar {
