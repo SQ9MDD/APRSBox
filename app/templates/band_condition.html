@@ -9,7 +9,7 @@
             <div class="panel-header">
                 <div class="panel-header-copy">
                     <h2>Band Condition</h2>
-                    <p class="section-lead">Estimated from long-term audibility of fixed reference stations. Mobile traffic is used only as a channel-load correction, not as the propagation baseline.</p>
+                    <p class="section-lead">Estimated from three factors: local reference audibility, channel occupancy, and appearance of fixed stations that are usually absent on this band at this hour.</p>
                 </div>
             </div>
             <div class="notice">This is an estimate, not a propagation forecast. Activity buckets are assigned to the band configured on the active TNC. Current monitored band: {{ monitored_band }}.</div>
@@ -60,16 +60,16 @@
             </div>
             <div class="stack-sm">
                 <div class="empty-state">
-                    <strong>Condition comes from fixed reference stations.</strong>
-                    <p class="section-lead">Only configured fixed stations build the long-term audibility baseline used to judge whether the band is worse or better than normal.</p>
+                    <strong>Reference stations estimate the local baseline.</strong>
+                    <p class="section-lead">Configured fixed stations show whether local audibility is below, near, or above its long-term norm for this hour.</p>
                 </div>
                 <div class="empty-state">
-                    <strong>Mobile traffic is only a congestion correction.</strong>
-                    <p class="section-lead">Mobile stations do not define propagation. Their traffic is used to soften or qualify degraded results when the channel is unusually busy.</p>
+                    <strong>Traffic estimates occupancy, not opening by itself.</strong>
+                    <p class="section-lead">Total and mobile traffic are compared against their hour-of-day baseline to detect likely channel load or local congestion.</p>
                 </div>
                 <div class="empty-state">
-                    <strong>Confidence depends on history and coverage.</strong>
-                    <p class="section-lead">Confidence rises with enough reference stations and enough baseline samples, and falls when data is sparse.</p>
+                    <strong>Rare fixed stations indicate opening.</strong>
+                    <p class="section-lead">If fixed stations that are usually absent begin to appear, they raise the opening score and can outweigh pure occupancy effects.</p>
                 </div>
             </div>
         </div>
@@ -191,7 +191,7 @@
             <div class="band-condition-card-header">
                 <div>
                     <h2>{{ item.band_label }}</h2>
-                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}" title="Ogólna ocena pasma wyliczona z porównania bieżącej słyszalności stałych stacji referencyjnych do długoterminowego baseline'u.">{{ item.label }}</span>
+                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}" title="Ogólna ocena pasma wyliczona z połączenia lokalnej słyszalności referencji, zajętości kanału i pojawiania się rzadkich stałych stacji.">{{ item.label }}</span>
                 </div>
                 <div class="band-condition-confidence" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
                     <span class="muted">Confidence</span>
@@ -200,25 +200,37 @@
             </div>
 
             <div class="metrics-grid">
-                <div class="metric-card" title="Znormalizowany wynik pokazujący, czy stałe stacje referencyjne są słyszane gorzej lub lepiej niż zwykle o tej porze dla tego pasma.">
+                <div class="metric-card" title="Końcowy wynik kondycji pasma zbudowany z lokalnej słyszalności referencji, zajętości kanału i openingu wykrytego przez rzadkie stałe stacje.">
                     <span class="metric-value">{{ "%.2f"|format(item.condition_score) }}</span>
                     <span class="metric-label">Condition score</span>
                 </div>
-                <div class="metric-card" title="Wskaźnik obciążenia kanału wyliczony z ruchu mobilnego względem jego długoterminowej normy. Nie definiuje condition bezpośrednio, tylko działa jako korekta.">
-                    <span class="metric-value">{{ "%.2f"|format(item.congestion_score) }}</span>
-                    <span class="metric-label">Congestion score</span>
+                <div class="metric-card" title="Wskaźnik openingu wyliczony z obecności stałych stacji, które historycznie są słyszane rzadko albo wcale o tej porze na tym paśmie.">
+                    <span class="metric-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
+                    <span class="metric-label">DX opening score</span>
+                </div>
+                <div class="metric-card" title="Wskaźnik zajętości kanału wyliczony z korelacji ruchu całkowitego, mobilnego i lokalnej słyszalności referencji.">
+                    <span class="metric-value">{{ "%.2f"|format(item.occupancy_score) }}</span>
+                    <span class="metric-label">Occupancy score</span>
                 </div>
                 <div class="metric-card" title="Liczba aktywnych stacji referencyjnych z wystarczającym baseline'em względem wszystkich skonfigurowanych referencji dla tego pasma.">
                     <span class="metric-value">{{ item.active_reference_station_count }}/{{ item.reference_station_count }}</span>
                     <span class="metric-label">Active references</span>
                 </div>
-                <div class="metric-card" title="Średnia bieżąca liczba ramek mobilnych na 5-minutowy bucket w krótkim oknie bieżącej oceny. To korekta zajętości kanału, nie baza propagacyjna.">
-                    <span class="metric-value">{{ "%.1f"|format(item.current_mobile_activity) }}</span>
-                    <span class="metric-label">Mobile activity / 5 min</span>
+                <div class="metric-card" title="Znormalizowany wynik pokazujący, czy lokalne stacje referencyjne są słyszane gorzej lub lepiej niż zwykle o tej porze dla tego pasma.">
+                    <span class="metric-value">{{ "%.2f"|format(item.local_reference_score) }}</span>
+                    <span class="metric-label">Local reference score</span>
                 </div>
             </div>
 
             <dl class="band-condition-stats">
+                <div title="Liczba unikalnych stałych stacji słyszanych w bieżącym krótkim oknie oceny, niezależnie od tego czy są referencjami.">
+                    <dt>Current fixed stations</dt>
+                    <dd>{{ item.current_fixed_station_count }}</dd>
+                </div>
+                <div title="Liczba stałych stacji spoza listy reference, które zostały uznane za rzadkie lub nowe dla tej pory dnia i weszły do składowej openingu.">
+                    <dt>Rare fixed stations now</dt>
+                    <dd>{{ item.dx_station_count }}</dd>
+                </div>
                 <div title="Długoterminowa średnia aktywność ruchu mobilnego dla tej godziny doby i tego pasma. Służy do porównania z aktualnym obciążeniem kanału.">
                     <dt>Baseline mobile activity</dt>
                     <dd>{{ "%.1f"|format(item.baseline_mobile_activity) }}</dd>
@@ -230,6 +242,10 @@
                 <div title="Długoterminowa średnia liczba wszystkich ramek dla tej godziny doby i tego pasma. Pomaga ocenić, czy kanał jest obecnie bardziej lub mniej zajęty niż zwykle.">
                     <dt>Baseline total activity</dt>
                     <dd>{{ "%.1f"|format(item.baseline_total_activity) }}</dd>
+                </div>
+                <div title="Liczba historycznych 5-minutowych bucketów dla tej godziny doby, które zasilają baseline aktywności i wykrywanie rzadkich stałych stacji.">
+                    <dt>Activity baseline samples</dt>
+                    <dd>{{ item.baseline_activity_samples }}</dd>
                 </div>
             </dl>
 
@@ -273,6 +289,36 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ ref.baseline_sample_count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% endif %}
+
+            {% if item.dx_station_details %}
+            <details class="band-condition-details">
+                <summary>Rare fixed stations now</summary>
+                <div class="table-wrap">
+                    <table class="data-table compact-table">
+                        <thead>
+                            <tr>
+                                <th>Station</th>
+                                <th>Window buckets</th>
+                                <th>Baseline heard ratio</th>
+                                <th>Baseline hits</th>
+                                <th>Rarity score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for station in item.dx_station_details %}
+                            <tr>
+                                <td><code>{{ station.station_key }}</code></td>
+                                <td>{{ station.bucket_hits }}</td>
+                                <td>{{ "%.2f"|format(station.baseline_heard_ratio) }}</td>
+                                <td>{{ station.baseline_heard_count }}</td>
+                                <td>{{ "%.2f"|format(station.rarity_score) }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>

@@ -12,6 +12,7 @@ CURRENT_WINDOW_BUCKETS = 3
 MIN_BASELINE_SAMPLES = 12
 EMA_ALPHA = 0.2
 INSUFFICIENT_CONFIDENCE = 0.2
+DX_RARE_STATION_RATIO = 0.18
 FIXED_REFERENCE_STATION_TYPES = ("home", "digi", "igate", "wx-fixed", "fixed")
 BAND_OPTIONS = ("2m", "70cm", "6m")
 
@@ -477,6 +478,22 @@ def _rollup_closed_buckets(connection: sqlite3.Connection, *, current_bucket_utc
         hour_of_day = hour_of_day_from_utc(row["bucket_start_utc"])
         connection.execute(
             """
+            INSERT INTO band_condition_fixed_station_baseline (
+                band, station_key, hour_of_day, heard_count, updated_at
+            )
+            SELECT ?, station_key, ?, 1, ?
+            FROM band_condition_activity_station_buckets
+            WHERE bucket_start_utc = ?
+              AND band = ?
+              AND is_fixed = 1
+            ON CONFLICT(band, station_key, hour_of_day) DO UPDATE SET
+                heard_count = heard_count + 1,
+                updated_at = excluded.updated_at
+            """,
+            (row["band"], hour_of_day, processed_at, row["bucket_start_utc"], row["band"]),
+        )
+        connection.execute(
+            """
             INSERT INTO band_condition_activity_baseline (
                 band, hour_of_day, sample_count, avg_mobile_frames, avg_total_frames, updated_at
             )
@@ -579,6 +596,7 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         (normalized_band, baseline_hour),
     )
     baseline_map = {str(row["station_key"]): dict(row) for row in baseline_rows}
+    reference_keys = {str(row["station_key"]) for row in reference_rows}
 
     activity_rows = fetch_all(
         """
@@ -599,6 +617,29 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
           AND hour_of_day = ?
         """,
         (normalized_band, baseline_hour),
+    )
+    fixed_station_baseline_rows = fetch_all(
+        """
+        SELECT station_key, heard_count
+        FROM band_condition_fixed_station_baseline
+        WHERE band = ?
+          AND hour_of_day = ?
+        """,
+        (normalized_band, baseline_hour),
+    )
+    fixed_station_baseline_map = {str(row["station_key"]): int(row["heard_count"]) for row in fixed_station_baseline_rows}
+    current_fixed_station_rows = fetch_all(
+        """
+        SELECT station_key, COUNT(*) AS bucket_hits
+        FROM band_condition_activity_station_buckets
+        WHERE band = ?
+          AND bucket_start_utc >= ?
+          AND bucket_start_utc <= ?
+          AND is_fixed = 1
+        GROUP BY station_key
+        ORDER BY bucket_hits DESC, station_key ASC
+        """,
+        (normalized_band, window_start, current_bucket),
     )
 
     per_reference: list[dict[str, Any]] = []
@@ -657,18 +698,32 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
 
     current_ratio = current_weight / total_weight
     baseline_ratio = baseline_weight / total_weight
-    raw_condition_score = _clamp((current_ratio - baseline_ratio) / max(0.25, baseline_ratio), -1.0, 1.0)
+    local_reference_score = _clamp((current_ratio - baseline_ratio) / max(0.25, baseline_ratio), -1.0, 1.0)
 
     current_mobile_activity = _average_numeric([float(row["mobile_frames"]) for row in activity_rows])
     baseline_mobile_activity = float(activity_baseline["avg_mobile_frames"]) if activity_baseline else 0.0
     current_total_activity = _average_numeric([float(row["total_frames"]) for row in activity_rows])
     baseline_total_activity = float(activity_baseline["avg_total_frames"]) if activity_baseline else 0.0
-    congestion_ratio = current_mobile_activity / max(1.0, baseline_mobile_activity)
-    congestion_score = _clamp((congestion_ratio - 1.0) / 2.0, -1.0, 1.0)
-
-    condition_score = raw_condition_score
-    if condition_score < 0 and congestion_score > 0:
-        condition_score = min(0.0, condition_score + min(0.3, congestion_score * 0.25))
+    baseline_activity_samples = int(activity_baseline["sample_count"]) if activity_baseline else 0
+    dx_station_details = _build_dx_station_details(
+        current_rows=current_fixed_station_rows,
+        reference_keys=reference_keys,
+        fixed_station_baseline_map=fixed_station_baseline_map,
+        baseline_activity_samples=baseline_activity_samples,
+    )
+    dx_opening_score = _dx_opening_score(dx_station_details)
+    occupancy_score = _occupancy_score(
+        current_total_activity=current_total_activity,
+        baseline_total_activity=baseline_total_activity,
+        current_mobile_activity=current_mobile_activity,
+        baseline_mobile_activity=baseline_mobile_activity,
+        local_reference_score=local_reference_score,
+    )
+    condition_score = _condition_score(
+        dx_opening_score=dx_opening_score,
+        local_reference_score=local_reference_score,
+        occupancy_score=occupancy_score,
+    )
 
     confidence_score = _confidence_score(
         configured_reference_count=reference_count,
@@ -676,16 +731,19 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         baseline_sample_total=baseline_sample_total,
         current_bucket_count=len(activity_rows),
         current_total_activity=current_total_activity,
-        congestion_score=congestion_score,
+        baseline_activity_samples=baseline_activity_samples,
+        dx_station_count=len(dx_station_details),
     )
     label = _label_for_scores(condition_score, confidence_score)
     explanation = _build_explanation(
-        current_ratio=current_ratio,
-        baseline_ratio=baseline_ratio,
+        local_reference_score=local_reference_score,
+        dx_opening_score=dx_opening_score,
+        occupancy_score=occupancy_score,
         current_mobile_activity=current_mobile_activity,
         baseline_mobile_activity=baseline_mobile_activity,
         confidence_score=confidence_score,
         active_reference_station_count=active_reference_station_count,
+        dx_station_count=len(dx_station_details),
     )
 
     return {
@@ -693,7 +751,9 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         "band_label": format_band_label(normalized_band),
         "label": label,
         "condition_score": round(condition_score, 3),
-        "congestion_score": round(congestion_score, 3),
+        "occupancy_score": round(occupancy_score, 3),
+        "dx_opening_score": round(dx_opening_score, 3),
+        "local_reference_score": round(local_reference_score, 3),
         "confidence_score": round(confidence_score, 3),
         "reference_station_count": reference_count,
         "active_reference_station_count": active_reference_station_count,
@@ -701,8 +761,12 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         "baseline_mobile_activity": round(baseline_mobile_activity, 2),
         "current_total_activity": round(current_total_activity, 2),
         "baseline_total_activity": round(baseline_total_activity, 2),
+        "current_fixed_station_count": len(current_fixed_station_rows),
+        "dx_station_count": len(dx_station_details),
+        "baseline_activity_samples": baseline_activity_samples,
         "explanation": explanation,
         "per_reference": per_reference,
+        "dx_station_details": dx_station_details,
     }
 
 
@@ -719,7 +783,9 @@ def _insufficient_band_snapshot(
         "band_label": format_band_label(band),
         "label": "Insufficient data",
         "condition_score": 0.0,
-        "congestion_score": 0.0,
+        "occupancy_score": 0.0,
+        "dx_opening_score": 0.0,
+        "local_reference_score": 0.0,
         "confidence_score": 0.0,
         "reference_station_count": reference_station_count,
         "active_reference_station_count": active_reference_station_count,
@@ -727,8 +793,12 @@ def _insufficient_band_snapshot(
         "baseline_mobile_activity": 0.0,
         "current_total_activity": 0.0,
         "baseline_total_activity": 0.0,
+        "current_fixed_station_count": 0,
+        "dx_station_count": 0,
+        "baseline_activity_samples": 0,
         "explanation": explanation,
         "per_reference": per_reference or [],
+        "dx_station_details": [],
     }
 
 
@@ -739,7 +809,8 @@ def _confidence_score(
     baseline_sample_total: int,
     current_bucket_count: int,
     current_total_activity: float,
-    congestion_score: float,
+    baseline_activity_samples: int,
+    dx_station_count: int,
 ) -> float:
     if configured_reference_count <= 0 or active_reference_station_count <= 0:
         return 0.0
@@ -747,10 +818,18 @@ def _confidence_score(
     active_factor = active_reference_station_count / max(1.0, configured_reference_count)
     sample_factor = min(1.0, baseline_sample_total / (configured_reference_count * 48.0))
     current_factor = min(1.0, current_bucket_count / float(CURRENT_WINDOW_BUCKETS))
+    history_factor = min(1.0, baseline_activity_samples / 48.0)
+    dx_factor = min(1.0, dx_station_count / 3.0)
     sparse_penalty = 0.18 if current_total_activity <= 0 else 0.0
-    congestion_penalty = max(0.0, congestion_score) * 0.18
-    confidence = (configured_factor * 0.2) + (active_factor * 0.35) + (sample_factor * 0.3) + (current_factor * 0.15)
-    return _clamp(confidence - sparse_penalty - congestion_penalty, 0.0, 1.0)
+    confidence = (
+        (configured_factor * 0.18)
+        + (active_factor * 0.32)
+        + (sample_factor * 0.24)
+        + (history_factor * 0.16)
+        + (current_factor * 0.1)
+    )
+    confidence += dx_factor * 0.05
+    return _clamp(confidence - sparse_penalty, 0.0, 1.0)
 
 
 def _label_for_scores(condition_score: float, confidence_score: float) -> str:
@@ -769,28 +848,38 @@ def _label_for_scores(condition_score: float, confidence_score: float) -> str:
 
 def _build_explanation(
     *,
-    current_ratio: float,
-    baseline_ratio: float,
+    local_reference_score: float,
+    dx_opening_score: float,
+    occupancy_score: float,
     current_mobile_activity: float,
     baseline_mobile_activity: float,
     confidence_score: float,
     active_reference_station_count: int,
+    dx_station_count: int,
 ) -> str:
-    audibility_phrase = "near normal"
-    if current_ratio < baseline_ratio - 0.2:
-        audibility_phrase = "well below the long-term fixed-station baseline"
-    elif current_ratio < baseline_ratio - 0.08:
-        audibility_phrase = "below the long-term fixed-station baseline"
-    elif current_ratio > baseline_ratio + 0.2:
-        audibility_phrase = "well above the long-term fixed-station baseline"
-    elif current_ratio > baseline_ratio + 0.08:
-        audibility_phrase = "above the long-term fixed-station baseline"
+    reference_phrase = "local reference audibility is near normal"
+    if local_reference_score <= -0.45:
+        reference_phrase = "local reference audibility is clearly below normal"
+    elif local_reference_score <= -0.12:
+        reference_phrase = "local reference audibility is slightly below normal"
+    elif local_reference_score >= 0.45:
+        reference_phrase = "local reference audibility is clearly above normal"
+    elif local_reference_score >= 0.12:
+        reference_phrase = "local reference audibility is slightly above normal"
 
-    congestion_phrase = "mobile traffic is close to normal"
-    if current_mobile_activity > baseline_mobile_activity * 1.6 and current_mobile_activity > 0:
-        congestion_phrase = "mobile traffic is unusually high, so degraded audibility is treated more cautiously"
+    dx_phrase = "no unusual fixed-station opening is visible"
+    if dx_station_count > 0 and dx_opening_score >= 0.6:
+        dx_phrase = f"{dx_station_count} rare fixed stations are currently present, which strongly suggests wider propagation"
+    elif dx_station_count > 0 and dx_opening_score >= 0.25:
+        dx_phrase = f"{dx_station_count} less-common fixed stations are currently present, which suggests some opening"
+
+    occupancy_phrase = "channel occupancy looks close to normal"
+    if occupancy_score >= 0.65:
+        occupancy_phrase = "channel occupancy looks elevated, so local overload may be affecting what is heard"
+    elif occupancy_score >= 0.3:
+        occupancy_phrase = "channel occupancy is somewhat elevated"
     elif baseline_mobile_activity <= 0 and current_mobile_activity > 0:
-        congestion_phrase = "mobile traffic is present but the long-term congestion baseline is still thin"
+        occupancy_phrase = "mobile traffic is present but the long-term occupancy baseline is still thin"
 
     confidence_phrase = "low confidence"
     if confidence_score >= 0.7:
@@ -799,10 +888,76 @@ def _build_explanation(
         confidence_phrase = "moderate confidence"
 
     return (
-        f"Fixed reference audibility is {audibility_phrase}. "
-        f"{congestion_phrase}. "
+        f"{reference_phrase}. "
+        f"{dx_phrase}. "
+        f"{occupancy_phrase}. "
         f"Estimate uses {active_reference_station_count} baseline-backed reference stations with {confidence_phrase}."
     )
+
+
+def _build_dx_station_details(
+    *,
+    current_rows: list[dict[str, Any]],
+    reference_keys: set[str],
+    fixed_station_baseline_map: dict[str, int],
+    baseline_activity_samples: int,
+) -> list[dict[str, Any]]:
+    details: list[dict[str, Any]] = []
+    if baseline_activity_samples < MIN_BASELINE_SAMPLES:
+        return details
+    for row in current_rows:
+        station_key = str(row["station_key"])
+        if station_key in reference_keys:
+            continue
+        heard_count = int(fixed_station_baseline_map.get(station_key, 0))
+        baseline_ratio = heard_count / float(max(1, baseline_activity_samples))
+        rarity_score = _dx_station_score(baseline_ratio, heard_count)
+        if rarity_score <= 0:
+            continue
+        details.append(
+            {
+                "station_key": station_key,
+                "bucket_hits": int(row["bucket_hits"]),
+                "baseline_heard_count": heard_count,
+                "baseline_heard_ratio": round(baseline_ratio, 3),
+                "rarity_score": round(rarity_score, 3),
+            }
+        )
+    details.sort(key=lambda item: (-float(item["rarity_score"]), -int(item["bucket_hits"]), str(item["station_key"])))
+    return details[:8]
+
+
+def _dx_station_score(baseline_ratio: float, heard_count: int) -> float:
+    if heard_count <= 0:
+        return 1.0
+    return _clamp((DX_RARE_STATION_RATIO - baseline_ratio) / DX_RARE_STATION_RATIO, 0.0, 1.0)
+
+
+def _dx_opening_score(dx_station_details: list[dict[str, Any]]) -> float:
+    if not dx_station_details:
+        return 0.0
+    station_scores = [float(item["rarity_score"]) for item in dx_station_details]
+    coverage_factor = min(1.0, len(station_scores) / 3.0)
+    return _clamp(_average_numeric(station_scores) * coverage_factor, 0.0, 1.0)
+
+
+def _occupancy_score(
+    *,
+    current_total_activity: float,
+    baseline_total_activity: float,
+    current_mobile_activity: float,
+    baseline_mobile_activity: float,
+    local_reference_score: float,
+) -> float:
+    total_pressure = _clamp((current_total_activity - baseline_total_activity) / max(3.0, baseline_total_activity), -1.0, 1.0)
+    mobile_pressure = _clamp((current_mobile_activity - baseline_mobile_activity) / max(2.0, baseline_mobile_activity), -1.0, 1.0)
+    reference_penalty = max(0.0, -local_reference_score)
+    return _clamp((max(0.0, total_pressure) * 0.45) + (max(0.0, mobile_pressure) * 0.35) + (reference_penalty * 0.2), 0.0, 1.0)
+
+
+def _condition_score(*, dx_opening_score: float, local_reference_score: float, occupancy_score: float) -> float:
+    occupancy_penalty = occupancy_score * max(0.15, 0.4 - (dx_opening_score * 0.25))
+    return _clamp((dx_opening_score * 0.65) + (local_reference_score * 0.35) - occupancy_penalty, -1.0, 1.0)
 
 
 def _average_numeric(values: list[float]) -> float:

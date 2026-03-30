@@ -251,6 +251,15 @@ CREATE TABLE IF NOT EXISTS band_condition_activity_baseline (
     PRIMARY KEY (band, hour_of_day)
 );
 
+CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
+    band TEXT NOT NULL,
+    station_key TEXT NOT NULL,
+    hour_of_day INTEGER NOT NULL CHECK (hour_of_day BETWEEN 0 AND 23),
+    heard_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (band, station_key, hour_of_day)
+);
+
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_band_condition_refs_band_enabled
@@ -259,6 +268,8 @@ CREATE INDEX IF NOT EXISTS idx_band_condition_audibility_processed
     ON band_condition_audibility_buckets(baseline_processed_at, bucket_start_utc);
 CREATE INDEX IF NOT EXISTS idx_band_condition_activity_processed
     ON band_condition_activity_buckets(baseline_processed_at, bucket_start_utc);
+CREATE INDEX IF NOT EXISTS idx_band_condition_fixed_station_baseline_band_hour
+    ON band_condition_fixed_station_baseline(band, hour_of_day);
 """
 
 
