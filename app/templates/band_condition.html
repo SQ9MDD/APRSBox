@@ -23,43 +23,43 @@
             <div class="band-condition-card-header">
                 <div>
                     <h2>{{ item.band_label }}</h2>
-                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ item.label }}</span>
+                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}" title="Ogólna ocena pasma wyliczona z porównania bieżącej słyszalności stałych stacji referencyjnych do długoterminowego baseline'u.">{{ item.label }}</span>
                 </div>
-                <div class="band-condition-confidence">
+                <div class="band-condition-confidence" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
                     <span class="muted">Confidence</span>
                     <strong>{{ "%.0f"|format(item.confidence_score * 100) }}%</strong>
                 </div>
             </div>
 
             <div class="metrics-grid">
-                <div class="metric-card">
+                <div class="metric-card" title="Znormalizowany wynik pokazujący, czy stałe stacje referencyjne są słyszane gorzej lub lepiej niż zwykle o tej porze dla tego pasma.">
                     <span class="metric-value">{{ "%.2f"|format(item.condition_score) }}</span>
                     <span class="metric-label">Condition score</span>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card" title="Wskaźnik obciążenia kanału wyliczony z ruchu mobilnego względem jego długoterminowej normy. Nie definiuje condition bezpośrednio, tylko działa jako korekta.">
                     <span class="metric-value">{{ "%.2f"|format(item.congestion_score) }}</span>
                     <span class="metric-label">Congestion score</span>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card" title="Liczba aktywnych stacji referencyjnych z wystarczającym baseline'em względem wszystkich skonfigurowanych referencji dla tego pasma.">
                     <span class="metric-value">{{ item.active_reference_station_count }}/{{ item.reference_station_count }}</span>
                     <span class="metric-label">Active references</span>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card" title="Średnia bieżąca liczba ramek mobilnych na 5-minutowy bucket w krótkim oknie bieżącej oceny. To korekta zajętości kanału, nie baza propagacyjna.">
                     <span class="metric-value">{{ "%.1f"|format(item.current_mobile_activity) }}</span>
                     <span class="metric-label">Mobile activity / 5 min</span>
                 </div>
             </div>
 
             <dl class="band-condition-stats">
-                <div>
+                <div title="Długoterminowa średnia aktywność ruchu mobilnego dla tej godziny doby i tego pasma. Służy do porównania z aktualnym obciążeniem kanału.">
                     <dt>Baseline mobile activity</dt>
                     <dd>{{ "%.1f"|format(item.baseline_mobile_activity) }}</dd>
                 </div>
-                <div>
+                <div title="Średnia bieżąca liczba wszystkich ramek w krótkim oknie oceny dla tego pasma, niezależnie od typu stacji.">
                     <dt>Current total activity</dt>
                     <dd>{{ "%.1f"|format(item.current_total_activity) }}</dd>
                 </div>
-                <div>
+                <div title="Długoterminowa średnia liczba wszystkich ramek dla tej godziny doby i tego pasma. Pomaga ocenić, czy kanał jest obecnie bardziej lub mniej zajęty niż zwykle.">
                     <dt>Baseline total activity</dt>
                     <dd>{{ "%.1f"|format(item.baseline_total_activity) }}</dd>
                 </div>
