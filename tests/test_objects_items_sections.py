@@ -84,7 +84,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "21.0122",
                     "symbol_table": "/",
                     "symbol_code": "r",
-                    "interval_minutes": "15",
+                    "interval_minutes": "45",
                     "path": "WIDE2-2",
                     "is_enabled": "1",
                     "comment": "Local voice repeater",
@@ -97,7 +97,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             assert row is not None
             self.assertEqual(row["lifetime"], "temporary")
             self.assertEqual(row["state"], "live")
-            self.assertEqual(row["interval_minutes"], 15)
+            self.assertEqual(row["interval_minutes"], 45)
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["is_enabled"], 1)
 
@@ -189,7 +189,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "21.0",
                     "symbol_table": "/",
                     "symbol_code": "A",
-                    "interval_minutes": "10",
+                    "interval_minutes": "45",
                     "path": "",
                     "comment": "Aid station",
                 },
@@ -209,7 +209,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "21.0",
                     "symbol_table": "\\",
                     "symbol_code": "A",
-                    "interval_minutes": "60",
+                    "interval_minutes": "45",
                     "path": "WIDE1-1,WIDE2-1",
                     "comment": "Aid station",
                     "is_enabled": "1",
@@ -221,7 +221,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             updated = get_section_row("items", int(row["id"]))
             assert updated is not None
             self.assertEqual(updated["state"], "killed")
-            self.assertEqual(updated["interval_minutes"], 60)
+            self.assertEqual(updated["interval_minutes"], 45)
             self.assertEqual(updated["path"], "WIDE1-1,WIDE2-1")
             self.assertEqual(updated["symbol_table"], "\\")
             self.assertEqual(updated["is_enabled"], 1)
@@ -244,7 +244,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                 },
             )
             self.assertFalse(success)
-            self.assertEqual(error, "Future send interval must be one of: 5, 10, 15, 30, 60 minutes.")
+            self.assertEqual(error, "Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
 
     def test_permanent_object_uses_fixed_111111z_timestamp_in_preview(self) -> None:
         with temporary_database():

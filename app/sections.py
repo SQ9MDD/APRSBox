@@ -139,7 +139,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             {"name": "symbol_code", "label": "Symbol Code", "type": "text", "required": True, "maxlength": 1, "placeholder": "r"},
             {
                 "name": "interval_minutes",
-                "label": "Future Send Interval",
+                "label": "Send Interval",
                 "type": "select",
                 "required": True,
                 "options": [
@@ -147,6 +147,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                     {"value": "10", "label": "10m"},
                     {"value": "15", "label": "15m"},
                     {"value": "30", "label": "30m"},
+                    {"value": "45", "label": "45m"},
                     {"value": "60", "label": "60m"},
                 ],
             },
@@ -194,7 +195,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             {"name": "symbol_code", "label": "Symbol Code", "type": "text", "required": True, "maxlength": 1, "placeholder": "A"},
             {
                 "name": "interval_minutes",
-                "label": "Future Send Interval",
+                "label": "Send Interval",
                 "type": "select",
                 "required": True,
                 "options": [
@@ -202,6 +203,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                     {"value": "10", "label": "10m"},
                     {"value": "15", "label": "15m"},
                     {"value": "30", "label": "30m"},
+                    {"value": "45", "label": "45m"},
                     {"value": "60", "label": "60m"},
                 ],
             },

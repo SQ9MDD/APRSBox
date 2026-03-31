@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS aprs_objects (
     lifetime TEXT NOT NULL DEFAULT 'temporary' CHECK (lifetime IN ('temporary', 'permanent')),
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
-    interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 60)),
+    interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS aprs_items (
     name TEXT NOT NULL UNIQUE,
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
-    interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 60)),
+    interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -304,6 +304,7 @@ CREATE INDEX IF NOT EXISTS idx_band_condition_fixed_station_baseline_band_hour
 def init_db() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA)
+        _migrate_entity_interval_constraints(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
@@ -381,7 +382,7 @@ def init_db() -> None:
                 """
                 ALTER TABLE aprs_objects
                 ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 30
-                CHECK (interval_minutes IN (5, 10, 15, 30, 60))
+                CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60))
                 """
             )
         if "state" not in item_columns:
@@ -404,7 +405,7 @@ def init_db() -> None:
                 """
                 ALTER TABLE aprs_items
                 ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 30
-                CHECK (interval_minutes IN (5, 10, 15, 30, 60))
+                CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60))
                 """
             )
         connection.execute(
@@ -428,6 +429,103 @@ def init_db() -> None:
             """,
             (utc_now(),),
         )
+
+
+def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None:
+    objects_sql = _table_sql(connection, "aprs_objects")
+    if objects_sql and "interval_minutes IN (5, 10, 15, 30, 45, 60)" not in objects_sql:
+        connection.executescript(
+            """
+            ALTER TABLE aprs_objects RENAME TO aprs_objects_old;
+            CREATE TABLE aprs_objects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                lifetime TEXT NOT NULL DEFAULT 'temporary' CHECK (lifetime IN ('temporary', 'permanent')),
+                state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
+                is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
+                interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                latitude TEXT,
+                longitude TEXT,
+                symbol_table TEXT,
+                symbol_code TEXT,
+                path TEXT,
+                comment TEXT,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO aprs_objects (
+                id, name, lifetime, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, path, comment, updated_at
+            )
+            SELECT
+                id,
+                name,
+                COALESCE(lifetime, 'temporary'),
+                COALESCE(state, 'live'),
+                COALESCE(is_enabled, 0),
+                CASE
+                    WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes
+                    ELSE 30
+                END,
+                latitude,
+                longitude,
+                symbol_table,
+                symbol_code,
+                path,
+                comment,
+                updated_at
+            FROM aprs_objects_old;
+            DROP TABLE aprs_objects_old;
+            """
+        )
+    items_sql = _table_sql(connection, "aprs_items")
+    if items_sql and "interval_minutes IN (5, 10, 15, 30, 45, 60)" not in items_sql:
+        connection.executescript(
+            """
+            ALTER TABLE aprs_items RENAME TO aprs_items_old;
+            CREATE TABLE aprs_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
+                is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
+                interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                latitude TEXT,
+                longitude TEXT,
+                symbol_table TEXT,
+                symbol_code TEXT,
+                path TEXT,
+                comment TEXT,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO aprs_items (
+                id, name, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, path, comment, updated_at
+            )
+            SELECT
+                id,
+                name,
+                COALESCE(state, 'live'),
+                COALESCE(is_enabled, 0),
+                CASE
+                    WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes
+                    ELSE 30
+                END,
+                latitude,
+                longitude,
+                symbol_table,
+                symbol_code,
+                path,
+                comment,
+                updated_at
+            FROM aprs_items_old;
+            DROP TABLE aprs_items_old;
+            """
+        )
+
+
+def _table_sql(connection: sqlite3.Connection, table_name: str) -> str:
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return str(row["sql"] or "") if row else ""
 
 
 def fetch_one(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:

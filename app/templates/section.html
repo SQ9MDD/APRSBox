@@ -207,7 +207,7 @@
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
                     <small class="muted">Optional future RF path. Common examples are <code>WIDE2-2</code> or <code>WIDE1-1,WIDE2-1</code>; leave blank for direct.</small>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
-                    <small class="muted">Prepared scheduling only. Transmission logic will use this in a later step.</small>
+                    <small class="muted">Prepared scheduling only. Default is 30m.</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
                     <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.</small>
                     {% elif section.slug == 'items' and field.name == 'comment' %}

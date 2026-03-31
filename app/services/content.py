@@ -1765,9 +1765,9 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
     try:
         interval_minutes = int(str(payload.get("interval_minutes") or "30").strip())
     except ValueError as exc:
-        raise ValueError("Future send interval must be one of: 5, 10, 15, 30, 60 minutes.") from exc
-    if interval_minutes not in {5, 10, 15, 30, 60}:
-        raise ValueError("Future send interval must be one of: 5, 10, 15, 30, 60 minutes.")
+        raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.") from exc
+    if interval_minutes not in {5, 10, 15, 30, 45, 60}:
+        raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
     normalized["interval_minutes"] = interval_minutes
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
