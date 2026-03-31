@@ -1,125 +1,122 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="panel dashboard-hero-panel">
-    <div class="panel-body">
-        <div class="dashboard-hero dashboard-hero-{{ dashboard_home.hero.tone }}">
-            <div class="dashboard-hero-copy">
-                <span class="status-pill dashboard-hero-status">{{ dashboard_home.hero.status }}</span>
-                <h2>{{ dashboard_home.hero.title }}</h2>
-                <p>{{ dashboard_home.hero.summary }}</p>
+<div class="dashboard-layout">
+    <section class="dashboard-overview-grid">
+        <section class="panel dashboard-hero-panel">
+            <div class="panel-body">
+                <div class="dashboard-hero dashboard-hero-{{ dashboard_home.hero.tone }}">
+                    <div class="dashboard-hero-copy">
+                        <span class="status-pill dashboard-hero-status">{{ dashboard_home.hero.status }}</span>
+                        <h2>{{ dashboard_home.hero.title }}</h2>
+                        <p>{{ dashboard_home.hero.summary }}</p>
+                    </div>
+                    <div class="dashboard-hero-summary">
+                        <div class="dashboard-hero-summary-item">
+                            <span class="muted">Callsign</span>
+                            <strong>{{ dashboard_home.station_callsign }}</strong>
+                        </div>
+                        <div class="dashboard-hero-summary-item">
+                            <span class="muted">Interface</span>
+                            <strong>{{ dashboard_home.selected_interface_name }}</strong>
+                        </div>
+                        <div class="dashboard-hero-summary-item">
+                            <span class="muted">Last traffic</span>
+                            <strong>{{ dashboard_home.latest_activity }}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-kpi-grid">
+                    {% for item in dashboard_home.stats %}
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ item.label }}</span>
+                        <span class="metric-value">{{ item.value }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="dashboard-action-row">
+                    <a href="{{ request.scope.root_path }}/station" class="button">My Settings</a>
+                    <a href="{{ request.scope.root_path }}/map" class="button button-secondary">Map</a>
+                    <a href="{{ request.scope.root_path }}/stations" class="button button-secondary">Stations</a>
+                    <a href="{{ request.scope.root_path }}/traffic" class="button button-secondary">Traffic Monitor</a>
+                </div>
             </div>
-            <div class="dashboard-hero-summary">
-                <div class="dashboard-hero-summary-item">
-                    <span class="muted">Callsign</span>
-                    <strong>{{ dashboard_home.station_callsign }}</strong>
-                </div>
-                <div class="dashboard-hero-summary-item">
-                    <span class="muted">Interface</span>
-                    <strong>{{ dashboard_home.selected_interface_name }}</strong>
-                </div>
-                <div class="dashboard-hero-summary-item">
-                    <span class="muted">Last traffic</span>
-                    <strong>{{ dashboard_home.latest_activity }}</strong>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
+        </section>
 
-<section class="panel">
-    <div class="panel-body">
-        <div class="dashboard-kpi-grid">
-            {% for item in dashboard_home.stats %}
-            <div class="metric-card dashboard-kpi-card">
-                <span class="metric-value">{{ item.value }}</span>
-                <span class="metric-label">{{ item.label }}</span>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="dashboard-action-row">
-            <a href="{{ request.scope.root_path }}/station" class="button">My Settings</a>
-            <a href="{{ request.scope.root_path }}/map" class="button button-secondary">Map</a>
-            <a href="{{ request.scope.root_path }}/stations" class="button button-secondary">Stations</a>
-            <a href="{{ request.scope.root_path }}/traffic" class="button button-secondary">Traffic Monitor</a>
-        </div>
-    </div>
-</section>
-
-<section class="grid two">
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>What Needs Attention</h2>
-                    <p class="section-lead">Only the items that block normal use.</p>
+        <section class="panel dashboard-band-panel">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>Band Condition</h2>
+                        <p class="section-lead">{% if dashboard_band %}Current estimate for {{ dashboard_band.band_label }}.{% else %}No band data yet.{% endif %}</p>
+                    </div>
+                    <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Open</a>
                 </div>
-            </div>
-            {% if dashboard_home.next_steps %}
-            <div class="dashboard-next-steps">
-                {% for item in dashboard_home.checks %}
-                {% if item.state != 'ok' %}
-                <div class="dashboard-next-step">
-                    <strong>{{ item.label }}</strong>
-                    <p>{{ item.value }}</p>
-                </div>
+                {% if dashboard_band %}
+                <section class="band-condition-hero band-condition-hero-{{ dashboard_band.diagnosis_tone }}">
+                    <div class="band-condition-hero-copy">
+                        <strong>{{ dashboard_band.diagnosis_title }}</strong>
+                        <p>{{ dashboard_home.band_summary }}</p>
+                    </div>
+                    <div class="band-condition-hero-score">
+                        <span class="muted">{{ dashboard_band.band_label }}</span>
+                        <strong>{{ dashboard_band.label }}</strong>
+                    </div>
+                </section>
+                {% else %}
+                <div class="notice">Band condition is not available yet.</div>
                 {% endif %}
-                {% endfor %}
             </div>
-            {% else %}
-            <div class="notice">Basic station setup is complete. You can work from My Settings, Map and Stations.</div>
-            {% endif %}
-        </div>
-    </div>
+        </section>
+    </section>
 
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Station Readiness</h2>
-                    <p class="section-lead">Quick operational checklist.</p>
+    <section class="dashboard-detail-grid">
+        <section class="panel">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>What Needs Attention</h2>
+                        <p class="section-lead">Only the items that block normal use.</p>
+                    </div>
                 </div>
-            </div>
-            <div class="dashboard-checks">
-                {% for item in dashboard_home.checks %}
-                <div class="dashboard-check dashboard-check-{{ item.state }}">
-                    <div>
+                {% if dashboard_home.next_steps %}
+                <div class="dashboard-next-steps">
+                    {% for item in dashboard_home.next_steps %}
+                    <div class="dashboard-next-step">
                         <strong>{{ item.label }}</strong>
                         <p>{{ item.value }}</p>
                     </div>
-                    <span class="status-pill {% if item.state == 'ok' %}status-running{% else %}status-unknown{% endif %}">
-                        {{ "OK" if item.state == "ok" else "Needs attention" }}
-                    </span>
+                    {% endfor %}
                 </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>Band Condition</h2>
-                <p class="section-lead">{% if dashboard_band %}Current estimate for {{ dashboard_band.band_label }}.{% else %}No band data yet.{% endif %}</p>
-            </div>
-            <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Open Band Condition</a>
-        </div>
-        {% if dashboard_band %}
-        <section class="band-condition-hero band-condition-hero-{{ dashboard_band.diagnosis_tone }}">
-            <div class="band-condition-hero-copy">
-                <strong>{{ dashboard_band.diagnosis_title }}</strong>
-                <p>{{ dashboard_home.band_summary }}</p>
-            </div>
-            <div class="band-condition-hero-score">
-                <span class="muted">{{ dashboard_band.band_label }}</span>
-                <strong>{{ dashboard_band.label }}</strong>
+                {% else %}
+                <div class="notice">Basic station setup is complete. You can work from My Settings, Map and Stations.</div>
+                {% endif %}
             </div>
         </section>
-        {% else %}
-        <div class="notice">Band condition is not available yet.</div>
-        {% endif %}
-    </div>
-</section>
+
+        <section class="panel">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>Station Readiness</h2>
+                        <p class="section-lead">Quick operational checklist.</p>
+                    </div>
+                </div>
+                <div class="dashboard-checks">
+                    {% for item in dashboard_home.checks %}
+                    <div class="dashboard-check dashboard-check-{{ item.state }}">
+                        <div>
+                            <strong>{{ item.label }}</strong>
+                            <p>{{ item.value }}</p>
+                        </div>
+                        <span class="status-pill {% if item.state == 'ok' %}status-running{% else %}status-unknown{% endif %}">
+                            {{ "OK" if item.state == "ok" else "Needs attention" }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </section>
+</div>
 {% endblock %}

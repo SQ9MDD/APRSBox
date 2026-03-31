@@ -335,6 +335,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "value": str(len(enabled_interfaces)),
         },
     ]
+    next_steps = [item for item in checks if item["state"] != "ok"]
     ready_count = sum(1 for item in checks if item["state"] == "ok")
     beacon_ready = ready_count == len(checks)
 
@@ -376,8 +377,11 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             {"label": "Last traffic", "value": latest_activity},
         ],
         "checks": checks,
+        "next_steps": next_steps,
         "beacon_ready": beacon_ready,
+        "station_callsign": station_settings.get("callsign") or "Not set",
         "selected_interface_name": selected_interface["name"] if selected_interface else "Not selected",
+        "latest_activity": latest_activity,
         "band_summary": band_summary,
     }
 
