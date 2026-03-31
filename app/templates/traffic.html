@@ -2,50 +2,6 @@
 
 {% block content %}
 {% set traffic_stream_url = request.scope.root_path ~ '/api/traffic/stream' %}
-<section class="grid two">
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Connection</h2>
-                </div>
-            </div>
-            <div class="traffic-status-row">
-                <span class="status-pill {{ 'status-running' if traffic_snapshot.status == 'connected' else ('status-unknown' if traffic_snapshot.status == 'connecting' else 'status-stopped') }}">
-                    <span id="traffic-status-label">{{ traffic_snapshot.status }}</span>
-                </span>
-                <span class="muted small" id="traffic-updated-at">{{ traffic_snapshot.updated_at }}</span>
-            </div>
-            <dl class="details-grid traffic-details">
-                <dt>Active TNC</dt>
-                <dd id="traffic-modem-name">{{ traffic_snapshot.active_modem.name if traffic_snapshot.active_modem else 'None' }}</dd>
-                <dt>Endpoint</dt>
-                <dd id="traffic-modem-endpoint">{{ traffic_snapshot.active_modem.device_path if traffic_snapshot.active_modem else '-' }}</dd>
-                <dt>Detail</dt>
-                <dd id="traffic-status-detail">{{ traffic_snapshot.status_detail }}</dd>
-                <dt>Last Error</dt>
-                <dd id="traffic-last-error">{{ traffic_snapshot.last_error or '-' }}</dd>
-            </dl>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Monitor State</h2>
-                </div>
-            </div>
-            <ul class="simple-list">
-                <li>Source: the first enabled modem with type <code>TCP</code>.</li>
-                <li>Address format: <code>ip:port</code> in the existing <code>Path / Adress</code> field.</li>
-                <li>Display: one row per complete KISS frame, newest first.</li>
-                <li>Decoded APRS UI frames are rendered in TNC2 form by <code>aprs-core</code>.</li>
-            </ul>
-        </div>
-    </div>
-</section>
-
 <section class="panel">
     <div class="panel-body">
         <div class="traffic-toolbar">
@@ -72,12 +28,6 @@
     (() => {
         const streamContainer = document.getElementById("traffic-stream");
         const count = document.getElementById("traffic-frame-count");
-        const statusLabel = document.getElementById("traffic-status-label");
-        const updatedAt = document.getElementById("traffic-updated-at");
-        const modemName = document.getElementById("traffic-modem-name");
-        const modemEndpoint = document.getElementById("traffic-modem-endpoint");
-        const statusDetail = document.getElementById("traffic-status-detail");
-        const lastError = document.getElementById("traffic-last-error");
 
         const renderFrames = (frames) => {
             if (!frames.length) {
@@ -103,40 +53,14 @@
             });
         };
 
-        const syncStatusClass = (status) => {
-            const pill = statusLabel.closest(".status-pill");
-            if (!pill) return;
-            pill.classList.remove("status-running", "status-stopped", "status-unknown");
-            if (status === "connected") {
-                pill.classList.add("status-running");
-            } else if (status === "connecting") {
-                pill.classList.add("status-unknown");
-            } else {
-                pill.classList.add("status-stopped");
-            }
-        };
-
         const applySnapshot = (snapshot) => {
-            statusLabel.textContent = snapshot.status;
-            updatedAt.textContent = snapshot.updated_at || "-";
-            modemName.textContent = snapshot.active_modem ? snapshot.active_modem.name : "None";
-            modemEndpoint.textContent = snapshot.active_modem ? snapshot.active_modem.device_path : "-";
-            statusDetail.textContent = snapshot.status_detail;
-            lastError.textContent = snapshot.last_error || "-";
             count.textContent = `${snapshot.frames.length} entries`;
-            syncStatusClass(snapshot.status);
             renderFrames(snapshot.frames);
         };
 
-        syncStatusClass(statusLabel.textContent);
         const eventSource = new EventSource({{ traffic_stream_url|tojson }});
         eventSource.onmessage = (event) => {
             applySnapshot(JSON.parse(event.data));
-        };
-        eventSource.onerror = () => {
-            statusLabel.textContent = "unavailable";
-            statusDetail.textContent = "Lost live connection to aprs-core stream. Waiting for reconnect.";
-            syncStatusClass("error");
         };
     })();
 </script>
