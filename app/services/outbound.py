@@ -18,7 +18,7 @@ OUTBOUND_STATUS_SENT = "sent"
 OUTBOUND_STATUS_FAILED = "failed"
 
 
-def enqueue_beacon_job(station_settings: dict[str, Any]) -> tuple[bool, str]:
+def enqueue_beacon_job(station_settings: dict[str, Any], *, trigger: str = "manual") -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
     beacon_interface_id = station_settings.get("beacon_interface_id")
@@ -55,6 +55,7 @@ def enqueue_beacon_job(station_settings: dict[str, Any]) -> tuple[bool, str]:
         "symbol_code": _normalize_symbol_code(station_settings.get("symbol_code")),
         "beacon_comment": str(station_settings.get("beacon_comment") or "").strip(),
         "beacon_path": str(station_settings.get("beacon_path") or "").strip(),
+        "trigger": str(trigger or "manual").strip() or "manual",
     }
     timestamp = utc_now()
     with get_connection() as connection:
@@ -77,8 +78,21 @@ def enqueue_beacon_job(station_settings: dict[str, Any]) -> tuple[bool, str]:
             ),
         )
         job_id = cursor.lastrowid
-    log_event("INFO", "outbound", f"Queued beacon job #{job_id} for interface {modem['name']}")
+    log_event("INFO", "outbound", f"Queued {payload['trigger']} beacon job #{job_id} for interface {modem['name']}")
     return True, f"Beacon queued as job #{job_id}."
+
+
+def pending_beacon_job_count() -> int:
+    row = fetch_one(
+        """
+        SELECT COUNT(*) AS total
+        FROM outbound_jobs
+        WHERE kind = ?
+          AND status IN (?, ?)
+        """,
+        (OUTBOUND_KIND_BEACON, OUTBOUND_STATUS_QUEUED, OUTBOUND_STATUS_PROCESSING),
+    )
+    return int(row["total"]) if row else 0
 
 
 def claim_next_outbound_job() -> dict[str, Any] | None:

@@ -382,6 +382,26 @@ def execute(query: str, params: tuple[Any, ...] = ()) -> None:
         connection.execute(query, params)
 
 
+def get_app_setting(key: str) -> str | None:
+    row = fetch_one("SELECT value FROM app_settings WHERE key = ?", (key,))
+    if row is None:
+        return None
+    return str(row["value"])
+
+
+def set_app_setting(key: str, value: str) -> None:
+    execute(
+        """
+        INSERT INTO app_settings(key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, value, utc_now()),
+    )
+
+
 def log_event(level: str, category: str, message: str) -> None:
     execute(
         "INSERT INTO event_logs(level, category, message, created_at) VALUES (?, ?, ?, ?)",
