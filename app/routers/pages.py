@@ -39,6 +39,7 @@ from app.services.band_condition import (
     split_station_key,
 )
 from app.services.map_service import get_map_page_config, get_map_station_payload, get_station_detail_map_config
+from app.services.outbound import enqueue_beacon_job
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
 from app.template_helpers import build_template_context
 
@@ -686,6 +687,7 @@ def station_page(
         active_nav="station",
         station=get_station_settings(),
         can_edit=current_user.role in {"admin", "operator"},
+        flash_success=True,
         **_station_form_options(),
     )
     return templates.TemplateResponse("station.html", context)
@@ -757,9 +759,59 @@ def station_update(
         station=get_station_settings(),
         can_edit=True,
         flash="Station settings saved.",
+        flash_success=True,
         **_station_form_options(),
     )
     return templates.TemplateResponse("station.html", context)
+
+
+@router.post("/station/send-beacon")
+def station_send_beacon(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    callsign: str = Form(""),
+    ssid: str = Form(""),
+    beacon_interface_id: str = Form(""),
+    beacon_comment: str = Form(""),
+    beacon_interval_minutes: str = Form("30"),
+    beacon_path: str = Form(""),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
+    symbol_table: str = Form("/"),
+    symbol_code: str = Form(">"),
+    default_units: str = Form("metric"),
+    tx_enabled: str | None = Form(None),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "callsign": callsign.strip(),
+        "ssid": ssid.strip(),
+        "beacon_interface_id": beacon_interface_id.strip(),
+        "beacon_comment": beacon_comment.strip(),
+        "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_path": beacon_path.strip(),
+        "latitude": latitude.strip(),
+        "longitude": longitude.strip(),
+        "symbol_table": symbol_table.strip(),
+        "symbol_code": symbol_code.strip(),
+        "default_units": default_units.strip(),
+        "tx_enabled": tx_enabled,
+    }
+    update_station_settings(payload)
+    station_settings = get_station_settings()
+    success, flash = enqueue_beacon_job(station_settings)
+    context = build_template_context(
+        request,
+        page_title="My Settings",
+        current_user=current_user,
+        active_nav="station",
+        station=station_settings,
+        can_edit=True,
+        flash=flash,
+        flash_success=success,
+        **_station_form_options(),
+    )
+    return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.get("/logs")

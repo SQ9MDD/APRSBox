@@ -105,6 +105,23 @@ CREATE TABLE IF NOT EXISTS station_settings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS outbound_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    interface_id INTEGER,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'sent', 'failed', 'cancelled')),
+    scheduled_at TEXT NOT NULL,
+    locked_at TEXT,
+    started_at TEXT,
+    sent_at TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (interface_id) REFERENCES modems(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS igate_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -265,6 +282,7 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
 
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_band_condition_refs_band_enabled
     ON band_condition_reference_stations(band, enabled);
 CREATE INDEX IF NOT EXISTS idx_band_condition_audibility_processed
