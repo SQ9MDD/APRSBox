@@ -1728,6 +1728,10 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
             raise ValueError("Object name is required.")
         if len(name) > 9:
             raise ValueError("Object name must be 1-9 printable ASCII characters.")
+        lifetime = str(payload.get("lifetime") or "temporary").strip().lower()
+        if lifetime not in {"temporary", "permanent"}:
+            raise ValueError("Object lifetime must be temporary or permanent.")
+        normalized["lifetime"] = lifetime
     else:
         if len(name) < 3 or len(name) > 9:
             raise ValueError("Item name must be 3-9 printable ASCII characters.")
@@ -1831,7 +1835,8 @@ def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
     if slug == "objects":
         name = str(payload.get("name") or "")[:9].ljust(9)
         state_marker = "*" if str(payload.get("state") or "live") == "live" else "_"
-        timestamp = datetime.now(timezone.utc).strftime("%d%H%Mz")
+        lifetime = str(payload.get("lifetime") or "temporary").strip().lower()
+        timestamp = "111111z" if lifetime == "permanent" else datetime.now(timezone.utc).strftime("%d%H%Mz")
         info = (
             f";{name}{state_marker}{timestamp}"
             f"{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}{symbol_code}{comment}"

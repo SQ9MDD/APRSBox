@@ -105,8 +105,18 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
         fields=[
             {"name": "name", "label": "Object Name", "type": "text", "required": True, "maxlength": 9, "placeholder": "VOICE"},
             {
+                "name": "lifetime",
+                "label": "Object Lifetime",
+                "type": "select",
+                "required": True,
+                "options": [
+                    {"value": "temporary", "label": "Temporary"},
+                    {"value": "permanent", "label": "Permanent"},
+                ],
+            },
+            {
                 "name": "state",
-                "label": "Object State",
+                "label": "Object Activity",
                 "type": "select",
                 "required": True,
                 "options": [

@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS digi_rules (
 CREATE TABLE IF NOT EXISTS aprs_objects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
+    lifetime TEXT NOT NULL DEFAULT 'temporary' CHECK (lifetime IN ('temporary', 'permanent')),
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 60)),
@@ -358,6 +359,14 @@ def init_db() -> None:
                 ALTER TABLE aprs_objects
                 ADD COLUMN state TEXT NOT NULL DEFAULT 'live'
                 CHECK (state IN ('live', 'killed'))
+                """
+            )
+        if "lifetime" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN lifetime TEXT NOT NULL DEFAULT 'temporary'
+                CHECK (lifetime IN ('temporary', 'permanent'))
                 """
             )
         if "path" not in object_columns:

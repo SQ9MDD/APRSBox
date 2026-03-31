@@ -620,6 +620,7 @@ def objects_create(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     record_id: int | None = Form(None),
     name: str = Form(...),
+    lifetime: str = Form("temporary"),
     state: str = Form("live"),
     latitude: str = Form(""),
     longitude: str = Form(""),
@@ -633,6 +634,7 @@ def objects_create(
     templates = request.app.state.templates
     payload = {
         "name": name.strip(),
+        "lifetime": lifetime.strip(),
         "state": state.strip(),
         "latitude": latitude.strip(),
         "longitude": longitude.strip(),

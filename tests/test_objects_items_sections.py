@@ -48,6 +48,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                 "objects",
                 {
                     "name": "VOICE",
+                    "lifetime": "temporary",
                     "state": "live",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
@@ -77,6 +78,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                 "objects",
                 {
                     "name": "VOICE",
+                    "lifetime": "temporary",
                     "state": "live",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
@@ -91,8 +93,9 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertTrue(success)
             self.assertIsNone(error)
 
-            row = fetch_one("SELECT name, state, interval_minutes, path, is_enabled, comment FROM aprs_objects WHERE name = ?", ("VOICE",))
+            row = fetch_one("SELECT name, lifetime, state, interval_minutes, path, is_enabled, comment FROM aprs_objects WHERE name = ?", ("VOICE",))
             assert row is not None
+            self.assertEqual(row["lifetime"], "temporary")
             self.assertEqual(row["state"], "live")
             self.assertEqual(row["interval_minutes"], 15)
             self.assertEqual(row["path"], "WIDE2-2")
@@ -104,6 +107,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                 "objects",
                 {
                     "name": "TOO-LONG-1",
+                    "lifetime": "temporary",
                     "state": "live",
                     "latitude": "",
                     "longitude": "",
@@ -228,6 +232,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                 "objects",
                 {
                     "name": "VOICE",
+                    "lifetime": "temporary",
                     "state": "live",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
@@ -240,6 +245,50 @@ class ObjectAndItemFormTests(unittest.TestCase):
             )
             self.assertFalse(success)
             self.assertEqual(error, "Future send interval must be one of: 5, 10, 15, 30, 60 minutes.")
+
+    def test_permanent_object_uses_fixed_111111z_timestamp_in_preview(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "T2WARSPL",
+                    "lifetime": "permanent",
+                    "state": "live",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": "I",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "comment": "http://hamspirit.pl:14501 Server T2",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("T2WARSPL",))
+            assert row is not None
+            decorated = get_section_row("objects", int(row["id"]))
+            assert decorated is not None
+            self.assertRegex(
+                decorated["raw_frame_preview"],
+                r"^SQ9MDD-4>APRS:;T2WARSPL \*111111z5215\.01N/02055\.61EIhttp://hamspirit\.pl:14501 Server T2$",
+            )
 
 
 if __name__ == "__main__":
