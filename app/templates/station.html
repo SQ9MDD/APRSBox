@@ -93,14 +93,6 @@
                             {% endfor %}
                         </div>
                     </div>
-                    <div class="station-symbol-preview" aria-live="polite">
-                        <img
-                            id="station-symbol-preview-image"
-                            src="{{ request.scope.root_path }}/static/icons/verG/x.gif"
-                            alt=""
-                        >
-                        <span id="station-symbol-preview-text">Preview</span>
-                    </div>
                 </div>
             </label>
             <label>
@@ -147,9 +139,7 @@
         const symbolTriggerText = document.getElementById("station-symbol-trigger-text");
         const symbolMenu = document.getElementById("station-symbol-menu");
         const symbolOptions = Array.from(document.querySelectorAll(".station-symbol-option"));
-        const previewImage = document.getElementById("station-symbol-preview-image");
-        const previewText = document.getElementById("station-symbol-preview-text");
-        if (!symbolTable || !symbolCode || !symbolDropdown || !symbolTrigger || !symbolTriggerImage || !symbolTriggerText || !symbolMenu || !symbolOptions.length || !previewImage || !previewText) {
+        if (!symbolTable || !symbolCode || !symbolDropdown || !symbolTrigger || !symbolTriggerImage || !symbolTriggerText || !symbolMenu || !symbolOptions.length) {
             return;
         }
 
@@ -170,8 +160,6 @@
             const icon = symbolTable.value === "\\"
                 ? selected.dataset.alternateIcon
                 : selected.dataset.primaryIcon;
-            previewImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
-            previewText.textContent = `${symbolTable.value}${selected.value}`;
             symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
             symbolTriggerText.textContent = selected.dataset.label || selected.value;
 

@@ -103,7 +103,7 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
         "symbol_code_options": [
             {
                 "value": chr(code),
-                "label": f"{chr(code)} ({code})",
+                "label": chr(code),
                 "primary_icon": get_aprs_symbol_icon_path(f"/{chr(code)}"),
                 "alternate_icon": get_aprs_symbol_icon_path(f"\\{chr(code)}"),
             }
