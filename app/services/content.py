@@ -109,16 +109,36 @@ def get_station_settings() -> dict[str, Any]:
     if not row:
         return {}
     result = dict(row)
+    result.setdefault("beacon_interface_id", None)
     result.setdefault("default_units", "metric")
     result.setdefault("beacon_interval_minutes", 30)
     result.setdefault("beacon_path", "")
     return result
 
 
+def get_configured_modem_interfaces() -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
+    return [dict(row) for row in rows]
+
+
 def update_station_settings(payload: dict[str, Any]) -> None:
     default_units = payload.get("default_units", "metric")
     if default_units not in {"metric", "imperial"}:
         default_units = "metric"
+    try:
+        beacon_interface_id = int(payload.get("beacon_interface_id")) if payload.get("beacon_interface_id") not in {None, ""} else None
+    except (TypeError, ValueError):
+        beacon_interface_id = None
+    if beacon_interface_id is not None:
+        interface_exists = fetch_one("SELECT id FROM modems WHERE id = ?", (beacon_interface_id,))
+        if interface_exists is None:
+            beacon_interface_id = None
     try:
         beacon_interval_minutes = int(payload.get("beacon_interval_minutes") or 30)
     except (TypeError, ValueError):
@@ -134,6 +154,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
     values = {
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
+        "beacon_interface_id": beacon_interface_id,
         "beacon_comment": payload.get("beacon_comment", ""),
         "beacon_interval_minutes": beacon_interval_minutes,
         "beacon_path": payload.get("beacon_path", ""),
@@ -151,6 +172,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
             UPDATE station_settings
             SET callsign = :callsign,
                 ssid = :ssid,
+                beacon_interface_id = :beacon_interface_id,
                 beacon_comment = :beacon_comment,
                 beacon_interval_minutes = :beacon_interval_minutes,
                 beacon_path = :beacon_path,

@@ -17,6 +17,7 @@
 
 <section class="panel">
     <div class="panel-body">
+        {% set selected_beacon_interface_id = station.beacon_interface_id|string if station.beacon_interface_id is not none else '' %}
         {% if can_edit %}
         <form method="post" class="form-grid">
             <label>
@@ -28,6 +29,14 @@
                 <select name="ssid">
                     {% for option in ssid_options %}
                     <option value="{{ option.value }}" {% if station.ssid == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="full">
+                <span>Interface</span>
+                <select name="beacon_interface_id">
+                    {% for option in interface_options %}
+                    <option value="{{ option.value }}" {% if selected_beacon_interface_id == option.value %}selected{% endif %}>{{ option.label }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -108,12 +117,14 @@
             </label>
             <div class="form-actions">
                 <button type="submit" class="button">Save Station Settings</button>
+                <button type="button" class="button button-secondary" id="send-beacon-button">Send beacon</button>
             </div>
         </form>
         {% else %}
         <dl class="details-grid">
             <dt>Callsign</dt><dd>{{ station.callsign }}</dd>
             <dt>SSID</dt><dd>{{ station.ssid }}</dd>
+            <dt>Interface</dt><dd>{% for option in interface_options %}{% if option.value == selected_beacon_interface_id %}{{ option.label }}{% endif %}{% endfor %}</dd>
             <dt>Beacon Comment</dt><dd>{{ station.beacon_comment }}</dd>
             <dt>Beacon at every</dt><dd>{{ station.beacon_interval_minutes }}m</dd>
             <dt>Beacon path</dt><dd>{{ station.beacon_path }}</dd>

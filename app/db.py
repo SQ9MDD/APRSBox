@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS station_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     callsign TEXT,
     ssid TEXT,
+    beacon_interface_id INTEGER,
     beacon_comment TEXT,
     beacon_interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (beacon_interval_minutes IN (15, 30, 45, 60)),
     beacon_path TEXT,
@@ -311,6 +312,13 @@ def init_db() -> None:
                 ADD COLUMN beacon_path TEXT
                 """
             )
+        if "beacon_interface_id" not in station_columns:
+            connection.execute(
+                """
+                ALTER TABLE station_settings
+                ADD COLUMN beacon_interface_id INTEGER
+                """
+            )
         if "band" not in modem_columns:
             connection.execute(
                 """
@@ -321,10 +329,10 @@ def init_db() -> None:
         connection.execute(
             """
             INSERT INTO station_settings (
-                id, callsign, ssid, beacon_comment, beacon_interval_minutes, beacon_path, latitude, longitude,
+                id, callsign, ssid, beacon_interface_id, beacon_comment, beacon_interval_minutes, beacon_path, latitude, longitude,
                 symbol_table, symbol_code, default_units, tx_enabled, updated_at
             )
-            VALUES (1, '', '', '', 30, '', '', '', '/', '>', 'metric', 0, ?)
+            VALUES (1, '', '', NULL, '', 30, '', '', '', '/', '>', 'metric', 0, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),
