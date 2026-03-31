@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 <section class="panel">
     <div class="panel-body">
