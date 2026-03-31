@@ -1967,18 +1967,46 @@ code {
     position: absolute;
     left: 50%;
     top: 50%;
-    width: 32px;
-    height: 32px;
+    width: 38px;
+    height: 38px;
     transform: translate(-50%, -50%);
     pointer-events: none;
-    display: grid;
-    place-items: center;
+    z-index: 500;
 }
 
-.location-picker-crosshair img {
-    width: 32px;
-    height: 32px;
-    opacity: 0.92;
+.location-picker-crosshair::before,
+.location-picker-crosshair::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 0, 0, 0.18);
+    transform: translate(-50%, -50%);
+}
+
+.location-picker-crosshair::before {
+    width: 2px;
+    height: 38px;
+}
+
+.location-picker-crosshair::after {
+    width: 38px;
+    height: 2px;
+}
+
+.location-picker-crosshair {
+    border: 2px solid rgba(255, 255, 255, 0.96);
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme="light"] .location-picker-crosshair,
+:root[data-theme="light"] .location-picker-crosshair::before,
+:root[data-theme="light"] .location-picker-crosshair::after {
+    background: rgba(17, 23, 20, 0.95);
+    border-color: rgba(17, 23, 20, 0.95);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8), 0 0 10px rgba(255, 255, 255, 0.22);
 }
 
 .location-picker-footer {
