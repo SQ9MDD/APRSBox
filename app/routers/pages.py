@@ -21,6 +21,7 @@ from app.services.content import (
     get_related_ssids,
     get_station_detail,
     get_station_settings,
+    recent_event_logs,
     station_summary,
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
