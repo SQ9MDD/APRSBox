@@ -588,37 +588,47 @@ def digi_create(
 def objects_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    edit: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "objects"))
+    edit_row = get_section_row("objects", edit) if edit is not None else None
+    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "objects", edit_row=edit_row))
 
 
 @router.post("/objects")
 def objects_create(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    record_id: int | None = Form(None),
     name: str = Form(...),
+    state: str = Form("live"),
     latitude: str = Form(""),
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
+    path: str = Form(""),
     is_enabled: str | None = Form(None),
     comment: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
-    success, error = safe_create_section_row(
-        "objects",
-        {
-            "name": name.strip(),
-            "latitude": latitude.strip(),
-            "longitude": longitude.strip(),
-            "symbol_table": symbol_table.strip(),
-            "symbol_code": symbol_code.strip(),
-            "is_enabled": is_enabled,
-            "comment": comment.strip(),
-        },
-    )
-    context = _section_template_context(request, current_user, "objects", flash=None if success else error)
+    payload = {
+        "name": name.strip(),
+        "state": state.strip(),
+        "latitude": latitude.strip(),
+        "longitude": longitude.strip(),
+        "symbol_table": symbol_table.strip(),
+        "symbol_code": symbol_code.strip(),
+        "path": path.strip(),
+        "is_enabled": is_enabled,
+        "comment": comment.strip(),
+    }
+    if record_id is None:
+        success, error = safe_create_section_row("objects", payload)
+        edit_row = None
+    else:
+        success, error = safe_update_section_row("objects", record_id, payload)
+        edit_row = get_section_row("objects", record_id) if error else None
+    context = _section_template_context(request, current_user, "objects", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
 
@@ -626,38 +636,68 @@ def objects_create(
 def items_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    edit: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "items"))
+    edit_row = get_section_row("items", edit) if edit is not None else None
+    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "items", edit_row=edit_row))
 
 
 @router.post("/items")
 def items_create(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    record_id: int | None = Form(None),
     name: str = Form(...),
+    state: str = Form("live"),
     latitude: str = Form(""),
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
+    path: str = Form(""),
     is_enabled: str | None = Form(None),
     comment: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
-    success, error = safe_create_section_row(
-        "items",
-        {
-            "name": name.strip(),
-            "latitude": latitude.strip(),
-            "longitude": longitude.strip(),
-            "symbol_table": symbol_table.strip(),
-            "symbol_code": symbol_code.strip(),
-            "is_enabled": is_enabled,
-            "comment": comment.strip(),
-        },
-    )
-    context = _section_template_context(request, current_user, "items", flash=None if success else error)
+    payload = {
+        "name": name.strip(),
+        "state": state.strip(),
+        "latitude": latitude.strip(),
+        "longitude": longitude.strip(),
+        "symbol_table": symbol_table.strip(),
+        "symbol_code": symbol_code.strip(),
+        "path": path.strip(),
+        "is_enabled": is_enabled,
+        "comment": comment.strip(),
+    }
+    if record_id is None:
+        success, error = safe_create_section_row("items", payload)
+        edit_row = None
+    else:
+        success, error = safe_update_section_row("items", record_id, payload)
+        edit_row = get_section_row("items", record_id) if error else None
+    context = _section_template_context(request, current_user, "items", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/settings/objects/{record_id}/delete")
+def objects_delete(
+    record_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    delete_section_row("objects", record_id)
+    return RedirectResponse(url=_path(request, "/objects"), status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/settings/items/{record_id}/delete")
+def items_delete(
+    record_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    delete_section_row("items", record_id)
+    return RedirectResponse(url=_path(request, "/items"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/bulletins")

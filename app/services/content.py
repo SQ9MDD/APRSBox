@@ -44,13 +44,14 @@ def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
 def create_section_row(slug: str, payload: dict[str, Any]) -> None:
     definition = SECTION_DEFINITIONS[slug]
     timestamp = utc_now()
+    normalized_payload = _normalize_section_payload(slug, payload)
     values: dict[str, Any] = {}
     for field in definition.fields:
         name = field["name"]
         if field["type"] == "checkbox":
-            values[name] = int(bool(payload.get(name)))
+            values[name] = int(bool(normalized_payload.get(name)))
         else:
-            values[name] = payload.get(name)
+            values[name] = normalized_payload.get(name)
     if slug == "modems" and values.get("modem_type") == "TCP":
         values["baud_rate"] = None
     if slug in {"modems", "servers"}:
@@ -72,13 +73,14 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
 
 def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
     definition = SECTION_DEFINITIONS[slug]
+    normalized_payload = _normalize_section_payload(slug, payload)
     values: dict[str, Any] = {}
     for field in definition.fields:
         name = field["name"]
         if field["type"] == "checkbox":
-            values[name] = int(bool(payload.get(name)))
+            values[name] = int(bool(normalized_payload.get(name)))
         else:
-            values[name] = payload.get(name)
+            values[name] = normalized_payload.get(name)
     if slug == "modems" and values.get("modem_type") == "TCP":
         values["baud_rate"] = None
     if slug in {"modems", "servers"}:
@@ -1685,6 +1687,8 @@ def worker_statuses() -> list[dict[str, str]]:
 def safe_create_section_row(slug: str, payload: dict[str, Any]) -> tuple[bool, str | None]:
     try:
         create_section_row(slug, payload)
+    except ValueError as exc:
+        return False, str(exc)
     except sqlite3.IntegrityError as exc:
         return False, str(exc)
     return True, None
@@ -1693,6 +1697,91 @@ def safe_create_section_row(slug: str, payload: dict[str, Any]) -> tuple[bool, s
 def safe_update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> tuple[bool, str | None]:
     try:
         update_section_row(slug, row_id, payload)
+    except ValueError as exc:
+        return False, str(exc)
     except sqlite3.IntegrityError as exc:
         return False, str(exc)
     return True, None
+
+
+def _normalize_section_payload(slug: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if slug == "objects":
+        return _normalize_aprs_entity_payload("object", payload)
+    if slug == "items":
+        return _normalize_aprs_entity_payload("item", payload)
+    return payload
+
+
+def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    name = _normalize_printable_ascii(str(payload.get("name") or "").strip())
+    if kind == "object":
+        if not name:
+            raise ValueError("Object name is required.")
+        if len(name) > 9:
+            raise ValueError("Object name must be 1-9 printable ASCII characters.")
+    else:
+        if len(name) < 3 or len(name) > 9:
+            raise ValueError("Item name must be 3-9 printable ASCII characters.")
+        if "!" in name or "_" in name:
+            raise ValueError("Item name cannot contain ! or _.")
+    normalized["name"] = name
+
+    state = str(payload.get("state") or "live").strip().lower()
+    if state not in {"live", "killed"}:
+        raise ValueError(f"{kind.capitalize()} state must be live or killed.")
+    normalized["state"] = state
+
+    latitude = str(payload.get("latitude") or "").strip()
+    longitude = str(payload.get("longitude") or "").strip()
+    if bool(latitude) != bool(longitude):
+        raise ValueError(f"{kind.capitalize()} requires both latitude and longitude, or neither.")
+    if latitude:
+        _validate_coordinate(latitude, minimum=-90.0, maximum=90.0, label="Latitude")
+        _validate_coordinate(longitude, minimum=-180.0, maximum=180.0, label="Longitude")
+    normalized["latitude"] = latitude
+    normalized["longitude"] = longitude
+
+    symbol_table = str(payload.get("symbol_table") or "/").strip()
+    if symbol_table not in {"/", "\\"}:
+        raise ValueError("Symbol table must be / or \\.")
+    normalized["symbol_table"] = symbol_table
+
+    symbol_code = _normalize_symbol_code_value(payload.get("symbol_code"))
+    normalized["symbol_code"] = symbol_code
+
+    path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
+    if len(path) > 64:
+        raise ValueError("Future RF path must be 64 printable ASCII characters or fewer.")
+    normalized["path"] = path
+
+    comment = _normalize_printable_ascii(str(payload.get("comment") or "").strip())
+    if len(comment) > 43:
+        raise ValueError("Comment must be 43 printable ASCII characters or fewer.")
+    normalized["comment"] = comment
+    return normalized
+
+
+def _normalize_symbol_code_value(value: Any) -> str:
+    text = str(value or ">").strip()
+    if len(text) != 1:
+        raise ValueError("Symbol code must be a single printable ASCII character.")
+    codepoint = ord(text)
+    if codepoint < 33 or codepoint > 126:
+        raise ValueError("Symbol code must be a single printable ASCII character.")
+    return text
+
+
+def _normalize_printable_ascii(value: str) -> str:
+    if any(ord(char) < 32 or ord(char) > 126 for char in value):
+        raise ValueError("Only printable ASCII characters are allowed in APRS object/item fields.")
+    return value
+
+
+def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: str) -> None:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a valid decimal coordinate.") from exc
+    if parsed < minimum or parsed > maximum:
+        raise ValueError(f"{label} is out of range.")

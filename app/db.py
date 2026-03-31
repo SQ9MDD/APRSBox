@@ -144,11 +144,13 @@ CREATE TABLE IF NOT EXISTS digi_rules (
 CREATE TABLE IF NOT EXISTS aprs_objects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
+    state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
     symbol_code TEXT,
+    path TEXT,
     comment TEXT,
     updated_at TEXT NOT NULL
 );
@@ -156,11 +158,13 @@ CREATE TABLE IF NOT EXISTS aprs_objects (
 CREATE TABLE IF NOT EXISTS aprs_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
+    state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
     symbol_code TEXT,
+    path TEXT,
     comment TEXT,
     updated_at TEXT NOT NULL
 );
@@ -300,6 +304,8 @@ def init_db() -> None:
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
+        object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
+        item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -342,6 +348,36 @@ def init_db() -> None:
                 """
                 ALTER TABLE modems
                 ADD COLUMN band TEXT NOT NULL DEFAULT ''
+                """
+            )
+        if "state" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN state TEXT NOT NULL DEFAULT 'live'
+                CHECK (state IN ('live', 'killed'))
+                """
+            )
+        if "path" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN path TEXT
+                """
+            )
+        if "state" not in item_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_items
+                ADD COLUMN state TEXT NOT NULL DEFAULT 'live'
+                CHECK (state IN ('live', 'killed'))
+                """
+            )
+        if "path" not in item_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_items
+                ADD COLUMN path TEXT
                 """
             )
         connection.execute(

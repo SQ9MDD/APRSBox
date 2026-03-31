@@ -10,6 +10,11 @@
             </div>
         </div>
         <div class="notice">{{ section.readonly_message }}</div>
+        {% if section.slug == 'objects' %}
+        <div class="notice">Use object names up to 9 printable ASCII characters. The sender will later pad them to the fixed APRS 9-character object field and add the mandatory timestamp automatically.</div>
+        {% elif section.slug == 'items' %}
+        <div class="notice">Use item names from 3 to 9 printable ASCII characters. Avoid item format on RF unless you specifically need it; objects are generally the safer interoperable choice.</div>
+        {% endif %}
         {% if flash %}
         <div class="alert">{{ flash }}</div>
         {% endif %}
@@ -111,7 +116,7 @@
                 <label class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}">
                     {% if field.type == 'textarea' %}
                     <span>{{ field.label }}</span>
-                    <textarea name="{{ field.name }}" {% if field.required %}required{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
+                    <textarea name="{{ field.name }}" {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if edit_row and edit_row[field.name] %}checked{% endif %}>
                     <span>{{ field.label }}</span>
@@ -126,7 +131,14 @@
                     </select>
                     {% else %}
                     <span>{{ field.label }}</span>
-                    <input type="{{ field.type }}" name="{{ field.name }}" value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}" {% if field.required %}required{% endif %}>
+                    <input type="{{ field.type }}" name="{{ field.name }}" value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}" {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}>
+                    {% endif %}
+                    {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
+                    <small class="muted">Optional future RF path. Common examples are <code>WIDE2-2</code> or <code>WIDE1-1,WIDE2-1</code>; leave blank for direct.</small>
+                    {% elif section.slug == 'objects' and field.name == 'comment' %}
+                    <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.</small>
+                    {% elif section.slug == 'items' and field.name == 'comment' %}
+                    <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.</small>
                     {% endif %}
                 </label>
                 {% endfor %}
