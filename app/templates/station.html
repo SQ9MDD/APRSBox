@@ -137,6 +137,51 @@
         {% endif %}
     </div>
 </section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Beacon Log</h2>
+                <p class="section-lead">Recent beacon jobs with delivery state and transmitted frame preview.</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table station-packets-table beacon-log-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Status</th>
+                        <th>Interface</th>
+                        <th>Attempts</th>
+                        <th>Error</th>
+                        <th>Frame</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in beacon_log_rows %}
+                    <tr>
+                        <td>{{ row.display_time.replace('T', ' ').replace('+00:00', ' UTC') if row.display_time else '-' }}</td>
+                        <td>
+                            <span class="status-pill {% if row.status == 'sent' %}status-running{% elif row.status == 'failed' %}status-stopped{% else %}status-unknown{% endif %}">
+                                {{ row.status }}
+                            </span>
+                        </td>
+                        <td>{{ row.interface_name }}</td>
+                        <td>{{ row.attempt_count }}</td>
+                        <td>{{ row.last_error or '-' }}</td>
+                        <td><code>{{ row.line or '-' }}</code></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">No beacon jobs yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
 {% endblock %}
 
 {% block extra_scripts %}

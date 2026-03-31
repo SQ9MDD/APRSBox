@@ -14,6 +14,7 @@ from app.services.content import (
     delete_section_row,
     get_configured_modem_interfaces,
     get_aprs_symbol_icon_path,
+    recent_beacon_jobs,
     get_recent_station_packets,
     heard_stations,
     get_section_row,
@@ -119,6 +120,28 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
         ],
         "beacon_interval_options": [{"value": value, "label": f"{value}m"} for value in (15, 30, 45, 60)],
     }
+
+
+def _station_page_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    flash: str | None = None,
+    flash_success: bool = True,
+    station: dict | None = None,
+) -> dict:
+    return build_template_context(
+        request,
+        page_title="My Settings",
+        current_user=current_user,
+        active_nav="station",
+        station=station or get_station_settings(),
+        can_edit=current_user.role in {"admin", "operator"},
+        flash=flash,
+        flash_success=flash_success,
+        beacon_log_rows=recent_beacon_jobs(limit=20),
+        **_station_form_options(),
+    )
 
 
 @router.get("/")
@@ -675,16 +698,7 @@ def station_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    context = build_template_context(
-        request,
-        page_title="My Settings",
-        current_user=current_user,
-        active_nav="station",
-        station=get_station_settings(),
-        can_edit=current_user.role in {"admin", "operator"},
-        flash_success=True,
-        **_station_form_options(),
-    )
+    context = _station_page_context(request, current_user)
     return templates.TemplateResponse("station.html", context)
 
 
@@ -746,17 +760,7 @@ def station_update(
             "tx_enabled": tx_enabled,
         }
     )
-    context = build_template_context(
-        request,
-        page_title="My Settings",
-        current_user=current_user,
-        active_nav="station",
-        station=get_station_settings(),
-        can_edit=True,
-        flash="Station settings saved.",
-        flash_success=True,
-        **_station_form_options(),
-    )
+    context = _station_page_context(request, current_user, flash="Station settings saved.", flash_success=True)
     return templates.TemplateResponse("station.html", context)
 
 
@@ -795,17 +799,7 @@ def station_send_beacon(
     update_station_settings(payload)
     station_settings = get_station_settings()
     success, flash = enqueue_beacon_job(station_settings)
-    context = build_template_context(
-        request,
-        page_title="My Settings",
-        current_user=current_user,
-        active_nav="station",
-        station=station_settings,
-        can_edit=True,
-        flash=flash,
-        flash_success=success,
-        **_station_form_options(),
-    )
+    context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 

@@ -1643,6 +1643,56 @@ select:focus-visible,
     vertical-align: top;
 }
 
+.beacon-log-table {
+    table-layout: auto;
+}
+
+.beacon-log-table th:nth-child(1),
+.beacon-log-table td:nth-child(1) {
+    width: 11rem;
+    min-width: 11rem;
+    white-space: nowrap;
+}
+
+.beacon-log-table th:nth-child(2),
+.beacon-log-table td:nth-child(2) {
+    width: 7.5rem;
+    min-width: 7.5rem;
+    white-space: nowrap;
+}
+
+.beacon-log-table th:nth-child(3),
+.beacon-log-table td:nth-child(3) {
+    width: 11rem;
+    min-width: 11rem;
+}
+
+.beacon-log-table th:nth-child(4),
+.beacon-log-table td:nth-child(4) {
+    width: 5rem;
+    min-width: 5rem;
+    white-space: nowrap;
+}
+
+.beacon-log-table th:nth-child(5),
+.beacon-log-table td:nth-child(5) {
+    min-width: 14rem;
+}
+
+.beacon-log-table th:nth-child(6),
+.beacon-log-table td:nth-child(6) {
+    min-width: 28rem;
+    white-space: nowrap;
+}
+
+.beacon-log-table td:nth-child(6) code {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: top;
+}
+
 .station-detail-map-root,
 .station-detail-map-canvas {
     width: 100%;

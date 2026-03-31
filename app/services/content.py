@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.services.outbound import build_beacon_tnc2
 from app.sections import SECTION_DEFINITIONS
 
 
@@ -196,6 +197,34 @@ def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
         (limit,),
     )
     return [dict(row) for row in rows]
+
+
+def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
+               m.name AS interface_name, j.payload_json
+        FROM outbound_jobs j
+        LEFT JOIN modems m ON m.id = j.interface_id
+        WHERE j.kind = 'beacon'
+        ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    jobs: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload_json = item.pop("payload_json", "") or "{}"
+        try:
+            payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            payload = {}
+        item["line"] = build_beacon_tnc2(payload) if payload else ""
+        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
+        jobs.append(item)
+    return jobs
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
