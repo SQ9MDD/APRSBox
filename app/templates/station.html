@@ -6,7 +6,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>My Settings</h2>
-                <p class="section-lead">This page stores the station profile and planned beacon defaults. Saving data here does not enable APRS traffic by itself.</p>
+                <p class="section-lead">This page stores the station profile and beacon defaults. When automatic beacon transmission is enabled below, saving this form persists that flag and lets the background scheduler queue beacon jobs at the selected interval.</p>
             </div>
         </div>
         {% if flash %}
@@ -113,7 +113,7 @@
             </label>
             <label class="checkbox-row">
                 <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
-                <span>Enable scheduled beacon from this form</span>
+                <span>Enable automatic beacon transmission every selected interval</span>
             </label>
             <div class="form-actions">
                 <button type="submit" class="button">Save Station Settings</button>
