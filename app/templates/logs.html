@@ -10,7 +10,14 @@
             </div>
         </div>
         <div class="table-wrap">
-            <table class="data-table">
+            <table class="data-table compact-table logs-table">
+                <colgroup>
+                    <col class="logs-col-id">
+                    <col class="logs-col-time">
+                    <col class="logs-col-level">
+                    <col class="logs-col-category">
+                    <col class="logs-col-message">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -22,9 +29,9 @@
                 </thead>
                 <tbody>
                     {% for row in log_rows %}
-                    <tr>
+                    <tr class="{% if row.level == 'WARNING' %}log-row-warning{% endif %}">
                         <td>{{ row.id }}</td>
-                        <td>{{ row.created_at }}</td>
+                        <td>{{ row.created_at.replace('T', ' ').replace('+00:00', ' UTC') }}</td>
                         <td>{{ row.level }}</td>
                         <td>{{ row.category }}</td>
                         <td>{{ row.message }}</td>

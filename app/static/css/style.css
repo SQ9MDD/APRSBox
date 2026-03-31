@@ -856,6 +856,45 @@ select:focus-visible,
     padding: 0.22rem 0.48rem;
 }
 
+.logs-table {
+    table-layout: fixed;
+}
+
+.logs-col-id {
+    width: 4rem;
+}
+
+.logs-col-time {
+    width: 11.5rem;
+}
+
+.logs-col-level {
+    width: 5.2rem;
+}
+
+.logs-col-category {
+    width: 7rem;
+}
+
+.logs-col-message {
+    width: auto;
+}
+
+.logs-table td:nth-child(1),
+.logs-table td:nth-child(2),
+.logs-table td:nth-child(3),
+.logs-table td:nth-child(4) {
+    white-space: nowrap;
+}
+
+.logs-table td:nth-child(5) {
+    word-break: break-word;
+}
+
+.log-row-warning td {
+    color: #d24b4b;
+}
+
 .stations-table tbody tr:hover td {
     background: rgba(109, 189, 128, 0.08);
 }
