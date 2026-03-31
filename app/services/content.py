@@ -414,8 +414,8 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     return {
         "hero": hero,
         "stats": [
-            {"label": "Heard stations", "value": str(traffic["heard_stations"])},
-            {"label": "APRS frames", "value": str(traffic["decoded_aprs"])},
+            {"label": "Heard stations", "value": f"{traffic['heard_stations']} in last h"},
+            {"label": "APRS frames", "value": f"{traffic['decoded_aprs']} / h"},
             {"label": "Active interfaces", "value": str(len(enabled_interfaces))},
             {"label": "Last traffic", "value": latest_activity},
         ],
