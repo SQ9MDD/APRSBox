@@ -1758,6 +1758,14 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
     symbol_code = _normalize_symbol_code_value(payload.get("symbol_code"))
     normalized["symbol_code"] = symbol_code
 
+    try:
+        interval_minutes = int(str(payload.get("interval_minutes") or "30").strip())
+    except ValueError as exc:
+        raise ValueError("Future send interval must be one of: 5, 10, 15, 30, 60 minutes.") from exc
+    if interval_minutes not in {5, 10, 15, 30, 60}:
+        raise ValueError("Future send interval must be one of: 5, 10, 15, 30, 60 minutes.")
+    normalized["interval_minutes"] = interval_minutes
+
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
         raise ValueError("Future RF path must be 64 printable ASCII characters or fewer.")

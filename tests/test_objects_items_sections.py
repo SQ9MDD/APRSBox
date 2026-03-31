@@ -53,6 +53,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "21.0122",
                     "symbol_table": "/",
                     "symbol_code": "r",
+                    "interval_minutes": "30",
                     "path": "WIDE2-2",
                     "comment": "Local voice repeater",
                 },
@@ -81,6 +82,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "21.0122",
                     "symbol_table": "/",
                     "symbol_code": "r",
+                    "interval_minutes": "15",
                     "path": "WIDE2-2",
                     "is_enabled": "1",
                     "comment": "Local voice repeater",
@@ -89,9 +91,10 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertTrue(success)
             self.assertIsNone(error)
 
-            row = fetch_one("SELECT name, state, path, is_enabled, comment FROM aprs_objects WHERE name = ?", ("VOICE",))
+            row = fetch_one("SELECT name, state, interval_minutes, path, is_enabled, comment FROM aprs_objects WHERE name = ?", ("VOICE",))
             assert row is not None
             self.assertEqual(row["state"], "live")
+            self.assertEqual(row["interval_minutes"], 15)
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["is_enabled"], 1)
 
@@ -106,6 +109,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "",
                     "symbol_table": "/",
                     "symbol_code": "r",
+                    "interval_minutes": "30",
                     "path": "",
                     "comment": "",
                 },
@@ -124,6 +128,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "",
                     "symbol_table": "/",
                     "symbol_code": "A",
+                    "interval_minutes": "30",
                     "path": "",
                     "comment": "",
                 },
@@ -142,6 +147,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "",
                     "symbol_table": "/",
                     "symbol_code": "A",
+                    "interval_minutes": "30",
                     "path": "",
                     "comment": "",
                 },
@@ -160,6 +166,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "",
                     "symbol_table": "/",
                     "symbol_code": "A",
+                    "interval_minutes": "30",
                     "path": "",
                     "comment": "X" * 44,
                 },
@@ -178,6 +185,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "21.0",
                     "symbol_table": "/",
                     "symbol_code": "A",
+                    "interval_minutes": "10",
                     "path": "",
                     "comment": "Aid station",
                 },
@@ -197,6 +205,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "longitude": "21.0",
                     "symbol_table": "\\",
                     "symbol_code": "A",
+                    "interval_minutes": "60",
                     "path": "WIDE1-1,WIDE2-1",
                     "comment": "Aid station",
                     "is_enabled": "1",
@@ -208,9 +217,29 @@ class ObjectAndItemFormTests(unittest.TestCase):
             updated = get_section_row("items", int(row["id"]))
             assert updated is not None
             self.assertEqual(updated["state"], "killed")
+            self.assertEqual(updated["interval_minutes"], 60)
             self.assertEqual(updated["path"], "WIDE1-1,WIDE2-1")
             self.assertEqual(updated["symbol_table"], "\\")
             self.assertEqual(updated["is_enabled"], 1)
+
+    def test_invalid_interval_is_rejected(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "7",
+                    "path": "",
+                    "comment": "",
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "Future send interval must be one of: 5, 10, 15, 30, 60 minutes.")
 
 
 if __name__ == "__main__":

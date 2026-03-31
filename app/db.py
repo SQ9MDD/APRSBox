@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS aprs_objects (
     name TEXT NOT NULL UNIQUE,
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
+    interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 60)),
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -160,6 +161,7 @@ CREATE TABLE IF NOT EXISTS aprs_items (
     name TEXT NOT NULL UNIQUE,
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
+    interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 60)),
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -365,6 +367,14 @@ def init_db() -> None:
                 ADD COLUMN path TEXT
                 """
             )
+        if "interval_minutes" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 30
+                CHECK (interval_minutes IN (5, 10, 15, 30, 60))
+                """
+            )
         if "state" not in item_columns:
             connection.execute(
                 """
@@ -378,6 +388,14 @@ def init_db() -> None:
                 """
                 ALTER TABLE aprs_items
                 ADD COLUMN path TEXT
+                """
+            )
+        if "interval_minutes" not in item_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_items
+                ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 30
+                CHECK (interval_minutes IN (5, 10, 15, 30, 60))
                 """
             )
         connection.execute(

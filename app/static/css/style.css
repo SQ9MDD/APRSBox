@@ -1861,6 +1861,29 @@ code {
     image-rendering: pixelated;
 }
 
+.prepared-entity-table {
+    table-layout: fixed;
+}
+
+.prepared-entity-col-icon {
+    width: 3.5rem;
+    text-align: center;
+}
+
+.prepared-entity-col-name {
+    width: 9rem;
+}
+
+.prepared-entity-col-raw {
+    width: auto;
+}
+
+.prepared-entity-col-raw code {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .empty-state {
     padding: var(--space-4);
     border: 1px dashed var(--border);
