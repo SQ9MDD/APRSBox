@@ -11,23 +11,6 @@
     {% set primary_band = bands[0] %}
 {% endif %}
 
-<section class="band-condition-layout">
-    <div class="panel band-condition-layout-full">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Band Condition</h2>
-                    <p class="section-lead">Estimated from three factors: local reference audibility, channel occupancy, and appearance of fixed stations that are usually absent on this band at this hour.</p>
-                </div>
-            </div>
-            <div class="notice">This is an estimate, not a propagation forecast. Activity buckets are assigned to the band configured on the active TNC. Current monitored band: {{ monitored_band }}.</div>
-            {% if flash %}
-            <div class="alert">{{ flash }}</div>
-            {% endif %}
-        </div>
-    </div>
-</section>
-
 <section class="band-condition-grid">
     {% for item in bands %}
     <article class="panel band-condition-card">
