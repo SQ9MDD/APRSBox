@@ -160,7 +160,7 @@
                     <span>{{ field.label }}</span>
                     <select name="{{ field.name }}" {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %} {% if field.required %}required{% endif %}>
                         {% for option in field.options %}
-                        <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name] == option.value) or (not edit_row and ((field.default is defined and field.default == option.value) or (field.default is not defined and loop.first))) %}selected{% endif %}>
+                        <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name]|string == option.value|string) or (not edit_row and ((field.default is defined and field.default|string == option.value|string) or (field.default is not defined and loop.first))) %}selected{% endif %}>
                             {{ option.label }}
                         </option>
                         {% endfor %}
