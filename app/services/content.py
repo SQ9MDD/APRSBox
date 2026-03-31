@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import re
 import sqlite3
 import subprocess
@@ -200,18 +201,21 @@ def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
 
 
 def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
-    rows = fetch_all(
-        """
-        SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
-               m.name AS interface_name, j.payload_json
-        FROM outbound_jobs j
-        LEFT JOIN modems m ON m.id = j.interface_id
-        WHERE j.kind = 'beacon'
-        ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
-        LIMIT ?
-        """,
-        (limit,),
-    )
+    try:
+        rows = fetch_all(
+            """
+            SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
+                   m.name AS interface_name, j.payload_json
+            FROM outbound_jobs j
+            LEFT JOIN modems m ON m.id = j.interface_id
+            WHERE j.kind = 'beacon'
+            ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    except sqlite3.OperationalError:
+        return []
     jobs: list[dict[str, Any]] = []
     for row in rows:
         item = dict(row)
