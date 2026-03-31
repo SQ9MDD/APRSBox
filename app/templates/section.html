@@ -35,6 +35,8 @@
                     <thead>
                         <tr>
                             <th class="prepared-entity-col-icon">Icon</th>
+                            <th class="prepared-entity-col-active">Active</th>
+                            <th class="prepared-entity-col-interval">Every</th>
                             <th class="prepared-entity-col-name">{{ 'Object Name' if section.slug == 'objects' else 'Item Name' }}</th>
                             <th class="prepared-entity-col-raw">Raw Frame Preview</th>
                         </tr>
@@ -43,12 +45,19 @@
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
+                            <td class="prepared-entity-col-active">
+                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.is_enabled else 'tnc-badge-disabled' }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
+                                    <span>{{ 'On' if row.is_enabled else 'Off' }}</span>
+                                </span>
+                            </td>
+                            <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
                             <td class="prepared-entity-col-name">{{ row.name }}</td>
                             <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="3">No records yet.</td>
+                            <td colspan="5">No records yet.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

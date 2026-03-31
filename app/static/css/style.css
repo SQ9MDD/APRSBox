@@ -1870,8 +1870,17 @@ code {
     text-align: center;
 }
 
+.prepared-entity-col-active {
+    width: 5.5rem;
+}
+
+.prepared-entity-col-interval {
+    width: 4.5rem;
+    white-space: nowrap;
+}
+
 .prepared-entity-col-name {
-    width: 9rem;
+    width: 8.5rem;
 }
 
 .prepared-entity-col-raw {
