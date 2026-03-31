@@ -1941,6 +1941,10 @@ code {
     height: 18px;
 }
 
+:root:not([data-theme="light"]) .location-picker-button img {
+    filter: brightness(0) invert(1);
+}
+
 .location-picker-modal[hidden] {
     display: none;
 }
