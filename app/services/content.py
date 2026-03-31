@@ -282,6 +282,106 @@ def dashboard_traffic_summary() -> dict[str, Any]:
     }
 
 
+def recent_alert_logs(limit: int = 5) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT id, level, category, message, created_at
+        FROM event_logs
+        WHERE level IN ('WARNING', 'ERROR')
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in rows]
+
+
+def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[str, Any]:
+    station_settings = get_station_settings()
+    traffic = dashboard_traffic_summary()
+    interfaces = get_configured_modem_interfaces()
+    enabled_interfaces = [item for item in interfaces if item.get("enabled")]
+    selected_interface_id = station_settings.get("beacon_interface_id")
+    selected_interface = next((item for item in interfaces if item.get("id") == selected_interface_id), None)
+    latest_frame_row = fetch_one(
+        """
+        SELECT created_at
+        FROM traffic_frames
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """
+    )
+    latest_activity = _format_monitor_timestamp(latest_frame_row["created_at"]) if latest_frame_row else "No traffic yet"
+
+    checks = [
+        {
+            "label": "Callsign",
+            "state": "ok" if station_settings.get("callsign") else "warn",
+            "value": station_settings.get("callsign") or "Not set",
+        },
+        {
+            "label": "Location",
+            "state": "ok" if station_settings.get("latitude") and station_settings.get("longitude") else "warn",
+            "value": "Configured" if station_settings.get("latitude") and station_settings.get("longitude") else "Missing coordinates",
+        },
+        {
+            "label": "Beacon interface",
+            "state": "ok" if selected_interface else "warn",
+            "value": selected_interface["name"] if selected_interface else "Not selected",
+        },
+        {
+            "label": "Active interfaces",
+            "state": "ok" if enabled_interfaces else "warn",
+            "value": str(len(enabled_interfaces)),
+        },
+    ]
+    ready_count = sum(1 for item in checks if item["state"] == "ok")
+    beacon_ready = ready_count == len(checks)
+
+    if traffic["heard_stations"] > 0 and traffic["decoded_aprs"] > 0:
+        hero = {
+            "tone": "good",
+            "title": "Station is receiving APRS traffic",
+            "summary": f"Heard {traffic['heard_stations']} stations and decoded {traffic['decoded_aprs']} APRS frames.",
+            "status": "Receiving",
+        }
+    elif beacon_ready:
+        hero = {
+            "tone": "neutral",
+            "title": "Station is ready for a beacon test",
+            "summary": "Basic station data and interface selection are configured. You can try manual beacon send.",
+            "status": "Ready",
+        }
+    else:
+        hero = {
+            "tone": "caution",
+            "title": "Finish station setup",
+            "summary": "Complete the basic station data so APRSBox can beacon and present your station properly.",
+            "status": "Needs setup",
+        }
+
+    if dashboard_band and dashboard_band.get("label") == "Insufficient data":
+        band_summary = "Band condition will become more useful after more traffic is collected."
+    elif dashboard_band:
+        band_summary = dashboard_band.get("diagnosis_summary") or ""
+    else:
+        band_summary = "Band condition is not available yet."
+
+    return {
+        "hero": hero,
+        "stats": [
+            {"label": "Heard stations", "value": str(traffic["heard_stations"])},
+            {"label": "APRS frames", "value": str(traffic["decoded_aprs"])},
+            {"label": "Active interfaces", "value": str(len(enabled_interfaces))},
+            {"label": "Last traffic", "value": latest_activity},
+        ],
+        "checks": checks,
+        "beacon_ready": beacon_ready,
+        "selected_interface_name": selected_interface["name"] if selected_interface else "Not selected",
+        "band_summary": band_summary,
+    }
+
+
 def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
     snapshots = get_heard_station_snapshots(limit=limit)
     stations: list[dict[str, Any]] = []

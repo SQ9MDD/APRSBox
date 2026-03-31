@@ -1,36 +1,59 @@
 {% extends "base.html" %}
 
 {% block content %}
+<section class="panel dashboard-hero-panel">
+    <div class="panel-body">
+        <div class="dashboard-hero dashboard-hero-{{ dashboard_home.hero.tone }}">
+            <div class="dashboard-hero-copy">
+                <span class="status-pill dashboard-hero-status">{{ dashboard_home.hero.status }}</span>
+                <h2>{{ dashboard_home.hero.title }}</h2>
+                <p>{{ dashboard_home.hero.summary }}</p>
+            </div>
+            <div class="dashboard-hero-actions">
+                <a href="{{ request.scope.root_path }}/station" class="button">Open My Settings</a>
+                <a href="{{ request.scope.root_path }}/map" class="button button-secondary">Open Map</a>
+            </div>
+        </div>
+    </div>
+</section>
+
 <section class="grid two">
     <div class="panel">
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Configuration Summary</h2>
+                    <h2>Station At A Glance</h2>
                 </div>
             </div>
             <div class="metrics-grid">
-                {% for key, value in summary.items() %}
+                {% for item in dashboard_home.stats %}
                 <div class="metric-card">
-                    <span class="metric-value">{{ value }}</span>
-                    <span class="metric-label">{{ key.replace('_', ' ').title() }}</span>
+                    <span class="metric-value">{{ item.value }}</span>
+                    <span class="metric-label">{{ item.label }}</span>
                 </div>
                 {% endfor %}
             </div>
         </div>
     </div>
+
     <div class="panel">
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Received Frames</h2>
+                    <h2>Setup Status</h2>
+                    <p class="section-lead">Simple checklist of what matters most for daily use.</p>
                 </div>
             </div>
-            <div class="metrics-grid">
-                {% for key, value in traffic_summary.items() %}
-                <div class="metric-card">
-                    <span class="metric-value">{{ value }}</span>
-                    <span class="metric-label">{{ key.replace('_', ' ').title() }}</span>
+            <div class="dashboard-checks">
+                {% for item in dashboard_home.checks %}
+                <div class="dashboard-check dashboard-check-{{ item.state }}">
+                    <div>
+                        <strong>{{ item.label }}</strong>
+                        <p>{{ item.value }}</p>
+                    </div>
+                    <span class="status-pill {% if item.state == 'ok' %}status-running{% else %}status-unknown{% endif %}">
+                        {{ "OK" if item.state == "ok" else "Needs attention" }}
+                    </span>
                 </div>
                 {% endfor %}
             </div>
@@ -38,104 +61,54 @@
     </div>
 </section>
 
-{% if dashboard_band %}
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>Band Condition</h2>
-                <p class="section-lead">Quick view of the current estimated condition for {{ dashboard_band.band_label }}.</p>
-            </div>
-            <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Open Band Condition</a>
-        </div>
-        <div class="stack-sm">
-            <div class="band-condition-card-heading">
-                <div>
-                    <h2>{{ dashboard_band.band_label }}</h2>
-                    <span class="status-pill band-condition-status {% if dashboard_band.label == 'Insufficient data' %}status-unknown{% elif dashboard_band.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ dashboard_band.label }}</span>
+<section class="grid two">
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Band Condition</h2>
+                    <p class="section-lead">{% if dashboard_band %}Current estimate for {{ dashboard_band.band_label }}.{% else %}No band data yet.{% endif %}</p>
                 </div>
+                <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Open Band Condition</a>
             </div>
+            {% if dashboard_band %}
             <section class="band-condition-hero band-condition-hero-{{ dashboard_band.diagnosis_tone }}">
                 <div class="band-condition-hero-copy">
                     <strong>{{ dashboard_band.diagnosis_title }}</strong>
-                    <p>{{ dashboard_band.diagnosis_summary }}</p>
+                    <p>{{ dashboard_home.band_summary }}</p>
                 </div>
                 <div class="band-condition-hero-score">
-                    <span class="muted">Condition</span>
-                    <strong>{{ "%.2f"|format(dashboard_band.condition_score) }}</strong>
+                    <span class="muted">{{ dashboard_band.band_label }}</span>
+                    <strong>{{ dashboard_band.label }}</strong>
                 </div>
             </section>
+            {% else %}
+            <div class="notice">Band condition is not available yet.</div>
+            {% endif %}
         </div>
     </div>
-</section>
-{% endif %}
 
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>Worker Status</h2>
+    <div class="panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>Alerts</h2>
+                    <p class="section-lead">Only issues that may need your attention.</p>
+                </div>
+                <a href="{{ request.scope.root_path }}/logs" class="button button-secondary">Open Logs</a>
             </div>
-        </div>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Worker</th>
-                        <th>Status</th>
-                        <th>Source</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for worker in worker_statuses %}
-                    <tr>
-                        <td><code>{{ worker.label }}</code></td>
-                        <td>
-                            <span class="status-pill status-{{ worker.state }}">{{ worker.state }}</span>
-                        </td>
-                        <td>{{ worker.source }}</td>
-                        <td>{{ worker.detail }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</section>
-
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>Recent Events</h2>
+            {% if recent_alerts %}
+            <div class="dashboard-alerts">
+                {% for row in recent_alerts %}
+                <div class="dashboard-alert">
+                    <div class="dashboard-alert-meta">{{ row.created_at.replace('T', ' ').replace('+00:00', ' UTC') }} · {{ row.category }}</div>
+                    <div class="dashboard-alert-message">{{ row.message }}</div>
+                </div>
+                {% endfor %}
             </div>
-        </div>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Level</th>
-                        <th>Category</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in recent_logs %}
-                    <tr>
-                        <td>{{ row.created_at }}</td>
-                        <td>{{ row.level }}</td>
-                        <td>{{ row.category }}</td>
-                        <td>{{ row.message }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="4">No events recorded yet.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            {% else %}
+            <div class="notice">No recent warnings. The station looks calm.</div>
+            {% endif %}
         </div>
     </div>
 </section>

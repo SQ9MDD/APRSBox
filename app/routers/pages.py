@@ -10,6 +10,7 @@ from app.dependencies import get_current_user, require_roles
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
+    dashboard_home_data,
     delete_section_row,
     dashboard_summary,
     get_configured_modem_interfaces,
@@ -22,6 +23,7 @@ from app.services.content import (
     get_related_ssids,
     get_station_detail,
     get_station_settings,
+    recent_alert_logs,
     recent_event_logs,
     station_summary,
     traffic_snapshot as get_traffic_snapshot,
@@ -144,7 +146,9 @@ def dashboard(
         traffic_summary=dashboard_traffic_summary(),
         worker_statuses=worker_statuses(),
         recent_logs=recent_event_logs(limit=8),
+        recent_alerts=recent_alert_logs(limit=5),
         dashboard_band=dashboard_band,
+        dashboard_home=dashboard_home_data(dashboard_band),
     )
     return templates.TemplateResponse("dashboard.html", context)
 

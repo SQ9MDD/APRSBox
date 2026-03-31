@@ -468,6 +468,105 @@ body {
     box-shadow: var(--shadow-soft);
 }
 
+.dashboard-hero-panel .panel-body {
+    padding: 0;
+}
+
+.dashboard-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-4);
+    align-items: center;
+    padding: calc(var(--space-4) + 0.2rem);
+    border-radius: var(--radius-md);
+}
+
+.dashboard-hero-good {
+    background: linear-gradient(135deg, rgba(86, 158, 104, 0.22), rgba(86, 158, 104, 0.08));
+}
+
+.dashboard-hero-neutral {
+    background: linear-gradient(135deg, rgba(214, 181, 106, 0.22), rgba(214, 181, 106, 0.08));
+}
+
+.dashboard-hero-caution {
+    background: linear-gradient(135deg, rgba(201, 122, 122, 0.2), rgba(201, 122, 122, 0.08));
+}
+
+.dashboard-hero-copy {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.dashboard-hero-copy h2 {
+    margin: 0;
+    font-size: 1.55rem;
+}
+
+.dashboard-hero-copy p {
+    margin: 0;
+    color: var(--text);
+    max-width: 62ch;
+}
+
+.dashboard-hero-status {
+    width: fit-content;
+}
+
+.dashboard-hero-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.dashboard-checks {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.dashboard-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 0.78rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+}
+
+.dashboard-check p {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+}
+
+.dashboard-check-warn {
+    border-color: rgba(201, 122, 122, 0.28);
+}
+
+.dashboard-alerts {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.dashboard-alert {
+    padding: 0.8rem 0.9rem;
+    border: 1px solid rgba(201, 122, 122, 0.28);
+    border-radius: var(--radius-sm);
+    background: rgba(201, 122, 122, 0.08);
+}
+
+.dashboard-alert-meta {
+    color: var(--muted);
+    font-size: 0.76rem;
+    margin-bottom: 0.24rem;
+}
+
+.dashboard-alert-message {
+    color: var(--text);
+}
+
 .metric-value {
     display: block;
     font-size: 1.35rem;
@@ -1778,6 +1877,10 @@ code {
         grid-template-columns: 1fr;
     }
 
+    .dashboard-hero {
+        grid-template-columns: 1fr;
+    }
+
     .page-header,
     .panel-header,
     .stations-summary-header,
@@ -1790,6 +1893,10 @@ code {
     .stations-summary-toolbar {
         flex-direction: column;
         width: 100%;
+    }
+
+    .dashboard-hero-actions {
+        justify-content: flex-start;
     }
 
     .stations-refresh-control {
