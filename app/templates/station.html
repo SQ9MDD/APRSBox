@@ -3,21 +3,10 @@
 {% block content %}
 <section class="panel">
     <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>My Settings</h2>
-                <p class="section-lead">This page stores the station profile and beacon defaults. When automatic beacon transmission is enabled below, saving this form persists that flag and lets the background scheduler queue beacon jobs at the selected interval.</p>
-            </div>
-        </div>
+        {% set selected_beacon_interface_id = station.beacon_interface_id|string if station.beacon_interface_id is not none else '' %}
         {% if flash %}
         <div class="alert {% if flash_success is not defined or flash_success %}success{% endif %}">{{ flash }}</div>
         {% endif %}
-    </div>
-</section>
-
-<section class="panel">
-    <div class="panel-body">
-        {% set selected_beacon_interface_id = station.beacon_interface_id|string if station.beacon_interface_id is not none else '' %}
         {% if can_edit %}
         <form method="post" class="form-grid">
             <label>
