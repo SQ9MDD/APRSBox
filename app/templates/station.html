@@ -66,16 +66,33 @@
             <label class="station-symbol-field">
                 <span>Symbol Code</span>
                 <div class="station-symbol-picker">
-                    <select name="symbol_code" id="station-symbol-code">
-                        {% for option in symbol_code_options %}
-                        <option
-                            value="{{ option.value }}"
-                            data-primary-icon="{{ request.scope.root_path }}/static/{{ option.primary_icon }}"
-                            data-alternate-icon="{{ request.scope.root_path }}/static/{{ option.alternate_icon }}"
-                            {% if station.symbol_code == option.value %}selected{% endif %}
-                        >{{ option.label }}</option>
-                        {% endfor %}
-                    </select>
+                    <input type="hidden" name="symbol_code" id="station-symbol-code" value="{{ station.symbol_code or '>' }}">
+                    <div class="station-symbol-dropdown" id="station-symbol-dropdown">
+                        <button type="button" class="station-symbol-trigger" id="station-symbol-trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="station-symbol-trigger-copy">
+                                <img id="station-symbol-trigger-image" src="{{ request.scope.root_path }}/static/icons/verG/x.gif" alt="">
+                                <span id="station-symbol-trigger-text">Select symbol</span>
+                            </span>
+                            <span class="station-symbol-trigger-caret">▾</span>
+                        </button>
+                        <div class="station-symbol-menu" id="station-symbol-menu" role="listbox" tabindex="-1" aria-label="Symbol code">
+                            {% for option in symbol_code_options %}
+                            <button
+                                type="button"
+                                class="station-symbol-option{% if station.symbol_code == option.value %} active{% endif %}"
+                                data-value="{{ option.value }}"
+                                data-label="{{ option.label }}"
+                                data-primary-icon="{{ request.scope.root_path }}/static/{{ option.primary_icon }}"
+                                data-alternate-icon="{{ request.scope.root_path }}/static/{{ option.alternate_icon }}"
+                                role="option"
+                                aria-selected="{% if station.symbol_code == option.value %}true{% else %}false{% endif %}"
+                            >
+                                <img class="station-symbol-option-image" src="{{ request.scope.root_path }}/static/{{ option.primary_icon }}" alt="">
+                                <span class="station-symbol-option-label">{{ option.label }}</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
                     <div class="station-symbol-preview" aria-live="polite">
                         <img
                             id="station-symbol-preview-image"
@@ -124,23 +141,84 @@
     (() => {
         const symbolTable = document.getElementById("station-symbol-table");
         const symbolCode = document.getElementById("station-symbol-code");
+        const symbolDropdown = document.getElementById("station-symbol-dropdown");
+        const symbolTrigger = document.getElementById("station-symbol-trigger");
+        const symbolTriggerImage = document.getElementById("station-symbol-trigger-image");
+        const symbolTriggerText = document.getElementById("station-symbol-trigger-text");
+        const symbolMenu = document.getElementById("station-symbol-menu");
+        const symbolOptions = Array.from(document.querySelectorAll(".station-symbol-option"));
         const previewImage = document.getElementById("station-symbol-preview-image");
         const previewText = document.getElementById("station-symbol-preview-text");
-        if (!symbolTable || !symbolCode || !previewImage || !previewText) {
+        if (!symbolTable || !symbolCode || !symbolDropdown || !symbolTrigger || !symbolTriggerImage || !symbolTriggerText || !symbolMenu || !symbolOptions.length || !previewImage || !previewText) {
             return;
         }
 
+        const closeMenu = () => {
+            symbolDropdown.classList.remove("open");
+            symbolTrigger.setAttribute("aria-expanded", "false");
+        };
+
+        const openMenu = () => {
+            symbolDropdown.classList.add("open");
+            symbolTrigger.setAttribute("aria-expanded", "true");
+        };
+
+        const selectedOption = () => symbolOptions.find((option) => option.dataset.value === symbolCode.value) || symbolOptions[0];
+
         const syncPreview = () => {
-            const selected = symbolCode.options[symbolCode.selectedIndex];
+            const selected = selectedOption();
             const icon = symbolTable.value === "\\"
                 ? selected.dataset.alternateIcon
                 : selected.dataset.primaryIcon;
             previewImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
             previewText.textContent = `${symbolTable.value}${selected.value}`;
+            symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+            symbolTriggerText.textContent = selected.dataset.label || selected.value;
+
+            for (const option of symbolOptions) {
+                const optionIcon = symbolTable.value === "\\"
+                    ? option.dataset.alternateIcon
+                    : option.dataset.primaryIcon;
+                const image = option.querySelector(".station-symbol-option-image");
+                if (image) {
+                    image.src = optionIcon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+                }
+                const isActive = option.dataset.value === selected.dataset.value;
+                option.classList.toggle("active", isActive);
+                option.setAttribute("aria-selected", isActive ? "true" : "false");
+            }
         };
 
+        symbolTrigger.addEventListener("click", () => {
+            if (symbolDropdown.classList.contains("open")) {
+                closeMenu();
+                return;
+            }
+            openMenu();
+        });
+
+        symbolOptions.forEach((option) => {
+            option.addEventListener("click", () => {
+                symbolCode.value = option.dataset.value || ">";
+                syncPreview();
+                closeMenu();
+            });
+        });
+
         symbolTable.addEventListener("change", syncPreview);
-        symbolCode.addEventListener("change", syncPreview);
+
+        document.addEventListener("click", (event) => {
+            if (!symbolDropdown.contains(event.target)) {
+                closeMenu();
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                closeMenu();
+            }
+        });
+
         syncPreview();
     })();
 </script>

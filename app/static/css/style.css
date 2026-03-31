@@ -526,6 +526,103 @@ body {
     align-items: stretch;
 }
 
+.station-symbol-dropdown {
+    position: relative;
+}
+
+.station-symbol-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: var(--control-height);
+    padding: 0.58rem 0.72rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--panel-alt);
+    color: var(--text);
+    box-shadow: var(--shadow-soft);
+}
+
+.station-symbol-trigger-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.station-symbol-trigger-copy img {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+}
+
+.station-symbol-trigger-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.station-symbol-trigger-caret {
+    color: var(--muted);
+    flex: 0 0 auto;
+}
+
+.station-symbol-menu {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    right: 0;
+    z-index: 20;
+    display: none;
+    max-height: 18rem;
+    overflow-y: auto;
+    padding: 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+}
+
+.station-symbol-dropdown.open .station-symbol-menu {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.station-symbol-option {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    min-height: auto;
+    padding: 0.5rem 0.55rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    box-shadow: none;
+}
+
+.station-symbol-option:hover,
+.station-symbol-option.active {
+    background: var(--panel-alt);
+}
+
+.station-symbol-option-image {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+}
+
+.station-symbol-option-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .station-symbol-preview {
     display: inline-flex;
     align-items: center;
