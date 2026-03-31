@@ -17,10 +17,18 @@
     const staticRoot = pageRoot.dataset.staticRoot || "/static/";
     const rootPath = pageRoot.dataset.rootPath || "";
     const refreshMs = Number.parseInt(pageRoot.dataset.refreshMs || "30000", 10);
-    const maskOpacityStorageKey = "aprsbox-map-mask-opacity";
+    const legacyMaskOpacityStorageKey = "aprsbox-map-mask-opacity";
     let map = null;
     let marker = null;
     let tileLayer = null;
+
+    function currentThemeName() {
+        return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    }
+
+    function maskOpacityStorageKey() {
+        return `aprsbox-map-mask-opacity-${currentThemeName()}`;
+    }
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -124,9 +132,13 @@
     }
 
     function resolveMaskOpacity() {
-        const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey) || "", 10);
+        const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey()) || "", 10);
         if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
             return storedOpacity;
+        }
+        const legacyOpacity = Number.parseInt(window.localStorage.getItem(legacyMaskOpacityStorageKey) || "", 10);
+        if (Number.isInteger(legacyOpacity) && legacyOpacity >= 0 && legacyOpacity <= 100 && legacyOpacity % 10 === 0) {
+            return legacyOpacity;
         }
         return 20;
     }
@@ -233,6 +245,15 @@
 
     applyMaskOpacity();
     ensureMap(initialStation, initialMapConfig);
+    const themeObserver = new window.MutationObserver(function (mutations) {
+        for (const mutation of mutations) {
+            if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
+                applyMaskOpacity();
+                break;
+            }
+        }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     if (Number.isInteger(refreshMs) && refreshMs > 0) {
         window.setInterval(refreshStation, refreshMs);
     }
