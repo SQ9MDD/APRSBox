@@ -6,6 +6,7 @@ from typing import Any
 from app.db import log_event
 from app.services.outbound import (
     build_beacon_tnc2,
+    build_object_tnc2,
     build_tnc2_kiss_frame,
     claim_next_outbound_job,
     mark_outbound_job_failed,
@@ -58,10 +59,12 @@ class OutboundService:
                 raise ValueError(f"Interface {interface_name} has invalid TCP endpoint.")
 
             kind = str(job.get("kind") or "").strip()
-            if kind != "beacon":
+            if kind == "beacon":
+                tnc2_line = build_beacon_tnc2(job.get("payload") or {})
+            elif kind == "object":
+                tnc2_line = build_object_tnc2(job.get("payload") or {})
+            else:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
-
-            tnc2_line = build_beacon_tnc2(job.get("payload") or {})
             frame = build_tnc2_kiss_frame(tnc2_line)
             host, port = endpoint
             reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5)

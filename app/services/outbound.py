@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.db import fetch_one, get_connection, log_event, utc_now
@@ -12,6 +13,7 @@ KISS_TFESC = 0xDD
 AX25_CONTROL_UI = 0x03
 AX25_PID_NO_LAYER3 = 0xF0
 OUTBOUND_KIND_BEACON = "beacon"
+OUTBOUND_KIND_OBJECT = "object"
 OUTBOUND_STATUS_QUEUED = "queued"
 OUTBOUND_STATUS_PROCESSING = "processing"
 OUTBOUND_STATUS_SENT = "sent"
@@ -93,6 +95,82 @@ def pending_beacon_job_count() -> int:
         (OUTBOUND_KIND_BEACON, OUTBOUND_STATUS_QUEUED, OUTBOUND_STATUS_PROCESSING),
     )
     return int(row["total"]) if row else 0
+
+
+def enqueue_object_job(
+    obj: dict[str, Any],
+    station_settings: dict[str, Any],
+    *,
+    trigger: str = "scheduled",
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str]:
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    ssid = str(station_settings.get("ssid") or "").strip()
+    beacon_interface_id = station_settings.get("beacon_interface_id")
+    if not callsign:
+        return False, "Callsign is required."
+    if beacon_interface_id in {None, ""}:
+        return False, "Interface is required."
+    try:
+        interface_id = int(beacon_interface_id)
+    except (TypeError, ValueError):
+        return False, "Selected interface is invalid."
+    modem = fetch_one(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE id = ?
+        """,
+        (interface_id,),
+    )
+    if modem is None:
+        return False, "Selected interface does not exist."
+
+    latitude = _parse_coordinate(obj.get("latitude"))
+    longitude = _parse_coordinate(obj.get("longitude"))
+    if latitude is None or longitude is None:
+        return False, "Object latitude and longitude must be valid decimal coordinates."
+
+    payload = {
+        "object_id": int(obj["id"]),
+        "callsign": callsign,
+        "ssid": ssid,
+        "name": str(obj.get("name") or ""),
+        "lifetime": str(obj.get("lifetime") or "temporary"),
+        "state": str(obj.get("state") or "live"),
+        "latitude": latitude,
+        "longitude": longitude,
+        "symbol_table": _normalize_symbol_table(obj.get("symbol_table")),
+        "symbol_code": _normalize_symbol_code(obj.get("symbol_code")),
+        "comment": str(obj.get("comment") or "").strip(),
+        "path": str(obj.get("path") or "").strip(),
+        "object_timestamp": _object_timestamp(str(obj.get("lifetime") or "temporary")),
+        "trigger": str(trigger or "scheduled").strip() or "scheduled",
+    }
+    now_text = utc_now()
+    scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text)
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO outbound_jobs(
+                kind, interface_id, payload_json, status, scheduled_at,
+                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+            """,
+            (
+                OUTBOUND_KIND_OBJECT,
+                int(modem["id"]),
+                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
+                OUTBOUND_STATUS_QUEUED,
+                scheduled_at,
+                now_text,
+                now_text,
+            ),
+        )
+        job_id = cursor.lastrowid
+    log_event("INFO", "outbound", f"Queued {payload['trigger']} object job #{job_id} for interface {modem['name']}")
+    return True, f"Object queued as job #{job_id}."
 
 
 def claim_next_outbound_job() -> dict[str, Any] | None:
@@ -201,6 +279,32 @@ def build_beacon_tnc2(payload: dict[str, Any]) -> str:
     return f"{header}:{info}"
 
 
+def build_object_tnc2(payload: dict[str, Any]) -> str:
+    source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
+    path = str(payload.get("path") or "").strip()
+    info = _build_object_info(payload)
+    header = f"{source}>APRS"
+    if path:
+        header = f"{header},{path}"
+    return f"{header}:{info}"
+
+
+def latest_object_dispatch_at() -> datetime | None:
+    row = fetch_one(
+        """
+        SELECT COALESCE(sent_at, started_at, scheduled_at, created_at) AS dispatch_at
+        FROM outbound_jobs
+        WHERE kind = ?
+        ORDER BY COALESCE(sent_at, started_at, scheduled_at, created_at) DESC, id DESC
+        LIMIT 1
+        """,
+        (OUTBOUND_KIND_OBJECT,),
+    )
+    if row is None or not row["dispatch_at"]:
+        return None
+    return _parse_timestamp(str(row["dispatch_at"]))
+
+
 def build_tnc2_kiss_frame(line: str) -> bytes:
     source, destination, path, info = _parse_tnc2_line(line)
     ax25 = bytearray()
@@ -261,6 +365,18 @@ def _build_beacon_info(payload: dict[str, Any]) -> str:
     return f"!{latitude}{symbol_table}{longitude}{symbol_code}{comment}"
 
 
+def _build_object_info(payload: dict[str, Any]) -> str:
+    name = str(payload.get("name") or "")[:9].ljust(9)
+    state_marker = "*" if str(payload.get("state") or "live") == "live" else "_"
+    timestamp = str(payload.get("object_timestamp") or _object_timestamp(str(payload.get("lifetime") or "temporary")))
+    latitude = _format_aprs_latitude(float(payload["latitude"]))
+    longitude = _format_aprs_longitude(float(payload["longitude"]))
+    symbol_table = _normalize_symbol_table(payload.get("symbol_table"))
+    symbol_code = _normalize_symbol_code(payload.get("symbol_code"))
+    comment = str(payload.get("comment") or "").strip()
+    return f";{name}{state_marker}{timestamp}{latitude}{symbol_table}{longitude}{symbol_code}{comment}"
+
+
 def _format_aprs_latitude(value: float) -> str:
     hemisphere = "N" if value >= 0 else "S"
     absolute = abs(value)
@@ -275,6 +391,22 @@ def _format_aprs_longitude(value: float) -> str:
     degrees = int(absolute)
     minutes = (absolute - degrees) * 60
     return f"{degrees:03d}{minutes:05.2f}{hemisphere}"
+
+
+def _object_timestamp(lifetime: str) -> str:
+    if lifetime == "permanent":
+        return "111111z"
+    return datetime.now(timezone.utc).strftime("%d%H%Mz")
+
+
+def _parse_timestamp(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _parse_tnc2_line(line: str) -> tuple[str, str, str, str]:

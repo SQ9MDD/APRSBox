@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
-from app.services.outbound import build_beacon_tnc2
+from app.services.outbound import build_beacon_tnc2, build_object_tnc2
 from app.sections import SECTION_DEFINITIONS
 
 
@@ -1823,7 +1823,21 @@ def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
     longitude = _parse_coordinate(payload.get("longitude"))
     if not source or latitude is None or longitude is None:
         return "Preview requires station callsign and valid coordinates."
-
+    if slug == "objects":
+        preview_payload = {
+            "callsign": station_settings.get("callsign"),
+            "ssid": station_settings.get("ssid"),
+            "name": payload.get("name"),
+            "lifetime": payload.get("lifetime"),
+            "state": payload.get("state"),
+            "latitude": latitude,
+            "longitude": longitude,
+            "symbol_table": payload.get("symbol_table"),
+            "symbol_code": payload.get("symbol_code"),
+            "comment": payload.get("comment"),
+            "path": payload.get("path"),
+        }
+        return build_object_tnc2(preview_payload)
     symbol_table = str(payload.get("symbol_table") or "/")
     symbol_code = str(payload.get("symbol_code") or ">")
     comment = str(payload.get("comment") or "").strip()
@@ -1831,23 +1845,12 @@ def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
     header = f"{source}>APRS"
     if path:
         header = f"{header},{path}"
-
-    if slug == "objects":
-        name = str(payload.get("name") or "")[:9].ljust(9)
-        state_marker = "*" if str(payload.get("state") or "live") == "live" else "_"
-        lifetime = str(payload.get("lifetime") or "temporary").strip().lower()
-        timestamp = "111111z" if lifetime == "permanent" else datetime.now(timezone.utc).strftime("%d%H%Mz")
-        info = (
-            f";{name}{state_marker}{timestamp}"
-            f"{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}{symbol_code}{comment}"
-        )
-    else:
-        name = str(payload.get("name") or "")
-        state_marker = "!" if str(payload.get("state") or "live") == "live" else "_"
-        info = (
-            f"){name}{state_marker}"
-            f"{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}{symbol_code}{comment}"
-        )
+    name = str(payload.get("name") or "")
+    state_marker = "!" if str(payload.get("state") or "live") == "live" else "_"
+    info = (
+        f"){name}{state_marker}"
+        f"{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}{symbol_code}{comment}"
+    )
     return f"{header}:{info}"
 
 
