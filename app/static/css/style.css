@@ -1797,7 +1797,7 @@ select:focus-visible,
 .traffic-stream {
     display: grid;
     gap: 0;
-    max-height: 60vh;
+    max-height: calc(60vh + 150px);
     overflow: auto;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
