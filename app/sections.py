@@ -124,6 +124,8 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                     {"value": "killed", "label": "Killed (_)"},
                 ],
             },
+            {"name": "latitude", "label": "Latitude", "type": "text", "required": False},
+            {"name": "longitude", "label": "Longitude", "type": "text", "required": False},
             {
                 "name": "symbol_table",
                 "label": "Symbol Table",
@@ -135,8 +137,6 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
             },
             {"name": "symbol_code", "label": "Symbol Code", "type": "text", "required": True, "maxlength": 1, "placeholder": "r"},
-            {"name": "latitude", "label": "Latitude", "type": "text", "required": False},
-            {"name": "longitude", "label": "Longitude", "type": "text", "required": False},
             {
                 "name": "interval_minutes",
                 "label": "Send Interval",

@@ -156,6 +156,15 @@
                 <input type="hidden" name="record_id" value="{{ edit_row.id }}">
                 {% endif %}
                 {% for field in section.fields %}
+                {% if section.slug == 'objects' and field.name == 'latitude' %}
+                <label class="full">
+                    <span>Get location</span>
+                    <button type="button" class="button button-secondary location-picker-button" id="objects-open-map-picker">
+                        <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
+                        <span>Get location</span>
+                    </button>
+                </label>
+                {% endif %}
                 <label class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}">
                     {% if field.type == 'textarea' %}
                     <span>{{ field.label }}</span>
@@ -212,7 +221,7 @@
                         value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}"
                         {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}
                     >
-                    {% if section.slug in ['objects', 'items'] and field.name == 'longitude' %}
+                    {% if section.slug == 'items' and field.name == 'longitude' %}
                     <button type="button" class="button button-secondary location-picker-button" id="{{ section.slug }}-open-map-picker">
                         <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
                         <span>Get location</span>
