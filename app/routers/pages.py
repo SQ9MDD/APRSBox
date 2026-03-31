@@ -67,6 +67,7 @@ def _section_template_context(
     if slug in {"objects", "items"}:
         context.update(
             {
+                "map_picker_config": get_map_page_config(),
                 "symbol_table_options": [
                     {"value": "/", "label": "Primary (/)"},
                     {"value": "\\", "label": "Alternate (\\)"},

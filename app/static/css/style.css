@@ -1893,6 +1893,102 @@ code {
     word-break: break-word;
 }
 
+.location-picker-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.55rem;
+}
+
+.location-picker-button img {
+    width: 18px;
+    height: 18px;
+}
+
+.location-picker-modal[hidden] {
+    display: none;
+}
+
+.location-picker-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+}
+
+.location-picker-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+}
+
+.location-picker-dialog {
+    position: relative;
+    width: min(42rem, calc(100vw - 2rem));
+    margin: 4vh auto 0;
+    padding: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+}
+
+.location-picker-header,
+.location-picker-footer,
+.location-picker-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.location-picker-header {
+    margin-bottom: 0.8rem;
+}
+
+.location-picker-header h3 {
+    margin: 0;
+}
+
+.location-picker-map-wrap {
+    position: relative;
+    height: 22rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--panel-soft);
+}
+
+.location-picker-map {
+    position: absolute;
+    inset: 0;
+}
+
+.location-picker-crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 32px;
+    height: 32px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    display: grid;
+    place-items: center;
+}
+
+.location-picker-crosshair img {
+    width: 32px;
+    height: 32px;
+    opacity: 0.92;
+}
+
+.location-picker-footer {
+    margin-top: 0.8rem;
+}
+
+body.modal-open {
+    overflow: hidden;
+}
+
 .empty-state {
     padding: var(--space-4);
     border: 1px dashed var(--border);

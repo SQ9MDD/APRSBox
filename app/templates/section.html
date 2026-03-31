@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+{% if section.slug in ['objects', 'items'] %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+{% endif %}
+{% endblock %}
+
 {% block content %}
 {% if section.slug not in ['objects', 'items'] %}
 <section class="panel">
@@ -205,6 +212,12 @@
                         value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}"
                         {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}
                     >
+                    {% if section.slug in ['objects', 'items'] and field.name == 'longitude' %}
+                    <button type="button" class="button button-secondary location-picker-button" id="{{ section.slug }}-open-map-picker">
+                        <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
+                        <span>Get location</span>
+                    </button>
+                    {% endif %}
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
                     <small class="muted">Optional future RF path. Common examples are <code>WIDE2-2</code> or <code>WIDE1-1,WIDE2-1</code>; leave blank for direct.</small>
@@ -227,12 +240,51 @@
                     {% endif %}
                 </div>
             </form>
+            {% if section.slug in ['objects', 'items'] %}
+            <div class="location-picker-modal" id="{{ section.slug }}-location-picker" hidden>
+                <div class="location-picker-backdrop" data-close-location-picker></div>
+                <div
+                    class="location-picker-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="{{ section.slug }}-location-picker-title"
+                    data-tile-url="{{ map_picker_config.tile_url }}"
+                    data-tile-attribution="{{ map_picker_config.tile_attribution }}"
+                    data-default-latitude="{{ map_picker_config.station_latitude }}"
+                    data-default-longitude="{{ map_picker_config.station_longitude }}"
+                    data-default-zoom="{{ map_picker_config.default_zoom }}"
+                >
+                    <div class="location-picker-header">
+                        <h3 id="{{ section.slug }}-location-picker-title">Get location</h3>
+                        <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="Close location picker" title="Close location picker">
+                            <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+                        </button>
+                    </div>
+                    <div class="location-picker-map-wrap">
+                        <div class="location-picker-map" id="{{ section.slug }}-location-picker-map"></div>
+                        <div class="location-picker-crosshair" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/crosshairs.svg" alt="">
+                        </div>
+                    </div>
+                    <div class="location-picker-footer">
+                        <div class="muted small" id="{{ section.slug }}-location-picker-center">--</div>
+                        <div class="location-picker-actions">
+                            <button type="button" class="button button-secondary" data-close-location-picker>Cancel</button>
+                            <button type="button" class="button" id="{{ section.slug }}-apply-location-picker">Get coordinates</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             {% else %}
             <p class="muted">Your role is read-only for this section.</p>
             {% endif %}
         </div>
     </div>
 </section>
+{% if section.slug in ['objects', 'items'] %}
+<script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
+{% endif %}
 <script>
     (() => {
         const rows = document.querySelectorAll(".clickable-row");
@@ -329,6 +381,97 @@
                 }
             });
             syncPreview();
+        }
+
+        for (const slug of ["objects", "items"]) {
+            const modal = document.getElementById(`${slug}-location-picker`);
+            const openButton = document.getElementById(`${slug}-open-map-picker`);
+            const form = document.getElementById(`${slug}-form`);
+            if (!modal || !openButton || !form || typeof window.L === "undefined") {
+                continue;
+            }
+            const latitudeInput = form.querySelector('input[name="latitude"]');
+            const longitudeInput = form.querySelector('input[name="longitude"]');
+            const dialog = modal.querySelector(".location-picker-dialog");
+            const mapNode = document.getElementById(`${slug}-location-picker-map`);
+            const centerOutput = document.getElementById(`${slug}-location-picker-center`);
+            const applyButton = document.getElementById(`${slug}-apply-location-picker`);
+            const closeButtons = modal.querySelectorAll("[data-close-location-picker]");
+            if (!latitudeInput || !longitudeInput || !dialog || !mapNode || !centerOutput || !applyButton) {
+                continue;
+            }
+
+            let map = null;
+
+            const formatCoordinate = (value) => Number.isFinite(value) ? value.toFixed(5) : "--";
+
+            const resolveInitialView = () => {
+                const latitude = Number.parseFloat(latitudeInput.value || "");
+                const longitude = Number.parseFloat(longitudeInput.value || "");
+                const fallbackLatitude = Number.parseFloat(dialog.dataset.defaultLatitude || "");
+                const fallbackLongitude = Number.parseFloat(dialog.dataset.defaultLongitude || "");
+                const fallbackZoom = Number.parseInt(dialog.dataset.defaultZoom || "10", 10);
+                return {
+                    latitude: Number.isFinite(latitude) ? latitude : fallbackLatitude,
+                    longitude: Number.isFinite(longitude) ? longitude : fallbackLongitude,
+                    zoom: Number.isInteger(fallbackZoom) ? fallbackZoom : 10,
+                };
+            };
+
+            const syncCenter = () => {
+                if (!map) {
+                    return;
+                }
+                const center = map.getCenter();
+                centerOutput.textContent = `${formatCoordinate(center.lat)}, ${formatCoordinate(center.lng)}`;
+            };
+
+            const ensureMap = () => {
+                if (map) {
+                    return;
+                }
+                const initialView = resolveInitialView();
+                map = window.L.map(mapNode, {
+                    center: [initialView.latitude, initialView.longitude],
+                    zoom: initialView.zoom,
+                    zoomControl: true,
+                });
+                window.L.tileLayer(dialog.dataset.tileUrl || "", {
+                    attribution: dialog.dataset.tileAttribution || "",
+                    maxZoom: 19,
+                }).addTo(map);
+                map.on("move zoom", syncCenter);
+                syncCenter();
+            };
+
+            const openModal = () => {
+                modal.hidden = false;
+                document.body.classList.add("modal-open");
+                ensureMap();
+                const initialView = resolveInitialView();
+                map.setView([initialView.latitude, initialView.longitude], map.getZoom() || initialView.zoom);
+                window.setTimeout(() => {
+                    map.invalidateSize();
+                    syncCenter();
+                }, 0);
+            };
+
+            const closeModal = () => {
+                modal.hidden = true;
+                document.body.classList.remove("modal-open");
+            };
+
+            openButton.addEventListener("click", openModal);
+            closeButtons.forEach((button) => button.addEventListener("click", closeModal));
+            applyButton.addEventListener("click", () => {
+                if (!map) {
+                    return;
+                }
+                const center = map.getCenter();
+                latitudeInput.value = center.lat.toFixed(5);
+                longitudeInput.value = center.lng.toFixed(5);
+                closeModal();
+            });
         }
     })();
 </script>
