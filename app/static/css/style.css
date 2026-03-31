@@ -200,6 +200,11 @@ body {
     transform: translateX(1px);
 }
 
+.nav-link-struck span {
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+}
+
 .sidebar-footer {
     margin-top: auto;
     padding: var(--space-2) 0.2rem 0;
