@@ -13,6 +13,12 @@
         {% endif %}
         {% if can_edit %}
         <form method="post" class="form-grid" id="station-form">
+            <div class="full station-settings-group stack-sm">
+                <div class="station-settings-group-header">
+                    <h2>Position Beacon</h2>
+                    <p class="section-lead">Configure the APRS position beacon. Beacon comment stays part of the position frame.</p>
+                </div>
+                <div class="form-grid station-settings-subgrid">
             <label>
                 <span>Callsign</span>
                 <input type="text" name="callsign" value="{{ station.callsign }}">
@@ -49,6 +55,32 @@
                 <span>Beacon Path</span>
                 <input type="text" name="beacon_path" value="{{ station.beacon_path }}" placeholder="WIDE2-2">
             </label>
+                </div>
+            </div>
+            <div class="full station-settings-group stack-sm">
+                <div class="station-settings-group-header">
+                    <h2>APRS Status</h2>
+                    <p class="section-lead">Status is sent as a separate APRS frame with data type identifier <code>&gt;</code>, independent from the position beacon.</p>
+                </div>
+                <div class="form-grid station-settings-subgrid">
+                    <label class="full checkbox-row">
+                        <input type="checkbox" name="status_enabled" value="1" {% if station.status_enabled %}checked{% endif %}>
+                        <span>Enable periodic APRS Status transmission</span>
+                    </label>
+                    <label>
+                        <span>Status Text</span>
+                        <input type="text" name="status_text" value="{{ station.status_text or '' }}" placeholder="Station online">
+                    </label>
+                    <label>
+                        <span>Status at every</span>
+                        <select name="status_interval_minutes">
+                            {% for option in beacon_interval_options %}
+                            <option value="{{ option.value }}" {% if station.status_interval_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                </div>
+            </div>
             <label class="full">
                 <span>Get location</span>
                 <button type="button" class="button button-secondary location-picker-button" id="station-open-map-picker">
@@ -160,6 +192,9 @@
             <dt>Beacon Comment</dt><dd>{{ station.beacon_comment }}</dd>
             <dt>Beacon at every</dt><dd>{{ station.beacon_interval_minutes }}m</dd>
             <dt>Beacon path</dt><dd>{{ station.beacon_path }}</dd>
+            <dt>APRS Status enabled</dt><dd>{{ station.status_enabled }}</dd>
+            <dt>APRS Status text</dt><dd>{{ station.status_text }}</dd>
+            <dt>APRS Status at every</dt><dd>{{ station.status_interval_minutes }}m</dd>
             <dt>Latitude</dt><dd>{{ station.latitude }}</dd>
             <dt>Longitude</dt><dd>{{ station.longitude }}</dd>
             <dt>Symbol</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
@@ -174,8 +209,8 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>Beacon Log</h2>
-                <p class="section-lead">Recent beacon jobs with delivery state and transmitted frame preview.</p>
+                <h2>Station TX Log</h2>
+                <p class="section-lead">Recent beacon and APRS Status jobs with delivery state and transmitted frame preview.</p>
             </div>
         </div>
         <div class="table-wrap">
@@ -183,6 +218,7 @@
                 <thead>
                     <tr>
                         <th>Time</th>
+                        <th>Type</th>
                         <th>Status</th>
                         <th>Interface</th>
                         <th>Attempts</th>
@@ -194,6 +230,7 @@
                     {% for row in beacon_log_rows %}
                     <tr>
                         <td>{{ row.display_time.replace('T', ' ').replace('+00:00', ' UTC') if row.display_time else '-' }}</td>
+                        <td>{{ row.kind }}</td>
                         <td>
                             <span class="status-pill {% if row.status == 'sent' %}status-running{% elif row.status == 'failed' %}status-stopped{% else %}status-unknown{% endif %}">
                                 {{ row.status }}
@@ -206,7 +243,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6">No beacon jobs yet.</td>
+                        <td colspan="7">No station outbound jobs yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -785,6 +785,27 @@ body {
     grid-column: 1 / -1;
 }
 
+.station-settings-group {
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+    box-shadow: var(--shadow-soft);
+}
+
+.station-settings-group-header {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.station-settings-group-header h2 {
+    margin: 0;
+}
+
+.station-settings-subgrid {
+    gap: var(--space-3);
+}
+
 label {
     display: flex;
     flex-direction: column;

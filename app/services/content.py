@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
-from app.services.outbound import build_beacon_tnc2, build_object_tnc2
+from app.services.outbound import build_beacon_tnc2, build_object_tnc2, build_status_tnc2
 from app.sections import SECTION_DEFINITIONS
 
 
@@ -125,6 +125,9 @@ def get_station_settings() -> dict[str, Any]:
     result.setdefault("default_units", "metric")
     result.setdefault("beacon_interval_minutes", 30)
     result.setdefault("beacon_path", "")
+    result.setdefault("status_enabled", 0)
+    result.setdefault("status_text", "")
+    result.setdefault("status_interval_minutes", 30)
     return result
 
 
@@ -140,44 +143,7 @@ def get_configured_modem_interfaces() -> list[dict[str, Any]]:
 
 
 def update_station_settings(payload: dict[str, Any]) -> None:
-    default_units = payload.get("default_units", "metric")
-    if default_units not in {"metric", "imperial"}:
-        default_units = "metric"
-    try:
-        beacon_interface_id = int(payload.get("beacon_interface_id")) if payload.get("beacon_interface_id") not in {None, ""} else None
-    except (TypeError, ValueError):
-        beacon_interface_id = None
-    if beacon_interface_id is not None:
-        interface_exists = fetch_one("SELECT id FROM modems WHERE id = ?", (beacon_interface_id,))
-        if interface_exists is None:
-            beacon_interface_id = None
-    try:
-        beacon_interval_minutes = int(payload.get("beacon_interval_minutes") or 30)
-    except (TypeError, ValueError):
-        beacon_interval_minutes = 30
-    if beacon_interval_minutes not in {15, 30, 45, 60}:
-        beacon_interval_minutes = 30
-    symbol_table = str(payload.get("symbol_table", "/") or "/").strip()
-    if symbol_table not in {"/", "\\"}:
-        symbol_table = "/"
-    symbol_code = str(payload.get("symbol_code", ">") or ">").strip()[:1]
-    if len(symbol_code) != 1 or not (33 <= ord(symbol_code) <= 126):
-        symbol_code = ">"
-    values = {
-        "callsign": payload.get("callsign", ""),
-        "ssid": payload.get("ssid", ""),
-        "beacon_interface_id": beacon_interface_id,
-        "beacon_comment": payload.get("beacon_comment", ""),
-        "beacon_interval_minutes": beacon_interval_minutes,
-        "beacon_path": payload.get("beacon_path", ""),
-        "latitude": payload.get("latitude", ""),
-        "longitude": payload.get("longitude", ""),
-        "symbol_table": symbol_table,
-        "symbol_code": symbol_code,
-        "default_units": default_units,
-        "tx_enabled": int(bool(payload.get("tx_enabled"))),
-        "updated_at": utc_now(),
-    }
+    values = normalize_station_settings_payload(payload)
     with get_connection() as connection:
         connection.execute(
             """
@@ -188,6 +154,9 @@ def update_station_settings(payload: dict[str, Any]) -> None:
                 beacon_comment = :beacon_comment,
                 beacon_interval_minutes = :beacon_interval_minutes,
                 beacon_path = :beacon_path,
+                status_enabled = :status_enabled,
+                status_text = :status_text,
+                status_interval_minutes = :status_interval_minutes,
                 latitude = :latitude,
                 longitude = :longitude,
                 symbol_table = :symbol_table,
@@ -199,7 +168,68 @@ def update_station_settings(payload: dict[str, Any]) -> None:
             """,
             values,
         )
-    log_event("INFO", "config", "Updated station settings")
+    log_event(
+        "INFO",
+        "config",
+        (
+            "Updated station settings "
+            f"(tx_enabled={values['tx_enabled']}, beacon_interval_minutes={values['beacon_interval_minutes']}, "
+            f"status_enabled={values['status_enabled']}, status_interval_minutes={values['status_interval_minutes']}, "
+            f"status_text={values['status_text']!r})"
+        ),
+    )
+
+
+def safe_update_station_settings(payload: dict[str, Any]) -> tuple[bool, str | None]:
+    try:
+        update_station_settings(payload)
+    except ValueError as exc:
+        return False, str(exc)
+    return True, None
+
+
+def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    default_units = payload.get("default_units", "metric")
+    if default_units not in {"metric", "imperial"}:
+        default_units = "metric"
+    try:
+        beacon_interface_id = int(payload.get("beacon_interface_id")) if payload.get("beacon_interface_id") not in {None, ""} else None
+    except (TypeError, ValueError):
+        beacon_interface_id = None
+    if beacon_interface_id is not None:
+        interface_exists = fetch_one("SELECT id FROM modems WHERE id = ?", (beacon_interface_id,))
+        if interface_exists is None:
+            beacon_interface_id = None
+    beacon_interval_minutes = _normalize_station_interval(payload.get("beacon_interval_minutes"), label="Beacon interval")
+    status_interval_minutes = _normalize_station_interval(payload.get("status_interval_minutes"), label="Status interval")
+    status_enabled = int(bool(payload.get("status_enabled")))
+    status_text = str(payload.get("status_text") or "").strip()
+    if status_enabled and not status_text:
+        raise ValueError("Status text is required when APRS Status is enabled.")
+    symbol_table = str(payload.get("symbol_table", "/") or "/").strip()
+    if symbol_table not in {"/", "\\"}:
+        symbol_table = "/"
+    symbol_code = str(payload.get("symbol_code", ">") or ">").strip()[:1]
+    if len(symbol_code) != 1 or not (33 <= ord(symbol_code) <= 126):
+        symbol_code = ">"
+    return {
+        "callsign": payload.get("callsign", ""),
+        "ssid": payload.get("ssid", ""),
+        "beacon_interface_id": beacon_interface_id,
+        "beacon_comment": payload.get("beacon_comment", ""),
+        "beacon_interval_minutes": beacon_interval_minutes,
+        "beacon_path": payload.get("beacon_path", ""),
+        "status_enabled": status_enabled,
+        "status_text": status_text,
+        "status_interval_minutes": status_interval_minutes,
+        "latitude": payload.get("latitude", ""),
+        "longitude": payload.get("longitude", ""),
+        "symbol_table": symbol_table,
+        "symbol_code": symbol_code,
+        "default_units": default_units,
+        "tx_enabled": int(bool(payload.get("tx_enabled"))),
+        "updated_at": utc_now(),
+    }
 
 
 def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
@@ -210,15 +240,15 @@ def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
+def recent_station_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
     try:
         rows = fetch_all(
             """
             SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
-                   m.name AS interface_name, j.payload_json
+                   j.kind, m.name AS interface_name, j.payload_json
             FROM outbound_jobs j
             LEFT JOIN modems m ON m.id = j.interface_id
-            WHERE j.kind = 'beacon'
+            WHERE j.kind IN ('beacon', 'status')
             ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
             LIMIT ?
             """,
@@ -234,11 +264,21 @@ def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
             payload = json.loads(payload_json)
         except json.JSONDecodeError:
             payload = {}
-        item["line"] = build_beacon_tnc2(payload) if payload else ""
+        kind = str(item.get("kind") or "").strip()
+        if payload and kind == "beacon":
+            item["line"] = build_beacon_tnc2(payload)
+        elif payload and kind == "status":
+            item["line"] = build_status_tnc2(payload)
+        else:
+            item["line"] = ""
         item["interface_name"] = item.get("interface_name") or "Unknown interface"
         item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
         jobs.append(item)
     return jobs
+
+
+def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
+    return recent_station_outbound_jobs(limit=limit)
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
@@ -1796,6 +1836,16 @@ def _normalize_printable_ascii(value: str) -> str:
     if any(ord(char) < 32 or ord(char) > 126 for char in value):
         raise ValueError("Only printable ASCII characters are allowed in APRS object/item fields.")
     return value
+
+
+def _normalize_station_interval(value: Any, *, label: str) -> int:
+    try:
+        interval_minutes = int(str(value or "30").strip())
+    except ValueError as exc:
+        raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.") from exc
+    if interval_minutes not in {15, 30, 45, 60}:
+        raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.")
+    return interval_minutes
 
 
 def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: str) -> None:

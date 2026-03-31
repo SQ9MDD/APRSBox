@@ -14,20 +14,20 @@ from app.services.content import (
     delete_section_row,
     get_configured_modem_interfaces,
     get_aprs_symbol_icon_path,
-    recent_beacon_jobs,
     get_recent_station_packets,
     heard_stations,
     get_section_row,
     get_section_rows,
     get_related_ssids,
+    recent_station_outbound_jobs,
     get_station_detail,
     get_station_settings,
     recent_event_logs,
+    safe_update_station_settings,
     station_summary,
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
     safe_update_section_row,
-    update_station_settings,
 )
 from app.services.band_condition import (
     build_station_key,
@@ -159,7 +159,7 @@ def _station_page_context(
         can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=flash_success,
-        beacon_log_rows=recent_beacon_jobs(limit=20),
+        beacon_log_rows=recent_station_outbound_jobs(limit=20),
         map_picker_config=get_map_page_config(),
         **_station_form_options(),
     )
@@ -803,44 +803,9 @@ def station_update(
     beacon_comment: str = Form(""),
     beacon_interval_minutes: str = Form("30"),
     beacon_path: str = Form(""),
-    latitude: str = Form(""),
-    longitude: str = Form(""),
-    symbol_table: str = Form("/"),
-    symbol_code: str = Form(">"),
-    default_units: str = Form("metric"),
-    tx_enabled: str | None = Form(None),
-) -> object:
-    templates = request.app.state.templates
-    update_station_settings(
-        {
-            "callsign": callsign.strip(),
-            "ssid": ssid.strip(),
-            "beacon_interface_id": beacon_interface_id.strip(),
-            "beacon_comment": beacon_comment.strip(),
-            "beacon_interval_minutes": beacon_interval_minutes.strip(),
-            "beacon_path": beacon_path.strip(),
-            "latitude": latitude.strip(),
-            "longitude": longitude.strip(),
-            "symbol_table": symbol_table.strip(),
-            "symbol_code": symbol_code.strip(),
-            "default_units": default_units.strip(),
-            "tx_enabled": tx_enabled,
-        }
-    )
-    context = _station_page_context(request, current_user, flash="Station settings saved.", flash_success=True)
-    return templates.TemplateResponse("station.html", context)
-
-
-@router.post("/station/send-beacon")
-def station_send_beacon(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-    callsign: str = Form(""),
-    ssid: str = Form(""),
-    beacon_interface_id: str = Form(""),
-    beacon_comment: str = Form(""),
-    beacon_interval_minutes: str = Form("30"),
-    beacon_path: str = Form(""),
+    status_enabled: str | None = Form(None),
+    status_text: str = Form(""),
+    status_interval_minutes: str = Form("30"),
     latitude: str = Form(""),
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
@@ -856,6 +821,9 @@ def station_send_beacon(
         "beacon_comment": beacon_comment.strip(),
         "beacon_interval_minutes": beacon_interval_minutes.strip(),
         "beacon_path": beacon_path.strip(),
+        "status_enabled": status_enabled,
+        "status_text": status_text.strip(),
+        "status_interval_minutes": status_interval_minutes.strip(),
         "latitude": latitude.strip(),
         "longitude": longitude.strip(),
         "symbol_table": symbol_table.strip(),
@@ -863,7 +831,56 @@ def station_send_beacon(
         "default_units": default_units.strip(),
         "tx_enabled": tx_enabled,
     }
-    update_station_settings(payload)
+    success, error = safe_update_station_settings(payload)
+    if not success:
+        context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
+        return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    context = _station_page_context(request, current_user, flash="Station settings saved.", flash_success=True)
+    return templates.TemplateResponse("station.html", context)
+
+
+@router.post("/station/send-beacon")
+def station_send_beacon(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    callsign: str = Form(""),
+    ssid: str = Form(""),
+    beacon_interface_id: str = Form(""),
+    beacon_comment: str = Form(""),
+    beacon_interval_minutes: str = Form("30"),
+    beacon_path: str = Form(""),
+    status_enabled: str | None = Form(None),
+    status_text: str = Form(""),
+    status_interval_minutes: str = Form("30"),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
+    symbol_table: str = Form("/"),
+    symbol_code: str = Form(">"),
+    default_units: str = Form("metric"),
+    tx_enabled: str | None = Form(None),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "callsign": callsign.strip(),
+        "ssid": ssid.strip(),
+        "beacon_interface_id": beacon_interface_id.strip(),
+        "beacon_comment": beacon_comment.strip(),
+        "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_path": beacon_path.strip(),
+        "status_enabled": status_enabled,
+        "status_text": status_text.strip(),
+        "status_interval_minutes": status_interval_minutes.strip(),
+        "latitude": latitude.strip(),
+        "longitude": longitude.strip(),
+        "symbol_table": symbol_table.strip(),
+        "symbol_code": symbol_code.strip(),
+        "default_units": default_units.strip(),
+        "tx_enabled": tx_enabled,
+    }
+    success, error = safe_update_station_settings(payload)
+    if not success:
+        context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
+        return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     station_settings = get_station_settings()
     success, flash = enqueue_beacon_job(station_settings)
     context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)

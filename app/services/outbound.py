@@ -13,6 +13,7 @@ KISS_TFESC = 0xDD
 AX25_CONTROL_UI = 0x03
 AX25_PID_NO_LAYER3 = 0xF0
 OUTBOUND_KIND_BEACON = "beacon"
+OUTBOUND_KIND_STATUS = "status"
 OUTBOUND_KIND_OBJECT = "object"
 OUTBOUND_STATUS_QUEUED = "queued"
 OUTBOUND_STATUS_PROCESSING = "processing"
@@ -84,7 +85,72 @@ def enqueue_beacon_job(station_settings: dict[str, Any], *, trigger: str = "manu
     return True, f"Beacon queued as job #{job_id}."
 
 
+def enqueue_status_job(station_settings: dict[str, Any], *, trigger: str = "manual") -> tuple[bool, str]:
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    ssid = str(station_settings.get("ssid") or "").strip()
+    beacon_interface_id = station_settings.get("beacon_interface_id")
+    status_text = str(station_settings.get("status_text") or "").strip()
+    if not callsign:
+        return False, "Callsign is required."
+    if beacon_interface_id in {None, ""}:
+        return False, "Interface is required."
+    if not status_text:
+        return False, "Status text is required."
+    try:
+        interface_id = int(beacon_interface_id)
+    except (TypeError, ValueError):
+        return False, "Selected interface is invalid."
+    modem = fetch_one(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE id = ?
+        """,
+        (interface_id,),
+    )
+    if modem is None:
+        return False, "Selected interface does not exist."
+
+    payload = {
+        "callsign": callsign,
+        "ssid": ssid,
+        "status_text": status_text,
+        "trigger": str(trigger or "manual").strip() or "manual",
+    }
+    timestamp = utc_now()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO outbound_jobs(
+                kind, interface_id, payload_json, status, scheduled_at,
+                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+            """,
+            (
+                OUTBOUND_KIND_STATUS,
+                int(modem["id"]),
+                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
+                OUTBOUND_STATUS_QUEUED,
+                timestamp,
+                timestamp,
+                timestamp,
+            ),
+        )
+        job_id = cursor.lastrowid
+    log_event("INFO", "outbound", f"Queued {payload['trigger']} status job #{job_id} for interface {modem['name']}")
+    return True, f"Status queued as job #{job_id}."
+
+
 def pending_beacon_job_count() -> int:
+    return pending_outbound_job_count(OUTBOUND_KIND_BEACON)
+
+
+def pending_status_job_count() -> int:
+    return pending_outbound_job_count(OUTBOUND_KIND_STATUS)
+
+
+def pending_outbound_job_count(kind: str) -> int:
     row = fetch_one(
         """
         SELECT COUNT(*) AS total
@@ -92,7 +158,7 @@ def pending_beacon_job_count() -> int:
         WHERE kind = ?
           AND status IN (?, ?)
         """,
-        (OUTBOUND_KIND_BEACON, OUTBOUND_STATUS_QUEUED, OUTBOUND_STATUS_PROCESSING),
+        (kind, OUTBOUND_STATUS_QUEUED, OUTBOUND_STATUS_PROCESSING),
     )
     return int(row["total"]) if row else 0
 
@@ -289,6 +355,12 @@ def build_object_tnc2(payload: dict[str, Any]) -> str:
     return f"{header}:{info}"
 
 
+def build_status_tnc2(payload: dict[str, Any]) -> str:
+    source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
+    info = _build_status_info(payload)
+    return f"{source}>APRS:{info}"
+
+
 def latest_object_dispatch_at() -> datetime | None:
     row = fetch_one(
         """
@@ -375,6 +447,10 @@ def _build_object_info(payload: dict[str, Any]) -> str:
     symbol_code = _normalize_symbol_code(payload.get("symbol_code"))
     comment = str(payload.get("comment") or "").strip()
     return f";{name}{state_marker}{timestamp}{latitude}{symbol_table}{longitude}{symbol_code}{comment}"
+
+
+def _build_status_info(payload: dict[str, Any]) -> str:
+    return f">{str(payload.get('status_text') or '').strip()}"
 
 
 def _format_aprs_latitude(value: float) -> str:

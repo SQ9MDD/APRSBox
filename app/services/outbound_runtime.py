@@ -7,6 +7,7 @@ from app.db import log_event
 from app.services.outbound import (
     build_beacon_tnc2,
     build_object_tnc2,
+    build_status_tnc2,
     build_tnc2_kiss_frame,
     claim_next_outbound_job,
     mark_outbound_job_failed,
@@ -61,10 +62,13 @@ class OutboundService:
             kind = str(job.get("kind") or "").strip()
             if kind == "beacon":
                 tnc2_line = build_beacon_tnc2(job.get("payload") or {})
+            elif kind == "status":
+                tnc2_line = build_status_tnc2(job.get("payload") or {})
             elif kind == "object":
                 tnc2_line = build_object_tnc2(job.get("payload") or {})
             else:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
+            log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
             frame = build_tnc2_kiss_frame(tnc2_line)
             host, port = endpoint
             reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5)
@@ -85,11 +89,12 @@ class OutboundService:
                 payload_hex=frame.hex(" ").upper(),
             )
             mark_outbound_job_sent(job_id)
-            log_event("INFO", "outbound", f"Sent outbound job #{job_id} via {interface_name}")
+            log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
         except Exception as exc:
             error = str(exc).strip() or exc.__class__.__name__
             mark_outbound_job_failed(job_id, error)
-            log_event("WARNING", "outbound", f"Outbound job #{job_id} failed: {error}")
+            kind = str(job.get("kind") or "unknown").strip() or "unknown"
+            log_event("WARNING", "outbound", f"{kind.capitalize()} outbound job #{job_id} failed: {error}")
 
     async def _sleep(self, delay: float) -> None:
         try:

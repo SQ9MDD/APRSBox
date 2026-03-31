@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from app.db import get_app_setting, set_app_setting
+from app.db import get_app_setting, log_event, set_app_setting
 from app.services.content import get_station_settings
-from app.services.outbound import enqueue_beacon_job, pending_beacon_job_count
+from app.services.outbound import enqueue_beacon_job, enqueue_status_job, pending_beacon_job_count, pending_status_job_count
 
 
 LAST_SCHEDULED_BEACON_AT_KEY = "scheduler.beacon.last_enqueued_at"
+LAST_SCHEDULED_STATUS_AT_KEY = "scheduler.status.last_enqueued_at"
 
 
 class BeaconSchedulerService:
@@ -44,22 +45,45 @@ class BeaconSchedulerService:
         if not station_settings or not bool(station_settings.get("tx_enabled")):
             return
 
+        now = datetime.now(timezone.utc)
+        self._schedule_beacon(station_settings, now)
+        self._schedule_status(station_settings, now)
+
+    def _schedule_beacon(self, station_settings: dict[str, object], now: datetime) -> None:
         interval_minutes = int(station_settings.get("beacon_interval_minutes") or 30)
         if interval_minutes <= 0:
             return
         if pending_beacon_job_count() > 0:
+            log_event("INFO", "outbound", "Beacon scheduler skipped enqueue because a beacon job is already pending")
             return
-
-        last_enqueued_at = _parse_timestamp(get_app_setting(LAST_SCHEDULED_BEACON_AT_KEY))
-        now = datetime.now(timezone.utc)
-        if last_enqueued_at is not None:
-            elapsed_seconds = (now - last_enqueued_at).total_seconds()
-            if elapsed_seconds < interval_minutes * 60:
-                return
-
-        success, _ = enqueue_beacon_job(station_settings, trigger="scheduled")
+        if not _is_schedule_due(LAST_SCHEDULED_BEACON_AT_KEY, interval_minutes, now):
+            return
+        log_event("INFO", "outbound", f"Beacon scheduler due check passed at {now.replace(microsecond=0).isoformat()}")
+        success, message = enqueue_beacon_job(station_settings, trigger="scheduled")
         if success:
             set_app_setting(LAST_SCHEDULED_BEACON_AT_KEY, now.replace(microsecond=0).isoformat())
+            log_event("INFO", "outbound", "Beacon scheduler enqueued scheduled beacon")
+        else:
+            log_event("WARNING", "outbound", f"Beacon scheduler failed to enqueue beacon: {message}")
+
+    def _schedule_status(self, station_settings: dict[str, object], now: datetime) -> None:
+        if not bool(station_settings.get("status_enabled")):
+            return
+        interval_minutes = int(station_settings.get("status_interval_minutes") or 30)
+        if interval_minutes <= 0:
+            return
+        if pending_status_job_count() > 0:
+            log_event("INFO", "outbound", "Status scheduler skipped enqueue because a status job is already pending")
+            return
+        if not _is_schedule_due(LAST_SCHEDULED_STATUS_AT_KEY, interval_minutes, now):
+            return
+        log_event("INFO", "outbound", f"Status scheduler due check passed at {now.replace(microsecond=0).isoformat()}")
+        success, message = enqueue_status_job(station_settings, trigger="scheduled")
+        if success:
+            set_app_setting(LAST_SCHEDULED_STATUS_AT_KEY, now.replace(microsecond=0).isoformat())
+            log_event("INFO", "outbound", "Status scheduler enqueued scheduled status frame")
+        else:
+            log_event("WARNING", "outbound", f"Status scheduler failed to enqueue status frame: {message}")
 
     async def _sleep(self, delay: float) -> None:
         try:
@@ -78,3 +102,11 @@ def _parse_timestamp(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _is_schedule_due(setting_key: str, interval_minutes: int, now: datetime) -> bool:
+    last_enqueued_at = _parse_timestamp(get_app_setting(setting_key))
+    if last_enqueued_at is None:
+        return True
+    elapsed_seconds = (now - last_enqueued_at).total_seconds()
+    return elapsed_seconds >= interval_minutes * 60
