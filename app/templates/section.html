@@ -30,6 +30,30 @@
                 </div>
             </div>
             <div class="table-wrap">
+                {% if section.slug in ['objects', 'items'] %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>{{ 'Object Name' if section.slug == 'objects' else 'Item Name' }}</th>
+                            <th>Icon</th>
+                            <th>Raw Frame Preview</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
+                            <td>{{ row.name }}</td>
+                            <td><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
+                            <td><code>{{ row.raw_frame_preview }}</code></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3">No records yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -96,6 +120,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -122,16 +147,53 @@
                     <span>{{ field.label }}</span>
                     {% elif field.type == 'select' %}
                     <span>{{ field.label }}</span>
-                    <select name="{{ field.name }}" {% if field.required %}required{% endif %}>
+                    <select name="{{ field.name }}" {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %} {% if field.required %}required{% endif %}>
                         {% for option in field.options %}
                         <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name] == option.value) or (not edit_row and loop.first) %}selected{% endif %}>
                             {{ option.label }}
                         </option>
                         {% endfor %}
                     </select>
+                    {% elif section.slug in ['objects', 'items'] and field.name == 'symbol_code' %}
+                    <span>{{ field.label }}</span>
+                    <div class="station-symbol-picker">
+                        <input type="hidden" name="symbol_code" id="{{ section.slug }}-symbol-code" value="{{ edit_row[field.name] if edit_row and edit_row[field.name] else field.placeholder or '>' }}">
+                        <div class="station-symbol-dropdown" id="{{ section.slug }}-symbol-dropdown">
+                            <button type="button" class="station-symbol-trigger" id="{{ section.slug }}-symbol-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="station-symbol-trigger-copy">
+                                    <img id="{{ section.slug }}-symbol-trigger-image" src="{{ request.scope.root_path }}/static/icons/verG/x.gif" alt="">
+                                    <span id="{{ section.slug }}-symbol-trigger-text">Select symbol</span>
+                                </span>
+                                <span class="station-symbol-trigger-caret">▾</span>
+                            </button>
+                            <div class="station-symbol-menu" id="{{ section.slug }}-symbol-menu" role="listbox" tabindex="-1" aria-label="Symbol code">
+                                {% for option in symbol_code_options %}
+                                <button
+                                    type="button"
+                                    class="station-symbol-option{% if (edit_row and edit_row[field.name] == option.value) or (not edit_row and (field.placeholder or '>') == option.value) %} active{% endif %}"
+                                    data-value="{{ option.value }}"
+                                    data-label="{{ option.label }}"
+                                    data-primary-icon="{{ request.scope.root_path }}/static/{{ option.primary_icon }}"
+                                    data-alternate-icon="{{ request.scope.root_path }}/static/{{ option.alternate_icon }}"
+                                    role="option"
+                                    aria-selected="{% if (edit_row and edit_row[field.name] == option.value) or (not edit_row and (field.placeholder or '>') == option.value) %}true{% else %}false{% endif %}"
+                                >
+                                    <img class="station-symbol-option-image" src="{{ request.scope.root_path }}/static/{{ option.primary_icon }}" alt="">
+                                    <span class="station-symbol-option-label">{{ option.label }}</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
                     {% else %}
                     <span>{{ field.label }}</span>
-                    <input type="{{ field.type }}" name="{{ field.name }}" value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}" {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}>
+                    <input
+                        type="{{ field.type }}"
+                        name="{{ field.name }}"
+                        {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
+                        value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}"
+                        {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}
+                    >
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
                     <small class="muted">Optional future RF path. Common examples are <code>WIDE2-2</code> or <code>WIDE1-1,WIDE2-1</code>; leave blank for direct.</small>
@@ -145,7 +207,10 @@
                 <div class="form-actions">
                     <button type="submit" class="button">Save</button>
                     {% if section.supports_editing and edit_row %}
-                    <a href="{{ request.scope.root_path }}/settings/{{ section.slug }}" class="button button-secondary">Cancel</a>
+                    <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else '/settings/' ~ section.slug) }}" class="button button-secondary">Cancel</a>
+                    {% if section.slug in ['objects', 'items'] and section.supports_delete %}
+                    <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post" onclick="return confirm('Delete this record?');">Delete</button>
+                    {% endif %}
                     {% endif %}
                 </div>
             </form>
@@ -167,22 +232,91 @@
             });
         }
 
-        const form = document.getElementById("modems-form");
-        if (!form) return;
-        const typeSelect = form.querySelector('select[name="modem_type"]');
-        const baudInput = form.querySelector('input[name="baud_rate"]');
-        if (!typeSelect || !baudInput) return;
+        const modemForm = document.getElementById("modems-form");
+        if (modemForm) {
+            const typeSelect = modemForm.querySelector('select[name="modem_type"]');
+            const baudInput = modemForm.querySelector('input[name="baud_rate"]');
+            if (typeSelect && baudInput) {
+                const syncBaudState = () => {
+                    const isTcp = typeSelect.value === "TCP";
+                    baudInput.disabled = isTcp;
+                    if (isTcp) {
+                        baudInput.value = "";
+                    }
+                };
 
-        const syncBaudState = () => {
-            const isTcp = typeSelect.value === "TCP";
-            baudInput.disabled = isTcp;
-            if (isTcp) {
-                baudInput.value = "";
+                typeSelect.addEventListener("change", syncBaudState);
+                syncBaudState();
             }
-        };
+        }
 
-        typeSelect.addEventListener("change", syncBaudState);
-        syncBaudState();
+        for (const slug of ["objects", "items"]) {
+            const symbolTable = document.getElementById(`${slug}-symbol-table`);
+            const symbolCode = document.getElementById(`${slug}-symbol-code`);
+            const symbolDropdown = document.getElementById(`${slug}-symbol-dropdown`);
+            const symbolTrigger = document.getElementById(`${slug}-symbol-trigger`);
+            const symbolTriggerImage = document.getElementById(`${slug}-symbol-trigger-image`);
+            const symbolTriggerText = document.getElementById(`${slug}-symbol-trigger-text`);
+            const symbolMenu = document.getElementById(`${slug}-symbol-menu`);
+            const symbolOptions = Array.from(document.querySelectorAll(`#${slug}-symbol-menu .station-symbol-option`));
+            if (!symbolTable || !symbolCode || !symbolDropdown || !symbolTrigger || !symbolTriggerImage || !symbolTriggerText || !symbolMenu || !symbolOptions.length) {
+                continue;
+            }
+
+            const closeMenu = () => {
+                symbolDropdown.classList.remove("open");
+                symbolTrigger.setAttribute("aria-expanded", "false");
+            };
+
+            const selectedOption = () => symbolOptions.find((option) => option.dataset.value === symbolCode.value) || symbolOptions[0];
+
+            const syncPreview = () => {
+                const selected = selectedOption();
+                const icon = symbolTable.value === "\\"
+                    ? selected.dataset.alternateIcon
+                    : selected.dataset.primaryIcon;
+                symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+                symbolTriggerText.textContent = selected.dataset.label || selected.value;
+
+                for (const option of symbolOptions) {
+                    const optionIcon = symbolTable.value === "\\"
+                        ? option.dataset.alternateIcon
+                        : option.dataset.primaryIcon;
+                    const image = option.querySelector(".station-symbol-option-image");
+                    if (image) {
+                        image.src = optionIcon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+                    }
+                    const isActive = option.dataset.value === selected.dataset.value;
+                    option.classList.toggle("active", isActive);
+                    option.setAttribute("aria-selected", isActive ? "true" : "false");
+                }
+            };
+
+            symbolTrigger.addEventListener("click", () => {
+                if (symbolDropdown.classList.contains("open")) {
+                    closeMenu();
+                    return;
+                }
+                symbolDropdown.classList.add("open");
+                symbolTrigger.setAttribute("aria-expanded", "true");
+            });
+
+            symbolOptions.forEach((option) => {
+                option.addEventListener("click", () => {
+                    symbolCode.value = option.dataset.value || ">";
+                    syncPreview();
+                    closeMenu();
+                });
+            });
+
+            symbolTable.addEventListener("change", syncPreview);
+            document.addEventListener("click", (event) => {
+                if (!symbolDropdown.contains(event.target)) {
+                    closeMenu();
+                }
+            });
+            syncPreview();
+        }
     })();
 </script>
 {% endblock %}

@@ -53,7 +53,7 @@ def _section_template_context(
     edit_row: dict | None = None,
 ) -> dict:
     definition = SECTION_DEFINITIONS[slug]
-    return build_template_context(
+    context = build_template_context(
         request,
         page_title=definition.title,
         current_user=current_user,
@@ -64,6 +64,25 @@ def _section_template_context(
         can_edit=current_user.role in definition.create_roles,
         edit_row=edit_row,
     )
+    if slug in {"objects", "items"}:
+        context.update(
+            {
+                "symbol_table_options": [
+                    {"value": "/", "label": "Primary (/)"},
+                    {"value": "\\", "label": "Alternate (\\)"},
+                ],
+                "symbol_code_options": [
+                    {
+                        "value": chr(code),
+                        "label": chr(code),
+                        "primary_icon": get_aprs_symbol_icon_path(f"/{chr(code)}"),
+                        "alternate_icon": get_aprs_symbol_icon_path(f"\\{chr(code)}"),
+                    }
+                    for code in range(33, 127)
+                ],
+            }
+        )
+    return context
 
 
 def _station_detail_context(callsign: str, unit_system: str) -> dict | None:

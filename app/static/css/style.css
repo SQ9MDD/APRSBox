@@ -1855,6 +1855,12 @@ code {
     min-width: 100%;
 }
 
+.section-symbol-preview {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+}
+
 .empty-state {
     padding: var(--space-4);
     border: 1px dashed var(--border);

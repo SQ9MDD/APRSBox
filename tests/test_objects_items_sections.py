@@ -1,11 +1,12 @@
 import contextlib
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.db import fetch_one, init_db
-from app.services.content import get_section_row, safe_create_section_row, safe_update_section_row
+from app.services.content import get_section_row, safe_create_section_row, safe_update_section_row, update_station_settings
 
 
 @contextlib.contextmanager
@@ -25,6 +26,50 @@ def temporary_database() -> Path:
 
 
 class ObjectAndItemFormTests(unittest.TestCase):
+    def test_object_row_contains_symbol_icon_and_raw_frame_preview(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "9",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "path": "WIDE2-2",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+
+            decorated = get_section_row("objects", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["symbol_icon"], "icons/verG/81.gif")
+            self.assertRegex(
+                decorated["raw_frame_preview"],
+                r"^SQ9XYZ-9>APRS,WIDE2-2:;VOICE {4}\*[0-9]{6}z5213\.78N/02100\.73ErLocal voice repeater$",
+            )
+
     def test_object_record_accepts_valid_aprs_fields(self) -> None:
         with temporary_database():
             success, error = safe_create_section_row(

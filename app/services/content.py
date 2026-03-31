@@ -32,13 +32,21 @@ WORKER_DEFINITIONS = (
 def get_section_rows(slug: str) -> list[dict[str, Any]]:
     definition = SECTION_DEFINITIONS[slug]
     rows = fetch_all(f"SELECT * FROM {definition.table_name} ORDER BY id DESC")
-    return [dict(row) for row in rows]
+    result = [dict(row) for row in rows]
+    if slug in {"objects", "items"}:
+        return [_decorate_aprs_entity_row(slug, row) for row in result]
+    return result
 
 
 def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
     definition = SECTION_DEFINITIONS[slug]
     row = fetch_one(f"SELECT * FROM {definition.table_name} WHERE id = ?", (row_id,))
-    return dict(row) if row else None
+    if not row:
+        return None
+    result = dict(row)
+    if slug in {"objects", "items"}:
+        return _decorate_aprs_entity_row(slug, result)
+    return result
 
 
 def create_section_row(slug: str, payload: dict[str, Any]) -> None:
@@ -1785,3 +1793,70 @@ def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: s
         raise ValueError(f"{label} must be a valid decimal coordinate.") from exc
     if parsed < minimum or parsed > maximum:
         raise ValueError(f"{label} is out of range.")
+
+
+def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
+    result = dict(row)
+    symbol_table = str(result.get("symbol_table") or "/")
+    symbol_code = str(result.get("symbol_code") or ">")
+    result["symbol_icon"] = get_aprs_symbol_icon_path(f"{symbol_table}{symbol_code}")
+    result["raw_frame_preview"] = _build_aprs_entity_preview(slug, result)
+    return result
+
+
+def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
+    station_settings = get_station_settings()
+    source = _build_preview_source(station_settings)
+    latitude = _parse_coordinate(payload.get("latitude"))
+    longitude = _parse_coordinate(payload.get("longitude"))
+    if not source or latitude is None or longitude is None:
+        return "Preview requires station callsign and valid coordinates."
+
+    symbol_table = str(payload.get("symbol_table") or "/")
+    symbol_code = str(payload.get("symbol_code") or ">")
+    comment = str(payload.get("comment") or "").strip()
+    path = str(payload.get("path") or "").strip()
+    header = f"{source}>APRS"
+    if path:
+        header = f"{header},{path}"
+
+    if slug == "objects":
+        name = str(payload.get("name") or "")[:9].ljust(9)
+        state_marker = "*" if str(payload.get("state") or "live") == "live" else "_"
+        timestamp = datetime.now(timezone.utc).strftime("%d%H%Mz")
+        info = (
+            f";{name}{state_marker}{timestamp}"
+            f"{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}{symbol_code}{comment}"
+        )
+    else:
+        name = str(payload.get("name") or "")
+        state_marker = "!" if str(payload.get("state") or "live") == "live" else "_"
+        info = (
+            f"){name}{state_marker}"
+            f"{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}{symbol_code}{comment}"
+        )
+    return f"{header}:{info}"
+
+
+def _build_preview_source(station_settings: dict[str, Any]) -> str:
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    if not callsign:
+        return ""
+    ssid = str(station_settings.get("ssid") or "").strip()
+    return f"{callsign}-{ssid}" if ssid else callsign
+
+
+def _format_aprs_latitude(value: float) -> str:
+    hemisphere = "N" if value >= 0 else "S"
+    absolute = abs(value)
+    degrees = int(absolute)
+    minutes = (absolute - degrees) * 60
+    return f"{degrees:02d}{minutes:05.2f}{hemisphere}"
+
+
+def _format_aprs_longitude(value: float) -> str:
+    hemisphere = "E" if value >= 0 else "W"
+    absolute = abs(value)
+    degrees = int(absolute)
+    minutes = (absolute - degrees) * 60
+    return f"{degrees:03d}{minutes:05.2f}{hemisphere}"
