@@ -5,8 +5,8 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>Station Settings</h2>
-                <p class="section-lead">This page stores the station profile and later transmission defaults. Saving data here does not enable APRS traffic by itself.</p>
+                <h2>My Settings</h2>
+                <p class="section-lead">This page stores the station profile and planned beacon defaults. Saving data here does not enable APRS traffic by itself.</p>
             </div>
         </div>
         {% if flash %}
@@ -25,11 +25,27 @@
             </label>
             <label>
                 <span>SSID</span>
-                <input type="text" name="ssid" value="{{ station.ssid }}">
+                <select name="ssid">
+                    {% for option in ssid_options %}
+                    <option value="{{ option.value }}" {% if station.ssid == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
             </label>
             <label class="full">
                 <span>Beacon Comment</span>
                 <input type="text" name="beacon_comment" value="{{ station.beacon_comment }}">
+            </label>
+            <label>
+                <span>Beacon at every</span>
+                <select name="beacon_interval_minutes">
+                    {% for option in beacon_interval_options %}
+                    <option value="{{ option.value }}" {% if station.beacon_interval_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                <span>Beacon Path</span>
+                <input type="text" name="beacon_path" value="{{ station.beacon_path }}" placeholder="WIDE2-2">
             </label>
             <label>
                 <span>Latitude</span>
@@ -41,16 +57,39 @@
             </label>
             <label>
                 <span>Symbol Table</span>
-                <input type="text" name="symbol_table" value="{{ station.symbol_table }}">
+                <select name="symbol_table" id="station-symbol-table">
+                    {% for option in symbol_table_options %}
+                    <option value="{{ option.value }}" {% if station.symbol_table == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
             </label>
-            <label>
+            <label class="station-symbol-field">
                 <span>Symbol Code</span>
-                <input type="text" name="symbol_code" value="{{ station.symbol_code }}">
+                <div class="station-symbol-picker">
+                    <select name="symbol_code" id="station-symbol-code">
+                        {% for option in symbol_code_options %}
+                        <option
+                            value="{{ option.value }}"
+                            data-primary-icon="{{ request.scope.root_path }}/static/{{ option.primary_icon }}"
+                            data-alternate-icon="{{ request.scope.root_path }}/static/{{ option.alternate_icon }}"
+                            {% if station.symbol_code == option.value %}selected{% endif %}
+                        >{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="station-symbol-preview" aria-live="polite">
+                        <img
+                            id="station-symbol-preview-image"
+                            src="{{ request.scope.root_path }}/static/icons/verG/x.gif"
+                            alt=""
+                        >
+                        <span id="station-symbol-preview-text">Preview</span>
+                    </div>
+                </div>
             </label>
             <label>
-                <span>Domyślne jednostki</span>
+                <span>Jednostki</span>
                 <select name="default_units">
-                    <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>Nasze (metryczne)</option>
+                    <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>Metryczne</option>
                     <option value="imperial" {% if station.default_units == "imperial" %}selected{% endif %}>Imperialne</option>
                 </select>
             </label>
@@ -67,13 +106,42 @@
             <dt>Callsign</dt><dd>{{ station.callsign }}</dd>
             <dt>SSID</dt><dd>{{ station.ssid }}</dd>
             <dt>Beacon Comment</dt><dd>{{ station.beacon_comment }}</dd>
+            <dt>Beacon at every</dt><dd>{{ station.beacon_interval_minutes }}m</dd>
+            <dt>Beacon path</dt><dd>{{ station.beacon_path }}</dd>
             <dt>Latitude</dt><dd>{{ station.latitude }}</dd>
             <dt>Longitude</dt><dd>{{ station.longitude }}</dd>
             <dt>Symbol</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
-            <dt>Domyślne jednostki</dt><dd>{{ "Imperialne" if station.default_units == "imperial" else "Nasze (metryczne)" }}</dd>
+            <dt>Jednostki</dt><dd>{{ "Imperialne" if station.default_units == "imperial" else "Metryczne" }}</dd>
             <dt>TX Enabled</dt><dd>{{ station.tx_enabled }}</dd>
         </dl>
         {% endif %}
     </div>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (() => {
+        const symbolTable = document.getElementById("station-symbol-table");
+        const symbolCode = document.getElementById("station-symbol-code");
+        const previewImage = document.getElementById("station-symbol-preview-image");
+        const previewText = document.getElementById("station-symbol-preview-text");
+        if (!symbolTable || !symbolCode || !previewImage || !previewText) {
+            return;
+        }
+
+        const syncPreview = () => {
+            const selected = symbolCode.options[symbolCode.selectedIndex];
+            const icon = symbolTable.value === "\\"
+                ? selected.dataset.alternateIcon
+                : selected.dataset.primaryIcon;
+            previewImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+            previewText.textContent = `${symbolTable.value}${selected.value}`;
+        };
+
+        symbolTable.addEventListener("change", syncPreview);
+        symbolCode.addEventListener("change", syncPreview);
+        syncPreview();
+    })();
+</script>
 {% endblock %}

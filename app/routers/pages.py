@@ -12,6 +12,7 @@ from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
     delete_section_row,
     dashboard_summary,
+    get_aprs_symbol_icon_path,
     dashboard_traffic_summary,
     get_recent_station_packets,
     heard_stations,
@@ -90,6 +91,26 @@ def _dashboard_band_condition_card() -> dict | None:
         return None
     preferred = next((item for item in bands if item.get("band") == "2m"), None)
     return preferred or bands[0]
+
+
+def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
+    return {
+        "ssid_options": [{"value": "", "label": "None"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
+        "symbol_table_options": [
+            {"value": "/", "label": "Primary (/)"},
+            {"value": "\\", "label": "Alternate (\\)"},
+        ],
+        "symbol_code_options": [
+            {
+                "value": chr(code),
+                "label": f"{chr(code)} ({code})",
+                "primary_icon": get_aprs_symbol_icon_path(f"/{chr(code)}"),
+                "alternate_icon": get_aprs_symbol_icon_path(f"\\{chr(code)}"),
+            }
+            for code in range(33, 127)
+        ],
+        "beacon_interval_options": [{"value": value, "label": f"{value}m"} for value in (15, 30, 45, 60)],
+    }
 
 
 @router.get("/")
@@ -651,11 +672,12 @@ def station_page(
     templates = request.app.state.templates
     context = build_template_context(
         request,
-        page_title="Station Settings",
+        page_title="My Settings",
         current_user=current_user,
         active_nav="station",
         station=get_station_settings(),
         can_edit=current_user.role in {"admin", "operator"},
+        **_station_form_options(),
     )
     return templates.TemplateResponse("station.html", context)
 
@@ -691,6 +713,8 @@ def station_update(
     callsign: str = Form(""),
     ssid: str = Form(""),
     beacon_comment: str = Form(""),
+    beacon_interval_minutes: str = Form("30"),
+    beacon_path: str = Form(""),
     latitude: str = Form(""),
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
@@ -704,6 +728,8 @@ def station_update(
             "callsign": callsign.strip(),
             "ssid": ssid.strip(),
             "beacon_comment": beacon_comment.strip(),
+            "beacon_interval_minutes": beacon_interval_minutes.strip(),
+            "beacon_path": beacon_path.strip(),
             "latitude": latitude.strip(),
             "longitude": longitude.strip(),
             "symbol_table": symbol_table.strip(),
@@ -714,12 +740,13 @@ def station_update(
     )
     context = build_template_context(
         request,
-        page_title="Station Settings",
+        page_title="My Settings",
         current_user=current_user,
         active_nav="station",
         station=get_station_settings(),
         can_edit=True,
         flash="Station settings saved.",
+        **_station_form_options(),
     )
     return templates.TemplateResponse("station.html", context)
 

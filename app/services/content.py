@@ -110,6 +110,8 @@ def get_station_settings() -> dict[str, Any]:
         return {}
     result = dict(row)
     result.setdefault("default_units", "metric")
+    result.setdefault("beacon_interval_minutes", 30)
+    result.setdefault("beacon_path", "")
     return result
 
 
@@ -117,14 +119,28 @@ def update_station_settings(payload: dict[str, Any]) -> None:
     default_units = payload.get("default_units", "metric")
     if default_units not in {"metric", "imperial"}:
         default_units = "metric"
+    try:
+        beacon_interval_minutes = int(payload.get("beacon_interval_minutes") or 30)
+    except (TypeError, ValueError):
+        beacon_interval_minutes = 30
+    if beacon_interval_minutes not in {15, 30, 45, 60}:
+        beacon_interval_minutes = 30
+    symbol_table = str(payload.get("symbol_table", "/") or "/").strip()
+    if symbol_table not in {"/", "\\"}:
+        symbol_table = "/"
+    symbol_code = str(payload.get("symbol_code", ">") or ">").strip()[:1]
+    if len(symbol_code) != 1 or not (33 <= ord(symbol_code) <= 126):
+        symbol_code = ">"
     values = {
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
         "beacon_comment": payload.get("beacon_comment", ""),
+        "beacon_interval_minutes": beacon_interval_minutes,
+        "beacon_path": payload.get("beacon_path", ""),
         "latitude": payload.get("latitude", ""),
         "longitude": payload.get("longitude", ""),
-        "symbol_table": payload.get("symbol_table", "/"),
-        "symbol_code": payload.get("symbol_code", ">"),
+        "symbol_table": symbol_table,
+        "symbol_code": symbol_code,
         "default_units": default_units,
         "tx_enabled": int(bool(payload.get("tx_enabled"))),
         "updated_at": utc_now(),
@@ -136,6 +152,8 @@ def update_station_settings(payload: dict[str, Any]) -> None:
             SET callsign = :callsign,
                 ssid = :ssid,
                 beacon_comment = :beacon_comment,
+                beacon_interval_minutes = :beacon_interval_minutes,
+                beacon_path = :beacon_path,
                 latitude = :latitude,
                 longitude = :longitude,
                 symbol_table = :symbol_table,
@@ -1408,6 +1426,10 @@ def _aprs_symbol_icon_path(symbol: str) -> str:
     if candidate.exists():
         return f"icons/verG/{filename}"
     return "icons/verG/x.gif"
+
+
+def get_aprs_symbol_icon_path(symbol: str) -> str:
+    return _aprs_symbol_icon_path(symbol)
 
 
 def _status_from_openrc(service_name: str) -> dict[str, str] | None:
