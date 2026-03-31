@@ -8,7 +8,7 @@
         <div class="alert {% if flash_success is not defined or flash_success %}success{% endif %}">{{ flash }}</div>
         {% endif %}
         {% if can_edit %}
-        <form method="post" class="form-grid">
+        <form method="post" class="form-grid" id="station-form">
             <label>
                 <span>Callsign</span>
                 <input type="text" name="callsign" value="{{ station.callsign }}">
@@ -44,6 +44,13 @@
             <label>
                 <span>Beacon Path</span>
                 <input type="text" name="beacon_path" value="{{ station.beacon_path }}" placeholder="WIDE2-2">
+            </label>
+            <label class="full">
+                <span>Get location</span>
+                <button type="button" class="button button-secondary location-picker-button" id="station-open-map-picker">
+                    <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
+                    <span>Get location</span>
+                </button>
             </label>
             <label>
                 <span>Latitude</span>
@@ -109,6 +116,38 @@
                 <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/station/send-beacon">Send beacon</button>
             </div>
         </form>
+        <div class="location-picker-modal" id="station-location-picker" hidden>
+            <div class="location-picker-backdrop" data-close-location-picker></div>
+            <div
+                class="location-picker-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="station-location-picker-title"
+                data-tile-url="{{ map_picker_config.tile_url }}"
+                data-tile-attribution="{{ map_picker_config.tile_attribution }}"
+                data-default-latitude="{{ map_picker_config.station_latitude }}"
+                data-default-longitude="{{ map_picker_config.station_longitude }}"
+                data-default-zoom="{{ map_picker_config.default_zoom }}"
+            >
+                <div class="location-picker-header">
+                    <h3 id="station-location-picker-title">Get location</h3>
+                    <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="Close location picker" title="Close location picker">
+                        <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+                    </button>
+                </div>
+                <div class="location-picker-map-wrap">
+                    <div class="location-picker-map" id="station-location-picker-map"></div>
+                    <div class="location-picker-crosshair" aria-hidden="true"></div>
+                </div>
+                <div class="location-picker-footer">
+                    <div class="muted small" id="station-location-picker-center">--</div>
+                    <div class="location-picker-actions">
+                        <button type="button" class="button button-secondary" data-close-location-picker>Cancel</button>
+                        <button type="button" class="button" id="station-apply-location-picker">Get coordinates</button>
+                    </div>
+                </div>
+            </div>
+        </div>
         {% else %}
         <dl class="details-grid">
             <dt>Callsign</dt><dd>{{ station.callsign }}</dd>
@@ -174,6 +213,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
         const symbolTable = document.getElementById("station-symbol-table");
@@ -253,6 +293,101 @@
         });
 
         syncPreview();
+
+        const modal = document.getElementById("station-location-picker");
+        const openButton = document.getElementById("station-open-map-picker");
+        const form = document.getElementById("station-form");
+        if (!modal || !openButton || !form || typeof window.L === "undefined") {
+            return;
+        }
+
+        const latitudeInput = form.querySelector('input[name="latitude"]');
+        const longitudeInput = form.querySelector('input[name="longitude"]');
+        const dialog = modal.querySelector(".location-picker-dialog");
+        const mapNode = document.getElementById("station-location-picker-map");
+        const centerOutput = document.getElementById("station-location-picker-center");
+        const applyButton = document.getElementById("station-apply-location-picker");
+        const closeButtons = modal.querySelectorAll("[data-close-location-picker]");
+        if (!latitudeInput || !longitudeInput || !dialog || !mapNode || !centerOutput || !applyButton) {
+            return;
+        }
+
+        let map = null;
+
+        const formatCoordinate = (value) => Number.isFinite(value) ? value.toFixed(5) : "--";
+
+        const resolveInitialView = () => {
+            const latitude = Number.parseFloat(latitudeInput.value || "");
+            const longitude = Number.parseFloat(longitudeInput.value || "");
+            const fallbackLatitude = Number.parseFloat(dialog.dataset.defaultLatitude || "");
+            const fallbackLongitude = Number.parseFloat(dialog.dataset.defaultLongitude || "");
+            const fallbackZoom = Number.parseInt(dialog.dataset.defaultZoom || "10", 10);
+            return {
+                latitude: Number.isFinite(latitude) ? latitude : fallbackLatitude,
+                longitude: Number.isFinite(longitude) ? longitude : fallbackLongitude,
+                zoom: Number.isInteger(fallbackZoom) ? fallbackZoom : 10,
+            };
+        };
+
+        const syncCenter = () => {
+            if (!map) {
+                return;
+            }
+            const center = map.getCenter();
+            centerOutput.textContent = `${formatCoordinate(center.lat)}, ${formatCoordinate(center.lng)}`;
+        };
+
+        const ensureMap = () => {
+            if (map) {
+                return;
+            }
+            const initialView = resolveInitialView();
+            map = window.L.map(mapNode, {
+                center: [initialView.latitude, initialView.longitude],
+                zoom: initialView.zoom,
+                zoomControl: true,
+            });
+            window.L.tileLayer(dialog.dataset.tileUrl || "", {
+                attribution: dialog.dataset.tileAttribution || "",
+                maxZoom: 19,
+            }).addTo(map);
+            map.on("move zoom", syncCenter);
+            syncCenter();
+        };
+
+        const openModal = () => {
+            modal.hidden = false;
+            document.body.classList.add("modal-open");
+            ensureMap();
+            const initialView = resolveInitialView();
+            map.setView([initialView.latitude, initialView.longitude], map.getZoom() || initialView.zoom);
+            window.setTimeout(() => {
+                map.invalidateSize();
+                syncCenter();
+            }, 0);
+        };
+
+        const closeModal = () => {
+            modal.hidden = true;
+            document.body.classList.remove("modal-open");
+        };
+
+        openButton.addEventListener("click", openModal);
+        applyButton.addEventListener("click", () => {
+            if (!map) {
+                return;
+            }
+            const center = map.getCenter();
+            latitudeInput.value = formatCoordinate(center.lat);
+            longitudeInput.value = formatCoordinate(center.lng);
+            closeModal();
+        });
+        closeButtons.forEach((button) => button.addEventListener("click", closeModal));
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !modal.hidden) {
+                closeModal();
+            }
+        });
     })();
 </script>
 {% endblock %}

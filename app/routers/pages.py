@@ -160,6 +160,7 @@ def _station_page_context(
         flash=flash,
         flash_success=flash_success,
         beacon_log_rows=recent_beacon_jobs(limit=20),
+        map_picker_config=get_map_page_config(),
         **_station_form_options(),
     )
 
