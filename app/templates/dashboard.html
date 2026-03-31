@@ -9,10 +9,39 @@
                 <h2>{{ dashboard_home.hero.title }}</h2>
                 <p>{{ dashboard_home.hero.summary }}</p>
             </div>
-            <div class="dashboard-hero-actions">
-                <a href="{{ request.scope.root_path }}/station" class="button">Open My Settings</a>
-                <a href="{{ request.scope.root_path }}/map" class="button button-secondary">Open Map</a>
+            <div class="dashboard-hero-summary">
+                <div class="dashboard-hero-summary-item">
+                    <span class="muted">Callsign</span>
+                    <strong>{{ dashboard_home.station_callsign }}</strong>
+                </div>
+                <div class="dashboard-hero-summary-item">
+                    <span class="muted">Interface</span>
+                    <strong>{{ dashboard_home.selected_interface_name }}</strong>
+                </div>
+                <div class="dashboard-hero-summary-item">
+                    <span class="muted">Last traffic</span>
+                    <strong>{{ dashboard_home.latest_activity }}</strong>
+                </div>
             </div>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="dashboard-kpi-grid">
+            {% for item in dashboard_home.stats %}
+            <div class="metric-card dashboard-kpi-card">
+                <span class="metric-value">{{ item.value }}</span>
+                <span class="metric-label">{{ item.label }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="dashboard-action-row">
+            <a href="{{ request.scope.root_path }}/station" class="button">My Settings</a>
+            <a href="{{ request.scope.root_path }}/map" class="button button-secondary">Map</a>
+            <a href="{{ request.scope.root_path }}/stations" class="button button-secondary">Stations</a>
+            <a href="{{ request.scope.root_path }}/traffic" class="button button-secondary">Traffic Monitor</a>
         </div>
     </div>
 </section>
@@ -22,17 +51,24 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Station At A Glance</h2>
+                    <h2>What Needs Attention</h2>
+                    <p class="section-lead">Only the items that block normal use.</p>
                 </div>
             </div>
-            <div class="metrics-grid">
-                {% for item in dashboard_home.stats %}
-                <div class="metric-card">
-                    <span class="metric-value">{{ item.value }}</span>
-                    <span class="metric-label">{{ item.label }}</span>
+            {% if dashboard_home.next_steps %}
+            <div class="dashboard-next-steps">
+                {% for item in dashboard_home.checks %}
+                {% if item.state != 'ok' %}
+                <div class="dashboard-next-step">
+                    <strong>{{ item.label }}</strong>
+                    <p>{{ item.value }}</p>
                 </div>
+                {% endif %}
                 {% endfor %}
             </div>
+            {% else %}
+            <div class="notice">Basic station setup is complete. You can work from My Settings, Map and Stations.</div>
+            {% endif %}
         </div>
     </div>
 
@@ -40,8 +76,8 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Setup Status</h2>
-                    <p class="section-lead">Simple checklist of what matters most for daily use.</p>
+                    <h2>Station Readiness</h2>
+                    <p class="section-lead">Quick operational checklist.</p>
                 </div>
             </div>
             <div class="dashboard-checks">
@@ -61,55 +97,29 @@
     </div>
 </section>
 
-<section class="grid two">
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Band Condition</h2>
-                    <p class="section-lead">{% if dashboard_band %}Current estimate for {{ dashboard_band.band_label }}.{% else %}No band data yet.{% endif %}</p>
-                </div>
-                <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Open Band Condition</a>
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Band Condition</h2>
+                <p class="section-lead">{% if dashboard_band %}Current estimate for {{ dashboard_band.band_label }}.{% else %}No band data yet.{% endif %}</p>
             </div>
-            {% if dashboard_band %}
-            <section class="band-condition-hero band-condition-hero-{{ dashboard_band.diagnosis_tone }}">
-                <div class="band-condition-hero-copy">
-                    <strong>{{ dashboard_band.diagnosis_title }}</strong>
-                    <p>{{ dashboard_home.band_summary }}</p>
-                </div>
-                <div class="band-condition-hero-score">
-                    <span class="muted">{{ dashboard_band.band_label }}</span>
-                    <strong>{{ dashboard_band.label }}</strong>
-                </div>
-            </section>
-            {% else %}
-            <div class="notice">Band condition is not available yet.</div>
-            {% endif %}
+            <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Open Band Condition</a>
         </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>Alerts</h2>
-                    <p class="section-lead">Only issues that may need your attention.</p>
-                </div>
-                <a href="{{ request.scope.root_path }}/logs" class="button button-secondary">Open Logs</a>
+        {% if dashboard_band %}
+        <section class="band-condition-hero band-condition-hero-{{ dashboard_band.diagnosis_tone }}">
+            <div class="band-condition-hero-copy">
+                <strong>{{ dashboard_band.diagnosis_title }}</strong>
+                <p>{{ dashboard_home.band_summary }}</p>
             </div>
-            {% if recent_alerts %}
-            <div class="dashboard-alerts">
-                {% for row in recent_alerts %}
-                <div class="dashboard-alert">
-                    <div class="dashboard-alert-meta">{{ row.created_at.replace('T', ' ').replace('+00:00', ' UTC') }} · {{ row.category }}</div>
-                    <div class="dashboard-alert-message">{{ row.message }}</div>
-                </div>
-                {% endfor %}
+            <div class="band-condition-hero-score">
+                <span class="muted">{{ dashboard_band.band_label }}</span>
+                <strong>{{ dashboard_band.label }}</strong>
             </div>
-            {% else %}
-            <div class="notice">No recent warnings. The station looks calm.</div>
-            {% endif %}
-        </div>
+        </section>
+        {% else %}
+        <div class="notice">Band condition is not available yet.</div>
+        {% endif %}
     </div>
 </section>
 {% endblock %}

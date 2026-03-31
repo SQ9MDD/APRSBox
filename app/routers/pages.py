@@ -12,10 +12,8 @@ from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
     dashboard_home_data,
     delete_section_row,
-    dashboard_summary,
     get_configured_modem_interfaces,
     get_aprs_symbol_icon_path,
-    dashboard_traffic_summary,
     get_recent_station_packets,
     heard_stations,
     get_section_row,
@@ -23,14 +21,11 @@ from app.services.content import (
     get_related_ssids,
     get_station_detail,
     get_station_settings,
-    recent_alert_logs,
-    recent_event_logs,
     station_summary,
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
     safe_update_section_row,
     update_station_settings,
-    worker_statuses,
 )
 from app.services.band_condition import (
     build_station_key,
@@ -142,11 +137,6 @@ def dashboard(
         page_title="Dashboard",
         current_user=current_user,
         active_nav="dashboard",
-        summary=dashboard_summary(),
-        traffic_summary=dashboard_traffic_summary(),
-        worker_statuses=worker_statuses(),
-        recent_logs=recent_event_logs(limit=8),
-        recent_alerts=recent_alert_logs(limit=5),
         dashboard_band=dashboard_band,
         dashboard_home=dashboard_home_data(dashboard_band),
     )
