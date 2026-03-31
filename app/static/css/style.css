@@ -1967,11 +1967,15 @@ code {
     position: absolute;
     left: 50%;
     top: 50%;
-    width: 38px;
-    height: 38px;
+    width: 24px;
+    height: 24px;
     transform: translate(-50%, -50%);
     pointer-events: none;
     z-index: 500;
+    border: 1.5px solid rgba(255, 255, 255, 0.9);
+    border-radius: 999px;
+    backdrop-filter: blur(1px);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
 }
 
 .location-picker-crosshair::before,
@@ -1980,33 +1984,26 @@ code {
     position: absolute;
     left: 50%;
     top: 50%;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 0, 0, 0.18);
+    background: rgba(255, 255, 255, 0.9);
     transform: translate(-50%, -50%);
 }
 
 .location-picker-crosshair::before {
-    width: 2px;
-    height: 38px;
+    width: 1.5px;
+    height: 30px;
 }
 
 .location-picker-crosshair::after {
-    width: 38px;
-    height: 2px;
-}
-
-.location-picker-crosshair {
-    border: 2px solid rgba(255, 255, 255, 0.96);
-    border-radius: 999px;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 0, 0, 0.18);
+    width: 30px;
+    height: 1.5px;
 }
 
 :root[data-theme="light"] .location-picker-crosshair,
 :root[data-theme="light"] .location-picker-crosshair::before,
 :root[data-theme="light"] .location-picker-crosshair::after {
-    background: rgba(17, 23, 20, 0.95);
-    border-color: rgba(17, 23, 20, 0.95);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8), 0 0 10px rgba(255, 255, 255, 0.22);
+    background: rgba(17, 23, 20, 0.85);
+    border-color: rgba(17, 23, 20, 0.85);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72);
 }
 
 .location-picker-footer {

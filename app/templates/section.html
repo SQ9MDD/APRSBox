@@ -229,7 +229,7 @@
                     {% endif %}
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
-                    <small class="muted">Optional future RF path. Common examples are <code>WIDE2-2</code> or <code>WIDE1-1,WIDE2-1</code>; leave blank for direct.</small>
+                    <small class="muted">Recommended path is blank for direct. If needed, use <code>WIDE1-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.</small>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
                     <small class="muted">Prepared scheduling only. Default is 30m.</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
