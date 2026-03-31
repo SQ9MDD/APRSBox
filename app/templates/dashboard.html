@@ -34,12 +34,7 @@
                     </div>
                     {% endfor %}
                 </div>
-                <div class="dashboard-action-row">
-                    <a href="{{ request.scope.root_path }}/station" class="button">My Settings</a>
-                    <a href="{{ request.scope.root_path }}/map" class="button button-secondary">Map</a>
-                    <a href="{{ request.scope.root_path }}/stations" class="button button-secondary">Stations</a>
-                    <a href="{{ request.scope.root_path }}/traffic" class="button button-secondary">Traffic Monitor</a>
-                </div>
+                <p class="muted small">Heard stations and APRS frames are calculated from all stored decoded TNC2 traffic in the local database, not only from the last hour.</p>
             </div>
         </section>
 
