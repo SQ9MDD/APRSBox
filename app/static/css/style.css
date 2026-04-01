@@ -2177,17 +2177,21 @@ body.modal-open {
 .messages-page-panel {
     padding: 0;
     overflow: hidden;
+    min-height: 0;
 }
 
 .messages-shell {
     display: grid;
     grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+    height: calc(100vh - 2 * var(--space-5));
     min-height: calc(100vh - 2 * var(--space-5));
+    max-height: calc(100vh - 2 * var(--space-5));
 }
 
 .messages-sidebar,
 .messages-thread {
     min-width: 0;
+    min-height: 0;
 }
 
 .messages-sidebar {
@@ -2516,6 +2520,8 @@ button.message-delivery-badge {
 
 @media (max-width: 980px) {
     .messages-shell {
+        height: auto;
+        max-height: none;
         min-height: auto;
     }
 }
