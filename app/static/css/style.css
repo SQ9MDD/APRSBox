@@ -2345,6 +2345,21 @@ body.modal-open {
     box-shadow: 0 0 0 3px rgba(109, 189, 128, 0.12);
 }
 
+.messages-heard-dot-fresh {
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(109, 189, 128, 0.12);
+}
+
+.messages-heard-dot-warn {
+    background: var(--warning);
+    box-shadow: 0 0 0 3px rgba(217, 181, 101, 0.14);
+}
+
+.messages-heard-dot-stale {
+    background: var(--danger);
+    box-shadow: 0 0 0 3px rgba(201, 122, 122, 0.14);
+}
+
 .messages-thread {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;

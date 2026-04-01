@@ -8,10 +8,13 @@ from unittest.mock import patch
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.content import update_station_settings
 from app.services.messages import (
+    HEARD_FRESH_SECONDS,
+    HEARD_WARN_SECONDS,
     MESSAGE_STATUS_ACKED,
     MESSAGE_STATUS_FAILED,
     MESSAGE_STATUS_RECEIVED,
     MESSAGE_STATUS_SENT,
+    _heard_recently_state,
     get_messages_page_data,
     normalize_aprs_message_text,
     process_incoming_tnc2_message,
@@ -71,6 +74,13 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
     def test_message_text_allows_extended_printable_ascii_punctuation(self) -> None:
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
         self.assertEqual(normalize_aprs_message_text(allowed), allowed)
+
+    def test_heard_recently_state_uses_expected_thresholds(self) -> None:
+        self.assertEqual(_heard_recently_state(HEARD_FRESH_SECONDS), "fresh")
+        self.assertEqual(_heard_recently_state(HEARD_FRESH_SECONDS + 1), "warn")
+        self.assertEqual(_heard_recently_state(HEARD_WARN_SECONDS), "warn")
+        self.assertEqual(_heard_recently_state(HEARD_WARN_SECONDS + 1), "stale")
+        self.assertEqual(_heard_recently_state(None), "none")
 
     async def test_queue_send_and_ack_direct_message(self) -> None:
         with temporary_database():
@@ -229,6 +239,31 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(conversation["callsign"], "DL1XYZ-9")
             self.assertEqual(conversation["messages"][0]["text"], "QSL")
             self.assertEqual(conversation["messages"][0]["delivery_state"], "queued")
+
+    def test_messages_page_data_exposes_heard_recently_state(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="QSL", path="")
+            execute(
+                """
+                INSERT INTO traffic_frames(source, format, line, port, command, length, hex, created_at)
+                VALUES (?, 'TNC2', ?, '', '', ?, '', ?)
+                """,
+                (
+                    "DL1XYZ-9",
+                    "DL1XYZ-9>APRS:>status",
+                    len("DL1XYZ-9>APRS:>status"),
+                    "2099-01-01T00:00:00+00:00",
+                ),
+            )
+
+            with patch("app.services.messages._heard_age_seconds", return_value=12 * 60):
+                view = get_messages_page_data()
+
+            conversation = view["conversations"][0]
+            self.assertTrue(conversation["recently_heard"])
+            self.assertEqual(conversation["heard_recently_state"], "warn")
 
     def test_local_echo_to_another_local_ssid_is_not_shown_as_incoming_self_conversation(self) -> None:
         with temporary_database():

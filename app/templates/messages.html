@@ -109,6 +109,22 @@
     let refreshTimer = null;
     let pathSaveTimer = null;
 
+    function conversationMessageSignature(conversation) {
+        if (!conversation || !Array.isArray(conversation.messages) || !conversation.messages.length) {
+            return "";
+        }
+        const lastMessage = conversation.messages[conversation.messages.length - 1];
+        return `${conversation.messages.length}:${lastMessage.id || ""}:${lastMessage.timestamp || ""}:${lastMessage.delivery_state || ""}`;
+    }
+
+    function isHistoryNearBottom() {
+        if (!historyNode) {
+            return true;
+        }
+        const remaining = historyNode.scrollHeight - historyNode.scrollTop - historyNode.clientHeight;
+        return remaining <= 40;
+    }
+
     function normalizeCallsign(value) {
         return String(value || "").trim().toUpperCase();
     }
@@ -177,6 +193,7 @@
             unread_count: Number(conversation.unread_count || 0),
             message_state: String(conversation.message_state || "read"),
             recently_heard: Boolean(conversation.recently_heard),
+            heard_recently_state: String(conversation.heard_recently_state || "none"),
             heard_recently_label: String(conversation.heard_recently_label || ""),
             path: String(conversation.path || defaultPath).trim().toUpperCase(),
             messages: Array.isArray(conversation.messages) ? conversation.messages.map((message) => ({
@@ -272,7 +289,7 @@
             await refreshState();
             return;
         }
-        render();
+        render({ autoScroll: true });
     }
 
     async function createConversation(callsign) {
@@ -309,6 +326,11 @@
             const unreadCount = isActive ? 0 : conversation.unread_count;
             const stateBadgeClass = unreadCount > 0 ? "message-state-badge-unread" : "message-state-badge-read";
             const stateBadgeLabel = unreadCount > 0 ? `Unread (${unreadCount})` : "Read";
+            const heardStateClass = {
+                fresh: "messages-heard-dot-fresh",
+                warn: "messages-heard-dot-warn",
+                stale: "messages-heard-dot-stale",
+            }[conversation.heard_recently_state] || "";
             return `
                 <div class="messages-conversation-row${isActive ? " active" : ""}" data-conversation-id="${escapeHtml(conversation.id)}">
                     <button type="button" class="messages-conversation-button" data-open-conversation="${escapeHtml(conversation.id)}">
@@ -321,7 +343,7 @@
                                 </span>
                             </span>
                             <span class="messages-conversation-meta-row">
-                                ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot"></span><span>${escapeHtml(conversation.heard_recently_label || "Heard recently")}</span></span>` : '<span class="muted">No recent heard-station entry</span>'}
+                                ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || "Heard recently")}</span></span>` : '<span class="muted">No recent heard-station entry</span>'}
                             </span>
                         </span>
                     </button>
@@ -353,7 +375,7 @@
         `;
     }
 
-    function renderThreadHistory(conversation) {
+    function renderThreadHistory(conversation, options = {}) {
         if (!conversation) {
             historyNode.innerHTML = '<div class="messages-thread-empty"><strong>Select a conversation</strong><span class="muted">Or start a new message from the left panel.</span></div>';
             return;
@@ -397,7 +419,9 @@
                 </div>
             `;
         }).join("");
-        historyNode.scrollTop = historyNode.scrollHeight;
+        if (options.autoScroll) {
+            historyNode.scrollTop = historyNode.scrollHeight;
+        }
     }
 
     function renderComposer(conversation) {
@@ -414,15 +438,19 @@
             : "Select a conversation to enable the composer";
     }
 
-    function render() {
+    function render(options = {}) {
         renderConversationList();
         const activeConversation = getActiveConversation();
         renderThreadHeader(activeConversation);
-        renderThreadHistory(activeConversation);
+        renderThreadHistory(activeConversation, options);
         renderComposer(activeConversation);
     }
 
     async function applyServerState(serverData, preferredConversationId = undefined) {
+        const previousActiveConversation = getActiveConversation();
+        const previousActiveConversationId = previousActiveConversation ? previousActiveConversation.id : null;
+        const previousMessageSignature = conversationMessageSignature(previousActiveConversation);
+        const shouldStickToBottom = isHistoryNearBottom();
         const nextState = buildInitialState(serverData || {});
         if (preferredConversationId !== undefined && preferredConversationId !== null) {
             nextState.activeConversationId = String(preferredConversationId);
@@ -443,7 +471,17 @@
             }).catch(() => {});
         }
         state = nextState;
-        render();
+        const nextActiveConversation = getActiveConversation();
+        const nextActiveConversationId = nextActiveConversation ? nextActiveConversation.id : null;
+        const nextMessageSignature = conversationMessageSignature(nextActiveConversation);
+        const activeConversationChanged = previousActiveConversationId !== nextActiveConversationId;
+        const activeConversationUpdated = (
+            previousActiveConversationId === nextActiveConversationId
+            && previousMessageSignature !== nextMessageSignature
+        );
+        render({
+            autoScroll: activeConversationChanged || (activeConversationUpdated && shouldStickToBottom),
+        });
     }
 
     async function refreshState() {
@@ -593,7 +631,7 @@
         }, 250);
     });
 
-    render();
+    render({ autoScroll: true });
     if (requestedCallsign && validateCallsign(requestedCallsign)) {
         void createConversation(requestedCallsign).then(() => {
             const url = new URL(window.location.href);

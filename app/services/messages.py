@@ -22,6 +22,8 @@ MESSAGE_MAX_LENGTH = 67
 RETRY_DELAYS_SECONDS = (8, 16, 32)
 MAX_TX_ATTEMPTS = 1 + len(RETRY_DELAYS_SECONDS)
 FINAL_ACK_WAIT_SECONDS = 30
+HEARD_FRESH_SECONDS = 10 * 60
+HEARD_WARN_SECONDS = 30 * 60
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -245,9 +247,11 @@ def get_messages_page_data() -> dict[str, Any]:
         last_activity_at = prepared_messages[-1]["timestamp"] if prepared_messages else str(row["created_at"])
         recently_heard = False
         heard_recently_label = ""
+        heard_recently_state = "none"
         if heard_snapshot is not None:
             age_s = heard_snapshot.get("last_heard_age_s")
-            recently_heard = bool(age_s is not None and age_s <= 30 * 60)
+            heard_recently_state = _heard_recently_state(age_s)
+            recently_heard = heard_recently_state != "none"
             heard_recently_label = str(heard_snapshot.get("last_heard_relative") or heard_snapshot.get("last_heard_label") or "").strip()
         conversations.append(
             {
@@ -259,6 +263,7 @@ def get_messages_page_data() -> dict[str, Any]:
                 "unread_count": unread_count,
                 "message_state": "unread" if unread_count else "read",
                 "recently_heard": recently_heard,
+                "heard_recently_state": heard_recently_state,
                 "heard_recently_label": heard_recently_label,
                 "path": str(row["path"] or ""),
             }
@@ -270,7 +275,7 @@ def get_messages_page_data() -> dict[str, Any]:
         "conversations": conversations,
         "active_conversation_id": active_conversation_id,
         "composer_limit": MESSAGE_MAX_LENGTH,
-        "recently_heard_window_minutes": 30,
+        "recently_heard_window_minutes": HEARD_WARN_SECONDS // 60,
         "default_path": str(station_settings.get("beacon_path") or "").strip(),
     }
 
@@ -773,6 +778,18 @@ def _heard_age_seconds(timestamp: str) -> int | None:
     except ValueError:
         return None
     return max(0, int((datetime.now(timezone.utc) - heard_at.astimezone(timezone.utc)).total_seconds()))
+
+
+def _heard_recently_state(age_s: Any) -> str:
+    try:
+        age_seconds = int(age_s)
+    except (TypeError, ValueError):
+        return "none"
+    if age_seconds <= HEARD_FRESH_SECONDS:
+        return "fresh"
+    if age_seconds <= HEARD_WARN_SECONDS:
+        return "warn"
+    return "stale"
 
 
 def _get_station_settings() -> dict[str, Any]:
