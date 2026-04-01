@@ -19,6 +19,14 @@
                     {% if station.path %}<span class="muted"> • Path {{ station.path }}</span>{% endif %}
                 </p>
             </div>
+            <a
+                href="{{ request.scope.root_path }}/messages?callsign={{ station.display_callsign|urlencode }}"
+                class="table-icon-button"
+                aria-label="Open message conversation with {{ station.display_callsign }}"
+                title="Open in Messages"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/message-arrow-right-outline.svg" alt="">
+            </a>
         </div>
     </div>
 </section>
@@ -73,33 +81,6 @@
             </div>
         </div>
     </article>
-</section>
-
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>Send Message To Station</h2>
-                <p class="section-lead">Message transmit is not implemented yet. This form is backend-backed scaffolding only.</p>
-            </div>
-        </div>
-        {% if message_flash %}
-        <div class="alert">{{ message_flash }}</div>
-        {% endif %}
-        <form method="post" action="{{ request.scope.root_path }}{{ station.detail_href }}/message" class="form-stack station-message-form">
-            <label>
-                <span>Destination callsign</span>
-                <input type="text" name="destination_callsign" value="{{ (message_form.destination_callsign if message_form else station.display_callsign) }}">
-            </label>
-            <label>
-                <span>Message text</span>
-                <textarea name="message_text" placeholder="APRS message transmit is not implemented yet.">{{ message_form.message_text if message_form else '' }}</textarea>
-            </label>
-            <div class="form-actions">
-                <button type="submit" class="button">Send Message</button>
-            </div>
-        </form>
-    </div>
 </section>
 
 <section class="panel">

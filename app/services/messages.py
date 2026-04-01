@@ -368,6 +368,61 @@ def mark_message_failed(message_id: int, reason: str) -> None:
         )
 
 
+def retry_failed_message(message_id: int) -> dict[str, Any]:
+    message = get_message(message_id)
+    if message is None:
+        raise ValueError("Message does not exist.")
+    if str(message.get("direction") or "") != MESSAGE_DIRECTION_TX:
+        raise ValueError("Only outbound messages can be retried.")
+    if str(message.get("status") or "") != MESSAGE_STATUS_FAILED:
+        raise ValueError("Only failed messages can be retried.")
+
+    cancel_pending_message_jobs(message_id)
+    now = utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE aprs_messages
+            SET status = ?,
+                tx_attempt_count = 0,
+                outbound_job_id = NULL,
+                updated_at = ?,
+                acked_at = NULL,
+                last_attempt_at = NULL,
+                failed_at = NULL,
+                failure_reason = NULL
+            WHERE id = ?
+            """,
+            (MESSAGE_STATUS_QUEUED, now, message_id),
+        )
+
+    refreshed = get_message(message_id)
+    if refreshed is None:
+        raise ValueError("Message could not be reloaded.")
+    station_settings = _get_station_settings()
+    success, error = enqueue_direct_message_job(refreshed, station_settings, trigger="manual-retry")
+    if not success:
+        mark_message_failed(message_id, error or "Failed to queue manual retry.")
+        raise ValueError(error or "Failed to queue manual retry.")
+
+    queued_job = fetch_one(
+        """
+        SELECT id
+        FROM outbound_jobs
+        WHERE aprs_message_id = ? AND status = 'queued'
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (message_id,),
+    )
+    if queued_job is not None:
+        register_outbound_job_link(message_id, int(queued_job["id"]))
+    result = get_message(message_id)
+    if result is None:
+        raise ValueError("Retried message could not be loaded.")
+    return result
+
+
 def cancel_pending_message_jobs(message_id: int) -> None:
     rows = fetch_all(
         """
@@ -666,6 +721,8 @@ def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
         "delivery_state": str(row.get("status") or ""),
         "message_number": str(row.get("message_number") or ""),
         "failure_reason": str(row.get("failure_reason") or ""),
+        "tx_attempt_count": int(row.get("tx_attempt_count") or 0),
+        "tx_attempt_limit": MAX_TX_ATTEMPTS,
     }
 
 

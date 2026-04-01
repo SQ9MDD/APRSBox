@@ -35,6 +35,7 @@ from app.services.messages import (
     get_messages_page_data as get_live_messages_page_data,
     mark_conversation_read,
     queue_outgoing_message,
+    retry_failed_message,
     update_conversation_path,
 )
 from app.services.band_condition import (
@@ -1035,6 +1036,18 @@ def messages_delete(
     _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     delete_message_conversation(conversation_id)
+    return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+
+
+@router.post("/api/messages/{message_id}/retry")
+def messages_retry(
+    message_id: int,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    try:
+        retry_failed_message(message_id)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
 
 

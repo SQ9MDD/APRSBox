@@ -9,11 +9,13 @@ from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.content import update_station_settings
 from app.services.messages import (
     MESSAGE_STATUS_ACKED,
+    MESSAGE_STATUS_FAILED,
     MESSAGE_STATUS_RECEIVED,
     MESSAGE_STATUS_SENT,
     get_messages_page_data,
     process_incoming_tnc2_message,
     queue_outgoing_message,
+    retry_failed_message,
 )
 from app.services.outbound import build_message_tnc2, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
@@ -246,6 +248,39 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
 
             view = get_messages_page_data()
             self.assertEqual(view["conversations"], [])
+
+    def test_retry_failed_message_requeues_same_record(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Retry me", path="WIDE1-1")
+
+            execute(
+                """
+                UPDATE aprs_messages
+                SET status = ?, tx_attempt_count = 4, failed_at = '2026-01-01T00:10:00+00:00', failure_reason = 'No ACK', updated_at = '2026-01-01T00:10:00+00:00'
+                WHERE id = ?
+                """,
+                (MESSAGE_STATUS_FAILED, int(message["id"])),
+            )
+            execute("DELETE FROM outbound_jobs WHERE aprs_message_id = ?", (int(message["id"]),))
+
+            retried = retry_failed_message(int(message["id"]))
+            self.assertEqual(retried["status"], "queued")
+            self.assertEqual(int(retried["tx_attempt_count"]), 0)
+
+            queued_job = fetch_one(
+                """
+                SELECT status
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(message["id"]),),
+            )
+            assert queued_job is not None
+            self.assertEqual(queued_job["status"], "queued")
 
 
 if __name__ == "__main__":

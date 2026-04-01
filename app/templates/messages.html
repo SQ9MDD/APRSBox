@@ -103,6 +103,7 @@
     const newConversationInput = document.getElementById("messages-new-callsign");
     const defaultPath = String(initialData.default_path || "");
     const messagesApi = `${window.location.pathname.replace(/\/messages$/, "")}/api/messages`.replace(/\/\//g, "/");
+    const requestedCallsign = new URLSearchParams(window.location.search).get("callsign");
 
     let state = buildInitialState(initialData);
     let refreshTimer = null;
@@ -186,6 +187,8 @@
                 unread: Boolean(message.unread),
                 delivery_state: String(message.delivery_state || ""),
                 failure_reason: String(message.failure_reason || ""),
+                tx_attempt_count: Number(message.tx_attempt_count || 0),
+                tx_attempt_limit: Number(message.tx_attempt_limit || 0),
             })) : [],
         };
     }
@@ -256,8 +259,15 @@
     async function openConversation(conversationId) {
         const conversation = state.conversations.find((item) => item.id === conversationId);
         if (!conversation) return;
+        const hadUnread = conversation.unread_count > 0;
         state.activeConversationId = conversation.id;
-        if (conversation.unread_count > 0) {
+        conversation.unread_count = 0;
+        conversation.message_state = "read";
+        conversation.messages = conversation.messages.map((message) => ({
+            ...message,
+            unread: message.direction === "rx" ? false : message.unread,
+        }));
+        if (hadUnread) {
             await apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversation.id)}/read`, { method: "POST", body: "{}" });
             await refreshState();
             return;
@@ -296,8 +306,9 @@
         }
         conversationList.innerHTML = state.conversations.map((conversation) => {
             const isActive = conversation.id === state.activeConversationId;
-            const stateBadgeClass = conversation.unread_count > 0 ? "message-state-badge-unread" : "message-state-badge-read";
-            const stateBadgeLabel = conversation.unread_count > 0 ? `Unread (${conversation.unread_count})` : "Read";
+            const unreadCount = isActive ? 0 : conversation.unread_count;
+            const stateBadgeClass = unreadCount > 0 ? "message-state-badge-unread" : "message-state-badge-read";
+            const stateBadgeLabel = unreadCount > 0 ? `Unread (${unreadCount})` : "Read";
             return `
                 <div class="messages-conversation-row${isActive ? " active" : ""}" data-conversation-id="${escapeHtml(conversation.id)}">
                     <button type="button" class="messages-conversation-button" data-open-conversation="${escapeHtml(conversation.id)}">
@@ -305,7 +316,7 @@
                             <span class="messages-conversation-title-row">
                                 <strong>${escapeHtml(conversation.callsign)}</strong>
                                 <span class="message-state-badge ${stateBadgeClass}">
-                                    <img src="${staticRoot}icons/${conversation.unread_count > 0 ? "email-mark-as-unread.svg" : "email-box.svg"}" alt="">
+                                    <img src="${staticRoot}icons/${unreadCount > 0 ? "email-box.svg" : "email-open-outline.svg"}" alt="">
                                     <span>${escapeHtml(stateBadgeLabel)}</span>
                                 </span>
                             </span>
@@ -356,16 +367,26 @@
             const dayLabel = formatDay(message.timestamp);
             const showDay = dayLabel && dayLabel !== previousDay;
             previousDay = dayLabel || previousDay;
-            const deliveryLabels = {
-                queued: "Queued",
-                sent: "Sent",
-                acked: "ACK",
-                failed: "No ACK",
-                received: "Received",
-            };
-            const deliveryBadge = message.direction === "tx"
-                ? `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabels[message.delivery_state] || message.delivery_state || "Sent")}</span>`
-                : "";
+            let deliveryLabel = message.delivery_state || "";
+            if (message.delivery_state === "queued") {
+                deliveryLabel = "Queued";
+            } else if (message.delivery_state === "sent") {
+                const attemptCount = Number(message.tx_attempt_count || 0);
+                const attemptLimit = Number(message.tx_attempt_limit || 0);
+                deliveryLabel = attemptLimit > 0 ? `Sent ${attemptCount}/${attemptLimit}` : "Sent";
+            } else if (message.delivery_state === "acked") {
+                deliveryLabel = "ACK";
+            } else if (message.delivery_state === "failed") {
+                deliveryLabel = "No ACK";
+            } else if (message.delivery_state === "received") {
+                deliveryLabel = "Received";
+            }
+            let deliveryBadge = "";
+            if (message.direction === "tx" && message.delivery_state === "failed") {
+                deliveryBadge = `<button type="button" class="message-delivery-badge message-delivery-badge-pending" data-retry-message="${escapeHtml(message.id)}" title="${escapeHtml(message.failure_reason || "No ACK received. Click to retry.")}">${escapeHtml(deliveryLabel || "No ACK")}</button>`;
+            } else if (message.direction === "tx") {
+                deliveryBadge = `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || "Sent")}</span>`;
+            }
             return `
                 ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}
                 <div class="message-bubble-row ${message.direction === "rx" ? "message-bubble-row-rx" : "message-bubble-row-tx"}">
@@ -408,6 +429,19 @@
         } else if (state.activeConversationId && nextState.conversations.some((conversation) => conversation.id === state.activeConversationId)) {
             nextState.activeConversationId = state.activeConversationId;
         }
+        const activeConversation = nextState.conversations.find((conversation) => conversation.id === nextState.activeConversationId);
+        if (activeConversation && activeConversation.unread_count > 0) {
+            activeConversation.unread_count = 0;
+            activeConversation.message_state = "read";
+            activeConversation.messages = activeConversation.messages.map((message) => ({
+                ...message,
+                unread: message.direction === "rx" ? false : message.unread,
+            }));
+            void apiRequest(`${messagesApi}/conversations/${encodeURIComponent(activeConversation.id)}/read`, {
+                method: "POST",
+                body: "{}",
+            }).catch(() => {});
+        }
         state = nextState;
         render();
     }
@@ -429,6 +463,28 @@
         if (openButton instanceof HTMLElement && openButton.dataset.openConversation) {
             void openConversation(openButton.dataset.openConversation);
         }
+    });
+
+    historyNode.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const retryButton = target.closest("[data-retry-message]");
+        if (!(retryButton instanceof HTMLElement) || !retryButton.dataset.retryMessage) {
+            return;
+        }
+        if (!window.confirm("Repeat sending this APRS message?")) {
+            return;
+        }
+        const activeConversation = getActiveConversation();
+        void apiRequest(`${messagesApi}/${encodeURIComponent(retryButton.dataset.retryMessage)}/retry`, {
+            method: "POST",
+            body: "{}",
+        }).then(async (payload) => {
+            await applyServerState(payload.messages_view, activeConversation ? activeConversation.id : null);
+        }).catch((error) => {
+            composerError.hidden = false;
+            composerError.textContent = error.message;
+        });
     });
 
     newConversationForm.addEventListener("submit", (event) => {
@@ -538,6 +594,13 @@
     });
 
     render();
+    if (requestedCallsign && validateCallsign(requestedCallsign)) {
+        void createConversation(requestedCallsign).then(() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("callsign");
+            window.history.replaceState({}, "", url.toString());
+        }).catch(() => {});
+    }
     refreshTimer = window.setInterval(() => {
         void refreshState().catch(() => {});
     }, 5000);
