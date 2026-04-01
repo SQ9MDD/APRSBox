@@ -47,7 +47,7 @@
 
             <form class="messages-composer" id="messages-composer">
                 <label class="messages-composer-field">
-                    <span>Message text</span>
+                    <span>Message text (<span id="messages-composer-count">0</span> / {{ messages_view.composer_limit }})</span>
                     <textarea
                         id="messages-composer-input"
                         name="message_text"
@@ -69,7 +69,6 @@
                         >
                     </label>
                     <div class="messages-composer-meta">
-                        <small class="muted" id="messages-composer-count">0 / {{ messages_view.composer_limit }}</small>
                         <small class="field-validation-error" id="messages-composer-error" hidden>Only letters A-Z, a-z and digits 0-9 are allowed.</small>
                     </div>
                     <button type="submit" class="button" id="messages-send-button">Send</button>
