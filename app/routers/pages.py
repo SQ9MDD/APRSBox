@@ -35,6 +35,7 @@ from app.services.messages import (
     get_messages_page_data as get_live_messages_page_data,
     mark_conversation_read,
     queue_outgoing_message,
+    update_conversation_path,
 )
 from app.services.band_condition import (
     build_station_key,
@@ -992,6 +993,9 @@ async def messages_send(
 ) -> JSONResponse:
     payload = await request.json()
     try:
+        conversation_id = payload.get("conversation_id")
+        if conversation_id not in {None, ""}:
+            update_conversation_path(int(conversation_id), str(payload.get("path") or ""))
         message = queue_outgoing_message(
             callsign=str(payload.get("callsign") or ""),
             message_text=str(payload.get("message_text") or ""),

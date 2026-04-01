@@ -114,6 +114,19 @@ def create_or_update_conversation(callsign: str, *, path: str = "") -> dict[str,
     return dict(conversation) if conversation else {}
 
 
+def update_conversation_path(conversation_id: int, path: str) -> None:
+    normalized_path = normalize_aprs_path(path)
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE aprs_message_conversations
+            SET path = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (normalized_path, utc_now(), conversation_id),
+        )
+
+
 def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") -> dict[str, Any]:
     normalized_callsign = normalize_aprs_destination_callsign(callsign)
     normalized_text = normalize_aprs_message_text(message_text)
@@ -121,6 +134,7 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     message_number = next_message_number()
     timestamp = utc_now()
     conversation = create_or_update_conversation(normalized_callsign, path=normalized_path)
+    update_conversation_path(int(conversation["id"]), normalized_path)
 
     with get_connection() as connection:
         cursor = connection.execute(
@@ -542,7 +556,7 @@ def store_incoming_message(
     path: str,
     timestamp: str,
 ) -> None:
-    conversation = create_or_update_conversation(sender, path=normalize_aprs_path(path))
+    conversation = create_or_update_conversation(sender)
     existing = fetch_one(
         """
         SELECT id
@@ -579,14 +593,6 @@ def store_incoming_message(
                     timestamp,
                     timestamp,
                 ),
-            )
-            connection.execute(
-                """
-                UPDATE aprs_message_conversations
-                SET path = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (normalize_aprs_path(path), timestamp, int(conversation["id"])),
             )
         log_event("INFO", "messages", f"Stored incoming APRS message from {sender} to {addressee}")
     station_settings = _get_station_settings()

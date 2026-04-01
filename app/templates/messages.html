@@ -463,6 +463,7 @@
             method: "POST",
             body: JSON.stringify({
                 callsign: conversation.callsign,
+                conversation_id: conversation.id,
                 message_text: text.trim(),
                 path: composerPathInput.value || defaultPath,
             }),
