@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-{% if section.slug not in ['objects', 'items', 'modems'] %}
+{% if section.slug not in ['objects', 'items', 'modems', 'bulletins'] %}
 <section class="panel">
     <div class="panel-body">
         <div class="panel-header">
@@ -22,8 +22,6 @@
         <div class="notice">Use object names up to 9 printable ASCII characters. The sender will later pad them to the fixed APRS 9-character object field and add the mandatory timestamp automatically.</div>
         {% elif section.slug == 'items' %}
         <div class="notice">Use item names from 3 to 9 printable ASCII characters. Avoid item format on RF unless you specifically need it; objects are generally the safer interoperable choice.</div>
-        {% elif section.slug == 'bulletins' %}
-        <div class="notice">General bulletins use <code>BLN0</code>-<code>BLN9</code>, announcements use <code>BLNA</code>-<code>BLNZ</code>, and group bulletins use <code>BLNnGROUP</code> in the fixed 9-character addressee field.</div>
         {% endif %}
         {% if flash %}
         <div class="alert">{{ flash }}</div>
