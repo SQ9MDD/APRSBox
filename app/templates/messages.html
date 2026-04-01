@@ -432,7 +432,7 @@
 
     function renderComposer(conversation) {
         const validation = validateComposer(composerInput.value);
-        composerCount.textContent = `${validation.length} / ${composerLimit}`;
+        composerCount.textContent = `${validation.length}`;
         const hasError = validation.tooLong || validation.asciiInvalid;
         composerError.hidden = !hasError;
         sendButton.disabled = !conversation || validation.empty || hasError;
