@@ -332,7 +332,6 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
-CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id ON outbound_jobs(aprs_message_id, status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
@@ -432,6 +431,12 @@ def init_db() -> None:
                 ADD COLUMN aprs_message_id INTEGER
                 """
             )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
+            ON outbound_jobs(aprs_message_id, status, scheduled_at, id)
+            """
+        )
         if "state" not in object_columns:
             connection.execute(
                 """
