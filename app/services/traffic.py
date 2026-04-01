@@ -6,6 +6,7 @@ from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
 from app.services.band_condition import process_incoming_frame
+from app.services.messages import process_incoming_tnc2_message
 
 KISS_FEND = 0xC0
 KISS_FESC = 0xDB
@@ -390,6 +391,7 @@ class TrafficMonitorService:
             connection.execute("DELETE FROM traffic_frames WHERE created_at < ?", (cutoff,))
         if entry["format"] == "TNC2":
             process_incoming_frame(entry["line"], band=active_band, timestamp=timestamp)
+            process_incoming_tnc2_message(entry["line"], timestamp=timestamp)
 
     async def _sleep(self, delay: float) -> None:
         try:

@@ -4,6 +4,7 @@ import asyncio
 from typing import Any
 
 from app.db import log_event
+from app.services.messages import expire_direct_message_timeouts, mark_message_failed, register_direct_message_transmission
 from app.services.outbound import (
     build_beacon_tnc2,
     build_message_tnc2,
@@ -42,6 +43,7 @@ class OutboundService:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
+            expire_direct_message_timeouts()
             job = claim_next_outbound_job()
             if job is None:
                 await self._sleep(self._poll_interval)
@@ -92,11 +94,17 @@ class OutboundService:
                 payload_hex=frame.hex(" ").upper(),
             )
             mark_outbound_job_sent(job_id)
+            payload = job.get("payload") or {}
+            if kind == "message" and str(payload.get("message_kind") or "") == "direct_message" and payload.get("aprs_message_id") is not None:
+                register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
             log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
         except Exception as exc:
             error = str(exc).strip() or exc.__class__.__name__
             mark_outbound_job_failed(job_id, error)
             kind = str(job.get("kind") or "unknown").strip() or "unknown"
+            payload = job.get("payload") or {}
+            if kind == "message" and str(payload.get("message_kind") or "") == "direct_message" and payload.get("aprs_message_id") is not None:
+                mark_message_failed(int(payload["aprs_message_id"]), error)
             log_event("WARNING", "outbound", f"{kind.capitalize()} outbound job #{job_id} failed: {error}")
 
     async def _sleep(self, delay: float) -> None:

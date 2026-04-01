@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS outbound_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,
     interface_id INTEGER,
+    aprs_message_id INTEGER,
     payload_json TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'sent', 'failed', 'cancelled')),
     scheduled_at TEXT NOT NULL,
@@ -123,6 +124,40 @@ CREATE TABLE IF NOT EXISTS outbound_jobs (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (interface_id) REFERENCES modems(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS aprs_message_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    remote_callsign TEXT NOT NULL,
+    remote_ssid TEXT NOT NULL DEFAULT '',
+    path TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (remote_callsign, remote_ssid)
+);
+
+CREATE TABLE IF NOT EXISTS aprs_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    direction TEXT NOT NULL CHECK (direction IN ('rx', 'tx')),
+    sender TEXT NOT NULL,
+    addressee TEXT NOT NULL,
+    message_text TEXT NOT NULL,
+    path TEXT NOT NULL DEFAULT '',
+    message_number TEXT,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'sent', 'acked', 'failed', 'received')),
+    tx_attempt_count INTEGER NOT NULL DEFAULT 0,
+    is_unread INTEGER NOT NULL DEFAULT 0 CHECK (is_unread IN (0, 1)),
+    outbound_job_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    sent_at TEXT,
+    acked_at TEXT,
+    last_attempt_at TEXT,
+    failed_at TEXT,
+    failure_reason TEXT,
+    FOREIGN KEY (conversation_id) REFERENCES aprs_message_conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (outbound_job_id) REFERENCES outbound_jobs(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS igate_rules (
@@ -297,6 +332,10 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id ON outbound_jobs(aprs_message_id, status, scheduled_at, id);
+CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
 CREATE INDEX IF NOT EXISTS idx_band_condition_refs_band_enabled
     ON band_condition_reference_stations(band, enabled);
 CREATE INDEX IF NOT EXISTS idx_band_condition_audibility_processed
@@ -318,6 +357,7 @@ def init_db() -> None:
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
         object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
+        outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -383,6 +423,13 @@ def init_db() -> None:
                 """
                 ALTER TABLE modems
                 ADD COLUMN band TEXT NOT NULL DEFAULT ''
+                """
+            )
+        if "aprs_message_id" not in outbound_columns:
+            connection.execute(
+                """
+                ALTER TABLE outbound_jobs
+                ADD COLUMN aprs_message_id INTEGER
                 """
             )
         if "state" not in object_columns:

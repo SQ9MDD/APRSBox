@@ -14,7 +14,6 @@ from app.services.content import (
     delete_section_row,
     get_configured_modem_interfaces,
     get_aprs_symbol_icon_path,
-    get_messages_page_data,
     get_recent_station_packets,
     heard_stations,
     get_section_row,
@@ -29,6 +28,13 @@ from app.services.content import (
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
     safe_update_section_row,
+)
+from app.services.messages import (
+    create_or_update_conversation,
+    delete_conversation as delete_message_conversation,
+    get_messages_page_data as get_live_messages_page_data,
+    mark_conversation_read,
+    queue_outgoing_message,
 )
 from app.services.band_condition import (
     build_station_key,
@@ -954,9 +960,64 @@ def messages_page(
         page_title="Messages",
         current_user=current_user,
         active_nav="messages",
-        messages_view=get_messages_page_data(),
+        messages_view=get_live_messages_page_data(),
     )
     return templates.TemplateResponse("messages.html", context)
+
+
+@router.get("/api/messages")
+def messages_snapshot(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_live_messages_page_data())
+
+
+@router.post("/api/messages/conversations")
+async def messages_create_conversation(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    try:
+        conversation = create_or_update_conversation(str(payload.get("callsign") or ""), path="")
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse({"conversation_id": str(conversation.get("id") or ""), "messages_view": get_live_messages_page_data()})
+
+
+@router.post("/api/messages/send")
+async def messages_send(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    try:
+        message = queue_outgoing_message(
+            callsign=str(payload.get("callsign") or ""),
+            message_text=str(payload.get("message_text") or ""),
+            path=str(payload.get("path") or ""),
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse({"message_id": str(message["id"]), "messages_view": get_live_messages_page_data()})
+
+
+@router.post("/api/messages/conversations/{conversation_id}/read")
+def messages_mark_read(
+    conversation_id: int,
+    _: UserIdentity = Depends(require_roles("admin", "operator", "viewer")),
+) -> JSONResponse:
+    mark_conversation_read(conversation_id)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/messages/conversations/{conversation_id}/delete")
+def messages_delete(
+    conversation_id: int,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    delete_message_conversation(conversation_id)
+    return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
 
 
 @router.get("/api/traffic")

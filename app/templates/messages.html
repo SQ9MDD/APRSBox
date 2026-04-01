@@ -7,7 +7,7 @@
             <div class="messages-sidebar-top">
                 <div class="panel-header-copy">
                     <h2>Conversations</h2>
-                    <p class="section-lead">APRS messages GUI scaffold. Conversation data is local to this view for now.</p>
+                    <p class="section-lead">Stored APRS message conversations from the local SQLite database.</p>
                 </div>
                 <form class="messages-new-conversation" id="messages-new-conversation-form">
                     <label class="messages-new-conversation-field">
@@ -72,7 +72,7 @@
                         <button type="submit" class="button" id="messages-send-button">Send</button>
                     </div>
                     <div class="messages-composer-meta">
-                        <small class="field-validation-error" id="messages-composer-error" hidden>Only letters A-Z, a-z and digits 0-9 are allowed.</small>
+                        <small class="field-validation-error" id="messages-composer-error" hidden>Use APRS-safe printable ASCII, max {{ messages_view.composer_limit }} chars, without <code>{ }</code> or telemetry delimiters.</small>
                     </div>
                 </div>
             </form>
@@ -88,7 +88,6 @@
     if (!app || !initialDataNode) return;
 
     const staticRoot = app.dataset.staticRoot || "";
-    const storageKey = "aprsbox-messages-gui-v1";
     const initialData = JSON.parse(initialDataNode.textContent || "{}");
     const composerLimit = Number(initialData.composer_limit || 67);
     const conversationList = document.getElementById("messages-conversation-list");
@@ -103,11 +102,18 @@
     const newConversationForm = document.getElementById("messages-new-conversation-form");
     const newConversationInput = document.getElementById("messages-new-callsign");
     const defaultPath = String(initialData.default_path || "");
+    const messagesApi = `${window.location.pathname.replace(/\/messages$/, "")}/api/messages`.replace(/\/\//g, "/");
 
     let state = buildInitialState(initialData);
+    let refreshTimer = null;
 
     function normalizeCallsign(value) {
         return String(value || "").trim().toUpperCase();
+    }
+
+    function validateCallsign(value) {
+        const normalized = normalizeCallsign(value);
+        return /^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$/.test(normalized);
     }
 
     function escapeHtml(value) {
@@ -148,26 +154,21 @@
         return {
             length: text.length,
             tooLong: text.length > composerLimit,
-            asciiInvalid: !/^[A-Za-z0-9]*$/.test(text),
+            asciiInvalid: /[\x00-\x1F\x7F{}|~]/.test(text) || [...text].some((char) => char.charCodeAt(0) > 126),
             empty: text.trim().length === 0,
         };
     }
 
     function normalizeMessageText(value) {
-        return String(value || "").replace(/[^A-Za-z0-9]/g, "").slice(0, composerLimit);
-    }
-
-    function normalizePath(value) {
-        return String(value || "").trim().toUpperCase();
-    }
-
-    function buildLocalMessageId(prefix) {
-        return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        return String(value || "")
+            .replace(/[\x00-\x1F\x7F{}|~]/g, "")
+            .replace(/[^\x20-\x7E]/g, "")
+            .slice(0, composerLimit);
     }
 
     function cloneConversation(conversation) {
         return {
-            id: String(conversation.id || normalizeCallsign(conversation.callsign)),
+            id: String(conversation.id || ""),
             callsign: normalizeCallsign(conversation.callsign),
             created_at: String(conversation.created_at || new Date().toISOString()),
             last_activity_at: String(conversation.last_activity_at || conversation.created_at || new Date().toISOString()),
@@ -175,14 +176,15 @@
             message_state: String(conversation.message_state || "read"),
             recently_heard: Boolean(conversation.recently_heard),
             heard_recently_label: String(conversation.heard_recently_label || ""),
-            path: normalizePath(conversation.path || defaultPath),
+            path: String(conversation.path || defaultPath).trim().toUpperCase(),
             messages: Array.isArray(conversation.messages) ? conversation.messages.map((message) => ({
-                id: String(message.id || buildLocalMessageId("msg")),
+                id: String(message.id || ""),
                 direction: message.direction === "rx" ? "rx" : "tx",
                 text: String(message.text || ""),
                 timestamp: String(message.timestamp || new Date().toISOString()),
                 unread: Boolean(message.unread),
                 delivery_state: String(message.delivery_state || ""),
+                failure_reason: String(message.failure_reason || ""),
             })) : [],
         };
     }
@@ -207,146 +209,83 @@
         conversation.last_activity_at = String(
             (lastMessage && lastMessage.timestamp) || conversation.created_at || new Date().toISOString()
         );
-        conversation.path = normalizePath(conversation.path || defaultPath);
+        conversation.path = String(conversation.path || defaultPath).trim().toUpperCase();
         return conversation;
     }
 
     function buildInitialState(serverData) {
-        const serverConversations = Array.isArray(serverData.conversations)
+        const conversations = Array.isArray(serverData.conversations)
             ? serverData.conversations.map(cloneConversation)
             : [];
-        let storedConversations = [];
-        let storedActiveId = null;
-        try {
-            const storedRaw = window.localStorage.getItem(storageKey);
-            if (storedRaw) {
-                const parsed = JSON.parse(storedRaw);
-                if (Array.isArray(parsed.conversations)) {
-                    storedConversations = parsed.conversations.map(cloneConversation);
-                }
-                storedActiveId = parsed.activeConversationId ? String(parsed.activeConversationId) : null;
-            }
-        } catch (_error) {
-        }
-
-        const merged = [];
-        const mergedByCallsign = new Map();
-        serverConversations.forEach((conversation) => {
-            merged.push(conversation);
-            mergedByCallsign.set(conversation.callsign, conversation);
-        });
-        storedConversations.forEach((stored) => {
-            const existing = mergedByCallsign.get(stored.callsign);
-            if (existing) {
-                existing.messages = stored.messages;
-                existing.created_at = stored.created_at || existing.created_at;
-                recomputeConversation(existing);
-            } else {
-                merged.push(stored);
-                mergedByCallsign.set(stored.callsign, stored);
-            }
-        });
-        merged.forEach(recomputeConversation);
-        sortConversations(merged);
-
-        let activeConversationId = storedActiveId || serverData.active_conversation_id || null;
-        if (activeConversationId && !merged.some((conversation) => conversation.id === activeConversationId)) {
+        conversations.forEach(recomputeConversation);
+        sortConversations(conversations);
+        let activeConversationId = serverData.active_conversation_id || null;
+        if (activeConversationId && !conversations.some((conversation) => conversation.id === activeConversationId)) {
             activeConversationId = null;
         }
-        if (!activeConversationId && merged.length) {
-            const unreadConversation = merged.find((conversation) => conversation.unread_count > 0);
-            activeConversationId = unreadConversation ? unreadConversation.id : merged[0].id;
+        if (!activeConversationId && conversations.length) {
+            const unreadConversation = conversations.find((conversation) => conversation.unread_count > 0);
+            activeConversationId = unreadConversation ? unreadConversation.id : conversations[0].id;
         }
         return {
-            conversations: merged,
+            conversations,
             activeConversationId,
         };
-    }
-
-    function persistState() {
-        try {
-            window.localStorage.setItem(storageKey, JSON.stringify({
-                conversations: state.conversations,
-                activeConversationId: state.activeConversationId,
-            }));
-        } catch (_error) {
-        }
     }
 
     function getActiveConversation() {
         return state.conversations.find((conversation) => conversation.id === state.activeConversationId) || null;
     }
 
-    function markConversationRead(conversation) {
-        conversation.messages.forEach((message) => {
-            if (message.direction === "rx") {
-                message.unread = false;
-            }
+    async function apiRequest(path, options = {}) {
+        const response = await fetch(path, {
+            ...options,
+            headers: {
+                "Content-Type": "application/json",
+                ...(options.headers || {}),
+            },
         });
-        recomputeConversation(conversation);
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || "Request failed.");
+        }
+        return payload;
     }
 
-    function openConversation(conversationId) {
+    async function openConversation(conversationId) {
         const conversation = state.conversations.find((item) => item.id === conversationId);
         if (!conversation) return;
         state.activeConversationId = conversation.id;
-        markConversationRead(conversation);
-        sortConversations(state.conversations);
-        persistState();
+        if (conversation.unread_count > 0) {
+            await apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversation.id)}/read`, { method: "POST", body: "{}" });
+            await refreshState();
+            return;
+        }
         render();
     }
 
-    function createConversation(callsign) {
+    async function createConversation(callsign) {
         const normalized = normalizeCallsign(callsign);
         if (!normalized) return null;
         const existing = state.conversations.find((conversation) => conversation.callsign === normalized);
         if (existing) {
-            openConversation(existing.id);
+            await openConversation(existing.id);
             return existing;
         }
-        const conversation = recomputeConversation({
-            id: normalized.toLowerCase(),
-            callsign: normalized,
-            created_at: new Date().toISOString(),
-            last_activity_at: new Date().toISOString(),
-            unread_count: 0,
-            message_state: "read",
-            recently_heard: false,
-            heard_recently_label: "",
-            path: defaultPath,
-            messages: [],
+        const payload = await apiRequest(`${messagesApi}/conversations`, {
+            method: "POST",
+            body: JSON.stringify({ callsign: normalized }),
         });
-        state.conversations.unshift(conversation);
-        state.activeConversationId = conversation.id;
-        sortConversations(state.conversations);
-        persistState();
-        render();
-        return conversation;
+        await applyServerState(payload.messages_view, payload.conversation_id || null);
+        return getActiveConversation();
     }
 
-    function deleteConversation(conversationId) {
-        const index = state.conversations.findIndex((conversation) => conversation.id === conversationId);
-        if (index < 0) return;
-        state.conversations.splice(index, 1);
-        if (state.activeConversationId === conversationId) {
-            state.activeConversationId = state.conversations[0] ? state.conversations[0].id : null;
-        }
-        persistState();
-        render();
-    }
-
-    function appendOutgoingMessage(conversation, text) {
-        conversation.messages.push({
-            id: buildLocalMessageId(conversation.id),
-            direction: "tx",
-            text,
-            timestamp: new Date().toISOString(),
-            unread: false,
-            delivery_state: "pending",
+    async function deleteConversation(conversationId) {
+        const payload = await apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversationId)}/delete`, {
+            method: "POST",
+            body: "{}",
         });
-        recomputeConversation(conversation);
-        sortConversations(state.conversations);
-        persistState();
+        await applyServerState(payload.messages_view, null);
     }
 
     function renderConversationList() {
@@ -416,8 +355,15 @@
             const dayLabel = formatDay(message.timestamp);
             const showDay = dayLabel && dayLabel !== previousDay;
             previousDay = dayLabel || previousDay;
+            const deliveryLabels = {
+                queued: "Queued",
+                sent: "Sent",
+                acked: "ACK",
+                failed: "No ACK",
+                received: "Received",
+            };
             const deliveryBadge = message.direction === "tx"
-                ? `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}">${escapeHtml(message.delivery_state === "acked" ? "ACK" : "Waiting ACK")}</span>`
+                ? `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabels[message.delivery_state] || message.delivery_state || "Sent")}</span>`
                 : "";
             return `
                 ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}
@@ -440,7 +386,7 @@
         sendButton.disabled = !conversation || validation.empty || hasError;
         composerInput.disabled = !conversation;
         composerPathInput.disabled = !conversation;
-        composerPathInput.value = conversation ? normalizePath(conversation.path || defaultPath) : defaultPath;
+        composerPathInput.value = conversation ? String(conversation.path || defaultPath).trim().toUpperCase() : defaultPath;
         composerInput.placeholder = conversation
             ? "Type APRS message text"
             : "Select a conversation to enable the composer";
@@ -454,17 +400,33 @@
         renderComposer(activeConversation);
     }
 
+    async function applyServerState(serverData, preferredConversationId = undefined) {
+        const nextState = buildInitialState(serverData || {});
+        if (preferredConversationId !== undefined && preferredConversationId !== null) {
+            nextState.activeConversationId = String(preferredConversationId);
+        } else if (state.activeConversationId && nextState.conversations.some((conversation) => conversation.id === state.activeConversationId)) {
+            nextState.activeConversationId = state.activeConversationId;
+        }
+        state = nextState;
+        render();
+    }
+
+    async function refreshState() {
+        const payload = await apiRequest(messagesApi, { method: "GET" });
+        await applyServerState(payload);
+    }
+
     conversationList.addEventListener("click", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
         const deleteButton = target.closest("[data-delete-conversation]");
         if (deleteButton instanceof HTMLElement && deleteButton.dataset.deleteConversation) {
-            deleteConversation(deleteButton.dataset.deleteConversation);
+            void deleteConversation(deleteButton.dataset.deleteConversation);
             return;
         }
         const openButton = target.closest("[data-open-conversation]");
         if (openButton instanceof HTMLElement && openButton.dataset.openConversation) {
-            openConversation(openButton.dataset.openConversation);
+            void openConversation(openButton.dataset.openConversation);
         }
     });
 
@@ -472,9 +434,19 @@
         event.preventDefault();
         const callsign = normalizeCallsign(newConversationInput.value);
         if (!callsign) return;
-        createConversation(callsign);
-        newConversationInput.value = "";
-        composerInput.focus();
+        if (!validateCallsign(callsign)) {
+            composerError.hidden = false;
+            composerError.textContent = "Destination callsign must be an AX.25/APRS callsign with optional SSID 0-15.";
+            return;
+        }
+        void createConversation(callsign).then(() => {
+            newConversationInput.value = "";
+            composerError.hidden = true;
+            composerInput.focus();
+        }).catch((error) => {
+            composerError.hidden = false;
+            composerError.textContent = error.message;
+        });
     });
 
     composerForm.addEventListener("submit", (event) => {
@@ -487,11 +459,22 @@
             renderComposer(conversation);
             return;
         }
-        conversation.path = normalizePath(composerPathInput.value || defaultPath);
-        appendOutgoingMessage(conversation, text.trim());
-        composerInput.value = "";
-        render();
-        composerInput.focus();
+        void apiRequest(`${messagesApi}/send`, {
+            method: "POST",
+            body: JSON.stringify({
+                callsign: conversation.callsign,
+                message_text: text.trim(),
+                path: composerPathInput.value || defaultPath,
+            }),
+        }).then(async (payload) => {
+            composerInput.value = "";
+            composerError.hidden = true;
+            await applyServerState(payload.messages_view, conversation.id);
+            composerInput.focus();
+        }).catch((error) => {
+            composerError.hidden = false;
+            composerError.textContent = error.message;
+        });
     });
 
     composerInput.addEventListener("beforeinput", (event) => {
@@ -501,7 +484,7 @@
         const start = composerInput.selectionStart || 0;
         const end = composerInput.selectionEnd || 0;
         const nextValue = composerInput.value.slice(0, start) + event.data + composerInput.value.slice(end);
-        if (nextValue.length > composerLimit || !/^[A-Za-z0-9]*$/.test(event.data) || !/^[A-Za-z0-9]*$/.test(nextValue)) {
+        if (validateComposer(nextValue).tooLong || validateComposer(nextValue).asciiInvalid) {
             event.preventDefault();
             composerError.hidden = false;
         }
@@ -535,11 +518,18 @@
         if (!conversation) {
             return;
         }
-        conversation.path = normalizePath(composerPathInput.value);
-        persistState();
+        conversation.path = String(composerPathInput.value || "").trim().toUpperCase();
     });
 
     render();
+    refreshTimer = window.setInterval(() => {
+        void refreshState().catch(() => {});
+    }, 5000);
+    window.addEventListener("beforeunload", () => {
+        if (refreshTimer !== null) {
+            window.clearInterval(refreshTimer);
+        }
+    });
 })();
 </script>
 {% endblock %}

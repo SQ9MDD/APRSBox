@@ -306,6 +306,50 @@ def enqueue_message_job(
     return True, f"Message queued as job #{job_id}."
 
 
+def enqueue_direct_message_job(
+    message: dict[str, Any],
+    station_settings: dict[str, Any],
+    *,
+    trigger: str = "manual",
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str]:
+    addressee = str(message.get("addressee") or "").strip().upper()
+    message_text = str(message.get("message_text") or "").strip()
+    message_number = str(message.get("message_number") or "").strip().upper()
+    payload = {
+        "aprs_message_id": int(message["id"]),
+        "callsign": str(station_settings.get("callsign") or "").strip().upper(),
+        "ssid": str(station_settings.get("ssid") or "").strip(),
+        "message_kind": "direct_message",
+        "addressee": addressee,
+        "path": str(message.get("path") or "").strip(),
+        "message_text": message_text,
+        "message_number": message_number,
+        "trigger": str(trigger or "manual").strip() or "manual",
+    }
+    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+
+
+def enqueue_ack_job(
+    addressee: str,
+    ack_number: str,
+    station_settings: dict[str, Any],
+    *,
+    trigger: str = "ack",
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str]:
+    payload = {
+        "callsign": str(station_settings.get("callsign") or "").strip().upper(),
+        "ssid": str(station_settings.get("ssid") or "").strip(),
+        "message_kind": "ack",
+        "addressee": str(addressee or "").strip().upper(),
+        "path": "",
+        "message_text": f"ack{str(ack_number or '').strip().upper()}",
+        "trigger": str(trigger or "ack").strip() or "ack",
+    }
+    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+
+
 def claim_next_outbound_job() -> dict[str, Any] | None:
     with get_connection() as connection:
         row = connection.execute(
@@ -381,6 +425,19 @@ def mark_outbound_job_failed(job_id: int, error: str) -> None:
             WHERE id = ?
             """,
             (OUTBOUND_STATUS_FAILED, error.strip()[:500], timestamp, job_id),
+        )
+
+
+def mark_outbound_job_cancelled(job_id: int) -> None:
+    timestamp = utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE outbound_jobs
+            SET status = ?, updated_at = ?
+            WHERE id = ? AND status = ?
+            """,
+            ("cancelled", timestamp, job_id, OUTBOUND_STATUS_QUEUED),
         )
 
 
@@ -549,11 +606,16 @@ def _build_status_info(payload: dict[str, Any]) -> str:
 def _build_message_info(payload: dict[str, Any]) -> str:
     addressee = resolve_message_addressee(payload)
     message_text = str(payload.get("message_text") or "").strip()
+    message_number = str(payload.get("message_number") or "").strip().upper()
+    if str(payload.get("message_kind") or "").strip() == "direct_message" and message_number:
+        message_text = f"{message_text}{{{message_number}"
     return f":{addressee}:{message_text}"
 
 
 def resolve_message_addressee(payload: dict[str, Any]) -> str:
     message_kind = str(payload.get("message_kind") or "bulletin").strip()
+    if message_kind in {"direct_message", "ack"}:
+        return str(payload.get("addressee") or "").strip().upper()[:9].ljust(9)
     bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()[:1]
     if message_kind == "announcement":
         return f"BLN{bulletin_code}".ljust(9)
@@ -631,3 +693,57 @@ def _split_callsign_ssid(value: str) -> tuple[str, int]:
         if ssid < 0 or ssid > 15:
             raise ValueError("AX.25 SSID out of range.")
     return base[:6], ssid
+
+
+def _enqueue_generic_message_payload(
+    payload: dict[str, Any],
+    station_settings: dict[str, Any],
+    *,
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str]:
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    beacon_interface_id = station_settings.get("beacon_interface_id")
+    if not callsign:
+        return False, "Callsign is required."
+    if beacon_interface_id in {None, ""}:
+        return False, "Interface is required."
+    try:
+        interface_id = int(beacon_interface_id)
+    except (TypeError, ValueError):
+        return False, "Selected interface is invalid."
+    modem = fetch_one(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE id = ?
+        """,
+        (interface_id,),
+    )
+    if modem is None:
+        return False, "Selected interface does not exist."
+
+    now_text = utc_now()
+    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO outbound_jobs(
+                kind, interface_id, aprs_message_id, payload_json, status, scheduled_at,
+                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+            """,
+            (
+                OUTBOUND_KIND_MESSAGE,
+                int(modem["id"]),
+                payload.get("aprs_message_id"),
+                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
+                OUTBOUND_STATUS_QUEUED,
+                scheduled_at,
+                now_text,
+                now_text,
+            ),
+        )
+        job_id = int(cursor.lastrowid)
+    log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_id} for interface {modem['name']}")
+    return True, f"Message queued as job #{job_id}."
