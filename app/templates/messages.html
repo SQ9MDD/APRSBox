@@ -108,6 +108,7 @@
     let state = buildInitialState(initialData);
     let refreshTimer = null;
     let pathSaveTimer = null;
+    const pathDrafts = new Map();
 
     function conversationMessageSignature(conversation) {
         if (!conversation || !Array.isArray(conversation.messages) || !conversation.messages.length) {
@@ -256,6 +257,19 @@
 
     function getActiveConversation() {
         return state.conversations.find((conversation) => conversation.id === state.activeConversationId) || null;
+    }
+
+    function mergePathDrafts(nextState) {
+        if (!nextState || !Array.isArray(nextState.conversations)) {
+            return nextState;
+        }
+        nextState.conversations.forEach((conversation) => {
+            const draftPath = pathDrafts.get(conversation.id);
+            if (draftPath !== undefined) {
+                conversation.path = draftPath;
+            }
+        });
+        return nextState;
     }
 
     async function apiRequest(path, options = {}) {
@@ -432,7 +446,12 @@
         sendButton.disabled = !conversation || validation.empty || hasError;
         composerInput.disabled = !conversation;
         composerPathInput.disabled = !conversation;
-        composerPathInput.value = conversation ? String(conversation.path || defaultPath).trim().toUpperCase() : defaultPath;
+        const desiredPathValue = conversation
+            ? String(pathDrafts.get(conversation.id) ?? conversation.path ?? defaultPath)
+            : defaultPath;
+        if (composerPathInput.value !== desiredPathValue) {
+            composerPathInput.value = desiredPathValue;
+        }
         composerInput.placeholder = conversation
             ? "Type APRS message text"
             : "Select a conversation to enable the composer";
@@ -451,7 +470,7 @@
         const previousActiveConversationId = previousActiveConversation ? previousActiveConversation.id : null;
         const previousMessageSignature = conversationMessageSignature(previousActiveConversation);
         const shouldStickToBottom = isHistoryNearBottom();
-        const nextState = buildInitialState(serverData || {});
+        const nextState = mergePathDrafts(buildInitialState(serverData || {}));
         if (preferredConversationId !== undefined && preferredConversationId !== null) {
             nextState.activeConversationId = String(preferredConversationId);
         } else if (state.activeConversationId && nextState.conversations.some((conversation) => conversation.id === state.activeConversationId)) {
@@ -614,15 +633,21 @@
         if (!conversation) {
             return;
         }
-        conversation.path = String(composerPathInput.value || "").trim().toUpperCase();
+        const draftPath = String(composerPathInput.value || "");
+        conversation.path = draftPath;
+        pathDrafts.set(conversation.id, draftPath);
         if (pathSaveTimer !== null) {
             window.clearTimeout(pathSaveTimer);
         }
         pathSaveTimer = window.setTimeout(() => {
+            const pendingPath = pathDrafts.get(conversation.id) ?? draftPath;
             void apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversation.id)}/path`, {
                 method: "POST",
-                body: JSON.stringify({ path: conversation.path }),
+                body: JSON.stringify({ path: pendingPath }),
             }).then(async (payload) => {
+                if (pathDrafts.get(conversation.id) === pendingPath) {
+                    pathDrafts.delete(conversation.id);
+                }
                 await applyServerState(payload.messages_view, conversation.id);
             }).catch((error) => {
                 composerError.hidden = false;
