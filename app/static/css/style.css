@@ -2491,9 +2491,21 @@ body.modal-open {
     flex-wrap: wrap;
 }
 
+.messages-composer-path-field {
+    display: grid;
+    gap: 0.34rem;
+    flex: 1 1 14rem;
+    min-width: min(18rem, 100%);
+}
+
+.messages-composer-path-field input {
+    min-height: var(--control-height);
+}
+
 .messages-composer-meta {
     display: grid;
     gap: 0.18rem;
+    flex: 0 1 auto;
 }
 
 @media (max-width: 980px) {

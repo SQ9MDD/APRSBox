@@ -57,17 +57,17 @@
                         spellcheck="false"
                     ></textarea>
                 </label>
-                <label class="messages-composer-field">
-                    <span>Path</span>
-                    <input
-                        type="text"
-                        id="messages-composer-path"
-                        name="message_path"
-                        placeholder="WIDE2-1"
-                        spellcheck="false"
-                    >
-                </label>
                 <div class="messages-composer-footer">
+                    <label class="messages-composer-path-field">
+                        <span>Path</span>
+                        <input
+                            type="text"
+                            id="messages-composer-path"
+                            name="message_path"
+                            placeholder="WIDE2-1"
+                            spellcheck="false"
+                        >
+                    </label>
                     <div class="messages-composer-meta">
                         <small class="muted" id="messages-composer-count">0 / {{ messages_view.composer_limit }}</small>
                         <small class="field-validation-error" id="messages-composer-error" hidden>Only letters A-Z, a-z and digits 0-9 are allowed.</small>
