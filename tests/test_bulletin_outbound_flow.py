@@ -173,6 +173,18 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             assert traffic_row is not None
             self.assertEqual(traffic_row["line"], expected_line)
 
+    def test_create_section_row_persists_bulletin_path(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                INSERT INTO bulletins(message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, path, message_text, updated_at)
+                VALUES ('bulletin', NULL, '2', '', 1, 15, 'WIDE2-2', 'Test', '2026-01-01T00:00:00+00:00')
+                """
+            )
+            row = fetch_one("SELECT path FROM bulletins ORDER BY id DESC LIMIT 1")
+            assert row is not None
+            self.assertEqual(row["path"], "WIDE2-2")
+
 
 if __name__ == "__main__":
     unittest.main()

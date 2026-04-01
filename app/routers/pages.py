@@ -747,6 +747,7 @@ def bulletins_create(
     bulletin_code: str = Form(""),
     group_name: str = Form(""),
     interval_minutes: str = Form("30"),
+    path: str = Form(""),
     is_enabled: str | None = Form(None),
     message_text: str = Form(...),
 ) -> object:
@@ -756,6 +757,7 @@ def bulletins_create(
         "bulletin_code": bulletin_code.strip(),
         "group_name": group_name.strip(),
         "interval_minutes": interval_minutes.strip(),
+        "path": path.strip(),
         "is_enabled": is_enabled,
         "message_text": message_text.strip(),
     }
