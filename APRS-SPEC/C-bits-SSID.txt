@@ -1,0 +1,40 @@
+USE of the C bits in the SSID BYTE in AX.25 Confusion             9 Jun 2017
+----------------------------------------------------------------------------
+WB2OSZ offers this explanation:
+
+The AX.25 spec says this about the "C" bits in the destination and source 
+addresses.  Section 6.1.2, figure 6.1.
+
+Frame Type        Dest.SSID C-Bit   Source SSID C-Bit
+---------------   ---------------   -----------------
+Previous versions        0                0
+Command (V.2.X)          1                0
+Response (V.2.X)         0                1
+Previous versions        1                1
+
+The two "C" bits must be the opposite of each other.  This is very important 
+for the traditional "connected" mode.
+
+I could find no mention of these two bits in the APRS protocol spec or other.
+
+After spending a lot of time studying the AX.25 spec, I think "command"
+would be correct.  The state diagrams, in the back, indicate that a UI frame 
+that is not a "command" is an error.  APRS is built on top of AX.25 so we 
+would expect it to follow the same rules unless explicitly said otherwise.
+
+When this question came up before, I hacked together something to observe 
+what is actually used in practice.
+
+Source C Dest C meaning, examples.
+-------- ------ ------------------
+ 
+   0      0     (previous vers)   WXtrac,APRS+SA,KPC-3,Tiny Track,Xastir
+   0      1     (command)   Uidigi, UIview, APRSISCE, APRSdroid
+   1      0     (response)  Kenwood, Yaesu, APRSISCE
+   1      1     (previous versions)   OpenTrack
+
+
+We can have philosophical discussions about what they "should" be but the 
+reality is that we find all 4 combinations being used.
+
+Any implementation should simply ignore them for incoming frames.

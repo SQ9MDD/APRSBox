@@ -1,0 +1,85 @@
+PREEMPTIVE DIGIPEATING                                 4 Dec 2012
+-----------------------------------------------------------------
+
+PREMPTIVE DIGIPEATING DEFINITION (rev b):  When ON, the digi will 
+begin searching at the first unused digipeater field and then to 
+the end for a match to any of its potential matching aliases 
+(MYCALL, MYALIAS, UIDIGI).  If a match, it will mark that and all 
+prior fields as HAS-BEEN-USED, it will REPLACE its ALIAS with its 
+MYCALL and will digipeat it once.  All remaining fields are still 
+active.
+
+GENERIC XXXXn-N DIGIPEATING should not do preemptive digipeating.
+
+INDICATORS:  When the packet is preemptively digipeated, all
+the digifields prior to the preempted field can either be 
+DROPPED, or MARKED.  
+
+DROPPED:  If dropped, then the preempted ALIAS becomes
+the first digipeater field, it is replaced with the MYCALL of the 
+digipeater, the has-been-digipeated-bit is set, and the remaining
+path remains intact. All prior path data is lost.  
+
+MARKED:   If MARKED is SET, then the full path prior to the 
+preempted alias is retained but the LSB of the two RR bits is set 
+to 1 and the has-been-digipeated-bit is also set for all unused 
+digi fields prior to and including the preempted ALIAS.  As 
+before, the ALIAS is replaced with MYCALL indicating the field 
+was prempted.
+
+In the GATEWAY scenario, one would probably use the DROP setting.  
+In the normal network scenario, then the MARK setting might be 
+the best setting.
+
+PRIORITY BIT:  Now why not use the other RR bit in the SSID field 
+for a PRIORITY bit.  The existing default value of the RR bit is 1 
+and will indicate a PRIORITY  packet but if "0", then this packet 
+is of less priority and can be dropped in future networks that 
+recognize it..
+
+RR-BITS: See definition of these bits, see figure 2.2.13.1.1 in:
+http://www.tapr.org/pub_ax25.html
+
+So the PREMPT TNC command now has 3 settings:  OFF, DROP, MARK to 
+indicate how to indicate the action.
+
+PACKETS TO HOME SCENARIO:  In this scenario your goal is to get 
+your packets targeted to a particular digi or area.  The path 
+WIDE2-2,HOMEX With the HOMEX digipeater recognizing pre-emptive 
+digipeating would make sure that all your packets got to HOMEX 
+in from 1 to 3 hops.  To get them say 4 hops from City A to City B
+ without flooding everywhere, the path WIDE1-1,CITYA,WIDE2-1,CITYB 
+would get to CITYB no matter where you are in A or B or inbetween, 
+but not involve ANY OTHER DIGI's than the shortest path between 
+them.  ETC...
+
+Or CITYD,CITYC,CITYB,CITYA would let you go on a trip to CItyD, 
+but your packets would get back home to A no matter where you were 
+inbetween.  When close, then they would only go 1 hop.  Or if you 
+wanted those at CityD to anticipate your arrival, you might use 
+the path CITYA,CITYB,CITYC,CITYD and then your packets would all 
+preceed you to CITYD until you got there, but with fewer and fewer 
+hops as you got close.
+
+GATEWAY SCENARIO:  IN this scenario there is a special event on 
+FREQB with lots of FREQB digis that desires to get at least one 
+(and only 1) copy of each packet into the 144.39 system via a 
+cross-channel gateway with the callsign GATE.  The path of 
+FREQB7-7,GATE,WIDE2-1 would make sure that a packet got everywhere 
+in the special event network but only one copy always gets through 
+the gateway at least one hop into the APRS network.  (such as the 
+linear appalachan trail event or an underground multihop cave 
+event...
+
+NO PREMPTIVE DIGIPEATING ON UIFLOOD and UITRACE.  The reason is, 
+that it would preclude any use of any kind of WIDEn-N AFTER going 
+through a gate, and that is one of the main reasons for doing it.
+
+Remember, these 4 hop Premptive SPECIFIC paths are MUCH less load 
+on the network than a WIDE4-4 which can potentially cause 34 DUPES, 
+compared to only a maximum of 4 hops with the explicit preemptive 
+hop approach.
+
+Have I missed anything?
+
+Bob, WB4APR

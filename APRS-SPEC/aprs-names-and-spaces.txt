@@ -1,0 +1,83 @@
+APRS OBJECT NAMES and CALLSIGN EQUALITY                    25 Apr 16
+--------------------------------------------------------------------
+
+25 Apr 2016 - Added note about the ambiguity of mixed case in calls
+14 Aug 2009 - previous version
+
+This Manefesto resulted from a discussion about equality of object
+names and callsigns with respect to SPACES in the name.  Here is how
+APRS was designed to work.  Bottom line is:
+
+- no leading spaces
+- trailing spaces are not part of the name
+- embedded spaces are allowed by the spec, but NOT encouraged!
+- (2016:) mixed-case callsign fields were intended to be allowed
+
+1) NAMES: Station, ITEM and OBJECT names were all meant to be in the 
+same NAME space.  (2016: and also APRS message addees)
+OBJECT Names are transmitted in a 9 byte field 
+with right padded spaces.  Those spaces are not part of the NAME.  
+ITEMS dropped the spaces by definition for brevity. STATION names 
+are from the AX.25 header and have callsign-type restrictions (WHEN 
+ENTERED into the sending TNC) debate continues about what is allowed 
+in 3rd party packets.  Object names can contain any printable ASCII 
+character (I will concede, this includes embedded spaces)(not 
+trailing spaces). (2016: and can be mixed case)
+
+2) PACKET TYPES:  STATION, OBJECT and ITEMS were all supposed to be 
+just different ways of enteirng a "thing" into the distributed APRS 
+virtual display.  THeir SOURCE was always to be retained as long as 
+the information was valid.  ANd their TYPE was supposed to be 
+retained on the display for immediate recognition. (2016: but other-
+wise are interchangeable as long as the name matched).
+
+3) DISPLAY:  The APRS display was supposed to be the concept of a 
+"virtual distributed information display" of which everyone was 
+looking at the same information.  They could zoom around and select 
+any subset of the information, but everyone is supposed to be seeing 
+the same "virtual information".  Be careful not to describe one's 
+own display as TRUTH.  It is just your view of the situation's 
+"virtual info".
+
+4) UPDATES:  SInce all "things" are in the same "virtual display 
+space" and the purpose of APRS in support of anything is to allow 
+for distributed participation and input to that "virtual display", 
+then, ANY participant in the event or local situation that has more 
+up-to-date info on a thing is supposed to update it and that UPDATE 
+is supposed to propagate to ALL participants looking at the same 
+"virtual display".
+
+5) OWNERSHIP:  Therefore, it was fundamental that the "ownership" of 
+each "thing" on the APRS display was part of that display and was 
+NOT hidden from view so that there is NEVER any question of who owns 
+it. STATION CALL, or OTHER's object or MY OBJECT.  This is very 
+important because at any time, someone else may take over an object 
+and the original owner has to be aware of this.  He can take it back, 
+or clients can even lock it in and not allow a takeover.
+
+I appreciate Steve's and other authors and sysops frustration at the 
+huge numbers of ways that users can perturbate callsigns and names 
+and that these sysops are then left with having to answer people as 
+to why WB4APR and wb4apr are two different things, but unfortunately, 
+this was intentional.  In some cases, people may want to put up 
+multiple objects (or opinions) of the same object.  In that case, we 
+gave them that ability by allowing them to mix case, use hyphens, 
+dots, and other ways to create a name with a similar meaning but that 
+would NOT update or replace an existing object (which had to match 
+exactly).  This allows for multiple inputs from multiple stations of 
+their information and then on the air for the participants to glean 
+from the multiple similar objets and decide which one is best.  Then 
+KILL the ones of no interest on the map.
+
+If the above clarifications of the spec still leave the existing 
+wording of the spec as ambiguous, I will go back and propose better 
+clarification wording.  I do agree with Steve that the leading 
+character of any NAME must be ALPHA-NUMERIC no matter what type of 
+packet is used to transmit it.
+
+I would welcome a UIview add-on that could underlay color circles 
+under each icon to show this ownership and age and other attributes.
+
+Hope that helps.
+
+Bob, WB4APR

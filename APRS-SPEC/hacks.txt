@@ -1,0 +1,125 @@
+RECOMMENDED APRS DIGI-PATHS                                 16 Sept 2003
+------------------------------------------------------------------------
+                                                                  WB4APR
+
+USERS MUST BE EDUCATED ABOUT PROPER USE OF APRS.  In the old days, this
+was easy.  There was one set of national recommendations that worked
+everywhere.  And it DID work, thought locals had to be careful to modify
+their paths if it caused local problems.
+
+Now, however, becasue of USER errors that abuse the network and even
+because of missunderstandings of the capabilities of APRS, some digi 
+sysops are making local hacks to try to correct what they perceive as the 
+quickest way to cut traffic, but at the expense of a piecemeal degradation 
+and fractionalization of 144.39 as a national system.
+
+This post is not targeted at anyone in particular, but the net sum of all 
+these little hacks is seriously threatening the integrity of APRS.  My 
+frustration is focused on all of us as a community.  We must FIX the user 
+problems so that the SYSOPS don't destroy the system with local self-
+protecting hacks that destroy the usability of the system for everyone.
+
+It seems every week I hear of another hack made to the system that further
+fractionalizes and destroys the commonality of the system.  Here were the
+original fundamental APRS recomendations:
+
+MOBILES:                    Use WIDE2-2  (or originally use RELAY,WIDE)
+GENERAL PATH EVERYWHERE:    Use WIDE2-2  (or originally use WIDE,WIDE)
+Multi-hops in sparse areas: WIDE3-3
+
+But no longer will any path work everywhere.
+These are the local HACKS THAT ARE DISINTEGRATING APRS as a NATIONAL system:
+----------------------------------------------------------------------------
+
+1) Some areas have disabled RELAY in all digipeaters.
+
+2) Many well placed users have not set their home station TNC's to the generic
+   alias of RELAY to help link-in mobiles passing by.
+
+3) Some areas have disabled WIDE in all digipeaters
+
+4) Some Older TNC's only support WIDE (a few, mostly east coast)
+
+5) Many digipeaters run with UIFLOOD set to ID which obliterates
+   PATH data and prevents WIDE,WIDEn-N from allowing the first digi
+   (entry point into APRS) to identify itself.
+
+6) Many IGates now use filtered feeds, that also filter out message traffic
+   unless directed to stations within a given "reported" range of that IGate.
+   Thus message traffic to a visitor in those areas will not be delivered  
+   unless that person transmits a valid local position report in that area.
+
+   (Many travlers with only a D7 in their shirt pocket, for example, do NOT 
+   (transmit valid local position reports for quite a while in a new area.
+   (Thus they cannot receive IGate messages through these IGates until they 
+   (hook up a GPS, AND are outdoors!  This poses a fundamental change to
+   (how IGates were designed to deliver message traffic.
+
+These short sighted local implementations are destroying APRS as a common
+real-time come-as-you are system for all..  Users can no longer travel
+anywhere in the North American Continent or the world for that matter and
+rely on any published recommendations as to what will work universally
+everwhere.
+
+Most of these local tweaks are just ill conceived quick-fixes for their
+own interests at the expense of maintaining commonality.  And most of
+these tweaks are being made because it is easier to make simple Draconian
+hacks than to solve the USER errors at the USER.  Or in 2004, we all agree
+to implement the New n-N Paradigm and let the SYSOPS take control and do
+it right to force the users into proper operations.
+
+INSTEAD OF HACKING UP A GOOD SYSTEM, WE MUST EDUCATE USERS AND GIVE ACTIVE
+FEEDBACK TO USERS AS TO WHAT IS NOT GOOD PRACTICE:
+--------------------------------------------------------------------------
+
+Here are features included in APRSdos to protect the network from errors
+by users.  Many follow-on APRS clients failed to include these fundamental
+aspects of APRS.  Number 2 is the most important in my mind:
+
+1) Decaying retry algorithm.  All APRS clients should decay old data to 
+longer and longer periods.  New data is refreshed immediately and the 
+packet period doubles after each retransmission down to the slowest 30 
+minute rate.  But new data gets there fast.  Old data decays into the 
+background.  Thus there is no user setting to screw up.  It works for 
+immediate events and it works for 24/7 benign operations as is.
+
+2) Client software should feedback to users a reminder of any inconsiderate 
+paths they might be using.  THat is, they should be warned everytime an 
+incorrect or inconsiderate path is used.  (THey should still be allowed to 
+use it, but the warning should interrupt their work ON EVERY TRANSMISSION
+until they are finished using it, or realize how bad it is.  In other words,
+there must be a "cost" to the user that is proportional to his missuse of
+the network assets.  APRSdos overwrites the users MAP screen with a big red 
+warning EVERYTIME a packet is transmitted with an inconsiderate path.  THus 
+the user can use it if he needs to, but it is impossible for him to forget 
+to change it back when he is finished or he learns how bad it is.
+
+3) APRS software should automatically adjust the NET-CYCLE time based on 
+the number of hops in the users path.  LOCAL or 1 hop packets use a net 
+cycle time of 10 minutes.  Longer paths default to the regional rate of 
+once every 30 minutes.   Again, no user settings to screw up.  Of course
+the decay algorithm is still needed to get the first several retries in 
+the first minute when the packet is new.
+
+4) APRSdos automatically filters out incoming distant packets based on the
+length of the path.  This is dynamic and it tries to keep the screen with
+only the nearest 100 to 250 uers depending on whether you are running APRSdos
+or APRSmax...  This keeps the map focused only on what the local network
+can possibly support (remember, the actual number is on the order of 40
+or so, so anything beyond that range is not reliably part of your local
+net anyway!)
+
+5) APRSdos included a README directory that covered EVERY aspect of the
+OPERATIONAL use of APRS.  Each file name represented the TOPIC.  Such as
+DIGIS.TXT.  OPS.TXT, MOBILES.TXT and so forth.  Most newcomers to
+APRS have never read these files...
+
+In summary, CLIENT SOFTWARE must help guide and educate users to proper use.
+
+ALSO, there is a new N-n Paradigm that proposes many new and better ways
+to use WIDEn-N, LANn-N, LINKn-N and other multi-hop paths without flooding
+entire areas.  WIDE2-2 should work everywhere!
+
+See the links on the http://www.ew.usna.edu/~bruninga/aprs/fix14439.html
+
+de WB4APR@amsat.org, Bob

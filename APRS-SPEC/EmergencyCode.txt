@@ -1,0 +1,100 @@
+EMERGENCY CODES for APRS                                      13 Feb 07
+-----------------------------------------------------------------------
+
+The Mic-E format used by many devices including the Kenwood TH-D7 and
+TM-D700 radios have the provision for sending 3 status bits with these
+meanings in each position report:
+
+ EMERGENCY
+ PRIORITY
+ SPECIAL
+ COMMITTED
+ RETURNING
+ INSERVICE
+ ENROUTE
+ OFF-DUTY
+
+In the original APRS, these bits were to trigger these on-receipt-
+responses:
+
+ SPECIAL  - would CENTER the map on the symbol
+ PRIORITY - would CENTER and ZOOM to 8 mile local range scale
+ EMERGENCY- CENTER and ZOOM and ALARM beeps until cleared by operator.
+
+And also the color attribute for the SYMBOL for these stations would
+be shown in these colors:
+
+ SPECIAL  - Yellow
+ PRIORITY - Orange
+ EMERGENCY- Red
+
+There has long been a proposal that other software should be able to
+send these same status bits.  But, since the bits are specially
+encoded inside the unique Mic-E format, they are not available to 
+other applications that do not use the Mic-E format.
+
+Hence, it has been proposed that the following special strings can
+be interpreted like the original Mic-E bits.  They are bracketed
+by exclamation points (!) to set them out from normal text and the
+are expected to be the first bytes of the free-field comment field
+of any station.   The first bytes of the comment field of any
+POSITION packet or OBJECT packet are located in the same place and
+if PHG data is in the same packet, then these special designators
+follow the PHG data.
+
+ !TESTALARM!
+ !EMERGENCY!
+ !PRIORITY!
+ !SPECIAL!
+ !COMMITTED!
+ !RETURNING!
+ !INSERVICE!
+ !ENROUTE!
+ !OFF-DUTY!
+
+Notice that an additional !TESTALARM! function has been added
+that is supposed to trigger the same circuits and algorithms on
+receipt as a real !EMERGENCY! field, except that it is CLEARLY
+supposed to convey it is a TEST.
+
+An Additional Proposal (has already been implemented in APRS+SA and
+XASTIR), is the recognition of these additional CENTER and ZOOM 
+triggers (but without the surrounding "!" bytes:
+
+ !ALARM!
+ !ALERT!
+ !WARNING!
+ !WXALARM!
+ !EM!
+
+And I would suggest that we add an additional level of on-receipt-
+responses is called FLASH for these new not-quite emergencies.  This 
+function is one step under the EMERGENCY BEEPING, and adds an 
+unmistakeable SILENT FLASH  of "something" that an attendant operator 
+cannot miss.
+
+EXAMPLES:
+
+!DDMM.hhN/DDDMM.hhW$!PRIORITY! Special Event in progress
+!DDMM.hhN/DDDMM.hhW$PHG3530!PRIORITY! Special Event in progress
+
+;OBJCTNAME*DDHHMMzDDMM.hhN/DDDMM.hhW$!PRIORITY! Special Event...
+;OBJCTNAME*DDHHMMzDDMM.hhN/DDDMM.hhW$PHG3530!PRIORITY! Special...
+
+This proposal is fully backwards compatible with all existing systems
+in that the free-field bytes are used.  Hence they will at least
+display on all known existent systems.  
+
+However, since this is an APRS1.2 Addendum Proposal, there is no 
+expectation of any functional backward compatibility or guaranteed 
+response to these special coded fields in any prior software.
+
+Hence use of this proposed feature should only be expected on pre-
+tested end-to-end future systems.
+
+
+Bob, WB4APR
+
+
+
+

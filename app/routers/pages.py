@@ -743,8 +743,7 @@ def bulletins_create(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     record_id: int | None = Form(None),
-    message_kind: str = Form("message"),
-    addressee: str = Form(""),
+    message_kind: str = Form("bulletin"),
     bulletin_code: str = Form(""),
     group_name: str = Form(""),
     interval_minutes: str = Form("30"),
@@ -754,7 +753,6 @@ def bulletins_create(
     templates = request.app.state.templates
     payload = {
         "message_kind": message_kind.strip(),
-        "addressee": addressee.strip(),
         "bulletin_code": bulletin_code.strip(),
         "group_name": group_name.strip(),
         "interval_minutes": interval_minutes.strip(),

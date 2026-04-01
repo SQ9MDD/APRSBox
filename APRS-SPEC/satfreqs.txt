@@ -1,0 +1,24 @@
+
+SAT  CALL     UPLINK                 DONWLINK             MODE              EL
+---- -------  ---------------------  -------------------  ----------------  --
+APRS pseudo   144.39            FM   144.39          FM   Terrestrial fake   0
+AO10          435.03 -435.18    LSB  145.975-145.825 USB  Mode B Analog      5
+MIR_          145.985           FM   145.985         FM   if ever            5
+ISS_          144.49            FM   145.800         FM   when avail         5
+RS13          145.96 -145.99    LSB   29.460- 29.50  USB  Mode A Analog      5
+RS15          145.858-145.898   LSB   29.380 center  USB  Mode A Analog      5
+AO16 PACSAT-1 145.90,92,94,96   Man  437.051         USB  PSK 1200           5
+LO19 LUSAT-1  145.84,86,88,90   Man  437.126         USB  PSK 1200           5
+IO26 ITMSAT-1 145.875,90,925,95 Man  435.822         USB  PSK 1200           5
+FO20          145.900-145.600   LSB  435.800-435.900 USB  Mode JA Analog     5
+FO29          145.900-145.600   LSB  435.800-435.900 USB  Mode JA Analog     5
+FO29          145.85,87,91      FSK  435.910         FSK  9600 bd mode JD    5
+UO22 UOSAT5   145.900           FSK  435.120         FSK  9600 Bd PACSAT    10
+KO23 HL01     145.900, 85       FSK  435.171         FSK  9600 Bd PACSAT    10
+KO25 HL02     145.980           FSK  436.502         FSK  9600 Bd PACSAT    10
+TO31 TMSAT1   145.925           FSK  436.925         FSK  9600 Bd PACSAT    10
+AO27          145.85            FM   436.798         FM   Voice days only    5
+UO14          145.975           FM   435.070         FM   Voice              5
+SV35          436.291           FM   145.825         FM   Voice              2
+SO35          145.825           FSK  436.250         FSK  9600 Baud          2
+

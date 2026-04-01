@@ -1,0 +1,111 @@
+APRS OPERATOR-PRESENT BIT                           16 Jan 2013
+---------------------------------------------------------------
+
+16 Jan 2013:  A proposal in Dec 2012 proposed an Operator 
+Bit by using one of the AX.25 RR bits in the SOURCE callsign 
+field.  See RR-bit.txt.  But there were many objections to
+mucking down in the AX.25 layer.
+
+17 Sept 2007:
+
+Due to too many lights-out-nobody-home stations on the air, 
+APRS has a bit in the APRS position packet that indicates if a 
+live human operator is present.
+
+This was added around 2002 or so in APRS addendum 1.2.  
+
+Here is how it was implemented in APRSdos for example.   If the 
+PC detects any activity at the keyboard or mouse, then the 
+station symbol overlay character is changed to an "O" and then
+a station posit is sent, and the usual decay algorithm is reset 
+to 10 minutes for the next posit.  Thus, operator presence is 
+immediately updated.
+
+When no additional operator actions are detected, then the
+operator Overlay is canceled and the normal doubling of the decay 
+rate resumes.  Within a half hour, it is back to the minimum 
+30 minute rate.
+
+EXAMPLE:  In APRSdos, Operator Present stations are indicated 
+on the map with bright white SYMBOLS and all non-operator present 
+or non-message capable symbols are shown in gray or the other 
+8 attribute colors depending on their other attributes (moving, 
+fixed, dead rekoned, decayed, old, 
+object, etc)...
+
+This bit was initially suggested as the case of the N/S byte 
+in the Latitude.  If the N/S character was UPPERCASE, then 
+there is an operator present.  If it is lower case, then 
+no operator is present.  This was backward compatible with 
+all software for attended stations, since attended stations 
+would all show normally.
+
+UIVIEW INCOMPATIBILITY:  The problem is that UIview not just
+ignores these lower case N/S indicators, but ignores the packets
+entirely. Thus, attended stations would disappear from UIview maps.
+
+NEW OPERATOR OVERLAY CHARACTER (in 2007):
+
+In response, the N/S bit was abandoned and in its place,
+the use of the "O" overlay character was  proposed as the
+Operator Present bit in any APRS position report.  ALthough
+most client software will not immediately display the "O"
+overlay, at least they will receive the original symbol without
+any problem.
+
+Later then, new clients can implement the switching of this bit
+and also the selection and display of the status of this bit.
+
+Kenwood, in the new D710 radio, has already implemented the
+display of the Overlay on ANY symbol, so HOUSE Icons using this
+bit should show up well.
+
+IMPLEMENTATION:
+
+Here are the receommended operating details of this Operator
+Present Feature:
+
+1)  If user activity is deteced by the keyboard or mouse, and 
+this feature is enabled, then the OPERATOR-PRESENT BIT is set.
+
+2)  If no activity has been detected in over 30 minutes, then
+the bit is cleard back to not-present.
+
+ACTION:
+
+If the OPERATOR PRESENT BIT transitions from off-to-ON, then
+the present OVERLAY character is saved, and it is replaced with
+an "O" and a position packet is sent immediately.  The timing 
+schedule or decay for the next such beacon is set to 10 minutes.
+
+If the OPERATOR PRESENT BIT transitions from ON-to-OFF, then
+the "O" overlay is replaced with the previously saved OVERLAY 
+character.  The position timing is allowed to decay back to 
+the normal 30 minutes default for fixed stations.
+
+DISPLAY OPTIONS:
+
+The prsence of an Operator at a station can be displayed in a
+special way so that it is obvious that an operator is present.
+In APRSdos, these station symbols are displayed in bright white.
+Stations that do not have operators present or are not message
+capable are displayed in light gray.  Other clients can find
+other ways of display.  I recommend a small surrounding color
+around the symbol.  See http://www.ew.usna.edu/~bruninga/aprs/
+symbols.html
+
+FILTERING/SELECTION:
+
+A good use of this bit is for eliminating map clutter.  THe
+client software should have a button for "Display ONLY ACTIVE
+stations".  The only packets that should remain on the map are:
+
+1) Operator Present stations ("O" overlays")
+2) Mobiles in motion
+3) All Mic-E's that are message capable (Kenwoods).
+
+This allows for quickly checking the status of your human
+operators in an APRS on-air-event.
+
+Bob, WB4APR
+

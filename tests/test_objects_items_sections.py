@@ -292,7 +292,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
 
 
 class BulletinAndMessageFormTests(unittest.TestCase):
-    def test_message_row_contains_target_and_raw_frame_preview(self) -> None:
+    def test_announcement_row_contains_target_and_raw_frame_preview(self) -> None:
         with temporary_database():
             update_station_settings(
                 {
@@ -313,9 +313,8 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             success, error = safe_create_section_row(
                 "bulletins",
                 {
-                    "message_kind": "message",
-                    "addressee": "sp8abc-1",
-                    "bulletin_code": "",
+                    "message_kind": "announcement",
+                    "bulletin_code": "A",
                     "group_name": "",
                     "interval_minutes": "15",
                     "is_enabled": "1",
@@ -329,10 +328,10 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             assert row is not None
             decorated = get_section_row("bulletins", int(row["id"]))
             assert decorated is not None
-            self.assertEqual(decorated["target_display"], "SP8ABC-1")
+            self.assertEqual(decorated["target_display"], "BLNA")
             self.assertEqual(
                 decorated["raw_frame_preview"],
-                "SQ9XYZ-9>APRS::SP8ABC-1 :Net starts at 19:30 UTC",
+                "SQ9XYZ-9>APRS::BLNA     :Net starts at 19:30 UTC",
             )
 
     def test_group_bulletin_preview_uses_bln_addressee(self) -> None:
@@ -377,13 +376,13 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                 "SQ9XYZ>APRS::BLN1WX   :Wind 15 km/h",
             )
 
-    def test_message_text_longer_than_sixty_seven_characters_is_rejected(self) -> None:
+    def test_bulletin_text_longer_than_sixty_seven_characters_is_rejected(self) -> None:
         with temporary_database():
             success, error = safe_create_section_row(
                 "bulletins",
                 {
-                    "message_kind": "message",
-                    "addressee": "SQ9XYZ-9",
+                    "message_kind": "bulletin",
+                    "bulletin_code": "1",
                     "interval_minutes": "30",
                     "message_text": "X" * 68,
                 },
@@ -391,13 +390,13 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertEqual(error, "Message text must be 67 ASCII characters or fewer.")
 
-    def test_message_text_rejects_non_ascii_characters(self) -> None:
+    def test_bulletin_text_rejects_non_ascii_characters(self) -> None:
         with temporary_database():
             success, error = safe_create_section_row(
                 "bulletins",
                 {
-                    "message_kind": "message",
-                    "addressee": "SQ9XYZ-9",
+                    "message_kind": "bulletin",
+                    "bulletin_code": "1",
                     "interval_minutes": "30",
                     "message_text": "Zażółć",
                 },
@@ -405,7 +404,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertEqual(error, "Message text may contain only APRS-safe printable ASCII characters.")
 
-    def test_bulletins_template_includes_counter_and_menu_is_not_struck(self) -> None:
+    def test_bulletins_template_includes_counter_and_menu_label(self) -> None:
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         self.assertIn('id="bulletins-message-count"', template_source)
         self.assertIn('id="bulletins-message-error"', template_source)
@@ -413,6 +412,8 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("['digi', 'igate']", base_source)
         self.assertNotIn("['digi', 'igate', 'bulletins']", base_source)
+        helpers_source = Path("app/template_helpers.py").read_text(encoding="utf-8")
+        self.assertIn("Bulletins / Announcements", helpers_source)
 
 
 if __name__ == "__main__":

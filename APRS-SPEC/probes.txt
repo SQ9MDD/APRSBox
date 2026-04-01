@@ -1,0 +1,98 @@
+APRS NETWORK PERFORMANCE MEASUREMENT  (PHGR)                 26 Feb 2003
+------------------------------------------------------------------------
+                                                                  WB4APR
+The HOLY Grail of APRS network performance!
+ 
+Due to collisions and the abilty of strong nearby stations to always win
+a collision, general statistics cannot measure the performance of an
+APRS network.  The ONLY way to measure the reliability of an APRS channel 
+is the sucess rate of the "typical intended user" in the "intended area
+of interest".  This cannot be measured by channel statistics because the 
+stronger stations will always get through no matter how bad the channel 
+(at the expense of  the lower power or more distant station)...
+ 
+So, the BEST measure of packet performance is simply measuring the 
+statistical performance of a "probe" packet that is transmitted from 
+"the indended user class station" on the edge of the "intended user 
+coverage area"...  If he gets in X% of the time, then your network is 
+operating at X% reliability in that area!
+ 
+Now, I would not suggest adding MORE packets just for the sake of
+measuring probes, but remember, ANY station can be a probe, as long as we
+know how often it is scheduled to transmit (and it is representative of
+the type of station you want to asses coverage for)!  All we have to do 
+is compare its success with its intended rate!
+ 
+So what I propose for use in "these measurement situations" is a SINGLE 
+additional byte to the PHG construct to show how often the PHG packet 
+is transmitted.  Knowing how often a "probe" packet is transmitted from 
+one location, and comparing that to how often it is received somewhere 
+else can tell you everything about APRS network reliability.  Imagine 
+a CONTOUR map showing contours of reliability in your area (derived in 
+real time!).
+
+The single byte is simply a character 1 to 9 or A to Z added onto the 
+end of the PHG string which indicates PHG packets-per-hour transmitted.  
+To show that this is an addition to the PHG string, a trailing "/" is 
+used as a separator to any other text that follows.
+
+Then software can watch these PHGR probes and COUNT statistics and derive 
+REASONABLE reliabilty figures, plots and statistics!
+ 
+By adding it to PHG, it is 100% backwards compatible to existing
+parsing of PHG data...  To give it a name, instead of "PROBES" we simply
+call it the "PHGR" data...  Here is the FORMAL SPEC for PHGR:
+
+  PHG is (and remains)  "PHGabcd........"
+ 
+  PHGR is  "PHGabcdr/......
+ 
+  Where a,b,c,d are as defined in the APRS spec.
+  Where r is the integer rate of PHGR packets XMTD in packets per hour
+          expressed as a single byte 1-9 and A-Z (A is 10 for example).
+ 
+And we add a specific "/" separator between the PHGR and any following
+text to help flag this as the new PHGR format.  All existing software on
+receive should still receive the "PHGabcd" with no impact, since no
+following character was ever specified..   And since the only field that
+follows a PHG is a variable length free-text comment field (except DF),
+the addition of the "/" on the front of that field does not disrupt
+understanding of the comment field.
+
+On transmit, most client applications transmit either a "/" or a SPACE 
+as a separator before any free text that follows anyway, and these 
+delimiters are ignored as leading delimiters in the free field
+comment text, so in this case, we are just forcing that now to be a "/"
+to add reliability in recognizing the new PHGR digit.
+ 
+EXCEPTIONS:  
+
+1) If a PHGR packet is sent out of its normal schedule (for
+example, in response to a QUERY), then the "R" byte is stuffed with a
+"0" to show that it is an unscheduled PHGR packet and should not be used
+in Statistical analysis of packets transmtted and received unless both
+counts are both incremented by one, depending on the choice of the
+analyzing software.  Or an OLD PHG format may be sent.
+
+2) It is very important that EVEYONE understand the purpose of PHGR is
+for measuring network reliability from a "typical intended user" at 
+a "particular location in an intended area of coverage" and that by that 
+definition, only fixed stations are suitable and obviously should not 
+be applied to non typical user stations such as:
+
+   * Wide area Digipeaters (we can all hear them anyway...)
+   * Digipeaters or any station with variable rates and paths
+   * Moving stations,
+   * any stations beaconing more often than once every 6 minutes
+   * any stations beaconing less often that once every hour
+   * any DF station sending a DF report
+
+3) If you want to measure a mobile over an area, then you dont need PHGR!
+Simply set a fixed rate, drive around, and then count your own hits.
+
+Did I miss something or is this the no cost holy grail of measuring
+network performance?  Wow, I'd love to see the kind of analysis and
+display software that could use this info...  Especially reliability 
+coutours drawn on maps!
+ 
+Bob, WB4APR

@@ -1,0 +1,713 @@
+DF.TXT            USING APRS FOR DIRECTION FINDING
+===========================================================================
+Document version: 8.4.3         15 Jul 1999
+Updated 1 Oct 2007
+
+The DF on-air format is found in PROTOCOL.TXT
+
+OVERVIEW:  APRS NOT ONLY PLOTS BEAM HEADINGS (Both Manual and DOPPLER)
+BUT IT ALSO HAS TWO METHODS FOR TRANSMITTER LOCATION USING ONLY OMNI
+DIRECTIONAL SIGNAL STRENGTH CONTOURS!  Since ANYONE can use the OMNI
+techniques, they are presented first, followed by the classical BEAM
+heading triangulation, followed by details of the automatic serial
+interfaces to the Doppler equipment.
+
+The first omni technique displays overlaping signal strength contours 
+on the map based on signal reports from MULTIPLE reporting stations. 
+This method is fully capable of localizing a signal or a jammer just 
+by plotting voice reports from anyone monitoring the jammer.  The 
+second omni technique calculates lines of bearing based on a SINGLE 
+moving omni station (Aircraft or vehicle) plotting three or more FADE 
+points on his map.  This is for single person operations.
+
+
+OMNI-DIRECTION FINDING:
+
+APRS improves ham radio's ability to localize a signal by 3 orders of
+magnitude by simply using its graphical display to plot signal 
+strength contours.  THIS PERMITS STATIONS WITH ONLY OMNI ANTENNAS TO 
+PARTICIPATE AND PROVIDE VALUABLE INFO!  This is possible since APRS 
+has a line-of-sight Power-Height-Gain (PHG) reporting and display 
+format which it can use to draw range contours around each station 
+relative to his communication range.  For stations not reporting the 
+PHG format they can be entered as objects by any other APRS station.
+
+The reason we claim 3 order magnitude improvement in capability is:
+1) 100% of everyone can participate, not just those with DF equipment
+2) Most, will hear nothing, but that ELIMINATES MOST AREAS on the map!
+3) Even short signals are good data, since only the EAR has to hear it.
+
+APRS plots a map of range contour around all stations.  Where two 
+circles intersect or overlap, direct communications are possible.  
+This PHG plot is an ideal tool for setting up ANY radio network 
+WHETHER OR NOT APRS or PACKET is being used!
+
+DFING WITH OMNI SIGNAL STRENGTH REPORTS:  By modifying these PHG 
+equations for plotting received signal strengths, a weak signal is 
+drawn as a larger area of probability than a stronger smaller circle.   
+DF signal reports use the scale of S0 to S9 for signal strength 
+indication.  These signal strength numbers are plotted as circles 
+from a dark gray up to a bright red, with the radius of the circle 
+decreasing with stronger signals.  A signal strength of 0 represents 
+NOTHING HEARD and is plotted last as dark gray on top of everything 
+else.  These areas clearly show where the transmitting station is 
+NOT.  And they narrow then the indications of other omni stations 
+that have heard the signal.
+
+Since the PC can only overlap circles, the user should visualize all
+the overlapping colors at the intersections of their peremeters and not 
+be misslead by the centers or the brightest ones on top.  The probable
+location of the transmiter will be in the area of the most concentrated
+perimeters of heard contours (if it is a small or weak signal).   But
+remember if the signal has a significant PHG circle of it's own, then
+the Signal Contour data must be interpreted as where it probably intersects
+the PHG circle of the signal or jammer.  The location of the signal will 
+never be  at the center of a DF signal circle.  THE LOCATION OF THE HIDDEN 
+TRANSMITTER IS AT THE CENTER OF HIS IMAGINARY PHG CIRCLE WHERE THE PERIMETER
+OF HIS PHG CIRCLE INTERSECTS THE PERIMETER OF THE OTHER DF SIGNAL CIRCLES.  
+If it was near the center of someones DF report, then that station would 
+have reported a stronger signal, and the circle would be brighter
+and smaller!  Load the DF-OMNI.BK file to see our first omni-df attempt
+and see the section below about what you will see in that file.
+
+
+OMNI-DF COMMAND SUMMARY:  The following list sumarizes all of the commands
+used in performing direction finding both OMNI and with BEAMS.  Please note
+that stations with BEAMS should NOT input OMNI signal strength readings,
+since their gain will upset the consistency of the OMNI plots.  Beam stations
+should always enter their BEAM HEADINGS.
+
+
+INPUT-DF - Enter either a beam heading or a signal report.  Enter "0" for
+      an OMNI signal strength report.   (360 means North, not 0.)
+
+INPUT-ADDobj - Add voice DF reports to the map.  Select the DF station 
+      symbol and you will be prompted for the BeamHeading or "0" for OMNI.
+
+INPUT-MY-HEADING - The heading of your vehicle since GPS data is useless
+      when you are stopped.
+
+INPUT-PwrHtGain - Not necessarily used for DF, but shows your radio range.
+
+INPUT-SAVEpos - Used by mobiles to mark the map with your current posit
+      and DF bearing as an object so that the fix remains on the map for
+      future reference.
+
+INPUT-UPLINKpos - Same as SAVE, but the FIX object is marked for uplinking.
+
+MAPS-PLOT-DF-OMNI - This command is used to plot the OMNI-DF profiles.
+
+MAPS-PLOT-HEARD - Plots only stations that have HEARD the fox.
+                  (for monochrome displays)
+
+MAPS-PLOT-NOTheard - Plots only stations that have NOT HEARD the fox.
+                  (for monichrome screens)
+
+MAPS-PLOT-PwrHtGain - Plots Power-Height-Gain range rings around all stns.
+
+MAPS-PLOT-RngRngs - Plots range/Bearing to the cursor.
+
+
+OMNI-DF EXAMPLE:  The file DF-OMNI.BK is a snapshot of my first Omni-DF  
+attempt on a Sunday afternoon foxhunt.  I simply called around on various
+2m repeaters in the area and asked stations to listen for the fox.  It
+turns out that all but one other report were from mobiles.  I added these
+stations to the map using the INPUT-ADD command.  To see the result, do a
+FILES-LOAD of DF-OMNI.BK and hit the MAPS-PLOTS-DF command.
+
+   First, notice that APRS blacks out the areas where the fox is NOT
+based on the null reports.  You will always get far more NULL reports
+than HEARD reports.  These are very VALUABLE!!!  because there are more
+of them and they instantly eliminate most of the surrounding area!  With
+these first 6 null reports, I knew instantly that the fox was not to the
+west, south, or east of Baltimore.  It took the mobile fox-hunters 
+another 45 minutes to figure this out!
+  
+    Second, notice the offset circle of KA3DZZ.  This is because he 
+reported that he was west of a ridge and didn't hear as well to the 
+east.  The most interesting report was from W3PWF who said it was a very
+strong signal and he was much further than either of the nearby mobiles that
+reported weak signals.  ALthough he was in his driveway, he had almost 200
+feet of height above average terain, but could not quantify it at the time.
+This points out how tricky it will be to use the OMNI-DF plots.  Do NOT
+rely on any one report.  You must visually take it all in.  His report is
+correct, and although he has a large horizon, APRS draws his pink circle
+smaller to show that the FOX could be closer to him.  Remember to look at 
+the edge of his circle, not the center.
+
+        APRS draws the NOT-HEARD or Black "0" plots last since they are
+POSITIVE report that the FOX is NOT within their range. 
+
+YOU MUST REMEMBER TO LOOK AT THE EDGES OF ALL CIRCLES, NOT THE CENTERS!
+THE SIGNAL HAS IT'S OWN PHG CIRCLE WHICH YOU MUST IMAGINE WHERE IT
+INTERSECTS WITH THE EDGES OF MOST DF CONTOUR REPORTS.
+
+     This was just my first test, and unplanned.  Notice that with all of
+the stations that we rounded up, only 4 of 13 even heard the FOX at all.
+For serious work, each station reporting should have a very good idea of
+his Height above average terrain and general geographic horizon.  If each
+of those stations was also watching the APRS plots unfold, they could have
+modified their reports to be more meaningful!
+
+
+RECOMMENDED OMNI-DF PROCEDURE:  When the APRS net is alerted to a FOX
+or hidden transmitter, each APRS station should listen on the reported
+frequency and enter his signal strength.  Next each APRS operator
+should go onto the local voice repeaters and ask for OMNI-SIGNAL strengths
+from any other fixed or mobile stations.  The APRS operators use the INPUT-
+ADD command to add these stations to the map.  NEGATIVE reports are VERY
+valuable too!  By having one APRS operator listening on EACH local voice
+repeater, and soliciting reports, the maximum number of reports can be
+gathered with a minimum amount of chatter.  Be sure to get the station's
+reported signal strength, location, Antenna height-ABOVE-AVERAGE-
+TERRAIN (not sea level or above ground) and any offset in his horizon.  It
+is amazing how many people do NOT understand ANTENNA HEIGHT.  Be  conser-
+vative.  Use the following scale:
+
+   0   No signal detected what-so-ever
+   1   Detectible signal (Maybe)
+   2   Detectible signal (certain but not copyable)
+   3   Weak signal marginally readable
+   4   Noisy but copyable
+   5   Some noise but easy to copy
+   6   Good signal with detectible noise
+   7   Near Full-quieting signal
+   8   Dead Full-quieting signal no noise detectible
+   9   Extremely strong signal "pins the meter"
+
+Remember, stations DO NOT NEED TO BE APRS stations to participate!
+Any voice report can be entered on the map by any other APRS station using
+the INPUT-ADD command and selecting the DF symbol type.  For more
+information on the Power-Height-Gain formats, see the DIGIs.txt and
+PROTOCOL.txt files.
+
+PLOTTING DETAILS FOR OMNI-DF CIRCELS;  I used the radio horizon forumla
+for the radius of the circles, modified by the signal strength value. 
+Here is the equation for the four DFSshgd or PHGphgd characters.
+
+   P = 10 / s        For Power plots, P = p;  For DFS, P is INVERSLY
+                     proportional to signal strength s.
+   H = 10 * 2 ^ h    Convert character to power in Watts
+   G = 10 ^ (g / 10) Convert from dB
+   D = 45 * VAL(d)   Convert to degrees.  If D is not zero, then the circle
+                     is offset in the indicated direction by 1/3rd radius
+  
+   R = SQR(2 * H * SQR((P / 10) * (G / 2)))   range modified by adding
+                     SQR(P/10 *G/2) to make it unity at 10 watts and 3 dB
+    
+   R = R * .85  Present fudge factor
+
+
+EQUAL FADE CIRCLE TECHNIQUE FOR MOBILE OMNI DFING:
+
+     This method has been used for years by Airborne search and rescue teams
+to locate downed aircraft based on the location of points where the signal is
+just detectable.  The advantage of this technique is that NO BEARING info
+and NO SIGNAL STRENGTH info is required.  The key factor, is that ALL points
+where the signal fades to zero are located on the edge of a large circle with
+the hidden transmitter at the center.  By simply flying (driving) through the
+area of the hidden transmitter and plotting at least three points where the
+signal fades out, you can identify the circle and therefore the location of
+the transmitter.  For aircraft searches, this technique can be repeated at
+lower and lower altitudes to repeatedly reduce the size of the circle and
+therefore increase the accuracy.  For ground based searches, an attenuator
+or tighter squelch can be used to reduce the size of the circle for successive
+runs.
+
+     The only assumption in this process, is that the radiation pattern
+from the transmitter is relatively omnidirectional.  See the following
+figure to see how the data is plotted.  Between each pair of fade points, 
+a line is computed and then a line of bearing is drawn perpendicular
+between the two points.  The intersection of these lines-of-bearing give the
+location of the transmitter.  The sketch below is symetrical due to the
+limitations of the angle of the slash characters used in drawing it, but the
+technique does work no matter where the flight paths intersect the circle!
+
+  Entry               .   .   .  Fade Circle
+Flight path      .                 .
+        \     .                    *  .
+          \ .       *           *       .  / Exit flight path
+          A.\          *     *          D/
+           .  \           T            / .
+           .    \      *     *       /   .
+            .     \ *           *  /    .
+              .  *  \            / *  .
+              *  .    \        /    . *
+           *          . \ . C/.          * Perpendicular
+                        B \/               lines of bearing
+                         /  \
+                        |    |
+                         \__/ oops, nothing heard,
+                              turn the other way!
+
+    APRS implements this algorithm.  No matter what pattern you drive
+(or fly), simply drive until you first aquire the signal and hit the F5 
+key.  Then continue driving in the same general direction until you just
+lose the signal.  At this point hit F5 again.  APRS will then compute a 
+line of bearing midway and perpendicular to those two points.  This line 
+of bearing is represented by the asterixed lines above.  Turn and choose 
+a new direction to drive until you re-aquire the signal and do the same 
+process again.  Hit F5 on aquisition and hit F5 again when the signal 
+fades.  When APRS plots this second line of bearing,  you will have two 
+intersecting lines of bearing that roughly indicate the location of the 
+transmitter.  Drive to that indicated point and insert enough attenuation 
+in your antenna to make the signal weak enough to do the whole process 
+again but with a much smaller FADE circle.  This added attenuation is 
+similar to aircraft reducing altitude to reduce the fade circle for each 
+additional run.
+
+    Note that each time you press the F5 key to mark a fade point on the map,
+APRS asks you if this is a NEW CONFIGURATION or not.  This is important,
+because APRS should use only the points made by the same station and in the
+same configuration for each plot.  To keep track of these, APRS labels each
+new fade point with your callsign suffix in parentheses and then a letter
+for the given configuration and then a sequential number.  Whenever the
+MAPS-PLOTS-FADE commmand is given, APRS only computes bisectors and bearing
+lines from each group of points from the same station, and from the same
+configuration group (letter).  So, for any given configuration (antenna and
+attenuation combination) just hit return at the configuration prompt.  When
+either the antenna or attenuation are changed, then answer Yes for the first
+point in the new configuration.
+
+NUMBER OF POINTS:  You need three points before APRS can compute and display
+the 3 intersecting lines.  Four points will generate SIX lines and the
+map will be quite messy.  Five points will genereate TWELVE lines and it
+will be impossible to make ANY sense out of the mess.  You are best off
+limiting to THREE Fade points.  Then go to the probable area, reduce
+antenna gain by 30 db and do it again with a NEW configuration...
+
+TIP!  To reduce map clutter, after each 3 line fix, put an object on the
+map to remember that point and DELETE the fade-points involved in that
+fix.  Then do it again with more attenuation.  This way there will not 
+be so many lines on the map...
+
+NOTE!   It is very important to understand that this is just a technique.
+The operator MUST have experience in DFing and must thoroughly appreciate
+the vagaries of propogation and antenna height-gain.  Just pressing F5 does
+NOT find the FOX!  Give me a violin and it will NOT make music!  Garbage in
+implies garbage out! ETC.  What I am saying, is to make sure that each time
+you are ready to mark a new fade point, consider the average terrain and be
+sure you are in a comparable propogation position.  Obviously, if you have
+some kind of S-meter, you do NOT have to drive all the way to a fade
+condition, but just to a measureable and repeatable signal strength level.
+As long as you press F5 at multiple points of equal signal strength, the
+fade technique will work.
+
+
+FURTHER DETAILS:  When you press the F5 key for manual reports, APRS creates
+a Fade marker at the location of the cursor.  If you are GPS equipped, you
+can instantly move the cursor to your current location by simply pressing
+the Go key.  For each press of F5, a new fade spot is created.  Once APRS
+has two or more of these locations, it can plot the lines of bearing.  Use
+the MAPS-PLOT-FADE command to display the plot of all of the lines of
+bearing.
+
+
+PLEASE NOTE!  The difference between this technique and the OMNI-DF function
+in APRS, is that the FADE technique takes advantage of a SINGLE MOBILE
+to locate the edge of the FADE circle.  FIXED stations can NOT provide ANY
+useful information for the FADE circle technique because their stations
+are not identical and its a one in a million chance that their fixed 
+location is on the fade circle anyway.  In summary, the FADE circle is 
+for single mobile OMNI fox hunters using the SAME station at MULTIPLE 
+locations, wheras the OMNI-DF capability plots signal strength contours 
+for MULTIPLE NON comparable stations.
+
+
+*****************************************************************************
+
+
+CLASSICAL APRS DIRECTION FINDING WITH BEAM HEADINGS AND/OR DOPPLER DF UNITS
+
+
+     APRS is an excellent tool for instantly plotting and diseminating DF
+bearing information using a variety of techniques:
+
+     MANUAL APRS    - Any APRS station simply selects the INPUT-DF command
+                      and enters his beam heading
+
+     MANUAL OTHER   - Any APRS station can take voice reports from other
+                      stations, and place them as DF reporting OBJECTS on
+                      his APRS map
+
+     AUTODF UNITS   - Connecting a second COM port to the serial output
+                      of these units:
+
+                      Doppler Systems Inc  (300 baud)
+                      N7LUE interface  (2400 baud)
+                      KA4IIA Doppler unit (4800 baud)
+                      Agrelo DFjr (4800 baud)
+
+DF DEMONSTRATIONS:  To see the results of manual DF bearings in a Baltimore
+foxhunt, FILE-LOAD the FOXDF.BK file.  You will see the multiple lines of
+bearing all converging to within 1/2 mile of the final location of the Fox.
+Notice that none of our stations were any closer than 15 miles away and more
+than half of our DF stations were more than 25 miles away!  
+
+     To see what the AUTOmatic Doppler DF interface looks like, zoom into
+Phoenix, Arizona and FILE-REPLAY the DF-AUTO.HST file.  You will see N7LUE's
+DF unit make multiple hits on three local repeaters in the area.  If you are
+doing a DF exercise from a fixed location, you can enable APRS to save all
+DF reports in a track history file by setting the CONTROLS-POSFIL to off.
+With the Position Filter off, APRS will save every DF posit to the track
+history file.  If you are moving, APRS saves all posits anyway.  To see
+my first Doppler mobile event, replay DF-FOX2.DF.
+
+CAUTION:  APRS does not do spherical geometry, it assumes a flat earth.
+For this reason, APRS should not be used for HF DFing beyond about 250
+miles.  This is contrary to the MAPS-PLOTS-RNGRNGS command which does 
+use great circle calculations.  Also to minimize out-of-area confusion,
+APRS marks the LENGTH of the bearing lines to be only equal to the
+current MAP scale.  If you are DFing on a 4 mile map, then the bearing
+lines will only be 4 miles long.  etc...
+
+
+MANUAL APRS STATION DF REPORT:  Each APRS station can include a beamheading
+in his position report by using the INPUT-DF command.  This bearing will 
+normally time out after 2 hours to eliminate any confusion caused by 
+old/stale reports.  A solid yellow line indicates an excellent line of 
+bearing, and a more dotted line indicates less and less quality.  You can 
+use the MAPS-PLOTS-RINGS command to superimpose range rings on the screen 
+around the map center for estimating distances.  If you are running the WX 
+station option, however, your DF bearing report will be overwritten as 
+soon as your next WX report comes in.
+
+NON PACKET DF REPORTS:  Even for non APRS stations, their lines of bearing
+can be quickly entered by any APRS station using the INPUT-ADD command. 
+In this case, simply select the DF symbol, enter a beam heading, and enter
+a quality between 1 and 8, where 8 is best.  These reports will NOT
+timeout, however, and should be killed after use.
+
+
+AUTOMATIC INTERFACE TO DOPPLER SYSTEMS INC UNITS:
+
+    These units have an optional serial data output that outputs a three
+digit azimuth once per second at 300 baud.  Just hook it up to APRS and
+watch the DF bearings plotted on the map and transmitted to other users
+on frequency.  BE SURE TO SELECT 300 BAUD to match the DSI output. 
+Include an on/off push button so that garbage reports are not sent to the
+APRS computer.
+
+AUTOMATIC INTERFACE TO THE AGRELO DFjunior:
+
+    Designed from the ground up to be APRS compatible, it includes data  
+processing so that erroneous readings are significantly reduced from 
+other doppler designs.  Has both automatic and manual modes.  Operates 
+at 4800 baud for ease of combining with GPS data using their multi-port 
+adapter.  In AUTO mode, the DFjr outputs a GPS posit and DF bearing at 
+a fixed rate.  In manual, data is only passed to APRS when the user presses 
+a button.  The multi-port adapter combines your TNC, DFjr and GPS data
+all into the same PC COMM port.  Using this adapter, configure APRS for 
+one port TNC operation (even if you are not using packet), then use alt-
+SETUP-DF menu to select the DFjr.  This tells APRS to watch for DF data 
+on the TNC comm port.  THen select the GPS-SPM mode under the alt-S-GPS- 
+MODES menu so that APRS will also parse GPS data on the TNC port.   Even 
+if you normally run HSP mode with other TNC's, your HSP adapter is not 
+being used.  The DFjr is doing the switching so SPM mode should be 
+selected.  (If you have the dual port Pico-TNC, however, then you must 
+select HSP.)  The multi-port adapter normally passes TNC data straight 
+through to the PC.  But when the DFjr outputs a report, it sends out a 
+POSIT followed by a DF report which are combined with the TNC data at 
+the COMM port.
+
+
+AUTOMATIC DOPPLER DF UNIT INTERFACE FOR ALL MULTI-LED DF UNITS:
+
+     Randy, KA7UUS and Bob N7LUE developed a 2400 baud serial interface to
+the popular ROANOKE Doppler DF unit (or any other DF unit that drives an
+LED display).  They added a divide by N counter and UART to produce a single
+ASCII character 8 times a second or so.  Each character is a letter from
+@,A,B,.. ,O indicating the azimuth of the 16 LEDS.  For some DF units that
+rotate counterclockwise, the board will optionally use lower case letters
+for the opposite rotation.  A VOX circuit disables data output when there
+is no DF signal, and an optional PTT circuit can be used to disable the DF
+unit when ever a co-located TNC transmits the resulting DF data.  This last
+circuit was necessary to prevent the DF unit from generating false bearings
+whenever the packet TNC transmitted!
+
+     APRS accumulates, averages and calculates the deviation of these samples.
+It then plots a bearing line in the average direction and shows the variance
+of the data by the "dottedness" of the line.  A solid line is a solid
+non-varying signal, whereas a very dotted line, had a lot of variance in the
+reports.  Since APRS averages the data and computes the deviation and
+average to 1 degree, the fact that the DF unit is only reporting in 16ths
+of the compass is averaged out.  Anyone who has watched a doppler DF unit in
+action, understands that the signal bounces everywhere due to reflections
+and the distribution of the data is broad enough that the quantization of the
+raw data to 4 bits is insignificant.  The add-on N7LUE interfce is no longer
+available but the new KA4IIA unit is.   See below.
+
+
+REMOTE DF SITE:   ALthough any APRS site with the DF interface can be an
+automatic DF station, a remote DF station only needs a remote controllable
+scanner, the DF unit with serial interface, and a TNC and packet radio. 
+By setting the TNC in the UNPROTO CONVERSE mode, it will simply packetize
+the data out of the DF unit periodically for display on all APRS stations
+on the network!  A suggested arrangement is as follows:
+
+  A.  Take the 8 characters per second data from the DF unit and connect
+them to the serial data input of the TNC.  Take the PTT output of the TNC
+and connect it to the optional PTT-SUPPRESS input of the N7LUE interface
+to prevent the DF unit from generating erroneous data when the TNC transmits
+(and overloads the DF unit).
+
+  B.  Set the TNC packet length PACLEN to 75.  On a continuous signal, then,
+the TNC will transmit once every 10 seconds after it has accumulated a full
+packet of 75 characters.  Each transmission will contain the last 75 samples
+from the DF unit.
+
+  C.  So that APRS knows the location of the remote DF unit and that it is
+a DF station, the BText of the DF TNC must contain the LAT/LONG and the APRS
+DF symbol character (\):     BT !3856.55N/07629.11W\DF station...
+
+  D.  APRS will then plot a new bearing line for each DF packet received.
+
+  E.  For short FOX transmissions, the TNC should have PACTIME set to AFTER
+10 (1 sec) and CPACTIME to ON.  The PACTIME setting was chosen relatively
+short so that a packet is transmitted at the end of each FOX transmission,
+but before another station keys up.
+
+  F.  To prevent all DF sites from keying up at once at the end of the FOX
+transmission, each automatic DF site must have a differnet value of DWait.
+Each additional site should have an additional 100 ms.
+
+   With the design noted above, each DF site will transmit a maximum of one
+packet every 10 seconds, or one packet for every short transmission of the
+fox.  With the parameters chosen above for 5 stations, the network would be
+pretty well saturated just handling the data from all sites.  This is fine
+for intensive operations in search of a FOX or jammer, but a more routine
+level of operation could be realized by reducing the data rate from the the
+DF unit from 8 to 4 characters per second or less.  This would result in
+only one packet report every 20 seconds or more which might be more suitable.
+At these high data rates, and since a good DF site should have good altitude,
+digipeater paths for routing the data should be avoided.
+
+
+AUTOMATIC REMOTE SITE DF NETWORK CONTROL:
+
+Since the automatic DF interface between a TNC and a DF unit will generate a
+lot of packets, there has to be some means for remotely turning it on and
+off.  I consider that beyond the realm of APRS, since for a remote DF site,
+there must already be some kind of control link in place in order to command
+the DF receiver what frequency to listen to.  If such a link already exists,
+then the capability is probably also there for enabling or diasabling the
+DF/TNC interface.
+
+     In the absence of such a control link, however, a very simple remote
+control and receiver command link can be derived from the TNC itself!  First,
+take the voltage from the CONECTED LED and use it to enable the DF unit
+output to the TNC input (some TNC's bring this signal out on one of the RS-
+232 pins).  This way, the automatic reporting will begin as soon as the DF
+Net Control station connects to the TNC.  This station can also then send
+tuning commands via the TNC to the radio serial port!  Even tho there is a
+connected link between the control operator and the DF station, APRS will
+still monitor all data from the remote site as long as CONTROLS-OTHER is
+selected.  Or the DF control station can temporarily make his TNC callsign
+be DFNET which APRS will always monitor.  This is legal, as long as he
+also places his true call in his BText once every 10 minutes.
+
+DF NET CONTROL OPERATION:    The scenario for this kind of operation, would
+be for the network SYSOP to use a dumb terminal in the multi-stream connect
+mode to connect in turn to each of the remote sites.  Once each of these
+connections is established, each DF station begins sending DF data as long as
+the connection is in place.  To disable a site, the SYSOP simply disconnects
+from that station.  The only disadvantage of this means of control is the
+additional QRM on frequency from all the ACKs required from the SYSOP TNC for
+every DF packet transmitted.   Having an alternate means of control, avoids
+this CONNECTED environment but adds complexity.  If you are ready to
+implement automatic remote site DF stations contact me so we can both make
+sure it works right.
+----------------------------------------------------------------------------
+
+
+MOBILE APRS DIRECTION FINDING
+
+    APRS is the ideal tool for integrating together all of the DF equipment
+in modern DFing, the Doppler DF, the GPS, and the TNC packet link.  If you
+have a dual serial port computer, the one port is connected to the TNC (if
+used), and a GPS, using the Hardware Single Port (HSP) switch.  The second
+COMM port is dedicated to the DF unit.  With this arrangement, the GPS
+provides continuous data on the location of the vehicle and the TNC provides
+the communication links to the APRS DFing network.  The DF unit provides the
+DF data whenever the FOX transmits.  Using the GPS heading, APRS will do an
+automatic conversion from the relative bearings from the DF unit to TRUE.
+With this arrangement, the mobile DF unit will be seen in the APRS network,
+moving along and providing constant bearings to the hidden transmitter.
+In practicality, however, there are problems in this plug-and-play scenario.
+
+  1)  First, The heading information from the GPS is ONLY ACCURATE, IF
+  THE VEHICLE IS MOVING!   Therefore, APRS only uses the LAST Heading for
+  which the vehicle velocity was over 5 MPH.  To help, the F8 key will
+  override the normal HSP timer and let you force an immediate GPS fix.
+  If you are stopped, and have a compass, enter your heading using the
+  INPUT-HEADING command.  (if using magnetic, be sure to set the alt-SETUP
+  OTHER-MAG-VAR to the variation in your area and save your CONFIG file.)
+
+  2)  Sometimes the GPS is not putting out good and, more often, the DF
+  unit is putting out GARBAGE!  We are beginning to conclude that only
+  a Human operator can really figure out when the data is good and
+  when to ignore it!  To avoid processing and transmitting BAD data, you
+  should place a Push button in the DF data line and only press it when
+  data is valid.  See the DFSP DF Single Port Mode description.
+
+  3)  Whenever the TNC transmits APRS DF or position data, it totally
+  garbles the DF unit!   There are two solutions:
+
+      a) Same as item 2 above!
+     
+      b) For fully automatic sites, the DF unit must have a MUTE circuit
+      connected to the TNC PTT line so the the DF is DISABLED whenever
+      the TNC transmits.  Diode ORing of the PTT leads of every transmitter
+      at the site should be conisdered.  The next N7LUE interface will have
+      this MUTE included.
+
+  4)  Most laptop computers only have one usable COMM port!
+
+
+DIRECTION FINDING IN DF SINGLE PORT MODE!
+
+   Since we have just about concluded that you need a manual push button
+for the operator anway (thanks Joe Moel, K0OV), it becomes trivial for
+us to add the DF serial data to the existing shared GPS/TNC/HSP serial
+port.  The following schematic shows how the serial data from all three
+devices is switched and how a second pair of contacts is used to alert
+APRS, when the DF data is connected.
+
+                                 
+                                      DF PUSH           LAPTOP
+            ----------                BUTTON            SERIAL
+TNC DATA >--|  HSP   |                                   PORT
+            |        |--------------------*
+GPS DATA >--| SWITCH |                    |
+            --*-------                   ----------*----------> RXD
+              |                  
+              |                           |
+DF DATA  >--------------------------------*
+              _
+              ^ D1                       ----------*
+              |       4.7 k                        |
+TNC DSR  >-----------/\/\/\/--*           |      -----
+              |               |           |      /////
+              |               |           |                    
+TNC DTR  >----*---->|---------*-----------*-------------------> DSR
+    RTS            D2
+         
+   
+     The second pole of the DPDT push button not only grounds the DSR
+input to tell APRS to process DF data on the serial port but also grounds
+the TNC DTR (RTS) input so that the TNC holds off any packet data until 
+after the DF switch is released.  Notice that two diodes,
+D1 and D2 isolate the TNC DTR (RTS) line so that either the HSP or
+the DFSP can pull the line to ground without affecting the other.  Some 
+TNC's (PACCOMM) use the RTS line instead of the DTR line for holding off
+TNC data,  so check your TNC manual.  The TNC DSR line is only used to 
+provide a source of +V.  APRS distinguishes between the TNC and GPS data 
+using the normal HSP logic.  Remember to provide the DSR or other source 
+of +V for the HSP circuit.
+
+     This DFSP circuit can be built within its own back-to-back DB-9
+connectors with a pigtail to the hand-held push button.  This circuit
+can then be inserted between the HSP and the Laptop at any time and
+the HSP can still be used with or without the DF circuit.  Or, since
+it is so trivial, just wire it permanently to your existing HSP device.
+
+CAUTION:  DO not enter DFSP mode with N7LUE enabled if you do not have
+the DSR pin held high, or the system will appear to lock-up while
+waiting for DF data...
+
+NOTE:  THE N7LUE DOPPLER INTERFACE MUST BE MODIFIED FOR 4800 BAUD vice   
+THE PRESENT 2400 BAUD IN ORDER FOR DFSP to WORK at the same baud rate
+as the GPS and TNC.   This is easy to do by cutting a trace and adding
+a jumper so that pin 14 of the baud rate chip U3 is held high, and pin
+15 is grounded.  Similarly, you must modify the DSI unit from 300 baud 
+to 4800 baud.
+
+CONFIGURATIOIN:  APRS should be in the normal HSP mode.  Then select the
+alt-SETUP-OTHER-DFSP mode.  This enables the sensing of the DSR line to
+indicate that APRS should begin DF processing.  You can tell that DFSP
+is enabled on the CONTROLS panel (tab key) by seeing DFS in the left
+window.  the DFSP command toggles the mode on and off.  It can be saved
+in a config file.
+
+OPERATION:  When you press the DF button, APRS begins a 5 second dead time
+during which it is collecting DF data for averaging.  At the end of this
+5 second period, a DF fix is computed and displayed.  Therefore you should
+hold the button for at least 5 seconds to get good data, and you can hold
+it longer, if you like.  These DF reports are added to your current posit.
+This means that there can be an ambiguity between the time of the last
+POSIT and the DF data.  For this reason, the operator should be driving
+on a straight course from the time of the last GPS fix, until he completes
+the release of the push button.  To minimize this problem, I have added
+the F8 key so the operator can force an instant HSP update at any time.
+
+If your vehicle has a heading of 000 or there is no heading information,
+then APRS will ignore any DOPPLER inputs or RELATIVE entires using the
+INPUT-DF command.  Fix this by using INPUT-MY-HEADING to enter 360 if you 
+are really pointed due north, or enter any other heading if you have a 
+compass.  If you have turned since your last fix or your speed has dropped 
+below 5 MPH, then you will also need to use the INPUT-MY-HEADING command.
+To help you visualize your heading, the normal velocity leader on your
+vehicle symbol is expanded by a factor of 4 while in DF mode.
+
+MARKING FIXES:  The INPUT-SAVEpos and INPUT-UPLINKpos commands permit the 
+operator to save a DF FIX or special position on their map for future 
+reference.  Pressing these commands makes a copy of your current position 
+report (with DF bearing if available) as an OBJECT.  They are named with 
+a serial number and the last three digits of your call.  These objects 
+will remain on the map at that location to serve as reference points.  
+The INPUT-UPLINKpos is the same, except that the saved OBJect is marked 
+for uplinking to the net.
+
+OPERATIONS:  Start driving.  As long as you are getting good DF data,
+periodically press the DF button.  If you want to mark one of these
+fixes for future reference, hit INPUT-SAVEpos.  If you want to share it with
+others, hit INPUT-UPLINKpos.  If you are maneuvering, hit the F8 key before
+taking a DF bearing to get a current heading.  If you are stopped, or
+your speed has dropped below 4 MPH then you must use INPUT-MY-HEADING to 
+update your heading with a magnetic compass or a map.  If you simply  
+pull over and maintain your last heading, then your heading will still
+be good.  If you do not have a DF interface, use the INPUT-DF command 
+to manually enter your DF bearing, either true or relative.
+
+------------------------------------------------------------------------
+SOURCES:  Products not tested nor endorsed by APRS:
+
+KA4IIA Doppler Unit:  Based on the Roanoke Doppler.  Doppler unit has a 
+   modified antenna switching unit utilizing amplifiers instead of PIN 
+   diodes. Unit was reviewed in March 1996 issue of 73's magazine, pp.79-81 
+   by Joe Moell. Also available, an universal serial interface that is 
+   compatible with APRS.  Interface compatible with KA4IIA and most Roanoke 
+   Doppler units. For more info on Doppler Kits and Serial interface:
+        Jim Sorenson KA4IIA
+        P.O. Box 81881
+        Conyers, GA 30208
+        Phone (770) 922-0867
+        E-mail ka4iia@radio.org
+
+
+N7LUE Universal DOPPLER APRS serial INTERFACE:  (No longer avail)
+     
+     Robert Swain, N7LUE cmpk59d@prodigy.com
+
+ROANOAK BOARDS:  Marty Mitchell, N6ZAV at 340? Otero St, Costa Mesa, CA 92626
+                 His number was 714 760-6060.
+
+AB5CK Doppler UNIT:  Based on the Roanoke Doppler shown in "Transmitter 
+Hunting - Radio Direction Finding Simplified" by Joseph D. Moell - K0OV.  
+
+     AB5CK Doppler PC board ................................ $49.95
+     AB5CK Doppler with parts .............................. $99.95
+     Machine DIP socket set for ICs (recommended) .......... $14.95
+     Antenna parts kit (chokes/PIN diodes/resistors/caps) .. $14.95
+     Fully assembled and tested AB5CK Doppler PC board .... $199.95
+     Fully operational AB5CK Doppler in cabinet ........... $399.95
+     Shipping free for most US orders.   Texans add 7.75% sales tax
+ 
+Thomas M. Lewis - AB5CK
+6721 Rolling Hills Drive,  
+North Richland Hills, Tx.  76180
+Phone     817-428-8200
+Internet  tlewis@dfw.net
+
+
+

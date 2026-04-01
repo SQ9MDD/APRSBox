@@ -1,0 +1,199 @@
+Mic-E TYPE CODES                                          4 Jun 2019
+--------------------------------------------------------------------
+
+See also www.aprs.org/aprs12/mic-e-examples.txt for formatting help!
+
+ 4 Jun 19 - Added FT3D
+31 Mar 19 - Added Anytone D878UV and D578UV
+24 Aug 16 - added TH-D74
+21 Jul 15 - added SCS GmbH & Co. KG
+31 May 15 - added FT2D and FTM-100D
+21 Aug 13 - added FTM-400DR and FT1D
+26 Oct 11 - new Mic-E code T.....*v www.KissOZ.dk OZ1EKD and OZ7HVO
+27 Jan 11 - add HinzTec anyfrog
+ 3 Nov 10 - add D72
+24 Mar 10 - add Yaesu VX-8G.  And updated info on KWD D710
+20 Oct 09 - add Yaesu FTM-350
+21 Oct 08 - clarify and add notes on D710 present decoding
+18 Aug 08 - reverse order of MFR and Version bytes:
+15 Aug 08 - set up OTHER category and use ENDING bytes.
+14 Jul 08 - original
+
+Old idea:  T.......vM   Prior to 18 August 08
+New idea:  T.......Mv   allows more flexibiilty in use of "v"
+
+BACKGROUND:  Before the formal APRS SPEC was written, there were 
+only two Mic-E products in use.  These were the original Mic-E 
+prototype, and the TAPR Mic-E kit.  While developing the SPEC for
+others, the two Kenwood radios, D7 and D700 were in development and
+so the first byte of the original free-text field was designated as 
+a Mic-E TYPE identifier to identify different devices.  This was
+written into the APRS spec.
+
+It is important that the type of Mic-E device be identified, since 
+some may have very important distinct properties.  For example we
+need to know which devices are message capable or not.  In the 
+future, we may want to know which models can auto-tune or not.
+
+ORIGINAL TYPE CODE:  The first byte of the original free-field text 
+was set-aside for use in indicating the type of Mic-E device.  On 
+page 55 of chapter 10 of the spec, the first two of these TYPE CODES 
+">" and "]" were defined for the D7 and D700.  In addition, the 
+statement was made:
+
+"It is envisioned that other Mic-E compatible devices will be
+allocated their own type-codes in the future."
+
+The future has arrived and the many thousands of existing APRS radios 
+and APRS clients will recognize the D7 and D700's, but unfortunately, 
+will not recognize anything with newer TYPE CODES without new software.  
+And since many people use UIview which cannot be upgraded with new 
+TYPE codes, we had to find a solution when Yaesu and others began 
+considering new APRS radios and Mic-E implementations.
+
+2008: Luckily, the original SPEC also allowed for two other special 
+characters in that location, the (') apostrophe and the (`) grave
+accent.  These were used by the original prototypes for additional
+BYTE wise analog telemetry fields.  Since no one since the mid 1990's
+was using these, and since all EXISTING radios and clients would
+pass these (and only these) two other bytes, they were REDEFINED
+as a new MIC-E TYPE category called "OTHER Mic-E".  The (`) character 
+was defined to indicate a message capable Mic-E device and the (')
+apostrophe would identify Trackers only.
+
+D710 VERSION CODE:  For backwards compatibility, the D710 uses the
+same "]" Type byte as the D700 but adds a special "=" byte on the
+end to distinguish the new radio.  We will use the abbreviated
+syntax of ]......= to represent this Mic-E TYPE code and version
+code.  The seven dots represent the free text field of the Mic-E 
+format which can include the special "aaa}" altitude.
+
+VALID TYPE CODE AND VERSION CODES.  For the purpose of this Mic-E
+update to the spec, the written format for the free-field text 
+defined in the original APRS spec will be referred to as 
+
+Mic-E TEXT FORMAT:   "T......Mv".
+
+Where T is the Mic-E TYPE byte (" ",">","]","`","'")
+Where ........ is the free text portion of the format
+Where aaa}.... like:  "Taaa}....Mv" is optional altitude
+Where "M" represents the Manufacturer Byte 
+Where "v" represents a version Byte
+
+Using this definition, all of the following examples have been 
+tested to work with existing D7 and D700 radios.  The D710 
+after software version 2.01 also decodes them.  The
+Yaesu VX-8R, VX-8G and FTM-350 as well as TH-D72 are compatible.
+
+LEGACY FORMATS:  These formats are to be recognized always in 
+all models now and in the future.  Notice that it allows for
+future VERSION codes for the D7 and D700 series so that even
+without recognizing the new version code, the radio will be
+recognized as being in the D700 or D7 family.
+
+ .......  Original Mic-E (leading space)  (not message capable)
+>.......  TH-D7A walkie Talkie TOCALL APK001 (message capable)
+>......v  *future TH-D7A upgrade version
+].......  TM-D700 MObile Radio TOCALL APK101 (message capable)
+]......=  TM-D710 Mobile Radio TOCALL APK201 (message capable)
+]......v  *future D7xx models version
+>......=  TH-D72 HT (Oct 2010) TOCALL APK003 (message capable)
+>......^  TH-D74 HT (Aug 2016) TOCALL APK004 (message capable)
+
+NEW FORMATS FOR ALL FUTURE APPLICATIONS: (plus the exceptions above)
+
+`......Mv  OTHER Mic-E  - display "McE-msg" or "Mic-Emsg"
+'......Mv  OTHER Mic-E  - display "McE-trk" or "McTrackr"
+
+As combinations of "Mv" bytes are added to this table, manufacturers
+are encouraged to display the correct radio type if known.  The
+following additional bytes have been declared:
+
+`......_b  Yaesu VX-8 (b = SPACE) (message capable)
+`......_"  Yaesu FTM-350   [new in Oct 2009] (message capable)
+`......_#  Yaesu VX-8G     [new in Mar 2010] (message capable)
+`......_$  Yaesu FT1D      [New in Dec 2012] (message capable)
+`......_%  Yaesu FTM-400DR [new in Aug 2013] (message capable)
+`......_)  Yaesu FTM-100D  [new in May 2015] (message capable)
+`......_(  Yaesu FT2D      [new in May 2015] (message capable)
+`......_0  Yaesu FT3D      [new in Jun 2019] (message capable)
+`...... X  AP510 KD7LXL    (not message capable spec violation)
+`......(5  Anytone D578UV  [new in Jun 2019] (message capable)
+'......(8  Anytone D878UV  [new in Jun 2019] (not msg capable)
+'......|3  Byonics TinyTrack3 (TT3)  
+'......|4  Byonics TinyTrack4 (TT4)
+T......\v  Hamhud  ? (awaiting confirmation?)
+T....../v  Argent  ? (awaiting confirmation?)
+T......^v  HinzTec anyfrog
+T......*v  APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO
+'......:4  SCS GmbH & Co. P4dragon DR-7400 modems (no msgs capable)
+'......:8  SCS GmbH & Co. P4dragon DR-7800 modems (no msgs capable)
+T......~v  OTHER (to be used when all other "M" MFR's are used up)
+
+Other manufacturer type codes could be as follows.  If anyone 
+intends to use any codes PLEASE check with WB4APR first to make
+sure you are universally compatible.
+
+T......`v
+T......'v
+T....../v
+T......\v
+T......-v
+T......:v
+T......;v
+T.......v
+
+It is important to choose ending MFR and Version bytes that will 
+not cause confusion on the end of any random text.  Designers of 
+Mic-E type devices are encouraged to advise their intent to use 
+a specific ENDING code (M) so that other designers can include 
+them in their code for display.
+
+DELIMTER BYTE:  As one last afterthought, if the MFR wants to 
+really make sure that his "Mv" code on the end of any random text
+does not add confusion to the text, maybe we should consider 
+preceeding it with a forced SPACE byte.  This way the Mv code of 
+"-3" would not be too confusing on the end of this "...text-3", 
+but would  look cleaner as "...text -3".  But it makes the packet
+one byte longer.
+
+RECEIVING AND DISPLAY OF MIC-E TEXT (STATUS):   Since the leading
+TYPE byte "T" was not as well defined as it could have been in the 
+original Mic-E spec, this byte will be displayed as part of the text 
+on some existing receiving applications that display the received 
+Mic-E text.  It is recommended that all future RECEIPT and DISPLAY 
+software consider that this leading TYPE byte will usually be one 
+of the above TYPE characters " ", ">", "]", "'", or "`" and 
+should not display it with the text.  This is essential to maintain 
+the common 10x10x8 text formatting of local information for best 
+display on mobile displays.
+
+So, suppress the T-TYPE byte from the text display if it is 
+recognized.  But use this information to display the radio type
+elsewhere as appropriate.  Similarly, if the ending "....Mv"
+bytes are both recognized and matched and decoded and displayed
+elsewhere, then these two bytes may be suppressed from the display
+if desired.  If these two bytes are not decoded and are not 
+recognized, then they need to be displayed for older radios so 
+the operator can interpret their meaning until his firmware is 
+updated.
+
+When a new type is not recognized, then display "McE-Msg" for a 
+two-way system and "McE-Trk" for a tracker without message 
+capability.  If 8 bytes are available for this display, then 
+display "MicE-Msg or McTrackr" etc...
+
+This table is maintained on the APRS web page:
+www.aprs.org/aprs12/mic-e-types.txt
+
+Adding these two new "'" and "`" OTHER MIC-E TYPE bytes was only
+possible beacuse extensive testing showed that those were the only
+ASCII bytes that the tens of thousands of D7 and D700 radios and
+UIview would decode now.  Fortunately, the D710 also parses these 
+TYPE bytes, and is fully compatible with version number V2.01 and 
+later.
+
+See examples in www.aprs.org/aprs12/mic-e-examples.txt
+
+Bob Bruninga
+WB4APR@amsat.org

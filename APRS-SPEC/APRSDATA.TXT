@@ -1,0 +1,316 @@
+APRSdata.TXT        APRSdata Sumary
+==========================================================================
+Document version: DB1
+Document dated:   02 Jul 2002 (previous ver was 12 Mar 2002)
+Author(s):        Bob Bruninga, WB4APR <bruninga@nadn.navy.mil>
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Ver DB0:  * Keps file now defaults to "amateur.txt" for easy entry
+
+Ver DA1:  * Map and Satellites will not overwrite new incoming msgs
+          * DATA Base now responds to QUERY and ?, not just QDOS
+          * INPUT-KEPS now only takes NASA 2-line files for simplicity
+
+Other Version HISTORY notes are at the end of this file.
+
+APRSdata is a copy of APRSdos with additional features for serving up
+"Tiny-Web-Pages" to Kenwood Mobiles and HT's in your area.  The initial 
+idea was to serve up Satellite data, but then it was trivial to add any
+other position related databases as well.  Here are the default Databases:
+
+  * Puts any Satellites in view up as Objects automatically.  Each sat
+    shows its up and downlink frequencies and present doppler.  Below 
+    4 degrees, the uplink frequency is replaced with the elevation.
+  * Can give VOICE alerts to D700 users of satellites in view
+  * Maintains an 80 min sat schedule in users DX lists every 10 mins
+  * Responds with a packet of info for any of these special Query Commands:
+
+    HELP            - Responds with a list of commands to mobile's DX LIST
+    DIGIS,IGATE,WX  - Nearest DIGI,WX or Igate heard on the air as an OBJECT
+    SATS            - Updates the SAT SKED in the mobile user's DX LIST
+  
+  * Responds to these Queries with the closest object in the XXX.POS:
+
+    ATV,CLUB,NET,FD - ATV repeaters, CLUBS, on-air nets or FD sites
+    Crashes         - Known crash sites to avoid errors during SAR
+    NWR, NWS        - NOAA WX Radio & Freq, or Natl Wx Service Site
+    Voice           - Nearest Voice repeater of sigificance 
+    DX              - Nearest DX cluster
+    HOSP, FD        - Nearest Hospital or Field Day Site
+    RS              - Nearest Radio Shack or Radio Store
+    PARK,CAMP       - Nearest PARK (includes Camps) or just CAMPgrounds
+    XXXX            - Nearest Object in any other POS\XXXX.POS file
+    OTHER           - WIll list these others files (NOT YET IMPLEMENTED)
+
+SATELLITE SETUP:   Please limit this capability to only those satellties 
+that are workable with the mobile or HT so that you do not clutter up 
+144.39 with data of little use to anyone.  At this date, I recommend
+ISS, UO-14, UO-22, AO-27, AO-40, PCsat and Sapphire.  To enable these
+satellite alerts and skeds, select the POSITIONS list and move the 
+cursor down to the satellites to be announced when they come in view.  
+Hit ENTER to select the satellite and then "U" for uplink in the usual 
+fashion to mark an object for uplink.  If the satellite is above the 
+horizon, then it will become yellow and uplinked immediately.  If, as 
+is more likely, it is not in view, it will be marked as a killed object 
+as dark blue for subsequent uplink later when it does come into view.
+
+HF SATELLITES:  Since the Mode-A RS birds can be heard on a mobile HF
+rig, you can also just mark the satellite on the P-LIST for "L" to
+be sure it is included in the periodic DX LIST satellite schedule, but
+it will not be announced as an object to minimize QRM.  The RS birds
+are in higher orbits and in view for up to 20 minutes or more at a time
+and it is felt that one-minute objects would be too much for the local
+net.  Yet HF users still will see its AOS in their DX lists.
+
+LEO SATELLITE TIMING:  Satellites to be uplinked on 144.39 are transmitted
+when they pass above 1 deg and then about 80 seconds later using the 
+normal decay rate.  But this jump to 160 seconds trips the selection 
+process so that the next time through the satellite list, in 10 to 20 
+seconds, it will again be rescheduled for uplink and the process repeats.  
+
+AO40 and AO10 TIMING:  For the eliptical satellites, the same rule 
+applies, but the delay between the transmissions is about 10 minutes.
+Due to the large number of modes, the UPLINK frequency is not shown
+but is replaced with an elevation angle when it is above 1 deg.  
+Otherwise the center of the analog UHF passband is shown.  Also, in the
+DXlist schedules, these satellites are only shown as " is UP" instead
+of an AOS time.
+
+SATELLITE SCHEDULES:  Once every 10 minutes, a single Satellite 
+schedule will be transmitted as a DX spot.  This will be captured on
+everyone's DX LIST and can show as many as 4 satellites.  To force
+the transmission of a new schedule, hit NEXT-SCHED.  SImilarly, any
+user can request a satellite schedule with a QUERY:?SATS command.
+New in version DA0, satellites can be marked with a "L" for inclusion 
+in the DX LIST separately without also forcing them as objects.
+
+VOICE ANNOUNCEMENTS on the D700:  To enable a voice announcement to
+alert anyone with a D700 and voice chip, simply select that station in 
+the POSITION list and select the VOICE option with the "V" command.
+Once a minute (I will reduce this later when I get around to it) it
+will send out a message that will speak "U-O-1-4 LOW" if the satellite
+is betwwen 5 and 19 degrees.  "Medium" if it is 20 to 29 deg and "High"
+if it is above 30 deg.  To allow users to request this data without
+prior action by the SYSOP, APRSdata will send voice announcements to
+any D700 that has his CUSTOM-1 comment set.  This does add substantial
+message traffic to the channel load, so users should not do this except
+when really needed.
+
+LOCATION:  APRSdata uses the position of the mobile for its search.  If
+the mobile wants to request the nearest Object closest to some other
+location, then he should temporarily change his posit to that location.
+If a Mobile has not transmitted a posit or it is 0000/0000, then
+APRSdata responds with a message that no data is available without 
+knowing the stations location.
+
+SYSOP FUNCTIONS:
+
+While serving as this community resource for others, APRSdata still is 
+usable by the local operator as a normal APRSdos program and assumes
+the operator is fully familiar with APRSdos.  For more indepth
+discussion of my overall  APRS/SATELLITE concept,  see ASTARS.TXT or
+APRStk.TXT or better go to my WEB page to see the latest.
+
+       http://www.ew usna.edu/~bruninga/astars.html
+
+Just let APRSdata run on a PC in the corner.  See the SETUP
+in the final section below for initial set up.  In addition to
+the normal APRSdos displays for the local operator, APRSdata also:
+
+* Predicts satellite pases over the next 80 mins and displays the times
+  and peak elevations graphically. (Use NEXT and/or FILE-FAST commands)
+  It will do this EVERY time you redraw the map if you set ALT-S-OTHER
+  to REDRAW.  Or otherwise, on a slow PC, leave REDRAW OFF, and you 
+  can do it manually.  In any case, to serve users, it will do it
+  automatically after your keyboard has been inactive for  10 minutes.
+  
+* Displays the names, Freqs and Modes of all amateur satellites.
+  Hit the LIST-FREQS command.  
+
+* Displays the basic Keplarian Elements for easy comparison with new
+  or old elements.  Hit the LIST-KEPS command.
+
+* Displays locations of satellites on the map as objects. 
+
+* Shows the azimuth and elevation to any satellite selected. 
+
+* Shows a set of elevation rings showing the range to satellites
+  above 0, 5, 20 and 40 degrees from your location.  Note that this
+  is dependent on satellite altitude and defaults to 800 km.  To
+  change this use INPUT-EL-RINGS.
+
+* Won't let you miss a pass.  If you are zoomed in below a range to see
+  current satellites in view, it will paint the map the color of the
+  current maximum elevation of any pass in progress.
+
+* Uplinks these satellite objects to your local APRS LAN to inform
+  others.  To do this select them with UPLINK command on the P-List.
+  APRSdata will transmit them once per minute when in view, and then kills
+  them once below -2 deg.  Every 10 minutes when the SCHEDULE is drawn
+  automaticaly due to no-operator present, then APRSdata will also send
+  out a DX SPOT containing all passes in the next 80 minutes.  If there
+  is an operator present, you can do this at any time with the NEXT-SKED
+  command.  Or users can request it with the Q-SATS message.
+
+* See how many people query your data base on the QUERY line on the
+  HEARD log.  
+
+* Use CONTROLS-FILTERS-IGNORE to ignore all off screen stations.  This
+  helps you control how rapidly your LISTS fill up with local traffic.
+
+* WX-RawCnvrt command now causes APRSdata to retransmit Raw UII wx 
+  packets as APRS formatted packets so that D7/D700 users can display them.
+
+* NEXT "-" command displays PREVIOUS 2 hours of passes so you can see
+  what satellites you just missed.
+
+
+HOW THIS WAS IMPLEMENTED:  Here is what I had to do to make this work:
+
+  1) Queries are sent as Messages
+     *  You send the message to "QDOS, QUERY or ?" ...
+     *  In the message you send ?XXXXX,  Where XXXXX is the data you want.
+  
+  2) The kenwoods do not recognize the concise "ITEM" format which was
+     designed for this application.  THus, I have to use the more verbose
+     OBJECT format
+  
+  3) APRSdos does not accept the ACK from APRSdata.  THus, APRSdos users
+     that request data must remember to ERASE the message request once
+     the data comes in. (Until I get a new modified APRSdos out there)
+  
+  4) The OLD D7's will not recognize a DX-SPot (the Sat Schedule) unless
+     it is to a NON-APRS TO-CALL.  Thus, these packets are sent to
+     RESORC.  And this takes a lot of overhead for APRSdos to switch
+     back and forth with the UNPROTO command.  Some TNC's dont do this
+     well.  SO each SYSOP should test with a D7 on the air to see if
+     his TNC is putting in the UNPROTO RESORC VIA ..... correctly.
+
+  5) The new COMPRESSED  format for objects will not work with old D7's
+     So APRSdata forces NORMAL format.
+
+DATABASE SETUP:
+
+APRSDATA should default your station to use the INFOSERVER ICON (/?).
+APRSdata uses all of the POS\*.POS data files that you already have.  To
+see these in any version of APRSdos, just hit the MAPS-OVERLAYS commands.
+These POS\*.POS files are distributed with each of the major APRSdos
+Map distributions.  To differentiate them and match them to the area
+the users is in, each file uses a .XXX extension that matches the MAPLIST
+extension for that area.  Thus if you are in the .EAS east coast 
+distribution, then your Radio Shack file should be named POS\RSHACKS.EAS.
+You MUST rename all of these to the appropriate new file name
+conventions shown below.  Be sure you have loaded the Emaps,Wmaps,Mmaps,
+SEmaps,NWmaps or Cmaps.ZIP file for your area.
+
+But since APRSdata will only be serving your local area, and we need to 
+make the file names short and recognizible, and different from the 
+national .XXX distribution files, you need to COPY your old local files 
+to these .POS files.  APRSdata will only use .POS files for its QUERY
+responses:
+
+  RS.POS      (was RSHACKS.XXX)
+  NWS.POS     (Was NWSPOSNS.POS)
+  NWR.POS     (Was NWR.XXX)
+  CRASH.POS   (Was CRASHES.XXX)
+  ZIP.POS     (Was ZIP.XXX but distributed separately in ZIPCODES.ZIP)
+  ATV.POS     (Was ATV.POS)
+  VOICE.POS   (Was Voice.xxx)
+  DX.POS      A new file we are working on
+  CLUB.POS    My local area file is included as a sample
+  NET.POS     My local area file is indluded as a sample
+  HOSP.POS    My local area file is included as a sample
+  PARK.POS    My local area file is included as a sample
+
+*** IMPORTANT*** Be sure to keep a copy of ALL of your *.POS files under
+a DIFFERENT EXTENSION, say *.MY, so that if you download a NEW copy of 
+APRSDATA then my SAMPLE files will overwrite your .POS files and you 
+will need to RE-COPY yours back..
+
+You can build any local file you want.  Such as FOOD or GAS, etc.  
+Just use the format of these files and the NAME of the file will be its 
+Query Name.  For each such file you use, send me the NAME of it, so we 
+can work up a common list of expected data bases...
+
+The DIGI,IGATE and WX data does not come from POS\*.POS files, but from 
+what you have heard on the air.  The advantage of this is for stand-alone
+WX stations that don't normally show on the Kenwoods.  But here, APRSdata
+converts their raw-PEET-format to  standard APRS format for display on
+the radios.  Now, since you do not want DX stations to overwrite local
+stations, APRSdata comes configured with CONTROLS-FILTERS-LIMIT set to
+20 to try to limit DX stations from entering your P-List and overwriting 
+locals.   (CFL=20 means it will ignore packets with DIGI Fields longer
+than 20 characters).
+
+COORDINATION:  It is important to coordinate the location, paths
+and coverage of each APRSdata station.  Here is what you can do:
+
+1) On D-PAGE, do a JUST-APRDA to find others using APRSdata
+2) Set your OUTGOING UNPROTO path to the minimum for your intended area
+3) Set your C-F-L filter to a small enough value to not accept Queries
+   from beyond this area.  This is not easy to do with WIDEn-N, but
+   will work in other areas.
+
+APRSDATA FILE STRUCTURE:     APRSDOS has many built-in files.
+The .POS files are single files that contain nationwide data.  All
+other files are broken down to smaller "regional" files that have
+the same extension as the regional APRS map distribution files.  For
+example, all EAST coast files are .EAS.  TO make these same categories
+work for users using the USA distribution, the default .APR extension
+is used.  These .APR files are only "representative" selectoins and 
+are NOT complete.  Once the user zooms into the regional MAPLIST, 
+then it will use the specific file for that region...
+
+DATA      M-OVRLY  OLD FILE   ADATA  For the default USA distribution
+FILES     MENU     EXTENSION  USES   these .APR files are used
+--------  -------  ---------  -----  --------------------------------
+ATV       A        .POS
+CRASHES   C                   .XXX  .APR 10% of them
+DIGIS     D        .POS
+FREQS     F        .POS
+GATES     G        .POS
+NWSPOSNS  N        .POS
+RSHACKS   R                   .XXX  .APR 10% of them
+STORES    S        .POS
+VOICE     V                   .XXX  .APR
+NWR       N                   .XXX  .APR 25% of them
+ZIPCODES  Z                   .XXX  .APR incomplete
+OTHER.....O        Prompts for file name
+
+The .APR files are selected samples so that when using the USA (.APR)
+distribution, something shows up.  Once the user selects one of the
+regional MAPLIST.XXX, then the correct .XXX file for his area will be
+used.
+
+VERSION HISTORY:
+----------------
+Ver DB1:  Just added AO-7 to LEO.ORB and changed PHG to 50% for mobiles
+
+Ver DB0:  Assumes default KEPS file name of "AMATEUR.TXT" for easy use
+
+Ver DA1:  Was in place Sept 2001 to 12 Mar and was a restart of the
+          version numbering scheme.  But on the next one, I went to DB0
+
+Ver DA0:  The RS Mode-A birds can be heard on a mobile HF rig.  So I 
+          added the capability to mark a satelite for inclusion on the
+          every 10 minute DX LIST posting without then also transmitting
+          it as an object.  This saves QRM but still alerts those who
+          need it.
+
+Ver DA9:  Added special processing for AO40 and other Eliptical Sats
+
+Ver DA8:  Added VOICE announcements of Satellite altitude to mobile D700
+          users with the voice chip.
+
+Ver DA7:  Minor tweak to appearance of DX list STATUS to not split "your".
+          Added CONTROLS-FILTERS-IGNORE to ignore all off screen stations.
+          LIST-KEPS now shows current Julian day to see how old are  keps.
+
+Ver DA6:  1) WX Menu RawCnvrt command causes APRSdata to retransmit RawUII
+          wx packets as APRS formatted packets so that D7/D700 users can
+          display them.
+          2) Wont XMIT Sat objects or a SCHEDULE if MYPOS is 0.
+          3) NEXT "-" displays PREVIOUS 2 hours of passes so you can see
+             what satellites you just missed.
+          4) Fixed bug so that if another stations is running APRSdata,
+             his OBJECTS wont cancel yours.
+

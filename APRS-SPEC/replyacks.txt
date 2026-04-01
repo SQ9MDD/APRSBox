@@ -1,0 +1,84 @@
+APRSdos REPLY-ACK MECHANISM                                      Dec 1999
+-------------------------------------------------------------------------
+                                                                   WB4APR
+
+SUMMARY:  
+Original APRS ACK:  {#####  <== There were no restrictions on #####
+New 1999 REPLY ACK: {MM}AA  <== This embedds ACK in next outgoing msg
+
+This technique is fully APRS1.0 compliant.  It is optional, but really
+improves DRAMATICALLY the reliability of message delivery in a QSO.
+
+The REPLY-ACK algorithm drastically improves throughput in a DIALOG
+situation on APRS.  Especially when used in conjunction with the rapidity
+of the decaying algorithm for transmitting new packets, it can make 
+messages really fly even in the presence of collisions and lost ACKS.  
+It evolved from ideas exchanged with Brent and to my knowledge has only 
+been implemented in APRSdos, APRS+SA and Xastir.  We have encouraged 
+other authors to implement it, but implementation has been slow...
+
+NEED:  The end-for-end ACKs of APRS suffer the same problem that caused
+PACKET to abandon digipeaters in the early 80's.  Beyond one Hop, message
+comms becomes almost useless. (and via IGates as well) because of the
+lower probability of ACKS to make the return path.  A 70% channel success
+rate yields a 50% chance of message delivery but only a 25% chance of ACK
+receipt over 2 hops.
+
+SOLUTION:  Instead of relying only on end-for-end acks, we can embed
+"free" acks in REPLY messages as well.  Not only do these get a free ride,
+but they also are redundantly transmitted by the distant station, thus
+drastically improving probabilities.
+
+COMPATIBILITY:  100% backwards compatible with all code.  The REPLY ACKS
+are embedded in the 5 digit line number.  Old code doesn't care.
+
+FORMAT:  The format for the line number for outgoing message numbers is
+"{MM}AA" where MM is the outgoing message number and AA is the "free ACK"
+if needed.  If no ACK is pending, then the message # is "{MM}".  
+The non-base91 character "}" was chosen as the separator so that there is
+no chance that an existing line number could be missinterpreted.  Notice,
+that even if there is no ACK, the presence of the trailing "}" tells the
+other end that the sender is REPLY-ACK capable and can accept a REPLY-ACK.
+
+DETAILS:  This is actually very simple to implement, but it does
+affect several areas of your code:
+
+1) Send all MSG numbers in the new {MM}AA format. AA is null if none.
+   But AA is only appended at the INSTANT of transmission.  For the 
+   same MM message, the AA must always represent the "latest" outstanding
+   ACK for that station.  It may change at future retries...
+2) RECEIVE messages and look for AA.  IF AA matches the MM of one of your
+   outgoing messages, then consider that message ACKED.
+3) RECEIVE messages and Strip off the AA from the end of the message text
+   before you store it.  THis is necessary so that your DUPE checker will
+   still work.  Since the AA may be different for multiple copies of the
+   same incoming MM...
+4) When you receive a message line XXX.., send the normal existing
+   "ackXXX..". This algoirithm is unchanged.  Even if XXX.. is MM}AA
+   then the ack is just the exact copy as before "ackMM}AA".
+5) When you receive a message line MM}AA, do #4 above as normal, but
+   also then save the incoming MM number as now it is your "latest ACK"
+   for that station.  Now then this becomes the AA REPLY-ACK number for
+   your next outgoing message to that station. (Step #1 above).
+6) Note, that in #1, above, that when the user prepares each message line,
+   that it is buffered up with only the {MM} line number on the end.
+   The AA (if pending) is not attached until the instant that packet is
+   transmitted.
+7) THus, in step #2, when you get a new REPLY-ACK, then you simply match
+   up the "AA" with the {MM} in your outgoing message queue.  But if
+   you get the old "ackMM}AA" ack, then you must pull out the "MM"
+   here and use IT to match with the outstanding "{MM}" in  your
+   outgoing message queue.
+
+I think that about covers everything we found.  Hopefully the above will
+be helpful.  Since this is totally transparent to the existing APRS 1.0
+SPEC, we can implement it without conflict or argument.  It really works 
+and makes DIALOG QSO's fly!  Especially when combined with the decaying
+packet algorithm which transmits the first retry in only 15 seconds.
+
+I hope you find this as exciting as I do, as it solves the #1 problem in
+APRS MESSAGE reliability!
+
+de WB4APR, Bob
+
+

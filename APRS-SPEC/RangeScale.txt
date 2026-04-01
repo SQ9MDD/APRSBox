@@ -1,0 +1,104 @@
+APRS RANGE SCALES:                                             6 Jan 2003
+-------------------------------------------------------------------------
+                                                                   WB4APR
+
+The absence of a common reference to "Range Scales" opens up one of my 
+"APRS standardization" issues that prevents us all from speaking a common 
+language.  That is zooms and range scales.  APRS was designed with the 
+concept of Range Scale.  Thus unambiguously, anyone can refer to a map 
+Range scale and everyone else will all know what he can see.  There are
+two things about many APRS implementations that I dont like:
+
+   1) Absence of any MAP SCALE legend at all 
+   2) Totally arbitrary references to ZOOM scales (X-Zooms)
+
+What could be simpler than the concept of Range Scale?
+
+If you are on a 64 mile "range Scale" that means that everything within 
+64 miles of the center is visible.  If you zoom to the 8 mile range scale, 
+then anyone else that is on an "8 mile range scale" (no matter what 
+version of APRS he is running) he will see the same "area".   It is only 
+one line of code to convert from an arbitrary "zoom factor" or "map size"
+to a meaningful "range scale".  And APRS would be so much the better 
+for it...
+
+Remember, the Range scale does not need to be "an exact measurement"!
+
+It simply means that if I am looking at a 64 mile range scale in APRSdos,
+then  "anything within 64 miles of the center of my screen IS VISIBLE to
+me.  The fact that the screen is actually wider and the top and bottom of
+my screen show out to about 90 miles or so don't matter.  The Bottom
+line is that a circle of that radius will fit on my screen.  The range
+scales are defined as powers of two.  That is 1,2,4,8,16, etc... and of
+course down to 1/2, 1/4, 1/8, 1/16th, 1/32, etc miles.... (or Km scale)
+
+The ability of anyone with any platform of APRS to say "go to the 32 mile
+range scale centered on Washington DC, and then BOTH of us will be
+looking at the same area.  This is fundamental to human comnmunication 
+with APRS!
+
+BACKGROUND:
+
+Maps (like radar scopes) have TWO variables that completely define the
+field of view.  1) MAP CENTER. and 2) RANGE.
+
+APRSdos defines "RANGE SCALE" for every map view.  THis is only an
+"approximate" referece to the radius of the largest circle of radius that
+will fit on the map view and uses powers of 2. (thus it doesnt care if the
+view is round or square or a 3/4 aspect ratio.   This "RANGE SCALE" is a
+universal reference used by all military, and civilian enteties involved
+in RADAR screens, tactical plots and now MAP displays.
+
+If I am looking at a MAP and you are looking at a map, and we are
+communicating by VOICE, APRS message, or whatever means is available
+to us, we can see TOTALLY different things.  (I may be zoomed into the 
+2 mile scale and you may be looking at the 128 mile scale.) but we are
+BOTH looking at the same town (or so we think)...
+
+Thus, NO map view on any system is "described" unless you also know the
+"RANGE SCALE".  I find that this concept of "RANGE SCALE" must be
+pervasive throughout APRS if we are to communicate between users.  
+
+APRSdos can zooom from any range scale from 8182 miles down to .0625 miles
+in powers of 2. ALthough I would like to see powers of two, it is not
+required.  As long as I am on an 8 mile scale and say you are on a 10 mile
+scale, then we should see about the same thing.
+
+I communicate 'RANGE SCALE" to my users in 3 ways:
+
+1) UPPER left corner of all maps shows "RANGE = N miles"
+
+2) Bottom of map has a "distance LEGEND bar" that goes from the
+   bottom center of the map and to the right N miles.  There are
+   no tick marks, just a gentle reminder that that bar is N miles
+   long and represents the Range Scale.
+
+3) Whenever the user presses the R key or does any other function that
+   involves distnance of objects from OWN station, it overlays a
+   "radar" style bull's-eye who's outer ring has a radius of N miles.
+
+4) Note, all of these can be displayed in equivalent METRIC units also
+
+But in any case, looking at any map, anwyere, there is no ambiguity of
+scale.  I do NOT like many APRS implementations' maps.  Many do not 
+display ANY concept of range or scale.  Some maps do show a small  
+1/2 inch long "1" mile mark, but I find it impossible on large maps 
+to "infer" from that any meaningful feeling of how big a map I am 
+looking at without stoping to think...  And I hear it on the
+voice nets all the time.  Two guys absolutely not agreeing to what the
+other is seeing but they BOTH swear they are looking at the same "map".
+But without a range scale, who can tell?
+
+ZOOM scales are similarly important.
+
+Its crazy to use zoom scales of 1X, 2X, 4X, 8X, which have no reference
+to anything consistent.  One one map, the 1X scale might be 5 miles. 
+on another, the 1X scale might be 50 miles.  This is so easy to fix 
+when a single algebraic equation could trivially convert that to the 
+standard APRS RANGE-SCALE in miles (or Km).  Defining "RANGE SCALE" 
+as a means of describing map views was fundamental to the definition 
+of APRS so that people with different platforms could communicate 
+verbally about what they were "seeing"...
+
+Bob Bruninga
+WB4APR

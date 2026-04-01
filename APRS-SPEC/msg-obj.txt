@@ -1,0 +1,84 @@
+MESSAGE OBJECT                                             24 Feb 12
+--------------------------------------------------------------------
+                                                              WB4APR
+24 Feb 12 Added QRZ server
+21 Feb 12 Draft (rev b)
+
+APRS has an ITEM-in-MSG format http://aprs.org/aprs12/item-in-msg.txt
+that was designed for allowing objects to be sent to individual
+stations via the APRS Igate system.  As messages they can pass from
+the APRS-IS back to RF where the recipient is located.  All future
+clients are expecetd to parse them (independent of recepient) and
+add them to their STATION/OBJECT list and display on the map.
+
+In contrast, this MESSAGE OBJECT format adds the ability for a user
+of an existing APRS radio to originate OBJECTS.   This format uses
+the assumed last heard position of the sending station as the 
+location of this new object.  This format ASSUMES that there is a
+special OBJECT Server that receives this message and then turns
+around and sends it back to the APRS-IS as a regular APRS object.
+If any other position, not of the sender, is needed, then the 
+original ITEM-in-MSG format should be used.
+
+The format for MESSAGE OBJECT is greatly simplified since the object
+position is taken from the senders position.  The MESSAGE OBJECT 
+format is defined as:
+
+ADDRESS:  Sent to the message address of OBJECT or OBJ
+
+OBJNAME [/$] text.....
+
+* Where the OBJNAME is a variable length object name (3 to 9 bytes)
+* Then the optional two byte SYMBOLs in brackets
+* Text is the variable length field which may contain any of the
+  other APRS formatted data:
+
+  CSE/SPD data  CCC/SSS/
+  PHG data      PHGphgd
+  FREQUENCY     FFF.FFFMHz
+  DF data       CSE/SPD/BRG/NRQ etc
+  other         any other valid fields in a position report
+
+ACKS: The MESSAGE OBJECT is transmitted like any other message 
+including a message line number on the end.  Similarly it is acked 
+by the OBJECT server like any other message. 
+
+OBJECT SERVER:  It is anticipated that there will be a special
+server that responds to messages to OBJECT or OBJ for short that 
+will receive these messages.  Its response will be as follows:
+
+1) Ack the message
+
+2) If the name is unique then
+   a) send a 3rd party object packet for this sender and object
+   b) send a ITEM-in-MSG with the data back to the sender
+
+3) If the name is not unique AND not more than more than 24 hrs old
+   a) Send a message advising its usage and owner and location
+      and suggesting a renaming.
+
+KILLING THE OBJECT:  To kill the object if desired, simply send the
+same Message Object to the KILL server.  This server has the
+message address of KILL.  It will only kill the object if the
+sending station is also the current owner.
+
+SENDER's CALLSIGN:  The callsign of the sender should always be
+retained and displayed associated with this ITEM/OBJECT  just like
+any other object.  This should already be part of any 3rd party
+object parser and client system.
+
+QRZ SERVER:  During discussion it was suggested that a QRZ server
+also be activated.  This server will respond to the message address
+of QRZ and will send back an ITEM-in-MSG to the requesting station
+representing either the STATION or OBJECT that matches the first 
+word of the QRZ message.
+
+If wildcards are used (? And *), then a multi ITEM response would simply be a 
+list of all the calls/names matching the request. And the requestor would 
+have to resend his request for the specific match.  If the requested word is 
+lower case, then it is assumed that any other match regardless of case is 
+being requested.
+
+
+Bob, WB4APR
+

@@ -1,0 +1,50 @@
+AMPLIFYING COMMENTS ABOUT OBJECTS IN APRS                          WB4APR
+-------------------------------------------------------------------------
+
+IDENTICAL TO POSITION REPORTS: Think of an OBJECT as 100% identical to a 
+position report.  You just take off the 9 character call, and then 
+continue parsing it as if it were a position.  This is intentional. It 
+allows an OBJECT to be anything a station can be.  Thus you can place WX 
+objects, Moving objects, DF objects, ANY station on the map that cannot 
+report his own position for some reason.  NOTE:  The algorithm above
+should not limit the 9 character callsign field above to just callsigns.
+Both upper and lower case and full 9 characters are permitted in Object 
+Names.
+
+KILLED OBJECTS:  The KILLED object format will KILL any matching NAMED 
+Object, station or ITEM.   It doesn't matter... Thats why we ask that the 
+software only permit the "originator of an OBJECT" to be able to send out 
+the KILLED OBJECT for that "named" object/item/posit...".  This prevents
+users from inadvertantly killing someone else's posit from the system.
+
+A KILLED OBJECT is only a "replacement" object that is marked as "killed". 
+It typically has the same object data but with the killed TYPE character. 
+Thus it stays on everyones list (for future reference).  But it only ceases 
+to be displayed.  The assumption being that NO ONE can ever completey cause 
+other's data to vanish.  It is simply marked for "no-display" so the other 
+stations still have a copy in case it later becomes important. 
+
+Or, think of it as simply a "replacement".  In this case, only the CALL 
+has to match." 
+
+Yes, APRS lets stations kill any Station or Object from the map. But if 
+the originator does not receive the KILL packet, and continues to transmit 
+it, then it will re-appear... and in fact, since the new object will 
+overwrite the sending stations "KILL" packet, it cancels his KILL efforts.
+This dueling-banjo effect is intentional to make sure that an owner and a 
+killer have to make a concerted effort to either kill or retain an object.  
+Thus it is hard to do by accident.
+
+ALSO, there is a format for "Killing an object from everyone's system". 
+This can  only be done by the originating station of that Object.. Although 
+anyone can take over reporting responsibilty for any object, and once he 
+has the responsibility, then he can kill it too...  This is so someone else 
+can globally kill someone else's long-dead object... Once killed (as in 
+APRSdos), it still remains in all lists, but is marked as a KILLED object
+and only faintly appears on the map.
+
+The Object section of the spec should make mention that weather info can be 
+included in an object/item packet. 
+
+de WB4APR, Bob
+

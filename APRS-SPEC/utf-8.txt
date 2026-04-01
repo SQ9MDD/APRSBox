@@ -1,0 +1,80 @@
+UTF-8 International Alphabets in APRS                     17 Dec 2009
+---------------------------------------------------------------------
+
+Since APRS has spilled across most international borders, it is time
+to consider the use of other alphabets.  The original APRS spec 
+called for 7 bit ASCII printable character set for all text in APRS
+formats.
+
+Hopefully, this can be expanded to include UTF-8 characters in most
+places.  While this will improve local communications, it is still
+recommended that international global communications use ASCII for
+best probability of communication.  
+
+I am making the following assumptions about UTF-8:
+(have not had time to do indepth research)
+
+1) does not use any control codes for alphabets between $00 to $1F
+2) does not use any byte that will appear as "{" other than itself
+
+MESSAGES:  In that case, then UTF-8 is probably compatible with APRS 
+text in messages, bulletins and announcements since it will not mess
+up the message line numbers.
+
+STATUS:  Every byte after the leading ">" and optional ">DDHHMMz 
+optional time stamp should be OK for UTF-8.
+
+POSITIONS/OBJECTS:  The free-form TEXT field in APRS begins after
+the symbol byte, but does have many optional constraints.  Beginning
+in that byte can be all of these fixed defined formats:
+
+CSE/SPD
+PHGxxxx
+RNGxxxx
+DFSxxxx
+/A=xxxxxx (anywhere in the field, preferred at the end)
+DIR/SPD   (wind heading and speed in complete WX format)
+Tyy/Cxx   (Area Object descriptor
+!DAO!     (anywhere in the field, preferred at the end)
+[XX]      (for Signposts anywhere in the field]
+
+In all cases, the free field text is shifted to the right.  The 
+original intent was that a DELIMITER such as a SPACE or a "/"
+would follow these fixed formats to distinguish the following
+additional free field text.  The intent was that all TEXT parsers
+would assume that a SPACE or "/" in that next position was a
+delimiter and would ignore it, or at least not waste valuable
+screen bytes with a leading SPACE or "/" on display.
+
+However, this was not codified in the spec and for example, the 
+tens of thousands of APRS radios did not make that assumption and
+so will display any leading delimiter.  Therefore, it is better 
+to not transmit a delimiter if you do not want to waste a byte 
+on the mobile radio display.
+
+I ask that all future implementations allow for an optional 
+delimiter "/" or SPACE in that location and IGNORE it if needed 
+to preserve display space.
+
+CONCLUSION:  UTF-8 text can begin after the above optional fields.
+
+
+Mic-E FORMAT:  The Mic-E format has additional restrictions, due
+to its evolution.
+
+1) We have depricated all support for the original Mic-E Mic-encoder
+alpha and beta models which had limited symbols, and several special 
+telemetry formats.
+
+2) The first 4 bytes MAY contain altitude xxx} and xxx can be any
+ASCII value between $21 and $92
+
+3) The LAST one-or two bytes can be any of the Manufacturer and Version
+bytes which are usually "punctuation" bytes.
+
+Hence, UTF-8 may be used in the Mic-E Status Text Field as long as
+the above special areas are preserved.
+
+SUMMARY:  Have I missed anything?
+
+Bob, WB4APR

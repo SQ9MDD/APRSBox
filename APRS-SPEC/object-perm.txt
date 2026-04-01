@@ -1,0 +1,101 @@
+OBJECT NAME PERMANENCE                                       03 Feb 2007
+------------------------------------------------------------------------
+                                                                  WB4APR
+
+A fundamental principle of the original APRS, was that all objects were
+unique and global.  This means that anyone with new information about 
+the location or status of an object could update the object and take 
+over ownership.  This avoids the problem of abandoned objects on the 
+screen, garbage and erroneous data, and latency in information.
+
+At first glance this seems to be anarchy where anyone can overtake
+someone else's object and move it anywhere, but this is essential to 
+maintining an accurate tactical picture when some stations come and
+go and may not be able to maintain their objects.  For this reason 
+anyone can take over and update an object, and therefore to avoid any
+amboguity, all client software is required to keep and display the 
+ownership (sending station) of the last received copy of any object.
+
+APRS CLIENT RULES:  Therefore objects have always been handled under the
+following parsing rules:
+
+1) An object is unique by name.  Any new object received with the 
+same name as an existing one, must be assumed to be an update of the 
+same object.  
+
+2) The callsign of the sending station of an object must be retained so
+that APRS does not lose attribution as to the source of the object
+
+3) In comparing object names, character CASE matters.  Thus the object
+LeadMan and LEADman are different objects.
+
+OBJECT NAME PERMANANCE:  However, there was a need for permanent 
+objects in the case where multiple local areas may want to preserve 
+local objects that have identical names to other objects in the global 
+APRS system.  Such a Permanent Object format was proposed for APRS1.2.
+
+An example is a 146.940- repeater.  There may be dosens of these 
+repeaters across the USA and they should be considred as unique objects.
+Normally this is not a problem since no two 146.94 repeaters will ever
+exist in the same local RF area.  But the APRS-Internet system will be
+gathering these objcts from all over and will see them ping-ponging
+all over the country as each one identifies and would normally replace
+each other..
+
+The APRS1.2 solution was to define a class of objects that are permanent 
+yet, are backwards compatible to all existing clients. 
+
+OBJECTS: use the unique 111111z timestamp to indicate permanence
+
+The 111111z time stamp has always been recommended for all timeless 
+objects as a default to indicate to the viewer that this object time 
+stamp carries no temporal value.  Therefore, it was a reasonable 
+extension of this concept to declare that a 111111z object is permanent 
+and should not be overwritten by any other identically named object 
+UNLESS it is originated by the same transmitting station.
+
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+
+The FOLLOWING IS PRESENTLY NOT USED, BECAUSE UIVIEW INCORRECTLY 
+INTERPRETS ALL 3rd PARTY OBJECTS AS BEING ORIGINATED AT AN IGATE.
+Therefore We could not use 3rd party for the Voice Repeater 
+system, because it would cause all partioipating DIGIpeaters to all
+be flagged as IGATES.  Until UIVIEW can be fixed, we cannot use
+3rd party for any of its original intentions.
+
+The 3rd party TOCALL of APOBJ is the other way of indicating permanence.  
+An example are the repeater objects for voice repeaters that are being 
+sent in 3rd party format so that the D7 and D700 properly decode the PHG 
+data.  Here is an example of a 3rd party station object:
+
+BT }146.760->APOBJ:!DDMM.hhN/DDDMM.hhWrPHG5320 PL 107.3  Net Tu 9PM AARC W3VPR
+
+The pseudo TOCALL of APOBJ flags this packet as a permanent object.  
+Although this means little locally  on RF where there will never be more 
+than one repeater object on the same frequency, it does make a difference 
+on the APRS-IS where these objects are accumulated from all over.  By 
+recognizing the PERMANANCE Flags of 111111z for objects or APOBJ for 
+3rd party pseudo stations, this means that another object of the same 
+name will not overwrite an existing object, unless the object of the 
+same name is from the *same* originator callsign.
+
+Of course another method of making these objects unique is to use an added
+byte on the end of the frequency as in FFF.FFF-X where X can be one of 36
+different unique bytes.
+
+Since all OBJECTS require the timestamp field, this definition of 111111z
+as a permanent non-changing object is consistent with normal APRS usage
+going back to when objects were first introduced in the 1995 time frame.
+Hence it is backwards compatible with all systems.
+
+And FINALLY, any object transmitted as a 3rd-party format does not even get
+accepted by the APRS-IS in the first place.  Many IGates (wrongly)filter 
+out all 3rd party packets as a way of preventing RF=>IS=>RF=>IS loops.  
+THey should be filtering on the presence or absence of TCPIP*, not 3rd party
+but many of them took the easy way by ignoring all 3rd party packets.
+
+Thus these objects never even get into the APRS-IS in the first place.
+
+de WB4APR
+Bob Bruninga
+

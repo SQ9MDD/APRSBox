@@ -1,0 +1,52 @@
+Notes from Keith, VE7GDH - UI-view maps of Jamboree          30 May 09
+----------------------------------------------------------------------
+
+Keith VE7GDH [ve7gdh@rac.ca] writes:
+
+I also created an underlay with the JPG map.  For anyone using UI-View 
+and PMapServer 7, they could convert the JPG to BMP format and create 
+a calibration file for it. The filename should be the same as the BMP 
+file (minus the BMP) and with an extension of SAT. The content of the 
+SAT file would be...
+
+-077.37683,38.1645,-077.30133,38.12166
+
+It's "top left / bottom right" in degree decimal format.
+
+The advantage of PMapServer 7 and having it as an underlay instead of 
+a static map is that they can pan / scroll / zoom... whether they zoom 
+out to see the whole continent, just the nearest towns, or areas 
+immediately adjacent to the underlay. Of course, to be able to make 
+use of the details shown in the underlay, they will need to be zoomed 
+in so the underlay covers the whole screen or even a bit more.
+
+You could convert the JPG to BMP format and make it available along 
+with the file JAMBOREE-APRSMAP50.SAT (with the above "calibration"
+information in it) for use by those that are using PMapServer. The
+instructions could be...
+
+* Download Jamboree-APRSmap50.BMP
+* Download Jamboree-APRSmap50.SAT
+* Save both files in the UNDERLAYS folder below the PMapServer 7
+   installation folder.
+
+For those that have never loaded an underlay before, the steps to
+actually use the underlay would be to click on...
+
+* MAP
+* Control Panel (only be visible if you are running PMapServer)
+* Underlays
+* Load Underlay
+* Select the underlay and click on OK
+* click on EXIT
+
+Basically, UI-View users would have the choice of using the JPG as a
+static map, or as an underlay (scrollable and zoomable) if they are
+using PMapServer 7. If they aren't, their only choice would be to use
+the JPG as a static file.
+
+73 es cul - Keith VE7GDH
+--
+"I may be lost, but I know exactly where I am!"
+
+

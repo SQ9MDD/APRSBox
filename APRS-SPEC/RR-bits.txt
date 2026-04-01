@@ -1,0 +1,95 @@
+APRS FUTURE USE of AX.25 SSID RR BITS                   05 Dec 2012
+-------------------------------------------------------------------
+                                                             WB4APR
+Future:  This is a preferred method of indicating Operator Present 
+and packet Precedence.  It must be considered in conjunction with
+previous proposals.  See priority-bit.txt and operator-bit.txt, 
+though precedence-bit.txt now replaes the previous "priority" bit.
+
+Precedence Bit
+Operator Present Bit
+Prempted (not used) digipeater bit
+3 others - TBD
+
+AX.25 has two RR bits in every callsign SSID field.  "The bits ... 
+may be used in an agreed-upon manner in individual networks".  The
+bits default to 11.  We hope to use these for future APRS features
+without impacting any existing systems, hardware, firmware or 
+software.  There are 4 RR bits in the minimum FROM/TO 
+callsign fields plust 2 more bits for each digipeater field.
+
+PROPOSED FROM-CALL RR BITS:  The first bit would be a precedence bit.  
+The default (1) means precedence.  If the first bit is a (0), then 
+the packet is a new, lower precedence packet (which can be decimated
+if the network finds this useful).  The second bit is an operator-
+present-bit. 
+
+PROPOSED TO-CALL RR BITS:  TBD
+
+PROPOSED DIGI RR BITS:  The LSB RR bit (1) (present default) 
+means the field has not been pre-empted.  If the bit is a (0) then 
+that field has been pre-empted along the way (assuming the has-
+been-digipeated-bit has also been set.  The MSB RR bit is still
+TBD and defaults to 1.
+
+One of the main drivers for finding these bits was to find a way to
+mark a digipeater field as having been preempted by a digipeater 
+but keeping the field intact for network tracing.  In this use, a
+premptive digipeater will mark all prior unused fields as has-been-
+used but will also mark them as "preempted".  All digipeater fields
+after the one used by this digipeater will be retained as unused
+and available for further digipeating.
+
+See http://aprs.org/aprs12/preemptive-digipeating.txt
+
+
+TRANSPARENCY:  The bits (being reserved) should be ignored by all 
+existing receiving systems.  We must first determine if this is the
+case for all existing systems.  Unfortunately, only hardware and
+firmware TNC builders can do these tests, since normally the user
+is not given access to these bits.  The easiest tests are to simply
+set the bits to 00 on transmit, and then operate APRS as normal and
+see if the bits propogate throught the system and also do not 
+affect any existing function.  The following list of tests are
+known to date:
+
+Kenwood - reports the bits -should- be transparent
+Byonics
+
+KISS TNC's - Applications that use TNC's in KISS Mode will have
+access to these bits for future use.  
+
+SOUNDCARD TNC's - will also have access to these bits.
+
+HARDWARE TNC's - will not have access to these bits witout upgrade
+but will hopefully pass the bits while digipeating
+
+AX.25 FORMATS:  Every byte (octet) in the AX.25 header address field 
+has the LSB set to "0" to indicate that additional bytes follow.  
+Only the last byte of the entire address field (FROM, TO, DIGIS...) 
+is set to 1.  This address space consists of multiple 7 byte 
+callsigns, with the last byte of every callsign being the SSID byte. 
+The SSID byte contains these bits MSB to LSB:
+
+HRRSSIDE
+
+Where H is the has-been-digipeated bit. Digipeaters set this bit to 1
+
+RR are the two reserved bits planned to be used by APRS
+
+SSID are the four SSID bits
+
+E - EXTENSION bit.  0 = more fields follow.  1= this is last field.
+
+OTHER USES OF THE RR  BITS:  
+
+DAMA:  The RR bit number 5 is being used in Europe where DAMA is 
+popular.  But since that is a CONNECTED protocol it has no impact on 
+APRS which is an independent network from DAMA networks.  Please see 
+this link:
+http://www.amsat.org/amsat-new/news/viewBrowse.php?nID=382&y=1996&v=24
+
+AX25 Modulo 128:  Andre PE1RDW also reports: ax25 modulo 128 uses bit 
+6 of the source ssid but only as information for monitoring stations.
+
+Bob Bruninga, WB4APR

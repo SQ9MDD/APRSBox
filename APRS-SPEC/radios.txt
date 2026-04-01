@@ -1,0 +1,67 @@
+TABLE of APRS-TouchTone RADIO Compatibility                 9 Oct 2008
+----------------------------------------------------------------------
+                                                                WB4APR
+
+There are 26 known methods or systems in Amateur Radio that can do
+text messaging.  Many of them rely on the telephone key-pad for data
+entry.  The APRS radios (D7, D700, D710, VX8R etc) all use the keypad
+for text entry.  Since 2001 or so we have been trying to use DTMF text 
+messaging from ANY HT with a DTMF key pad so that all ham radio 
+operators can check-in to APRS, not just those with APRS radios.  The 
+DTMF to APRS gateway is called APRStt Touchtone).  See
+
+www.aprs.org/aprstt.html
+
+This is all part of the Universal Ham Radio Text Messaging Initiative
+see:  www.aprs.org/aprs-messaging.html
+
+This file and table below will help us document all existing DTMF 
+capabilities in ham radios.  Basically there are three classes:
+
+* Radios with APRS packet directly (D7, D700, D710, VX8R and DR135)
+* Radios with some kind of DTMF to text messaging (rudimentary)
+* All other radios with DTMF keypads
+
+Even if not used for APRS, using such digital signaling from the field
+can be very valuable for events... www.aprs.org/aprsevent.html
+
+Radio   mem #  Alpha  Encoding
+------- --- -- -----  ------------------------------------------------
+
+TH-D7   10  16 1=qz   multi-press A=next-letter. Full APRS packet
+TM-D700 10  16 1=qz   multi-press A=next-letter. Full APRS packet
+TM-D710 ??  16 1=qz   multi-press C=next-letter. Full APRS packet
+VX-8R   ??  ?? 7=PQRS multi-press "mode"=next-letter. Full APRS packet
+
+FT-51R  10  12 1=QZ   TX & RX two-key-using A/B/C    (sold 1995-1999)
+        10  15 DTMF   for normal autodialing (or more messages)
+FT-11R and FT-41R also have this capability
+
+TH-78   10   6 1=QZ   TX & RX two-key-using A/B/C for 6 letter msgs
+                      can combine for up to 60 letter message
+        10  15 DTMF   for normal autodialing (or more messages!)
+
+FT-50R   8  16 ----
+TH-79a  10  15 ----   
+FT-470  ??  ?? 7=PQRS ?????
+VX-7R    9  16 7=PQRS ?????
+
+Cell Phones    7=pqrs multipress  PAUSE=next-letter
+Echolink...    1=QZ   two-digits-per-letter-fixed
+
+APRStt:        7=pqrs multi-press A=next-letter
+               Callsigns use two-key method
+
+> K1RFD (author of EchoLink) seems willing to consider possibly 
+> supporting MULTI-PRESS in addition to his two-key method at some 
+> time in the future to come more in line with cell phone use... 
+>
+> See the APRStt web page www.aprs.org/aprstt.html  
+> It is evolving, so some sections are out of date 
+> 
+> Once into the local APRStt system, you can send just your SUFFIX if
+> there is no local conflict.  IE, "APR" (277) instead of "WB4APR" 
+> (9A2B42A7A7C).    
+
+Bob, WB4APR
+

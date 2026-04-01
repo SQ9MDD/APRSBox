@@ -1,0 +1,997 @@
+APRStt version 0.2         The APRS Touch-Tone SPEC           10 Oct 2008
+-------------------------------------------------------------------------
+                                                                   WB4APR
+
+*** THIS WAS THE ORIGINAL APRStt SPEC ***
+*** It is not the simplified version  ***
+*** that we are currently developing  ***
+*** in 2009 for windows.              ***
+
+APRStt is a gateway between conventional Packet APRS and a separate 
+simplex voice channel where APRStt users can "log-in" to APRS using only
+their DTMF key pad and where they get voice responses informing them of
+significant APRS information in their area.
+
+APRStt VERSION 0.2  INTRODUCTION:
+
+The original APRStt was a local Touchtone/Voice interface to APRS.  It 
+ran on any old DOS PC with standard LPT1 and COM1 ports.  It required an
+external hardware DTMF decoder and an 8-resistor D/A for voice.  It was
+last updated 8 Nov 2002.  File name is aprstt-old.txt.  All the files
+were in APRStt.zip
+
+Voice-Only.  Even without any DTMF input data from any APRStt users, the
+APRStt gateway can give unsolicited voice comments on items of local
+interest.  Examples implemented in APRStt1.0  were:
+
+  1) It would speak the movements of special stations.
+     A) Any TH-D7 using the  TRIANGLE ICON
+     B) Any D700 or any other APRS mobile using the "/n" ICON
+     C) Any one station commanded by the APRStt operator (or DTMF user)
+  2) Speak the AZ and EL and Frequency of any satellite in view
+  3) Speak the TRAFFIC Speed past any TRAFFIC choke point that is
+     listed in the TRAFFIC.POS file.  This is for daily commuters.
+     See TRAFFIC.TXT
+
+Using APRStt in this manner is great for a RACE or other event with one
+or only a few special calls that everyone needs to track.  Just put APRStt
+on a simplex frequency and ALL HT users can listen in...
+------------
+
+APRStt was first demonstrated at Dayton 2002 and voice was added by RAC
+2002 in Vernon B.C. 
+
+APRStt DESCRIPTION:
+
+An APRStt local server consists simply of a standard APRS Packet
+TNC/Radio on the Comm port and another radio with audio connectinos
+to the Voice and Data lines on the APRStt interface to the LPT1 port.
+The packet side operates on the 144.39 or other APRS channel and the
+other radio operates on the local APRStt VOICE channel.  NOTICE, a D7
+or D700 can serve both purposes, thus, one laptop-one-radio complete.
+
+This APRStt spec provides for a standard TTone-to-APRS and APRS-to-Voice
+conversion format so anyone, anywhere can send and receive APRS messages,
+position reports, Objects and Queries with only an HT/Mobile with a TTone
+pad and can hear voice responses.  The ability of APRStt to allow every-
+one with a simple HT to participate in data entry and to monitor APRS
+moving objects opens up many new possibilities for the user of APRS to
+support special events.  Here are several examples:
+
+1) My kids can use an $88 HT to send messages to Dad's Taxii service,
+   ("get me at 5").  Or to query where I am (QRD*WB4APR)
+
+2) You can send EMAIL from any DTMF HT.
+
+3) Mobiles/Portables at an event can report their position anywhere or
+   in the "vicinity" of reference points with only 3 or 4 digit entries.
+   The entry "B*#013" puts them in the vicinity of mile 13 (with a half
+   mile ambiguity).
+
+4) Any tracker, station or Object can be set for automatic APRStt voice
+   reporting as each new posit comes in on APRS.
+
+   NOTE:  APRStt reports all positions as a DIRECTION and DISTANCE to
+   other known reference locations (not lat/long).
+
+5) A blind APRS user at RAC suggested he could set his D7 band A to
+   APRS as a conventional APRS tracker and listen to APRStt on band B
+   and now he would know his OWN position.  Normally, everyone else
+   knows where he is, but not himself.
+
+6) APRStt can be set to announce the AZ and EL of any APRS (or other)
+   satellite when it comes in view.. APRSdata.exe already puts these
+   APRS Satellite objects on 144.39.  The command to activate Voice
+   announcements is simply "AA" to "Activate Amsats".
+
+7) APRStt also has traffic monitoring capability and can report by voice
+   the speed of traffic by certain local traffic choke points.
+
+The abbreviated short format definintions of APRStt combined with the
+TTone memories built-in to most radios allows for nominal APRS operations
+with only a few key strokes.  In fact, the number of key strokes can
+actually be less than for a Kenwood APRS radio message!
+
+Further more, there are many non APRS HT's that were built in the
+1990's that can receive Touch Tone alphanumeric messages.  APRStt can
+forward APRS messages from 144.39 to these HT's just as easily as to
+a THD7 by using DTMF for these radios:  (this feature is not yet done)
+
+    Kenwood TH-28A, TH-48A, TH-78A
+    Yeasu   FT-11R, FT-41R, FT-51R
+    Icom    W31A
+
+
+This APRStt system is implemented on a single PC listening for tones on
+your normal voice repeater or on a simplex frequency usually up in
+the 147.5 MHz range (147.555).  The APRStt engine decodes the DTMF
+commands and responds to queries or re-formats the received TTone
+digits into an APRS packet.  After confirmaiton of correctness by the
+user, then APRStt sends the data out on 144.39 as a normal APRS packet.
+For feedback to the user and for sending APRS messages back to the
+APRStt user, the PC uses synthesized voice.
+
+The following topics are covered in this document:
+
+   APRStt Introduction
+   APRStt Description
+   APRStt KeyPad:   Precursor Keys,  Editing Keys
+   APRStt Formats:  Hashing, Responses, Nomenclature, Callsigns
+   CALL Format Variations
+   Position Format Variations
+   Message Format Variations
+   Query Formats
+   Special Data Example
+   Icons
+   Retries
+   SPECIAL TRACKING
+   APRS Tips for Special Events
+   APRS Software Concepts
+   APRStt DTMF Interface Schematic
+
+
+APRStt KeyPad:
+--------------
+
+All APRStt formats are based on the familiar 16 button DTMF keypad
+found on almost all HAM radios.  These keys, 0-9, *,#, and A,B,C,D are
+used for all entries.  For commonality with the same keypads used on
+the Kenwood APRS data radios, the assginments of the alphabet to those
+keys and the fundamental definitions of the ABCD keys are kept as
+close as possible to the APRS Kenwood design shown below:
+
++------------------+  This figure shows the standard Touch Tone Key pad
+| 1    2    3   A  |  with its standard Alphabetic alternate definitions.
+| QZ  ABC  DEF --> |  These definitions match those on the Kenwood also
+| 4    5    6   B  |  used for APRS message entry.  For Alphabetic text
+|GHI  JKL  MNO <-- |  entry, the letter A would be one press of the "2"
+| 7    8    9   C  |  key, B would be "22" and C would be "222".  To enter
+|PRS  TUV  WXY del |  the digit "2" within text, it would be "2222". If
+| *    0    #   D  |  two adjacent letters use the same key, then press
+|    space     OK! |  the "A" key between them.  The # key does all
++------------------+  punctuation in the order ?!'.,-/ etc
+
+PRECURSOR "#" KEY:  When APRStt is at a voice repeater and listening
+to the repeater input for tones, it must share the audio with the
+existing COMMAND decoder.  Therefore, all APRStt sequences must be
+preceeded with a key that tells the command decoder to ignore all
+remaining tones. In most repeater controllers, this is the # key.  Thus,
+we can use it as the start of all APRStt  sequences to force the normal
+repeater to ignore the remainder of the APRStt sequence.  To APRStt,
+leading #'s are ignored.
+
+EDITING KEYS:  APRStt uses the A, B, C and D keys as special format
+identifiers when they are the leading character in a field.  But whenever
+they occur within an alphanumeric field, then they also take on these
+editing definitions:
+
+  A - Letter separator.  It is used between sequential letters that share
+      the same number digit to tell APRStt to move on to the next one.
+  B - Is a backspace character which deletes the previous character
+  C - is a universal CANCEL or ABORT for the whole APRStt text
+  D - Is the OK, or ENTER key.
+
+
+APRStt FORMATS:  There are only four basic APRStt formats, Call, Position,
+Message and Query.  The senders call is included in the CALL format to
+identify the sending station for either a position or a message.
+The CALL format includes the call and other unchanging data, the
+ICON and Comment text.  The position format can be used for not only
+station position, but also for objects.  Messages can be between APRS
+stations or Email.  Queries ask APRStt for information about other users.
+
+With these fundamental types and the numerous sub formats and short-cuts
+APRStt becomes a very powerful APRS communications entry system and
+APRS data server.  Each of these four entry formats begin with one of
+the four special touch tone keys "A","B", or "C" and they all end
+with a "D".
+
+CALL: Acccc.*II*comment...D  - A,MYCALL,ICON,position comment
+POS:  BLL.*LL.D              - B,LATITUDE,LONGITUDE (or shortcuts)
+MSG:  Ctttt.*message...D     - C,TOCALL,message text
+QRY:  QTMtttt.D              - Q,TYPE,MODIFIER,CALLSIGN
+
+In all cases where a packet will be generated, the users entry is
+announced, but the packet is held in a temproary buffer.  It will not
+be sent on the APRS channel, 144.39 until the user sends "OK" on his
+keypad (the digits 65) and ends it with the usual "D".  Example:
+
+  * A brand new user enters his full call.
+  * A 10 mile ambiguity posit is prepared for him around the APRStt loc
+  * If he enters OK, it is sent.  If not, it is held
+  * If he next enters a better posit, then the new resulting packet
+    overwrites the pending packet and the new one is held.
+  * If he now enters OK, then it is sent.
+
+HASHING:  An important concept in APRStt is hashing.  Hashing in this
+context means simply entering a single digit equivalent for each alpha-
+numeric character instead of the exact 2, 3, or 4 key press alphanumeric
+definition. Then APRStt will try to use syntax and heuristics to try
+to figure out the most probable meaning for a given entry.  In other-
+words the exact way to spell WB4APR is 922444427A77 but in most cases,
+just using one key press per letter or hitting 0924277 will be a unique
+enough number that only matches WB4APR in your area without ambiguity.
+In the hashed example, the leading "0" implies the callsign is a HASH
+and not exact.  In APRStt two major fields are usually hashed,
+Callsigns and ICons.
+
+In any CALLSIGN field, the presence of a leading "0" indicates that
+the callsign is hashed otherwise it is decoded as a full alphanumeric
+entry.  APRStt decodes hashed calls easily, because it is listening to
+the APRS channel and maintains a list of all calls heard in the local
+area.  On receipt of a DTMF hashed callsign, it will resolve the match
+to the correct callsign using these rules:
+
+1) For the "FROM" field, only callsigns that have been previously entered
+   via APRStt touchtones will be searched for a match.
+
+2) For other calls, any callsign heard is compared to a hash entry.
+
+3) If no match, or duplicate matches, a "QRZ" or WHO? is returned.
+
+4) The SSID is indicated with "0xx" as being the equivalent of "-xx".
+   A callsign ending in "0" or with no "0xx" is assumed to be the
+   root call except as noted in number 5 following:
+
+5) For "FROM" callsigns, the lack of any SSID will imply "-11" as
+   the default for all APRStt users.  An ending "0" is required to
+   force the root call.
+
+6) If only a root call (hashed) is used for a TOCALL of a message,
+   and there is no exact match to the hash in the currently heard
+   list, then the most recently heard SSID for that call will be used
+   as the on-air packet call for the message and no error is returned.
+   This ambiguity is permissible, becasuse all APRS client software
+   is supposed to capture APRS messages to any of it's SSID's.
+   The only requirement for an exact match is for the purpose of ACKS.
+   And since APRStt does not send DTMF' acks back to the user, this is
+   not critical and the message will be captured by all SSID's of that
+   station currenlty on the air.
+
+
+RESPONSES:
+----------
+
+APRStt responds to user entries using voice to validate the users entry
+and to respond to his actions:
+
+ CW  Voice       DTSS    MEANING
+ --- ----------  ------  -------------------------------------------------
+ QRZ no match    WHO?    User callsign not yet received
+ R   callsign    OK      Sent following an understood entry
+ K   tbd         Over    Sent as a prompt for next entry
+ ?   bad call    What?   Entry not understood (Doesnt have numeral, etc)
+ W   no match    Who?    No matching callsign (if referenced)
+ ... match error Dupe?   Hash is ambiguous.  Spell out the full call
+ BT  tbd         Break.  APRStt timed out, canceled CALL, ready...
+ M   message     Msg     Message
+ CQ  CQ message  CQ      Message to ALL received
+ B   B message   Bulln   Bulletin (will be "bulletin")
+ EM  email       Email
+ ARL ARRL nn     ARRL    ARRL## Radiogram
+ P   posit       POS     Position
+ L   near posit  POS##   Reference Location
+ C   near call           Relative Position near CALLSIGN
+
+
+RESPONSES:  These responses are sent in response to an APRStt entry.  For
+positions and locations, the LAT/LONGs are not spelled out but reported
+as a direction and distance from known reference points.  These known
+reference points are usually the APRStt device itself, the local club
+repeater, the local digipeater, "downtown", the last-referenced object
+or another referenced position.  This way, one can hear the relative
+positions of stations or objects relative to each other.
+
+When a New User enters his call, both the Reference position and the
+Target position are defaulted to APRStt.  Once he has entered a new
+position, then the defaults are to set to his location.
+
+
+DIALOG WITH APRSTT:
+
+Although APRStt was designed to convert DTMF to the four standard
+APRS packet types, there are additional DTMF commands useful for the
+user in his interacting with APRStt.  These are best remembered by
+their HASH codes:
+
+ ASD (273) Activate Sat Data    - Activate satellite voice data
+ ATS (287) Activate TRACKER SPCL- Activate voice tracking of SPCL objects
+ BYE (293) BYE                  - Log-off user (cancels his callsign)
+ OK  (65)  OK                   - OK, send the pkt
+ MM  (66)  Mile-Mark entry      - MMRD#nnn Road and Mile Mark number
+ SA  (72)  Say Again            - repeat the last voice response
+ SP  (77)  Say Packet           - say the packet pending (not yet OK'd)
+ SLL (755) Say Lat/Long         - Say Ltitude and Longitude for target
+ IT  (48)  Identify Target      - What is the current Target?
+ IR  (47)  Identify Ref         - What is the current Reference?
+ QRU (178) QRU                  - What is status of APRStt
+ QRZ (171) QRZ                  - What is the current APRStt users call
+
+ RESPONSES:
+
+ CALL:    HELLO <CALL>
+ MSG:     MESSAGE TO <CALL>  or EMAIL TO <spells out first word>
+ POSIT:   <CALL> POSIT IS <DIRECTION> <DIST> FROM <ref>
+ QUERIES:
+   Callsign:  <target> IS <direction> <dist> MILES FROM <reference>
+   Nearest:   NEAREST <type> IS <direction> <dist> MILES FROM <reference>
+   Relative:  <target> IS <direction> <dist> MILES FROM <type>
+
+
+NOMENCLATURE:  In this specification,  the following shorthand notation
+is used in defining various formats:
+
+    A,B, or C   - As leading characters, they define the APTStt formats.
+                  Otherwise they are editing keys as noted above.
+    D           - All entries end with D as the ENTER or OK key
+    *           - The * is typically used as a data field separator
+    #           - # as a trailing character on a command = HELP
+    lower case  - means full alphanumeric text
+    callsigns   - are full alphanumeric text but if they begin with a "0"
+                  then the call is hashed.
+    .           - a dot means variable length field
+    UPPER case  - means a NUMERIC entry
+
+CALLSIGNS:  Callsigns are either fully spelled out, or begin with a "0"
+    and are hashed.  Further, since the APRStt user will usually need to
+    use a different SSID to distniguish his call from his other APRS
+    stations, APRStt will assume the default SSID of -11 for all APRStt
+    users unless a specific one is entered.  To separate the SSID digits
+    from the call, enter a "0".  To enter the root call only without SSID
+    then enter only the 0.  To accept the default -11, leave off the 0.
+    Here are some examples using my call:
+
+    WB4APR-11   922444427A77     <== no SSID imples -11
+    WB4APR-3    922444427A7703   <== all SSID's begin with a "0"
+    WB4APR      922444427A770    <== forces -0 or no SSID
+    WB4APR-11   0924277          <== The hashed version
+    WB4APR-3    092427703        <== The hashed -3 call
+    WB4APR      09242770         <== The hashed root call
+
+
+CALLSIGN FORMAT VARIATIONS:
+---------------------------
+There are five variations on the CALL format and in each case, the callsign
+may be fully spelled out, or hashed (with a leading "0").  For the first
+time in an area you must always use a fully spelled out callsign so
+that the local APRStt knows who you are.  From then on, you may hash it
+and or enter the additional optional fields...
+
+   Acccc.D               - A,MYCALL
+   Acccc.*iiD            - A,MYCALL,ICON
+   Acccc.*status...D     - A,MYCALL,status text
+   Acccc.*ii*status...D  - A,MYCALL,ICON,status text
+   Acccccc#hAAAOOOD      - Special 16 digit Call/Posit format for space
+
+The ICONS are an optional two digit alphabetic abbreviation of the same
+16 icons that are in the Kenwoods.  See section on ICons later.  It is
+distinguished from a "status" field because it is exactly 2 digits long.
+On receipt of an CALL packet, with no prior information on file, then a
+position packet will be generated showing a position within the vicinity
+of the LAT/ LONG of the APRStt engine but with a 10 mile ambiguity.
+This puts you on the worldwide APRS "map" as being in the area of this
+APRStt server.
+
+
+POSITION FORMATS:  Position Reports consist of one or two fields,
+Bxxx*xxx with meaning determined by the first character and length of
+the fields as follows:
+
+ B*cccc.         - In vicinity of station cccc...
+ B#nnn           - In vicinity of numbered LOCation "nnn"
+ BMMRD#nnn       - Road and Mile Mark number
+
+ Ba     *cc      - sets Ambiguity and position comment
+ Bmm    *mm      - Minutes  (nearest mi +/- 30mi fm APRStt)
+ Bdmm   *dmm     - Degree/minutes (nearest mi +/- 300 mi fm APRStt)
+ Bmmhh  *mmhh    - L/L MM.HH exact posit +/- 30mi fm rptr          ..
+ Bddmmhh*dddmmhh - L/L exact position..(N,S,E,W same as APRStt)
+
+ AMBIGUITY:  0 = 0.1 mile       1   = 1 mile,       9 = 9 mile
+
+ POSITION COMMENTS:  Comments are hashed from 1 to 3 digit entries:
+    C (2) - Committed      S  (7)   - Special      C1 (21) - Custom 1
+    E (3) - Enroute        RE (73)  - Returning    C2 (22) - Custom 2
+    I (4) - In Service     PR (77)  - Priority     ...(2n) - Custom n
+    O (6) - Off Duty       911(911) - Emergency    C6 (26) - Custom 6
+
+LAT/LONG entries can be either exact, ambiguous or relative depending
+on the number of digits entered.  The three LAT/LONG formats are:
+
+ Bmm    *mm     *SD - Minutes  (nearest mi +/- 30mi fm APRStt)
+ Bdmm   *dmm    *SD - Degree/minutes (nearest mi +/- 300 mi fm APRStt)
+ Bmmhh  *mmhh   *SD - L/L MM.HH exact posit +/- 30mi fm rptr          ..
+ Bddmmhh*dddmmhh*SD - L/L exact position..(N,S,E,W same as APRStt)
+                *S  - The status byte is optional
+
+REFERENCE POSITIONS:  You may refer to a nearby position such as
+someone else's call or an object or a prepared map of locations.  In
+this case, then the first field points to the object location or call
+and the second field enters the position ambiguity of either 0.1, 1
+or 10 miles using the digits 1,2 and 3.  One mile is the default.
+A given ambiguity will remain with that station until changed.
+The two reference formats are as follows:
+
+ B*cccc.*X*SD - In vicinity of station cccc... (ambiguity X)
+ B#Xnn*X*SD   - In vicinity of LOCation "Xnn"  (ambiguity X)
+
+LOCATION DETAILS:  The provision for position by reference in support
+of special events is where APRStt really shines.  The format B#Xnn
+will place you in the vicinity of a location identified to APRStt as
+LOCXnn.  This can be a preloaded file, OR it can be an OBJECT uploaded
+to APRStt over the air in near real-time!  Imagine being able
+to report the position of anyone or anything at your special
+event by simply entering the 6 digits above on ANY HT.  Think of the
+first digit (X) as a "table" and nn as being a given location from 1
+to 99 in that table.  One table can be Checkpoints, Another can be
+water stops, another can be MILE marks another can be food stops,
+another can be local hotels, etc.
+
+For example:
+    B#103     - places you at checkpoint 3
+    B#103*3   - places you enroute checkpoint 3
+    B#103*73  - places you returning from checkpoint 3
+
+For Dayton, the Hamvention brochure contains a list of hotel areas
+numbered 1 through 13.  Just entering 7 TTones, will place you on the
+map near your hotel.  If all spin-off night-meeting locations were
+also listed in the Brochure with a number legend, then people could
+just use there HT's without the bother of a GPS for tracking friends
+around the city.   The main HARA buildings could be 001 to 009, the
+hotels could be 101 to 120  The restaurants could be 200 to 230, etc...
+
+MILE-MARK POSITION REPORTING:  This evolves from the Mile Mark position
+plotting built into APRSdos (and now UIview) that allows anyone to
+locate a mile mark on the map.  In APRStt, the entry BMMRD#nn will place
+a station on the map in the vicinity of mile mark nn on road RD.  These
+entries use the MM.ALL file derived from  the MILEMARK.DAT file included
+in all copies of APRSdos and recently UIview.  The Difference between
+these files is that MM.ALL contains both LAT and LONG for the reference
+mile marks wheras MILEMARK.DAT only contained one or the other.
+
+The MM.ALL file provided with APRStt is quite crude but covers most
+interstates.  But you should customize entries for your area,
+and copy the result to MM.DAT which is the file used by APRStt.
+Each entry in the file is a long road segment giving the LAT/LONG of
+the beginning and ending Mile mark.  APRStt then can interpolate to
+any milemark in  between.  Since the purpose of mile marks are only
+approximate positions to the nearest mile or so, only a few such straight
+line segments can cover most interstates.
+
+The entry MD50,0,43,LA1,LO1,LA2,LO2 covers the stretch of Maryland
+Route 50 starting at mile mark 0 and going to mile mark 43.
+
+Since APRStt is a local program, it only needs entries for roads within
+RF range of APRStt.  So copy only the needed entries from the MM.ALL
+file to your own local MM.DAT file, and save a BACKUP copy of it as
+MM.MY in case something ever overwrites the MM.DAT file... or MM.SS
+for your state SS.
+
+Also, if there are no adjacent state ambiguities, you may also remove the
+state abbreviation from the entry to save keystrokes for all DTMF users.
+BUT if you need to retain the STATE abbreviation, you must convert them
+to the DTMF equivalent numerical digit.  In my case, "MD50" becomes "6350".
+
+
+
+MESSAGE FORMATS:  Messages all begin with the "C" key.  The second letter
+is hashed (Q=1, B=2, E=3).  The shortcut Email assumes the recepient has
+his Email Address in his own comment or status text.  If no Email address
+is available, it is simply a message to his RF callsign.  An advantage
+of APRStt is that it adds a time-stamp to the message automatically if
+there is room but puts it on the end so that it does not detract from
+the short screens on the D7.  The time stamp format also alerts the
+recepient that the APRStt sender cannot receive a reply.
+
+   CQ*msg      - CQ message to ALL
+   Cccccc*msg  - Message to ccccc
+   C#msg       - Subsequent lines to the same person.
+   Cccccc*E msg- Message to ccccc sent to his email addr (if given)
+                 (For APRStt, the E is hashed "3" for brevity.
+   Cccccc*E P  - Email as above containing sender's present position.
+   CBn*msg     - Bulletin number n
+   CE*aaa msg  - EMAIL in the usual APRS format with address as 1st word
+
+
+The MESSAGE format of APRS allows APRStt infinite expansion capabilities
+for any kind of data reporting at any kind of event.  Thus, you can
+define any message for your application.
+
+
+SPECIAL DATA EXAMPLE:  A local HAM club provides radio support for
+our local scout Klondike Derby.  At each checkpoint the HAMS report by
+voice the checkpoint, the troop number and the score.  These are
+laboriously hand scribed onto paper, then passed to a keyboard operator
+that enters the data into a computer to tally the results in (long
+delayed) real time.  I suggested APRS, but we cannot find enough
+D7's or operators who know how to use them.
+
+But with APRStt anyone with any HT can enter Ctttt*CKss where tttt is
+the troop number, CK is the checkpoint and ss is the score.  There is
+no need for human scribing, because the data (after becoming an APRS
+packet) goes directly into the computer.
+
+
+QUERIES TO APRSTT
+-----------------
+
+The APRStt Query allows the APRStt user to query for information about
+data in the APRS system.    A Query begins with the hashed letter "Q"
+which is of course the digit "1" on the TTone keypad and has two
+following fields and a third optional callsign field.
+
+ QUERY FORMAT:  QTM*cccc.D   - Q,TYPE,MODIFIER,CALLSIGN
+
+The second field is the TYPE character and is a single digit hash for
+the different types of Querys and the MODIFIER field is also hashed
+as a modifier of that TYPE query.  The last field (optional) is for
+a callsign or object name.   The use of the TYPE key and the MODIFIER
+key allows for up to 99 different types of queries.
+
+For most Queries, locations are given for a TARGET in terms of DIRECTION
+and DISTANCE from a REFERENCE.
+
+The 10 TYPES of Query are indicated by the first field of the Query.
+Each of these can be thought of as ten different Tables of additional
+Queries.  The # key in each category is like the HELP key and will
+return the list of options for that TYPE.  Again all Queries are
+documented by referring to their HASHED nomenclature.  In other words,
+the query "QRZ" really is a press of the "171" keys followed by the
+usual "D" Key.
+
+The following are the major categories of QUERY.  Many are not yet
+implemented.  Only the QUERY-NEAREST and QUERY-REFERENCE are mostly
+complete.
+
+    TYPE          KEY       DESCRIPTION of QUERY TYPES
+    ------------- --------  ------------------------------------------
+    Q             1         Returns the "state" of APRStt (SATS, SPCL)
+    Qqz??         11 (QZ )  TBD
+    QC - Club     12 (ABC)  Information relative to the local clubs
+    QE - Event    13 (DEF)  Event related Queries
+    QH - Help     14 (GHI)  returns HELP info
+    Qjkl???       15 (JKL)  TBD
+    QN - Nearest  16 (MNO)  NEAREST stn/obj (changes the TARGET)
+    QR - Relative 17 (PRS)  Selects REFERENCE for Position of TARGET
+    Qtuv???       18 (TUV)  TBD
+    QW - Weather  19 (WXY)  returns the nearest WEATHER to you
+    Q#            1#        Returns a HELP list of Qx options
+
+
+NEAREST POSITION QUERIES:  These will return the call and position of
+the nearest of a selected set of Target stations/object types.  In
+most Queries concerning positions, a Query will respond with a direction
+and distance between the "reference" position and the "target" position.
+The reference position and target position are changed by the user, but
+otherwise do not have to be included in each specific Query....  For
+each new APRStt user, however, both the Target and Reference are set
+to the APRStt default.  Once he enters his position, then both are
+referenced to him.  Here are the definitons for the NEAREST Queries
+(QNx or "16x"):
+
+
+  NEAREST(16)     KEY (n)    NEAREST STN/OBJ TO THE REFERENCE POS
+  -------------   ---------  ------------------------------------------------
+  QNQ - QTH       161 (Qz )  nearest fixed station
+  QNabc???        162 (abc)  TBD
+  QND - Digi      163 (Def)  nearest digipeater
+  QNI - IRLP      164 (ghI)  nearest IGATE
+  QNL - LINK      165 (jkl)  nearest LINK(IRLP, ILinke, Elink, etc)
+  QNM - Mobile    166 (Mno)  nearest MOBILE
+  QNR - Repeater  167 (pRs)  Nearest Voice Repeater
+  QNV - tbd       168 (tuV)  tbd
+  QNW - Weather   169 (Wxy)  nearest WEATHER to you
+  QN*             16*        Marks the current TARGET as the new REFERENCE
+  QN#             16#        Returns a HELP list of all NEAREST options
+
+  Voice Response is:
+    "NEAREST <STN/OBJ> TO <REFERENCE> IS <DIRECTION> <DISTANCE> MILES"
+
+POSITION RELATIVE QUERIES:   These Queries return the position as a
+  direction and distance of the Target station/object relative to
+  various pre-defined Reference locations.  If no callsign or object
+  is entered, then it is assumed to be the same Target station/object
+  as the last one.
+
+    QRY/MODIFIER     KEY        POSITION RELATIVE TO THESE REFERENCES
+    ---------------  ---------  --------------------------------------------
+    QRZ              171 (qZ )  QRZ, who is the current APRStt user?
+    QRC - Club       172 (ABC)  the CLUB site
+    QRD - Downtown   173 (DEF)  downtown
+    QRG - GPS        174 (GHI)  GPS coordinates  TBD
+    QRL - LAST Obj   175 (JKL)  Last marked object
+    QRM - Me         176 (MNO)  ME
+    QRR - Repeater   177 (PRS)  our repeater
+    QRT - TTone      178 (TUV)  the APRStt location
+    QRW - WXY???     179 (WXY)  our WX station
+    QR* -            17*        Marks the REFERENCE as the new TARGET
+    QR#              17#        Returns a HELP list of all RELATIVE options
+
+    Voice Response is:
+       "<TARGET> IS <DIRECTION> <DISTANCE> MILES FROM <REFERENCE>"
+
+
+OTHER IDEAS:
+
+    QA  - Age of last packet sent by station CCCC
+    QEM - What is the Email address of CCCC
+    QL  - who was the last user (previous)
+    QOF - What is the Operating Frequency of CCCC
+    QTH - What is current location of CCCC
+
+ICONS:  APRStt uses the same ICONS subset as the Kenwoods.  These
+are entered as a two digit hash from the first two letters of the
+name of the ICON.  For example enter "CA" (22) for a car.  If no
+ICON is entered, the default is for a "person".
+
+28 ATv    46 HOuse     73 PErson     83 TEnt      56 JOgger
+24 BIke   48 HT        75 PLane      87 TRuck
+26 BOat   53 JEep      76 POrtable   18 18wheeler
+22 CAr    72 SAilboat  77 RV         82 VAn
+
+
+SPECIAL EMAIL FORMATS:
+----------------------
+I have proposed to enhance the existing APRS EMAIL system to allow for
+a number of special shortcuts for common EMAIL needs.  Since most
+mobile APRS Email messages are entered from a TTone keyboard, (even on
+a Kenwood), it only makes sense to abbreviate many of the key strokes
+commonly used.  Here is what I have proposed:
+
+   :EMAIL    :email@address message...  - This is the original format
+   :E        :Email@address message...  - Abbreviates EMAIL
+   :CALL     :E message                 - Use Email address of station
+                                          "CALL" if known.
+
+To simplify the entry of Email Addresses in APRStt, the * key will be
+interpreted as an @ symbol and the # will be interpreted as a DOT (.).
+Notice that the CALL type email above in general APRS use, requires
+APRStt and/or the WU2Z or other EMAIL engine to search for the CALL to
+see if an Email address has been provided.
+
+
+RETRIES:
+--------
+
+Once APRSt receives a DTMF message or position entry, it  temporarily
+holds the APRS packet translation and responds to the user with its
+interpretation of the packet.  Then the user must hit the OK button
+"D" to actually have APRStt take responsibility for it and begin
+sending it on the APRS channel.
+
+At his point, APRStt assumes responsibility for all retries and
+message acks.   It uses a similar decaying algorithm to that used
+by APRSdos.  That is, any new packet is sent once, and a decay timer
+set to 18 seconds later.  After each such delay, the packet is
+transmitted again and the decay is doubled (actually, a factor of 1.8).
+This results in 5 retries over the first 7 minutes:
+
+ * 18s * 32s * 58s * 105s * 3m * 5.5m * 10m * 18m
+
+If an ACK is received for a message, the message is canceled and a
+voice response "QSL MESSAGE FROM WB4APR".  Once a message gets past 7
+minutes, without success, it is not transmitted again unless the
+recepient is later heard on the air.  Positions cancel after the
+7 minute window.  Of course the 7 minute window is based on having
+RETRIES set to 5.  Retry is a variable under SETUP.
+
+
+APRStt PRESENCE ON 144.39 and 147.525 (or whatever freq you can find)
+------------------------------------- -------------------------------
+
+APRStt will identify itself on 144.39 like any other APRS station with
+a Position, a Status, an Object and a Bulletin all transmitted via only
+the LOCAL DIGI.  It will use the MYCALL of "APRSTT".  To avoid conflicts
+and overlaps, adjacent machines will use different SSID's.
+
+  ICON:  Box with "tt" in it or something looking like a TTone pad
+  POSN:  The physical location of the machine.  Comment has FCC call
+  OBJT:  A 30 mile AREA box bounding the MYCENTER location of coverage
+  STTS:  "on 147.555 Try it!  TouchTone APRS!"
+  BLN1:  "CALL=Acccc, Pos=Blat*lon Msg=Cto*msg. End = D."
+
+The Bulletin is carefully crafted to fit the screen of a TH-D7.  The
+object BOX is a 22 to 33 mile box centered on the MYCENTER LAT/LONG.
+The reason for this is because all abbreviated position formats can only
+be plus or minus 29 minutes of LAT/LONG from the center location without
+ambiguity.  Thus, about 30 miles in Southern States and about 23 miles
+in Seattle.
+
+Similarly, APRStt will identify itself on 147.525 once every 10 minutes
+with a BRIEF CW or Voice announcement:
+
+  Voice:  "APRSTT <callsign>"
+
+
+SPECIAL TRACKING:
+-----------------
+
+To help voice users keep track of special moving objects such as the
+LEAD and TAIL at a marathon, APRStt can be told to TRACK special objects
+and report by voice the position of these objects as they come in on
+packet.  Remember 'SPCL' is a special APRS TOCALL that all APRS programs
+are supposed to treat in a special fashion.  This same special
+designation can be used to signal APRStt which stations/trackers are
+special.
+
+Since the Mic-E format uses the TOCALL for latitude and cannot use
+SPCL, we can still signal the special tracking feature in APRStt by
+selecting the TRIANGLE ICON.  I had Kenwood include the generic
+TRIANGLE Icon in the D7 and D700 for just this kind of future potential.
+On the D700 select OTHER and set to the symbol of "n" and table of "\".
+
+When a position report comes in marked SPCL, (or with an icon of "\n"),
+APRStt will say:
+
+  <CALL> is <DIRECTION> <DISTANCE> miles from <REFERENCE>
+
+Or you can follow the ACTIVATE TRACKER command with a callsign and
+then APRStt will also track that callsign too.  Format is AT*ccccc.
+Later if you want to clear that callsign, just do an AT*NONE.  Only
+one call can be entered this way.  To track more than one, they must
+set either the ICON or the SPCL...
+
+APRStt TIPS FOR SPECIAL EVENTS:
+-------------------------------
+
+1) For "route" style events, simply prepare a list of objects represent-
+ing known locations such as 000 to 027 being Mile Marks, 1xx being
+special locations, 2xx being Food places, 3xx being Hotels, 4xx being
+Hospitals.  For  small events, just transmit these locally as local
+objects the days before, so that APRStt can capture them.  For larger
+events, you may want to prepare the file offline...
+
+2) Consider SHORT tacitcal calls for all users.  APRStt defaults to
+requiring 4 letter legal calls (it wants to see the numeral as a check
+on its validity).  Or select the NOCALLS option in APRStt to disable
+this check so that any 4 letter sequence may be used.
+
+3) Have everyone put their FULLY spelled out callsign in their DTMF
+memory #1 including the terminating "D" key.  This should only need to
+be used once at each venu, but will always be required for APRStt
+anyway...
+
+4) Then in the next location put their HASHED call ending with a "B" so
+that it can be followed by either the 2x2D or 4x4D manual position report.
+
+5) You can fill up remaining memories with either KNOWN positions or
+with a list of PRE-Prepared message reports.
+
+
+APRStt SOFTWARE CONCEPTS:
+-------------------------
+
+Here was my approach to implement this initial APRStt program.
+
+1)  All packets heard on either the APRS channel or the APRStt audio
+channel are saved (after removing dupes and keeping track of the time
+of receipt).  My buffer is currently 500 deep and when full, overwrites
+the oldest packet.  A longer buffer than about 24 hours worth of
+callsigns is not desired as it just adds to the probability of duplicate
+hashes.
+
+1.5) Note-to-me: Here is how I capture packets:
+     /@ taken as is in normal format
+     != add TOR  to convert to normal
+     ;  Objects  converted  to normal
+     $GPRMS and GGA add TOR to normal (later)
+     Mic-E REMAIN AS IS SO PARSE-PACKET has to CONVERT on the fly
+
+2)  All DTMF-to-Packet packets are sent to the TOCALL of APTxxx where
+xxx is the software version number.  This clearly identifies the packets
+as having been generated by APRStt and not by some other XXXX-11
+station.  This distinction is required so that users of DTMF are always
+identifiable.
+
+3)  A SEND buffer holds all the currently scheduled APRStt data
+received from DTMF users and scheduled for transmission.  On receipt
+of any new ICON, STATUS, or POSITION data from a DTMF user this buffer
+is scanned and any previous position packet is updated and the
+transmit decay timing is restarted.  Any ACKED messages are removed,
+as well as any OLD packets.
+
+4)  A separate LIST (or other mechanism) must always keep a copy of the
+current data for all DTMF users even if it is old.  THis is used to
+maintain the last konwn position and ICON and STATUS for each such user.
+
+5)  APRStt packets all use the "/" position type indicator with time
+stamp to show when it entered the system and that it is not message
+capable.  APRStt packets conform to the following format:
+
+   USER>APTxxx:/DDHHMMzDDMM.hhN/DDDMM.hhW]no_comment/status......
+
+Notice that the comment field (no_comment) is exactly 10 characters long
+in order to match the definitions of the 13 standard Mic-E comments and
+also to match the 10 character wide screen of the D7.
+
+6)  APRStt uses a decaying timing algorithm where new DTMF generated
+packets are transmitted relatvely frequently when new, and then decay
+to longer periods.  Any transmission beyond about 5 retrires (about
+5 minutes) is usually not a good idea...
+
+7)  There must be a callsign timeout. That is, a DTMF callsign is
+valid for a limited time and or packets after initial receipt.  The
+exact algorithm is TBD.
+
+8)  DTMF tones can be as brief as only a few milliseconds, so APRStt
+program execution must check the DTMF port every few milliseconds.
+
+9)  Since different fields can be included in differing formats above,
+Position, Icon, and status infromation from the DTMF user should be
+overwritten individualy in modified packets and not necessarily used
+to start a NEW packet on each new entry.  Thus, a new position uses
+the same ICON and STATUS until they are changed, etc.
+
+The latest version of this APRStt document will be maintained on the
+Main APRStt WEB  page  http://www.ew.usna.edu/~bruninga/aprstt.html
+
+de WB4APR@amsat.org, Bob
+
+
+APRStt CONNECTIONS FOR THE DTMF chip to the LPT1 PORT        20 May 2002
+------------------------------------------------------------------------
+                                                                  WB4APR
+
+THis was all I hooked up to give the demo's at dayton.  I need to modify
+this to add the ability for the 8880 chip to SEND DTMF back to the end
+user if he has one of the DTMF messaging radios.  For now, I am only
+concentrating on the DTMF receive side.  But if anyone is considering
+making this in to a small board, then remember that it will eventually
+need to have DTMF send also.
+
+This design below uses the 5 available Input pins on the Parallel port
+and does NOT attempt to use the port as a bi-directional port which will
+not work on all PC's...
+
+
+Connections to the 8880 DTMF chip are:                               DB-25
+                                                                     LPT1 Port
+                        +-------+
+                   *---*|       |*---------------------*---> +5V
+      0.1     100k |    |       |                  0.1 |
+Inpt --||--*--/\/\/\/--*|       |*--------------*--||--+
+           |  100k |    |       |       390k    |      |  +-----+
+           +--/\/\/\/--*|       |*-----/\/\/\/--*------|--| XXX |--- Pin 15
+                   |    |       |                      |  +-----+
+                   *---*|       |*----- D3-------------|------------ Pin 11
+                        |       |                      |
+           GND --------*|       |*----- D2-------------|------------ Pin 10
+                        |       |                      |
+                XTAL---*|       |*----- D1-------------|------------ Pin 12
+                        |       |                      |
+                XTAL---*|       |*----- D0-------------|------------ Pin 13
+                        |       |            3.3k      |
+      DTMF OUT --------*|       |*---------/\/\/\/-----+
+                        |       |                      |
+         +5 R/W -------*|       |*      clock         === 0.1
+                        |       |                      |
+        not CS     *---*|       |*---*  REG Sel        |
+                   |    +-------+    |                 |
+                  ===               ===               ===
+                   =                 =                 =
+
+I/O PORT CONSIDERATIONS
+
+LPT1   PORT ADDRESS = 888
+STATUS PORT ADDRESS = 889
+
+BIT 8880 VAL  DB25  color  NAME    OPEN out  GND out  note
+--- ---- ---  ----  -----  ------  --------  -------  -----------
+ D7  D3  128   11   yel    BUSY     +5   0      1     HW inverted
+ D6  D2   64   10   org    nACK      0   1      0     defined inverted
+ D5  D2   32   12   red    Pempty   +5   0      1
+ D4  D0   16   13   brn    Select    0   0      0
+ D3  ESt   8   15   w      nError   +5   1            defined inverted
+ D2        4                         0   0
+ D2        2                         0   0
+ D0        1                         0   0
+
+In software, to get the 8880 chip 4 bit outputs to read properly,
+
+1) First XOR with 128 to reverse the Hardware inversion
+2) Then binary divide by 16 to right shift the data.
+3) Note that D3 is the state of the KEY press.  It is 0 if no key
+   and goes to 1 if there is a key pressed.  Get this bit with AND 8
+
+
+XXX CIRCUIT:  This circuit unloads the digit-detect output and isolates
+              it from the R/C time constant of the 390k and 0.1 uF cap.
+              Then it is inverted an used to feed the Pin 15 to tell the
+              APRStt that a new digit has been received.
+
++5v-----------*----------------*
+              |e               |
+           b|/                 \ 10K
+>--/\/\/----|PNP               /
+   470K     |\                 \
+              |c               *------------> Pin 15
+              |                |c
+              |             b|/
+              *---/\/\/\/----|NPN
+                   100 K     |\
+                               |e
+                              ===
+                              GND
+
+
+APRStt VOICE D/A CONVERTER  USING THE LPT1 PORT
+-----------------------------------------------
+
+As of July 2002, I have added VOICE response to APRStt to facilitate the
+feedback of data to the user as he makes his entries and also in response
+to Queries.
+
+Speech is limited to pre-recorded WAV files only and is limited to the
+alphabet and special words only.  These are distributed in three files.
+One for the alphabet, one for special words, and a third file for added
+words as needed.  But ANYONE can re-record these files and use my
+WAVETEST.EXE utility to rebuild their own index TABLE files to match
+so that their APRSTT uses their voice!  Here are the words in each file.
+
+ALPHABET.WAV = ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 IS
+               Derived words A, I, OK, TO, ARE, BE, SEE, YOU, WHY
+
+WORDS1.WAV   = at, is, on, from, no, match, error, your,
+               north, south, east, west, nearest, gate, mobile, weather
+               bad, posit, message, email, from, repeater
+               point, my, miles, per, hour, minutes, packet, sent
+
+WORDS2.WAV   = and number nocall call relativeto dupe object aprs
+               aprstt downtown digi club qth kenwood hamfest tracker
+               queries hello
+
+WORDS3.WAV   = this_is, who_are_you, about, dash, target, reference,
+               headed, milemark
+
+        Note:  Multiple entries in the WORDS.TBL file can point
+               to the same or overlaping sections in the WAV file
+               for example "aprs" and "aprstt" in WORDS2
+
+
+LPT1 PARALLEL PORT D/A VOICE CONVERTER SCHEMATIC:
+-------------------------------------------------
+
+                              +---------+
+ PIN-1 -----------------------+ PTT CKT +----> To Radio PTT
+ PIN-2 --<640K>--+            +---------+
+ PIN-3 --<320K>--+
+ PIN-4 --<160K>--+
+ PIN-5 --<80 K>--*------*---------||---------> To Radio Microphone input
+ PIN-6 --<40 K>--+      \        10uF
+ PIN-7 --<20 K>--+      /
+ PIN-8 --<10 K>--+      \ 33 Ohms
+ PIN-9 --< 5 K>--+      /
+ PIN-25-----------------* GND
+
+
+PTT BUFFER CIRCUIT
+------------------
+
+This circuit converts the TTL level LPT1 Strobe bit to an open collector
+PTT output that should work with all radios...  The 220k and 100 uF
+capacitor are a watchdog timer that will prevent the circuit from holding
+down PTT for longer than 22 seconds and the 10uF caps are to filter any
+noise from getting into the Mic circuit when PTT is combined with Mic
+audio on HT's.   To combine PTT with Mic Audio, simply run the PTT output
+to the mic input through a 2.2k resistor.
+
+                      +---||---+
+                      |  10uF  |
+                      +--/\/\--*--------*--------------------> +5v
+                      |  220K  |        |
+                      |        |e      === 10 uF
+                      |     b|/         |
+ PIN-1  >--\/\/\--||--*------|PNP      ---
+(strobe)    10K  100uF       |\        /// GND
+                               |c               *------------> PTT to Radio
+                               |                |c
+                               |             b|/
+                               *---/\/\/\/----|NPN
+                                    2.2 K     |\
+                                                |e
+                                               ===
+                                               /// GND
+
+
+de WB4APR, Bob
+

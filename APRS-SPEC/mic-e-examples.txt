@@ -1,0 +1,170 @@
+Mic-E TEST EXAMPLES                                     10 DEC 2008
+-------------------------------------------------------------------
+www.aprs.org/aprs12/mic-e-examples.txt                       WB4APR
+
+See also:  www.aprs.org/aprs12/mic-e-types.txt 
+
+There have been lots of changes and evolution to the Mic-E formats
+since the original Mic-E was built by WB4APR and N3MIM back in 
+1994.  Many of these were captured in the APRS spec in 2000, but 
+with the new APRS radios, D710, Yaesu and TinyTrack products, plus
+the addition of !DAO! precision and FFF.FFFMHz for frequency, there
+needs to be a consistent test suite of formats to make sure we
+are all on the same page.
+
+This document interprets the evolution of the Mic-E protocol and
+shows how to properly place the additions within the Mic-E format.
+
+LATITUDE BYTES: For these examples, assume that the AX.25 TOCALL is 
+loaded with "ABCDEF" which happens to decode this information:
+
+   LATITUDE:   1234.56N 
+   MESSAGE:    CUSTOM 0
+   LONGITUDE:  West and greater than 100 degrees.  
+
+LONGITUDE AND CSE/SPD BYTES:  I have randomly chosen the "abc123" 
+bytes for the next 9 original bytes of the packet which decodes as:
+
+   LONGITUDE:  16910.71W 
+   CSE/SPD:    223 degrees and speed of 014m.
+
+SYMBOL:  I will assume an RV Primary table symbol "R/".  But 
+remember that the second byte is the TABLE or OVERLAY BYTE and can
+be virtually any uppercase printable ASCII chanracter A-Z and 0-9.
+Also notice that the order of the symbol and table are reversed 
+from the normal way that we typically refer to table and symbol 
+as "/R".  This is because the alternate symbol table was added to 
+the Mic-E protocol after the initial TAPR Mic-E kits were in use.
+Before then, only primary symbols were available.
+
+MIC-E TEXT FIELD:  All of the evolution of the Mic-E protocol has
+been via additions to the original TEXT field so that all future
+systems are 100% backwards compatible with precious hardware and
+decoders. There have been no additions to the Mic-E protocol that 
+would have any impact on the above position and symbol data.
+
+The additions are all in the TEXT field:
+
+'abc123Rtext...         - original Mic-E
+'abc123R/text...        - original Mic-E with "/" TABLE byte
+'abc123R/>text...       - added the ">" TYPE byte for the D7
+'abc123R/]text...       - added the "]" TYPE byte for the D700
+'abc123R/]123}text...   - Added altitude as FIRST 4 bytes...
+                          But altitude is OPTIONAL, so it simply
+                          offsets remaining text by 4 bytes.
+
+The orignal APRS spec was published at this point.  Then the D710
+needed an identifier byte.  We added this byte to the end of the
+text for backwards compatibililty to all existing radios and 
+clients.
+
+'abc123R/]123}text...=      - D710 added "=" on end for ID
+
+In 2007 we needed many more TYPE bytes for many more radios and 
+hardware; so through exhaustive testing we found that all existing 
+radios could accept the "`" and "'" bytes as TYPE bytes without 
+breaking anything.  We defined "`" for MSG capable units
+and the "'" one for one-way trackers.  
+
+Also we needed to identify the radio manufacturer and the version 
+number since the APxxxx field cannot be used with the Mic-E format.
+So we added a Manufacturer and Version byte (Mv) on the end of the 
+text in 2008.
+
+'abc123R/`text......Mv          - Message capable (MFR and Version)
+'abc123R/'text......Mv          - One-way Tracker (MFR and Version)
+
+DELIMITER:  For clarity we recommend that a SPACE might be included 
+before the " Mv" bytes to distinguish them from the text if the MFR
+byte can be confusing on the end of some text.
+
+ALTITUDE AND FREQUENCY:
+
+Next we added FREQUENCY as an optional New "first" 10 byte field 
+in all APRS text formats, not just Mic-E.  But to apply this rule 
+in the Mic-E means that it must apply after the earlier optional 
+123} altitude is considered.  In otherwords, the "text..." field 
+is right shifted if 123} altitude is used, and so the definition 
+of "first" bytes is also shifted right 4 bytes before parsing 
+the "text...".
+
+'abc123R/'123}text... Mv        - Optional altitude must be first
+'abc123R/'FFF.FFFMHztext... Mv  - FREQ must be first "text".
+'abc123R/'123}FFF.FFFMHztext Mv - format if both are used.
+
+NOTE: THought not shown, it is desireable to transmit a SPACE byte 
+after the Frequency to separate it from other text.  Early Yaesu
+FTM-350's require this space.
+
+PRECISE POSITION DATA !DAO! FORMAT:
+
+The optional !DAO! format for 1 foot precision and DATUM is allowed
+in APRS1.2 to be decoded "anywhere" in the text field, but again, 
+only as long as "anywhere" does not break any other rules.  In the 
+Mic-E format, it cannot go before the 123} or the FREQ field.  It
+is recommended that !DAO! always go at the end where it does not 
+detract from other more valuable human readable text, nor any of 
+the other "first" optional fields.
+
+This also applies to any use of the old /A=123456 optional 
+altitude format.  It should always be towards the end so that it
+does not displace valuable bytes at the beginning.  Of course
+there is no reason for this verbose altitude format to ever be
+in a Mic-E packet, but it is included here for completeness with
+the spec.
+
+'abc123R/'123}FFF.FFFMHztext.../A=123456 Mv      - old-alt later
+'abc123R/'123}FFF.FFFMHztext.../A=123456!DAO! Mv - DAO always last
+
+I will summarize all of these formats below so you can use them
+as a test case...
+
+AX.25 destination address "ABCDEF"
+AX.25 data field:
+
+'abc123R/text...
+'abc123R/>text... 
+'abc123R/>text...v             for future D7's 
+'abc123R/]text...
+'abc123R/]text...=
+'abc123R/]text...v             for future D7XX
+'abc123R/'text...... Mv        for all other manufacturers
+'abc123R/'FFF.FFFMHztext... Mv
+'abc123R/'123}text... Mv
+'abc123R/'123}FFF.FFFMHztext... Mv
+'abc123R/'123}FFF.FFFMHztext.../A=123456 Mv
+'abc123R/'123}FFF.FFFMHztext.../A=123456...!DAO! Mv
+
+MIC-E FORMAT BYTE:  The very first byte shown above as a "'" 
+at the very beginning of the packet is the APRS Data-type
+identifier and has two values for the Mic-E protocol.  The
+apostrophe "'" was supposed to indicate and OLD GPS fix, and
+the grave-accent "`" was supposed to mean a valid GPS fix.
+
+But Kenwood got them backwards, and by the time this was
+discovered, it was too late to change the radio.  But this
+quirk did make it into the original spec.  I do not know
+how most software clients distinguish between these two
+types of Mic-E format.  But the original APRSdos will display
+"OLD FIX" if the "'" type byte is used by any other Mic-E but
+if it is a Kenwood, then the "oldness" is ignored and the
+packet is just displayed as kenwood...
+
+NOTES:  The decision to add the additional Mic-E-OTHER type
+byte  (' or `) was solidified after the initial D710 was 
+released, so on those D710's the Mic-E position is properly
+decoded, but the CSE/SPD and text fields are not displayed.  But
+these are being corrected in the next D710 firmware download.
+
+Hope that helps...
+
+See the original document on these Mic-E TYPE/VERSION bytes:
+
+    www.aprs.org/aprs12/mic-e-types.txt  
+
+These are linked from the APRS 1.2 Addendum Web page:
+
+    www.aprs.org/aprs12.html    The APRS1.2 addendum
+
+Good luck!
+Bob, Wb4APR

@@ -1,0 +1,183 @@
+APRStt User Guide                              rev 2.3   08 Aug 2013
+--------------------------------------------------------------------
+
+08 Aug 13 Reversed order from XXXYYY to YYYXXX in DTMF formats
+16 Feb 13 Minor word tweaking to make compatible with coding24.txt
+30 Jan 10 Initial revision 2.3
+
+This text file tells the DTMF user how to set up his callsign in 
+DTMF memory and how to prepare for other data entry applications.
+
+APRStt KEYPAD:  APRStt uses the same keypad as telephones and other
+APRS radios.  See differences on www.aprs.org/aprstt/radios.txt
+
++------------------+  The standard TouchTone Key pad has letter
+| 1    2    3   A  |  definitions for each key that we use for 
+|     ABC  DEF --> |  APRStt.  For callsigns, we use the two-key
+| 4    5    6   B  |  method where you first press the key associated 
+|GHI  JKL  MNO <-- |  with the letter, and then press the A, B, C 
+| 7    8    9   C  |  or D key depending on whether the letter is 
+|PQRS TUV WXYZ del |  listed first, second, third or forth on that 
+| *    0    #   D  |  key. A key alone is the actual digit.  The * 
+|    space     OK! |  key is often used as a delimiter (,./) and # 
++------------------+  ends a string.  
+
+APRStt DATA FIELDS:  All APRStt DTMF data strings begin with a type
+key to indicate the type of APRS data that follows. They are:
+
+"A" - CALLSIGN  (FCC calls, callsign suffixes, or tactical calls)
+"B" - POSITIONS (pre-loaded or manually entered)
+"C" - COMMENT   (comments or local voice freq you are monitoring
+"D" - MESSAGES  (commonly used text messages for you or your family
+
+The simplest use of APRStt is to simply send your pre-stored callsign.
+By hearing only a DTMF callsign, an APRStt node sends a position 
+report into the APRS system containing all of the following:
+
+1) Identifies the station by call, and date and time
+2) Plots the station on the global APRS map near that gateway
+3) The packet shows the FREQUENCY and TONE he is using
+4) The packet contains other info such as Echolink or IRLP node#
+
+CALLSIGN LAST:  For additional flexibility, other manual or pre-
+loaded DTMF strings will let you do most of your local routine 
+operating.  These additional fields are transmitted first and then
+followed by your DTMF memoery callsign.  This assures that all data
+is associated with a callsign.  Any data, not followed by a callsign
+will be ignored if no callsign follows in 2 seconds.
+
+ADDITIONAL INFORMATION FIELDS:  As a minimum, routine DTMF users
+should consider saving these typical local formats in DTMF memory.
+
+1) AcccccccccccVVK#  Your full callsign and Overlay byte
+2) AcccVK#           Abbreviated callsign suffix 
+3) Byyxx*            Position of HOME
+4) Byyxx*            Position of work or other hangout etc
+5) CFFFFFF*          Voice Monitoring Frequency FFF.FFF MHz
+6) CFFFFFF*          Another favorite frequency...
+7) CE123456* ...     Echolink node... (6 dgitis starts with "E")
+8) CI12345* ...      IRLP Repeater ID etc...
+9) Dxxxxxxxxxx*      Message text.  CALLME or PHONE xxxxxxxxxxx etc
+
+Once you send at least your callsign on the APRStt channel, then
+anyone in the local area, or anywhere in the world on APRS can see
+the information in real time.  The Frequency or IRLP/Echolink info
+is very handy since it can be used to contact you from anywhere.
+After sending at least a DTMF callsign a user should be able to see 
+himself appear on the APRS Internet system (APRS-IS).  For example
+use this URL with your MYCALL to see how APRS sees you:
+
+ http://map.findu.com/MYCALL* or
+ http://aprs.fi/MYCALL
+
+APRStt CALLSIGN:  The callsign is permanently set into a DTMF memory 
+along with a symbol overlay character.  A checksum is also added to
+assure reliability.  The format is as follows:
+
+   AcccccccccccVK#
+
+   Where A begins the callsign field
+   Where cccccccc is the callsign using two-key text encoding
+   Where V or VV is an overlay digit or two-key letter
+   Where K is a checksum to minimize errors
+   Where # signals the end of the string
+
+CALLSIGN-12:  By default, an APRStt callsign will appear on APRS 
+with an SSID of -12 so that these callsigns are easily destinguished 
+from other callsigns from the same station on the air.  They also 
+all use a square black symbol with the overlay character selected
+by the APRStt user.  Here is an example of how my WB4APR-9 callsign 
+looks in DTMF:
+
+ A9A2B42A7A7C91#
+
+ A    The leading A key indicates it is an APRS Callsign
+ 9A   decodes as W
+ 2B   decodes as B
+ 4    decodes as 4 (because another digit follows it)
+ 2A   decodes as A
+ 7A   decodes as P
+ 7C   decodes as R
+ 9    decodes as 9 for the overlay digit on the APRStt symbol
+ 3    Is the checksum (10+9+10+2+11+4+2+10+7+10+7+12+9=103 )
+ #    signals the end of the burst
+
+CALLSIGN SUFFIX:  Once APRStt has heard a full callsign, it
+can identify your data in subsequent DTMF bursts using only your 
+callsign suffix.  That is, the right 3 characters of your call that
+are further simplified to only the Digit keys used for those 3 
+characters.  So for WB4APR overlay 9, it would be "APR" and that 
+would short cut to 277, and adding a "9" overlay would result as:
+
+    A27795#  (checksum 35 = 5)  Basically, this station is "2779"
+
+APRStt will match this abbreviation to your full callsign (previously
+transmitted).  If there is no match APRStt will request the full 
+callsign.  New full callsigns are always accepted.  This is why any
+use of a suffix has to be scanned through all active calls recently
+heard and are only accepted if their callsign association is unique
+and do not conflict with any other existing call.  Users may resolve 
+any conflicts by negotiating different overlay digits to distinguish 
+them.
+
+Being a shorter string, you can now store not only your callsign
+but also a frequent POSITION or a COMMENT string such as your 
+favorite repeater frequency in the same DTMF memory.  For example
+
+    B1234*AcccVK#    contains call and an X/Y position of 12/34
+    C146940*AcccVK#  contains call and 146.940 MHz
+
+When gated by APRStt to APRS, the "MHz" will be added so that the 
+packet is fully compatible with the APRS frequency field.  
+Frequencies must always be exactly 6 digits long so for HF, leading
+zeros are required.
+
+APRStt COMMENTS:  The several APRS Mic-E comment definitions, can also
+be transmited using the code Cn* where n is as follows:
+
+  0 Off duty    3 Returning  6 Priority  9 Custom 2
+  1 Enroute     4 Committed  7 EMERGENCY
+  2 In Service  5 Special    8 Custom 1
+
+Simply send the "Cx*" followed by your callsign or suffix digits
+from  your DTMF memory.  The full text will be expanded when gated 
+to APRS.
+
+APRStt POSITION FORMATS:  Positions always begin with the "B" key
+and end with a * to indicate that your callsign will follow.  One
+of the easiest formats is simply X/Y offsets from a given origin
+such as the local APRStt gateway.  In the example used at Dayton, 
+the simple one-digit "B1yx*" format used a 10x10 grid which could 
+locate anyone to the nearest 150 feet at the hamvention with only 
+one X and Y digit.  See www.aprs.org/aprstt/DaytonTTmap.GIF.  This 
+same 4 key method can also be used for up to 99 pre-defined 
+locations for other events with special event maps such as the 
+mile marks in a marathon, etc.
+
+A two-digit format "B2yyxx*" can place anyone anywhere in a 10 mile
+area to the nearest tenth of a mile if xx and yy are interpreted
+as x.x and y.y minutes of LAT/LONG.  A three digit format "B3dmm#
+can locate stations in direction (N,NE,E,SE,S,SW,W,NW (1-8)) and 
+mm is in miles.  These position formats can be locally defined for 
+each local area or application.
+
+Other POSITION formats are possible, such as 2 digit milemarks in
+a marathon, or 4 digit flea market spaces at Dayton.  A simple 
+table system translates these to exact lat/longs for display
+on APRS. In all cases, a handout for the club or event will 
+indicate what specific formats are used and what map is used
+for manual entry.
+
+DTMF STATUS TEXT:  For the nimble fingered station, you can actually
+spell out any text you want using normal text-messaging technique.
+For example:
+
+   ...C4A3B8A0A6A3B0A2A8A0A3*...
+
+Spells out "GET ME AT 3" and can be used by a kid to signal Dad's
+taxi for a pickup.  Kids have no problems using these text-messaging
+techniques.
+
+With these simple formats, you can join the world of APRS!
+
+Bob, WB4APR

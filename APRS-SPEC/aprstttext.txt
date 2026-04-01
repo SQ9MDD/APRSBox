@@ -1,0 +1,76 @@
+APRStt HT TEXT DATA EXCHANGE!
+-----------------------------
+
+Before the entry of the Kenwood D7 into the market, several 
+manufacturers had experimented with using Touch Tone signalling 
+transmission and display in their handhelds.  These Handhelds 
+can send AND receive short TEXT fields via Touch Tones:
+
+Kenwood: TH-28A/48A/78A
+Yeasu:   FT-11R,41R,51R
+ICOM:    W31A
+
+For users with these radios, APRStt can send them textual information
+directly to the front panel of their radios.  The applications
+are boundless limited only by the imagniation of the end users.
+  
+-------------------------------------------------------------------
+MESSAGE TRANSMISSION AND RECEPTION
+ 
+The TEXT that can be transmitted and received at one time can be
+up to six characters long on the Kenwoods and 8 characters long on 
+the Yeasu's.... but there can be up to 10 such text bundles.  This 
+function is used with DTSS or Paging.
+ 
+Message Reception
+* Turn the DTSS or paging function ON.
+* Press F then MSG key to activate message function.
+* The radio can not receive any messages until you receive a DTSS
+  code that matches to your  3 digit DTSS code. (say, "123")
+ 
+incoming DTMF code
+ "1"
+ "2"
+ "3" -> matches to your DTSS code -> waiting for header for 2 sec.
+ "#" -> header for new message -> this code must be received with in 2 sec.
+ "2" -> message body start
+ "A"
+ "2"
+ "B"
+ "2"
+ "C"
+ "#" -> terminate the new message
+ 
+Notice that, DTSS or paging must be activated and user code matched.
+ 
+Code Entry Chart
+----------------
+
+Text characters are entered always as two key presses per character.
+The first press indicates the key on which is found the desired
+alphabetic letter.  This followed by either of four other keys to
+indicate if it is the Numeral or the 1st second or 3rd character in
+the three charactger group.  To get the letter M you would press the
+"6" key and the "A" key to indicate that it was the first Key in the
+"MNO" combination.  The following quasi graphic shows the
+equivalents for each letter and numeral:
+
+[1:1 Q:1A Z:1B _:1C]  [2:2 A:2A B:2B C:2C]  [3:3 D:3A E:3B F:3C]
+
+[4:4 G:4A H:4B I:4C]  [5:5 J:5A K:5B L:5C]  [6:6 M:6A N:6B O:6C]
+
+[7:7 P:7A R:7B S:7C]  [8:8 T:8A U:8B V:8C]  [9:9 W:9A X:9B Y:9C]
+
+                      [0:0               ]
+
+To Implement this in APRStt, the APRStt software keeps a list of the
+DTSS codes for each callsign with the capability.  Thus, whenever
+APRStt sees a message to a station with DTSS capability, it goes to
+this table and converts the APRS message callsign to the correct
+DTSS 3 digit code.  Then APRStt sends the tones over the repeater
+to the DTSS HT user where the message is shown on his display.
+
+All it takes is a little software!
+
+de WB4APR, Bob
+ 

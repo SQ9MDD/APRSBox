@@ -1,0 +1,89 @@
+
+IS-to-RF Selective Local Gating - A Proposal   (rev a)          28 Dec 2011
+---------------------------------------------------------------------------
+
+NOT VALID.  Apparently the APRS-IS no longer allows additional PATH entries
+in the APRS-IS path.  Plase see REV B.
+
+To avoid a lot of misplaced debate on apples and oranges and confusion, the 
+following is a collection of -a- proposal so we can all be sure we are 
+debating the same thing.  I am not saying we agree to implement this.  I'm 
+just making sure we are all looking at the same limited idea and debating 
+only its merits, and not all the possible other bugaboos...
+
+NAME:  FOr identification, lets call this fucnction RGATING.
+
+PURPOSE:  To give IGate operators a local tool to allow local selective 
+IS-to-RF gating while giving him the means to control it based on his local 
+environment (his IGate coverage range and channel loading). Only IS packets 
+specifically identified by the IS originator as potential for RF gating are 
+considered by the RGATE and then only the rules of the local RGATE owner 
+permit transmission.
+
+SPEC:  The goal is to work this problem from both ends.  The Originating
+clients indicate which packets are potentially being offered for gating
+to RF and with what weight.  This gives the local RGATE operators greater
+flexibility in controling the local RF load.
+
+IS CLIENT REQUIREMENTS:  Authors of mobile phone or other IS applications 
+that inject such RF gating request packets into the APRS-IS would adhere 
+to a specific set of "rules".  Here are some specifics to limit rates:
+
+1) Packets intended for consideration for RF must be flagged.  Flag could 
+consist of RGATEx inserted in the IS path.  Such as:
+WB4APR>APVVVV,TCPIP*,RGATEx:packet_data_goes_here...
+[note.  This does not match the exact recommendation on the APRS.NET]
+
+2) Packets originated for RGATEing should conform to standard APRS 
+packet rates.  Every 30 Minutes for benign fixed stations, every 10 minutes 
+for operator-present stations, and a maximum for mobiles of 1 per minute, 
+but must also be Decayed and "rate weighted".
+
+2) Such packets must use the APRS decaying algorithm.  Meaning, if the 
+position or data is unchanging, then the period to the next packet is 
+doubled down to the final rate of one per 30 minutes (same as all other 
+APRS packets).
+
+3) RATE WEIGHTING:  This is similar to the RF technique of PROPORTIONAL 
+PATHING that is used on RF to drastically reduce the area network load 
+while maintaining frequent local updates.  For this RGATE function we
+will use the new name of RATE WEIGHTING to identify this technique.  
+This weight can be selectively used by RGATES to best match his local 
+loading.  The IS source would send every other packet via RGATE0.  The 
+alternating packets then would be sent half the time via RGATE1 and the 
+other half the time via RGATE2.  This in effect implements a 1, 2 or 4 
+minute rate weighting potential on RF while allowing for a 1 minute rate 
+on the APRS-IS.
+
+IGATE RGATING REQUIREMENTS:  The IGATE sysop can choose among a variety 
+of settings:
+
+RGATE0 RANGE - sets the heard-range where these become elegible
+RGATE1 RANGE - Sets the heard-range where these become elegible
+RGATE2 RANGE - sets the heard-range where these become elegible
+ 
+DIRECT = 0, 1, 2 will gate these RGATEx packets direct only 
+ONEHOP = 1, 2 .. will gate these RGATEx packets only 1 hop 
+TWOHOP = 2 .. .. will gate these RGATEx packets only 2 hops
+
+RGATE0 LIMIT - Sets the number of such packets allowed per minute
+RGATE1 LIMIT - Sets the number of such packets allowed per minute
+RGATE2 LIMIT - Sets the number of such packets allowed per minute
+
+For example, a typical home IGate that (ideally) only uses a 1 hop RF path 
+via the nearest local digipeaters might set his RGATE1 RANGE to only include 
+the reliable coverage area of his local digis and then set ONEHOP = 2.
+The result would be only one packet from any IS-mobile once every 4 minutes.
+Or he could set ONEHOP = 1,2 and then have these mobiles appear once 
+every 2 minutes.  ETC.
+
+He sets the RGATEx LIMITS as a failsafe mechanism.  There is also a BLOCK 
+list where any abusers callsigns can be blocked if they try to induce spam.
+
+Something like that.
+
+Just an idea to consider.  What would need to be changed to allow this?
+
+Bob, WB4APR
+
+

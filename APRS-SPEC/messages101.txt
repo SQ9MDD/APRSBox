@@ -1,0 +1,130 @@
+APRS MESSAGES:  Why Many APRS clients Fail Miserably     16 Jan 2008
+--------------------------------------------------------------------
+                                                            WB4APR
+
+History lesson:  For those that are new to packet, please,
+please, learn and understand these facts which are fundamental
+to packet radio system with ACKS:
+
+1) Packet success via multiple hops is abismal.  This is because
+for say a 50% reliable channel, the chance of getting a message
+packet through 2 hops is 25%.  The chance of getting the ACK
+back is 50% of 50% of that 25% or only 6%.  Thus, the ability to
+get more than ONE line from station A to station B is 6% for
+each line try.
+
+2) The original APRS was designed with this in mind.  The first
+fundamental technique was the Decay Algorithm with the High
+initial 8 second RETRY rate.  This meant in less than a minute,
+the packet was tried 4 times!   Not ONCE like most follow-on
+clones.  This improves the message throughput SPEED by a factor
+of FOUR.
+
+3) The second technique was the Delayed ACK.  This is necessary
+as proved in number 1, because the propability of success for
+ACKS is so much worse than for the outgoing message.  So the
+original APRSdos then always scheduled a second redundant ACK 30
+seconds after each outgoing ACK.  If one of the other 2 in the
+first 30 seconds had already gotten through, then good, this and
+subsequent ones were canceled.  But if they had not, then this
+one further DOUBLED the throughput.
+
+Combined, Decay-with-initial-high rate, and delayed-ACK made
+APRSdos potentially 8 times faster message throughput on a busy
+channel than most clones that ignored these fundamental
+techniques.  Yet, on a 5 minute average, used no more overall
+packets because of the decay algorithm.
+
+4) REPLY-ACK then gains even further speed advantage.  See
+example #1.  In this case, MESSAGES get through with FOUR TIMES
+the reliability of the ACK getting back.  By placing an outgoing
+REPLY-ACK in any next outgoing MESSAGE back to the original
+originator, then the ACK's reliaiblity is improved by ANOTHER
+factor of FOUR in a dialog.  
+
+Factor this factor of 4 into the above, and in a DIALOG between
+two APRS clients that FULLY implemented all of these techniques
+and message throughput can be 32 times better than the
+simplistic 1 minute retry implemented in some of the most
+popular clients.
+
+THIS IS WHY these days, hardly anyone believes that APRS
+messages are practical.  But this is because of the abismial
+simplistic implementation in some clients that they see, not the
+way it is supposed to work.  And REAL events require REALTIME
+messaging!
+
+EXMPLE 1.  A 50% RELIABLE PATH (per hop):
+ 
+I am not a mathematician that can rigorously present all this,
+but lets compare two stations trying to exchange 3 message lines
+over the 50% channel using two hops above.  Using the simplistic
+fixed 1 minute rate will probably take about...never mind.  It
+will never happen even if the messages are set to timeout after
+TEN retries.  Because at a 6% probable success rate, it may take
+more than 10 retries just to get the frist line through before
+the next line can begin... (Even though the probability that
+each received the others message is VERY HIGH, the second lines
+cannot be transmitted because the ACKS probability is VERY LOW).
+It might get through in 30 minutes before all retries are
+exhausted.  The system fails.
+
+Now using the full APRS Message protocol with DECAY, DELAYED-ACK
+and REPLY-ACK the messages are probably deliverd in a minute or
+so.
+
+A's 1st msg has FOUR 25% tries in first minute (average 100%)
+B's 1st msg has FOUR 25% tries in first minute (average 100%)
+(Their acks have only ONE 25% chance of getting back (avg 25%)
+
+But as soon as ONE of A's (Four 25% tries) gets through, then
+now B's ACK is added to B's (four 25% tries) message and it is
+almost assured of being deliverd in that first minute.  Same
+goes for B's message to A.  His ACK is mostly assured of being
+delivered in that same minute.  Then the next line and so on
+down...
+
+The difference is complete failure of the simplistic fixed rate
+system, but reliable delivery in a few minutes with the original
+APRS system.
+
+EXAMPLE 2.  A 70% RELIABLE PATH (per hop):
+
+With a 70% reliable digipeat, after 2 hops, the message has a
+50% chance of delivery and the ACK a 25% chance.  On average
+then the simplistic 1 minute system will take about 4 minutes
+per line, or about 12 minutes to deliver the 3 line message.  An
+EXTREMELY FRUSTRATING DIALOG!
+
+The fully implemented APRS system will do this dialog in about
+48 seconds.
+
+EXAMPLE 3.  A THREE HOP PATH:  
+
+(Not using WIDE3-3 of course, but using WIDE2-2,DIGI3).  Forget
+even attempting a message with the simplistic 1 minute client.
+It is most certain to fail.  In the 50% system, the
+probabilities are near 1% and in the 70% system the
+probabilities are near 12%.
+
+But you will be successful every time with the original APRS if
+the RECEPIENT when he sees your incoming message ANSWERS with a
+"Roger, got it" message.  His outgoing retries are now carrying
+the ACK of the incoming, and each of these has a 8 or 16 times
+better chance of closing the QSO.
+
+Now I hope you see why I complain so much about the loss of APRS
+Realtime functionality because everyone's experience these days
+is by poorly implemented or incomplete APRS clones.
+
+It would make a nice research paper to do a rigorous probability
+and statistcs study of these techniques.
+
+But APRS messaging does work well.... If you use the right
+client with all the fundamental APRS protocol implemented.
+
+For UIview users, there is an add-on fix to apply the DECAY rate
+to messages:   Use M0CYP's UI-Instant Messenger.
+
+Bob, Wb4APR
+

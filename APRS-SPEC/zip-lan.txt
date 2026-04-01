@@ -1,0 +1,104 @@
+ZIP-LAN.TXT   8.0            MULTI-PC APRS ZIP-LAN networks!
+
+The ZIP-LAN concept is a trivial way to connect a classroom full of
+PC's together to a single TNC so that students can all play with
+the MIREX experiment.  In MIRMON, the MASTER mode is disabled so
+that only the main PC connected to the TNC can transmit via the
+TNC but all can listen and send messages back and forth between 
+each other.  Here is an edited version of the normal APRS 
+ZIP-LAN.TXT file...
+
+    ZIP-LAN is a way of connecting many co-located APRS PC's together 
+in the field so that they can all communicate with each other and a 
+single TNC for powerful multi-PC APRS support of an event or emergency.  
+A ZIP-LAN is just a single wire and ground, as in ZIP-cord.  Everyone 
+listens for APRS data on the wire, and sends their RS-232 data to the 
+wire.
+
+   Only one TNC is needed and it puts everything it hears on the wire.
+Therefore all PC's hear everything locally and from the TNC.  ALso they
+can all transmit to each other and the MASTER.  For MIRMON, only 
+the MASTER can transmit via the TNC.  Each ZIP-LAN PC can have its own 
+call and can communicate fully among each other!  This is perfect
+for MIRMON in a classroom.
+ 
+The hardware concept is simple, Everyone sends and receives everything to
+the single ZIP-LAN wire.  The diodes and 15 K reisitors provide the 
+"ORing" function so that anyone can drive the ZIP-LAN wire.
+
+                        *--/\/\/--*      :
+     +--------+         |         |      :
+     |   PC   |3--------*--->|----*      |  One wire LAN
+     |  LOCAL |                   |      |
+     |   #1   |2<-----------------*------*
+     +--------+                          |  
+                                         |  
+                        *--/\/\/--*      |
+     +--------+         |         |      |
+     |   PC   |3--------*--->|----*      |  (ground not shown)
+     |  LOCAL |                   |      |
+     |   #2   |2<-----------------*------*
+     +--------+                          |                   +-------+
+                                         |                   |       |
+                  *--------------------- | ----------------->* TXD   |
+                  |                      |                   |       |
+                  |                      |                   |       |
+     +--------+   |                      |                   |  TNC  |
+     |   PC   |3--*                      |    *--/\/\/--*    |       |
+     | MASTER |                          |    |         |    |       |
+     |        |2<------------------------*----*---|<----*---<* RXD   |
+     +--------+                          |                   |       |
+                                         :                   +-------+
+                                         :
+
+Notice that the diode and 15K resistor easily fit in the DB-9 shell.
+The recommended zip connector is nothing but two wire pigtails with
+insulated aligator clips on the end.  You connect to the ZIP cord with
+ordinary PINS pushed through the insulation.  At the MASTER you put the
+diode and resistor between a back-to-back connector with the two pigtails
+hanging so it can be inserted between any existing TNC and its PC. 
+(come as you are)
+
+DIGIPEATER OPERATIONS:  Notice that the MASTER does not send to the ZIP-
+LAN but only to the TNC.  This means that there must be a digipeater on
+the air for the MASTER's packets to get digipeated back to the LAN....
+For MIRMON, this is an excellent confirmation that the MASTER's packets
+got to MIR and back.  Until MIR comes into view, if you want the MASTER
+to be able to send packets to the ZIP-LAN, there must be a temporary
+digi in place, or switch to the APRS freqency in your area.
+ 
+OPERATIONS:  Simply bring up all of the local PC's in ZIP-LAN mode, and
+the master station operates normally.  Local PC's both send and receive 
+on the ZIP-LAN, but only the Master sends to the TNC.  Master packets 
+get to  the local PC's by being digipeated on the air...
+
+Resistor values may need to be increased or decreased depending on
+your particular serial port requirements.  I typically 10k for the
+TNC and 15k or so for the others.  This should work over several 
+hundreds of feet and up to 5 PC's or more.  Or MAYBE LESS.  I have 
+used DIODE-ORing of RS-232 successfully for 19 years with good results.  
+
+BAUDRATE!  Operating at 9600 baud will minimize collisions if there will 
+be more than a few PC's generating traffic.  Collisions will garble 
+packets half as much at 9600 as the 4800 default.  But long wire runs at 
+9600 baud may also suffer errors in a noisy environment, so experiment 
+and see what is best for your application.  ALL PC's and the TNC must be 
+at the same rate.   You may consider adding 300pF Caps in each interface
+to ground to bypass any RF that might get on the wire.
+
+COLLISIONS:  Since the local PC's share the single ZIP-LAN wire for both
+send and receive, there may be some collisions when the local PC's
+transmit.  For this reason, where practical, the MASTER should be used
+to generate the bulk of the outgoing traffic.  Also, since there can 
+only be one POSIT ICON at the whole LAN location, the ZIP-LAN PC's will 
+not originate any POSITS, except for the Master.  Similarly, enter
+NONE for their STATUS beacons, unless needed.
+
+     Theoretically, with a max'ed out 1200 baud APRS channel (36% busy), 
+and operating the ZIP-LAN at 9600 baud, the LAN is only busy less than 
+4% of the time so colisions should be minimal.
+
+TNC INTERFACE:   The master is connected to the TNC in the normal fashion,
+so it can handshake with the TNC as needed for configuration and changing
+the UNPROTO path.  The other PC's can't touch it.
+

@@ -1,0 +1,59 @@
+APRS MOBILE RANGE                                         WB4APR
+----------------------------------------------------------------
+
+In 2001 we strongly recommended that all APRS software display
+PHG range circles at HALF their previous value as described in
+the APRS SPEC.  The SPEC value approximates the reasonable range
+of two fixed stations.  But it turns out that mobiles in motion
+experince less than HALF this reliable range.
+
+Mobiles in motion travel though a complex field of interacting
+waves and reflections.  These multiple fields add and subtract
+at any instant giving from 6 to 30 dB of "mobile flutter".
+
+When the signal is strong enough, these variances are not 
+noticed at all, because they are a superimposed AM modulation
+to the receiver and since we use FM, these modulations are not 
+normally noticable until we get to weak signals.  Then they 
+are quite noticible and pronounced.  Every mobile operator is 
+familiar with this phenomenon and it usually occurs in multiples 
+of wavelength.  That is why you can move your car only 18" on 
+2 meters and see a change in signal.
+
+For voice communications, a lot of mobile flutter can be 
+tolerated and still have good communications between humans.  
+A missed sylable or millisecond of voice is not noticed.  But for 
+the mobile DIGITAL signals, and AX.25 packet, a single millisecond
+hit in a packet will cause an error bit and that will cause the 
+entire packet to FAIL the CRC check.  Thus the packet is lost.
+
+To account for this 10 to 30 dB of signal fluctuation, a digital 
+signal needs about 10 dB or more stronger signal to be reliable 
+than for voice.  Since mobile range is proportional to the SQUARE 
+of the power, this means to improve the signal by 6 dB, you have to
+be half as close to the repeater.
+
+Thus, we strongly recommend that ALL APRS software display the 
+half-sized MOBILE PHG circles on all maps when the operator asks
+for a PHG display.  This give the more realistic map of coverage
+for mobiles, protables and other things on the move.  Then as an
+option, the operator can request a FIXED PHG display that will
+display the original equation PHG circles.
+
+As most people have learned the PHG circles in APRS are optimistic
+and so they were giving people a missleading sense of coverage.
+I hope all authors will apply this HALF-SIZE PHG fix.
+
+Further, since there is no such thing as zero range for a radio,
+and since the path between two stations is the sum of their
+PHG ranges, there were some defaults that should be used for 
+displays for stations not reporting their PHG:
+
+Fixed stations: PHG5130 25W, 20 feet, 3 dB gain Omni
+Mobiles:        PHG3020 10W, 10 feet, 2 dB gain omni
+
+These result in range circles (half-size) of about  4 and 2 miles 
+respectively (8 and 4 for fixed paths according to the original 
+formula)..
+
+de WB4APR, Bob

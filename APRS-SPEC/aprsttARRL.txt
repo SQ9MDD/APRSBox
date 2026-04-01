@@ -1,0 +1,135 @@
+FOLLOWING ARRL NUMBERED RADIO GRAMS LIST                  27 May 2010
+---------------------------------------------------------------------
+                                                               WB4APR
+
+Maybe we can use the following format for sending a radiogram by
+APRS Touchtone.  Although entering a recepient by DTMF may be very
+challenging, the much easier method for using APRS messaging via
+APRStt is to simply send the message to no-one in particular... but
+it will be picked up by the APRS Internet and WEB pages and so loved
+ones can check there to see what the sender is saying.
+
+So the format for sending an ARRL radio gram to the APRS web pages
+will be as follows:
+
+C2775*mm* then followed by your preprogrammed DTMF callsign.
+The "2775" is just ARRL spelled out on a keypad.  The mm is the
+ARRL message number from the list below.
+
+The actual packet that results from this APRStt DTMF entry will be
+
+CALLID>APSPK,WIDE2-2:}USER>APRStt::ARRL-No##:message here....
+
+Where CALLID is the callsign of the APRStt or APRSSpeak node
+Where APSPK is the version ID
+Where WIDE2-2 is the minimum path to get to an IGate
+Where USER is the callsign of the DTMF user
+Where APRStt shows it is an APRStt message
+Where ::ARRL-No##: is the required format for a message
+Where ## should be set to the actual ARRL message number
+Where "message here" is the text of the ARRL radio gram.
+
+Here are the standard ARRL NUMBERED Radiograms.  Where they are too
+long, or require fill-in information, they have been modified 
+slightly to a shortened APRS version as shown here:
+
+
+01   Everyone safe here. Please don't worry.
+ 
+02   Coming home as soon as possible.
+ 
+03   Am in hospital. Receiving excellent care and recovering fine.
+     
+04   Slight property damage here. Do not be concerned about 
+     media reports.
+ 
+05   Am moving to new location. Will inform you of new address 
+     when relocated .
+ 
+06   Will contact you as soon as possible.
+ 
+07   Please reply by Amateur Radio through this web page if possible.
+ 
+08   Need additional mobile or portable equipment for immediate 
+     emergency use.
+ 
+09   Additional radio operators needed to assist with emergency 
+     at this location.
+ 
+11   Call us on whatever circuit might work.
+
+12   Anxious to hear from you.  Please contact me soonest.
+ 
+13   Medical emergency situation exits here.
+ 
+14   Situation here becoming critical and increasing.
+ 
+15   Please advise your condition and what help is needed.
+ 
+16   Property damage very severe in this area.
+ 
+18   Please contact me as soon as possible.
+ 
+20   Temporarily stranded. Will need some assistance. 
+ 
+21   SAR assistance is needed by local authorities here.
+ 
+22   Need accurate information on the extent and type of conditions 
+     now at your location. 
+
+23   Report the accessibility and best way to reach your location.
+ 
+24   Evacuation of residents from this area urgently needed. 
+ 
+25   Furnish the weather conditions at your location.
+ 
+26   Evacuation of sick and injured from this location needed.
+ 
+Emergency/priority messages originating from official sources must 
+carry the signature of the originating official.
+--------------------------------------------------------------------
+ 
+Group Two & Routine Messages
+ 
+46   Greetings on your birthday and best wishes for many more.
+ 
+50   Greetings by Amateur Radio.
+ 
+51   Greetings by Amateur Radio. Having a wonderful time.
+ 
+52   Enjoyed being with you. Looking forward to next time.
+
+53   Received your package. Thanks!
+ 
+54   Many thanks for your good wishes.
+ 
+55   Good news is always welcome. Delighted to hear about yours.
+ 
+56   Congratulations, a most worthy and deserved achievement.
+ 
+57   Wish we could be together.
+ 
+58   Have a wonderful time. Let us know when you return.
+ 
+59   Congratulations, Hope mother and child are well!
+ 
+60   Wishing you the best of everything.
+ 
+61   Wishing you a Merry Christmas and a Happy New Year.
+ 
+62   Greetings and best wishes to you for the holiday season.
+ 
+63   Victory or defeat, our best wishes are with you. Hope you win.
+ 
+64   Arrived safely.
+ 
+65   Arriving as planned. Please arrange to meet me there.
+ 
+66   QSLs for you are at the QSL Bureau. Send SASE's.
+ 
+67   Your message was undeliverable. Please advise.
+ 
+68   Sorry to hear you are ill. Best wishes for a speedy recovery.
+ 
+69   Welcome! We are glad to have you with us...
+

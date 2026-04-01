@@ -1,0 +1,102 @@
+NET-SKED     A local FREQ OBJECT generator for APRS          7 Nov 08
+---------------------------------------------------------------------
+
+We need a background program (or add-on for Uiview) that will 
+automatically output FREQUENCY objects LOCALLY every 3 minutes or so 
+whenever an important local NET is in session.  This will show on 
+everyone's mobile display to invite them to participate while the 
+net is in session.  The format is carefully chosen to show up weell 
+on the displays of the APRS radios.
+
+   +------------+
+   | NET-AARC   |      <== for the AARC radio club
+   | FFF.FFFMHz |      <== the frequency of the net
+   |  Tnnn Rxxk |      <== the tone and range in k or miles
+   |  On-air    |      <== indicator of on air, or time
+   +------------+
+
+As an added option, during the day of the net, the object will also 
+be transmitted once every 10 minutes but with the TIME instead of 
+TONE and RANGE and "on air" as in the following example.  By using 
+only two lines (beyond the object name) this will be sure to show on 
+the display of even the limited D7.
+
+   +------------+
+   | NET-AARC   |      <== for the AARC radio club
+   | FFF.FFFMHz |      <== the frequency of the net
+   |  Today 9PM |      <== the tone and range in k or miles
+   +------------+
+
+Using this NetSked add-on, then, one person in each city can 
+prepare a FILE for this add-on that lists all of the repeater 
+nets and times, and frequencies and PATH so that the ADD-ON will 
+then do all the work of putting out the objects on the correct 
+schedule for all the clubs and events in the area.
+
+REQUIREMENTS!
+
+1) each net object should have its OWN PATH so that its packets 
+only cover the area that is reachable by that net frequency.  Any 
+of these packets that are delivered far out of the area are SPAM 
+to everyone else and not appreciated!
+
+2) Each net object should follow the format of the web page above
+
+3) The rate during net-time should be settable.  But no higher 
+than once every 2 minutes and no lower than every 10 during net 
+time.?
+
+4) The OPTIONAL "day-of" format with the weekly time should not 
+be transmitted if it is aleady being properly transmitted by the 
+local digi that should already be announcing the best locally 
+recommended voice frequency.  See www.aprs.org/localinfo.html. 
+But for secondary or rarely used repeaters that are not already 
+covered on APRS, then this optional "day-of" announcement should 
+be set for 10 minutes.
+
+The need for this NET-SKED add-on is simple.
+
+In my metropolitan area, there are over 100 ham radio clubs and 
+100 repeaters.  It is impossible for anyone to remember when or 
+where all of the weekly nets are.  But this is what APRS was 
+designed to do.  TO make mobile operators aware of the "local 
+situational awareness", so if he is mobile, and if a net is in 
+progress, then he has an opportunity to tune in.  
+
+Without these info packets, he might miss this opportunity.
+
+Actually, the need is even more important than that!  With over 
+100 clubs, and now activity falling for years, many nets are empty 
+with no check-ins, because no one is out there listening.  Ham 
+radio is dying and on way to make sure those of us remaining can 
+participate is to use APRS to alert everyone that is mobile of any 
+activity in progress.  We may not be as active on ham radio as 
+before, but we are still out there driving... And would participate 
+if we had "good situational awareness" (which APRS is suppposed to 
+deliver).
+
+SUGGESTED FILE FORMAT:
+
+The fields needed in the schedule file that drives the NetSked engine
+would be something like these:
+
+NET DAY  NET TIME RATE NAME      FREQ    TONE RNGE PATH 
+-------  -------- ---- --------- ------- ---- ---- -----------------
+tuesday   9:30 PM 3/30 NET-AARC  147.105 none R17m VIA WIDE1-1
+3rd Wed   7:00 PM 5/60 NET-MMARC 146.805 T107 R34k via W3AXY,WIDE1-1
+2nd Mon  10:00 AM 4/45 NET-ARES  146.910 none R15m VIA W4ABC,WIDE1-1
+etc
+
+Beginning say 10 minutes prior, these packets are formatted into a
+NET object packet with frequency and are transmitted at the high rate
+for the duration indicated.  FOr example "3/30" indicates it will be
+transmitted every 3 minutes for 30 minutes.  Values lower than 1 
+minute andd greater than say one hour should probably not be allowed.
+
+Ideally, the transmit algorithm might double the rate for the 10
+minutes prior and first 10 minutes of the net before droping back to 
+the indicated rate.  This accomplishes the same thing as the original
+APRS decay algorithm, that is, to use high rates for new info, and
+drop back for older lest valuable info.
+
+Bob, WB4APR

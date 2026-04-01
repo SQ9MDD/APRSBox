@@ -1,0 +1,61 @@
+NETWORK STEWARDSHIP                                         5 Sep 2004
+----------------------------------------------------------------------
+                                                    (updated May 2005)
+
+APRS is a network.  APRS works well when all members of the network
+adhere to the common protocol and best practices.  Sometimes to assure 
+the best performance for all, it is necessary to limit the excesses 
+of others.  The original concept of APRS assumed that "APRS" software
+would encourage, if not enforce this kind of network discipline.
+
+However, in the original APRS Specification Committee formed by  TAPR,
+the provision of all of these concepts referred to as "Network
+Stewardship" were not allowed in the spec.  This was a grave mistake as
+it has allowed un-constrained saturation of the net and encouragement
+of blind-operating practices where the user is removed from the 
+responsibilty to understand the limitations of the network and his own
+impact on others.
+
+Hence we have prepared this document to list all of the features that 
+should be in user software to provide a degree of "Network Stewardship" 
+and to encourage efficient and network friendly operations.
+
+NETWORK STEWARDSHIP:  What I mean by  Network Stewardship is that 
+software must attempt to balance the needs of the individual  with 
+the needs of the network to survive and provide some basic level of 
+service.  This includes minimizing paths, proper choice of rates,  
+reducing fluff, eliminating bad data, timing out of old data, smart 
+ack techniques, smart beaconing among others.  Since the New N Paradigm
+was developed in 2004/2005 which greatly simplified paths and digipeater
+settings, it is even easier now for APRS client software to help encourage
+proper operation via these network stewardship functions.
+
+Here are some of the features involved in  Network Stewardship
+--------------------------------------------------------------
+Auto Netcycle  (10minutes local else 30 minutes for wider area)
+Auto ALOHA Circle display
+Default Path of WIDE2-2
+challenge and Confirmation for hops over 3
+Challenge and Confirmation for hops past GATE
+RELAY no longer desired (causes multiple dupes at each digi)
+HID in TNC forced to OFF (to eliminate useless packets)
+Local TNC beacon forced OFF (eliminates useless packets)
+Decaying of old Messages to minimize old and speed up new data
+Decaying of old Posits to minimize old and speed up new data
+Decaying of old Objects to minimize old and speed up new data
+Randomizing multiple objects
+Randomizing all timings
+Message termination after N
+Retry Messages on Heard
+Redundant ACKing (to improve the probability of an ACK)
+Message Reply ACKing (to improve the probability of an ACK)
+Analysis Tool for ALOHA range
+Analysis Tool for observing HOPS (for best path selection)
+Analysis Tool for observing Paths
+Analysis Tool for observing PHG RF range circles
+Heard counts per station per hour (for rapidly seeing abusive packets)
+Monitoring tool for HID's
+Channel Loading Display (to give users feedback on the network)
+
+
+de WB4APR, Bob

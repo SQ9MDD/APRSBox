@@ -1,0 +1,45 @@
+POWER-HEIGHT-GAIN:  This optional field replaces the CSE/SPD fields with a
+report of transmitter power, antenna height-above-average-terain and 
+antenna gain.  APRS uses this to plot radio range circles around all 
+stations.  The following details the format to be used in the BText of 
+a TNC dedicated as an APRS digipeater:
+
+    !DDMM.mmN/DDDMM.mmW#PHG5360/WIDE...(identifying comments)...
+      |         |      | | ||||  |_____ makes station show up green
+      |         |      | | ||||________ Omni (Direction of max gain)
+      |         |      | | |||_________ Ant gain in dB
+      |         |      | | ||__________ Height = log2(HAAT/10)
+     LAT      LONG     | | |___________ Power = SQR(P)
+                       | |_____________ Power-Height-Gain identifier *
+                       |_______________ # is symbol for digipeater
+
+     As you can see by the integers in the PHG string, there are only 10
+     possible values for each of these fields as follows:
+
+     DIGITS   0  1  2   3   4   5   6    7    8    9         Equation
+     -------------------------------------------------------------------
+     POWER    0, 1, 4,  9, 16, 25, 36,  49,  64,  81  watts  SQR(P)
+     HEIGHT  10,20,40, 80,160,320,640,1280,2560,5120  feet   LOG2(H/10)
+     GAIN     0, 1, 2,  3,  4,  5,  6,   7,   8,   9  dB
+     DIR   omni,45,90,135,180,225,270, 315, 360,   .  deg    (D/45)
+
+     The DIRECTIVITY field offsets the PHG circle by one third in the
+     indicated direction.  This means a front to back range of 2 to 1.
+     Most often this is used to indicate a favored direction or a null
+     even though an OMNI antenna is at the site.  Note that 0 means
+     OMNI and 8 means 360 or a NORTH offset.
+
+     HIGHTS are ABOVE-AVERAGE TERRAIN!  Not above ground or sea
+     level. ALso, since DOS version 8.0 the Height character may be any 
+     ASCII character 0-9 and above.  This is so that higher heights for
+     aircraft or satellites may be incorporated.
+
+On receipt, the PHG values are converted to a usable radio range using
+the following algorithms:
+    
+     POWER = P^2
+     H = 10 as a default
+     H = ASCII(Hchar)-51   converts it to a decimal value
+     HAAT = 10*2^H
+     GAIN = 10^(G/10)      converts from DB to decimal
+     RANGE = SQR(2*H*SQR((P/10)*(GAIN/2)))

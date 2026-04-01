@@ -1,0 +1,243 @@
+APRS SYMBOLS (Icons)                                            24 Jan 2003
+---------------------------------------------------------------------------
+                                                                     WB4APR
+
+These are the clarifications and additions to the APRS symbol table since
+the spec was produced.  Attached below is the original APRSdos symbol.txt
+file which I used as the baseline for what appears in the APRS SPEC.  I
+will try to make sure it is current with the SPEC list, but since this is
+what APRSdos always used and was the basis for everything, Until someone
+has time to go over it icon by icon, there still maybe some differences.
+
+Anyway, NEW SYMBOLS since the SPEC:
+
+24 Jan 2003:
+
+  /L  is for a user "logged-on" to the Internet only with no RF.  It
+      should appear as a desk-top PC image.
+  /l  is similar but should appear as a laptop looking image
+
+
+Here is what I use as my reference:
+
+
+SYMBOLS.TXT       APRS DISPLAY SYMBOLS                 APRSdos     ORIGINAL
+===========================================================================
+Document version: 8.4.0
+Document dated:   28 Apr 99
+Author(s):        Bob Bruninga, WB4APR <bruninga@nadn.navy.mil>
+ABSTRACT
+SYMBOLS.TXT       Details of all APRS display symbols. (ICONS)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The character after the latitude "N/S" in an APRS position report is a TABLE
+character and the character following the longitude "E/W" is the APRS symbol
+character.  The TABLE character selects one of two symbol tables or may be
+used as a numeric overlay over some symbols as follows:
+
+        TABLE    RESULT            
+         /       Primary   symbol Table  (Mostly stations)
+         \       Alternate symbol table  (Mostly Objects)
+         0-9     Alternate OVERLAY symbol with 0-9 overlayed
+         A-Z     Alternate OVERLAY symbol with A-Z overlayed
+      
+For ease of reference we refer to these as the SYMBOL CHARACTERS and
+often abbreviate them as "/$" which refers to the Table character "/"
+and symbol character "$".
+
+Press F1-S in APRSdos to see these symbols.  Some symbols may have a
+numeric overlay character 0-9 or A-Z.  These are shown on the F1-S
+display with the numeral "3" overlayed.  These overlayable symbols are:
+
+  CIRCLE, SQUARE, CAR, TRUCK, VAN, DIGIS, GATES
+  Civil-Defense(RACES), NWS sites, WX stations, Triangle
+
+SYMBOLS WITH STAND-ALONE GPS TRACKERS:  Stand-alone TNC trackers which
+transmit raw GPS have two methods of selecting their symbol.  First, by
+the callsign in their UNPROTO TOADDRESS of the form GPSxyz.  The X points
+to a subgroup table and the Y is the actual symbol.  Z is an overlay 
+character if used.   Secondly, for MIM trackers which cannot set the 
+UNPROTO address, there are 15 default SSID's which will translate to 15 
+special Icons.
+
+Actually there are four TOCALLS that will provide the same symbol.
+
+   GPSxyz is for stand alone trackers
+   SPCxyz is for stand alone trackers at SPECIAL events in SPCL mode
+   SYMxyz is for other TNC-only stations such as WX stations
+
+Notice that both the /$ method and GPSxyz method have a one-for-one
+corrspondence for all numeric and alphabetic symbols of both upper 
+and lower case which should make them easy to remember.  For the GPSxyz 
+method, we have broken the PRIMARY and ALTERNATE tables into sub tables
+with different names to make them easier to remember.  For example, "/C"
+is a CANOE in the PRIMARY table which can be referred to as PC in the 
+XYZ format and the "\C" ALTERNATE table symbol is for Coast Guard which 
+could also be referred to in the GPSxyz format as AC.   Simillarly, you 
+can think  of the lower case symbols /c or \c as being LC for lower case 
+C and SC for "secondary" table "c".
+
+The Following Symbol table shows the two types of identifiers for all
+APRS ICONS.  THe primary symbols are on the left and the alternate 
+table is on the right.  The first column of each is labeled /$ and \$ 
+for the primary and alternate tables.  THese are the chacacters you 
+will see in an APRS formatted position report.  The XYZ columns are 
+for the stand-alone trackers described above.
+
+/$  XYZ BASIC SYMBOL TABLE         \$  XYZ OTHER SYMBOL TABLE (\)
+--  --- -------------------------  --  --- ----------------------
+/!  BB  Police, Sheriff            \!  OB  EMERGENCY (!)            
+/"  BC  reserved  (had been rain)  \"  OC  reserved
+/#  BD  DIGI (white center)        \#  OD# NUMBERED STAR (green)
+/$  BE  PHONE                      \$  OE  Bank or ATM  (green box) 
+/%  BF  DX CLUSTER                 \%  OF 
+/&  BG  HF GATEway                 \&  OG# NUMBERED DIAMOND
+/'  BH  Small AIRCRAFT (SSID = 7)  \'  OH  Crash site
+/(  BI  CLOUDY                     \(  OI  CLOUDY
+/)  BJ  avail (Mic moved to m)     \)  OJ                                   
+/*  BK  SnowMobile                 \*  OK  SNOW
+/+  BL  Red Cross                  \+  OL  Church
+/,  BM  Boy Scouts                 \,  OM  Girl Scouts
+/-  BN  House QTH (VHF)            \-  ON  House (HF)
+/.  BO  X                          \.  OO  Ambiguous Plot (Big Question mark)
+//  BP  Dot                        \/  OP
+
+/$  XYZ PRIMARY SYMBOL TABLE       \$  XYZ ALTERNATE SYMBOL TABLE (\)
+--  --- -------------------------  --  --- --------------------------
+/0  P0  # circle (obsolete)        \0  A0# NUMBERED CIRCLE (OVERLAY)
+/1  P1  TBD                        \1  A1
+/2  P2  TBD                        \2  A2
+/3  P3  TBD                        \3  A3
+/4  P4  TBD                        \4  A4
+/5  P5  TBD                        \5  A5
+/6  P6  TBD                        \6  A6
+/7  P7  TBD                        \7  A7
+/8  P8  TBD                        \8  A8
+/9  P9  TBD                        \9  A9  Gas Station (blue pump)  
+/:  MR  FIRE                       \:  NR  Hail                     
+/;  MS  Campground                 \;  NS  Park/Picnic area         
+/<  MT  Motorcycle     (SSID = 10) \<  NT  ADVISORY
+/=  MU  RAILROAD ENGINE            \=  NU
+/>  MV  CAR            (SSID = 9)  \>  NV# NUMBERED CAR
+/?  MW  SERVER for FIles           \?  NW  INFO Kiosk  (Blue box with ?)
+/@  MX  HC FUTURE predict (dot)    \@  NX  HURICANE/Trop-Storm
+/A  PA  Aid Station                \A  AA# NUMBERED BOX             
+/B  PB  BBS                        \B  AB  Blowing Snow
+/C  PC  Canoe                      \C  AC  Coast Guard          
+/D  PD                             \D  AD  Drizzle
+/E  PE  EYEBALL (Eye catcher)      \E  AE  Smoke
+/F  PF                             \F  AF  Freezing rain
+/G  PG  Grid Square (6 digit)      \G  AG  Snow Shower                    
+/H  PH  HOTEL (blue bed symbol)    \H  AH  Haze                     
+/I  PI  Tcp-Ip                     \I  AI  Rain Shower  
+/J  PJ                             \J  AJ  Lightening
+/K  PK  School                     \K  AK  Kenwood              
+/L  PL  Logged-on PCuser (Jan 03)  \L  AL  Lighthouse                     
+/M  PM  MacAPRS                    \M  AM  
+/N  PN  NTS Station                \N  AN  Navigation Buoy          
+/O  PO  BALLOON        (SSID = 11) \O  AO 
+/P  PP  Police                     \P  AP  Parking                    
+/Q  PQ  TBD                        \Q  AQ  QUAKE                       
+/R  PR  REC. VEHICLE   (SSID = 13) \R  AR  Restaurant                   
+/S  PS  SHUTTLE                    \S  AS  Satellite/Pacsat
+/T  PT  SSTV                       \T  AT  Thunderstorm        
+/U  PU  BUS            (SSID = 2)  \U  AU  SUNNY                       
+/V  PV  ATV                        \V  AV  VORTAC Nav Aid              
+/W  PW  National WX Service Site   \W  AW  NUMBERED NWS site (NWS options)
+/X  PX  HELO           (SSID = 6)  \X  AX  Pharmacy Rx
+/Y  PY  YACHT (sail)   (SSID = 5)  \Y  AY
+/Z  PZ  WinAPRS                    \Z  AZ
+/[  HS  Jogger                     \[  DS  Wall Cloud                  
+/\  HT  TRIANGLE   (DF)            \/  DT
+/]  HU  PBBS                       \]  DU
+/^  HV  LARGE AIRCRAFT             \^  DV# NUMBERED Aircraft
+/_  HW  WEATHER Station (blue)     \_  DW  NUMBERED WX site (green digi)
+/`  HX  Dish Antenna               \`  DX  Rain       
+
+/$  XYZ LOWER CASE SYMBOL TABLE    \$  XYZ SECONDARY SYMBOL TABLE (\)
+--  --- -------------------------  --  --- --------------------------
+/a  LA  AMBULANCE     (SSID = 1)   \a  SA  ARRL ARES etc
+/b  LB  BIKE          (SSID = 4)   \b  SB  Blowing Dust/Sand
+/c  LC  tbd                        \c  SC  NUMBERED Civil Defense (RACES)
+/d  LD  Dual Garage (Fire dept)    \d  SD  DX spot by callsign
+/e  LE  HORSE (equestrian)         \e  SE  Sleet
+/f  LF  FIRE TRUCK    (SSID = 3)   \f  SF  Funnel Cloud                
+/g  LG  Glider                     \g  SG  Gale Flags                     
+/h  LH  HOSPITAL                   \h  SH  HAM store
+/i  LI  IOTA (islands on the air)  \i  SI  Indoor BOXn digipeater (w overlay)
+/j  LJ  JEEP          (SSID-12)    \j  SJ  WorkZone (Steam Shovel)
+/k  LK  TRUCK         (SSID = 14)  \k  SK
+/l  LL  Logged-on laptop (Jan 03)  \l  SL  Area Locations (box,circles,etc)
+/m  LM  Mic-Repeater               \m  SM  Value Signpost (3 digit display)   
+/n  LN  Node                       \n  SN# NUMBERED TRIANGLE         
+/o  LO  EOC                        \o  SO  small circle                    
+/p  LP  ROVER (puppy)              \p  SP  Partly Cloudy            
+/q  LQ  GRID SQ shown above 128 m  \q  SQ
+/r  LR  ANTENNA                    \r  SR  Restrooms                
+/s  LS  SHIP (pwr boat)   SSID-8)  \s  SS# NUMBERED SHIP/boat (top view)
+/t  LT  TRUCK STOP                 \t  ST  Tornado                  
+/u  LU  TRUCK (18 wheeler)         \u  SU# NUMBERED TRUCK
+/v  LV  VAN           (SSID = 15)  \v  SV# NUMBERED Van
+/w  LW  WATER station              \w  SW  Flooding                 
+/x  LX  xAPRS (Unix)               \x  SX                                  
+/y  LY  YAGI @ QTH                 \y  SY
+/z  LZ                             \z  SZ
+/{  J1                             \{  Q1  Fog
+/|  J2  reserved (Stream Switch)   \|  Q2
+/}  J3                             \}  Q3
+/~  J3  reserved (Stream Switch)   \~  Q4
+
+AREA SYMBOLS!  You can define BOX/CIRCLE/LINE or TRIANGLE areas in all
+colors, either open or filled in, any size from 60 feet to 100 miles. 
+Simply move the cursor to the location, press HOME, move the cursor to the
+lower right corner of the AREA and hit INPUT-ADD-OBJECTS-AREA.  Enter
+the type of area, and color.  NOTE that AREA shapes can only be defined
+by selecting the upper left corner first, then the lower right second. 
+The line is an exception.  It is still top to bottom, but the lower point
+can be to the left of the beginning point.  Further, in the line option
+you may specify a "width" either side of the central line.
+
+   These AREAS are useful for real-time events such as for a search-and-
+rescue, or adding a special ROAD or ROUTE for a special event.  Be cautious
+in using the color fill option, since all other objects in that area that
+occur earlier in your PLIST will be obscured.  AND you do NOT know the
+order of other stations P-lists. 
+
+AREAS FORMAT: The new format for specifying special areas uses the CSE/SPD
+field to provide the additional information as follows:
+
+$CSE/SPD...  Normal Field description
+lTyy/Cxx...  Where:  l (lower case L) is the symbol for "LOCATION SHAPES"
+                     T is the Type of shape:  0=circle, 1=line, 2=elipse
+                                              3=triangle 4=box
+                                              add 5 to these => color-in
+                     C is the color from 0 to 15.  For colors geater than
+                       9, the / is replaced with a 1.
+                    yy is the sqroot of the latitude offset in 1/100ths
+                    xx is the sqroot of the longitude offset
+                       
+These offsets are ALWAYS positive to the right and down, except for the
+special case of a lower right quadrant line, these are given the Type of
+6 and are drawn down and to the left.
+
+HURRICANES, TROPICAL STORMS and DEPRESSIONS:  These symbols will be
+differentiated by colors red, yellos, and blue.  Additionally a radius
+of Huricane and also Tropical storm winds will also be shown if the
+format detailed in WX.txt is used.
+
+SYMBOLS ON MAPS!  APRS can also be permanently embedded in maps.  To embed
+a symbol in a map, simply make the first four characters of the label be a
+# followed by the dual symbol character, followed by a hex number from 1
+to F that indicates the color for the symbol.  The remaining 8 characters
+can be used for a conventional label at the same location.  An example are
+the VORTAC nav-aids in Alaska.  The Anchorage VORTAC appears as ANC on all
+maps below 128 miles. The label entry is #\VFANC,LAT,LONG,128.
+
+VALUE SIGNPOSTS:  Signposts display as a yellow box with a 1 to 3 letter 
+overlay on them.  You specify the 1-3 letter overlay by enclosing them 
+in braces in the comment field.  Thus a VALUE Signpost with {55} would 
+appear as a sign with 55 on it.  This was designed for posting the speed 
+of traffic past speed measuring devices.  They can be used for any purpose.  
+But to avoid cluttering the map, they ONLY appear at 8 miles and below 
+AND they do not show any callsign or name.  Only the yellow box and the 
+3 letters.  Select them from the OBJECT menu under VALUE...

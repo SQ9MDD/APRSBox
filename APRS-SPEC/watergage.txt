@@ -1,0 +1,100 @@
+WATER GAUGES in APRS                                      29 June 06
+--------------------------------------------------------------------
+
+24 March 2011 UPDATE!!!!
+
+As of March 24 2011, the standard format used by hundreds of
+these sensors on FIRENET appears to be:
+
+;09428508 *061713z3401.40N/11424.75Ww3.57gh/82cfs
+
+Which is a standard OBJECT report with the text "3.57gh/82cfs".  This
+means water gage number 09428508 with a reading of 3.57 GageHeight and
+82 cubic feet per second.
+
+----------------------------------------------------------------------
+
+Most of the details from this page have been folded into a 
+generalized APRS1.2 addendum on all new additions to the WEATHER 
+formats in APRS.    
+
+Please see:      http://aprs.org/aprs12/weather-new.txt or
+The full APRS1.2 addendum:  http://aprs.org/aprs12.html
+
+
+WATER GAUGE INFO:
+
+In June 06, water level gage information was added to APRS.  There are 
+two symbols, one for H2O "/w" and the other for FLOOD "\w".  The 
+device can choose to send either of these symbols depending on its 
+own threshold for "flooding".  Or instead, if additional weather data 
+is avaiable it can simply add the water level information in the Fxxxx
+format to a weather report.  As of March 24 2011, we have seen no 
+gages use the weather format and all appear to be using the standard 
+format used by hundreds of these sensors appears to be:
+
+;09428508 *061713z3401.40N/11424.75Ww3.57gh/82cfs
+
+Which is a standard OBJECT report with the text "3.57gh/82cfs".  This
+means water gage number 09428508 with a reading of 3.57 GageHeight and
+82 cubic feet per second.
+
+In 2006 we also defined a water gage/flooding format for inclusion in
+weather data.  In that case, the height above or below flood or tide 
+level in inches was to be included in the position text (or weather
+data string) as Fxxxx and that string is chosen to be compatible with
+the standard APRS weather reporting parameters.  In addition, a voltage 
+field Vvvv was also added. Thus, the usual APRS complete weather report 
+string similar to:
+
+  DIR/SPD/Gggg/Tttt/Rrrr/Pppp etc
+
+is extended by adding these additional parameters for 
+
+Fxxxx  water level above or below flood stage or mean tide in tenths
+       of a foot.  Values can range between +999 and -999 in tenths 
+       meaning -99.9 to +99.9 feet.  Meters are not used for the on
+       air format because it gives too little or too much resolution
+       to fit in the fixed length 4 bytes that are required.
+
+Vxxx   battery volts in tenths   128 would mean 12.8 volts
+
+Zxx    Device type
+
+These fields can be added to a WX station report where the WX symbol 
+would continue to be used, or to heighligh that the weather station
+has a water gage, it can use the weather station overlay character of
+"F".  The standard WX report allows for any field to be indicated as 
+not available either by omission or by replacing the value with "...".
+Since the wind direction and speed and temperature are required fields,
+this means the minimum weather report with flood info is
+   
+WX symbol -plus-   .../...t...VxxxFxxxx
+
+Notice that if water data is added to a WX report, then only Fxxxx
+and optional Vxxx are added to the WX report.  
+
+Examples are:
+
+Weather reports:
+ DDMM.hhN/DDDMM.hhW_ddd/sss/Gggg/Tttt/Fxxxx...
+ DDMM.hhN/DDDMM.hhW_ddd/sss/Gggg/Tttt/Fxxxx/Vvvv...
+ DDMM.hhN/DDDMM.hhW_ddd/sss/Gggg/Tttt/Rrrr/PppppFxxxx...
+
+Water Gage reports:
+ DDMM.hhN/DDDMM.hhWwFxxxx/ZFA
+ DDMM.hhN/DDDMM.hhWwFxxxxVvvv/ZFA
+ DDMM.hhN\DDDMM.hhWwFxxxxVvvv/ZFA
+ DDMM.hhN/DDDMM.hhWwddd/sss/Gggg/Tttt/Fxxxx/ZFA
+ DDMM.hhN/DDDMM.hhWwddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+ DDMM.hhN\DDDMM.hhWwddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+
+Notice that two of these indicate the FLOOD symbol (\).
+
+Also notice that existing software needs to now consider parsing
+the appearance of any WATER or FLOOD symbols to see if they also
+include Weather.  Also, everyone's weather parser needs to look
+at the WX fields for the optional additional Fxxxx or Vvvv fields.
+
+de WB4APR, Bob
+

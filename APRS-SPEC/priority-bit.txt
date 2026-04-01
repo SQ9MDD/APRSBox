@@ -1,0 +1,125 @@
+APRS PRIORITY BIT    (obsolete.  See PRECEDENCE BIT)     16 Jan 2013
+--------------------------------------------------------------------
+
+Jan 2013:  The name of the Priority bit was changed to Precedence
+           Bit to avoid any confusion with the Mic-E PRIORITY status
+           or position comment bits.
+
+Dec 2012:  The Priority bit is better defined using the RR bits.
+           See http://aprs.org/aprs12/RR-bits.txt
+
+Aug 2009:  (now Obsolete!) Retained for historical and backwards
+           compatibility purposes.
+
+APRS needs a way of differentiating important packets from routine
+packets for network management under stress.  There are two 
+parameters that need to be available in every packet.  These are the
+OPERATOR PRESENT bit and a PRIORITY bit.  The operator present bit 
+has been defined since the early 2000's and is already covered in 
+the APRS Addendum 1.2.  Basically, an overlay "O" on any symbol
+indicates an operator is present.  This page now defines the 
+priority bit.
+
+The priority bit and Operator Present bit can be used to
+differentiate how packets are handled and displayed during times of 
+stress.  For example, Operators can select OPERATOR-ONLY symbols 
+on their display to quickly be able to see what live-assets are
+available on the map without all the clutter of unattended stations.
+Or, when the local Emergency coordinator declares an emergency, 
+digipeaters can be put into "minimize" state and the digipeaters 
+then will be able to pass all priority packets, and may reduce the 
+non-priority packets to fewer hops.
+
+BACKGROUND:  APRS only has 3 available bits in the standard position 
+packet.  These are the CASE/case of the N/S, the E/W and the symbol 
+overlay bytes.  For many years we have wanted to use these bits to 
+indicate if a live operator is present, an a priority bit.  The 
+problem is that UI-View is not backward compatible with the use of 
+lower case in the N/S or E/W bytes.  We cannot use those bits until 
+UI-view is finally made obsolete.  It is however able to display the 
+lower case Overlay byte.  Therefore we are proceeding to use that bit.
+
+PRIORITY BIT:  If the overlay byte in any APRS packet is in lower 
+case, then the packet is considered to be a priority packet.  If the
+symbol is in the primary table or has an uppercase overlay byte, then
+the packet is considered to be ROUTINE.
+
+APPLICATION:  Future digipeater code should allow for a SYSOP 
+parameter called "minimze".  When this is OFF, digipeater functions
+are normal.  If MINIMIZE is enabled, then the digipeater can
+implement levels of decimation of packets.  There can be multiple
+levels of MINIMIZE depending on the degree required in the immediate
+situation.  For example, these conditions may be applied:
+
+MINIMIZE MINIMUM: Priority packets are digipeated normally. Routine
+packets are digipeated once and the has-been-digipeated bit is set.
+
+MINIMIZE MAXIMUM: Priority packets are digipeated normally. Routine
+packets are ignored.
+
+It is not expected that this higher level processing will applly to
+all digipeaters, but at least it will give us the tools to use in
+some digipeater code to apply to critical situations in some small
+geographic areas or special events.  The burden on the digipeteater
+is significant since the digi now has to parse the packet format to
+find the priority bit.
+
+DISPLAY:  There should be an indicator on all APRS symbols as to 
+whether the OPERATOR-PRESENT or the PRIORITY BITS are set.  Luckily
+this is inherent on most systems, since they information is conveyed
+in the existing overlay byte.  But in-keeping with the original 
+intent of APRS that used SYMBOL COLOR to convey the 8 basic 
+attributes of each symbol, these two new conditions of OPERATOR
+present and PRIORITY should be considered as fundamental symbol
+attributes as well.  
+
+It is a major fialing of many APRS clones that they do not always
+display at least the original 8 attributes on every symbol.  The
+most critical example is the abliity to differentiate STATIONS from
+OBJECTS and MY objects from OTHER objects.  This ownership is very
+critical and very important to the tactical situation, because
+ownership can change on a packet-by-packet basis.  Ownership and
+responsiblity for objects is critical to operations.  This 
+paragraph does not necessarily apply to the PRIORITY topic, but it
+has been so overlooked by so many authors, that it is revisted here
+as a reminder.
+
+SELECTION:  Given that stations and objects can be easily differen-
+tiated by prioirty, operator-present, and ownership, the good
+client softeware gives the operator the ability to selectively 
+display these distinctions.
+
+LIMITATIONS:  Pete Lovell notes that this priority can only be set
+on Alternate symbols and only those with an ALPHA overlay.  Further
+this priority bit cannot be set on COMPRESSED packet formats as it
+will conflict with the use of the letters a-j to translate to the
+digits 0-9.
+
+Also it is interesting that the Mic-E formatted packets have another 
+means of indicating SPECIAL, PRIORITY and EMERGENCY which can also be 
+exploited in the future.
+
+UI-VIEW NOTES: Keith VE7GDH reports that UI-View will still only 
+let you enter an overlay in upper-case, you can exit the program 
+and edit uiview32.ini and edit the [STATION] section to change the 
+TABLE_CHAR to lower case and it will stay put.  UI-View does
+display stations with a lower case overlay correctly... but only
+on symbols that accept an overlay.  
+
+To make any alternate symbol capable of displaying an OVERLAY, 
+simply add "No." as the first four bytes in the description in the 
+mysymb.txt file.  This is an abbreviation for "numbered" which is 
+what we originally used to refer to overlay symbols.  The reason 
+we did this was that we use the NUMBER sign to indicate the overlay 
+generically as in "#>" would show that the alternate symbol ">" can 
+have an overlay #.
+
+Anyway, this technique can be used to update UI-View to be able
+to use the new overlay and symbol concepts shown in:
+
+www.aprs.org/symbols/symbols-new.txt
+
+Bob, WB4APR
+
+
+

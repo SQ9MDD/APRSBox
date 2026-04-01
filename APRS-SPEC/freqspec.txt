@@ -1,0 +1,647 @@
+APRS Freq Spec - AFRS(Automatic Frequency Reporting System)  30 Sep 2019
+------------------------------------------------------------------------
+                                                                  WB4APR
+Revisions:
+
+30 Sep 19 Added a section on D-STAR formats for Frequency Reporting.
+          Added section on Yaesu radio incompatibilty with Freq Objects.
+
+09 May 12 Clarified that Offset can always follow the Tone Tnnn format
+          and is clarified as oXXX meaning +XXX or -XXX in 10's of KHz
+          wherever Rxxm has frequently been shown in the examples when 
+          the offset is not transmitted (standard offsets used).  IE, 
+          that location following Tnnn can be either Rxxm or oXXX.
+
+          The FTM-350 apparenlty does not decode FREQ OBJECTS.  The 
+          suggested workaround is to continue to transmit standard
+          FREQ Objects as before, and then add the FFF.FFFMHz for the
+          locally recomended voice repeater as the leading part of 
+          the local DIGI text.
+
+08 May 12 Clarified a significant misunderstanding.  When the FREQ is
+          transmitted as the OBJECT NAME, then there is no expectation
+          of the first 10 byte FFF.FFFMHz field (except for crossband
+          repeaters, and so the remaining fields do not begin in the 
+          11th position, but begin at the start of the comment field.  
+          Scan for clarifications with a search of "08 May".
+
+          *** NOTE, a dual band APRS radio cannot TUNE or QSY to a
+          cross band repeater anyway, without losing the APRS band!
+          The information is in there for DISPLAY and INFO only.
+
+07 May 12 Clarifies some wording.  IE, MHz should be case sensitive for 
+          transmit, and insensitive for receive.  Also added comments 
+          on observed inconsistanceis in the use of a leading space.
+          Better enumerated the 4 format categories for FREQ info.  
+          Removed the confusing 2nd-10-byte FFF.FFF + example due to
+          confusion with the first 10 byte field where +/- are not
+          allowed.
+
+18 Jun 10 clarify 1750 Wideband and l750 narrow (l/c "L")
+22 Oct 09 added WiRES and Echolink objects  
+15 Jun 08 eliminate leading space in FREQ object
+21 Feb 08 add WIDE/NARROW and TONE/CTCSS
+13 Dec 07 updated IRLP beacon info
+30 Sep 07 included Mic-E Echolink format for D710 radio
+ 1 Aug 07 merge in IRLP & EchoLink nodes (was on AVRS pages)
+21 May 07 included unique ID's for repeater frequency objects
+ 8 Oct 05 Original concept
+
+FREQUENCY IMPORTANCE IN APRS:
+
+Ham radio's biggest advantage of thousands of frequencies is also its 
+biggest stumbling block at rapidly and efficiently establishing com-
+munications under emergent or immediate need or just to chat on a long
+trip across country.  APRS provides a way to determine the operating 
+frequency of the other stations and applications around us or to send
+to a distant station, a desired contact frequency.  This initiative 
+came out of the Hurricane Katrina lessons learned.
+
+APRS, is a single resource for identifying and locating amateur radio
+operators on both a local and global scale.  Over 30,000 stations 
+world wide are currently in the system and you can view them in any 
+area or near any station via any APRS client program or via any number 
+of APRS web pages such as the following:
+
+http://aprs.fi  OR
+http://map.findu.com/callsign* ... and then select "stations near".
+http://www.jfindu.net
+
+FREQUENCY CATEGORIES:  There are basically four categories of Frequency
+specifications in APRS:  
+
+   FREQ OBJECTS - originated by local digis.  FREQ is the object name
+   Fixed FREQ COMMENT - included in any fixed position or object comment
+   FREQ STATUS - Frequency included in STATUS packets for NMEA trackers
+   Auto FREQ INSERTION - automatically included in position comment
+
+This APRS Frequency initiative is to standardize so that we know 
+the correct frequency, Tone, offset, and maybe bandwidth.  In addition,
+there are many other useful parameters that can be included in these
+beacons as well.  These are the types of local objects that should show 
+up on the mobile APRS display in every local area:
+
+  Every mobile's (or fixed station's) operating frequency
+  The locally recommended voice frequency for visitors
+  The local IRLP or EchoLink node and current node status
+  The local WinLink node and current node status
+  The frequency of any Net in progress
+  Any other local ham radio asset or net of interest to APRS mobiles
+
+KEEP IT LOCAL!  These local fixed FREQ OBJECTS should ONLY be 
+transmitted in the local RF area where they can be immediately used.  
+Transmitting them any farther than DIRECT will not only add QRM and
+congestion to the local channel they are also just SPAM beyond the
+local simplex range in areas that cannot use them.  The sources of 
+these frequencies  are as follows:
+
+* Newer Mobile radios put their operating frequency in their STATUS 
+  text (not to be confused with the APRS "STATUS" packet which is
+  a separate packet and is not part of this FREQ spec.
+
+* Local Voice Repeater objects are TX'ed by the local DIGI's TEXTS
+
+* IRLP, EchLink and WinLink objects are generated by their own software 
+  and injected into the APRS-IS.  From there, each LOCAL IGATE SYSOP 
+  decides which IRLP and which Echlink and which WinLINK object is in 
+  his immediate area, and he then adds these specific individual 
+  objects to his pass-to-RF list via no more than a ONE-HOP-PATH...
+
+
+RECOMMENDED TRAVELERS VOICE REPEATERS:
+
+Every digi has a coverage area.  It is the responsiblity of that digi
+to transmit an object showing the best recommended travelers voice
+repeater in that coverage area, DIRECT, once-every-10-minutes.  Being
+direct (no digipeats), they are only received in the vicinity where 
+they are usable.  Also, by originating at the Digipeater's high site, 
+there is no impact on the channel load, because the digi will not 
+transmit until the channel is clear.  See:
+
+     http://aprs.org/localinfo.html
+
+WOTA, DX CLUSTERS, KATRINA:  This AFRS Frequency initiative is working 
+in parallel with the post-Katrina ARRL Initiative to provide operating 
+frequency contact information in support of emergency response.  
+
+Since the APRS-IS exists worldwide and already supplies information on 
+all APRS stations, it can also accept data from WOTA, DX clusters and 
+Logging programs to serve as a single resource for finding the likely 
+operating frequency of interest for any station. 
+
+ADDING FREQUENCY TO APRS:  Already, APRS encodes the following 
+information into typical user position packets.
+
+  CALL, LAT, LONG, COURSE, SPEED (Grid is calculated)
+  Station type (one of over 200 symbols)
+  Antenna Height above average terrain
+  Antenna Gain
+  Comment (37 bytes max)  (usually where stations have their frequency)
+  Software version
+
+FREQUENCY has been added in a backwards compatible manner, either as a 
+fixed formatted field in the first 10 bytes of the existing free-field 
+position comment text or as the noun name of an object packet.
+
+In addition to the frequency information (9 bytes of an OBJECT name) or
+10 fixed format bytes in a position comment, there are additional 
+optional format bytes to include additional amplifying information about 
+tone, range, net and meeting times.  This information has been carefully
+formatted to show up well on the 10x10 byte displays of the D7, D700's,
+the HAMHUD, Yaesu's and other existing devices.   A typical entry might 
+be:
+
+"FFF.FFFMHz Tnnn +500 RXXm".  The Tone and Offset are fixed field formats
+followed by additional text such as Range (XX miles or km).  If the 
+offset is omitted, then the standard offset in the region will be used
+by radios on receipt.   The tone does not include decimals.
+
+FREQUENCY-in-MESSAGE:  Similarly we want to be able to send a freqency
+in a message to another station, and for his station to either 
+manually or automatically change his voice radio to that contact
+frequency.  With this APRS capability, we can implement almost a
+ham radio version of cell phones.  Just send a message to a distant
+ham callsign and let the system set up the voice links. See the
+http://aprs.org/avrs.html
+
+FUTURE RADIO COMPATIBILITY:  In response to this frequency initiative
+both Kenwood and Yaesu have released compatbile radios.  The Kenwood 
+D72/710 and Yaesu FTM350 will automatically insert their frequency into 
+their position text and on receipt, can parse it and automatically tune 
+to that frequency with a single press of the TUNE/QSY button.   See the 
+Automatic Voice Relay System:  http://www.aprs.org/avrs.html
+
+RADIO INCOMPATIBILITY:  There are some radios (Yaesu) that will not
+recognise the APRS Frequency Object that uses the FREQUENCY as the
+OBJECT name.  Thus, drivers cannot simply see the Frequency in their
+STATION LISTS.  Nor can they be sorted for easy summary at the top of
+the list.  For these radios to see and react to the frequency object,
+the frequency must also be listed in the comment field. THis greatly
+limits the amount of data in these objects as the Frequency information
+has to be included twice.
+
+LOCAL/GLOBAL VOICE CONTACT VIA CALLSIGN ALONE:  One of the major
+initiatives for this frequency capability was to be able to set up
+end-to-end VOIP voice contact between amateur radio operators knowing
+only callsigns.  By using APRS as the backbonen signalling system,
+Automatic QSY can be implemented and this, combined with APRS 
+messaging and IRLP or EchoLink networks can lead to fully automatic 
+end-to-end voice connectivity between APRS users anywhere on the 
+planet with only the knowledge of a callsign.  All it takes is a 
+little software.  But that is where we are headed with this.
+
+
+BACKWARDS COMPATIBILITY:  It is also possible that some PC controlled 
+radios could be outfitted with simple external PIC processor that can 
+interrogate the radios via their serial ports and can then insert 
+their frequency information into their position beacon.  This could
+easily be added to the firmware of some of the existing APRS TRACKER
+devices.
+
+NATIONAL VOICE ALERT FREQUENCY:  Presently, APRS operators already
+have a nationwide voice contact frequency called VOICE ALERT.  This 
+system for mobiles simply means that the APRS data radio is set to 
+CTCSS 100 with the volume up.  This mutes all packets, but allows the
+operator to be available for a voice call from anyone in simplex range 
+running the PL 100 tone.  Most APRS built-in radios can do this
+as is.  Any APRS mobile packet system can also do this if the TNC is
+attached to the discriminator prior to the CTCSS squelch circuit.
+But Voice Alert only works within simplex range.  That is why we also
+need to see the stations other Voice band so we can contact him via
+the repeater he is currently monitoring. 
+
+See: http://aprs.org/VoiceAlert3.html
+
+OTHER VOICE SYSTEMS:  All specialized local voice assets should also
+beacon their operating frequency.  The three other global internet 
+amateur radio linked systems, IRLP, EchoLink and Winlink also include 
+provisions for beaconing their POSIITON and FREQUENCY data onto the 
+national APRS channel using the FFF.FFFMHz format.  This way, mobiles 
+monitoring the national APRS frequency anywhere in the country can 
+be aware of the position and frequency of all amateur radio assets 
+around them.
+
+
+APRS FREQUENCY FORMATS:
+-----------------------
+
+There are two Frequency formats.  The POSITION/OBJ COMMENT format 
+includes the frequency as FFF.FFFMHz in the free field text of a normal 
+position or object report as noted above.  The other is called the
+FREQ OBJECT format because it puts the Frequency in the OBJECT NAME 
+using the format of FFF.FFxyz so that it shows up very clearly on the 
+radio's positions/object list.  Of course, an object can also have a 
+frequency in its position comment as well.  If both the object name and 
+the comment contain a frequency, then the NAME is considered the transmit
+frequency for the object and the frequency in its comment text is
+its crossband or non-standard split receive frequency.
+
+*** NOTE, [08 May] that a dual band APRS radio cannot TUNE or QSY to
+          a cross band repeater anyway, without losing the APRS band!
+          The information is in there for DISPLAY and INFO only.
+
+As noted before, a 10x10x+ format is used for the POSITION COMMENT
+format for best display on the existing variety of APRS radios.  Here 
+are the standard 10-byte formats.  Please note that spaces are 
+required where shown.  In some cases a "_" may be shown for clarity 
+in this document, but in the actual format, a SPACE should be used:
+
+CLARIFICATION 08 May 2012:  Note, if the FREQ is in the object name, 
+(not in the first 10 bytes of the "comment") then the remaining
+comment text (such as TONE and OFFSET, etc) are left justified in the 
+comment field.  Examples for a FREQ OBJECT named FFF.FFxyz:
+
+   Example object comments
+   -----------------------
+   Tnnn oXXX Rxxm ... Tone, Offset +xxx or -xxx, and or range
+   Tnnn Rxxm ...      Tone and Range
+   Tnnn ...           Tone only (radios will use standard offsets)
+   Tnnn -000 ...      Tone and forced simplex
+   tnnn oXXX ...      Tone and offset and Narrowband
+   1750 oXXX ...      Tone Burst with offset
+   l750 oXXX ...      Tone Burst & narrowband (Leading lower case L)
+   
+
+EXAMPLE POSITION/OBJECT comments when OBJECT NAME is not FFF.FFxyz:
+
+   1st 10-BYTES  Frequency Description
+   ----------    -----------------------------------------------------
+   FFF.FF MHz    Freq to nearest 10 KHz
+   FFF.FFFMHz    Freq to nearest  1 KHz
+    
+   Examples:
+   146.52 MHz Enroute Alabama
+   147.105MHz AARC Radio Club
+   146.82 MHz T107 AARC Repeater (Tone of 107.2)
+   146.835MHz C107 R25m AARC     (CTCSS of 107.3 and range of 25 mi)
+   146.805MHz D256 R25k Repeater (DCS code and range of 25 km)
+   146.40 MHz T067 +100 Repeater (67.8 tone and +1.00 MHz offset)
+   442.440MHz T107 -500 Repeater (107.2 tone and 5 MHz offset)
+   145.50 MHz t077 Simplex       (Tone of 77.X Hz and NARROW band)
+
+   2nd 10-BYTES  Optional Added fields  (with leading space)
+   ----------    -----------------------------------------------------
+   _Txxx RXXm    Optional PL tone and nominal range in miles
+   _Cxxx -060    Optional CTCSS tone and -600 KHz offset
+   _Dxxx RXXk    Optional DCS code and nominal range in kilometers
+   _1750 RXXk    Optional 1750 tone, range in km, wide modulation
+   _l750 RXXk    Optional 1750 tone narrow modulation (lower case L)
+   _Toff -000    Optional NO-PL, No DCS, no Tone, forced simplex
+   _Txxx +060    Optional Offset of +600 KHz (up to 9.90 MHz)
+   _Exxm Wxxm    East range and West range if different (N,S,E,W)
+   _txxx RXXm    Lower case first letter means NARROW modulation
+   _FFF.FFFrx    Alternate receiver Frequency if not standard offset
+
+If a frequency is included in the first 10 bytes then "MHz" in mixed 
+case is required to be transmitted.  (Case should be case insensitive 
+on receipt to allow for manual typos).  Notice that the second 10 byte 
+fields begin with a SPACE shown above as "_" (9 useable bytes) for 
+better reading of the packet when combined with a frequency in the first
+ten bytes.  Do not include the "_" but put a SPACE there in your actual 
+packet.  (8 May 2012 clarification: if the first 10 bytes do not 
+contain a frequency, then left justify the TONE and OFFSET without
+the leading space).  Here is the raw packet format for the comments:
+    
+    FFF.FFFMHz comment...           one frequency
+    FFF.FF MHz FFF.FFFrx comment... for separate TX and RX 
+    FFF.FF MHz T107 R25m comment... for TX, tone and range
+    FFF.FF MHz T107 oXXX R25m ...   for TX, tone and range
+    Tnnn oXXX R25m comments....     for a FREQ OBJ <08 May clarity>
+    Tnnn R25m comments....          for a FREQ OBJ standard offsets
+    Tnnn comments....               for a FREQ OBJ Tone only
+
+
+The 10x10x8 byte format has been defined so that it shows up well on 
+the TH-D7, TM-D700 and Hamhud displays.  Examples are as follows:
+
+    +------------+    +------------+    +------------+
+    | >WB4APR-11 |    | >WB4APR-11 |    | >147.105md | <08 May clarity
+    | FFF.FF MHz |    | FFF.FFFMHz |    | T107 +060  |
+    |  FFF.FFF M |    |  T107 R17m |    | R25m text. |
+    +------------+    +------------+    +------------+
+
+OTHER COMBINATIONS:  It is important to note that the TEXT field used
+for this frequency already has several possible options.  Normally
+the comment-TEXT field begins after the SYMBOL byte.  But there are 
+already several defined 7 byte Data-Extensions that then push the 
+comment-TEXT field further to the right as shown here.  In many 
+applications, an optional delimiter is added to make the packet more
+readable.  This optional delimiter (usually a " " or "/") is not
+explicitly called out in the spec, but should be considered in all
+following parsing of the text field.  All of these can be valid use 
+of Data-Extensions and following FREQUENCY info.
+
+!DDMM.mmN/DDDMM.MMW$FFF.FFFMHz ...         begins after symbol ($)
+!DDMM.mmN/DDDMM.MMW$CSE/SPD/FFF.FFFMHz ... 
+!DDMM.mmN/DDDMM.MMW$PHGphgd/FFF.FFFMHz ... 
+!DDMM.mmN/DDDMM.MMW$DFSshgd/FFF.FFFMHz ... 
+!DDMM.mmN/DDDMM.MMW$DFSshgd FFF.FFFMHz ... with SPACE insted of /
+!DDMM.mmN/DDDMM.MMW$CSE/SPDFFF.FFFMHz ...  w/o delimiter
+!DDMM.mmN/DDDMM.MMW$PHGphgdFFF.FFFMHz ...  w/o delimiter
+
+LEADING SPACE ISSUE:  Althout the optional delimiter shown here is 
+a "/" it can also be a SPACE character too. The original intent of 
+APRS was that any free text field that begins with either of these
+two delimiters, then they can be ignored and the beginning of the
+text field begins after them. We believe that Kenwood and maybe
+others did not allow for this option, and so a leading space will
+not work.  We are trying to clarify this.... now in 2012...
+
+FREQUENCY ON GPS TRACKERS:  APRS was intended to be a two-way 
+comunications system between human operators.  For this reason, 
+transmit-only tracking devices should include their monitoring voice 
+frequency in their packet beacon so that they can be contacted.  The 
+format is the same.  Simply put the frequency in the position text.
+If the the tracker does not have that flexibility (such as a NMEA 
+tracker, or Mic-E), then put the frequency into the STATUS BEACON 
+text with the leading ">" STATUS formatter (not required in Mic-E):
+
+ BText >FFF.FFFMHz Tnnn oXXX etc......
+
+Where the leading ">" makes this packet an APRS STATUS packet and
+the "etc..." can be any additional free text (or Tnnn tone) as
+needed.  On recepit, most APRS programs should combine this info
+with the station data to make the frequency parseable as needed.
+
+D-STAR STATION FORMATS:
+------------------------
+
+To make a voice call with D-STAR station that uses D-STAR repeater,
+the callsign of the accessing repeater is needed.  On the other hand,
+to make a voice call with D-STAR station that does not use a D-STAR 
+repeater, the frequency of the station's voice channel is needed.  
+Here are the examples for D-STAR QSY information.
+
+Communication without using a repeater station:
+ 1) FFF.FFFMHz D-STAR comment...
+
+Communication using a repeater station:
+ 2) FFF.FFFMHz D-STAR>CALLSN A comment...
+ 3) D-STAR>CALLSN A comment...
+
+1st 7-BYTES  means D-STAR station format.
+2nd 8-BYTES  "CALLSN A" means the callsign of access repeater
+             "CALLSN A" is fixed 8 characters.
+
+(The optional "oXXX" (SHIFT/OFFSET) information is available between
+ "FFF.FFFMHz" and "D-STAR")
+
+
+RECOMMENDED VOICE REPEATER FREQUENCY OBJECTS:
+---------------------------------------------
+
+Please see: http://aprs.org/localinfo.html
+
+OBJECT NAMES:  Every New-N Paradigm APRS digipeater is supposed to 
+periodically transmit an OBJECT showing the locally recommended 
+voice repeater frequency for travelers visiting the digi's own coverage
+area.  APRS software should be able to locate these frequencies as 
+well.  The format for these frequency object names is as follows:
+
+    OBJECTNAME
+    ----------
+    FFF.FFF-z   5KHz repeaters with up to 62 unique (z) ID's
+    FFF.FFFyz   5KHz repeaters with up to 2700 unique (yz) ID's
+    FFF.FF-yz  10kHz repeaters with over 3600 unique (yz) ID's
+    FFF.FFxyz  10kHz using three xyz unique characters...
+
+Choose letters to make your repeater frequency unique in all the world
+so that it can be easily found by wildcarding the callsign FFF.FF*.  
+
+The rest of the OBJECT format contains the TONE and RANGE and any
+specific information on regular net times and meeting dates.  The
+format for these FREQ OBJECTS is:
+
+;FFF.FFFxy*111111zDDMM.hhN/DDDMM.hhWrT079 R25m NETxxxxxx MTGxxxx...
+;FFF.FFFxy*111111zDDMM.hhN/DDDMM.hhWrT079 oXXX NETxxxxxx MTGxxxx...
+
+(15 Jun 08 change.  Eliminated the leading space before the T079)
+
+Where T079 is a tone of 79.7 Hz   (always drop the tenths)
+Where R25m is a Range of 25 miles (or k for km)
+Where oXXX is an offset in 10's of KHz +XXX or -XXX
+Where NETxxxxxx is something like "Net Tu9PM" or "Net Tu730"
+Where MTGxxxx  is something like "Mg3rdTu" and must be 7 bytes
+Where ... 9 more bytes are possible but won't show on mobiles
+
+These may at first appear very cryptic, but as a standard, they will
+become second nature.  THe goal is to put as much standard info into
+the minimum text that will fit nicely on the 10x10x8 displays of the D7, 
+D700 and HAMHUD and on the 20 byte displays of the VX-8R and FTM-350.
+
+TONES and DCS:  We force the tone to 3 bytes always for simplicity 
+of display, since all tones are standardized, they do not need the 
+tenths.  So T088, C067, T156 and DXXX are all valid entries.  Lower 
+case implies NARROW modulation as in t088, c067, t156 etc.
+
+
+OBJECT NAME PERMANANCE:  Notice that an object name needs to be 
+unique since there are dozens of 146.94 repeaters in the country, 
+and so these objects choose characters for the optional z, yz and 
+xyz characters above to make them unique.  
+
+Since these can be upper and lower case and or numbers, this gives 62 
+unique identifiers for the 5 KHz repeaters and over 3600 for 10 KHz 
+repeaters.  If there are still conflicts, then other delimiters such 
+as "_=!^@, etc" can be used in place of the - separator.  But always
+check to see if they get through on FINDU.COM using the link below.
+For example, FINDU.COM does not display FREQ OBJECTS that use the
+(+) character.
+
+To see what freqeuncies are already in use, simply do a wildcard (*)
+on the end of the FREQ in your favorite APRS-IS web engine.  For 
+example, http://map.findu.com/146.94* will provide a list of all 
+146.94 repeaters currently showing on APRS and their "xyz" modifiers 
+currently in use!
+
+These objects are transmitted with the pseudo permanent date/time 
+stamp of 111111z.  This unique time stamp declares this object to be 
+permanent.  This means that it should not be replaced by any other 
+similarly named object unless that object is transmitted by the same 
+originating station.  This lets the originator of a permanent object 
+update or move his object, but it then prevents his object from being 
+replaced by anyone else's similar object.
+
+DX CLUSTER FORMAT:  APRS also decodes the DX CLUSTER format, and this 
+format includes a frequency field too.  All APRS software should 
+decode and capture this frequency information also.
+
+
+THE NEXT SECTION IS ALSO FOUND IN: www.aprs.org/echo-irlp-win.txt)
+
+EchoLink OBJECT FORMATS:  
+------------------------
+
+EchoLink object names have the format of EL-123456 so that the node 
+number can be easily seen on the station list of the mobile.  This is
+important, since the mobile user has to have the node number to
+activate a link.  Not the callsign of the node. The rest of the 
+object uses the previous formats above to convey operating frequency 
+and tone, and range.  Here is an example OBJECT for EchoLink nodes.
+
+;EL-123456*111111zDDMM.--NEDDDMM.--W0FFF.FFFMHz Tnnn STTS CALL...
+...............   <== up to a max of 43 total characters
+
+The "STTS" is only a four byte field for the current stataus of the
+node.  Maybe "busy", "conf", "off_", "idle" etc.  The CALL is the 
+callsign of this node.  But we dont get the RANGE info.  So maybe:
+
+;EL-123456*111111zDDMM.--NEDDDMM.--W0FFF.FFFMHz Tnnn oXXX %CALL..
+...............   <== up to a max of 43 total characters
+
+Where % is a single byte to indicate Status.  This will show with
+all of the information on teh front panel of the APRS mobiles as:
+
++------------+
+| EL-123456  |
+| 438.700MHz |
+|  Tnnn Rxxm |
+|  %CALL..   |
++------------+
+
+The only loss is that the -R or -L does not show for most node 
+callsigns unless they are four character calls.  Though this is
+not needed by the mobile operator
+
+
+POSITION DETAILS:  In the LAT/LONG fields the TWO hundredths 
+digits are shown entered as SPACE bytes so that the object is 
+transmitted as a one-mile ambiguity object.  Replace the two 
+"--" bytes above with SPACES for it to work.  The E between 
+LAT/LONG makes APRS display the EchoLink symbol.  It is hoped 
+that a single central EchoLink server will generate these objects 
+so that the only thing needed to get them on the air in a local 
+area is to have the local IGate sysop to activate the local 
+object by name for pass-to-RF.
+
+ECHOLINK FORMAT USING MIC-E:  This format is for the Kenwood D710 
+radio which reports its position in Mic-E format.  This format
+will appear on the air as:
+
+MYCALL>LLLLLL,DIGI:'GGGCSD0E]FFF.FFFMHz Tnnn RXXm Ecolink node=
+
+The LLLLLL is the latitude bytes, GGGCSD are the longitude and course
+speed bytes.  The "0E" are the ECHOLINK Symbol bytes.  And the "]"
+byte indicates this is a D700 series Mic-E and the "=" on the end
+indicates it is the D710 version.  The "FFF.FFFMHz Tnnn RXXm" is the 
+frequency and range format.  And "Ecolink node" is intentionally 
+misspelled to fit nicely on the display of a D700.
+
+IRLP OBJECT FORMATS:
+--------------------
+
+See the Scrip to add this to your IRLP node:
+http://irlp.kc6hur.net/irlp_scripts.php
+
+IRLP object names are similar and have the format of IRLP-1234 or
+IRLP12345 if they ever go to 5 digits.  This format is so that 
+the node number can be easily seen on the station list of the mobile.  
+The rest of the object uses the previous formats above to convey 
+operating frequency and tone, and range.  Here is an example OBJECT 
+for IRLP: 
+
+;IRLP-1234*111111zDDMM.--NIDDDMM.--W0FFF.FFFMHz Tnnn oXXX STTS CALL...
+...............   <== up to a max of 43 total characters
+
+In the LAT/LONG fields the TWO hundredths digits are shown entered 
+as SPACE bytes so that the object is transmitte as a one-mile 
+ambiguity object.  Replace the two "--" bytes above with SPACES for 
+it to work.  The I between LAT/LONG makes APRS display the IRLP 
+symbol.  It is hoped that a central server will be written for these 
+objects as well so that they can be consistently generated into the 
+APRS-IS and then only gated back to RF locally.  The STATUS (STTS)
+can be something like these: (Idle, off_, busy, etc).  For more info, 
+contact Mark Herson n2mh@n2mh.net
+
+
+WiRES OBJECT FORMATS:
+------------------------
+
+Yaesu WiRES nodes should also appear on the APRS channel.  For example
+for an OBJECT NAME : WIR-1101D the format would be:
+
+Example:  WiRES Node Number = "1101D" (Lat:3348.43N/Lon:11802.32W)
+
+;WIR-1101D*111111z3348.43NW11802.32W0430.900MHz D023 oXXX STTS...
+...............   <== up to a max of 43 total characters
+
+If an FTM-350 Radio is used as the WiRES node, then it will identify
+using the Mic-E format and should use this format:
+
+MYCALL>LLLLLL,DIGI:'GGGCSD0W`FFF.FFFMHz Tnnn oXXX WiRES node _"
+
+
+WINLINK OBJECT FORMATS:
+-----------------------
+
+WinLINK Telpac gateway object names have the format of W?-CALLSIGN 
+(where W? can be WL or W1, W2,... W9 for multiple stations) so that 
+the node callsign can be easily seen on the station list of the mobile.
+The rest of the object uses the previous formats above to convey 
+operating frequency and range.  The baud rate, "bbbb" for packet is 
+inserted in place of the TONE, Txxx for voice. Here is an example 
+OBJECT for injection into the APRS-IS:
+
+;WL-AB9XYZ*111111zDDMM.--NWDDDMM.--WaFFF.FFFMHz 1200 oXXX comment
+...............   <== up to a max of 43 total characters
+
+In the LAT/LONG fields the TWO hundredths digits are shown entered 
+as SPACE bytes so that the object is transmitte as a one-mile 
+ambiguity object.  Replace the two "--" bytes above with SPACES for 
+it to work.  The W between LAT/LONG and "a" symbol makes APRS 
+display the WinLink symbol.
+ 
+
+MICROWAVES:  Of course FFF.FFFMHz only works to 999.999 MHz, and so 
+we have defined some letter designations above that.  There are two 
+methods.  One, is to simply use GHz as in XXX.XXXGHz.  But this is 
+limited to wideband modes to the nearest MHz.  Example is
+__1.296GHz for 1296 MHz.  But to retain one KHz resolution, we use
+this table of alphabetical extensions:
+
+A96.000MHz would be 1296 MHz
+B20.000MHz would be 2320 MHz
+C01.000MHz would be 2401 MHz 
+D01.000MHz would be 3401 MHz
+E51.000MHz would be 5651 MHz 
+F60.000MHz would be 5760 MHz 
+G30.000MHz would be 5830 MHz
+H01.000MHz would be 10,101 MHz
+I01.000MHz would be 10,201 MHz
+J68.000MHz would be 10,368 MHz 
+K01.000MHz would be 10,401 MHz
+L01.000MHz would be 10,501 MHz
+M48.000MHz would be 24,048 MHz 
+N01.000MHz would be 24,101 MHz
+O01.000MHz would be 24,201 MHz
+
+
+APRS FREQUENCY-IN-MESSAGE FORMATS:  A variety of formats have been 
+proposed, but until someone is ready to implement either the auto-
+QSY on receipt of a message, or to transmit such a message, it is
+premature to nail down an exact format.  But something like:
+
+QSY FFF.FFFMHz! ... Auto QSY now
+QSY FFF.FFFMHz? ... Auto QSY unless user hits NO
+QSY FFF.FFFMHz. ... QSY if user manually hits TUNE
+
+
+CONCLUSION:   Examples of frequency use in APRS are obvious:
+
+   1) Advertising the voice frequency you are monitoring
+   2) Voice repeater and other local frequency Objects
+   3) Mobile GPS map display of surrounding frequency assets
+   4) IRLP and EchoLink nodes
+   5) WinLINK Packet nodes
+   6) EOC operations
+   7) Long distance travelers
+   8) ATV repeaters and links, etc...
+
+Since the object of APRS is to facilitate local communications and 
+situational awareness of all surrounding ham radio assets, everyone is 
+encouraged to include their operating frequency in their position 
+packets to make their availability known.
+
+de WB4APR
+Bob Bruninga
+

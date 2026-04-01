@@ -1,0 +1,186 @@
+APRS OBJECT-Caching SPEC:                               7 June 2004
+-------------------------------------------------------------------
+                                                             WB4APR
+
+OBJECTIVE:  An Object Manager function placed at a digipeater or 
+centrally located station at an event who's job it is to cache, or 
+take over reporting responsibility for a given object/station. 
+This technique improves channel efficiency by more than a factor of 
+two for these objects because it eliminates the uplink contention 
+to the digi on all subsequent repetitions, and because the DIGI has 
+better CSMA performance, it assures better reliability on delivery.
+
+This capapbilty was built-in to the original APRSdos and called
+NET-CONTROL mode, but was not implemented any other follow-on 
+clones to my knowledge.  This text file addresses two possible
+implementations.  The EVENT OBJECT MANAGER is enabled at an
+event and it automatically takes over ALL objects it hears.  The 
+ON-CALL OBJECT MANAGER operates in the background but can be selec-
+tively activated by anyone for any single object at a time.
+
+EVENT OBJECT MANAGER:  This single piece of code running at only one 
+location at the event, or venue, takes responsbility for ALL 
+objects as soon as they are posted by anyone.  It then implements 
+the decay algorithm to re-transmit those objects to everyone with 
+newer data refreshed more often than older data, plus it does this 
+with the original randomness timers so that the data is gracefully 
+interleaved with other live traffic so it does not hog the network.  
+This mode was called NET-CONTROL in the original APRS implementation.  
+The algorithm works like this:
+
+OBJECT MANAGER CODE:
+1) It receives objects from anyone/everyone (other than its own), 
+and then takes them over.
+
+2) It retransmits each one using the APRS decay algorithm, that is, 
+immediately, then 30 seconds later, then 60, then 2m then 4m then 
+8m and so forth down to either the 10 or 30 minute standard net-cycle 
+time for APRS depending on whether this is a local direct (1 hop) 
+event (10 minutes) or 2-or-more hop event (30 minutes).
+
+3) If anyone moves an object, then steps 1 and 2 are repeated.
+
+4) It will not relinquish control of an object unless it receives 
+a KILL object from any other station.
+
+5) It includes the original APRS randomness to all timings (+/- 10% 
+or so) so that objects are not bundled but are spread out in time, 
+and do not self-sync with any other system.
+
+6) The BEST location of the OBJECT MANAGER code is at a HIGH central 
+site, so that it has good listening ability to not only capture the 
+objects from all users, but to also have good CSMA and avoid 
+transmitting objects that might collide with other packets.  Only 
+one copy of the OBJECT MANAGER add-on is needed at any event/
+situation.
+
+USER STATIONS:  User stations can use any client, or even UIview 
+to input objects as soon as known and each station can enter as 
+many objects as he wants because:
+
+1) As soon as his object is heard and retransmitted by the OBJECT 
+MANAGER at the event, this originating station will CEASE 
+transmitting the object (this is fundamental to All APRS clients 
+and already exists).
+
+2) Later any station with new knowledge of the location of the 
+object wants to move it, he just takes over responsbility, and 
+moves the object to the new location.  His station's object will 
+replace the OBJECT MANAGER's one and, the OBJECT MANAGER will 
+immediately take over this new one.
+
+3) If anyone wants to kill the object, he may do so and the 
+OBJECT MANAGER will also kill its copy and stop transmitting.
+
+
+ON-CALL OBJECT MANAGER APPLICATION:  This application sits in the
+background on the APRS channel and can be called on to take over any
+selected objects that an operator choses.  This way, the OBJECT is
+transmitted centrally, with less QRM (from a high site) and the 
+oriignal poster can cease transmitting as needed.
+
+                           
+ON-CALL MANAGER:   The ON-CALL digi or OBJECT MANAGER to cache the 
+   OBJECT is specified as the FIRST digi in the  path.  (This is 
+   assuming a local direct event).  The DIGI call must be an 
+   explicit match, must be first (for a direct event), and in that 
+   case, the digi or manager must have heard the object direct.  
+   This blocks out-of area SPAM.
+
+TOCALL:   To signal a cache request to the DIGI to take 
+   over responsibility,  the object packet will use the special 
+   APRS TOCALL of AP0Cxy (that's a zero).
+   Where:       x = expiration time in hours from now
+                y = final periodiciy in TENS-of-minutes
+
+ON-CALL OBJECT MANAGER RESPONSE:  On receipt of a Cache Request, 
+  that meets the criteria above, the designated digipeater will 
+  add the OBJECT format to its OBJECT cache but will change 
+  the TOCALL from AP0Cxy to  AP0Oxy for subsequent output 
+  transmission.  As time elapses, the "x" expiration time counts 
+  down so that it can be interpreted as hours to go.
+
+CACHED OBJECT ACKNOWLEDGEMENT:  On receipt of the Cache request, 
+  the DIGI/station taking over responsibility will acknowledge 
+  that fact by simply sending out  the first copy of the cached 
+  object.  ALL existing APRS spec compliant code will already see 
+  that response and will relinquish any uplink responsibility.
+
+CACHED OBJECT TIMING:  Since such a request is usually the result 
+  of a NEW object or a changed position of an object, the Caching 
+  digi should implement the usual decayed rate algorithm before 
+  settling in to the requested ultimate refresh rate to make sure 
+  that all stations on the net had a higher than normal probabilly
+  of receipt of this new data.  A suggested implementation
+  algorithm is to send the second Cached OBJECT one minute later, 
+  then 2, then 4, then 8, then 16 minutes later and so on until 
+  the final requested rate is reached.
+
+  This is the original APRS decaying algorithm for new data.
+  Authors are allowed flexibility in the details of this routine 
+  as long as an effort is made to have at least a few copies 
+  transmitted within the first few minutes.
+
+CACHED OBJECT PATH:  The Cached OBject path should ONLY be direct.  
+  The intent of this process is to OPTIMALLY serve only the local 
+  area with the multifold improvement in reliability.  PLEASE NOTE:
+  If this rule is violated and the OBJECT is sent out for further 
+  digipeating, then the fundamental objectives of the whole idea 
+  is lost, since now the packet is no different with respect to 
+  collisions and doubling of channel capacity.
+
+  The one exception to this rule is under DIGIPEATER SYSOP control 
+  who may specify an alternate REQUIRED path for all such cached 
+  objects.  A good example here is a special event which requires 
+  3 main digis to serve the entire venue.   This is known in 
+  advance and so the SYSOP for these 3 digis establishes a specified 
+  explicit CACHE path that includes the other two digis.
+
+  The other objective of this DIRECT-ONLY rule is to prevent remote 
+  SPAMING of distant areas.
+
+CACHED OBJECT CANCELLATION:  The rules for the cancellation of 
+the cached object from the digi are no different than existing 
+APRS1.0.  That is, it will automatically cancel the object 
+immediately on receipt of any other identically named object from 
+anyone.
+
+BACKGROUND AND DETAILS:   This caching idea has been in APRSdos 
+since about 1995 or so where it was called NET-CONTROL mode.  It
+is compatible with the existing spec.  The version in APRSdos, 
+was an EVENT OBJECT MANAGER that could be enabled by the SYSOP for 
+a one-time event, and it would automatically take over reporting 
+responsibility for ALL objects at the event.
+
+Then in 2004, Scott Miller suggested that the originator of an 
+object should be able to request such action remotely.  Thats when
+we added the ON-CALL OBJECT MANAGER idea too.
+
+NOTES on HOW OBJECTS ARE HANDLED BY APRS1.0.  
+None of this is impacted in any way.  User client applications are not
+changed in any way.
+
+1) Taking over responsiblity for objects has always been fundamental 
+to APRS.  This means that ANY station that is SENDING an object, will, 
+on seeing the SAME object name (case dependent) from a different 
+station,  will CEASE its own uplinking and will accept as a
+replacement the new OBJECT data from the new station.  
+
+2)  Clients are required to always retain the identify of the 
+SENDING station so that end users can easily tell who has 
+responsibility at any instant.
+
+3) Due to the promiscuous nature of Object ownership all client 
+programs SHOULD display the data AT ALLTIMES and on the MAP as 
+well whether the object is owned by THIS station or another 
+station.  Example:  APRSdos always displays OWN-STATION active
+objects as YELLOW, and other station objects as Purple.  Notice 
+these color can toggle at any time and on a packet-by-packet 
+basis... and so these provisions assure the operators are fully 
+aware of the changing ownership.  Without these ON-THE-MAP
+distinctions, it is very dangerous, because you can never be 
+sure if the object you placed at location X is still there, or 
+actually has been moved across the street without your knowledge!
+
+Thanks.
+de WB4APR, Bob

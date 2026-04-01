@@ -1,0 +1,193 @@
+ARTICLES.TXT      APRS ARTICLES
+===========================================================================
+Document version: 8.3.7
+Document dated:   14 Mar 99 (updated 12 Sept 2013)
+Author(s):        Bob Bruninga, WB4APR <bruninga@usna.edu>
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ABSTRACT
+ARTICLES.TXT      A brief history and bibliography of APRS.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Updated 12 Sept 2013, to add the original Teaneck New Jersey paper of
+1992 which was mentioned in the text, but not listed in the bibleography
+and to correct my email address.
+
+This file consists of a brief history of the development of APRS and then
+a bibleography of most of the articles that have been written about APRS.
+
+THE HISTORY OF APRS
+
+The Automatic Packet Reporting System (APRS) software has evolved over the
+last 18 years of my involvement in amateur packet radio.  In 1976 I had
+built the first digital RTTY on the air automatic message system which
+evolved into a dual port phone and packet radio BBS for the AMRAD group
+when ASCII first became legal in the late 70s [1].  In 1978 we began
+experimenting with the original VADCG packet boards from Canada.  For years
+I was on the AMRAD board of directors, the Amateur Radio  Reasearch and
+Development group that was instrumental in the original specification for
+AX.25 written by Terry Fox, WB4JFI and published by AMRAD in 1984.  Isolated
+overseas in Japan in 1982, I wrote my first data maping program, which took
+NAVY HF position reports off the air and displayed them on an APPLE-II.
+From the beginning, I was always making packet maps of the growing packet
+network [3,5,6].  In 1983, I wrote a gateway/BBS program on my VIC-20
+computer to permit simultaneous operation of both HF and VHF ports for
+exchange of packet messages and pioneered the use of 200 Hz shift for packet
+on HF with cross-county links to W0RPK, W9TD, and K7PYK [2].  We used 10.149
+MHz.  To my knowledge, this was the first amateur HF BBS/GATEWAY; and it
+remained on the air 'round the clock for 5 years through 1989 under the FCC
+STA for automatic packet HF operations.
+
+     My APRS connectionless protocol idea was first used in a VIC-20 program
+in 1984 for reporting the position and status of horses in a 100 mile cross
+country endurence run for AMRAD [4].  I spent two years improving the idea
+for amateur packet radio support of the National Disaster Medical System
+exercises sponsored by FEMA [7,8,9].  During this time frame I called it
+the Connectionless Emergency Traffic System (CETS).  At the end of the
+second national exercise, I dropped the C-64 and began to port CETS to the
+new IBM PC.  I also began to integrate packet mapping into the program.
+
+During 1990 I got tired of trying to find a public domain set of maps
+and began to digitize the East Coast myself with a TEXT format so that any
+HAM could draw a map for any local packet application using only a text
+editor.  Once that maping decision was made, APRS evolved nightly as I
+began to play with it on the air, and realized its potential.  I also realized
+that I could use my callsign in the name and changed the name to Automatic
+Packet Reporting System.  I published the APRS paper at the ARRL 11th
+Computer Networking Conference in 1992.  From then on, for a decade, APRS has 
+consumed thousands of hours of evenings and weekends as I tweaked the 
+program and drew maps.
+
+In 1994 I introduced the Mic-E pic processor for putting APRS into the 
+microphone on any radio.  Kenwood eventually implemented this in their
+TH-D7 in 1998.  Then they released the D700 around the year 2000.  In
+the 1996 time frame PacComm implemented my new digipeating ideas in their
+TNC's so that Digipeaters would do callsign Substitution.  Then in 1998
+Kantronics finally implemented my 1994 idea of the WIDEn-N digipeating
+system.
+
+Finally, I am not doing this to make money on amateur radio.  The
+registration contribution helps defray the mailing hassles and the
+psychological burden of having hundreds of HAMS all across the country call
+me at home at all times of the evening with repititious and continuous
+questions.  I learned this lesson the hard way by releasing my C-64 BBS
+source code to the HAM community in 1984 for free.  In 1995, 11 years 
+later, I was still getting phone calls, letters without SASE's, and 
+registered letters from third world countries (requiring a trip to the 
+post office) asking questions about this obsolete software!
+
+
+BIBLEOGRAPHY:
+
+[1] MULTI-USER DATA NETWORK OVER VHF RADIO, Bruninga, AMRAD Newsletter,
+Mar 1978.
+
+[2] HF PACKETS, MODEMS and GATEWAYS, Bruninga, Third ARRL computer Networking
+Conference pg 6-7, 15 Apr 84. (HF packet specification for 200 HZ shift)
+
+[3] EASTNET - AN EAST COAST PACKET RADIO NETWORK, Bruninga, p 9-11, Third
+ARRL  Computer Networking Conference. 15 Apr 84. (MD,NJ & NY packet map)
+
+[4] THE RACING PROBLEM: A PACKET SOLUTION, Bruninga, p 12-15, Third ARRL
+Computer Networking Conference, 15 Apr 84. (A connectionless protocol for
+reporting the location and status of Horses on a 100 mile endurence run.
+*(the original APRS concept)
+
+[5] EASTNET - A YEAR LATER, Bruninga p 15-24, Fourth ARRL Computer Networking
+Conference, 30 Mar 85. (More East Coast maps and the first USA HF map)
+
+[6] LINKING PERSONAL COMPUTERS BY PACKET RADIO, Bruninga, Proceedings, IEEE
+COMPCON 84 16 Sept 84, (Published the USA packet map, and amateur HF packet
+standards)
+
+[7] CONNECTIONLESS EMERGENCY TRAFFIC SYSTEM, Bruninga, Packet Radio
+Magazine, pg 4-5, July 86. (details the design of the connectionless
+position and status reporting system)
+
+[8] AN UPDATE ON THE CONNECTIONLESS EMERGENCY TRAFFIC SYSTEM, Bruninga,
+Packet Radio Magazine, Aug 86. (more of the same)
+
+[9] CONNECTIONLESS PROTOCOL for the NDMS, Bruninga, p 19, Packet Radio
+Magazine, Nov 86. (using the connectionless protocol for emergency comms)
+
+[10] PACKET RADIO AT THE WRECK OF THE AMTRACK COLONIAL, Bruninga, P 13
+Packet Radio Magazine Jan 87. (using portable packet for disaster comms)
+
+[11] LANS and WANS, Bruninga, 7th ARRL Computer Networking Conference,
+1 Oct 88 (First DC/BALTIMORE area packet maps with APRS symbols)
+
+[12] A WORLDWIDE PACKET RADIO NETWORK, Bruninga, Signal Magazine, June 88,
+(shows HF map of 10.149 MHz activity.
+
+[13] PACKETRADIO IM NOTFUNKEINSATZ BEI EINEM ZUNGUNGLUCK, RTTY magazine
+18 Jan 87. (translation of article on APRS at the AMTRACK train wreck)
+
+
+CURRENT:
+
+[14] AUTOMATIC PACKET LOCATION SYSTEM (APLS), Bruninga, ARRL Gateway/QEX,
+Feb 1991. (early specification for position and status reporting formats)
+
+[15] “Automatic AX.25 Position and Status Reporting”, Bob Bruninga, WB4APR
+ARRL Amateur Radio 11th Computer Networking Conference Teaneck, New Jersey, 
+November 7, 1992
+
+[16] GROUND STATION TRACKING VIA PACKET RADIO, Bruninga, AMSAT Journal,
+Pg 1 May/June 93
+
+[17] TRACKIT RADIO, Stan Horzepa, p 92, QST, July 93
+
+[18] UPFRONT IN QST, p 11, QST, August 93. (excellent pictures)
+
+[19] A DESCRIPTION OF APRS by WB4APR, AND MORE!, PACKET USERS NOTEBOOK,
+Buck Rogers, CQ Magazine, Dec 93
+
+[20] INTERFACING GPS/LORAN DEVICES TO PACKET RADIO, Bruninga, pg 9-14,
+QEX, Feb 94
+
+[21] HOMING IN, Radio Direction Finding, by Joe Moell, page 56-59,
+October 94 issue of 73 Magazine.
+
+[22] HOMING IN, by Joe Moell, Jan 95 issue of 73 magazine.
+
+[23] "Track it With Packet", HOMING IN, Joe Moell, Feb 95 issue of 73.
+
+[24] Ads by PacComm, AEA and KANTRONICS touting GPS packet.  April 95 QST
+
+[25] "GPS and PACKET", Buck Rogers, Packet Notes. CQ magazine May 95 issue.
+
+[26] PACKET: Speed, More Speed and Appllications, ARRL Publication,
+chapter 4, 1995.
+
+[27] "NMEA-0183: A GPS receiver standard", GPS World, July 1995.
+
+[28] "Upgrade, Dont stop now",Radio Fun Magazine, August 1995
+
+[29] QST Compares: GPS Compatible TNC's, Steve Ford WB8IMY, QST Oct 1995
+
+[30] Availability of Seventy 9600 Baud Packet CHannels on Two Meters,
+14th ARRL Digital Communications Conference, Arlington, TX 8-10 Sept 1995
+
+[31] APRtrak, A Program for Determining the Locations of Ground Stations
+and Spacecraft, Proceedings of the AMSAT-NA 13th Space Symposium Oct 6-8
+1995, Orlando, FL
+
+[32] APRS in Balloons and HOMING-IN column Nov 95 issue of "73" Magazine
+
+[33] The MIM Module, Mobile Radio Technology, May 1996
+
+[34] APRS.  CQ VHF Magazine, by N2IRZ. Aug 96
+
+[35] APRS, feature article, Dec 1996 issue 73 magazine.
+
+[36] Position Reporting with APRS, Richard Parry, W9IF.  Page 60
+     June 1997 issue of QST.
+
+[37] "APRS Supports Search-and-Rescue Operations", p 58, CQ VHF Oct 98
+                           
+[..] #113 December 99 Circuit Cellar on APRS and Balloons
+
+Beyond 1999, I just got lazy and could not keep track of all the papers
+and artilces.  APRS still going strong now in 2013!
+
+Bob Bruninga, WB4APR

@@ -1,0 +1,64 @@
+LEONIDS.TXT       APRS METEOR EVENT RESULTS
+===========================================================================
+Document dated:   10 Mar 99
+Author(s):        Bob Bruninga, WB4APR <bruninga@usna.edu>
+LEONIDS.TXT       The Leonids meteor shower of 17-18 November 1998.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Over 17-18 Nov Leonids Meteor Shower, 37 packet stations transmitted APRS
+formatted 2meter packets on 145.79.  Everyone that ran a beam except for
+one station reported either hearing others, or being seen by others.  One
+station reported receiving a 630 mile packet on an omni, and being seen
+by another station over a 537 mile path.
+
+Total paths:           48 not counting dupes
+Seen by most:          WA4HEI seen by 8 other stns, N8DEU seen by 7
+Heard most:            N8QLT heard 5 others, KB9JLW heard 3
+Greatest distance:     W0IBM heard by KE4CUA over 1185 mi
+Longest burn:          W3ADO heard by K4RS. 23 packets in one burst
+Omni antenna success:  N3UYI heard WA4HEI over 630 mi
+                        and was seen by N8QLT over 537 mi
+
+HEARD LOGS submitted by 19 stations
+
+N8QLT   Heard VE2DWE,N3UYI,N3OBQ,N2QAE,N2NRD
+W2EV    Heard W0IBM, K4RS, WA4HEI
+KB9JLW  heard N2QAE, VE2DWE-5, WA4HEI-2
+KE4CUA  Heard W0IBM, W3ADO
+KB4LCI  Heard N2QAE, WB4RXZ
+WA7HRA  heard K7RR
+WA8INZ  Heard W2EV
+N3ZLL   Heard WA4HEI
+KF6QNC  heard N7HXP
+N5TAM   heard N8DEU
+KA1LM   heard VE2DWE
+N3OZB   heard WA4HEI   690 mi
+WA5FRF  heard N8DEU
+K9OPO   heard VE2DWE   758 Mi
+KA3ZPM  heard W0IBM    866 mi
+KF7TP   heard WA6YLB   580 mi
+WD0E    heard N8DEU    1071 mi
+WA6FQM  heard N7HXP    645 mi
+NU0C    heard no pkts, but was occassional operator while doing SSB DX
+
+TRANSMIT SUCCESSES from 18 stations showing Milages:
+
+WA4HEI  Seen by 2EV-462,ZLL-690,NRD-720,OBQ-680,OZB-675
+WA4HEI  Seen also by QAE-678,UYI-630,JLW-264
+N8DEU   Seen by FRF-813,TAM-670,D0E-1071,4RS-621,2EV-757,OBQ-670,QAE-770
+VE2DWE  Seen by N8QLT-560,KA1LM-535,N2QAE-368,OPO-758,JLW-789
+K4RS    Seen by W3ADO 2@ 821,W2EV 2@ 1100,N3ZLL  2@ 871 mi
+W3ADO   seen 23 times by K4RS-821*,KE4CUA-651,HEI-677
+N8QLT   Seen by W2EV-296,N2QAE-456,N3OBQ-470
+N2NRD   seen by HEI-720,QLT-469,HEI-681 mi
+WB4RXZ  Seen by N3ZLL-496,KB4LCI-383
+W0IBM   Seen by W2EV-740,KE4CUA-1185*
+N2QAE   Seen by N8QLT-456,JLW-700
+N7HXP   Seen by KF6QNC 689,WA6FQM-645
+W2EV    Seen by WA8INZ 866 mi
+N3UYI   Seen by N8QLT  537 mi Xomni
+N3OBQ   Seen by N8QLT  536 mi
+K7RR    Seen by WA7HRA 1000 mi
+KC8CSD  Seen by W2EV   304 mi
+WA6YLB  Seen by KF7TP  580 mi

@@ -1,0 +1,205 @@
+MOBILE.TXT        TIPS FOR MOBILE APRS USERS
+Document version: 8.6.3
+Document dated:   2 Jan 2004.  Previous was 8.3.8 of 10 Mar 99
+Author(s):        Bob Bruninga, WB4APR
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+NEW ITEMS:
+
+ DESTINATION WAYPOINTS:  New in ver 863 is the WAYPOINT for any mobile 
+ that can change its ICON on the fly.  It looks like a red dot with an 
+ optional overlay character.  Each station can only have one 
+ outstanding Waypoint at a time.  The WAYPOINT symbol has special 
+ processing:
+
+ 1) The symbol is sent by the same MYCALL that wants to define a WPT
+ 2) The sending station manually enters his POSIT for the WPT and TX's
+ 3) Receiving clients save the WPT POSIT with the call MYCALL-WP
+ 4) Clients also keep a 1to1 association between MYCALL and MYCALL-WP
+ 5) So they can maintain a line from the MYCALL to the MYCALL-WP
+ 6) A new WAYPOINT will change the location of an old one
+ 7) If the WPT ICON has an OVERLAY numeral #, then it is MYCALL-W#
+    But we dont want anyone to have more than one WPT at a time!
+
+ To enter a WAYPOINT on your mobile APRS radio, simply:
+ * MENU to change ICON to "/" and table "\" (or overlays)
+ * MENU to turn GPS to NO GPS
+ * MENU to POSITION and enter the position for the WAYPOINT
+ * HIT BCON button a few times until you see MYPOSIT confirmation
+ * CHANGE ICON back to normal, and GPS to NMEA and resume normal ops.
+ - Note this can be simplified with a PM already set up with the WPT
+
+ Note:  1) APRSdos can only draw one line-of-association between mobile
+        and WPT.  Thus, only the last WPT received will show the line.
+
+        2) If a WPT is sent as an object, its NAME must be the name of
+        the mobile (including SSID) of the mobile it is for.  This will
+        cause it to be received identically as if the mobile had sent
+        it and so all clients will display it the same way and associate
+        it properly.
+
+MILEMARKS were improved in ver 862.  To see all the milemarks for any
+ given interstate on your map just hit the "MM" command.  The first time
+ it will ask you for the STATE and INTERSTATE number as in VA95 for
+ Virgnina I-95.  THis is VERY handy for keeping track of fellow mobiles
+ who do not have APRS but report their position via MILE MARKS.  You
+ can add these fellow travelers to the map as objects and since APRSdos
+ Dead Reckons such objects, these other stations will travel along with
+ you.  Great for going to Dayton.  See MILEMARK.TXT
+
+ONE-FINGER-MOVING-MAPS:  In ver 837, simply pressing the M key followed
+ by an arrow key will recenter the map in that direction.
+
+INPUT-MY-RADAR sets your airspace.  You can set ALARMS to go off on
+ ANYONE, or only SPECIAL stations, or only NEW stations.
+
+VOICE ALERT!  The concept called Voice Alert is like getting a FREE
+APRS voice calling channel in your mobile for ALWAYS being able to
+contact an APRS mobile no matter what freq his voice radio is on.
+Its also like a radar detector for other mobile APRS operators in
+simplex range on the open road.  It is trivially simple:
+
+Instead of turning the speaker volume down on your noisey 144.39
+channel, simply set CTCSS decode to 100 Hz.  This accomplishes 2 things:
+1) It keeps your speaker quiet but everyone who understands voice alert
+knows they can contact you by voice by simply calling on PL 100.
+
+2) It causes your outgoing packets to have PL 100 to serve as a radar
+ping to other Voice Alert stations in range.  Conversly you will
+never hear anything on your 144.39 voice alert unless anotehr APRS
+voice alert station is in simplex range (about 5 miles max)
+
+These two make sure you will have an opportunity for a voice call to
+QSY to 52 or other channel for a QSO.  On the interstates you pass
+another ham statistically about once every 10 minutes.  But you never
+know it.  With Voice Alert, you now will be aware of each other's
+presence AND you will have a KNOWN contact frequency.
+
+
+OTHER MOBILE HINTS:
+------------------------------------------------------------------------
+
+OVERVIEW:  Although APRS on cars, boats and aircraft equipped with GPS
+is obvious, it is IMPORTANT TO NOTE THAT APRS IS STILL VERY USEFUL FOR
+VEHICLES WITHOUT GPS TOO!  Actually, the only stations that need GPS
+are the ones that are lost!  For this reason, the first section below
+will discuss the use of APRS in a vehicle without GPS.
+
+Note:  Be sure to do a MAPS-OVERLAY-DIGIS before going on a trip so you
+can see where the digiepaters are...
+
+MANUAL POSITION UPDATING:   Even without GPS, just use the map and the
+INPUT-MY-POS command to enter yourself on the map.  If you include a
+course and speed, then you will also move on everyone's screen by dead
+reckoning.  (unfortunately many new APRS clients overlooked the extreme
+importance of deadreckoning in APRS and objects don't move on their
+maps (sad)).
+
+Depending on the speeds involved and the size of the net, updates are
+only required when there is a significant change to course or speed.
+Astation moving cross country reporting via HF can set his course to
+270 degrees at his estimated average speed made-good.  Although he only
+updates his position once every few hours, because of the automatic
+APRS dead reckoning, his van will appear to everyone to move west
+giving a good approximation of his progress.
+
+Our first GPS equipped Marathon used bicycles in 1993 marathon, but in
+1994 we did not even bother with the GPS's except for the TAIL.  We
+simply monitored the voice nets, and occasionally whenever someone
+mentioned where the LEAD, or PACK (or any other recognizable) runners
+were, the APRS operator simply updated the objects to the reported
+locations and all APRS stations along the route could see visualy where
+these objects were because of the automatic Dead Reckoning.
+
+THis works beautifully because the course is always known, and the
+speed of the runners in a marathon is very well known, the dead-
+reckoned movement of these symbols between updates was actually just
+as accurate as GPS! (Selective Availabilty was always on back then).
+See MARATHON.txt.  A special version of APRS can actually deadreckon
+objects along a given course making all the turns indicated on the
+map.  See APRSdr.txt.
+
+MOBILE OPERATIONS:  APRS was designed to make mobile operations with one
+finger relatively easy.  The following summarizes the commands that are
+frequently used in the Mobile environment:
+
+  G - GOTO:  On any screen other than the MAP, this command will redraw
+      the map centered on your vehicle.  If you are already on the map,
+      then GOTO puts the cursor on your station so that a single press of
+      the PgUP/DN keys will allow you to zoom or home the map in one step.
+
+  T - TRACK:  Select this on the P-list.  As a tracked station
+      approaches the edge of any map, APRS will automatically re-draw the
+      map in that direction.  If TRACK mode is on, then the GOTO command
+      will go to the Tracked vehicle.
+
+  A - ALARM:  Also activated on the P-list, will trigger BEEPs and cause
+      your screen to be centered on the station if it moves.  Useful to
+      alert me when the wife is coming home so I can go to the kitchen
+      and look domestic on her return.
+
+  IMP - INPUT-MY-POS: Use to manually update your position, or change your
+       symbol, course, speed or comments.
+
+Unless your exact location between point A and B is important, simply
+enter your estimated average speed, and the straight line course to B.
+Other stations will be able to see your dead-reckoned progress toward B
+and you will not have to make frequent updates.  Since APRSdos also DR's
+your progress on your own screen, you will see the same thing that
+everyone else sees.  You can tell whether you need to update your
+progress or not because each DR'ed position is posted on your screen at
+the same time that it is transmitted.  Because of the APRSdos decay
+algorithm the reports will be close together initially and further apart
+as time goes on.  In order for this DR to work on your own screen, you
+must not be in HSP or SPM modes.  See the ALT-SETUP-GPS-OFFgps command
+below.  If you want to see where your DR'ed position is at any time
+between transmissions, simply hit the space bar, and a fresh DR will
+be displayed.
+
+
+CHEAP AND PLENTIFUL MOBILE LAPTOPS:  I prefer my old 8086 laptop mono-
+chrome LCD since it works BEST in bright sun!  It only has dual flopies,
+but a minimum APRS system PLUS DOS will fit on a single 720K floppy.
+Or to have more maps, put only APRSxxx.EXE on the system floppy in A:
+and put all the rest of APRS and maps on drive B.  Then boot with A,
+then change to B: and run A:APRSxxx.  This will load APRSxxx.exe from
+A:, but it will look on B: for all its files.
+
+
+AUTOMATIC GPS INTERFACES
+
+See the GPS.txt file for information on the several methods for 
+interfacing your PC to GPS or LORAN.  Some useful commands are:
+
+    Alt-SETUP-GPS-TIMEsync - Synchronizes your PC clock to the GPS time
+        in the next GPS posit heard.  This is important to avoid dead
+        reckoning errors on small area maps!
+        NOTE that this command only synchronizes the minutes, so
+        you at least have to be in the right hour....
+
+    Alt-SETUP-POSrate - Sets both your own screen updates and the
+        on-air transmission rates through the TNC.
+
+    Alt-SETUP-GPS-OFFgps - Turns off the HSP/SPM modes without having to
+        re-configure.  This is useful if you are normally configured for
+        HSP or SPM modes but are going to be doing manual updating.  If
+        the PC is left in HSP or SPM modes, then your local screen will
+        NOT be updated on each DR.   IF HSP and SPM are off, then each
+        time your position is transmitted, a new DR plot is drawn.
+
+    OPS-COMM-GPS - Permits you to either communicate with your GPS if it
+        has a bi-directional port, or to monitor the TNC.  This command
+        also switches the APRS port-splitter circuit in HSP mode so that
+        you could monitor the GPS.
+
+    F6  This key is called the QRT function because it forces your speed
+        to zero as you approach your destination so that your posits will
+        not continue to dead reckon on everyone's screens after you
+        turn your system off.
+
+MAPLISTS:  As you enter different areas of the country, don't forget to
+change to a new MAPLIST.xxx for each of the 6 major regions of the country
+with the MAPS-CONFIG-CHANGEmaplist command.
+
+de WB4APR, Bob
+

@@ -1,0 +1,123 @@
+APRS WEATHER SPECIFICATION COMMENTS                               24 Mar 2011
+-----------------------------------------------------------------------------
+                                                                       WB4APR
+
+24 Mar 2011 added Radiation Sensors - see aprs.org/aprs12/weather-new.txt
+18 Aug 2010 updated Water height and symbols for water gages
+11 Apr 2006 added water gages  - see aprs.org/aprs12/weather-new.txt
+
+This file attempts to clarify many details about APRS weather formats.  Curt 
+Mills was very helpful in identifying some of these original APRS SPEC 1.01
+omissions.  
+
+On Tue, 17 Jul 2001, Curt Mills, WE7U wrote:
+
+>Page 64 of the APRS spec talks about weather report format:
+>
+> "s = sustained one-minute wind speed in mph. <in positionless format only>
+>  p = rainfall (in hundredths of an inch) in the last 24 hours.
+>  P = rainfall (in hundredths of an inch) since midnight
+>  ...
+>  Other parameters that are available on some weather station units include:
+>  L = luminosity (in watts per square meter) 999 and below.
+>  l (lower-case "L") = luminosity (in watts per square meter) 1000 and above.
+>  s = snowfall (in inches) in the last 24 hours.
+>  # = raw rain counter"
+>  Fxxxx for water height in feet (usually tenths) ie: "20.1"
+>  fxxxx for water height in meters (usually tenths) ie: "20.1"
+>
+> 1) Why are there two 's' fields defined, wind speed _and_ snow?
+> Is one a typo and should have been a capital 'S'?  Probably snow?
+ 
+In the RECOMMENDED complete WX format, the WIND SPEED does not have a 
+"s" format identifier since it is in a FIXED position.  Thus if you see 
+"s", then it is snow.
+ 
+Only WinAPRS uses the verbose positionless Weather format which does
+have this ambiguity.  Thus, it cannot be used to send Snow values.
+But the WinAPRS "positionless" weather format is not recommended for 
+further implementation anyway.
+
+> 2) Rainfall in last 24 hours. I assume this is intended to be a 
+> rolling count going backwards from the current time 24 hours, 
+> and not the amount of rain that was seen yesterday.  "last 24 hours" 
+> implies a rolling count to me.  I'm fairly sure on this one, just 
+> checking.
+ 
+Yes.  I think only the original APRSdos and Xastir do this properly.  
+Newer programs took the simpler approach of starting the count each
+day at midnight...  But this is why we further defined three different
+rain identifiers.  "p" is as above,  "P" is since midnight, "r" is
+last hour.
+
+> 3) The "Other parameters" _letters_ are defined, 
+> but the number of bytes for each field are not.
+
+The are all three bytes unless otherwise specified.
+
+> 'l' is in the spec also under the "Other parameters" heading, 
+> supposed to be luminosity greater than 1000.  Not knowing the 
+> range for luminosity, do I assume that a 1000 gets added to a 
+> three digit value to give the final result for the 'l' field?
+
+No. if the byte is capital "L" then it is a luminosity from 0 to 
+999.  If the luminosity is above 1000, then the lower case letter
+"l" is used.  Thus l123 is a luminosity value of 1123.  
+Kinda cute isnt it..
+
+> Snow 's' has ?? bytes?  Format?  (s1.25, s100.99)  
+
+Three bytes.  S001 is one inch.  S1.5 is 1.5 inches.  S010 is 10 
+inches.  Notice that fractions of an inch above 9 inches are not 
+possible in 3 digits.
+
+> What is the "raw rain counter"?  Is that the "total rain" 
+> counter that some weather stations provide, or the raw counts 
+> from the rain bucket over some time period?  How many bytes 
+> for that field and in what format?  1/100 inch?  Inches?  
+> Counts?
+
+It is the three least significant bytes of the counter no matter what
+units.  The assumption here is that it is just a raw bucket count and
+the users of that station have to understand the specifics of that
+counter.  Mostly it lets users see if the value has CHANGED from the
+last reading.  This is not recommended.  These days it is better for
+all raw WX stations to have a pic processor to put the data into the
+original "COMPLETE" format.
+
+> So, are the \W and /W icons to be used for stations sending Complete
+> Weather Reports on APRS?  If so, the spec text is wrong.
+
+No, they are just alternate symbols for a weather station.  They were
+intended for use at National Weather Service sites to distinguish
+real "calilbrated" weather reports from "amateur" home stations.
+
+> I just tweaked Xastir to only allow \_ and /_ for weather stations.
+> If the NWS icons are intended for use at NWS _as_ weather stations,
+> then I need to tweak the code some more, and the spec needs to be
+> corrected as well.
+
+Yes, I have always accepted /W and \W interchangeably with /_ and \_.
+thanks for finding the bug in the spec...
+
+> How do you differentiate "No X" from "No sensor for X".
+> Is your windspeed 0 because it really is, or because you 
+> don't have a sensor?
+
+The spec allows "..." or "   " for the fields.  It also allows
+any field to be absent, as long as it's not one of the few required
+fields at the beginning.  I prefer dots as in "r..." so that the 
+columns line up nicely even if a station has no rain gage.  The 
+number of '.' or ' ' characters matches the field width.
+
+> Note that the spec does not fully specify the fields for the
+> additional weather fields possible (details from Bob in an earlier
+> message to the aprsspec list)...
+
+Yes, they are variable.
+
+Also, two new software type identifiers have been assigned:
+ 
+"O" for Otracker, "K" for  Kenwood, "B" for Byonics, "Y" for Yeasu.
+
+de WB4APR, Bob

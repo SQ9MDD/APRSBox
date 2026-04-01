@@ -1,0 +1,57 @@
+APRS STATISTICS AS OF 7 June 2004 (2009 update)            WB4APR
+-----------------------------------------------------------------
+
+Update 10 June 2009 from FINDU (Steve Dimse):
+
+From 1-10 June there have been 40235 different calls (yes, that  
+counts ssid's as separate calls) with a position report in findU.
+Over these 10 days, there have been 30,623,084 packets reaching  
+findU (more than 3 million per day, 35.4 a second), of these  
+11,874,362 were weather (1.1 million wx reports a day, 13.7 
+every second).
+
+FINDU got an average of 1,610,478 hits per day during the month 
+of May.
+
+Original Statistics 7 June 2004
+-----------------------------------------------------------------
+
+Below is data from KF4OTN on 7 June 2004 using his WE7U program.  
+
+Station Type Count  Pct %     Count  Pct%  Packets  Chars  Length
+------------ -----  -----   -------  ----   ------   ----  ------
+     Ui-View: 6057  22.44   2478941  17.8     79.5   46.2    52.5  
+     WinAPRS: 1396   5.17    684779   4.9     95.3   59.5    56.5 
+     APRS+SA:  555   2.06    239722   1.7     83.9   48.3    52.1 
+      Xastir:  371   1.37    104809   0.8     54.9   32.1    53.0  
+     DosAPRS:  322   1.19    165569   1.2     99.9   56.2    50.9 
+     MacAPRS:   56   0.21     26381   0.2     91.5   55.3    54.6  
+      APRSce:   65   0.24     13443   0.1     40.2   16.9    38.0 
+  PocketAPRS:   64   0.24     10394   0.1     31.5   18.1    51.8  
+   AprsPoint:   14   0.05      6250   0.0     86.7   54.3    56.6  
+
+       Aprsd:  916   3.39    241458   1.7     51.2   31.5    55.7
+     Ui-Digi:  267   0.99    218353   1.6    158.9   96.6    55.0
+Network Node:  321   1.19    234434   1.7    141.9   80.9    51.6
+    Digi_ned:  128   0.47    100330   0.7    152.3   32.1    19.1
+
+Unidentified: 8040  29.79   6405170  46.1    154.8   53.1    31.1
+     Kenwood: 4275  15.84   1296506   9.3     58.9   15.0    23.0
+   Std Mic-E: 2020   7.48    554696   4.0     53.3   11.3    19.3
+    TinyTrak: 1224   4.53    493845   3.6     78.4   38.1    44.0
+        NMEA:  463   1.72    257579   1.9    108.1   80.1    67.1
+Experimental:  419   1.55    354270   2.5    164.2  101.9    56.1
+      Hamhud:   10   0.04      4105   0.0     79.7   40.0    45.4
+ Opentracker:    9   0.03      4366   0.0     94.2   45.6    43.8
+------------------------------------------------------------------
+       Total:26992  100.0  13895400 100.0
+
+Additional Observations from Steve Dimse based on FINDU data:
+
+These 27 thousand stations represent about 11,250 separate users and
+of these users, 38% of them use a Kenwood D7 or D700 APRS radio
+while mobile.  This represents 57% of all mobiles and more importantly,
+represents almost 85% of all stations that are mobile with APRS
+send/receive capability.
+
+de WB4APR, Bob

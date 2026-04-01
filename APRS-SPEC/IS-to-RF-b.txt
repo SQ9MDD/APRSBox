@@ -1,0 +1,88 @@
+
+IS-to-RF Selective Local Gating - A Proposal   (rev b)          28 Dec 2011
+---------------------------------------------------------------------------
+
+This is the best I can come up with for how local IGates can opt-in to 
+allow *local* APRS-IS mobile applicatitons to also be seen locally on RF. 
+I am not saying we agree to implement this.  I'm just making sure we are 
+all looking at the same concept and debating only its merits, and not all 
+the possible other bugaboos...
+
+Rev A was abandoned, since somewhere along the line, the APRS-IS narrowed 
+the original 1997 APRS-IS design which allowed TCPIP* to be in any of the
+digi fields in an APRS-IS packet, and not just the first and only.  This
+blocks any use of the APRS-IS path as an indicator for future applications.
+
+So here is the best we can do...
+
+NAME:  For identification, lets call this function RGATING.
+
+PURPOSE:  To give RGate operators a local tool to allow local selective 
+IS-to-RF gating for local mobile IS applications while giving him the 
+means to control it based on his local environment (his IGate coverage 
+range and channel loading).
+
+SPEC:  The goal is to work this problem from both ends.  The Originating
+clients are required operate within the same rate guidelines as any other
+APRS station.  This gives the local RGATE operators greater flexibility 
+in controling the local RF load.
+
+IS CLIENT REQUIREMENTS:  Authors of mobile phone or other IS applications 
+that inject such position packets are required to 
+
+1) only use the APRS-IS path similar to this:
+
+WB4APR-IS>APVVVV,TCPIP*:packet_data_goes_here...
+
+2) Packets originated for RGATEing should conform to standard APRS 
+packet rates.  Every 30 Minutes for benign fixed stations, every 10 minutes 
+for operator-present stations, and a maximum for mobiles of 1 per minute.
+
+3) All such packets must use the APRS decaying algorithm.  Meaning, if the 
+position or data is unchanged from the last, then the period to the next 
+packet is doubled down to the final rate of one per 30 minutes (same as 
+all other APRS packets).
+
+4) All such stations with any other VHF, UHF or HF radio should include
+their operating frequency in the FFF.FFFMHz format.  See:
+
+http://aprs.org/localinfo.html
+
+RGATING REQUIREMENTS:  The RGATE sysop can choose among a variety 
+of settings:
+
+RGATE0 RANGE - the direct heard-range of the RGATE
+RGATE1 RANGE - the 1 hop heard-range of the RGATE and digis
+RGATE2 RANGE - the 2 hop heard-range of the RGATE and 2 tiers of digis
+ 
+DIRECT RATE - sets the max allowed rate for RF DIRECT packets
+ONEHOP RATE - sets the max allowed rate for 1 hop RF packets
+TWOHOP RATE - sets the max allowed rate for 2 hop RF packets
+
+RGATE0 LIMIT - the total number of such packets allowed per minute
+RGATE1 LIMIT - the total number of such packets allowed per minute
+RGATE2 LIMIT - the total number of such packets allowed per minute
+
+NOFREQ-NOGATE - if on, will not igate any mobile without a contact freq
+
+For example, a typical home IGate that (ideally) only uses a 1 hop RF path 
+via the nearest local digipeaters might set his RGATE1 RANGE to only include 
+the reliable coverage area of his local digis and then set ONEHOP RATE 4
+The result would be only one packet from any IS-mobile once every 4 minutes.
+Or he could set ONEHOP RATE = 2 and then have these mobiles appear once 
+every 2 minutes.  ETC.
+
+He sets the RGATEx LIMITS as a failsafe load limiting mechanism.  There 
+is also a BLOCK list where any abusers callsigns can be blocked if they try 
+to induce spam.
+
+The NOFREQ-NOGATE option allows the local RGATE to ignore mobile IS apps
+that have no means for participating in the local ham radio RF anyway.
+I'm not interested in seeing IS clutter on the local RF, if he displays no 
+interest in taking part in local Ham radio contacts.
+
+Something like that.
+
+Bob, WB4APR
+
+

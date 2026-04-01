@@ -1,0 +1,125 @@
+APRS Objects 101                                      16 Jan 2008
+-----------------------------------------------------------------
+                                                           WB4APR
+
+APRS was designed around the assumption that APRS would not be 
+used by very many members of a club, and very few devices could 
+actually report their own position.  The design assumption was 
+that manual entry of large numbers of objects would be a major 
+function of APRS inorder to fully represent the situation.  
+
+Fundamental to this plan was that New objects, moved objects, or 
+deleted objects were re-tried in 8, then 16, then 32 seconds, 
+then 1 minute, 2  minutes, 4, 8 and so on down to a final 10 
+minutes if it was a local event or 30 minutes if it was a long 
+term regional event.  This made the map very reliable and up-to 
+date whenever any object was added, moved, changed or deleted.  
+The map had basically 3 retries at being current up to the MINUTE!
+
+The idea was that APRS users would respond to an emergency if 
+they have the time and are in the right situation.  
+
+A) As steve points out, if an APRS operator is in the middle of 
+it he has too much else to do.  But if he can, he should put out 
+a packet showing where he is, his status or needs, and his 
+operating voice frequency for contact.  Then attend to other 
+things.
+
+B) Those APRS volunteers that are out of area but can monitor the 
+situation, should put on headphones and LISTEN to nets or other 
+data sources.  Every fact, operator, station, location, position, 
+object, situation, fire, wreck, that is overheard ONCE should be 
+put on the APRS map.  THIS is what APRS was designed to do.  It 
+was supposed to be EVERYONE contributing all their small bits of 
+the pie onto the ONE area situational APRS display resource that 
+can be viewed by everyone at their own needed and focused scale. 
+(Think: a zoomable APRS situational display in front of every EOC 
+operating position).
+
+C) What killed (B) however is the very poor implementation of 
+objects in most follow-on clients.  Uiview transmits all objects 
+(Old, and new) at exactly the same rate and all at the same time 
+in one huge block.  This generates an order of magnitude too many 
+packets for the need, clobbers the network for a full 30 seconds 
+at a time for 30 objects, blocks most digipeats of those objects, 
+and either has too much time lag or too much QRM to be of real 
+value.
+
+It is self defeating to use APRS as intended (managing dozens and 
+dozens of objects) using Uiview as the data entry station.  
+HOWEVER, there are work arounds as long as everyone is mindful of 
+these limitations.
+
+1) Establish only a properly implemented APRS client as the OBJECT 
+manager.  This station rapidly refreshs new info, decays old info, 
+and randomizes the transmission of each object independently so 
+that none are transmitted in big wall-to-wall blocks that self-
+distruct their own digipeats and block other users for long periods.
+
+2) Have operators trained on this system to take-over any object 
+posted by a Uiview station.  If this station has good ears or a 
+high location, it has another advantage of better use of CSMA in 
+the situation area to minimize collisions too because it can hear 
+more.
+
+3) If #1 and #2 are implemented, then Uiview can be used freely and 
+purposefully by everyone to input any objects that are needed.  
+This works because the #1 OBJECT-station takes them over as soon 
+as they appear.  This usurps these objects from Uiview and 
+eliminates all of the channel problems caused by it. 
+
+Because taking-over-objects was fundamental to the APRS design, 
+all of the above can occur transparently to the Uiview users.  
+He does not even know that the object has been taken over, because 
+it remains on his screen (and does not display the ownership 
+attribute).  If this original station wants to move the object, 
+he can do so, and again, the network will respond to this new 
+entry, but again, the centeral OBJECT operator will take over the 
+new position as sooon as it sees it.
+
+In fact, the original APRSdos was designed with a NETCONTROL 
+function.  With this switched on, that station would take over 
+all objects as soon as they appeared. (though anyone can move 
+them at any time).  This is why in APRSdos, objects have the two 
+color atributes for OWN object and OTHERS object.  So at a glance, 
+you can see ownership of each object as it might be changing back 
+and forth.
+
+Another way that Uiview can be used for objects is if the load is 
+spread out.  Say each operator only inputs and manages a few 
+objects.  Say no more than 5 or so.  This prevents the big-block-
+transmission problem and fratricide problem (most TNC's will drop 
+the carrier after each seven packets and check the channel for 
+channel sharing).  But this lets the digi start transmitting which 
+then collides with the next seven.  This is why Uiview simply 
+cannot be used for more than a few objects for anything except 
+DIRECT simplex operations.
+
+In this case, since all objects both old and new are always 
+transmistted on the same schedule by UIview, these schedules 
+have to be well spread out.  Probably it is best to use a 10 
+minute rate.  But this then reduces the original APRS timeleness 
+by an order of magnitude (from under 1 minute to over 10 minutes) 
+and is another reason why people do not see APRS as a real time 
+tool anymore.  But keeping the channel QRM down is probably more 
+important since new objects do become old objects pretty quickly.
+
+The only problem is that either of these solutions requires a a 
+lot of skilled labor, and attention and planning.  Exactly what 
+APRS was supposed to avoid!
+
+> ... as I listen to the on-air traffic, I hear 
+> a high degree of professionalism, focus and 
+> dedication. 
+
+And the key to getting APRS used, is to not try to change those 
+operators, but instead, to place a PC APRS display in front of 
+them, not to make him an APRS opeator, but so that he has a MAP 
+display that he can zoom around on the map as needed to see what 
+is going on.  Let others in the background or away from the area, 
+be the INFO-INPUT people to keep the map and BULLETIN/ANNOUNCEMENT 
+board up to date.
+
+See next message about the BULLETIN/ANNOUNCEMENT BOARD.
+
+Bob, WB4APR

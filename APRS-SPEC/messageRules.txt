@@ -1,0 +1,67 @@
+APRS MESSAGES:  Operations                               16 Jan 2008
+--------------------------------------------------------------------
+                                                              WB4APR
+
+The limitations of a message-ACK system is detailed in my page:
+http://www.aprs.org/txt/messages101.txt
+
+It also discusses severe problems in many clients that did not fully
+implement the full APRS packet protocol.  It is these clients that
+can make APRS message performance appear abismal.  The following
+paragraphs offer the proper operations techniques to not only make
+messages work very well on corretly implemented systems, but also at
+least be useable on some of the poorly implemented ones.
+
+MESSAGE OPERATIONS:
+
+There are several things EVERYONE is supposed to be doing to
+make APRS messaging work best. 
+
+1) Never try to message beyond 1 or 2 hops reliably.
+
+2) Recognize that your message had 2 to 4 times higher chance of
+getting through then you will ever see in getting an ACK back.
+
+3) If you think the other guy got the first message, kill it so
+that the next line can go out even if the first ACK never got
+back.
+
+4) When you see an INCOMMING message.  ALWAYS answer it (human
+response).  This accomplishes MANY things in a real-time
+network:
+
+  (A) Messages are for HUMANS.  Give the HUMAN response!
+
+  (B) outgoing messages have double the reliability of an ACK
+via 1 hop and FOUR times the reliability via 2 hops!  This tells
+him you got the message even if the ACK didn't make it.
+
+  (C) if you are using one of the fully implemented APRS
+clients, then this same multiplication in success will get his
+ACK back to him so his system will send the next line.
+
+5) If you must use a 3 hop path for a special message from point
+A to point B, then use WIDE2-2,DIGI3, never WIDE3-3!  The
+directed  hop on the end will have little more QRM than 2 hops,
+but will improve the reliability that DIGI3 gets it. NEVER use
+W3-3 or the QRM kills the network.
+
+6) NEVER use REPLY-MSGS.  They are Just QRM.  They do NOT have
+any of the above advantages because they are not "pushed" but
+are just like another ACK, but one that does absolutely nothing.
+The only time to use REPLY-MESsAGES are in a REAL time event,
+when the operator might need to disappear for 20 minutes.  Then
+a REPLY-MESSAGE saying "Ill be back at 1330" is a GOOD use of
+this capability.  In the original APRS, any such REPLY message
+is automatically canceled whenever the sender returns and
+touches his keyboard.  IE, we never want reply messages that are
+not providing REAL-TIME INFO to the other end.
+
+These rules above about messages are fundamental to real-time
+APRS.
+
+For UIview users, there is an add-on fix to apply the DECAY rate
+to messages:   Use M0CYP's UI-Instant Messenger.
+
+Bob, Wb4APR
+

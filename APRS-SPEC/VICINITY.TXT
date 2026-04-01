@@ -1,0 +1,216 @@
+VICINITY.TXT      APRS Vicinity Tracking (tm)                 1 June 2011
+===========================================================================
+Document version: 8.4.3  Previously updated  25 Feb 99
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1 June 2011 updated the WIDEn-N section since all paths are now traceable
+under the New-N paradigm.
+
+APRSdos implemented Vicinity Tracking (tm) which gives a first order
+approximation of position based on the nearest digipeater to any new
+station.  This has advantages in many situations as follows:
+
+  1) On first packet receipt from a new station.  No matter what the
+     packet, APRSdos will plot him using a VICINITY plot in the
+     vicinity of his closest Digi.
+
+  2) Plots WinAPRS "positionless WX" so you don't have to wait
+     an hour to find out where the weather is...
+
+  3) Plots stations who are transmitting 0000/0000 posits
+
+  4) Can crudely track any packet device to the nearest digipeater even
+     without GPS as long as they transmit a packet on the APRS network.
+
+  5) Can track indoors by using nearly-deaf digipeaters.  See following
+     section.  This last function is experimental and not yet fully
+     agreed among the APRS authors.  It is included for experimentation.
+
+Although FUNDAMENTAL to APRS, this VICINITY tracking technique was not
+allowed in the spec by other authors on the committee because they did
+not want to be told "how" to plot info.  THeir view of APRS as a precise
+vehicle tracking system doomed the spec to the same narrowminded
+vision of APRS... ignoring its original value as a communications 
+system and packet network.
+
+WIDEn-n IMPLEMENTATIONS:  With the New-N paradigm, since about 2004, 
+just about all packets now contain a traceable path.  This means that 
+we can identify what digi was the first to hear the packet, and 
+therefore approximately where on Earth the originating station is 
+located.
+
+INITIAL PLOTTING OF NEW STATIONS HEARD:
+             
+APRS can use this technique on the first paccket heard from a new station
+even if it has not position info.
+
+1) First, the station is added to the station list
+2) It is given a random ambiguous position within 1 mile of its digi
+3) A QUESTION MARK symbol is used
+4) The plot is given a standard APRS "ambiguity" of 1 mile
+5) The callsign is NOT displayed on the map above the 8 mile range
+6) The callsign IS shown if the symbol is selected or the view is
+   zoomed to 4 mile range scale or below.
+
+The reason for the above technique is not for Position tracking since 
+that is not the goal of APRS.  The goal of APRS is a VHF network for
+providing INFORMAITON connectivity between all participants.  Knowning
+the PATH to all stations is the main reason for position plotting in
+APRS.  SO the VICINITY plotting technique provides the following.
+
+1) The station instantly exists within APRS on first packet heard
+2) We can see where on earth the station is to a few miles
+3) There is no confusion that this is anything other than a guess
+4) The guess is within 1 mile of the digi to make it easy to see
+5) The absence of callsigns avoids confusion by casual viewers
+6) The information IS available to those who look for it.
+
+To see a VICININTY plot, please see: symbols/APRSvicinity2.GIF
+
+INTERIOR TRACKING IDEA 
+
+This technique
+can also work indoors such as in convention centers and other large 
+distributed structures by simply reducing the range of indoor digis.   
+Simply install nearly-deaf digipeaters called BOXn digipeaters in each
+major room area.  A good example is the HARA Arena at the Dayton
+Hamvention which consists of approximately seven large interior spaces.
+The APRS software simply plots the location of interior users in the
+vicinity of each of about a dozen-or-so BOXn digipeaters that last heard
+the users packet.  THis process is called VICINITY Tracking and can
+also be used to approximate the location of new stations near any 
+digipeater until a valid posit is received.
+
+The Interior application of Vicinity Tracking can actually be more 
+accurate than GPS (under 50 meters), and can be adjusted to the size of 
+the rooms in any given application.  A receive range of about 50 m (150') 
+is the nominal design range.  As long as all users set their transmitters 
+to approximately 100 mw, then the threshold of these ranges is more 
+accurate than one might think.  THis is because with the BOXn digi's 
+antenna in the clear in the room, then the path to any walking user is 
+almost line-of-sight and follows the 1/r squared law quite well.  Since 
+it is a square law, the detection difference between 50 and 100 meters, 
+for example is over 6 dB.
+
+These BOXn digipeaters may even be used outdoors so that users in a
+confined area, such as the flea market at Dayton, can be localized without
+them having to carry a GPS.  Since each BOXn digi is able to have its own
+hearing range and it conveys that to the system in its BText, these BOXn
+digis may use a longer range. 
+
+Even though the reliability of this system is based on an assumed 100 mw
+transmitter power from the users, the threshold range for a 1 watt user 
+in a 50 meter system would be  only 3 times greater or about 150 meters.
+If most BOXn digis are confined to physical rooms, the loss through 
+adjacent walls will probably reduce, if not eliminate this problem.
+
+BOXn DIGIS:  These are standard APRS digipeaters that use either the
+PacComm or KPC-3 TNC's.  These TNC's are given the MYCALL of BOXn and
+the UIDIGI of RELAY and a local application name such as HARA (at Dayton).
+The local interior path name (HARA) is the preferred via PATH for users 
+indoors to prevent bedlam on the 144.39 frequency from the hundred 
+vehicles in the parking lot who may also digipeat RELAY packets.   But 
+RELAY is included for those few people who forget.  Any packet heard 
+in the vicinity of any of these BOX'es will be digipeated with MYCALL 
+substituted so that all APRS software can tell which digi is closest 
+to the user.  At Dayton, the old frequency of 145.785 may be used for
+interior tracking to help split the load on 144.39 and to allow just
+RELAY to be used.
+
+RANGE REDUCTION:  To make interior tracking work, the range of the BOXn
+receiver must be reduced by many orders of magnitude.  One way to reduce 
+receive sensitivity while maintaining normal antenna operation  
+for the BOXn digi tramsmitter is a whip antenna with back-        |
+to-back diodes and a partial dummy load at the base.  THe         |
+diodes in series with the antenna connection, effectively         |
+isolate the receiver but allow the antenna to still be used       |
+by  the transmitter.  By adding two 100 ohm resistors to the      |
+whip, a 50 ohm load is presented and the length then of the       |
+whip can be trimmed to adjust final sensitivity.  In this         |
+drawing the Diodes are shown as "D" and the resistors as "R".     |
+                                                               *-***-*
+The letter "V" is trying to show the center pin of a BNC       R D D R
+and the two bottom *'s show the ground ring of the BNC.        | *** |
+The transmitter should be operated at about 100mw or less.     |  |  |
+The transmitter will see the antenna and only needs enough     *  V  *
+power to be heard in the general area of operations.   Note,
+however that diodes on antennas generate Intermod for everyone, so
+these kinds of antennas should not be used in a rich RF environment such
+as Dayton.
+
+
+MFJ 8621 DATA RADIO.  AN IDEAL BOXn DIGI APPLICATION
+
+A BETTER solution is to use a transceiver that can have additional atten-
+uation added to the receiver only.  At Dayton, a receive range of about 
+50 meters requires about 85 dB of attenuation to a nominally good receiver.
+Unfortunately, this cannot easily be done at the antenna as shown above
+or the Transmitter is also similarly attenuated making the BOXn digi
+to weak to be heard.  Usually for these short ranges it is necessary to
+do minor surgery on the receiver to add separate attenuation.  This is
+very easy to do in the low cost MFJ 8621 data radio.  Simply lift one end
+of the T/R Receive switching PIN diode D8.  It is the diode that looks 
+just like a plastic transistor closest to the antenna connection.  Lift
+the end closest to the Antenna.  This adds more than 60 dB of attenuation
+and makes the radio perfect in this application.  If the range is too
+short, then try inserting a 5K or less resistor in series until the proper
+range is reached.  Probably good to set this for about a 200 meter range
+with full 1/4 wave antenna and then you can adjust the final distance per 
+application by trimming the antenna.  If you use the MFJ data radio as 
+modified here, then there is NO NEED for the diodes as shown.  In fact, 
+they should NOT be used at Dayton where they would generate horendus QRM.  
+But do keep the 100 ohm resistors to serve as a good load as  you trim 
+the antenna as needed for the final 50 meter range.
+
+
+SOFTWARE:  APRS scans incoming packets for the presence of the key path 
+"BOX" in the first digipeater field.  These packets will be given
+a position in the vicinity of that specific BOXn digipeater.  CALLSIGNS
+only will be displayed, probably as a list in an orderly fashion around 
+the location of the BOXn so it is clear that they are in that vicinity.
+
+BOXn ICON:  The BOXn digipeaters are given a special ICON of \i or #i.
+On APRS maps, these ICONS are overlayed with the number # and so there
+is no need for the callsign to clutter the local area.  Thus these
+\i or #i icons never display their own calls.  Further the BText of
+these digis must include their exact location and also their RANGE.
+Their range is indicated in braces, for example {50} would mean a nominal
+range of 50 meters.  The APRS software uses these values to know how closely
+to display the nearby callsigns of users...
+
+
+APRS SOFTWARE SPEC FOR VICINITY TRACKING:
+
+BOXn ICON    #i.  These ICONS are boxes with the # overlay character
+
+STN  ICON    /_ where "_" here represents the SPACE character.  This is the
+             APRS null ICON which is nothing.  All stations heard via a 
+             BOXn digi will be assigned this ICON so that no ICONS are 
+             plotted to clutter the map.
+
+BOXn BText   These digis use the standard ! position format and must 
+             include the approximate listening range in braces in meters,
+             such as {50} for example.  Values up to 999m are permitted.
+             These listening ranges are defined to be for 100mw users.
+             A system based on one watt users would imply a factor of
+             THREE times further.
+
+BOXn DISPLAY Only the BOXn ICON is shown on the map.  The "BOXn" callsign
+             is redundant and not shown to leave more room for Vicinity
+             station's callsigns.
+
+PROCESSING:  Any incoming packet with the occurrence of the string "BOX"
+             in the digipeater header is assumed to have been digipeated 
+             via one of the BOXn's with MYCall substitution.  The exact 
+             call plus its number is extracted, and a STATION search is 
+             conducted to find the location of that BOXn digi.  The 
+             position of the reporting station is then assumed to be in 
+             the vicinity of that BOXn and is displayed accordingly.
+             
+             In APRSdos, THe BOXn digi location is copied as the assumed
+             position of the reporting station plus/minus randomly in
+             both LAT and LONG the hearing-distance as reported in {xx}
+             within the BOXn BText.  These calls are plotted in the 
+             vicinity of the BOXn with no ICONS, thus showing that their 
+             location is not known precisely.
+

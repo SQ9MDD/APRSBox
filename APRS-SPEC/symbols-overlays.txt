@@ -1,0 +1,144 @@
+OVERLAY EXTENSION to APRS SYMBOL SET                      9 April 2007
+----------------------------------------------------------------------
+
+References:  
+APRS Symbols: http://aprs.org/symbols.html
+
+As of 2007, fewer than about 10 unassigned APRS symbol codes were 
+still available.  Yet, APRS continues to grow in depth and scope and 
+needs a vast expansion of symbol characters while still remaining 
+backwards compatible to existing implementations.
+
+It is therefore proposed that the OVERLAY character which was defined
+back in 1996 be useable on all symbol types, not just the original
+designated few.  In fact, the original APRSdos concept was that ALL
+characters would be overlayable from the beginning, but this was met
+with resistance from Windows applications that were limited to only a
+fixed set of ICONS and each overlay character had to be handled as a
+separate case.
+
+We need to no longer be bound by this implementation restriction.  By
+allowing the 36 overlay characters on any symbol, we can in effect
+expand the existing code base from about 188 symbols to over 3400
+combinations.  By carefully applying some of the remaining undefined
+symbols to be "blocks" of symbols, then we can define at least 360 
+new symbols (10 new symbol blocks, each with a possbile 1 of 36 overlay 
+characters).
+
+Implementation stages:
+
+Baseline Overlays:  Means software will display all of the original
+symbols plus all of the overlay characters on those origional selected 
+special overlayable symbols. CARS, BOATS, TRUCKS, CIRCLES, SQUARES, 
+TRIANGLES, STARS, NWS, AIRCRAFT, WX, ARRL, CIVIL DEFENSE, BOXES, VANS, 
+SHELTERS.
+
+Backwards compatibility:  Means software will correctly capture new 
+overlay characters on any symbol and this packet will be processed as 
+before though the overlay character might be ignored, but the packet 
+parsing is not broken.
+
+Overlay Transparency:  Means that software will receive new overlay
+characters on any symbol and this overlay character will be displayed
+somehow so that it is acccessible to the viewer on every symbol.  For
+example, an S overlay on a house might mean Solar powered.  Or W for
+wind or E for emergency power, or O for off-grid, etc...
+
+Full Overlay Capability:  Means that software will receive and display
+all overlay characters and will map any new combinations into any new
+symbol sets that may be defined.
+
+NEW HOME STATION SYMBOL EXAMPLE:  Under this proposal the HOME symbol
+will accept Overlays.  OPriginally, the primary HOUSE symbol was a 
+house with a vertical antenna.  The basic secondary symbol was a HOUSE 
+with an HF wire dipole.  By allowing OVERLAYS, now the house symbol 
+can have any of a number of overlay characters superimposed.  For
+example:  
+
+B = Battery    E = Emergency   G = Generator   S = Solar    W = Wind
+
+POSSIBLE FUTURE BLOCK ASSIGNMENTS:  Here are a number of new symbol
+block assignments that we could use.  We hope that all authors will
+agree to these extensions:
+
+ARRL    - exist.  So far only ARES and WINLINK have been used
+CIVIL   - exist.  So far, only RACES and CERTS have been used
+SHLTERS - exist.  
+FIRENET - Expansion block.  This could give them 36 new codes
+SKYWARN - Expansion block.  This could give them 36 new codes
+EMRGNCY - Expansion block.  This could give them 36 new codes
+
+
+ACTION:
+
+1)  We need assurence from all authors that their existing code is 
+Baseline Capabile and is Backwards Compatible such that new overlay 
+characters  will not break any existing parsing of existing packets.
+
+2)  We need concurrence fom all authors that they will support this
+overlay extension to APRS in the future.
+
+For what it is worth, an assessment of the condition of symbols in 
+most APRS clones is attached below...
+
+Bob Bruninga, WB4APR
+------------------------------------------
+Addendum:
+
+ASSESSSMENT OF SYMBOL SETS IN APRS CLONES 
+(by an un-named APRS expert):
+
+
+The problem is that WinAPRS, APRSplus and UI-View are orphaned 
+products that are effectively no longer under development.    
+
+* WinAPRS hasn't seen any significant development in many years...   
+It's symbol set hasn't been updated in 10 years.   WinAPRS's symbol 
+set is embedded INSIDE the compiled .EXE file, making it impossible 
+for an outside agent to update.   The main people I see still using 
+WinAPRS  are the weather buffs because of it's better-than-average 
+support of NWS warning zones and overlays. 
+	
+* APRSplus was effectively orphaned when Delorme radically changed 
+the format of Street Atlas USA that APRSplus depends on for it's maps.   
+Street Atlas Ver 9.0 (the last version that works with APRSplus) was 
+discontinued in 2002.  The developer essentially abandoned the program 
+since no newbies could get the maps it requires. An indicator of this 
+is that he dropped the registration fee to zero about 4 years ago.  
+By default, APRSplus doesn't plot standard symbols (it uses a tiny 
+black diamond with the callsign to the upper right), although it does 
+display them in the text lists of stations heard, tracked, etc.
+	
+* UIview, of course has the problem that it's author is deceased as 
+well as the source code.  Fortunately, it DOES properly support the 
+overlay process.  Further, the symbol set is in accessible external 
+files, so they can be replaced with  updated ones.  Any symbol can be 
+empowered to have overlaysby adding the "numbered #" nomenclature on
+to the symbol in the UIview symbol file (see UIview for details).
+	
+*  UIview has available a plug in called UI-Point that allows UIview 
+posits to be displayed on Microsoft MapPoint (either the North 
+American or the European versions).  UIpoint uses symbols stored in a 
+pair of accessible external .BMP files (so I can update them) but it 
+doesn't support overlays in ANY MANNER.  
+	
+* APRSpoint, an APRS client that is itself actually a plugin for MS 
+MapPoint, doesn't use APRS symbols (or overlays) at all. Instead it 
+only uses generic Microsoft "push pins" that are standard with MS 
+MapPoint and MS Streets&Trips.
+	
+Bottom line:  NONE of the current Windows programs are EVER likely to 
+be updated to support either offset overlays or vector-based symbols 
+because they are ALL dead or dying projects that are frozen in time.   
+
+Probably the only way you will EVER see a compliant Windows client is 
+to stop flailing the dead DOS horse, and develop a modern Windows 
+client yourself...
+
+P.S.  Now in 2011, there are many new clients for a variety of
+platforms that are being actively written and supported. It is time
+to move on.
+
+
+
+

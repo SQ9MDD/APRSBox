@@ -1,0 +1,57 @@
+APRS FUNDAMENTALS LEFT OUT OF MANY CLIENTS            16 Jan 2008
+-----------------------------------------------------------------
+                                                           WB4APR
+
+You will notice that almost all of my complaining over these
+years rarely has to do with displays, but instead is the lack of
+any care for the the optimal -transmission- of data keeping in
+mind the limitations of the network and human nature which can
+not be relied on for real-time settings in each changing
+situation.
+
+Too many clones simply focused on the maps, and just figured
+transmit at afixed rate and they were done.  Extremely simple,
+but not at-all what APRS transmission was all about as a SYSTEM
+and a network.
+
+Many of the following parts of the TRANSMIT algorithms were left
+out of many clones making APRS hard to use in real time:
+
+- High initial rate (8 seconds) for any new data
+- Continuous decay  (doubling of time to next pkt)
+- 10m final rate if path is direct or one hop
+- 30m final rate if path is 2 or more hops
+- Decay applies to GPS input too (parked cars)
+- Decay also applies to OBJECTS, WX and own station
+- Smart (redundant and delayed) acks for messages
+- embedded reply-acks to greatly improve message throughput
+- proportional pathing (lower rate for higher hops)
+- Message delivery time out -and- RETRY-ON HEARD
+- ALOHA circle automatically computed & displayed
+- Aloha circle determines max hop count
+- Warnings against improper settings
+- Transmitting PHG data so we can SEE the RF network
+- Transmitting the user-activity bit if present
+
+Well, I guess I also complain about displays too..., I may as
+well list the DISPLAY processes that were left out of many
+clones:
+
+- the 8 or so Symbol color attributes
+  - Moving or dead reckoned versus fixed.
+  - message or non message capable (trackers vs users)
+  - Fresh, stale or Old versus new
+  - Objects versus stations
+  - own objects versus other station's objects
+  - Special, priority and emergency stations
+- Display of stations activity bits (user present)
+- Vicinity plotting for packets without position info
+- Position ambiguity for things with less precision
+- A consistent and easy to see map RANGE scale
+- Display of PHG data for network visualization
+- Display of the stations individual ALOHA circle
+
+Oh well, I run on...
+
+Bob, WB4APR
+

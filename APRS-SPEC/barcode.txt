@@ -1,0 +1,45 @@
+BAR-CODE Formats for APRS                                  26 Feb 2007
+----------------------------------------------------------------------
+
+Here is the beginning of some thoughts on Bar-Code formats for APRS
+that started on the APRSSIG today.  We may as well consider this for
+APRS 1.2 addendum.
+
+From the SIG:
+
+I think a BarCode Application is ideal for APRS.
+
+> IF the entrant's scorecards could be barcoded, they 
+> could be scanned on the way IN to a stage and on the 
+> way OUT of a stage.
+
+I hope we can integrate the Barcodes into APRS in a seamless way
+so that they can be tabulated even on existing machines.  Here
+are some options:
+
+>STATUS Packet...   
+:BLN1SCAN :A bulletin to all
+:DATABASEx:A message to "databaseX callsign"
+=POSIT/position comment text
+
+MESSAGE FORMAT:  A message to a specific applications callsign
+would be great for generic applications.  The message contains
+the barcode.  Using the message format assures the data will be 
+captured by all APRS clients and can be captured in FINDU etc.
+
+BARCODE POSIT FORMAT:  The BAR CODE POSIT format is good for an 
+application where the barcode itself contains the posit data.
+An example might be the barcode wand is moving through a building 
+or something (or a cave) and whenever they see a barcode on the 
+wall, they scan it and their wand sends the LAT/LONG position 
+encoded on the barcode AND any other data that is on the bar code.
+
+WAND POSIT FORMAT:  Similar to the above, but in this mode the
+packet contains the GPS position of the barcode scanner when it
+scans a barcode and the barcode data is included in the position
+report comment field.
+
+Does anyone see any other applications that cannot be fit into 
+either of these formats?
+
+Bob, WB4APR

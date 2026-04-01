@@ -1,0 +1,66 @@
+APRStt-PL adds PL decoding!                          WB4APR 25 Mar 2002
+-----------------------------------------------------------------------
+
+ 
+APRStt-PL listens for PL's on the repeater voice input and sends out a
+very brief APRS STATUS packet (direct. No hops) whenever it hears a new
+PL(has not been heard in the last N minutes).  The packets would look
+like this:
+ 
+W3VPR>APLxxx:>Heard 088
+W3VPR>APLxxx:>Heard 105
+ 
+Where W3VPR is the callsign of the repeater (APRS will already konw the
+locatin of this repeater from its once every 30 minute BText).  "XXX"
+is the PL tone heard (without the tenths digit).  And these 9 chars fit
+beautifully on the D7 and D700 front panel when the packet comes in.
+ 
+Thus, my APRS software could then maintain a list of every such PL heard
+at that site in the last 30 minutes.  Thus you can see WHO is using that
+repeater or use it for other inaudible signaling tasks.  Here is how I
+might use this tremendous ID capability.
+ 
+1) My kids could turn on PL XYZ when they call me.  My APRS in the office
+BEEPS me that my kid is on the air (I cannot maintain a listening watch on
+our VERY BUSY 2m repeater at work, its just TOO distracting).
+
+2) My kids could turn on PL ABC when the soccer game is over and while I
+am out running errands I will  see that PL and hear the BEEP on my D7 HT
+or Mobile D700 front panel and know to go get them.
+ 
+3) VIPS in ARES/RACES could have PL codes and if APRStt-PL was running on
+all local repeaters, then the APRS map could show What repeater they are
+on.
+ 
+I can think of endless possiblities.  And it is so easy. My biggest
+frustration with new neat applications is that nothing gets through modern
+repeaters end-to-end except voice.  I cannot use CTCSS, DCS, TTones, or
+Packet to get through a repeater.  The only easy signaling method is ARPS
+but it requires a $400 HT (which I am not yet willing to give to my kid on
+a routine basis and it is too big anyway for her b ackpack)..  But,
+APRStt-PL allows ANY HT even the tiniest ones to be used as a singnaling
+device.
+ 
+This APRStt-PL is a method of signalling "around" any repeater in a method
+that is machine (and human) readable to augment voice or other signallling
+needs.  It also works well with PL heard on FRS... (no imediate idea comes
+to mind, but for a $29 signalling device with built in PL encoder, its a
+thought)..
+ 
+There are only 38 PL tones, so in a HAM club like ours with over 250
+members, we cannot just assign everyone a unique code for daily use.
+So that is not what is envisioned here.  But in that same club there are
+probably only a half-dozen people on any given day that really play with
+neat new things or APRS and so there is ample room for uniqueness.  Also,
+you have to more or less  eliminate the PL's used in the surrounding area,
+because they will be  heard all day long as people come and go on the
+repeater.  But in our  area, most PL's in Maryland are the same for user
+convenience anyway, so  that leaves LOTS of PL's for unique signalling...
+ 
+In APRSdos, I will just add these APRSPL packets to the existing
+"vicinity" plotting which will randomly place them on the map in the
+vicinity of the voice repeater using the normal Vicinity plotting ICON of
+the biq Questionmark.  So at a glance, you can see them and where they are
+being heard.
+ 
+de WB4APR@amsat.org, Bob

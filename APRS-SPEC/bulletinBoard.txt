@@ -1,0 +1,108 @@
+APRS Common Bulletin Board for Situational Awareness    16 Jan 2008
+-------------------------------------------------------------------
+                                                             WB4APR
+Ev Tupis noted:
+> APRS is billed as a situational awareness service, 
+> yet... largely barren of situational awareness info...
+
+The original APRS concept for displaying this collection of 
+situational information was the MAP display -and- the VIRTUAL 
+BULLETIN/ANNOUNCEMENT BOARD.
+
+My previous message addressed the problem as a great under-
+utilization of OBJECTS to convey the situation.  This message will 
+address the lack of implementaiton in all follow-on clones of the 
+COMMON VIRTUAL BULLETIN/ANNOUNCEMNET BOARD concept.
+
+Unfortunately, I don't think a single APRS follow-on clone properly
+implemented the VIRTUAL Bulletin board.  Just like a MAP display 
+was supposed to keep everyone informed of the POSITIONS of 
+everything (and lots of objects), the BULLETIN BOARD was supposed 
+to act like a BIG DISPLAY board that EVERYONE could see and they 
+ALL SAW THE SAME THING.  Think of a big board in the EOC, but now 
+everyone could see the SAME board via APRS everywhere.  BUT IT WAS 
+THE SAME BOARD.
+
+The original APRS VIRTUAL BULLETIN board had 40 lines.  This is not a 
+"limitation" but a forced method of making users condense information
+to only what is immediately valuable, current and relevant.  Think of 
+the public boards in Train stations or Airports.  In APRS, anyone 
+can post to the board, can edit their lines or can kill their lines.  
+The board is always sorted on the display.  This way, the most 
+important information was always on the display (the same to 
+everyone) and since each source can edit his lines one line at a 
+time, this drastically reduced channel load.  Only a changed line 
+had to be retransmitted. 
+
+If the top 4 lines on the COMMON display board was maintiaing a 
+list of capabilities at each shelter, then to change the second 
+line of that display, an update required only ONE PACKET to re-
+transmit THAT line!  The update was sorted and INSERTED where the 
+old line was!
+
+The limitation of 40 lines was arbitrary but was INTENTIONAL to 
+keep the board uncluttered and to make sure that EVERYONE was 
+always seeing the most important and current information and all
+were seeing it in the same way!  If new information came in that 
+made the board go over 40 lines, then the oldest information was 
+overwritten.  But more often, the originator of an old post that 
+was no longer valid, could simply OVERWRITE his old lines on the 
+board with new information on the board at the same place.  Again, 
+ONLY THE 40 most important lines that were CURRENT would ever be 
+on anyone's display.  If you wanted to see a chronology of all 
+bulletins, updates, changes etc, then you could look at the 
+message log.
+
+Problem is, none of the follow-on APRS clones implemented the 
+VIRTUAL bulletin board.  They all just show bulletins as items in 
+a sequential LOG.  Thus, no one sees the same thing.  There is 
+nothing maintaining the currency of the information, there is no 
+system for focusing on what is imporant and what is old, and there 
+is no way of editing or updating information without sending the 
+entire text and context over again plus retries.  This is a total 
+failure of these clones to understand the need for COMMON 
+information diplays of situatinal information!
+
+The few clones that even considered the VIRTUAL bulletin board 
+display rejected it as being too limited at 40 lines.  They could 
+provide a log display of hundreds or thousands of lines of 
+bulletins...  Well DUH, that is the worst way to present TIMELY, 
+RELEVANT, IMPORTANT information.  Humans cannot focus on huge lists 
+of data, they need FOCAL points.  This single VIRTUAL BULLETIN/
+ANNOUNCEMNT display was supposed to filter out all the old, changed, 
+and updated information and only display to everyone the MOST 
+IMPORTANT and CURRENT 40 lines of info, that EVERYONE SAW 
+everywhere.
+
+In APRSdos, all one had to do was look at the BULLETIN BOARD and 
+see what has been posted.  If something new has been posted since
+you last looked, you were alerted to "new bulletins" pending.
+This one screen gave him the full present, real-time situation 
+(that everyone else was also seeing).  With the all the missguided 
+focus on the maps and just vehicle tracking of so many follow-on 
+clones, this concept of a FIXED single community bulletin  board 
+display presenting the full relevant tactical situation has been 
+completely lost to almost all  users.
+
+This is another reason why the focus on APRS as a vehicle tracking 
+system has caused people to no longer see APRS for its intended 
+purpose of situational awareness.
+
+We need this 40 line VIRTUAL Bulletin Board added to all software that
+omitted it in their rush to vehicle tracking.  I believe that an add-
+on has now been written for UIview.  I hope everyone uses it.  Using 
+this add-on would be a requirement for participation in an event.
+
+An entire page in the APRS SPEC (p78) was dedicated to presenting 
+this concept of DISPLAY and IMPLEMENTATION of a COMMON bulletin 
+board display, yet it was easier for programmers to just display 
+bulletins as they came in, and keep them in a sequencial log, than 
+to present them  as intended.  Bummer for APRS...
+
+Don't get me started on what else has been glossed over in the 
+rush to put ICONS on maps.  APRS was a lot  more....  Read about 
+them: http://aprs.org/APRS-tactical.html
+
+Bob, WB4APR
+
+

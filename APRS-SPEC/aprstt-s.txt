@@ -1,0 +1,74 @@
+APRS DTMF-to-APRS PROTOCOL                               23 Mar 2010
+--------------------------------------------------------------------
+                                                              WB4APR
+
+23 Mar 2010 Updated to new  formats
+10 Oct 2002 Original
+
+APRStt is the specification for Touchtone applications of APRS.  It
+allows anyone with an HT to use his DTMF pad to enter APRS positions,
+messages and other data.  Thus EVERYONE in ham radio can communicate
+by APRS, not just those with APRS HT's.
+
+Although the Terrestrial application of APRStt with its well defined 
+voice repsonses will revolutionize APRS and allow everyone to parti-
+cipate, a shortend modified version is necessary for Satellite 
+applications.  Due to congestion on the uplink, the entire data from 
+one station must be sent in a single burst.  This is done by pre-
+loading the position and call in two DTMF memories and keying them
+consecutively.
+
+Therefore the following SPACE version of APRStt is being developed:
+
+FUNDAMENTALS: 
+ 1) Protocol must fit into 16 digits (typical DTMF memory size)
+ 2) Protocol must end with the "D" key
+ 3) Calls are HASHED, meaning a 6 digit decimal callsign equivalent. 
+
+The best small satelllite application of SPACE APRStt is to have a simple
+DTMF decoder on the satellite uplink and then for the satellite to
+convert the DTMF to the SPACE-APRStt equivalent AX.25 packet on the
+downlink.  Then all APRS stations in the footprint of the satellite and
+the worldwide APRS internet linked system of AX.25 receivers will 
+receive the data.  If the satelltie is DTMF only, then all it has to do
+is regenerate the DTMF on the downlink and let a SPACE-APRStt ground
+station convert the packet for injection to the worldwide APRS internet
+system.  FOllowing are the initial definitions of SPACE-APRStt formats:
+
+POSITION FORMAT:  The following is the proposed 
+ 
+16 digit DTMF     Packet
+----------------  ---------------------------------------
+BhaaaoooAccccccD  cccccc>APxxxx,WIDE:=AAA0.00N/hLLL0.00W$
+ 
+Where B begins the Position format
+Where h is the hemisphere region (see table)
+Where aaa are the 3 MSB digits of Latitude
+Where ooo are the 3 MSB digits of Longitude (not counting hundreds)
+Where A begins the Callsign digits
+Where cccccc are the callsign digits (924277=WB4APR)
+
+The Hemisphere digit is:
+1 = N lat, E long (Europe region 1 to 99 East longitude)
+2 = N lat, W long (North America to 99 west longitude)
+3 = N lat, E long (Asia, Pacific Rim > 100 East Longitude)
+4 = S lat, W long (South America to 99 W longitude)
+5 = S lat, E long (Africa to 99 E longitude)
+6 = N lat, W long (North America > 100 W longitude)
+7 = S lat, W long (South Pacific > 100 W longitude)
+8 = S lat, E long (Australia > 100 E longitude)
+
+MESSAGE EXAMPLE:
+ 
+16 digit DTMF     Packet
+----------------  ---------------------------------------
+C1234567AccccccD  CCCCCC>APxxxx,WIDE::ALL      :1234567
+ 
+Which is a message to ALL from cccccc containing a 7 digit
+message.  I have defined MANY pre-defined messages including
+ARRL radio grams etc...  so this is not much of a
+limitation...
+
+We can publish the list of messages when this gets implemented..
+
+Bob, Wb4APR

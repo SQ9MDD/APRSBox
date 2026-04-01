@@ -201,7 +201,6 @@
                 {% endif %}
                 <label
                     class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}"
-                    {% if section.slug == 'bulletins' and field.name == 'addressee' %}id="bulletins-addressee-row"{% endif %}
                     {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
                     {% if section.slug == 'bulletins' and field.name == 'group_name' %}id="bulletins-group-row"{% endif %}
                 >
@@ -271,8 +270,6 @@
                     <small class="muted">Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.</small>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
                     <small class="muted">Prepared scheduling only. Default is 30m.</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'addressee' %}
-                    <small class="muted">Direct APRS target, 1-9 chars: <code>A-Z</code>, <code>0-9</code> or <code>-</code>.</small>
                     {% elif section.slug == 'bulletins' and field.name == 'bulletin_code' %}
                     <small class="muted">Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.</small>
                     {% elif section.slug == 'bulletins' and field.name == 'group_name' %}
@@ -445,10 +442,8 @@
         const bulletinForm = document.getElementById("bulletins-form");
         if (bulletinForm) {
             const kindSelect = document.getElementById("bulletins-message-kind");
-            const addresseeRow = document.getElementById("bulletins-addressee-row");
             const codeRow = document.getElementById("bulletins-code-row");
             const groupRow = document.getElementById("bulletins-group-row");
-            const addresseeInput = bulletinForm.querySelector('input[name="addressee"]');
             const codeInput = bulletinForm.querySelector('input[name="bulletin_code"]');
             const groupInput = bulletinForm.querySelector('input[name="group_name"]');
             const textInput = document.getElementById("bulletins-message-text");
@@ -478,20 +473,14 @@
                     return;
                 }
                 const kind = kindSelect.value;
-                if (addresseeRow) {
-                    addresseeRow.hidden = kind !== "message";
-                }
                 if (codeRow) {
-                    codeRow.hidden = kind === "message";
+                    codeRow.hidden = false;
                 }
                 if (groupRow) {
                     groupRow.hidden = kind !== "group_bulletin";
                 }
-                if (addresseeInput) {
-                    addresseeInput.required = kind === "message";
-                }
                 if (codeInput) {
-                    codeInput.required = kind !== "message";
+                    codeInput.required = true;
                     codeInput.placeholder = kind === "announcement" ? "A" : "0";
                 }
                 if (groupInput) {
@@ -502,15 +491,6 @@
             if (kindSelect) {
                 kindSelect.addEventListener("change", syncBulletinFields);
                 syncBulletinFields();
-            }
-
-            if (addresseeInput) {
-                addresseeInput.addEventListener("input", () => {
-                    const filtered = addresseeInput.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 9);
-                    if (filtered !== addresseeInput.value) {
-                        addresseeInput.value = filtered;
-                    }
-                });
             }
 
             if (codeInput) {

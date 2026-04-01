@@ -1,0 +1,500 @@
+PROTOCOL.ALL 8.2.8     APRS ON-AIR PROTOCOLS and FORMATS         WB4APR
+-----------------------------------------------------------------------
+
+APRS and Mic-Encoder are Trademarks of Bob Bruninga
+ALL APRS README files are Copyrighted 1992 to 2008 by Bob Bruninga.
+See LICENSE.TXT for licensing APRS applications...
+
+Updated 14 Nov 08 to clarify Q byte in NRQ in DF report.
+
+PACKET TYPE:  All APRS transmissions use AX.25 UI frames  
+
+RETRIES:      Being an unconnected protocol, there are no "retries" but
+              all packets are redundantly transmitted on a decaying
+              algorithm so that new information is transmitted more
+              frequently than old data.but without acknowledgment.  
+              In general the period between each packet is on the order
+              of 1.5 to 2 times the previous period.  Down to a maximum
+              period called the "Net Cycle Time".  Other reasonable
+              timings are permitted.
+
+NET CYCLE:    There is an assumed maximum refresh period that all data
+              is at least transmitted once.  For special events, this
+              is 10 minutes.  For local area, 20 mins and for routine
+              wide area operations, this is 30 minutes.  APRS uses the
+              number of digipeaters in the UNPROTO path to determine
+              this maximum refresh period.  For none or one digi, it
+              is 10.  For 2 hops it is 20, and for 3 or more, it is 30.
+              Other forms of adjusting the NET-CYCLE TIME are permitted.
+
+UNPROTO TO ADDRESS:   APRS uses the TO address in several ways depending
+on the type of sending station as follows:
+
+   BEACONS - Many common beacon addresses are assumed:  AP, BEACON,
+         MAIL, QST, CQ, GPS, ALL, AIR, ID, DF, DRILL, DX, JAVA, MICE, QTH,
+         SKYWRN, SPACE, SPCL, SYM, TEST, TLMTRY, WX, ZIPLAN, APRS.  Other
+         TOCALLS are ignored to protect ALTNETS.  These are all wildcarded
+         to the right.  (actually I have these additional ones in my code,
+         but cannot right now remember what they were for:
+
+         AC,AN,MI,NE,NA,PH,RA,SA,SI,TC,TE,TR,WI
+
+   STAND-ALONE-TRACKER - These TNC's send to the call of GPSxyz where
+         the xyz is used to indicate the APRS ICON.  SPCxyz is used for
+         special events.  SYMxyz is also defined, but not in general
+         use.  All APRS software should capture these packets.
+
+   GRID-IN-TO -  For special events such as digipeating via the SAREX
+         or space station MIR, the stations gridsquare is sometimes
+         transmitted in the TOCALL to keep the packet as short as
+         possible.  In this case, the packet must begin with ]$[, where
+         $ is from the primary symbol table.  And the ] character tells
+         APRS to look for the grid square posit in the BText.
+
+   Mic-Encoder -  The Mic-E includes part of its position in the TOCALL.
+         Therefore these need to be decoded by everyone. 
+
+   APRS STATION -  APRS Stations use the TOCALL to indicate the intended
+         network, or group of recepients.  This can allow multiple groups
+         of stations to all share the same channel with minimum 
+         inerference.
+
+         ALLCALLS:  These are copied by everyone.  All APRS software  will 
+                    accept packets addressed to the generic BEACON calls
+                    listed above and will normally ignore all others.
+                    Notice that the TOCALLS used by the various versions of
+                    APRS fit the above list as APR817, APRSW, APRSM, APRSA4
+                    etc
+              
+                    All other TO addresses are ignored unless you set 
+                    CONTROLS-FILTERS-OTHER to ON.
+         VERSION:   APRS software should use the TOcall announcing the
+                    version number.  This takes advantage of these other
+                    wise unused bytes.  Since AP is wildcarded, the 
+                    following list of version identifiers is used:
+                    APRxxx APRSdos
+                    APMxxx MacAPRS
+                    APWxxx WinAPRS
+                    APKxxx Kenwood
+                    AP0xxx APRS+SA
+                    AP.... etc
+
+         SPECIAL:   This is for special events.  All APRS versions will 
+                    accept packets addressed to SPCL.  But stations 
+                    operating in SPECIAL mode will ONLY see other packets 
+                    addressed to SPCL.  This is so they will not be 
+                    cluttered by other traffic on the channel NOT involved 
+                    in their special event.
+              
+         ALTERNATE NETS:  Other stations can use other TO calls.  THey will 
+                    transmit to the ALTNET call and will receive ONLY packets
+                    to that same call.  These stations thus can operate on 
+                    the channel with other APRS, but will only see themselves.
+                    And will not be seen by others.
+
+            
+APRS FORMATS:  In the following APRS on-air formats, the abbreviations are 
+D for degrees (or DAY), M for minutes (Both lat/long and time), h for 
+hundredths (or Hours), N for North and W for West.  Base91 characters are
+the ASCII printable characters from ! to }.
+
+
+ICONS:  The APRS ICONs are identified by a two byte combination of a TABLE 
+character and a SYMBOL character.  There is a primary table, the alternate 
+table, and overlay characters.  See SYMBOLS.TXT. 
+
+TIME FORMATS:  APRS generally uses a military style DATE-TIME-GROUP 
+consisting of the two digit day and 4 digit hour and minute.  These can 
+be expressed in local and zulu time.  Recently only zulu formats are
+transmitted on the air.  In addition, a DATELESS format is also supported.
+
+     121234/ is local time 1234 on the 12th
+     121234z is zulu time 1234 on the 12th
+     123456h is hours minutes and seconds in zulu 12:34:56 zulu
+
+FORMAT CHARACTER:  The first character of any APRS packet is a format 
+identifier.  It determines the format of the remainder of the packet.
+
+THIRD PARTY FORMAT:  One special format character } allows any APRS
+packet to be carried or transmitted by any other station.  This is 
+what allows the both the ZIPLAN and IGATE messaging capability!  On 
+receipt of a 3rd party packet, the original header is dropped and the 
+packet is recursively parsed again, beginning at the {.  To show that 
+it has been carried by another station, the call of that station is 
+extracted from the as-received header and inserted  as a pseudo digi* 
+in the digi path.   Example:
+
+    W3XYZ>APRS,DIGI*:}W4ABC>APRS,WIDE:>121234zStatus
+
+will be processed as  W4ABC>APRS,WIDE,W3XYZ,DIGI*:>121234zStatus
+
+Notice how the "carrying station" W3XYZ is inserted as if it had been
+a digi in the path
+
+----
+----
+POSITION REPORT:  There are many POSITION formats as determined by the
+first format character.  There is one exception, and that is the !FIXED 
+format which may occur anywhere up to the 40th character position in the 
+packet.  This variability is to support X1J TNC digipeaters which have
+a string of un-modifyable text at the beginning.  All LAT/LONG formats
+are fixed field and use Degrees and Decimal minutes.  Any of the lesser
+significant decimal digits may be replaced with Spaces to indicate
+several orders of magnitude of inprecision.
+
+There are two subsets of posits.  THose with and without time stamps
+and those indicating stations that may or may not have message
+capability.  If a position begins with @ or = then APRS is running and the
+station is message capable.   If only a TNC is running, then a ! or a /
+indicates that there is no  APRS messaging capability on line.  In this
+case, the date-time means  the time that APRS was last running.  Here are
+the common formats currently in use:
+
+...!DDMM.hhN/DDDMM.hhW$...      Fixed format (digipeaters) no APRS
+   =DDMM.hhN/DDDMM.hhW$...      Fixed but is APRS message capable
+   /DDHHMMzDDMM.hhN/DDDMM.hhW$...   Stationary, time of last fix
+   @DDHHMMzDDMM.hhN/DDDMM.hhW$CSE/SPD/... Moving (with APRS)
+   @DDHHMMzDDMM.hhN/DDDMM.hhW\CSE/SPD/BRG/NRQ/....  DF report
+   [XXnnyy]....                  Grid Square
+   [XXnn]...                     Grid Square
+    /YYYYXXXX$csT                Compressed format which can be used
+                                 in place of LAT/LONG/cse/spd in all
+                                 formats. /$ are the ICON bytes and T
+                                 is a TYPE byte.  See YYYYNNNN.txt
+                                 
+   $GPRMC,...,...,...           Raw NMEA strings from stand-alone-trackers
+   $GPGGA,...,...,...
+   $GPGLL,...,...,...
+
+COURSE/SPEED:  The 7 bytes following the symbol character can be any of
+   the following additional formats:
+      
+      CSE/SPD - these are fixed field 3 bytes each
+      PHGabcd - Power, ant/height, Gain and Directivity
+      DFSxbcd - Omni DF report (Same as PHG, but x=sig str)
+      
+POWER-HEIGHT-GAIN:  This optional field replaces the CSE/SPD fields with a
+report of transmitter power, antenna height-above-average-terain and 
+antenna gain.  APRS uses this to plot radio range circles around all 
+stations.  The following details the format to be used in the BText of 
+a TNC dedicated as an APRS digipeater:
+
+    !DDMM.mmN/DDDMM.mmW#PHG5360/WIDE...(identifying comments)...
+      |         |      | | ||||  |_____ makes station show up green
+      |         |      | | ||||________ Omni (Direction of max gain)
+      |         |      | | |||_________ Ant gain in dB
+      |         |      | | ||__________ Height = log2(HAAT/10)
+     LAT      LONG     | | |___________ Power = SQR(P)
+                       | |_____________ Power-Height-Gain identifier *
+                       |_______________ # is symbol for digipeater
+
+     As you can see by the integers in the PHG string, there are only 10
+     possible values for each of these fields as follows:
+
+     DIGITS   0  1  2   3   4   5   6    7    8    9         Equation
+     -------------------------------------------------------------------
+     POWER    0, 1, 4,  9, 16, 25, 36,  49,  64,  81  watts  SQR(P)
+     HEIGHT  10,20,40, 80,160,320,640,1280,2560,5120  feet   LOG2(H/10)
+     GAIN     0, 1, 2,  3,  4,  5,  6,   7,   8,   9  dB
+     DIR   omni,45,90,135,180,225,270, 315, 360,   .  deg    (D/45)
+
+     The DIRECTIVITY field offsets the PHG circle by one third in the
+     indicated direction.  This means a front to back range of 2 to 1.
+     Most often this is used to indicate a favored direction or a null
+     even though an OMNI antenna is at the site.  Note that 0 means
+     OMNI and 8 means 360 or a NORTH offset.
+
+     HIGHTS are ABOVE-AVERAGE TERRAIN!  Not above ground or sea
+     level. ALso, since DOS version 8.0 the Height character may be any 
+     ascii character 0-9 and above.  This is so that higher heights for
+     aircraft or satelites may be incorportated.
+
+On receipt, the PHG values are converted to a usable radio range using
+the following algorithms:
+    
+     POWER = P^2
+     H = 10 as a default
+     H = ASCII(Hchar)-51   converts it to a decimal value
+     HAAT = 10*2^H
+     GAIN = 10^(G/10)      converts from DB to decimal
+     RANGE = SQR(2*H*SQR((P/10)*(GAIN/2)))
+
+PHG FOR MOBILES:  Due to fading and multipath on mobile signals which
+can average 6 to 10 dB and peak at 20 to 40 dB, the effective range of 
+packets for mobiles is about HALF the range of Fixed stations.
+Thus in APRS852 I reduced the PHG circles by 50% when using the MAPS-
+PLOTS-PHG command and you need to hit MAPS-PLOTS-FIXED to see the PHG 
+for fixed stations (like in all previous versions)
+
+
+OMNI-SIGNAL-STRENGTH DIRECTION FINDING REPORT:  APRS can localize jammers 
+by plotting the overlapping signal strength contours of all stations 
+hearing the signal.  This OMNI-DF format replaces the PHG format with DFS 
+to indicate DF Signal strength, and the transmitter power field is replaced 
+with the relative signal from 0 to 9.  The following beacon would
+represent a weak signal heard on an antenna with 3 dB gain at 40 feet:
+
+   @141923/3859.11N/07629.23W\DFS2230/comments
+
+   A signal of ZERO (0), is equally SIGNIFICANT beacuse APRS uses these 
+   0 signal reports to draw BLACK circles where the jammer is NOT!  
+   These BLACK circles are extremely valuable since you will get a lot 
+   more reports from stations that don't hear the jammer than from those 
+   that do.   This quickly eliminates a LOT of territory! 
+   
+WEATHER REPORT:  APRS uses the underline symbol character for WX reports.
+For these, the COURSE/SPEED field is used for the WIND and the remainder 
+of the comment line contains other weather items.  See WX.TXT 
+
+    @DDHHMM/DDMM.hhN/DDDMM.hhW_CSE/SPDgXXXtXXXrXXXpXXXPXXXhXXbXXXXXdU2k
+    r is in hundredths of an inch of rain in the LAST HOUR
+    p is in hundredths of an inch of rain in the LAST 24 HOURS
+    P is in hundredths of an inch of rain since midnight
+    s is INCHES of snow in the last 24 hours
+    b is in tenths of millibars
+    h is percent humidity (00=100%)
+    dU2k is Ultimeter 2000, /U5 is the 500 and /Dvs is Davis
+         The "d" means it is running DOS
+    Lxxx is luminosity in Watts per square meter 999 and below
+    lxxx is luminosity in Watts per square meter 1000 and above
+         L is inserted in place of one of the rain values.
+    
+OBJECTS:  OBJECT reports are identical to POSITs except that the
+posit is preceeded with a fixed nine character object name.  The semicolon
+is the FORMAT identifier and a * separates the name and the posit.  The
+position is time stamped in the usual manner.  The call of the station
+sending the object should be attached to the object.
+
+    ;OBJECT___*DDHHMMzDDMM.hhN/DDDMM.hhW$CSE/SPD/comments...
+
+ITEMS:  Items are the same as objects, except that the Format identifier
+is a ), there is no time stamp, and the item name is variable length from  
+3 to 9 bytes followed by the standard ! format posit.
+    
+    )ITEM!DDMM.hhN/DDDMM.hhW$...
+
+This is the same format as the .POS files in the .POS directory.
+
+REPLACEMENT OBJECT:  A fundamental precept in APRS is that any station
+may take over reporting responsibilty of an object by simply transmitting
+the object in a new location (or the same location).  The original station
+will cease transmitting that object when it sees an incoming same-named
+object from another station.  Names ARE case sensitive.   All receiving
+software must attach to the object the call of the sending station.
+
+KILLED OBJECT:  The station reporting an object may KILL the object from
+everyone elses screen by continuing to transmit it but with the * replaced
+with an underscore _.  The format is the same. 
+
+AREA OBJECTS:  Area objects can draw large shapes (BOX,CIRCLE,TRIANGLE
+and LINE) on the map with a size of from below a mile to 400 miles.
+The symbol character is L and the size and offset of the shape and
+its color is conveyed in the next 7 bytes normally used as the
+CSE/SPD field.  Including the symbol char, then this format is LTyy/Cxx.
+
+Where "l" is the area object symbol characetr (lower case L)
+      "T" is they type of area (line, circle, square, triangle)
+      "C" is the color (1 of 8 dos colors)
+      yy  is the Y axis offset in .01 degrees latitude squared
+      xx  is the X axis offset in .01 degrees longitude squared
+      {zzz is an optional width parameter in the comment text for
+           drawing lines of a given width.  This is useful for
+           weather watch areas such as 50 will draw a dotted
+           line +/- 50 miles on either side of the original line.
+
+The types are either filled in or not.
+ 0 circle     (5 is filled in)
+ 1 line       (6 is line in opposite quadrant)
+ 2 reserved   (7 reserved
+ 3 triangle   (8 is filled in)
+ 4 box        (9 is filled in)
+ 
+LINE OBJECTS:  The LINE object above can additionally draw "a line 
+X miles either side of the line" if the width of this box is defined
+in the comment text within braces: {120}.  This is for Weather watch
+boxes.
+
+SIGNPOST:  This special object will only appear on a map below the 8 mile
+scale.  It appears as a highway sign and will display up to a 3 digit
+value on the sign if it is included in the comment text within braces
+{30}.  The intention of this object is for displaying the speed of the 
+flow of traffic past a point or any other changable quantity suitable for
+a sign.
+
+
+STATUS PACKET:  These packets announce the stations current mission or 
+any other single line status to everyone.  Each station may transmit one
+and only one.  Only one is maintained on receipt.  These packets are time
+stamped so the sender knows when they were entered.
+
+    >DDHHMMzComments
+
+ALL OTHER PACKETS:  Any packet that does NOT meet any of the formats in
+this document are assumed to be a STATUS beacon and will show up as 
+status as long as no other properly formatted Status has been received.  
+TYpical TNC ID packets fall into this category.  Once a STATUS packet has
+been received it will not be overwritten by other non-status non-identified
+packets.  Mac/WIn/+SA may capture and list ID packets separately.
+
+APRS MESSAGES:  Station to station messages begin with a colon and a 9
+character addressee name padded with spaces to a total of nine characters
+followed by a colon:
+
+    :W3XYZ____:one line message text......{345 (the {345 is the line#)
+
+LINE NUMBERS:  Line numbers begin with the "{" character and may have 
+from one to 5 bytes in them.  Any printable ascii character may be used
+but short numerical bytes are preferred.  An ACK returns a copy of the 
+line number.
+
+MSG ACK:   An ACK is just a message with the letters ACK# where the # is 
+the message line number (following the { character at the end of the line).
+
+    :W3XYZ____:ack345
+
+If there is no message line number, then no ack should be sent.
+
+MESSAGE TYPES:  There are many types of messages:
+
+  MESSAGES TO/FROM YOU:  THese are to be displayed separately and forced
+  on the user whenever a new messages arrives.  Messages to any of your
+  SSID's should be captured as TO YOU, but only a match to your MYCALL 
+  should be acked.
+
+  MESSAGES BETWEEN OTHERS:  These messages are not to/from you and are
+  separately displayed as TRAFFIC on the APRSdos TRAFFIC page for example.
+
+  MESSAGE GROUPS:  You can specify special MESSAGE GROUPS to be calls 
+  that your station will also capture on your message page as if they 
+  had been addressed to you.  Receive them as TO YOU, but do not ACK.
+
+BULLETINS:   BULLETINs are simply messages to the call signs of BLN1, BLN2, 
+... BLN#.  They will never be acked, but all APRS stations will capture
+and sort them onto the special BULLETINS page.  Bulletins sent to BLN# will 
+decay to very long periods but bulletins sent to BLNx will decay down to 
+once every NetCycle time and stay at that rate.   Users must be alerted
+on arrival of a new BULLETIN.
+
+BULLETIN GROUPS:  Bulletins may be sent to Bulletin groups, such as BLN#GRP
+All stations will also copy these bulletins, but if a station selects
+a list of Bulletin Groups, then his station will IGNORE all other bulletin
+groups (while still receiving the general BLN# bulletins).  For example:
+
+     :BLN#WX___:This is a bulletin to the WX group
+
+Everyone will receive it.  But if a station is only interested in WX and
+nothing else, then he may set his BULLETIN GROUP to include WX.  As soon
+as his BULLETIN GROUP is non zero, then he will IGNORE all other Bulletin
+groups except those in his list. (He still gets all basic BLN#'s tho)
+
+DF REPORTS:  The DF report includes a NRQ field in addition to the
+position, course and speed of the vehicle plus the bearing line.
+ 
+     @DDHHMM.xxN/DDDMM.xxW\CSE/SPD/BRG/NRQ/DF report...
+
+     NRQ indicates the quality and range of the report.  The "N" 
+     byte is unique to the N7LUE DF unit interface.  If N is 0, 
+     then it means nothing.  Values from 1 to 8 give an indication 
+     of the number of hits per period relative to the length of the 
+     time period.  So 8 means 100% of all samples possible, got a hit.  
+     The N is only significant from the automatic DF units.  The byte
+     may be used to indicate a manual bearing report by entering a 9.
+
+     The range (R) indicates the approximate area of interest.  In 
+     APRSdos, this is automatically inserted by the sending station
+     by using the range-scale of the current map in use.  The R byte
+     is computed as 2^R so, for R=4 would be 16 miles.
+
+     The Q byte is QUALITY and is a relative measure of the degree
+     of unknown in the beam heading.  Although APRSdos displays this
+     as the degree-of-dottedness of the bearing line, it is best
+     interpreted as a BEAMWIDTH as follows:
+
+     9 = 1 degree wide
+     8 = 2 degree
+     7 = 4 degree
+     5 = 8 degree
+     4 = 16 degree
+     3 = 32 degree
+     2 = 64 degree
+     1 = 128 degree
+     0 = OMNI
+
+QUERIES:  THere are two types of APRS Queries.  One is general to all
+stations and the other is in a message format to a single station.  Queries
+always begin with a ?, are one-time transmissions (not scheduled for retry) 
+and should not be acked.  Similarly the responses to queries are one-time
+and should not be scheduled for repeated transmission and also should be
+send without line numbers so that they are not acked.  
+
+  ?APRS?                    Queries all stations (respond in 2 mins)
+  ?APRS?LLLLLL,OOOOOO,RRRR  Queries a radius around a LAT/LONG point
+                            If RRR is less than 8 then respond immediately
+  ?WX?                      Queries all WX stations
+  :W3ABC____:?APRS?         Queries just W3ABC  (his posit/status)
+  :W3ABC____:?APRSP         Queries for  W3ABC's Posit
+  :W3ABC____:?APRSS         Queries for  W3ABC's Status
+  :W3ABC____:?APRSM         Queries for  W3ABC's messages
+  :W3ABC____:?APRSO         Queries for  W3ABC's Objects
+  :W3ABC____:?APRSD         Queries for stations heard DIRECT by W3ABC
+  :W3ABC____:?APRSH W4XYZ   Queries to see if W3ABC has heard W4XYZ
+                            W3ABC sends back a packet with W4XYZ as an OBJ
+                            and sends back a message with the number of
+                            packets heard per hour from him.
+
+  W3ABC responds with his Posit, Status, Messages or Objects as appripriate.
+  For the APRSD he responds with a single MESSAGE back to the query 
+  station as follows:   Directs= N3ABC W4XYZ AB3GH N5QSO ...
+
+  In the case of the ?APRSH query, W3ABC sends back the POSIT of W4XYZ as
+  an OBJECT and sends back a single line message as follows:
+                        Hrd:  14  15  4  .  10  6  7  .
+  
+  Which are his Heard statistics per hour for the last 18 hours.
+
+APPENDIX:  This table gives a one line summary of all APRS protocols:
+
+   >.....................     Status packet
+   >DDHHMMz..............     Time stamped status packet
+   !DDMM.hhN/DDDMM.hhW$...    POSIT ( no APRS)
+   =DDMM.hhN/DDDMM.hhW$...    POSIT (APRS message capable)
+   /DDHHMM/DDMM.hhN/DDDMM.hhW$...   Time of last fix (No APRS)
+   @DDHHMM/DDMM.hhN/DDDMM.hhW$CSE/SPD/... Moving (with APRS)
+   @DDHHMM/DDMM.hhN/DDDMM.hhW\CSE/SPD/BRG/NRQ/....  DF report
+   [XXnnyy]....               Grid Square
+   [XXnn]...                  Grid Square
+   ]$[.....                   Grid-In-Tocall using symbol $
+   ./YYYYXXXX$csT             Compressed (Used in any !=/@ format)
+   $GPRMC,...,...,...         Raw NMEA strings from stand-alone-trackers
+   $GPGGA,...,...,...        
+   $GPGLL,...,...,...
+   'lllc/s$/.........         Mic-E no message capability
+   'lllc/s$/>........         Mic-E message capability
+   `lllc/s$/>........         Mic-E old posit
+   ;OBJECT___*DDHHMMzDDMM.hhN/DDDMM.hhW$CSE/SPD/comments...
+   +OBJECT___*DDHHMMzDDMM.hhN/DDDMM.hhW$CSE/SPD/comments...  dos Internal
+   -OBJECT___*DDHHMMzDDMM.hhN/DDDMM.hhW$CSE/SPD/comments...  Kill object
+   _OBJECT___*ditto  Internal by APRS DOS showing object was killed
+   ;AREAOBJ__*DDHHMMzDDMM.hhN/DDDMM.hhWlTyy/Cxx/comments...{width
+   )ITEM!DDMM.hhN/DDDMM.hhW$...  Similar to .POS file format
+   :ADDRESSEE:Message text ........{XXXXX    Up to 5 char line number
+   :ADDRESSEE:ackXXXXX                       Ack for same line number
+   :ADDRESSEE:Message text ........{MM}AA    Line# with REPLY ACK
+                                             ACKS previous msg# AA also
+   :BLN@     :Bulletin text long term        @ is serial line number
+   :BLN#     :Bulletin text short term       # is serial line number
+   :BLN#GROUP:Short or Long term GROUP Bltn
+   %BRG%Q                                    DF Bearing and Quality
+   *DWTRRRRrrrr    Ultimeter-II MPH? (I may have these reversed)
+   #DWTRRRRrrrr    Ultimeter-II KPH?
+   !!....,......   Ultimeter-2000
+   $ULTW........   Ultimeter-2000 Packet mode
+   ?APRS?.......   Many Query formats.  See above
+   <............   Reserved  (Mark?)
+   (............   Avail 
+   }packet......   3rd Party Packet
+   ^............   Not used?
+   \............   Not used?
+   &............   Not used?
+
+de WB4APR

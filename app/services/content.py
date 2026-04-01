@@ -1830,22 +1830,13 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
 
 def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
-    message_kind = str(payload.get("message_kind") or "message").strip().lower()
-    if message_kind not in {"message", "bulletin", "announcement", "group_bulletin"}:
-        raise ValueError("Type must be message, bulletin, announcement or group bulletin.")
+    message_kind = str(payload.get("message_kind") or "bulletin").strip().lower()
+    if message_kind not in {"bulletin", "announcement", "group_bulletin"}:
+        raise ValueError("Type must be bulletin, announcement or group bulletin.")
     normalized["message_kind"] = message_kind
 
-    addressee = str(payload.get("addressee") or "").strip().upper()
     bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()
     group_name = str(payload.get("group_name") or "").strip().upper()
-
-    if message_kind == "message":
-        if not addressee:
-            raise ValueError("Addressee is required for APRS messages.")
-        if not re.fullmatch(r"[A-Z0-9-]{1,9}", addressee):
-            raise ValueError("Addressee must be 1-9 characters: A-Z, 0-9 or -.")
-    else:
-        addressee = ""
 
     if message_kind in {"bulletin", "group_bulletin"}:
         if not re.fullmatch(r"[0-9]", bulletin_code):
@@ -1873,7 +1864,6 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not message_text:
         raise ValueError("Message text is required.")
 
-    normalized["addressee"] = addressee
     normalized["bulletin_code"] = bulletin_code
     normalized["group_name"] = group_name
     normalized["interval_minutes"] = interval_minutes
@@ -1939,11 +1929,10 @@ def _decorate_aprs_message_row(row: dict[str, Any]) -> dict[str, Any]:
     result = dict(row)
     result["target_display"] = resolve_message_addressee(result).rstrip()
     result["type_label"] = {
-        "message": "Message",
         "bulletin": "Bulletin",
         "announcement": "Announcement",
         "group_bulletin": "Group Bulletin",
-    }.get(str(result.get("message_kind") or ""), "Message")
+    }.get(str(result.get("message_kind") or ""), "Bulletin")
     result["raw_frame_preview"] = _build_aprs_message_preview(result)
     return result
 
@@ -1995,7 +1984,6 @@ def _build_aprs_message_preview(payload: dict[str, Any]) -> str:
         "callsign": station_settings.get("callsign"),
         "ssid": station_settings.get("ssid"),
         "message_kind": payload.get("message_kind"),
-        "addressee": payload.get("addressee"),
         "bulletin_code": payload.get("bulletin_code"),
         "group_name": payload.get("group_name"),
         "message_text": payload.get("message_text"),

@@ -1,0 +1,358 @@
+APRS.TXT          AUTOMATIC PACKET/POSITION REPORTING SYSTEM (APRS)
+===========================================================================
+Document version: 8.5.3 (10 year anniversary update)
+Document dated:   18 Sept 2002 (Previous version was 1 Mar 2000)
+Author(s):        Bob Bruninga, WB4APR@amsat.org
+---------------------------------------------------------------------------
+Home page:  www.aprs.org  or www.ew.usna.edu/~bruninga/aprs.html
+
+APRS is a real-time tactical digital communicatons protocol for exchanging
+information between a large number of stations covering a large (local)
+area.  As a multi-user data network, it is quite different from 
+conventional packet radio.
+
+APRS is different from regular packet in four ways.  First by the 
+integration of maps and other data displays to organize and display 
+data, second, by using a one-to-many protocol to update everyone in real 
+time, third, by using generic digipeating so that prior knowledge of the
+network is not required,  AND FORTH, since 1997, a worldwide transparent   
+internet backbone, linking everyone worldwide.  APRS turns packet radio 
+into a real-time tactical communications and display system for emergencies 
+and public service applications (and global communications).  Normal 
+packet radio is useful in passing bulk message traffic (Email) from point-
+to-point, but it does not do well at real time events where information 
+has a very short life time and needs to get to everyone quickly.
+
+APRS is a LOCAL RF network.  Although the Internet monitors APRS worldwide,
+this is not the primary objective.  But like all of our other radios, how 
+we use APRS in an emergency of special event is what drives the design of 
+the APRS protocol.  Although APRS is used 99% of the time over great 
+distances, and benign conditions, the protocol is designed to be optimized 
+for short distance real-time crisis operations on RF.
+
+APRS provides universal connectivity to all stations in the net by avoiding
+the complexity and limitations of a connected network.  It permits 
+any number of stations to exchange data just like voice users would on a 
+voice net.  Any station that has information to contribute simply sends
+it, and all stations receive it and log it.  Secondly, APRS recognizes 
+that one of the greatest real-time needs at any special event or emergency 
+is the tracking of key assets.  Where is the Event Leader?  Where are the 
+emergency vehicles?  Whats the Weather at various points in the County?  
+
+To answer these questions, APRS transmits and captures the location and 
+status of all stations.  It can be used over any 2-way radio system 
+including HAM, CB, Marine Band, etc.  See CB.txt,  Boats.txt, Aircraft.txt.
+
+APRS is on 144.39 throughout the North American Continent.  Other
+countries may use other frequencies.  Check locally.
+
+Included on the original APRSdos distribution disk (and this web site), are 
+several README text files on applications of APRS such as for weather nets, 
+direction finding, plotting satellite contacts, and monitoring DX clusters.  
+You must read at least the README.1st, DEMOS.txt, NewNotes.txt and HELP.txt 
+files.  APRS uses UI frame broadcasts and map displays.  There are three 
+major display subsystems and a number of other minor displays as follows:
+
+     LIST-STATUS - This display maintains a list of the latest UI status 
+packet from each station.  In effect, this is a multi-station one-line
+broadcast status system.  On a DX cluster freq, this display accumulates a 
+list of all users and what was their latest command to the cluster.
+
+     POSITIONS - This display maintains a separate list of the positions of
+each station often including a brief comment.  They can also contain DF 
+and or WX info.  
+
+     MAPS - Maps from 300 yards up to 4000 miles can be displayed.  All 
+other APRS stations will be plotted.  Stations reporting a course and 
+speed are dead-reckoned to their present position.  Overlay databases of  
+the locations of all APRS DIGIpeaters, National WX Service sites and
+even HAM stores are built in.  You can zoom in to any point on the globe!
+
+     MESSAGES -  In addition to the one-line STATUS packets, two-way
+messages with acknowledgment are supported.  All incoming messages alert
+the user on arrival and are held on the MESSAGE screen until Killed.
+
+     BULLETINS - This screen maintains a list of active BULLETINS.  These
+are important multi-line BULLETINS addressed to everyone.
+
+     TRAFFIC - Shows the last 42 messages monitored between other stations 
+on the net.  The MAPS-PLOTS-TRAFFIC command will connect these stations 
+with lines on the map.
+
+     LIST-LOG - This display is a time sequenced log of every new
+status or message received.  This is in contrast to the LATEST display 
+which only shows the most recent status packet per station.  
+
+     HEARD LOG - Displays the total number of packets per station per hour.  
+These statistics show the connectivity of the network over varying paths, 
+such as HF, or to see when stations enter and leave the net.
+
+     DIGIPEATER LIST - This display displays the raw packet header so that
+APRS users can see what digipeater paths are being used by other stations.
+The proper use of digipeaters is important in an APRS network.  An asterix
+in the first column means that you hear the other station direct without a
+digipeater!  Change your UNPROTO path to NONE to chat with those stations. 
+
+     ANALYZE - This display is a great tool for monitoring the APRS local
+network and giving selected displays on numerous statistics abotu the local
+RF network.  Just digipeaters, Just mobiles, Just WX, selection by software
+version, object type, or a display of the number of hops used by each 
+station and digi.
+
+STATION TRACKING.  Although APRS automatically tracks mobile GPS/LORAN
+equipped stations, it also tracks perfectly well with manual reports or 
+GridSquares.  APRS will use a GridSquare in brackets at the beginning of 
+any packet.  Additionally, any station can place an object on his
+map including himself and within seconds that object appears on all other
+station displays.  In the example of a parade, as each checkpoint with 
+packet comes on line, its position is instantly displayed to all in the 
+net. Whenever a station moves, he just updates his position on his map and 
+that movement is transmitted to all other stations.  To track other event 
+assets, only one packet operator needs to monitor voice traffic to hear 
+where things are.  As he maintains the positions and movements of all 
+assets on his screen, all other displays running APRS software display 
+the same displays.  There is also a Tracking command on the P display that 
+will cause APRS to keep the map display always centered on a selected 
+object.
+
+GRID SQUARES:  Because of the ambiguity of a grid-square position report, 
+APRS will not display a 4 or 6 digit gridsquare report on map ranges 
+less than 128 and 8 miles respectively.  Stations reported in the same 
+grid square are randomly offset to avoid cluttering of callsigns on top of 
+each other.  Grid Squares are brief; six characters vice seventeen.  APRS
+uses this to advantage in GRID-SQUARE mode, for Meteor Scatter, SAREX, 
+or the PACSATS. 
+
+ACARS: If your TNC has an ACARS modem for receiving Airline digital packets
+on 131.55 MHz, then the optional APRSair.EXE will plot the positions of all
+aircraft in range (usually up to about 200 miles out)..  See ACARS.txt
+
+USING APRS ON ALL DIGITAL CHANNELS:  Use APRS posit packets on all 
+frequencies as a general purpose network topology display on ANY packet 
+frequency!  See the PROTOCOL.txt for details on APRS formats and see 
+FRQCOORD.txt for suggestions for using APRS as a freq-coord display tool.
+
+SATELLITES:  Use the special version APRStk.exe to enjoy APRS and also
+see all the satellites when they come in view.  At least 5 satellties
+permit APRS digipeating and 7 can be received by your Kenwood Radios
+and auto-tuned by APRStk for each pass!  APRS is ideal for the short but
+congested satellite pass. APRS only requires one successful packet for
+everyone to see each successful station compared to the typical *CONNECTED*
+SAREX mode which requires 5 successful packets.  Thus APRS reduces channel
+loading, while capitalizing on the most fascinating aspect of the amateur
+radio hobby, and that is the display on a map of the location of those
+stations.  See SPACE.txt.
+
+FOX HUNTING OR DIRECTION FINDING:  APRS is an excellent tool for plotting 
+the location of a hidden transmitter, balloon, or interfering signal.  
+APRS has several powerful DF tools:
+
+  1) Plots the positions and Bearing lines of all participating stations
+     whether mobile or fixed
+  2) Plots the overlaping signal strength contrours for OMNI-DF reports.
+     This techinque even plots big BLACK circles for NULL reports so
+     that you see all the areas where the FOX is NOT!  This OMNI technique
+     is very powerful and locate a jammer to a neighborhood with NO
+     beams or special equipment.
+  3) Fade-Circle Search and Rescue technique for single station signal
+     strength location using only a OMNI antenna
+  4) Optional automatic DF interface to Doppler DF units for automatic
+     plotting of DF bearings.
+
+For more DF info, see the DF.txt file or the "dfing.html" on this site.
+
+WEATHER STATION REPORTING:  APRS position reports can also include the wind
+speed and direction, as well as other important weather conditions.  APRS
+supports a serial interface option to the ULTIMETER and DAVIS home weather 
+stations to do this automatically.  All weather stations show up as a blue 
+circle, with a line indicating wind speed and direction.  The APRS NEXT 
+command will successively highlight each WX station in turn, for WX at a 
+glance.  APRS also has a database of the locations of most NWS sites and 
+can crunch a file of NWS hourly WX conditions for display.  Finally, APRS 
+users can set WX alarms and be alerted when WX conditions exceed those 
+values.  See WX.txt.
+
+DX CLUSTERS:  APRS an ideal tool for the DX cluster user.  Not only does 
+he get to see all DX spots on the map, but by operating in the monitor only 
+mode, he has reduced the overall packet load on the DX cluster.  This is 
+a benefit to everyone on the channel.  Also the APRS monitoring station 
+will see the SPOT as soon as the first station gets it, rather than later 
+on down the list.  See DXclustr.txt.
+
+INTERNET:  APRSdos no longer supports the APRS-Internet access, since it
+is now just too big.  And APRS is a local RF network anyway for most 
+local practical applications.
+
+Other APRS clients will attempt to display the 30,000 or os other APRS
+stations worldwide, though this can be flitered as needed to cut the 
+clutter.  The real beauty of APRS-Internet system is that is gives long
+distance connectivity automatically to APRS MESSAGES.  All packets 
+everywhere go IN to the APRS-IS, and if needed, any station-to-station
+messages go out the other end on RF to another user.
+
+FREQUENCY COORDINATION:  Every packet asset on every frequency should 
+include a position or at least gridsquare in all routine BEACONS.  This
+alows APRS to be used to monitor network topography on any frequency.
+Thus, APRS makes an excellent tool for frequency coordination.  In fact,
+javAPRS is now used by TAPR to maintain the entire digital data base for
+North America.
+
+PROTOCOL - Although APRS redundantly transmits data, a fundamental precept 
+is that old data is less important than new data.  All APRS packets are 
+repeated at an ever decreasing rate.  Each new packet is transmitted 
+immediately, then 10 seconds later.  After every transmission, the period 
+is doubled.  After 20 minutes only six packets have been transmitted.  From 
+then on the rate remains at 10 minutes for local 1-hop nets and every 30
+minutes for stations using 2 or more hops.  All transmissions can be toggled  
+off using the CONTROLS-XMT command, or forced at any time with the X key.  
+See PROTOCOL.txt
+
+COMMANDS:   The keyboard is always active.  Almost every key does something
+or brings up additional menus.  (APRS processing of packets on the air is
+continuous EXCEPT while waiting for the user response to a prompt.  These
+prompts are surrounded with a yellow).  Commands fall into 3 categories:
+
+APRSdos SCREENS:
+
+  Space Key           - Display map and all station locations
+  L - LIST            - Menu for DX, LOG, TELEMETRY, RESOURCES screens
+  P - Positions       - Displays a list of all stations reporting positions
+  B - BULLETINS       - Keeps a list of all BULLETINS heard
+  R - Read Messages   - Displays all of your in and out messages
+  T - Traffic         - Displays the last 23 lines of messages between stns
+  D - Digis Used      - Displays the digipeater paths being used by others
+  H - Heard Log       - Displays packets per hour per station for 24 hours
+  V - VIEW            - Displays all packets on a scrolling screen
+
+SUB-MENUS:
+
+  F1- Help            - Select from a MENU of HELP commands
+  C - Controls        - Display a one line control panel
+  F - FILES Menu      - For Loading/Saving files, or Replaying tracks
+  I - Input commands  - Used to input posits, DF info or add OBJects to map
+  O - OPERATIONS      - Several commands for normal operations
+  M - MAP Functions   - Functions dealing with maps
+  W - Weather Menu    - Displays the number of beacons per hour per station
+
+MESSAGES:
+
+  R - READ            - Displays your incomming and outgoing messages
+  S - Send            - Sends traffic to a station
+  E - Erase           - Erases outgoing traffic lines
+  K - Kill            - Kills incomming traffic lines
+  T - Traffic         - Displays message traffic between other stations
+
+
+DEMONSTRATION FILE:  To see how APRS looks in our area, FILES-LOAD the file 
+named WASHDC.BK.  To see the tracking of the GPS equiped Army/Navy game 
+football run, FILES-LOAD FBALL.BK and do a FILES-REPLAY of the file named 
+FBALL93.HST.  To see the Marine Corps marathon, load MARATHON.BK and replay 
+the MARTHON.HST file.  See Details in README.1st.
+
+SELECTING STATIONS:  The cursor can be moved to select any station on the map
+using the arrow keys.  When near any station symbol, the ENTER key will
+"select" the station.  Detail information on that station will be displayed
+on the bottom of the screen.  Alternatively, use the + and - keys to step
+through each station one by one. or the <> to step through objects on the  
+current map scale only.  You may also use the cursor on the P or L-list to 
+select a station or object.  Once sselected, several functions may be
+performed:
+
+     ALL    - Displays a list of all beacons from that station.
+     EDIT   - Change the position packet text
+     MOVE   - Move the station by moving the cursor
+     DELETE - Delete the station.
+     FOLLOW - Force this object to FOLLOW a course (APRSdr only)
+     UPLINK - Toggle on/off transmiting the object to others
+     ALARM  - Sets an alarm if that station ever moves.
+     TRACK  - Always center display on selected station as it moves
+     SPECIAL- Mark stations for selective display with the JUST command
+
+The select function also works on the LATEST and POSITION display lists by
+using the up/down arrow keys. 
+
+REPLAY:  Replay past track histories either from memory or from a file.  
+Tracks are kept in on-line memory until 150 have been saved, and then are 
+saved to a HISTORY file.  During REPLAY, use the following commands:
+
+      C    - CALLsigns on/off
+      HOME - Homes map to presently displayed station
+      SPACE- Redraws the present map to remove track clutter
+      F    - Faster.  Speeds up playback
+      G    - Overlays the Civil Air Patrol Search and Rescue grids
+      M    - Medium replay speed
+      P    - Pause
+      S    - Slow.  Slows down playback
+      Q    - Quit playback.
+      PgUp/PgDn - Zoom in and out
+
+
+FILES:  All APRS files are retained in five different sub-directories of
+  BAKS, LOGS, HSTS, SYSTEM, MAPLISTS and README.  There are several 
+  other files used by the system:
+
+  MAPLIST.USA  - The file that lists all map files to be used by APRS.  
+		 These MAPLISTS are all in the MAPLISTS directory.  Change 
+		 to different MAPLISTS using the MAPS-CHANGE command.
+  BACKUP  .BK  - Automatic backup of system every time program is quit.  It
+		 can be loaded quickly using the FILES-LOAD-B command.
+		 Or Automatically by invoking APRSXX/B at the DOS prompt.
+  MAPFIX40.EXE - A powerful program for fixing, drawing, and modifying maps!
+  SYSTEM (DIR) - Contains the following required files
+     IintTAPR.TNC - Setup parameters for your TNC (InitAEA.TNC for AEA)
+     RESTORE.TNC  - TNC commands used to restore your TNC after quitting APRS.
+     CAPGRIDS.DAT - A file of the CAP Sectional Aeronautical charts
+     DXCALLS.DAT  - Callsign prefix-to-LAT/LONG database for DX spots
+     XXXX.SYS     - Numerous brief files for APRS internal screens
+  OTHER FILES:
+     METAR.TXT    - A sample file used to load National Weather Service data
+     NWSPOSNS.POS - A file of the locations of all NWS sites
+
+
+CHESSBOARD:  To demonstrate the flexibility of APRS in reporting the 
+movement of objects in a net, there is a 2 mile chessboard in the center
+of the Gulf of Mexico.  Two APRS stations can place pieces on the board
+with the INPUT-ADD command or can move existing pieces using the Cursor,
+SELECT and INSert commands!  An easy way to begin a game, is to load the
+CHESS.BK file which already has all 32 pieces saved.  By selecting the 
+alt-SETUP-OTHER-GAME command APRS not only keeps track of the move numbers
+but also changes the packet address from APRS to GAME, so that others on 
+frequency will not see their PLists cluttered with the pieces as they are 
+moved. Also, GAME mode only UPLINKS the LATEST move, to minimize QRM. 
+You may consider going to an unused frequency so as not to clutter an 
+active APRS net, however.  
+
+    If you want to Kibitz a game in progress, also load the CHESS.BK file 
+and use the CONTROLS-FILTERS-OTHER command so that your APRS will monitor 
+OTHER packets on the channel so you will see the GAME packets.  If you 
+missed the beginning of the game, ask one of the players to use his P
+list to SELECT and UPLINK any piece locations you missed.
+
+OTHER SPECIALIZED VERSIONS OF APRSdos:
+
+APRSmax.exe  This program removes some rare features from the full up
+APRSdos to make more room for more stations.  This version will capture
+and display over 250 stations compared to the original 100.  When either
+system is full, the oldest station is deleted to make room for each new
+station heard.
+
+APRSdr.EXE:  For tracking known OBJECTS that move at KNOWN speeds over
+a KNOWN course, such as the runners in a Marathon, use APRSdr.  This
+program will Dead Reckon objects along the course, so that you can 
+reasonably track the progress of the event, without having to strap
+a GPS/TNC and RADIO to the head of the lead runner.  All GPS mobiles
+will also be tracked.  This is a trememdous visual aid for NET CONTROL.
+
+APRSwx.exe:  This version minimizes serial port overflow if you are
+running an interface to an Ultimeter 2000 WX station.
+
+APRSmin.exe:  This version runs in less space, about 450K instead of 550.
+
+APRSair.exe:  For tracking commercial aircraft using the ACARS system.
+
+APRSnet.exe:  For tracking all packets on the INTERNET www.aprs.net:10151
+
+APRStk.exe:   Includes Satellite tracking and Kenwood radio tuning
+
+APRSdata.exe: A local tiny-web-page server for all mobile kenwoods
+

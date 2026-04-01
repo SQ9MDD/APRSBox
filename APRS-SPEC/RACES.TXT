@@ -1,0 +1,281 @@
+RACES.TXT (was DR.TXT)       DEAD RECKONING in APRS (and APRSdr.exe)
+===========================================================================
+Document version: 8.3.1
+Document dated:   19 Feb 99
+Author(s):        Bob Bruninga, WB4APR <bruninga@nadn.navy.mil>
+ABSTRACT
+DR.TXT            Dead reckoning in APRS, and how to track planned events
+                  (marathons) without a GPS receiver using APRSdr.exe
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+     APRS attempts to dead reckon all moving objects to their estimated 
+current positions based on elapsed time since the last position report.  
+Not only is this automatic tool very valuable, an OPTIONAL version of
+APRS has been written to permit objects to follow a given course 
+by dead reckoning, instead of just a straight line.  For planned 
+events, such as marathons and 10K runs, this allows APRS to track 
+the lead and tail runners without even using GPS!  Here are the important
+concepts:
+
+1) APRS accounts for speeds in Knots.  6 Knots = 7 MPH.  Also, each
+MINUTE of LATITUDE is = 1 NAUTICAL MILE.  This is handy...
+
+2) APRS only DR's to the nearest minute.  
+
+3) You PC clock must be within a minute of real time, or even fresh 
+POSITS will be DR'ed on receipt.  Some new APRS users mistakenly turn 
+off DR in order to solve this problem of DRed posits.  But what they 
+SHOULD DO INSTEAD is simply sync their PC clock to real time!  Use the 
+alt-SETUP-GPS-TIME-sync command to sync your clock on the NEXT receipt 
+of a raw GPS position report from your GPS or someone else on 
+frequency.  This command only works on MINUTES, so you must at least 
+be in the right hour or time zone...
+
+4) APRS stops DRing at 24 hours.  Even on HF, there is good propogation 
+at least once every 24 hour period.
+
+5) DR'ed positions are only updated on your map under the following 
+conditions:
+
+   a) Each time the map is re-drawn
+   b) Each time a POSIT is received.  For autotrackers, this
+      is meaningless, since each report is a NEW position, but
+      for manually entered reports, each new copy of an old
+      report is assumed to mean that the station is on the same
+      course and speed, so it is DR'ed.
+   c) For your own posit, each time APRS transmits your posit.
+
+
+********   PATH-FOLLOWING AUTO-DR OPERATIONS in APRSDR.EXE:  *********
+
+New in APRSdr vintage 831:  FOLLOW objects are now in CYAN to distinguish
+them from the regular uplinked objects which are yellow.  ALso, fixed bug
+in the "C" command.
+
+APRSdr was derived from APRS820.exe to facilitate tracking known events 
+along known courses, such as marathons, and other public service events.  
+This is a very powerful technique which can provide the same measure of 
+tracking but without attaching a GPS to the main runners!  Considering  
+the errors inherrent in GPS of 100 yards, the Dead Reckoning technique
+can be at least as accurate.  The concept is simple, the position of the 
+lead runner of a marathon, the lead handicapped, the lead woman, and 
+tail-end-charley are all completely predictible!  WHen the starting gun 
+fires, simply place all objects at the starting line and give them a 
+speed of 9,10,8 and 6 knots respectively.  If you mark these objects for 
+path following, they will then proceed down the course at the given
+speeds, making all turns as needed.  Then throughout the next severl 
+hours, you listen for voice reports and update these moving positions as 
+needed using the HOOK-INSert key command.
+
+DEMONSTRATION:  Run APRSdr, and zoom into the Washington DC map at 3853 
+and 07703 to a range of 1 or 2 miles.  INPUT-ADD an object anywhere on 
+the purple course, and give it a SPEED of say 9 kts.  Mark it for 
+FOLLOWing either with an "F" instead of the usual "Y" or call up the 
+P-LIST, hook the object and select FOLLOW.  Go back to the map and watch 
+the object move once a minute.  The user of APRSdr must be registered
+to be able to uplink more than one object.
+ 
+PROCESSING:  To the left of the map screen, a trouble shooting aid 
+will appear as follows:
+
+OBJ= LEADER
+NMP= 835     Total number of map points in the file
+End= 586     End point of purple course
+1st= 583     First or current point to begin search for course
+Leg= 583     Current point (LEG) found on the course
+New= 584     New leg if past endpoint
+
+This display aid displays the last object processed.  So, If 
+several are on the same schedule, then only the last will be seen.
+
+HOW IT WORKS:    First, when APRSdr loads the current map, it will 
+remember the location of the beginning of the LAST purple line in 
+the file.  Presumably this is the race course added to an APRS map.  
+When you place an object on the map, the course will be scanned 
+starting at this point, looking for a line segment near your object.  
+It does this via the rectangles formed around the diagonal line 
+segment.  This means that 45 degree lines will have a big nearly 
+square rectangle, while vertical and horizontal lines will be defined 
+by vanishingly narrow search ranges.  TO solve this problem for 
+vertical and horizontal lines, APRS adds and subtracts 1 form both 
+ends to broaden the rectangle.  Once it finds a matching segment, 
+it remembers that segment for each different object.  Look at the 
+following 4 segment race course.
+
+                                      2
+      - - - - - - - - - - - - - - - - *----------------
+      |                           *   |   *           |
+      |                       *       |       *       |
+      |                   *           |           *   |
+      |               *               | - - - - - - - * 3
+      |           *                   |      |       *|
+      |       *                       |      |      * |
+      |   *                           |      |     *  |
+    1 * - - - - - - - - - - - - - - - -      |    *   |
+   Start                                     |   *    |
+                                             |  *     |
+   Finish                                    | *      |
+       - - - - - - - - - - - - - - - - - - - |*       |
+    5 *  *  *  *  *  *  *  *  *  *  *  *  *  * - - - -
+       - - - - - - - - - - - - - - - - - - - | 4
+
+
+    Knowing the segment and its angle, once every N minutes (set
+via the alt-SETUP-POSRATE command) APRS will DR the object along
+the same direction as the given line segment and transmit the new
+position.  Its new position will be compared to the edges of the
+rectangle at the end point of that line segment.  If the
+predicted position is beyond the edge of the rectangle, then it
+will be moved to that end point.  When this is done, the segment
+number for that object is incremented by one so that on the next
+DR, the direction of the next line sement will be used.  This
+process continues throughout the event.  
+
+    Whenever the end point of the complete course is reached, the 
+velocity is set to zero so that no further DR occurs.  Actually 
+truncating each leg at the end point would result in lost time on 
+each leg.  This is corrected by having the comparison made to plus 
+AND minus 50% of the dead reckoned distance from the end point.  
+This way, sometimes the object is moved AHEAD to the end point, and 
+some times it is moved BACK to the end point.  In the long run, these 
+two effects should average out.
+
+     At any time, if the dead reckoned object gets more than a minute
+ahead or behind schedule, you may HOOK the object and move the cursor to
+the newest reported position and hit INSert key to update its position.  
+When you hit the INSert key, the remembered segment number is zeroed 
+and a scan is performed again to find the nearest leg of the course.  
+This works fine except for the case where the course intersects itself, 
+backtracks, or re-traces some segments.  In these instances, the 
+location of the object may be within several overlapping segment 
+rectangles.  APRS solves this problem by asking for which of the
+conflicting segments, the 1st, 2nd, 3rd... should be used.  The default 
+(ENTER) response will assume the 1st.
+
+     When you move an object with the HOOK-INSert method, you
+don't need to enter the COURSE, it will be derived by the path-
+following routine (if found).  If the course of the object as
+shown on the map does NOT align itself with the course, then
+the course was NOT found for some reason...  SImilarly, there is no
+need to make an entry for the comments and time unless desired.
+
+Objects that APRSdr is DRing every minute will show in CYAN.  Any
+other of your uplinked Objects will be the usual Yellow.  This
+distinction should make it easy to see when one of your objects looses
+the FOLLOW distinction... so you can get him back on track...
+
+
+CAUTIONS:  This is a complex process and should be monitored
+closely.  The operator should be completely familiar with this
+process and the following cautions. 
+
+1) Since Dead Reckoning is only done on a minute by minute basis,
+the OBJ-UPLINK period (using alt-SETUP-POSRATE) should not be 
+set less than 60 seconds.
+
+2) This one minute increment causes a secondary consideration on 
+the length of each leg on a course.  If the legs are shorter than 
+one minute, then errors will build up since it still takes a minimum 
+of one minute increment to go from the starting point of a segment 
+to the end point.   This may appear unavoidable in convoluted city
+runs, but see MAKING RACE MAPS below for workarounds.
+
+3) When you HOOK-INSert-MOVE to correct the position of an object, 
+the PATH-FOLLOWING algorithm only derives the DIRECTION from the 
+nearest line segment, it does not correct for any off-course position
+errors.  In other words, if you place the object 200 yards to the 
+right of the path, then it will be dead-reckoned with approximately 
+that same offset until it gets to the end point..  
+
+3) In order to resolve the rectangles around line segments, draw
+the maps with enough resolution (pixels per degree) so that even
+the shortest line segments are more than just one pixel between
+end points.
+
+4)  Since this entire scenario is based on the course drawn in
+purple on the current map display, it would not work if you ever
+leave the given map.  For this reason, as soon as you mark a
+station for FOLLOWING, the present map is LOCKED.  Obviously,
+before you FIRST hook an OBJECT on the P list, and mark if for
+FOLLOWING, you MUST have displayed the MAP at least once.  If you
+UNLOCK the map, the objects will be UN-MARKED for FOLLOWING.
+
+4*  APRSdr will not let you zoom below 1 mile.  This is because the DR
+algorithm fails due to map scale problems below that range.
+
+5)  Commonly used objects for these events are JOGGER, WHEEL-CHAIR,
+CIRCLES or BOXES.  By overlaying Letters/Numerals on the CIRCLES or
+BOXES, you can keep the map less cluttered by turning off callsigns
+but still determine which object is which.  In most races, however,
+only the LEAD, TAIL and PACK are tracked with maybe  a WOMAN or
+HDKPD as well.
+
+MAKING RACE MAPS:
+
+To add your race course to an APRS map, simply load up the best APRS map
+for that area into MAPFIX.  Next use the cursor and EDIT-ADD command 
+to add the race course.  Here are the important concepts:
+
+1) You must use the color 13 and the entire race must be in one 
+continuous feature.  The purple COURSE does not have to be the last 
+FEATURE in a map file, but only the LAST such PURPLE feature.  This 
+means after laying out your course using MAPFIX, you may still add 
+other features without messing up the DR function.
+
+2) Be sure the map has enough resolution so that your smallest leg of
+the course is still several X/Y counts between endpoints.  If not
+CHANGE-ORIGIN to increase the number of PIX-PER-DEG and then you may 
+need to TASK-TRIM to cut away the outer edges to stay in the yellow
+box. THEN RESAVE THE MAP UNDER A NEW NAME and add it to your MAPLIST.
+
+3) Legs of the course should be no smaller than one minute in length.
+For human runners, this is about 1/4 mile.  If your course has lots
+of such short or shorter segments through the city, then here is what
+I do:
+
+   a)  Make a map of the EXACT race course including each little turn
+   and squiggle.  This will be the map distributed and used by ALL APRS
+   operators *except* for the APRSdr station.  It will look nice.
+
+   b)  Make a second one but eliminate all the little squigles and
+   let the race course just approximate the straight line through
+   complex areas.  This map will be used by APRSdr.  Remember, the
+   OBJECTS you transmit are only going to show on everyone elses
+   screens as discrete points about 1 minute apart.  (Even with GPS
+   they WILL NOT always be on the exact road).  Also, remember that
+   APRSdr only predicts the new posit by its course, not by its
+   distance from the purple line, so you may still place a runner
+   exactly on a road and he will be DR'ed along that road even if
+   the purple line is quite a ways away.  The purple line only GUIDES
+   the DIRECTION of movement, not the exact path.  Of course, at end
+   points of each leg, the object is brough back to that end point
+   before launching on the next leg.
+
+   c)  Enter both the DETAIL map and the APRSdr map identically in the
+   MAPLIST, but with the DETAIL map second.  THus, it will always come
+   up routinely for all users.  BUT the APRSdr operator may still 
+   select it by zooming to the area of interest and then when the 
+   DETAIL map comes up, then hit MAPS-SHOW-ALTmap.  THis will force
+   APRSdr to load the ALTernate map, in this case, the APRSdr one for
+   the same area which has fewer short line segments and is best for
+   the APRSdr program.  Next hit MAPS-LOCK to force APRSdr to USE only
+   that desired map.
+
+FOllowing these steps allow you to have both a public *detail* map and
+one that will work more accurately for APRSdr which smooths out the
+course to fewer, longer legs which will be more accurate.
+
+REDRAW:  For unattended displays dont forget to set alt-S-OTHER-REDRAW
+to redraw the screen frequently.  Probably set it to about the same one
+minute rate as you set the alt-S-POSRATE.
+
+SPECIAL MODE:  ALso, you can set alt-S-MODES-SPECIAL if you want nothing
+else to appear on your screen except the Special Event stations.  SPECIAL
+mode transmits all packets to SPCL and receives ONLY other stations
+addressing their packets to the same address.   GPS trackers using the
+tocalls of GPSxyz will still be tracked in SPECIAL mode.
+
+VALIDATION:
+
+APRSDR.exe must be registered to dead reackon more than one object. 

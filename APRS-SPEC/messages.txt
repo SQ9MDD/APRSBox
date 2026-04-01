@@ -1,0 +1,47 @@
+APRS MESSAGE ENTRY RESTRICTIONS                             25 July 2003
+------------------------------------------------------------------------
+                                                                  WB4APR
+
+APRS messages are the only packet in the protocol that are not outward-
+bound only packets.  They have an additional layer of protocol that re-
+quires ACKS.  And it is well known, that ACKS are much more unreliable
+than forward bound packets.  THus single message lines are delivered with
+the same forward reliability of all other APRS packets, but the second
+line and subsequent lines are STUCK until an ACK eventually gets back.
+
+APRS messages are one-liner's.  Users must understand this.
+
+APRS clinet software should FORCE the sender to consider the consequences
+of using APRS to send messages that are longer than one line.  They MUST
+understand the impact of each line on the network and how their message 
+will appear on receipt.  TO this end, the following is recommended when
+ever a user sends an APRS "message"...
+
+1) Message Lines are limited to 67 characters (45 for D7, 64 for D700)
+
+2) If multi-line dialog boxes are used for text entry, nothing should be
+send until the entire message text is completely entered, analyzed and 
+confirmed.
+ 
+3) Message size: if more than 3 lines are entered used, then post a 
+warning box about the inefficienicies of APRS and require the
+sender to confirm his intent.
+ 
+4) Conciseness:  If two lines are used, then if the second line is less 
+than 20% of the first, then ALERT the user to the inefficiencies involved 
+and require the sender to reword his message or to confirm his intent.
+ 
+5) TH-D7:  If the message is going to a D7, then display HOW IT WILL 
+LOOK ON RECEIPT on the two-page four line 12x12x12x9 display and require 
+the sender to confirm his intent.
+ 
+6) TM-D700:  If the message is going to a D700, then display HOW IT WILL 
+LOOK ON RECEIPT on the 3 line 22x22x20 character display and require the
+sender to confirm his intent.
+ 
+If authors implemented these checks, then messages would be handled much
+more repliably in the APRS network.  There is also an entire treatse on
+how ACKS should be implemented in client software.  Please see the 
+paper http://www.ew.usna.edu/~bruninga/aprs/acks.html
+
+de WB4APR, Bob

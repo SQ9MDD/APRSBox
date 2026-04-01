@@ -1,0 +1,107 @@
+APRS SSID Recommendations                                  6 Feb 2012
+---------------------------------------------------------------------
+
+Updated 6 Feb  2012 to clarify the title of this document to be
+                    SSID RECOMMENDATIONS not to imply any kind of 
+                    decoding "standard".  That original NMEA
+                    decodign standard is covered in the original spec
+Updated 9 June 2010 for more flexibility using 1,2,3,4 and 15
+Revised 2 June 2004 to add -10, -11, 12 and -15
+
+SSID's have seen two different uses in APRS.  Initially as an ICON
+indicator back in the early 1990's.  But that is obsolete for over
+a decade.  Now SSID's are used as an informal way of indicating one 
+of several different typical APRS applications.
+
+Since many small displays for the handheld and mobile operator show
+nearby APRS station callsigns that flash up on the screen, it is nice
+to have some idea of what type of station or activity might be 
+involved simply from the callsign SSID without having to push 
+buttons, search lists, or look at maps to find out more about them.  
+
+SSID RECOMMENDATIONS:  It is very convenient to other mobile 
+operators or others looking at callsigns flashing by, to be able to 
+recognize some common applications at a glance.  Here are the 
+recommendations for the 16 possible SSID's (the limit of 16 comes 
+from the 4 bits available in the AX.25 protocol.  Note, The SSID of 
+zero is dropped by most display applications.  So a callsign with no 
+SSID has an SSID of 0.
+
+-0 Your primary station usually fixed and message capable
+-1 generic additional station, digi, mobile, wx, etc
+-2 generic additional station, digi, mobile, wx, etc
+-3 generic additional station, digi, mobile, wx, etc
+-4 generic additional station, digi, mobile, wx, etc
+-5 Other networks (Dstar, Iphones, Androids, Blackberry's etc)
+-6 Special activity, Satellite ops, camping or 6 meters, etc
+-7 walkie talkies, HT's or other human portable
+-8 boats, sailboats, RV's or second main mobile
+-9 Primary Mobile (usually message capable)
+-10 internet, Igates, echolink, winlink, AVRS, APRN, etc
+-11 balloons, aircraft, spacecraft, etc
+-12 APRStt, DTMF, RFID, devices, one-way trackers*, etc
+-13 Weather stations
+-14 Truckers or generally full time drivers
+-15 generic additional station, digi, mobile, wx, etc
+
+* One-way trackers should best use the -12 one-way SSID indicator
+because the -9's usually mean a ham in full APRS communication
+both message and voice.  The -9's can be contacted by APRS message
+or by Voice on his frequency included in his beacon, or on Voice
+Alert if he is in simplex range.  The -12's are just moving Icons
+on the map and since they have no 2 way communication for ham radio
+they are not generally of routine interest to other operators.
+
+OBJECTS or INTERNET:  In addition, Objects or internet generated 
+stations can have any SSID, not just the original 16, since 
+Objects are not constrained by the AX.25 header and can have a 
+9 byte name.  Here are some common OBJECT/Internet SSID's:
+
+-63 for PSK63 HF stations
+-tt for APRS TouchTone users (DTMF)
+-ID for RFID
+-A through -Z for Dstar
+
+SSID BACKGROUND:  Originally, in 1992, we had to use the SSID as 
+a way of indicating the type of station that transmitted a raw 
+NMEA-0183 GPS sting.  But in the mid 1990's we began indicating 
+any of the nearly 200 APRS symbols by the setting of the AX.25 
+TOCALL of "GPSxyz".  The "xyz" characters define the symbol from 
+the standard APRS symbol table www.aprs.org/symbols.html.
+
+The GPSxyz concept worked so well, the original SSID associations 
+are no longer a required part of the spec.  But the conventions
+that evolved from those early SSID's are still encouraged as 
+noted above, for easy recognition of station type or activity by 
+when only the callsign is seen.
+
+The -1, -2, -3, -4 and -15 are kept generic so that anyone with
+as many as 6 digipeaters, or 6 trackers or 6 weather stations or
+6 vehicles can still have unique SSID's for each of his stations.
+Beyond 6, people will just have to use any SSID that suits their
+fancy.  In some areas there might be 15 digipeaters all under
+one guy's call!
+
+SSID USAGE:  The SSID's also might give a hint as to how someone 
+is getting into APRS whether via satellite, a one-way tracker, a 
+mobile, an HT or even via DTMF or an RFID device or whether he is 
+doing something special.
+
+For example, if you are doing something special, change your 
+SSID to -6 to alert others to your excitement, or to make the
+track-history begin and end on site, and not be tied to all 
+your other -9 travels.  Or use -6 SSID for a packet sent 
+via the ISS or APRS satellite or for a 6 meter test so the
+successful packet is preserved and not overwritten by the same
+radio the next time you use it not via the ISS on the 144.39 
+national channel.  By using separate SSID's the WEB data bases 
+will keep statistics and data separate from when you are working 
+normally on other bands with other SSID's.
+
+So stick to the suggestions above for the obvious applications 
+where you can.  Of course these are not rigid.  If you have 
+more than 6 digipeaters, use any SSID you want.  These are only 
+guidelines to hint at a station's possible application when all  
+you can see easily is the callsign on a screen or in a list....
+
+de WB4APR, Bob

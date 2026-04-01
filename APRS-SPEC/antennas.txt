@@ -1,0 +1,59 @@
+APRS BASE STATION ANTENNA REQUIREMENTS                       22 Mar 09
+----------------------------------------------------------------------
+
+One thing that many people overlook both in their Home station and in 
+Igates is the value of NOT using an omni antenna at their base station 
+if they want to get maximum decoding from all digis in the area.
+
+It is counter intuitive, but if your home station or Igate can hear 
+two or more digis, then you do NOT want to have an omni antenna that 
+can hear them all equally.  If you can only decode two digis direct, 
+then set your antenna on one side of your house so that it hears one 
+of those digis at least 10 dB stronger than the other digi.
+
+If you can decode 3, then set your antenna such that it hears the best 
+one 10 dB better than the second one, and 20 dB better than the third 
+one.  You usually have plenty of dB to play with.
+
+You do this, because in a collision (happens all the time in APRS 
+by design), you want ONE copy to always be 100% decoded and not 
+destroyed by the other digis.  Yet, you still hear all three digis if 
+they do not collide.  Remember, the design of APRS digis is that they 
+are all supposed to key up on the same packet at the SAME time to 
+minimize channel loading.  If you have not taken this fundamental 
+antenna arrangement, and hear 2 or more digis within a few dB of each 
+other then you are missing a LOT of packets!
+
+You can tell if you are seeing collisions, by watching the S meter and 
+your TNC.  First, by ear, you can usually hear them as jumbled audio.
+If you see strong RF signals and do NOT deccode, then you are hearing
+collisions and losing most of your packets due to collisions!
+
+You should certainly fix this problem by taking the necessary effort to 
+assure this anti-collision arrangement of your antenna.  Remember, 
+HIGHEST and BEST is not the optimum for APRS.  APRS is a network with 
+a contention based delivery system.  Set up  your antenna to match that 
+network characteristic and you will double or triple your station 
+performance.
+
+This may mean an antenna below the roof line, or on a specific side of 
+your tower, or a small beam, or any combination.  Or just sticking up 
+a 39" reflector rod somewhere within a foot of your existing antenna 
+to change the pattern a bit..
+
+All it takes is 10 dB difference, and that is not much at RF.  Think 
+of it as 2 "S" units..
+
+If your 2 or 3 digis all "pin your S meter" so you cannot see the 
+difference, then simply temporarily insert an attenuator so you can 
+get ALL the levels down into the range of  your "S" meter.  Then 
+assess how the 2 or 3 digis compare.  Make your antenna adjustments 
+to get the 2 "S" unit difference between all of them... Then when 
+you are satisfied, remove the atennuator and you are all set.
+
+This is Ham radio.  We work in RF.
+RF is not plug-n-play...
+
+Good luck.
+
+Bob, WB4APR

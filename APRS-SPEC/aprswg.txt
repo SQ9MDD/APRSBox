@@ -1,0 +1,13 @@
+APRS Working Group Membership            June 2004
+--------------------------------------------------
+
+John Ackerman,     TAPR and Adminsitrative Chair
+Bob Bruninga,      Technical Chair, Author APRSdos
+Stand Horzepa,     Secretary
+Keith Sproul,      Author MacAPRS
+Mark Sproul,       Author WinAPRS
+Brent Hilderbrand, Author APRS+SA
+Mike Musick,       Author Pocket APRS
+Steve Dimse,       Author FINDU.COM (resigned)
+Roger Barker,      Author UIview
+Bill Diaz,         Author AFilter

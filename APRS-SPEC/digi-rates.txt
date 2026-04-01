@@ -1,0 +1,138 @@
+DIGIPEATER IDENTIFICATION (POSIT and POSIT COMMENT) PLANNING        WB4APR
+--------------------------------------------------------------------------
+
+Updated 27 Aug 2008
+
+Before the New-N Paradigm, we had too many digis beaconing too often too
+far and inefficiently.  And most used the HID packet which is useless on 
+APRS and just sixtuples QRM.
+
+The New-N Paradigm fixed all that (www.aprs.org/fix14439.html) by 
+recommending digipeater settings that will assure not only fully legal 
+operation, but also quick local reaction times, regional coverage, and yet 
+lighten the load on the network significantly.  The idea is for the DIGI 
+to make itself known locally every 10 minutes (direct) and less often 
+further out.  This assures that new arrivals or someone just 
+turning on their radio will be updated to all working local assets within 
+10 minutes, yet not add too many packets elsewhere.
+
+This is important for the mission of APRS as a come-as-you-are real time
+responsive system.  The network should support the convergence of lots of 
+mobile and portable operators arriving in an area under stress who have no
+local knowledge of the system.  THey expect to be updated in 10 minutes 
+from arrival.    To those 24/7 fixed stations that just monitor APRS in its
+static benign daily condition, these rates may appear excessive, but 
+remember, 24/7 inactivity is NOT the mission of APRS...
+
+HID OFF:  First turn the TNC HID function to OFF.  This ID packet is not 
+an APRS format and uses the same path as the UNPROTO and goes out every 
+10 minutes if on.  This, plus a bad UNPROTO path of 3 hops generates 
+almost 100 HID packets per hour per digi in the area.  HID must be turned  
+off, because by default the TNC has it on.
+
+REDUCING DIGI BEACON QRM:  Further, The New-N paradigm optimized the 
+beacon rate as noted above.  The sugestions below can have a 3 to 6 
+fold reduction in DIGI beacons while still meeting the goals of APRS and 
+the local ID  requirement.
+
+DIGI BEACON RATE SYSTEM FOR NEW n-N PARADIGM:
+
+Every 10 minutes a local direct posit
+Every 30 minutes a 1 hop area posit
+Every 60 minutes a 2 hop regional posit
+
+KPC-3+ settings:
+ HID OFF
+ UNPROTO APN383    <== no via for direct BTexts announcing local info
+ BEACON EVERY 10   <== but ONLY for direct BTexts with local info
+ BLT 1    EVERY 00:30:00 START 00:00:00
+ BLT 2    EVERY 00:30:00 START 00:10:00
+ BLT 3    EVERY 01:00:00 START 00:20:00
+ BLT 4    EVERY 01:00:00 START 00:50:00
+ LTP 1    APN383 
+ LTP 2    APN383 
+ LTP 3    APN383 VIA WIDE2-1
+ LTP 4    APN383 VIA WIDE2-2    <==equivalent to a user path of WIDE3-3>
+
+The below figure shows the timing in 10 minute blocks of the number of 
+hops the position packet will take.  A direct Local user will hear a 
+packet every 10 minutes, but those out 1 hop will only hear one every 
+30 minutes and those out 2 hops will only hear one every hour.  The 
+numbers below show the WIDEn-N packets as they count down and arrive in 
+each area.  A "0" means the packet is direct and will go no farther..  
+
+
+LOC     0 0 1 0 0 2 0 0 1 0 0 2 0 0 1 0 0 2 0 0 1 0 0 2 0 0 1 0 0 2 0 0 
+1-HOP       0     1     0     1     0     1     0     1     0     1    
+2-HOP             0           0           0           0           0      
+
+
+*** ALTERNATE FOR SPARSE N-N AREAS WHERE USERS MAY BE USING LONGER PATHS:
+
+EVERY  10 minutes a local direct Posit
+Every  20 minutes a 1 hop Posit
+Every  40 minutes a 2 hop Posit
+Every 160 minutes a 3 hop posit 
+
+KPC-3+ settings:
+ HID OFF
+ UNPROTO APN383    <== no via for direct BTexts announcing local info
+ BEACON EVERY 10   <== but ONLY for direct BTexts with local info
+ BLT 1    EVERY 00:20:00 START 00:00:00
+ BLT 2    EVERY 00:40:00 START 00:10:00
+ BLT 3    EVERY 01:20:00 START 00:30:00
+ BLT 4    EVERY 02:40:00 START 01:10:00
+ LTP 1    APN383 
+ LTP 2    APN383 VIA WIDE2-1
+ LTP 3    APN383 VIA WIDE2-2    
+ LTP 4    APN383 VIA WIDE3-3    
+
+The below figure shows the timing in 10 minute blocks how the WIDEn-N 
+packets will count down and arrive in each area.  A "0" means the 
+packet is direct and will go no further..   
+ 
+LOCAL 0 1 0 2 0 1 0 3 0 1 0 2 0 1 0 . 0 1 0 2 0 1 0 3 0 1 0 2 0 1 0 . 0 1
+1-HOP   0   1   0   2   0   1   0       0   1   0   2   0   1   0       0
+2-HOP       0       1       0               0       1       0
+3-HOP               0                               0
+
+
+*** RECOMMENDED FOR UIDIGI ROMS THAT ONLY HAVE 3 PATHS:  (rumor has 
+it that the offset system in the UIDIG ROM is not working correctly 
+and so this proposal doesnt work.  We are waiting for someone to come 
+up with the optimum work-around...  Here was the idea:
+
+#1 DIRECT       every 30 mins starting at 10
+#2 VIA WIDE     every 30 mins starting at 20
+#3 VIA WIDE2-2  every 60 mins starting at  0
+
+That will get you a local packet every 10 mins, a WIDE every 30, 
+and a WIDE2-2 every hour on the hour.  The only problem is that
+once every hour on the half hour, you wont get one.   But 5 out 
+of 6 ain't bad, since the rest of it works so well.  And if you are
+a local sysop for more than one, and keep their clocks reasonably
+close, then #3 on half the digis you can make "at 30" and the
+other one "at 0" so that the hour-one from one digi comes out
+when the other digi is missing one... etc...
+
+
+LTEXTS SHOULD BE IDENTICAL:
+
+Please remember that the LTexts 1 through LT 4 must have identical 
+positions and position comment text.  This is beacuse, by definition, 
+an APRS station (or this digi) can only have one and only one position
+on line at any time.  Thus if one tries to be creative by letting the 
+digi comment field contain a rolling bulletinboard of useful text, this
+appears to all user softwares as a "CHANGED" position report and so the
+logging is triggered to record this "change" every time.  Thus, these 
+digis could consume over 148 lines per day in everyone's LOG files.
+
+So, be sure to keep the LText's identical.
+
+And REMEMBER the goal throughout North America is to move all WIDEn-N
+digipeating to the UITRACE parameter so that ALL WIDEn-N packets will
+be traced for better network management.  This leaves UIFLOOD available
+for SSn-N's which even at 7-7 only go so far and can support state or
+section wide events.
+
+de WB4APR, Bob

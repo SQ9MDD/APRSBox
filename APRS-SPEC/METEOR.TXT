@@ -1,0 +1,204 @@
+METEOR.TXT        APRS METEOR SCATTER
+===========================================================================
+Document dated:   5 Aug 2010.  Previous was 18 July 99
+Author(s):        Bob Bruninga, WB4APR 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+See also www.aprs.org/APRS-docs/LEONIDS.TXT
+This update (Aug 2010) adds the idea for individual montioring of 144.39
+
+Meteors constantly bombard the atmosphere leaving numerous ionized trails.
+Athough individual trails are random, there is a long term continuum to
+provide almost continuous data throughput of around 100 baud average over
+ranges of 500 to 1000 miles.  This is usually done by two stations
+operating full duplex on separate frequencies with beam antennas pointing
+to the same area of the sky, and running the highest practical power
+levels (100% transmit duty cycle).  The optimum frequency seems to be
+around 40 MHz, making the 10 meter and 6 meter bands the most favorable.
+Though 2 meters also works..  Usually data is transmitted at high power
+and data rates 4800 or 9600 baud so that the packet lengths are very short.  
+On average a few get through every few minutes.
+
+Can Meteor scatter work on 2 meters?  Yes and no.  K1HTV and W0RPK completed
+the first packet QSO between Maryland and Iowa during a meteor shower back
+in 1984.  Running very high power, and it still took 2.5 hours to complete
+the contact.  My APRS station has been on the APRS 2 meter frequency
+24 hours a day for 6 years, along with hundreds of other stations across
+the country.  In all that time I have seen only two random packets that
+could be attributed to Meteor reflection during meteor showers.  This is
+due to using an OMNI antenna and the constant QRM on the channel.
+
+HOWEVER, using APRS during the 1995 Persieds, 18 stations with beams
+saw packets over 1000 mile paths on 145.79.  And again during the Leonids
+in 1998, 37 stations proved that APRS works well for capturing MS packets.
+Since 1998, we have the advantage that ALL normal APRS activity has moved
+to 144.39, thus leaving 145.79 available for DEDICATED METEORSCATTER WORK!
+!!! Though the space station now uses 145.800 and so the 10 KHz separation
+is insufficient to prevent QRM !!!  In 1999 Leonids, a
+simplex frequency proposed by W2EV of 147.585 was used.
+
+There are TWO things we can to with APRS and METEOR SCATTER.  The first
+is to play with it on 2 meters during the very predictable Meteor SHOWERS
+that happen a few times a year.  The second is to begin building a 6
+meter MS  network.  APRS is an ideal tool for generating interesting but
+SHORT packets and for displaying and recording them.
+
+
+METEOR SHOWER EVENTS ON TWO METERS:
+
+There are two approaches to 2 meters.  1) Operate in a very high rate
+MS mode with lots of participants (like we did back in the 1990's).  Or
+2) just operate as an individual MONITORING 144.39 for DX MS packets
+coming in from hundreds of miles away during a meteor shower.  The latter
+depends on no one but yourself.  The former is harder and harder to get
+people motivated to get away from their internet addiction and just do
+something...
+
+APRS ROUTINE METEOR SCATTER MONITORING APPROACH:
+
+So as an INDIVIDUAL... Here is what I would do...
+
+1) See if you can find a place with weak 144.39 signals.
+
+2) Such as down in a valley somewhere where surrounding city APRS
+traffic is hard to hear but you can still see the sky down to 
+about 10 degrees in a favored direction towards a really BIG APRS
+activity area about 500 miles to 800 miles away.  If targeting a
+distant city, keep your beam low (to minimize local QRM) but
+point it up about 10 to 20 degrees in the favored direction. 
+(Actually, tiliting it is not needed at all... But the point is
+to keep the antenna itself LOW below the horizon to avoid local
+packets.)
+
+Run your APRS station on 144.39 all night.
+
+In the morning, look at what packets you caprured, looking
+carefully at the PATH.  If you heard them direct and they are
+over 200 miles or so away, then it was most likely via MS (or
+tropo...).
+
+And you did not have to drum up any other players,  You let the
+10,000 other signals on the air be your test signals...
+
+APRS METEOR SCATTER MODE:
+
+This mode is designed for getting a lot of people to run APRS all
+night (days work too) operating on a DEDICATED separate frequency
+during a meteor shower event.  APRSdos has a MS mode to improve 
+the probabilities of seeing APRS packets during a Meteor Shower 
+(MS).  In APRSdos use the alt-S-FORMATS-MSCATTER command:
+
+  1) Your grid square posit is placed as the first word in your 
+     STATUS text in order to get the shortest possible packet:
+
+     W3XYZ>APRS:>GG##gg$... comment^HP...
+
+     Where ">" makes it an APRS STATUS packet
+     The first word is a Grid Square
+     $ is the APRS Symbol or ICON
+     COMMENT can be any length
+     ^HP encodes your beam heading & power according to the following:
+              P = SqrRoot(P/10): 2=40, 3=90, 5=250, 9=910
+              H = heading /10:   2=20, 9=90, A=100, Z=350
+
+  2) your normal digipeater path is removed
+  4) CONTROLS-FILTER-LIMIT is set to ignore all but DIRECT packets
+  5) CONTROLS-OTHER is set to capture OTHER packets (not just APRS)
+  6) The country is divided into four regions and ops in each region
+     transmit randomly on the same 15 second sycle.  This 
+     improves the chances that stations 500 to 1000 miles away will 
+     be LISTENING when a DX packet is being transmitted.
+  7) When your station transmits, it will send from 10 to 20 copies 
+     of your packet (.25 secs each, or about 3 seconds total).  Or 
+     a full 15 seconds of packets if you choose 100%.
+  8) Your TNC is placed in FULL DUPLEX mode so multiple local TNC's
+     will transmit at the same time, instead of collision avoidance.
+  9) The objective is to see POSITS and record HEARD logs.  There is 
+     NO enhancement given to other APRS packets (ie, messages).
+
+In order for this to work optimally, everyone must be synchronized to
+within a few seconds of WWV!  APRS will let the Northeast transmit from
+00 to 15, then the Southeast to 30, then the Southwest to 45 and then
+the Northwest to 00.  The dividing lines are 39 degrees latitude and
+96 degrees longitude.  Most Meteor showers only peak for a few days,
+so, although this mode will generate a LOT of local QRM on 145.79, it
+wont last long!
+
+TWO WAY CONTACTS:  Two-ways are really only expected on 6 meters, but here
+is the procedure suggested by W0RPK and implemented in APRSdos:
+
+   1)  When you see a MS packet from another station, use the INPUT-STATUS
+   command to enter an Snn signal report.  Send Snn/HISCALL where nn is
+   the number of packets copied from that station.
+
+   2)  WHen you see an Snn report from another station, send back his
+   report with an R on the end:   SnnR/HISCALL
+
+   3)  WHen you see an SnnR from another station, send back SnnR73/HISCALL
+
+   4)  WHen you see SnnR73 from the other station, then you have one
+   for the record books.
+
+In all of these exchanges, the number nn will probably increment as the
+number of successfull packets accumulate.  In MScat mode, APRS must always
+have one of the standard APRS addresses in the TO call such as CQ, QST,
+ALL, etc, so you have to communicate via the comment field in the format
+above.
+
+DURING A METEOR SHOWER PLEASE DO THE FOLLOWING:
+
+1) Turn off HF GATEWAYS. (no longer needed since MS will be on 145.79)
+2) Set your UNPROTO PATH TO NONE, nothing, nadda, zip, zero
+3) Use MAXIMUM POWER and coordinate your BEAM headings not to overlap
+   the beam headings of other transmitting stations in your area
+4) Be sure that at least one station in your area posts a BULLETIN
+   advising everyone of the MS EVENT and to NOT use digipeaters.
+5) Check your screen daily for MS posits.  Especially in the morning.
+   Look at the D-LIST to be sure it was heard direct.
+6) Only the MAP, P-list and HEARD log will be useful.  The L-LIST does
+   not normally update on POSITS, and a MS packet with a GDSQ in the
+   address, is a POSIT.  It will NOT show up on the L-LIST or A-LIST.
+
+
+BUILDING A METEOR SCATTER NETWORK ON 6 METERS:
+
+To make this work as a meaningful system, we need to operate at 100 
+watts or so, using 9600 baud packets.  This is actually easy to do:
+
+1) It is easy to find 100W surplus highway-patrol radios for about $50
+2) The Kantronics 9612 TNC has both the 1200 and 9600 baud modems that
+   can operate on both 145.79 for normal APRS, and 9600 baud on 6m for
+   MScat.  Transmitting normal APRS packets at the normal timings,
+   however, will almost certainly not be seen.
+3) The best way to transmit is by using any 9600 baud TNC and loading
+   the grid square into the UNPROTO TO call, and placing the TNC into
+   CONVERSE mode.  Then periodically, a series of 10 carriage returns
+   are sent to the TNC to force the generation of 10 minimal length
+   position reports.
+
+On 6 meters, the objective of the network is still only to send and 
+receive position reports.  Remember that MS is MORE reliable than the 
+ionosphere and HF.  It will be a good band for reporting the position 
+of distant mobiles (who can afford to run 100W on a 20% or so duty cycle!)
+
+THINGS TO DO!  We need to get a NATIONWIDE 6 meter APRS tracking 
+frequency AND A SEPARATE 6 meter Meteor Scatter frequency.   Here is 
+the existing band plan in the Washington DC/Baltimore area:
+
+   50.62  APRS network (3 digis in the Baltimore/Wash area)
+   50.64
+   50.66
+   50.68
+   50.70  OLD RTTY FREQ
+   50.72
+   50.74
+   50.76
+   50.78  
+   50.80  Lower band edge for remote control
+
+I recommend we choose a frequency FAR from the radio control OPS...
+I suggest 50.62 MHz, unless someone comes up with a better one.
+ALthough we have a local 50.62 APRS tracking network, the activity
+is so low, we WELCOME MS activity during meteor showers...
+
+Bob, WB4APR

@@ -1,0 +1,36 @@
+AREA OBJECT NOTES (APRS 1.0)                                     Dec 1999
+-------------------------------------------------------------------------
+                                                                   WB4APR
+
+Here are some notes about area objects as written in the spec.  These 
+notes were derived from comments by Curt Mills while attempting to follow
+the spec:
+
+* Ellipses haven't been implemented in any software yet...
+
+* Triangles are always isosceles triangles, oriented vertically...
+  and the points of reference are the top APEX and the lower right corner.
+
+* Circles are defined by a square box referenced by the upper left corner
+  and the center.
+
+* Lines are referenced to the upper end.
+
+The Spec is WRONG about how the LAT/LONG of the object is derived.
+The last paragraph on the bottom of page 60 SHOULD SAY:
+
+"The 'offset reference' position of the object is the upper left corner
+of the object and the offsets are the distance from the lower right
+corner (or center of a circle) back to this "offset reference" position.
+(An exception is the special case of a type-6 line which is drawn down
+and to the left)."
+
+As written, the spec implies that the LAT/LONG of the offset reference
+position is actually what goes in the packet, but in fact, it is the
+lower reference point that is the actual transmitted lat/long of the
+object.
+
+* The Formula for sizing is wrong in spec.  Should be: 
+offset_in_degrees = (offset_in_packet^2) / 1500 
+
+de WB4APR, Bob

@@ -1,0 +1,354 @@
+WX.TXT         USING APRS IN WEATHER AND SKYWARN APPLICATIONS
+===================================================================
+Document version: 8.3.5 dated 10 Mar 1999                    WB4APR
+Updated           18 Aug 2010
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New in APRSdos 809  Now supports COUNTY WX Warnings.  
+New in APRSdos 796  Supports HC/TS winds on the DOT symbol 
+New in 793  *****  All new WX formats not Backward compatible *****
+            WX-GETmetar can load METAR data from a file into P-LIST
+New in 78b  File-Print will log new data to a printer and on the 
+            P-LIST, Just-Print-WX will print a file or page of all 
+            WX data. Fixes receipt of remote Ultimeter WX data...
+
+OVERVIEW:  APRS is an ideal tool for reporting weather conditions 
+via packet.  APRSdos and most other clients will accept and transmit 
+serial data from the PEET Bros ULTIMETER or DAVIS home weather
+stations.  You can even mount an ULTIMETER remotely with only a TNC 
+and Radio to report and plot conditions.   APRS is idealy suited for 
+SKYWARN with the following features:
+
+ MAP DISPLAY - Shows the location of all reporting stations and WX 
+     conditions and DOZENS of other WX symbols or objects...
+
+ WX SYMBOLS - There are dozens of WX symbols such as TStorms, Hail,
+     Tornados, etc.  They  will automatically move if given a 
+     course and speed.
+
+ WX WARNINGS - You can mark large areas with either rectangles, 
+     circles, triangles, or lines using the OBJECTS-AREA symbols.  
+     New in 809, Whole counties will change color based on WX 
+     Warnings transmitted by specially formatted APRS Messages.  
+     See COUNTY WARNINGS below.
+
+ WEATHER ONLY - The JUST-WX command for a temporary display of only 
+     WX stations on the map or P-List.  Use the WX-JUST-WX-ALWAYS 
+     command to lock this feature on and off.  The N-NEXT command 
+     cycles through each WX station in turn with a circle on the map 
+     and displays its wx conditions at the top of the screen.
+
+ TROPICAL STORM WINDS - a special format causes APRS to color 
+     huricanes red, tropical storms yellow and depressions blue. It 
+     will also show the radius of the winds with colored circles 
+     offset in the direction of the danger quadrant proportional to 
+     the storm speed of advance.
+
+     DDHHMM/LAT/LONG@CSE/SPD/TS/www^GGG/ppp>RRR&rrr
+
+     Where @   is the symbol for a Huricane
+           /   is the symbol for a predicted posit
+           CSE is direction of movement
+           SPD is speed of movement
+           TS, HC and TD are types of storm
+           www is sustained wind speed
+           GGG is peak wind gusts
+           ppp is central pressure
+           RRR is radius of Hurrican winds
+           rrr is radius of TS winds
+
+ DEAD RECKONING -  APRS dead-reckons moving objects, so the symbol 
+ on the map is presented where it SHOULD be, NOT where it was when 
+ first reported.  After two hours with no update, the symbol fades 
+ to dark gray.
+
+ NWS STATION PLOTTING - Hit MAPS-OVERLAYS-NWS to see all NWS Sites
+
+ METAR BULLETINS - Suggested by KD4UYR in FLorida, this feature 
+     parses NWS METAR bulletins and plots the WX data on the map.
+     (removed from APRSdos in 837)
+
+ WX-DISPLAY - You may display WX conditions instead of callsigns on 
+     maps:
+           WX-DISP-TIME shows the TIME
+           WX-DISP-TEMP shows Temperature
+           WX-DISP-BARO SHows Baro and rain
+           WX-DISP-WIND Shows winds
+
+ OPERATOR MESSAGES - APRS messages are ideal for Skywarn traffic.
+     With FILE-PRINT enabled, these messages and WX reports can be 
+     scrolled to the printer.
+
+ STATUS - In addition to weather data included in position reports,
+     the station STATUS packet is also available for additional info. 
+     
+ BULLETINS -  Bulletins are an alerting mechanism for all stations.
+
+ VOICE REPORTS -  Even non-packet voice stations making a weather 
+     report can be placed on the map (like an object) by another 
+     APRS packet operator.  His station will appear in purple showing 
+     that his report has been placed there by another station.
+
+
+COUNTY WARNINGS - This was pioneered by the Sprouls and causes APRS 
+to color in counties based on NWS Warnings in effect.  Hit the usual
+label zoom keys ] and [ to see the county name if needed.  The
+formats for these warnings are a message sent to the APRS address of
+NWS-XXXXX as shown below.  These messages accumulate on the APRSdos
+TRAFFIC page where they drive the coloring algorithm.
+
+    NWS-WARN :exptime,type,c1,c2,c3,c4,c5, (where c1-c5 are counties)
+    NWS-WATCH:exptime,type,c1,c2,c3,c4,c5,
+    NWS-ADVIS:exptime,type,c1,c2,c3,c4,c5,
+    NWS-TEST :exptime,type,c1,c2,c3,c4,c5, (trailing comma is needed)
+    NWS-CANCL:type,c1,c2,c3,c4,c5,
+
+Where: exptime - is the Expiration time in the usual DDHHMM format
+       type    - is free text of the type of warning
+       c1 - c5 - 1 to 5 counties truncated to 9 bytes or less each
+
+NOTE:  If the type of warning is longer than 10 bytes, then only 
+include 4 counties per line to prevent truncation by APRS on receipt.
+
+In APRSdos, maps with county map labels of the form SS_COUNTY which
+match the counties in the C1 to C5 fields above will change color.
+These fields are limited to 9 characters according to these rules:
+
+    1. SS_ is the state abbreviation
+    2. Next 6 chars must be first six chars of County name, omit
+       spaces and abbreviate SAINT to ST, PRINCE to PR, etc...
+
+    See COUNTIES.TXT for details in making the labels for your maps.
+Since there is not room for all 3000 Counties in my larger regional
+and USA maps, in these maps, the entire state will color based on the
+SS_ formats.  Or you can trigger a whole state with SS_STATE.
+
+
+NATIONAL WEATHER SERVICE HOURLY METAR BULLETINS
+*** This capability was removed in 8.3.4 to make more room ***
+It was retianed in the APRSwx.exe version.
+
+Based on work by KD4UYR in Clearwater FL, the MAPS-OVERLAY-NWS 
+command searches the NWSposns.POS file and temporarily displays 
+all NWS stations within the boundaries of the current APRS map 
+display (up to 250 miles).  You are given the option of a one-time 
+map overlay or to add the sites to your P-LIST.
+
+The WX-GET-METAR command is used for loading a file of NWS METAR
+reports.  This file can be obtained from most of the commercial data
+servers or some BBS's, or on the internet at:
+
+     http://weather.noaa.gov/weather/metar/shtml
+
+APRS will scan the NWS METAR file looking for each station that you
+have  on your APRS P-LIST.  For each match, it will parse the Winds,
+temperature, dew point and barometric pressure onto the P-list.  It
+takes the remainder of the report and places it on the L-list.  The 
+time of the entries in the P and L-list will be the time of the NWS 
+report (in local time).  The date is assumed to be the current date.
+
+Once the data is loaded, you can uplink selected stations to the 
+APRS net as desired.  Be considerate, though, and not overload the 
+channel.  Once everyone on the net sees the reports, the uplinking 
+station should consider Quitting the uplink in order to reduce QRM.
+
+DEMONSTRATION:  To see how APRS works in a SKYWARN or other reporting 
+net, load the backup file SKYWARN.BK using the FILES-LOAD command.   
+To demonstrate the NWS capability, center your map on Illinois at 
+the 128 mile range, enter the MAP-OVERLAY-NWS command and select the 
+Add option to add them to your P-List.  Next, enter the WX-GETmetar 
+command to load the sample METAR data file.  Look at the P and L-lists 
+to see what is going on...
+
+METRIC MEASUREMENTS:  Select wind speed in KPH and temperature in
+Celsius by toggling the WX-METRIC command.   Make this permanent, 
+by saving a CONFIG file.  The on-air APRS WX protocols, however, 
+still will be in MPH and F.  Also, the ALARMS are compared to MPH 
+and F values.
+
+WX ALARMS:  If a WX report comes in that exceeds your WIND, TEMP or 
+RAIN alarm values, the station is plotted in RED and an ALARM 
+sounds.  This can be used to warn of the passing of a warm or a 
+cold front.  
+
+CLEARING ALARMS:  When an alarm occurs, the station is drawn in RED 
+and the map is re-drawn to center on that station.  Also, the station 
+is marked on the P-list with the ALARM marker.  TO clear the alarm, 
+simply hook the station on the map, and then UNhook it (hit ENTER 
+twice), or use the WX-ALARMS-CLEAR command.  To clear the A on the 
+P-list, hook the station and hit the A key.  Normally, the ALARM on 
+the P-list will only sound if that station MOVES.  Since a WX station 
+should not move, there is really no problem in leaving the A on the 
+Plist until convenient to remove it.
+
+WEATHER WARNINGS AND WATCH BOXES:  You can use the OBJ-AREA-LINE 
+command to draw a box from 400 feet to 400 miles plus-or-minus X miles 
+from a line between points A and B.  The line and width are perfect 
+for WATCH and WARNING boxes.  Use the normal INPUT-ADD-AREA-LINE 
+command prompts which will indicate the +/- sidelines in a 3 digit 
+number of Miles enclosed in braces {075} anywhere in the COMMENTS 
+field.
+
+HOME WEATHER STATION INTERFACE:  With the optional $9 WX registration,
+APRS inserts the ULTIMETER or DAVIS conditions in your position report
+for unattended weather reporting.  ULTIMETERS that output data with a *
+output wind in MPH and those with a # in KPH.  APRS averages the wind
+value over the last 4 samples, so the default rate is every 15 seconds
+to yield a running 1 minute average.
+
+RAIN VALUES:  Rain is counted in increments of 0.1 or 0.01 inch or 1mm.
+but reports all values in 0.01 inches over the air.  Since raw rain
+counts have no meaning without knowing when they were last reset, APRS
+only compares the difference in rain for the last hour (rXXX) and the
+precipitation in the last 24 hours (pXXX).  A reading of r123 means 1.23
+inches fell in the last hour.  After 60 minutes, this value will return
+to zero.  A reading of p164 means 1.64 inches have fallen since the same
+hour yesterday.  For REMOTE ULTIMETERS with only a TNC and no PC,
+the P value means rain since MIDNIGHT and an uppercase Pxxx is used.
+Also since there is no RAIN per hour value, that field is replaced with
+the raw rain counter #xxxx.
+
+FORMATS:  APRS re-formats data from attached WX units and transmits the 
+data as shown below.  For remote Ultimters, where there is no PC, the 
+TNC just transmits the raw data, but APRSdos converts them to these formats
+for display on the P-LIST.
+
+   _CSE/SPDgXXXtXXXrXXXpXXXdU-II        Original U-II auto
+   _CSE/SPDgXXXtXXX#XXXdU2r                  Original U-II remote
+   _CSE/SPDgXXXtXXXrXXXpXXXbXXXXhXXdDvs  Davis WX station
+   _CSE/SPDgXXXtXXXrXXXpXXXbXXXXhXXdU2k  U-500/2000 with APRS
+   _CSE/SPDgXXXtXXXPXXXbXXXXhXXdU2kr      Remote Ultimeter Logger
+   _CSE/SPDgXXXtXXX#XXXbXXXXhXXdUpkm      Remote Ultimeter Pkt Mode
+
+   _CSE/SPDgXXXtXXXrXXXpXXXPXXXhXXbXXXXX%type NEW FORMAT APRS793 June 97
+                                              NOT BACKWARD COMPATIBLE
+
+Where:        
+  CSE/SPD is wind direction and sustained 1 minute speed
+  txxx is in degrees F
+  rxxx is Rain per last 60 minutes
+  pxxx is precipitation per last 24 hours (sliding 24 hour window)
+  Pxxx is precip per last 24 hours since midnight
+  sxxx is snow
+  bxxxxx is Baro in tenths of a mb
+  hxx is humidity in percent.  00=100
+  gxxx is Gust (peak winds in last 5 minutes)
+  Lxxx is luminosity below 999
+  lxxx is luminosity above 1000
+  Fxxxx is flood water height in feet (to tenths ie: 20.1)
+  fxxxx is flood height in meters (also to tenths)
+  #xxx is the raw rain counter for remote WX stations. See notes on remotes
+  %xxx.. 1st byte shows software type d=Dos, m=Mac, w=Win, etc
+         remainder shows type of WX instrument
+
+
+With the WX interface enabled, the normal APRS decaying of position/wx
+reports still holds as long as nothing changes (except the wind).  If any 
+other WX value changes, then the period is reset to the alt-SETUP-POSrate 
+value.  The WX-WIND command can be used to set a Wind threshold which will 
+force a WX report whenever the wind is above that threshold.
+
+WX PERIOD:  APRS decays to 10,20,or 30 minute rates depending on the
+number of digipeaters.  For a weather station, you should change the
+MaxPeriod to maybe 10 minutes or so using a text editor in your
+CFIGxxx.APR file.  There it is expressed in seconds.  Of course, a
+WX/position report will be transmitted by the APRS station at anytime,
+in response to an APRS or WX query.
+
+ULTIMETER INTERFACE CABLE:  Peet Bros sells an interface cable with a
+DB-25 connector to RJ-11.  Since the U-II has no negative supply, a 5 K
+pulldown resistor is added to the DB-25 connector between Pins 2 and 3.
+This uses the -5 or -12 volts on the unused TXD line to bias the RXD
+line.  You can use a common phone line plug for their serial output.
+I found the data on the green while using the black wire as ground.
+If your connector was crimped on backwards, red is data and yellow is
+ground.  The Peet Bros cable includes transient protection and RF
+filtering to protect your computer as well as providing the bias resistor.
+Remember, the annemometer is like an antenna, high in the air.  It can
+radiate RFI and take lightening charges...  The U-2000 is directly
+RS-232 and needs no pull down resistor.  Be sure the U-500/2000 is in
+DATA-LOGGER mode.
+
+DAVIS INTERFACE:  You must have the DAVIS Weather Link serial interface
+option before your Davis station will output serial data.  Simply connect
+their connector to your PC. You MUST use the APRS alt-SETUP-OTHER-AGL
+command to set your average ground level.  This converts your baramoter
+readings to their equivalent value at sea level...  Your objective is to
+find an exact AGL that will result in your BARO readings matching the
+readings on your instrument or local NWS.  THis AGL will probably NOT be
+your true AGL.
+
+SAVE A COMM PORT!  You can use a simple 89 cent switch to allow other
+devices to share a single COMM port with your WX station.  Since the WX
+stations only use ONE pin and GROUND, simply add them to your MODEM
+cable with a simple SPDT switch as follows:
+
+  ULTIMETER-II   >---------*--------*  sw1
+                           |        <----*--------------> RXD
+  MODEM   }      >------------------*
+    or    }                |
+  other   }                *-----/\/\/\/\-------*
+  serial  }                        5.6k         |
+  device  }      <------------------------------*-------< TXD
+          }      * * * -----------------------------* * * other pins
+          }      *--------------------------------------* GND
+
+Actually, you can wire this to any serial device that you do NOT use while
+running APRS.  I chose my MODEM that is on COM2.  Note the series resistor
+as mentioned in the text to provide the -V pull-down for the U-II output.
+
+REMOTE ULTIMETER OPERATION:  Only the Ultimeters from Peet Bros can be used
+as remote WX stations using only a TNC and a radio.  This is because they 
+output continuous data without needing a PC to interrogate it periodicaly.  
+There are two ways to time the transmission of this data for the packet 
+channel depeneding on what Ultimeter you are using.  We call these PACKET 
+mode or DATA LOGGER mode:
+
+DATA LOGGER MODE (GPS mode):
+
+  U-II - These units output 14 bytes continuously beginnning with * or #
+  U-2000 (old) - These units output 44,48,or 52 bytes beginning with !!
+
+For the DATA LOGGER mode, the TNC must do the scheduling of packets just
+like the TNC does for continuous GPS data.  Just program your TNC to 
+think that the WX data is GPS data by entering the #, * or !! instead of the
+usual $GPRMC data typically used for GPS.  Then set the timing for each
+transmission to be about once every 5 minutes.  Be sure to SET ECHO off if
+your ULTIMETER-II uses a resistor on the TXD line to bias the RXD line!
+(Otherwise you will echo all heard packets back onto the channel!  KD4GOE
+figured that one out!).
+
+PACKET MODE :
+  U-500 - Outputs 44,48,or 52 bytes beginning with $ULTW
+
+This mode was designed for APRS packet since the WX unit only outputs
+a single data line every 5 minutes.  Since it is already timed to once
+every 5 minutes, all the TNC has to do is be in UI CONVERSE mode and it
+will send the packet.  Be sure to use a TNC that can be configured to
+power-up in UI-CONVERSE.  Try UIMODE or PMode-CONV depending on your
+TNC.  ALso you must set LFIgnore to ON so that the LF after the CR is
+not transmitted..  Since the Kantronics TNC's do not have LFIGNORE,
+you must set SENDPAC to $0A (linefeed) and set CR off!  If there are
+dozens of REMOTE U-500's, hopefully their clocks are staggered enough
+that they wont all transmit at EXACTLY the same time.
+
+CAUTION:  Only U-500's and only U-2000's manufactured after April 97
+should be used in packet mode.  U-2000's prior to that date will not
+show wind in the packet mode.
+
+WX POSITION:  In both cases, you must put the unit's POSIT in the BText
+using the "_" WX symbol.  This way the TNC transmits two packets, one
+is a BText WX posit with no WX data, and the other is raw WX data with
+no posit!  APRS cannot display the WX on the map until it has received
+a WX posit beacon.  So, set the beacon to go about once every 20 minutes.
+Once the posit is received it will be displayed as a Blue dot unless the
+site is also acting as a WIDE-RELAY digipeater, and it will show GREEN if
+the delimiter between the LAT/LONG is set to a backslash instead of the
+usual forward slash.
+
+WX LOGGING:  Use the WX-LOG command to turn WX-LOGging on and off.  
+It will show on the control panel when on.  If ON, then on-air 
+reports are saved when received every 10 minutes or so, and your own 
+report will be saved at the rate set by the Set-Pos-Rate command.
+
+Bob, WB4APR

@@ -1,0 +1,74 @@
+ITEM-IN-MESSAGE FORMAT                                     21 Feb 12
+--------------------------------------------------------------------
+                                                              WB4APR
+
+21 Feb 12 updated to mention the new MESSAGE OBJECT function
+30 Oct 08 added options for Sending and Reading-the-mail
+07 Oct 08 updated
+
+The original ITEM-in-MSG format was designed to provide a 
+mechanism for a station in message contact with someone anywhere in 
+the APRS system to be able to exchange position data, not only of 
+his own station, but also of any objects he would like the other 
+station to see.  For example.  This would be used by the AVRS engine
+to send FREQUENCY OBJECT to a called station to have him QSY to 
+receive the voice call.  See http://aprs.org/avrs.html
+
+Do not confuse this with the MESSAGE OBJECT function which is a
+backwards compatible way for any existing radio to be used to send
+a MESSAGE OBJECT to a special OBJECT server where it is converted
+to an object on the APRS-IS.  See http://aprs.org/aprs12/msg-obj.txt
+
+The format for ITEM-in MSG is simply an ITEM format inserted in the 
+message text field..  The ITEM format is defined as:
+
+)NAME!DDMM.mmN/DDDMM.mmW$text.....
+
+* Where the first character is the ")"
+* Then a variable length object name (up to 9 bytes)
+* Then the usual FIXED position format beginning with a !
+  and followed by LAT/LONG and SYMBOL 
+* Text is the variable length field which may contain any of the
+  other APRS formatted data:
+
+  CSE/SPD data  CCC/SSS/
+  PHG data      PHGphgd
+  FREQUENCY     FFF.FFFMHz
+  DF data       CSE/SPD/BRG/NRQ etc
+  other         any other valid fields in a position report
+
+ACKS: The ITEM-IN-MESSAGE message is transmitted like any other 
+message including a message line number on the end.  Similarly it 
+is acked like any other message.  If the ITEM is intended for a 
+local or APRS-IS wider audience, then the ITEM might be sent to 
+a generic callsign so that it is not acked but allowed to retry 
+the typical 5 times to improve the reliability 
+of receipt by all parties.
+
+DISPLAY:  On receipt, if the message contains the above ITEM format, 
+then the ITEM and position information is copied to the STATION/
+OBJECT list and displayed on the map. 
+
+RETENTION: If the client can edit and send its own objects from the 
+STATION list, then it is OK to not retain a copy of the incoming 
+ITEM-in-MSG where it will just take up room.  On the other hand,
+if the client is unable to originate objects, then a copy of the 
+incoming ITEM-in-MSG should be retained in the MESSAGE list for 
+future editing.  
+
+SENDER's CALLSIGN:  The callsign of the sender should always be
+retained and displayed associated with this ITEM/OBJECT  just like
+any other object.
+
+SEND OPTION:  Another option is in the MESSAGE MENU.  There can be 
+a menu item there to allow the sending station to select any object 
+or station in his station list, and (after editing) send it as an 
+ITEM-in-MSG to another party.
+
+READING-THE-MAIL:  Another option is on receipt. Even if a message
+is not to this station, if an ITEM-IN-MSG format is detected while
+monitoring the channel, such an ITEM should be considered general
+positional info and should be captured and plotted on the map.
+
+Bob, WB4APR
+

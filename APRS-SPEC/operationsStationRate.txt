@@ -1,0 +1,55 @@
+APRS Station Reporting and Refresh Rate                   16 Jan 2008
+---------------------------------------------------------------------
+                                                               WB4APR
+
+A big failure of many APRS follow-on clones was their fixed reporting
+rates of X minutes.  This assures failure to communicate in real time.
+
+A station's POSITION, or POSITION TEXT, or STATUS text are very 
+important fields that convey a stations instantaneous operations.  
+They were not considered to be fixed bolierplate info, but dynamic 
+info that changes whenever their situation or status changes.  This 
+could be quite frequently during a real "situation.".
+
+These packets are used to convey what THIS operator is doing, and 
+why.  It also how he communicates to EVERYONE. 
+
+Too many clients ignored the fundamental APRS transmit decay system
+that would refresh any NEW info as often as 8 seconds the first time
+it was changed, but decay this rate by a factor of 2 with each
+subsequent retransmision.  Too many clients just set a fixed rate of
+once every 30 minutes for this data.
+
+SO if it is set to 30 minutes (for a fixed station) and he changes
+his your position text field to say "Operator going to 147.105 to
+join net" then it might be 30 minutes to an hour before that
+packet is received by everyone else.  This is ludicrous in the APRS
+real time system!
+
+Fixed rate beaconing for NEW information violates the fundamental 
+principles of APRS as a real time system because it does not follow
+the immediate needs of the operator and/or demands inordinate real
+time tweaks to operating paramters (a sure cause of errors).  Here 
+is how everything was supposed to work in APRS:
+
+Whenever ANY element of info in APRS is changed, even by editing 
+just one word, then this was NEW information that was supposed to
+refresh everyone in the network right then,  not up to 30 minutes 
+later.  Or not an HOUR later if the first update suffered a 
+collision.  In APRSdos, that changed line was transmitted immediately, 
+then 8 seconds later, then 16, then 32 and on down.  This makes the 
+rapid delivery about as fast as regular packet in those initial 
+retries.  Yet unburdens the network with older data.
+
+So I hope this can get fixed.  In my example above, it violates
+the principle of least astonishment if someone makes a change to
+their position, status or position text, and it is not seen for
+up to an hour by everyone else.  No wonder some people using some 
+poorly implemented clients are not seeing APRS as a real-time 
+situational awareness system.
+
+For UIview users, there is an add-on fix to apply the DECAY rate
+to messages:   Use M0CYP's UI-Instant Messenger.
+
+Bob, WB4APR
+

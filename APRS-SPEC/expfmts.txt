@@ -1,0 +1,42 @@
+APRS USER DEFINED DATA FORMATS LIST                      09 Jun 2017
+--------------------------------------------------------------------
+
+09 Jun 17 Added {BT for Bricsat Telemetry & {BP for jpg Pix
+18 Mar 15 added {Q1 and {Q2 for QIKcom1 data
+17 Oct 12 added {Sx for SARTrack
+12 Feb 10 added {I format for RFID tags
+27 Aug 08 Added {KY for University of Kentucky
+06 Dec 04 Added {P for Propnet.
+
+Although provision was made in the APRS SPEC for new formats for 
+experimentation and special use applications, this experimental
+escape sequence should not be used for applications where broad user
+receipt or backwards compatibility is needed.  Remember, that as of
+June 2004, almost 55% of packet stations on the air were using
+FIXED firmware  that in many cases may not be easily upgraded.
+
+Therefore, authors are encouraged to try to use MESSAGE, STATUS or 
+POSIION comment field formats for these special uses where possible 
+to maintain backwards compatibility with old systems.  
+
+The following experimental formats have been reserved:
+ 
+HEADER  AUTHOR   DESCRIPTION
+------  -------- ----------------------------------------------------
+ {BT    KB3UKS   For BRICSAT Telemetry
+ {BP    KB3UKS   For BRICSAT Pictures
+ {Fnn   WB4APR   nn is a 2 byte descriptor of MITEL GPS data formats
+ {HT    WB4APR   For HAM-Trail reporting devices (tbd) 
+ {ID    WB4APR   RFID tags
+ {K1    WB4APR   "K" for Keps and "1" for NASA One line.
+ {K2n   WB4APR   For NASA two line elements. "n" is line 1 or 2.
+ {KY    KI4YLJ   For KYSAT (University of Kentucky)
+ {Q1    WB4APR   For QIKcom-1 data
+ {Q2    WB4APR   For QIKcom-2 data
+ {Sx    ZL4FOX   for SARTrack a SAR specific set of protocols
+ {TP    WB4APR   Telemetry for PCSAT2 Solar Panel Experiments
+ {TU    WB4APR   Telemetry for PCSAT2 Solar Panel Experiments
+ {x1    J Bennet for WX
+ {x2    J Bennet for WX
+
+de WB4APR, Bob

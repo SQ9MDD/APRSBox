@@ -273,8 +273,7 @@ def enqueue_message_job(
         "message_id": int(bulletin["id"]),
         "callsign": callsign,
         "ssid": ssid,
-        "message_kind": str(bulletin.get("message_kind") or "message").strip(),
-        "addressee": str(bulletin.get("addressee") or "").strip().upper(),
+        "message_kind": str(bulletin.get("message_kind") or "bulletin").strip(),
         "bulletin_code": str(bulletin.get("bulletin_code") or "").strip().upper(),
         "group_name": str(bulletin.get("group_name") or "").strip().upper(),
         "message_text": str(bulletin.get("message_text") or "").strip(),
@@ -549,9 +548,7 @@ def _build_message_info(payload: dict[str, Any]) -> str:
 
 
 def resolve_message_addressee(payload: dict[str, Any]) -> str:
-    message_kind = str(payload.get("message_kind") or "message").strip()
-    if message_kind == "message":
-        return str(payload.get("addressee") or "").strip().upper()[:9].ljust(9)
+    message_kind = str(payload.get("message_kind") or "bulletin").strip()
     bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()[:1]
     if message_kind == "announcement":
         return f"BLN{bulletin_code}".ljust(9)

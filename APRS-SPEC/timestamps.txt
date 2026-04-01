@@ -1,0 +1,51 @@
+APRS TIME STAMPS                                           12 Feb 2004
+----------------------------------------------------------------------
+                                                                WB4APR
+
+APRS originally had time stamps in many formats, but the lack of
+consistency in PC clocks made on-air interpretation of received
+data ambiguous and full of errors.  To solve this, in 1995, we changed
+all default position reports to NOT have time-stamps on transmission
+but for all software to add time stamps on receipt.  
+
+RECEIVED TIME STAMPS:  By assigning time stamps on receipt, then all 
+packets heard are then self-consistent to the recepient's system and do 
+give a live presentation of the data that is temporaly correct. 
+
+ASSUMPTIONS:  APRS is a real-time tactical communications system.  Data
+moves at nearly the speed of light and so all data seen on RF must be
+assumed to be LIVE, or the most recent available data at that instant. 
+As soon as the packet leaves the RF environment, a TIME STAMP must then 
+and forever more be associated with that packet.
+
+LOG FILES:  Thus all LOG files of ANY APRS packets must contain a 
+RECEIVED time stamp so that this association with TIME is not lost on 
+receipt.  Note, some software saves RAW packets and no time stamps.  
+This is NOT GOOD.   Not only is the temporal nature of the entire log 
+lost, but the file can then be reloaded or exchanged and the recepient 
+has no indication of the difference between LIVE or OLD data.  The only 
+time  an APRS packet can exist without a time stamp is when it is LIVE 
+and on RF.
+
+TX TIME-STAMPS:  Conversly, if anyone does use an APRS format that 
+does include a time stamp, then that time stamp must be honored as the
+time when that data was valid, regardles of time of receipt.
+
+APRS INTERNET SYSTEM:  Now the APRS INTERNET system has a problem.  It
+also assumed that all packets are LIVE and so all IGates simply forwarded
+on LIVE packets and the time of receipt was the time of arrival at
+the other end of the APRS-IS.  This then introduces many seconds or 
+even ten's of seconds of delays.  This cannot be solved by time-stamping
+on receipt by every IGate, because we have learned that we cannot 
+trust individual PC times.
+
+APRS-IS TIME:  I have no answer to this APRS-IS problem.  Good luck.
+But I think it must all boil back to basics, and that is that at the
+instant that a packet leaves RF, that is when the time must be stamped
+for that particular copy of that particular packet, and that association
+must remain for all uses of that packet data...  Conversly, on the slow
+1200 baud channel, timing accuracies better than the nearest minute
+were never intended and this is why seconds were never included in
+the APRS formats.
+
+de WB4APR

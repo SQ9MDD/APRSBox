@@ -1,0 +1,38 @@
+           DTMF Radio Capabilities for APRStt            (rev b) 30 Nov 2015
+----------------------------------------------------------------------------
+
+The purpose of this document is to document the capabilities and ease-of-use 
+of DTMF in all popular radios.   For the purpose of APRStt, it is assumed 
+that any preparation work has already been done to place the radio in an 
+optimum configuration that then subsequently facilitates the sending of DTMF.
+For example, the Kenwoods have an exhaustive MENU key, but in this case, it 
+is assumed that the MENU key has already been cycled to the DTMF memory 
+function during DTMF operations so that all subsequent use of that key is 
+already in DTMF MEMORY mode.
+
+[Optional steps] are shown in brackets.
+
+Radio Model  Sending live DTMF   Sending from DTMF memory                Mrys
+             After pressing PTt  After pressing PTT
+-----------  ------------------  ----------------------------------      ----
+THD7,TMD700  Press DTMF key      MENU, [dial memory#], Press OK            10
+-----------------------------------------------------------------------------
+Wofung/*     Press DTMF key      No Memory.  Just ANI up to 6 digits. ON/OFF  
+Befung       Press DTMF key      No Memory.  Just ANI up to 5? digits. ON/OFF                                                        But takes 26 key presses to change ON/OFF
+                                 Also SIGNAL code.  Details unknown         1
+-----------------------------------------------------------------------------
+
+*Detailed DTMF info by Daniel, KB3MUN: http://aprs.org/aprstt/DTMF-China.html
+*Also, WOXUN Report from Byon:
+
+Using KG-UV3D memory config software from Powerwerx on my Wouxun KG-UV3D. https://www.powerwerx.com/wouxun/usb.html )
+
+Can store from 1 to 6 DTMF tones.  All 16 DTMF keys allowed.  Manual only says
+0-9 and A-D, but * and # can also be stored.  The ANI tones were sent each 
+time after pressing PTT.  There were no "signal codes", or any other DMTF 
+memory features I could see.  Reception was not affected by enabling ANI.  ANI
+is only settable via the config software, not the radio keypad.
+
+The ABCD keys are the top row of keys labeled as MENU, UParrow, DN arrow, EXIT
+
+The CHIRP software has no references to ANI or DTMF for the Woxun (or Baofeng)

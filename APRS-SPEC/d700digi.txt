@@ -1,0 +1,110 @@
+DIGIPEATING SETTINGS FOR THE D-700                      21 oct 2014
+--------------------------------------------------------------------
+*** Revised 21 Oct 2014 to clarify permanent digipeating
+*** Revised 14 April 2005 for the New n-N Paradigm
+*** Revised 31 May 2006   for TEMPn-N digipeating
+
+Although the D-700 supports digipeating, care must be taken in how
+it is set up and used.  First, we do not, in general, want mobile
+digipeaters running around on a routine basis multiplying the
+number of packets.  Second, some of the settings have the same name
+but work differently from the same settings in other digipeaters,
+for example the KPC-3+.  So please heed the following recommendations.
+
+The D700 is confusing, because it allows you to use the front panel
+to set DIGI ON or OFF and to make entries in the UIDIGI Alias list,
+but you cannot change the UIFLOOD or UITRACE parameters that support
+WIDEn-N digipeating from the front panel and require a serial cable
+and PC to change them.
+
+FRONT PANEL MENU CONTROLS:
+
+DIGIpeat ON:  This command only affects digipeating via your callsign.
+This should remain on.  If someone wants to go to the trouble to
+digipeat via your mobiile when he can hit nothign else, then by all
+means we want to suppor him.
+
+UIDIGI none:  Defaults to UIDIGI RELAY,WIDE.  These are obsolete 
+because they have no dupe-elimination mechanism under 3 hops and were 
+the cause of tremendous dupes on the APRS system. If you are parked 
+on a hill and do need to TEMPORARILY support digipeating of special
+event mobiles, the set UIDIGI WIDE1-1.  If mobiles will be using
+other initial hops, and you do not have a PC to properly activate 
+UITRACE WIDE, then you can temporarily add other aliases for this 
+event vian the MENU by adding WIDE1-1, WIDE2-2, WIDE2-1, and WIDE3-2 
+etc to the UIDIGI MENU. Thus can temporarily support first-hop 
+digipeating but the packets will die after this first hop.  These 
+digipeats will be callsign substituted after your transmission and 
+will go no farther.
+
+UIFLOOD TEMP:  This setting should be set permanently in all D700
+radios via the serial port to support backup TEMPn-N DIGIPEATING.
+This makes it easy to use a D700 mobile as a multi-hop digipeater 
+on an immediate basis.  This means that we encourage all
+D700 mobiles to permanently set their UITRACE parameter to TEMP.
+That is, "UITRACE TEMP" is the command you provide at the command
+prompt on the serial port to enable the D700 to always digipeat any
+TEMPn-N packets.  THis makes them instantly useable at any time
+by anyone with the path TEMPn-N.  Sort of an invisible backup
+network ready to be used at any time a D700 is in range.
+Leave this set permanently so that it is there if needed.
+
+
+SETTING THE D700 as a FULL FUNCTION DIGIPEATER VIA THE SERIAL PORT:
+
+If you want to set the D700 to act as a full function digipeater
+then use the following settings.  Then saving that configuration 
+in a PM so that it can be activated and de-activated in te field 
+by chaing PM's.  WIthout the PM's you must use your serial port 
+and a PC to disable these settings if you ever take this D700 mobile 
+again.  So use these commands with caution and full intent of 
+setting up a permanent digi only.
+
+AUTO-PM-SAVE OFF:  If you save settings in a PM, be sure to find the
+AUTO-PM-SAVE command and be sure it is OFF.  It defaults to ON and
+though this is confusing, it will cause your desreid PM savings to 
+be overwritten every time you turn the radio off. YOU DONT want that!
+
+UIFLOOD SS,ID:  This command has a bug and should NEVER be used 
+with NOID.  Fortunately with ID on, it works identical to the KPC-3+ 
+digipeaters and will support the SSn-N system.  Just set 
+"UIFLOOD SS,30,ID" to support SSn-N digipeating for your State or 
+Section.  Notice this receommendaton TO use ID and to never use NOID 
+is exactly opposite of the recommendations that used to be in place 
+before the New-N-Paradigm prior to 2004.  So remember, UIFLOOD should 
+have ID in the D700.
+
+UITRACE WIDE:  Under the new n-N paradigm, WIDEn-N is now supported in
+the UITRACE parameter so that all WIDEn-N paths are traceable.
+Set "UITRACE WIDE"
+
+For more information on the New n-N Paradigm, see the web page:
+http://aprs.org/fix14439.html
+
+But PLEASE Disable UIFLOOD SS and return UITRACE from WIDE back to TEMP
+when this D700 is not being used explicitly as a fixed digi.  Otherwise 
+it will add QRM to the network
+
+
+FIELD DAY and OTHER SPECIAL EVENT OPERATIONS WITH TEMPn-N:
+
+The permanent use of "UITRACE TEMP" to support TEMPn-N digipeating
+not only gives us an instant temporary alternate network for FIeld
+Day on 145.01 for that day, but also then gives us a permanent
+shadow network all the rest of the time on 144.39 that anyone
+can use as a first hop if they cannot get out with WIDE1-1 or
+WIDEn-N.
+
+DEBUGGING the UIFLOOD-ID PARAMETER:  For example, if you are receiving 
+a local station sporadically with a variety of -13, -14, -15 SSID's 
+then there is a D700 somewhere with UIFLOOD set with NOID enabled.  Find
+it and fix it to ID, or better is to disable UIFLOOD completely and
+set "UITRACE TEMP" to support only TEMPn-N digipeats.
+
+WARNING:  The UIFLOOD and UITRACE parameters can only be set with
+an attached PC.  And once set, the radio will remember it always.
+The only way to turn it back off is with the PC again.  So be
+very careful and very intentional when messing with these parameters
+in the D700, or set UITRACE TEMP,30 and dont worry ever again.
+
+de WB4APR, Bob

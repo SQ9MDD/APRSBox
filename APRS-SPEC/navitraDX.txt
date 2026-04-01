@@ -1,0 +1,218 @@
+NAVITRA to APRS J-Gate DRAFT SPECIFICATION                  8 Apr 2003
+-----------------------------------------------------------------------
+                                                                 WB4APR
+
+This spec suggests a mechanism for exchanging 
+messages and data between APRS users and Japanese NAVITRA users via the
+worldwide APRS Internet System.  NAVITRA is an AX.25 Mobile position
+reporting system used in Japan on their domestic model D7 and D700 
+equivalent radios.  Although it has no specific messaging capability, 
+it does have the same 40 character DX-LIST that we have in our radios.
+Thus we can convert APRS messages to something they can receive.
+
+They can communicate back using the 20 character text in their position
+reports or eventually start using APRS client software to send standard
+APRS messages.
+
+By definition, all packets on the APRS-IS will be APRS formatted.  
+Japanese users desiring to view this data on the actual internet will use 
+normal APRS client software.  This spec defines only how packets cross 
+the NAVITRA(RF)-to-APRS(IS) interface before being sent to or from the
+APRS-IS.  I will call this a "JGate" to distinguish it from an "Igate"
+although they are otherwise identical processes in client software.
+In other words, how NAVITRA RF packets will be converted to 
+APRS format and how APRS packets will be converted to NAVITRA on RF.
+
+POSITION DATA:  This is easy.  JGate authors simply add the $PNTS
+NAVITRA format to their list of existing APRS formats they parse.  This
+simple step immediately makes an APRS program NAVITRRA compliant as
+far as being able to monitor RF in Japan and the worldwide APRS-IS.
+This is the EASY and the MOST REWARDING step in integrating NAVITREA
+users into APRS.  If authors put $PNTS into all their software, then
+even visiting Japanese hams elsewhere int he world can be seen on
+APRS!
+
+MESSAGES:  APRS messages that need to go through a JGate will be
+converted to DX-LIST format before transmission back to RF in Japan.
+This makes them receivable on any D7 and D700 in Japan.  ALthough
+the mobile user in Japan cannot send back a message or DX list format,
+NAVITRA users can communicate with each other by adding ">TOCALL" 
+at the end of the 20 byte text.  Sometimes only a callsign suffix is 
+used ">XXX".  This should be easy to identify and parse back into a
+brief APRS message at the JGate.
+
+
+POSITION DATA NAVITRA(RF)-TO-APRS(IS):  
+--------------------------------------
+
+But before we get into the details of the text or "message" bytes, we must 
+first define the standard conversion for position data.  In the NAVITRA
+data, there is only ONE packet format.  BUT it has a single byte "I"
+which can indicate the "type" of position report as shown below.
+It can either be the station's present position, a Waypoint, a Starting 
+point or an Ending point.  But almost all packets are of the "O" type.  
+The others are RARELY used:
+
+NAVITRA FORMAT:   $PNTS,V,I,DD,MM,YYYY,HHMMSS,LAT,N,LONG,W,$
+
+Here is then how to convert the $PNTS to APRS format based on the "I"
+byte:
+
+APRS(I=0): @DDHHMMzDDMM.HHN/DDDmMM.hhW$CSE/SPD/xxxxxx...    A posit
+APRS(I=S): ;XXX-START*DDHHMMzDDMM.HHN/DDDmMM.hhW$xxxxxx...  Start Pt
+APRS(I=E): ;XXX-END  *DDHHMMzDDMM.HHN/DDDmMM.hhW$xxxxxx...  End Pt
+APRS(I=I): ;XXX-WAYPT*DDHHMMzDDMM.HHN/DDDmMM.hhW$xxxxxx...  Waypoint
+APRS(I=P): ;XXX-OBJCT*DDHHMMzDDMM.HHN/DDDmMM.hhW$xxxxxx...  Object
+
+Where XXX is the sending station's callsign suffix.  These suffixes are 
+only used as the object NAME in the object formats.
+
+
+J-GATE NAVITRA to APRS-IS MESSAGE FORMAT:
+-----------------------------------------
+
+Common usage in Japan has users placing ">TOCALL" at the end of any 
+position text when it is intended for another station.  Sometimes this 
+is only a sufFIX.  Our conversion is easy.
+
+1) If the ">TOCALL" exists, then TOCALL becomes the APRS message address
+   and the TOCALL is added to a TOCALL-buffer in the JGate
+2) If ">xxx" is 3 bytes and it matches the suffix of a call in the 
+TOCALL-buffer then it is sent to that call.  If there is no match, then
+it is sent to ALL with the entire 20 bytes included in the message as is... 
+Here are the examples that we can use for APRS conversions:
+
+  
+NAVITRA 20 byte TEXT  Converted to APRS FORMAT                     NOTES
+--------------------  -------------------------------------------- ----------
+message text >TOCALL  :TOCALL...:NAVITRA MSG: message text         Normal MSG
+More message txt>XXX  :ALL......:NAVITRA MSG: More message txt>xxx Suffix msg
+any other text, etc   [is not a message because the ">" is missing]
+
+In these examples, the ">" character indicates it is a NAVITRA message 
+for injection into the J-GATE.  WHat follows the ">" can be 4 things:
+
+  >TOCALL    in this case, the conversion is to a personal message
+  >XXX       In this case, the conversion is to a personal message
+             or to ALL if there is no immediate match
+  >#         This will be a Bulletin Number #
+  >          This will be an Email
+
+TOCALL is variable length, from 4 to 6 characters.  There is no provision 
+for SSID, since just like in APRS, a message to the root call will be 
+accepted by all SSID's of the same call.  And since there is no ACK 
+capability in NAVITRA, then there is no reason to specify or require an 
+exact SSID match.  
+
+
+APRS(IS)-TO-NAVITRA(RF) Message Conversion:
+--------------------------------------------
+
+Going from APRS-IS to RF requires the J-Gate to convert it to DX-LIST
+format.  This gives us a 30 to 40 character message capability.  But 
+since there are no ACKS, the message is transmitted 'n' times and it 
+times-out.  Here is how we can use the DX-list format to send messages 
+to the Japanese model D7 and D700 in Japan:
+
+D7 Display:   +--------------+     +--------------+
+              | DxXYZ>ABCDEF |     | DxXYZ>ABCDEF |
+              | 222222222_   |     |   3333333333 |
+              |        [MSG] |     |   4444444444 |
+              +--------------+     +--------------+
+
+D700 Display: 
+              +---------------------------+
+              | 1:XYZ>ABCDEF**       [MSG]|
+              |            222222222      |
+              |   333333333344444         |
+              |   444445555555555         |
+              +---------------------------+
+
+D700 DX-list: +---------------------------+
+              | 1:XYZ>ABCDE 222222222[MSG]|  <== note only 5 chars of TOCALL
+              +---------------------------+
+
+URCALL>RESORC:DX de IGATECALL.222222222_XYZ>ABCDEF***33333333334444444444
+              5555555555*[MSG]
+
+Notice that all the fields are fixed length:
+  IGATECALL  9 bytes valid call format
+  2222...    This is 10 chars, but the last (_) is not shown on the D700
+  XYZ>ABCDEF The FROM (suffix) and full TOCALL
+  3333...    10 bytes of free text
+  4444...    10 bytes of free text
+  5555...    10 more bytes not shown on the D7
+
+Notice that since this is an APRS-IS to RF conversion process, this 
+process is only performed if the "TOCALL" of the message matches a 
+locally received NAVITRA station just like any IGate.  But to allow
+for an intial means to communicate with the small number of Japanese
+using NAVITRA, there needs to be a backdoor.  THis will be via 
+a bulletin such as BLN#JAPAN or BLN#NIHON.
+
+NAVITRA GROUP CALLS:
+
+There is another feature in NAVITRA that allows GROUP calls.  These can
+be used to send packets to certain 3 digit groups.  We could use one
+such GROUP call as a way to automatically pass APRS packets through
+the JGate that are intended for JAPAN only.  The default wildcard is 
+"000".  SO, for example, only bulletins originated on APRS 
+specifically intended for NAVITRA users by these group calls would be 
+J-Gated to RF in Japan.
+
+I need to work on the GROUP code some more, because I am not sure
+if it is only an outgoing indicator or if there is a filter on the
+NAVITRA incoming...
+
+DETAILS of the NAVITRA PROTOCOL:
+--------------------------------
+
+Data in AX.24 packet:  $PNTS,VER,ID,dd,mm,yyyy,hhmmss,LAT,NS,LON,EW,
+                       DIR,SPD,ICON,COMMENT,GROUP,STATUS*SUM
+ 
+     VER       Version of this $PNTS format. '1' is the most recent
+ 
+     ID        Shows what kind of data this is.
+               '0': normal position data
+               'P': location of object
+               'R': ack for 'P' receiving.
+               'S': start point of Route
+               'I': intermediate waypoint of Route
+               'E': goal point of Route
+ 
+     DIR       moving direction '00' to '63'
+ 
+     SPD       moving speed     'xxx.x' km/h
+
+     ICON      icon dat         '0-9, A-E' See table below
+ 
+     COMMENT   Up to 20 digits comment
+ 
+     GROUP     group code.      '000' to 'ZZZ'
+ 
+     STATUS    gps status   '1' if gps data is OK
+ 
+     SUM       check sum
+
+
+NAVITRA to APRS ICON CONVERSIONS
+--------------------------------------------
+
+APRS SYMBOL     NAVITRA ICON
+--------------  ----------------------------------------------
+0n 0 Triangle   0 - Triangle
+Yn Y Triangle   1 - Triangle with a "Y" on it (Yellow I think)
+Bn B Triangle   2 - Triangle with a "B" on it (Blue I think)
+Gn G Triangle   3 - Triangle with a "G" on it (Green I think)
+Rn R Triangle   4 - Triangle with a "R" on it (Red I think)
+/r Vertical     5 - vertical antenna with groundplane
+/- House        6 - house
+/y House (yagi) 7 - Apartment
+/x Diamond      8 - Bell
+/w Water        9 - soda can
+\< Advisry Flag A - golf green with flag
+/' Airplane     B - bird
+/s Boat         C - fish
+\P Parking      D - Parking sign
+\R Food         E - Restaurant icon
+

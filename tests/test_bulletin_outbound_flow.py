@@ -157,6 +157,9 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             assert row is not None
             self.assertEqual(row["status"], "sent")
+            payload = json.loads(row["payload_json"])
+            self.assertEqual(payload["message_kind"], "announcement")
+            self.assertNotIn("addressee", payload)
 
             runtime_job = get_outbound_job(int(row["id"]))
             assert runtime_job is not None

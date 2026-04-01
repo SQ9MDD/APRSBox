@@ -1,0 +1,165 @@
+DISCUSSION ON VOICE OBJECT NAMES:                           25 Jan 2007
+-----------------------------------------------------------------------
+
+Several formats and plans were proposed and discusssed:
+
+A: ;146.940- *111111zDDMM.hhN/DDDMM.hhWrPHGxxxx PL107.3   club...
+B: ;146.940- *111111zDDMM.hhN/DDDMM.hhWrRNGxxxx PL107.3   club...
+C: }146.940->APOBJ:!DDMM.hhN/DDDMM.hhWrPHGxxxx PL107.3   club...
+D: }146.940->APOBJ:!DDMM.hhN/DDDMM.hhWrRNGxxxx PL107.3   club...
+E: }146.940-X>APOBJ:!DDMM.hhN/DDDMM.hhWrPHGxxxx PL 107.3   club...
+F: ;RPTRCL-R *111111z4612.74N/06320.46WrRNG0020 146.74- 110.9 Club
+G: ;146.940- *111111zDDMM.hhN/DDDMM.hhWrAAAAAAAAAABBBBBBBBBB88888888...
+
+Plan A didnt work because the D700 did not display the freq
+Plan B didnt work because the RNG took up too much room
+Plan C worked well, but was not Unique on the APRS-IS
+Plan D was attempted to get RNG to work, but it didnt
+Plan E added an "X" byte to make each object unique on APRS-IS
+Plan F does not show the frequency without operator action
+
+We therefore recommend the OBJECT format G.  PHG cannot be used
+because UIview does not support it, and also UIview does not allow
+3rd party format to be used at all, or it marks all such digipeaters
+as IGates (C, D and E).  OBJect format G allows for the 10x10x8 byte 
+line wraps found on the front panel displays of the D7, D700 and 
+HamHud.  The AAA... and BBB... are the two 10 byte fields displayed 
+as 2 lines on the D7 and D700.  THe 888... are the added 8 bytes 
+visible on the D700 only.
+
+Here is some of the discussion on the APRSSIG:
+
+> Regarding the WA5XYZ-R callsign format proposal:
+
+I have no problem at all with an object 146.940-R.  But I do like it
+a lot better than WA5XYZ-R because it gives the frqeuency at a glance
+without operator intervention.  The -R helps make it unique.  And 
+displaying only a voice repeater callsign in my opinion is a non-
+starter, since no one I know of refers to voice repeaters by their 
+callsign.  THey all refer to the frequency and that is what we want 
+to show up on the front panel.
+
+>(Bob, if you are doing lookups while you are in motion 
+> behind the wheel, you are spending way too much 
+> time with your eyes off of the road). 
+
+If the object name is the freq, as I propose, then one does not have to 
+do any "lookup".
+
+My control head is mounted on the dashboard above the steering wheel 
+where it is even easier to glance at than the car's instrument cluster.  
+And since the frequency 146.940- of the OBJect repeater shows up on the 
+display's station-LIST without me having to push any buttons, then it is 
+hands free too.  The WA5XYZ-R method of having voice repeaters send out 
+just anther callsign with an -R on the end and requiring the driver to 
+push a button to see the frequency, is more distracting to the driver and 
+lacks any ergonomics considering the mobile traveler's needs.
+
+> I find it interesting that Bob has been a big proponent 
+> of IRLP, EchoLink, and Winlink objects to use the SSID 
+> or the first two letters of the object name as a visual 
+> identifier that it is that type of object, yet he doesn't 
+> like that idea for voice repeaters.
+
+Yes, what I am proposing now is completely consistent with those 
+recommendations.  That is, that the *info* needed by the traveler 
+(in this case the IRLP or ECHOlink node number) shows up in the 
+OBJECT name, so that it shows on the front panel of the radio 
+hands-free.  We recommended putting the ER- or IP- in front of the 
+object name so that when it was truncated on a 6 character GPS map, 
+then the more important node number would still show on the map.  
+Thus we get ER-123456 for ECHOlink and IRLP-8080 for IRLP and 
+these show on the worst-case-6-byte GPS map as 123456 and P-8080.  
+
+These are easy to distinguish at a glance from an object "146.940-"
+
+But for this voice repeater application, I don't see that much value 
+in focusing so hard on trying to get the digits to show on the GPS 
+map.  What we are after here is not that, but the hands-free, 
+heads-up-display on the front panel of the radio without pushing any 
+buttons to show the traveler the recommended voice repeater for 
+where he is right now.
+
+> by adding TCPIP* to the third-party path, we can avoid the APRS-IS
+> from picking up these objects and that will solve the lack of
+> uniqueness on the APRS-IS.
+
+Yes, but I agree with your other suggestion and that is that we do 
+want to see these on the APRS-IS so we want them to be unique were
+we can.  SO adding a -X or +X or -xy or +xy to the end can be used 
+to select a unique character to make up to 62 of these objects unique
+for each frequency.
+
+> APRS-IS is not going to start handling certain objects
+> based on their names or symbols in certain ways out of 
+> the millions of packets sent each day.
+
+Why not?  They already do.  The APRS-IS and all clients are already 
+required to parse out the object name and the SENDERS call for every 
+object, since attribution of the source of an object is required in 
+the spec.  Only a few lines of code change can logically combine these 
+fields to make all such objects unique.
+
+> Yes, propagation in the DFW area where these objects can 
+> collide is almost a daily issue.  It must be nice...
+> to live in an isolated area where you can pass down  
+> pronouncements with a "I don't care if it doesn't work 
+> for you 'cuz we don't have that problem here" attitude.
+
+I would never say that.  And besides it is unfounded anyway... 
+for several reasons.  We are working very hard to make sure this
+does work everywhere.
+
+1) I live in the Baltimore/WashingtonDC area, probably the highest 
+density of APRS and voice repeaters on the planet, over 100 voice 
+repeaters and I just checked 50 digipeaters heard on RF.  So I think 
+it is representative of a worst case scenario and a pretty good area
+to consider the application.
+
+2) With our population density, we have multiple 146.94 repeaters 
+every 50 to 100 miles or so and yet we don't think that a 146.94 
+object transmitted DIRECT from 100 miles away is going to be heard
+by our local mobiles and cause a problem to them.
+
+3) Yes we have tropo sometimes and we sometimes hear multiple 146.94 
+repeaters in our area, but then it is doubtful that an adjacent 
+146.94 repeater is also the #1 APRS recommended repeater in the next 
+city too.  Thus, there will not be that many (local direct) 146.94 
+objects competing during tropo with ours.
+
+4) OK, say there is a string of 146.94 recommended travelers repeaters 
+and during band openings these objects do come in.  So what.  What 
+shows on the radio's display is still just 146.94- which is all that 
+the traveler needs to see anyway to know what frequency to tune to.
+If the TROPO is in, then he can work it too!
+
+5) In an area such as you claim as DFW, then if multiple 146.94 
+repeaters are all the recommended traveler repeaters and you want to 
+distinguish them, then surely the APRS digipeater sysops who are 
+putting these objects in the digipeaeters can agree on additional
+one or two unique "-X" bytes to make them unique.  Say, 146.94-D for 
+the Dallas one, 146.94-F for the FortWorth one, and so forth...
+
+In any case, these recommended voice repeater frequencies showing up 
+on the front panel station LIST hands-free, are far more valuable to 
+the driver than seeing W5XYZ-R and W5APC-R, both of which the operator 
+has to push a button just to see what frequency they are on.
+
+So it still seems to me that the best object name should be 146.940- 
+where the "-" is optional and also any of the 62 additional "-X" or
+"+X" bytes are optional to make the repeaters unique in areas where 
+tropo may be a problem.  For 10kHz repeaters, there are over 3600
+-xy combinations to choose from.  So here is the current recommendation:
+
+*** POSTSCRIPT.  THIS CAUSED PROBLEMS WITH UIVIEW ****  and is not used
+
+BT }146.760->APOBJ:!DDMM.hhN/DDDMM.hhWrPHG5320 PL 107.3  Net Tu 9PM
+B E 10
+UNPROTO APNxxx <== where xxx is 383 for the KPC-3 version 83 etc
+
+*** THE FINAL FORMAT THA SEEMS TO SOLVE ALL PROBLEMS IS: (April 07)
+
+BT ;146.76-xy*111111zDDMM.hhN/DDDMM.hhWrT107 RXXm Net 9PM W Mtg3rd F
+
+
+Bob, WB4APR

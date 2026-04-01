@@ -1,0 +1,67 @@
+The TNC HID function and APRS                   20 July 2004
+------------------------------------------------------------
+
+APRS is being QRM'ed by a proliferation of HID packets which
+have no purpose on APRS.  In some cases there are more HID
+packets per station than actual APRS packets!  We must fix this.
+
+WHAT ARE HID PACKETS?
+
+All TNC's have a command called HID which enables a special
+"ID" packet once every 10 minutes if the TNC is used in
+repeater service.  But this is for use on conventional packet
+channels for Digipeaters, and Nodes to identify their
+presence.  In APRS, this HID function has been replaced by
+the much more valuable APRS POSITION packet which not only
+identifes the digi, but also, its type, position, elevation
+and range.  Thus the HID is supposed to be OFF and remain off.
+
+HOW DID THIS PROBLEM OCCUR?
+
+The original APRSdos included the HID OFF commmand in all
+TNC initialization files.  But over the years, other
+software has become more prevalent and apparently overlooked
+the requirement to suppress the HID packets.  Thus, it is
+now incumbent on every user to manually set his HID to OFF
+to prevent his station from adding unneeded QRM to the channel.
+
+WHY ARE HID PACKETS SO BAD?
+
+Under benign conditions, a home station normally sends out
+only two packets every 30 minutfes, one Position and one Status
+packet.  If HID is left turned on in a home station, then this
+adds THREE more packets every 30 minutes resulting in 3 out of
+every 5 packets per station being nothing but unwanted QRM!
+This is just not part of APRS and must be turned off.
+
+It is even worse for DIGIpeaters!  This is because HID packets
+are once every 10 minutes AND they go to the full path length
+of the TNC's UNPROTO commands.  Although in APRS we DO want to
+see at least a local Position ID packet once every 10 minutes,
+this process has been specifically engineered to place a minimum
+load on the network.  A properly configured APRS digi uses the
+four LTexts, four LPaths and four BLT's to specially schedule
+these Position ID packets so that it only sends a local (direct)
+POSITION ID once every 10 minutes, then a one-HOP POSITION
+ID every 30 minutes, and then a 2 hop regional POSITION ID
+once every hour.  In an area where digis typically hear four
+other digis, this results in 6 local, 8 one-hop and 12 two-hop
+packets every hour.  But if HID is on, and the UNPROTO path
+is set to 3 hops, then the resulting number of packets is
+THREE TIMES GREATER at over 78 HID packets per hour per digi!
+For these digipeaters 67% of their packets are HID QRM and
+of no value on APRS.
+
+SOLUTION:
+
+Home stations: Set HID off, and add HID OFF to your init files
+Authors:       Set HID OFF in all TNC initialization files.
+WEB Masters:   Be sure all your "advice" has HID OFF.
+Digis:         Set HID off and set LT's, LTP's and BLT's properly
+               according to DIGIS.txt.
+
+This is a big problem, but it is easy to fix.
+Lets fix it.
+
+de WB4APR, Bob
+

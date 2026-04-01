@@ -1,0 +1,253 @@
+GREAT APRS SETUPS FOR THE TM-D700 MOBILE                  21 Jun 2014
+---------------------------------------------------------------------
+                                                               WB4APR
+Revised 21 Oct 2014 to include D700 settings as permanent digipeaters
+Revised 19 May 2010
+Revised 10 May 2007 and 3 Jan 2008
+Original 6 Jun 2005
+
+First, see the POWERPOINT:  www.aprs.org/APRS-mobile.ppt
+
+It is important to properly set up your APRS radio inorder to get the
+best APRS mobile experience not only for normal terrestrial APRS 
+operations and satellites, but also voice and traffic reporting as 
+well.
+
+NORMAL APRS OPERATIONS:
+-----------------------
+
+BAND-B:  Use this band for your voice operations.  Use it on 2m, 440
+or even receiving on 1296 FM and many other commercial bands.
+
+CALL CHANNEL:  Save 146.52 MHz voice simplex in your CALL CHANNEL.  
+This is important for making QUICK mobile QSO's... The D710 even 
+has diffeent CALL channels on the A and B side.
+
+BAND-A:  Set for APRS on 144.39, 1200 baud, TNC on band A.  Set path 
+to WIDE1-1,WIDE2-1 in most areas, never more hops without serious 
+thought.  LEAVE THE VOLUME UP.  You will control what you hear on 
+the APRS channel by what APRS "channel" you have selected.  This lets
+the APRS channel be used for data and Voice Alert.
+
+Set band A CTCSS to 100 Hz for Voice Alert with volume up.  Save
+in memory 0 or wherever.  Be sure to set Band A squelch way up so 
+that the BUSY indication goes out between packets or your rig will 
+never transmit APRS.  The tightness has no affect on APRS, but if 
+it opens and BUSY shows, the radio will never transmit packet.
+
+SET MENU RADIO-DISPLAY-KEY_FUNCTION-MODE 3  Without this, the
+radio is practically uselsess for APRS, because you have to
+push-and-hold-1-sec even to access any APRS front panel keys.
+Without this, APRS is just too hard to operate for display of
+information and becomes just another one-way tracker.
+
+SET MENU RADIO-MEMORY-AUTO_PM_STORE OFF.  Without this, you can not
+save your favorite configurations in any of the PM's and have any
+hope that they will remain uncorrupted during operation.  The default
+is ON, which means that everytime you use the radio, it will auto-
+matically save (overwrite) your favorite settings with whatever
+you were last doing with the radio.  This is bad.  Leave it OFF.
+That way once you have the radio configured and saved in a PM, then
+you can always go back to that by selecting that PM.
+
+So, now SAVE your APRS configureation in a PM. while the band A
+channel is the one with 144.39 and CTCSS 100 for voice alert.
+
+MEMORIES:  Store this APRS/Voice Alert channel with CTCSS 100 in 
+memory, say memory 0.  Label it as "APRS VA".  Now turn CTCSS OFF 
+and run this open squelch. Save this in say memory 1 with the
+channel name of "APRS raw".  Now turn CTCSS ON again, and program it
+with CTCSS xxx (your private CTCSS).  Save this in channel 2 for 
+example and name it "APRSmute".  With these 3 channels then you 
+can easily configure APRS on the fly:
+
+Ch1  "APRS VA " 144.39 Voice Alert, CTCSS 100 for normal operations
+Ch2  "APRS raw" 144.39 no tone squelch - for troubleshooting
+Ch3  "APRSmute" 144.39 CTCSS 123  - for completely QUIET operation             
+
+The real purpose of channel 3 is if you go to a club meeting or 
+hamfest and there are so many voice alert operators that the noise
+is bothering you.  DO NOT TURN DOWN SIDE A VOLUME!  Instead, set
+channel 3 and you will not hear anything.  THe reason for this is
+that if you ever turn the volulme down, you will forget and it 
+might be weeks or months before you realize it and in the mean 
+time you were out of Voice Contact capability.
+
+If you want, you can also use channel 3 for private calls from 
+trusted agents who know your private CTCSS, but then you lose out
+on all the Voice Alert activity.  But remember to SAVE your config
+in a PM and with the channel A set to the APRS Voice Alert channel
+so that every time you start the car, you ARE on Voice Alert.
+
+You can also set in a few digital channels for local DX clusters if
+you like using your D7 or D700 for monitoring them.  Then you can 
+QSY at any time to a DXcluster frequency and receive DX spots too.
+
+APRS BUTTONS:  Change the MENU RADIO-DISPLAY-KEY_FUNCTION to MODE3.  
+This puts the front panel buttons into APRS function so you can 
+quickly hit the LIST or MSG or BCON buttons.
+
+VOICE ALERT:  This was why you left band A volume up but set CTCSS 
+100 to mute the speaker.   This way, you dont hear any packets, but 
+ANYONE can call you with VOICE on 144.39 to alert you by using 
+PL 100.  This allows anyone, anywhere, anytime (they are in simplex 
+range of you) to call you by voice with PL100, because they KNOW you 
+are listening on the APRS channel with CTCSS 100!
+
+PROXIMITY RADAR:  A corrolary advantage of the Voice Alert Setting is 
+that the speaker is 100% muted for all packets... EXCEPT simplex 
+range packets from another Voice Alert D700 that is very close to 
+you.  His once a minute packets will act like a radar-ping, alerting 
+you to his presence and the fact that he is also monitroing voice 
+alert for a simplex QSO.
+  
+You may go weeks without hearing anyone (simplex packet range is 
+only 5 miles or so), but it is fun when someone comes in range.  
+APRS is about *facilitating-communications*.  With Voice Alert, you
+will never "pass-in-the-night" without knowing that someone is nearby, 
+in simplex range of you that can ALWAYS be contacted with a voice 
+call...  Its like a free radar for other mobile APRS operators that 
+are in simplex range AND listening.
+
+DIGIPEATING-MOBILE:  We do not want mobiles to be digipeating most of 
+the time.  But we do want them available as backup digipeaters at all
+times.  There are two methods for this.  1) It is OK to digipeat via
+any mobile by using his callsign explicitly.  And 2) all D700's should
+be configured to support UITRACE TEMP so thta it can be used as a
+TEMPn-N digi at any time.  See the special web pages all about D700 
+digipeater settings:
+
+http://aprs.org/TEMPn-N.html
+http://aprs.org/D7xx/d700digi.txt
+
+But basically it means:
+
+1) Set UIDIGI to nothing! (we do NOT want you to be a generic digi!)
+2) Set DIGIPEATER to ON   (so we can at least digi via your callsign
+2) Set UIFLOOD to nothing (so it is not used
+3) Set UITRACE to TEMP so that your radio always supports TEMPn-N 
+
+DIGIPEATING-FIXED:  SOmepeople with spare D700's want to use them as
+permanent digipeaters.  This is fine.  It invovles using the serial
+port and setting:
+
+UIFLOOD SS,ID
+UITRACE WIDE
+
+Then saving that configuration in a PM so that it can be activated and 
+de-activated in te field by chaing PM's.
+
+http://aprs.org/D7xx/d700digi.txt
+
+KEYBOARD TEXT MESSAGING:
+------------------------
+
+John Hansen has built an external interface box that allows the use 
+of any PS-2 style keyboard as a message text entry device for the 
+D700.  It just plugs into the D700 mic jack and lets you send 
+messages at normal typing speed. 
+See http://www.coastalchip.com/Kenkey.htm
+
+
+OBJECTS and TRAFFIC REPORTING:
+------------------------------
+
+See also http://aprs.org/D7xx/d700-objects.txt
+
+This feature allows you to place TRAFFIC objects on the APRS system
+to alert other drivers of traffic porblems, slowdowns and or other
+incidents with only two button presses.  This works by changing
+your MYCALL temporarily to TRAFFC (or other OBJECT name) and then
+sending a few packets to put it on the map.  You put this cofig-
+uration in one of the radio's Program Memories (PM5) as follows:
+
+MYCALL:      TRAFFC-4    <use random SSID or match your last letter
+XMIT:        MANUAL      <to only report the object ONCE or so
+STATUS TXT:  BACKUP/SLOWDOWN/INCIDENT(APR)   <your SUFFIX on the end)
+PATH:        WIDE2-2     <keep the OBJECT local
+ICON:        STAR        <big & eye catching. (use Triangle on D7).
+BAND-B:      146.52      <to hear other locals in the same mess
+Voice Alert: OFF         <in otherwords, do NOT set CTCSS 100
+ 
+By setting XMIT to Manual, you wont keep transmitting TRAFFC objects
+if you forget to switch back to your other PM...  But you do need to
+push BCON a few times until you are sure that your packet got 
+digipeated a few times so that others can see it.
+
+Voice Alert is OFF, so that you will HEAR packets and be reminded that
+you are in PM5!  Not only is  Band B programmed with 146.52 for ease 
+of communicating direct with others in the same traffic mess, but you
+can also then use this PM5 as a quick QSY for "52" at any time.  Thus 
+you get triple use out of this Program Memory PM5:
+
+1) One button traffic reporting (push BCON button to actually XMIT it)
+2) Quick QSY for 146.52 operations (its also in your band A CALL ch)
+3) Quick ctcss disable on 144.39 if I want to listen to APRS channel
+4) Possible temporary DIM setting while you get out of the car
+
+
+SATELLITE TRACKING:
+-------------------
+
+SATELITE TRACKING:  If someone in your area is running an APRSdata
+server, on your front panel, you will see an alert for any FM
+satellites that come into view.  These alerts are transmitted on
+144.39 to all Kenwood Mobiles.  They are also captured into your
+station list as satellite objects showing you the Frequency,
+Doppler Azimuth and distance to the bird.  If your radio has been
+on for at least 10 minutes, it will also capture a schedule of all
+satellite passes for the next 80 minutes into your DX LIST.
+
+For more info see http://aprs.org/astars.html .
+
+ISS:   ISS with the new Kenwood on board (2004) uses similar path
+aliases of ARISS, WIDE, APRSAT also and requires Transmitting and
+receiving on 145.825 MHz.  It should also digipeat on WIDEn-N so
+that you do not have to change anything from normal operating except
+the operating channel to work it.  When operating cia the ISS or
+any APRS satellite it is a good idea to add the wildcard "*" to your 
+MSG GROUPS so that you can see all of the messages between other 
+users.  But dont forget to remove the wild card for normal use or 
+your message list will fill up fast on 144.39.
+
+SUNSAT, SAPPHIRE, ANDE, RAFT:  These sateliltes also supported APRS
+digipeating but are all now inoperative or have de-orbited.
+
+GO-32:  NOT OPERATIONAL AT THIS TIME (June 2010)
+This satellite needs a separate PM because it needs to have
+Transmit Data on Band A 145.93 and RX data on Band B on 435.225 +/-
+10 KHz fof DOppler and APRS baud rate set to 9600.  It also needs to 
+have its own VIA PATH of VIA 4XTECH.  Also, it is a good idea to add 
+the wildcard "*" to your MSG GROUPS so that you can see some of the 
+messages from GO-32 or other users.  See the GO-32 web page:
+http://aprs.org/GO32-ops.html
+
+UHF DOWNLINKS:  The frequencies for all the satellites with 
+downlinks on UHF are listed above as the center frequency.  You will 
+have to tune 10 KHz higher at the start of the pass.  This will shift 
+down by 5 KHz 4 times during the pass, so if you use memories, you 
+will have to program in several in sesquence to follow the doppler.
+
+In summary I would do it this way:
+
+PM-off - Normal operations with 144.39 in a memory on band A for
+         terrestrial operations with CTCSS 100.  Then change channel 
+         memory to 145.825 to operate PCSAT (No CTCSS).  Band B is 
+         available for all other mobile operations.  Also operate
+         Sapphire by only changing your channel freqeuncy and path.
+
+PM1    - ISS operations with 145.825 in a memory on Band A.  You 
+         can still use Band B for all normal mobile operations.
+
+PM2    - Satellite operations with band-A memories holding the
+         uplinks for UO-22 (packet), UO-14, and AO-27 and Sapphire.  
+         Band-B memories hold the downlinks.  Actually, each satelite 
+         will probably need 5 memories (+10, +5, +0, -5 and -10 KHz).
+
+PM3, PM4,Available for your other applications or object names.
+
+PM5    - Available for 52 and APRS object reporting...
+
+Just some thoughts...
+
+de WB4APR, Bob

@@ -1,0 +1,186 @@
+APRS version 1.2.1 WEATHER UPDATES TO THE SPEC          24 Mar 2011
+-------------------------------------------------------------------
+
+24 Mar 2011  Proposed major simplification of new sensor approach
+23 Mar 2011  updated Radiation Reporting Field
+ 6 Jan 2010  previous version
+
+After the Japanese Nuclear incident in Mar 2011, we realized we 
+needed a radiation sensor field in the APRS weather format.  But in
+2006 we had already added Flood gages and Flooding symbols.  
+Apparently on Firenet where these water gage symbols appear, they
+are all not using the weather format but are using this format:
+
+;09428508 *061713z3401.40N/11424.75Ww3.57gh/82cfs
+
+This March 2011 we have proposed a change to simplify new sensors 
+as follows:
+
+1) All weather data (and any new sensor data) will be transmitted
+using one of the existing WX parsable symbols: *_, where "*"
+is now used as a wildcard meaning any of the table characters or
+overlays.  
+
+2) All HAZARD symbol categories will also be parsed for weather
+and other sensor formatted data.  This is because, once a condition
+has exceeded a threshold, that station/sensor can change its 
+symbol to indicate that HAZARDOUS condition.  So this includes *H
+symbols.  
+
+3) The 2006 Water gage format noted above will not change, since it 
+has no impact on the weather sensor format.  The 2006 proposal for
+water gages did include a format for inclusion in weather data, and
+that format is still valid, but will ONLY be parsed for in otherwise
+valid weather data formats.  The special water gage and flooding
+symbols /w and \w introduced in 2006 will not be parsed for weather
+data as originally proposed.
+
+Changes implicated by the above will be updated in all APRS files
+that I can find.  Such as:
+
+http://aprs.org/aprs11/symbols.txt
+http://aprs.org/aprs12/watergage.txt   
+
+Readers should also review all the clarifications to
+the original spec made in the APRS1.1 addendum in this document:
+
+http://aprs.org/aprs11/spec-wx.txt
+
+This new aprs12/weather-new.txt file will contain all proposed 
+APRS1.2 additions to the WX format fields.  For the full APRS1.2
+addendum, see http://aprs.org/aprs12.html
+
+COMPLETE REPORT:  The use of the COMPLETE APRS weather format is
+strongly encouraged where both position and weather data are included
+in a single COMPLETE packet.  The use of the positionless weather
+format is strongly discouraged since it is useless without position,
+and the requirement for additional weather station position report
+packets are equally useless without weather included in them!  It is
+an anathma for a real time system such as APRS to split this data
+among multiple unreliable packets.
+
+RADIATION LEVEL:  The field Xxxx has been proposed for reporting the
+level of Nuclear Radiation levels if available.  The X is the type
+indicator.  We chose "X" for radiation.  The xxx are like the resistor
+code.  First, two digits of precision and the last digit is the order
+of magnitude in NANOSEVERTS/Hr.  So 123 is 12 * 10^3 nanosieverts/hr or
+12 microsieverts/hr. Or 456 is 45 * 10^6 nanosieverts/hr or 45 
+millisieverts/hr.  One bananna generates about .1 uSieverts/hr, 
+a Brazil nut .4 uS/hr.
+
+If the radiation is at background levels the /_ weather symbol may be 
+used, when elevated readings occur, the R_ weather symbol with "R"
+overlay will indicate a Radiation Sensor weather station.  When a
+hazard threshold has been reached, the symbol can change to a RH
+symbol (Hazard with R overlay).
+
+WATER GAUGE INFO:
+
+In June 06, water level gage info was added to APRS.  Two new 
+symbols were introduced, one for H2O "/w" and the other for FLOOD "\w".  
+The device can choose to send either of these symbols depending on its 
+own threshold for "flooding".  The data format for these objects
+appears to be: 
+
+;09428508 *061713z3401.40N/11424.75Ww3.57gh/82cfs
+
+Which is standard Object format with a text of "3.57gh/82cfs" meaning
+gage height and cubic feet per second.
+
+NEW:  We propose that water gage readings can also be included in
+weather reports.  For benign water readings included with WX info
+use the normal /_ weather symbol, unless the flood gage reading is
+important when the F_ weather station with F overlay will be used.
+When FLOOD conditions are reached, the symbol can change to a hazard
+symbol (FH).
+
+The height above or below flood or tide level in inches is included in 
+the position comment string as Fxxxx and that string is chosen to be 
+compatible with the standard APRS weather reporting parameters.  In 
+addition, a voltage field Vvvv is also added. Thus, the usual APRS 
+weather report string similar to:
+
+  DIR/SPD/Gggg/Tttt/Rrrr/Pppp etc
+
+is extended by adding these additional parameters for 
+
+Fxxxx  water level above or below flood stage or mean tide in tenths
+       of a foot.  Values can range between +999 and -999 in tenths 
+       meaning -99.9 to +99.9 feet.  Meters are not used for the on
+       air format because it gives too little or too much resolution
+       to fit in the fixed length 4 bytes that are required.
+
+Vxxx   battery volts in tenths   128 would mean 12.8 volts
+
+Zxx    Device type
+
+These fields can either be added to a WX station report where the WX
+symbol would continue to be used, or the available weather data can
+be added to a Water Gage report using either of the two water symbols.
+The standard WX report allows for any field to be indicated as not
+available either by omission or by replacing the value with "...".
+SInce the wind direction and speed and temperature are required fields,
+this means the minimum weather report with flood info is
+   
+WX symbol -plus-   .../...t...VxxxFxxxx
+
+or the minimum water gauge report is
+
+Water symbol -plus- VxxxFxxxx/ZFA
+
+Notice that if water data is added to a WX report, then only Fxxxx
+and optional Vxxx are added to the WX report.  But if WX data is
+added to a water gage report, then the minimum fields of wind 
+direction and speed and temperature .../...t...Fxxxx are required.
+
+Examples are:
+
+Weather Station reports with flood gage readings:
+
+ DDMM.hhN/DDDMM.hhW_ddd/sss/Gggg/Tttt/Fxxxx...
+ DDMM.hhN/DDDMM.hhW_ddd/sss/Gggg/Tttt/Fxxxx/Vvvv...
+ DDMM.hhN/DDDMM.hhW_ddd/sss/Gggg/Tttt/Rrrr/PppppFxxxx...
+
+Water Gage Object reports (w/o weather):
+
+;09428508 *061713z3401.40N/11424.75Ww3.57gh/82cfs
+
+Water Gage Object reports with weather:
+
+ DDMM.hhN/DDDMM.hhWwFxxxx/ZFA
+ DDMM.hhN/DDDMM.hhWwFxxxxVvvv/ZFA
+ DDMM.hhN\DDDMM.hhWwFxxxxVvvv/ZFA
+ DDMM.hhN/DDDMM.hhWwddd/sss/Gggg/Tttt/Fxxxx/ZFA
+ DDMM.hhN/DDDMM.hhWwddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+ DDMM.hhN\DDDMM.hhWwddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+
+Water Gage reports (new):
+ DDMM.hhNFDDDMM.hhW_Fxxxx/ZFA
+ DDMM.hhNFDDDMM.hhW_FxxxxVvvv/ZFA
+ DDMM.hhNFDDDMM.hhW_FxxxxVvvv/ZFA
+ DDMM.hhNFDDDMM.hhW_ddd/sss/Gggg/Tttt/Fxxxx/ZFA
+ DDMM.hhNFDDDMM.hhW_ddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+ DDMM.hhNFDDDMM.hhW_ddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+
+Flood Hazards(new):
+ DDMM.hhNFDDDMM.hhWHFxxxx/ZFA
+ DDMM.hhNFDDDMM.hhWHFxxxxVvvv/ZFA
+ DDMM.hhNFDDDMM.hhWHFxxxxVvvv/ZFA
+ DDMM.hhNFDDDMM.hhWHddd/sss/Gggg/Tttt/Fxxxx/ZFA
+ DDMM.hhNFDDDMM.hhWHddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+ DDMM.hhNFDDDMM.hhWHddd/sss/Gggg/Tttt/FxxxxVvvv/ZFA
+
+
+Notice that since 2006, existing software had to also consider parsing
+the appearance of any WATER or FLOOD symbols to see if they also
+include Weather.  Also, everyone's weather parser needed to look
+at the WX fields for the optional additional Fxxxx or Vvvv fields.
+
+This has been simplilfied in addendum 1.2.1 so that only two APRS
+symbol groups need to be parsed for Weahter and other sensor data,
+that is the original *_ and *W for weather plus the new *H hazards.
+
+Parsing the old water gage data may be required until all legacy
+water gages are gone.?  Comments?
+
+de WB4APR, Bob

@@ -1,0 +1,542 @@
+APRSDOS PARSER                                              30 May 2008
+-----------------------------------------------------------------------
+
+This text file contains the original APRSdos parser greatly condensed 
+down and commented in plain english where possible.  It contains some
+legacy formats that are no longer needed in most modern parsers.  These 
+obsolete or rarely used formats are indicated with a * at the end.
+
+Some other subroutines that just happened to be in this same module
+are also retained here for info if needed...  APRSdos consisted of
+5 modules and over 30,000 lines of code.  This is just one module
+and highly condensed with most code replaced by english summary lines.
+
+
+**********************************************************************
+SUBROUTINE:  PARSE_INCOMING_LINE_OF_DATA
+ 
+FIRST PARSE FOR ANYTHING ON THE SERIAL PORT THAT IS RAW DATA FROM
+DF UNITS, GPS/LORANS, SPECIAL TNC's or ANYTHING WITHOUT A PACKET HEADER
+This is necessary because all of these could share the same serial
+port in the various single-port modes of early APRS...
+
+If begins with "P1 or P2" its a dual port TNC. Skip to 4th byte
+If begins with space and 46th byte is "Z " it is DX cluster mail
+If first byte is not $%*@,A-Z,0-9 THen skip to 2nd byte. continue
+IF PSEUDO PACKET FROM ZIPLAN, Process accordingly (and digipeat)
+IF begins with  "*** CONNECTED.." then go to TNC terminal routine
+IF Longer than 165 THEN ignore packet as too long
+IF begins with "!!" THEN its a Raw Ultimeter WX data
+IF "%" is between 3rd and 12th byte check if it is DF junior raw data
+IF is $GPVTG string, combine with previous $GPGGA for complete posit
+IF begins with "$" It is own station raw GPS sharing the serial port
+
+EVERYTHING FROM HERE DOWN ASSUMES THE STRING HAS A PACKET HEADER
+
+Confirm there is a header with ">", commas and a ":", else abort
+Extract the CALLSIGN
+EXTRACT TOCALL
+Extract PATH, and save on PATH page
+Set flag if DIRECT
+CHeck for third-Party.  If so, extract header and recurse back to start
+If MY packet, keep statistic and ignore rest of parser
+If nothing looks like a header, skip further processing
+If PATH contains "GATE" then issue warning to operator or filter
+If Header is in AEA format, then re-arrange into TAPR-2 format
+Accept only packets with TOCALLS OF:
+  APxxxx, BEACON, ID, CQ, MAIL, GPSxyz, SYMxyz, QST, ZIPxxx, WXxxxx
+  DFxxxx, DRxxxxx, DXxxxx, MIxxxx, NExxxx,     * 
+  NAxxxx, QTH TCxxxx, TExxxx, TRxxxx, WIxxxx   * 
+  I dont remember what these other two lines were for. Not needed now.
+If begins "SC2" then it is skycommand.  Parse and display FREQ
+If TOCALL matches a selected ALTNET then keep it, else skip
+If TOCALL is SPCL Always keep it
+If first bytes are your call, then it is ASCII, RTTY or PSK-31
+   re-arrange into a pseudo packet format and keep processing
+If the 10th bytes are ":ACK" THEN always allow
+if begins with GAME, then do Chess processing (board in S.Atlantic)
+If in SPACE or Meteor scatter mode, keep all packets
+Check for beta-Mic-E  OLD posit     *
+Check for Mic-E  OLD posit          
+Check for original Beta-Mic-E       *
+Check for New Mic-E
+  Identify D7 and D700 and D710
+  Go parse Mic-E into pseudo APRS position/status packet & continue
+
+If DX CLuster Mail, go capture it
+DUPE CHECK to previous packet in last 8 seconds and ignore if dupe
+
+Check existing station list for CALLSIGN.  
+   Do not add if a KILL packet
+   If new, add with VICINITY position estimate (from 1st digi location)
+IF begins with "<IGATE,M" THEN mark it as an igate
+IF begins with "<IGATE,C" THEN mark it as an igate
+
+IF "?APRS?" then set response timer
+IF "?WX?"  and am WX station, then set respond timer
+If "Ping! " OR "?CQ?" sound out CQ to operator
+IF "DX de " THEN its a DX cluster spot. Process and save
+IF TYPE is "*" or "#" and length is 14 then it is peet bros WX
+IF TYPE is "!!" and length is 42 then figure out Peet format
+if TYPE is "$ULT" and length is 49 then figure out which peet and process
+If AUTO-QSO mode is on, add call to QSL Bulletin and set timer
+IF begins with "LIST" THEN 'convert D700 data to POSIT   
+IF OLD (pre 1996) Message format, convert to new format          *
+If OLD (pre 1996) OBJECT format, convert to new format           *
+
+IF Type is ":" then process as message
+IF TYPE is ")" THEN convert ITEM to OBJECT
+If ! is anywhere in packet, see if it is old NETROM APRS beacon  *
+IF TYPE is ";" it is an object, get NAME and process as position
+IF TYPE is "-" it is a transmitted killed object
+IF TYPE is "_" Go decode positionless weather and add to posit
+IF TYPE is "@=*-/!" then it is a posit
+   TIME STAMP all POSITS in UTC
+If 9th byte is not 0-9 and LEN>21 then check for compressed
+Confirm that N,S,E,W bytes are correct
+Confirm that TIME byte contains one of "zZhH/"
+If SYMBOL is a WAYPOINT then
+   CONVERT CALLSIGN SSID to -W and save
+IF TYPE is "/1@" then get POS DATA and COMMENT TEXT
+   IF COMMENT HAS WX DATA, then PARSE IT
+   CHECK POSIT AGAINST ALARMS and PROXIMITY
+   IF posit="0000.00N/04000.xx" then use "xx" table look up system
+IF TYPE is "[]>" then do GRID parsing
+IF TYPE is ">" AND 10th byte is SPACE, check for GRID-IN-TO format
+CHECK POSITION FILTER. If within selective availability, do not log as new
+
+IF TYPE is ">" or other text has been received in any other format
+   then it should be added to the STATUS list if presently EMPTY
+   If TYPE is "ID" then add to status only if empty
+   ELSE only proper ">" STATUS should overwrite any previous STATUS
+TIME STAMP ALL STATUS received
+LOG all NEW STATUS packets or changed packets in LOG file
+IF TYPE is "T#" then PARSE TELEMETRY
+IF POSITON  was RAW NMEA without velocity, then hold 1 seconds 
+   for possible association with subsequent VTG packet
+UPDATE PACKET counter for CALLSIGN
+END SUB
+--------------------------------------------------------------------
+
+SUB PARSE  RAW NMEA  STRINGS
+
+ GET CALLSIGN.  Set SYMBOL based on SSID or TOCALL GPSxyz or SPCxyz
+ IF "RMZ" OR "GLB" THEN get heading and set magnetic or true
+ IF "GGA" Parse out position and hold for 1 seconds for later VTG
+ IF "GLL" Parse out position and hold for 1 seconds for later VTG
+ IF "VTG" AND position is pending, parse and combine
+ IF "RMC" Parse out position and CSE/SPD and posit complete
+ IF "WPL" AND Waypoints is enabled, then parse out position
+ IF "HDM" THEN get DF heading
+ 
+END SUB
+--------------------------------------------------------------------
+
+
+SUB AckedMSG 
+    Search outgoing messages for matching line number and callsign
+    IF not previously acked then
+       If LineNo equals ACK number then 
+          if ACK, then mark as acked
+          if REJ, then mark as Rejected
+          CALL SendCW("R")
+          Now, search for next MSG to same station (if any)
+          If exists, then set timer to 0 to begin sending.
+END SUB
+--------------------------------------------------------------------
+
+SUB AlohaCalc
+
+ 'in main :IF KyActy > 300 AND aloha = 0 THEN CALL AlohaCalc
+ Aloha = 60'default
+ DIM r%(Pmax), S%(Pmax), S$(Pmax)
+ IF MyLON <> 0 THEN CDX = MyLON: CDY = MyLAT
+ FOR ALL STATIONS:
+     IF not heard in last hour set Rate = 1
+     EXTRACT SYMBOL TYPE
+     IF Weather then set Rate = 6
+     IF Digi, then set Rate = 3
+     If a MObile then set Rate = 7
+     If SPEED > 0 then set Rate = 15
+     For all others, set Rate = 2
+ NEXT
+ Now SORT LIST by CLOSEST
+ Set DIGI multiplier to 1
+ Now start at closest and begin summing each stations Rate
+     If is a DIGI, increment DIGI multiplier
+     Set TOTAL = TOTAL + Rate * DIGI Multiplier
+     IF TOTAL > 1800 THEN the channel is full.  Stop.
+ NEXT i
+ RANGE of last stn accumulated is the ALOHA RADIUS for full channel.
+ IF There less than 60 stations, then there is not enough to compute
+ IF number heard in last hour is less than 60, not enough to compute
+ If enough, and above loop totaled >1800, then
+    Show ALOHA circle
+    Show statistics on Mobiles, Digis, Weathers and others...
+END SUB
+
+-----------------------------------------------------------------------
+
+SUB IncPrd (Decay, F, M, k, Nxt)
+
+ After sending each packet, use this routine to update next-send timers
+ FIRST, count number of hops in PATH.
+ If PATH is 1 hop or less, then set final decay limit to 10 minutes
+ IF PATH is 2 hops or more, then set final decay limit to 30 minutes
+ UNLESS packet was an OBJECT, then limit decay to 24 hours max
+ Set DECAY to 2 Sec + old DECAY multiplied by FACTOR +/- 25% randomness
+ For this packet, set NEXT_TX to NOW plus this new DECAY
+ REMARK: I actually used different FACTORS for 
+         positions = 1.8
+         Objects = 2
+         messages = 1.6
+ Today, I would just use a factor of 2 (double) after each packet)
+ But ALWAYS add randomness to ANY TX calculation so you don't sync with
+ someone else...
+
+END SUB
+
+--------------------------------------------------------------
+
+SUB RECEIVE A NEW MESSAGE (a$, Rmsg$, Resp$, LineNo$, Rack$, Call$)
+     
+CHECK all messages.  Reject if a dupe
+CHECK if line number contains REPLY ACK in {MM}AK format
+IF SO, then go mark message number MM as being acked
+IF MESSAGE buffer is full, do not ack. Send back REJECT instead
+Now prepare ACK for this message containing {xxxxx or {MM}AK format
+Add MESSAGE to MESSAGE LOG
+If MESSAGE is in NTS format, then display on NTS form
+Send ACK and sound out "K" in CW
+If this is 3rd or more times you receiv ed DUPE then warn of poor path
+END SUB
+------------------------------------------------------------------
+
+SUB PROCESS A RECEIVED MESSAGE
+   RcvMsgCK (a$, k, Call$, AddFlg)
+ CONVERT OLD FORMAT (had no leading ":") by inserting leading ":"
+'new k:234567890: for 872, adding k everywhere here
+Get CALLSIGN SSID
+IF TO MY CALLSIGN AND ANY SSID, THEN CAPTURE AS FOR ME
+IF SSID DOES NOT MATCH MYCALL, then do not ACK
+Get LINE NUMBER {xxxxx or could be {MM}AK
+IF MSG CONTAINST ?APRS? then GO DO Query Response
+IF MSG IS AN ACK THEN
+       GET ACK NUMBER 
+       IF ACK NUMBER IS REPLY ACK {MM}AK THEN ACKNO= {MM
+       GO MARK AS ACKED any outgoing messages with {MM
+       'new lines in rcvmsgadd   {MM}AK
+       'SendMSGs, put in ak$=ACK$ on end at XMIT
+       'sendline adds "}" adn removes Message number from NTS
+       'Read page Rmsg$ devoid of ACK# now
+       'temp display of Line # in READPAGE
+IF MSG IS A "REJ" THEN SendCW("NAK")
+ELSE IT IS A MESSAGE TO ME
+     IF MESsAGE LIST IS FULL, DELETE OLDEST AND ADD THIS ONE
+       CALL RcvMsgAdd(a$, Rmsg$, Resp$, LineNo$, Rack$, Call$)'845
+       IF MEESAGE IS "SET XXX" THEN SET INDICATED OUTPUT BITS ON
+       IF MESSAGE IS "OFF XXX" THEN SET INDICATED OUTPUT BITS OFF
+       IF MESsAGE IS "READ" THEN Read the parallel port and report
+       SCHEDULE A DELAYED ACK in 30 seconds
+       SEND ACK NOW
+       IF AUTO REPLY is ON, then SEND REPLY MESSAGE
+ELSE  the message is not to me...
+    IF CALLSIGN IS "HELP!" THEN SOUND ALARM
+    IF MESSAGE IS BULLETIN Then ADD To BULLETIN Display
+    ELSE, TIME STAMP AND ADD TO TRAFFIC PAGE
+END SUB
+----------------------------------------------------------------------
+
+SUB PROCESS INCOMING BULLETIN
+
+ STATIC QST
+ GET CALLSIGN
+ GET BULLETIN GROUP (if any)
+ IF x = 99 THEN
+    HDR$ = LEFT$(RTRIM$(Call$) + ">" + B$ + "       ", 12)
+       L = LEN(a$)
+       i = INSTR(k + 10, a$, "{"): IF i <> 0 THEN L = i
+       BN(ms1) = HDR$ + MID$(a$, k + 10, L - k - 10)
+       M = 0: j = 1: k = 0
+       LEFBN$ = LEFT$(BN(ms1), 12)
+       SORT INTO LIST BY CALL AND BLN# number
+           IF DUPE Then IGNORE
+           IF SAME BLN# then OVERWRITE OLD WITH NEW
+
+       IF NEW BLN# is NEW
+          SET NEW Bulletin flag and sound out "B" in CW
+          ADD to BULLETING history LOG
+          SORT INTO BULLETIN PAGE
+          IF NO MORE ROOM, ELIMINATE OLDEST BULLETIN
+          IF IN NTS FORMAT, DISPLAY ON NTS TRAFFIC FORM
+END SUB
+---------------------------------------------------------------------
+
+SUB Xmit PACKET (any kind)
+
+  IF PATH contains "ECHO" and on HF then FLASH WARNING
+  IF PATH contains "RELAY" and not first in PATH then FLASH WARNING
+  IF PATH contains "WIDE1-1" and not first in PATH then FLASH WARNING
+  IF PATH contains "GATE" and not HF then FLASH WARNING
+  IF PATH contains "WIDE,WIDE,WIDE" then FLASH WARNING
+END SUB
+
+-------------------------------------------------------------------------
+
+SUB  DECODE MIC-E PACKET  (I still need to comment this one)
+     (ToCall$, a$, k, TLM$, STS$, MicE$)
+
+ REM ToCall$ = "S8UY1Q"
+ REM 385911N 07629.11W 123/045>
+ REM mmmN0W
+ REM 385911 ^721134
+ REM         ]691205
+ REM These digits are n+28     ^^^^
+ CFg = 0: s25$ = MicE$
+ FOR i = 1 TO 6   'Lat
+     B%(i) = 0: c = ASC(MID$(ToCall$, i, 1))  ': CFg = 0
+     SELECT CASE c
+     CASE 90: c = 32                                     'Z = _
+     CASE 75: c = 32: B%(i) = 1                          'K = _
+     CASE 76: c = 32: B%(i) = 1: IF i < 4 THEN CFg = -1  'L = _ Custom MSG
+     CASE 80 TO 89: c = c - 32                           'P-Y = Posit
+     CASE 65 TO 74: c = c - 17: CFg = -1                 'A-J = Custom Msg
+     CASE ELSE: B%(i) = 1
+     END SELECT
+     LA$ = LA$ + CHR$(c)
+ NEXT i
+ IF B%(4) THEN N$ = "S" ELSE N$ = "N"
+ IF B%(5) THEN O$ = "0" ELSE O$ = "1"
+ IF B%(6) THEN w$ = "E" ELSE w$ = "W"
+ LA$ = LEFT$(LA$, 4) + "." + MID$(LA$, 5, 2) + N$
+ LO$ = O$ + M2$(a$, k + 2) + M2$(a$, k + 3) + "." + M2$(a$, k + 4) + w$
+
+ IF LEFT$(LO$, 2) = "18" THEN MID$(LO$, 1) = "10" 'Mic-2 tests
+ IF LEFT$(LO$, 2) = "19" THEN MID$(LO$, 1) = "00"
+ IF MID$(LO$, 4, 1) = "6" THEN MID$(LO$, 4, 1) = "0"
+ a = ASC(MID$(a$, k + 5, 1))
+ IF a > 107 THEN MID$(a$, k + 5, 1) = CHR$(a - 80) 'fixes SPD+800
+
+ SC2$ = M2$(a$, k + 6)
+ cs$ = RIGHT$(SC2$, 1) + M2$(a$, k + 7) + "/" + M2$(a$, k + 5) + LEFT$(SC2$, 1)
+ a = VAL(LEFT$(cs$, 1))
+ IF a > 3 THEN MID$(cs$, 1) = MID$(STR$(a - 4), 2, 1) 'fixes CSE+400
+ sm$ = MID$(a$, k + 8, 1): adj$ = "/"
+ IF NewE THEN adj$ = MID$(a$, k + 9, 1)
+ M = 4 * B%(1) + 2 * B%(2) + B%(3)
+ IF M = 7 THEN Alarm = PM: MID$(PS(PM), 10, 1) = "A":
+ c$ = MID$("Off duty..Enroute...In ServiceReturning.Committed.Special...Priority..EMERGENCY!", 10 * M + 1, 10)
+ 'SELECT CASE M
+ '0 "Off duty.."
+ '1 "Enroute..."
+ '2 "In Service"
+ '3 "Returning."
+ '4 "Committed."
+ '5 "Special..."
+ '6 "PRIORITY.."
+ '7 "EMERGENCY!"
+ M$ = "/M": IF CFg THEN c$ = "Custom  " + STR$(M): M$ = "/C"
+ M$ = "/" + MicE$ + M$ + MID$(STR$(M), 2) + "/" + c$'Pos Comment
+ cmt = 9: T = 0  ' had been cmt=14 and mid$(...4)
+ IF NewE THEN cmt = 10
+ IF MID$(a$, k + 9, 1) = CHR$(29) THEN T = 10: S = 1: N = 5
+ IF MID$(a$, k + 10, 1) = "'" THEN T = 11: S = 2: N = 10
+ IF MID$(a$, k + 10, 1) = "`" THEN T = 11: S = 2: N = 4
+ IF T THEN cmt = T + N: TLMt$ = MID$(a$, k + T, N)
+
+ STS$ = MID$(a$, k + cmt) '+ SPACE$(54) removed in 824
+' TY$ = "/": typ$ = ">Mic-E: "
+' IF LEFT$(STS$, 1) = ">" THEN TY$ = "@": typ$ = ">TH-D7:"
+' IF LEFT$(STS$, 1) = "]" THEN TY$ = "@": typ$ = ">D-700:"
+ KW$ = LEFT$(STS$, 1)
+ IF KW$ = ">" THEN
+    TY$ = "@": typ$ = ">TH-D7:"
+ ELSEIF KW$ = "]" THEN TY$ = "@": typ$ = ">D-700:"
+ ELSE KW$ = " ": TY$ = "/": typ$ = ">Mic-E:": STS$ = KW$ + STS$
+ END IF
+
+ IF MID$(STS$, 5, 1) = "}" THEN
+    a& = 8192 * V91(STS$, 2) + 91 * V91(STS$, 3) + V91(STS$, 4) - 10000
+    IF a& > 32700 THEN a& = 32700
+    a! = a&
+    alt$ = "/A=" + LzN$(a!, 6)
+    STS$ = KW$ + MID$(STS$, 6)
+ END IF
+ STS$ = typ$ + STS$
+ IF LEN(STS$) = 8 THEN STS$ = ""
+ p$ = LA$ + adj$ + LO$ + sm$ + cs$ + M$ + alt$
+  a$ = LEFT$(a$, k) + TY$ + ZTG$ + p$ + SPACE$(16)
+  'BL(LineB) = "N3MIM     222326 T#101,232,114,215,075,255,00110101"
+  IF LEN(TLMt$) = 4 THEN TLMt$ = TLMt$ + CHR$(0) 'for pre-beta's
+  IF T THEN
+     TLM$ = "T#MIC"
+     FOR i = 1 TO N STEP S
+         IF T = 10 THEN a = ASC(MID$(TLMt$, i, 1))
+         IF T = 11 THEN CALL HEXDEC(TLMt$, i, 2, a)
+         TLM$ = TLM$ + "," + LzN$(a, 3)
+         IF N = 4 AND i = 1 THEN TLM$ = TLM$ + ",---"
+     NEXT i: IF N = 4 THEN TLM$ = TLM$ + ",---,---"
+     IF RTRIM$(MID$(BL(LineB), 18, 25)) <> TLM$ THEN
+        CALL AddBL(Call$ + " " + DTGs$ + TLM$)
+     END IF
+  END IF
+
+END SUB
+
+
+-----------------------------------------------------------------------
+SUB Qresp (a$, k, Call$, B)
+  
+ REM B=0 means ASAP, B=1 means later
+ MID$(HL(Pmax + 2), 1) = CHR$(ASC(HL(Pmax + 2)) + 1)
+ Qrng = 8192: LA = CDY: LO = CDX
+ REM W3XYZ....:?APRS$ W3ABC
+ TY$ = MID$(a$, k + 14, 3)
+ x$ = RTRIM$(MID$(a$, k + 18, 9))
+ Rack$ = "}" + ACK$
+ SELECT CASE TY$
+ CASE "RSP": Qpo = -1: B = 0
+ CASE "RSM": Qms = -1: B = 0
+ CASE "RSO": Qob = -1: B = 0
+ CASE "RSS": QST = -1: B = 0
+ CASE "RSD": x$ = ""
+       FOR i = 1 TO LineP
+           IF LEFT$(DG(i), 1) = "*" THEN
+              j = INSTR(DG(i), ">"): IF j < 3 OR j > 10 THEN j = 10
+              x$ = x$ + MID$(DG(i), 2, j - 2) + " "
+           END IF
+       NEXT i
+       x$ = LEFT$(x$, 62)
+       CALL Xmit(3, ":" + Call$ + ":Dir= " + x$ + Rack$)' + "{:")
+ CASE "RSH"
+       FOR i = 1 TO LineP
+           IF x$ = LEFT$(PS(i), LEN(x$)) THEN
+              CALL Xmit(3, ";" + LEFT$(PS(i), 9) + "*" + MID$(PS(i), 12))
+              CALL PHrdLN(i, d$, 12)
+              CALL Xmit(3, ":" + Call$ + ":Hrd " + x$ + " " + d$ + Rack$)'+"{:")
+           END IF
+       NEXT i
+ CASE "RST"
+       CALL Xmit(3, ":" + Call$ + ":PATH= " + MID$(RTRIM$(DG(PM)), 22) + Rack$)'+"{:")
+ CASE ELSE: Qpo = -1: Qob = -1: Qms = -1: QST = -1
+ END SELECT
+
+ CALL ParseA(PS(0), TY$, LA, LO, Sym$): Laq = LA: Loq = LO
+ IF LEN(a$) > k + 19 THEN
+    'CALL ParseA(PS(0), TY$, LA, LO, sym$)
+    Laq = VAL(MID$(a$, k + 7, 6)): Loq = -VAL(MID$(a$, k + 14, 7))
+    Qrng = VAL(MID$(a$, k + 22, 4))
+    IF Qrng < 8 ^ Bfac THEN B = 0
+ END IF
+ a = (Bfac * 5) + B * INT(60 * RND(1) * (Bfac)) 'randomly
+ IF ABS(LA - Laq) < Qrng / 70 AND ABS(LO - Loq) < Qrng / 70 * Lfac THEN
+    REM randomly in 1 min (or 2 for HF)
+    IF Qpo THEN NxPOS = TIMER + a
+    IF QST THEN NxBCN = TIMER + a + 4
+    a = a + 4' spread things out a little...
+    FOR i = 1 TO LineP
+        IF Qob AND NxOBJ(i) > TIMER + a THEN NxOBJ(i) = TIMER + a: a = a + 2
+    NEXT i
+    FOR i = 1 TO nsl
+        IF Qms AND NxMSG(i) > TIMER + a THEN NxMSG(i) = TIMER + a + i
+    NEXT i
+ END IF
+ 
+END SUB
+--------------------------------------------------------------------------
+
+
+SUB ParseGdSq (a$, k, Call$, LALO$, c$)
+
+REM ............:[FM18sv] where : is at position K
+REM W3XYZ>FM18SV:]$[...where $ is symbol
+REM W3XYZ>FM18SV:]$[...^HP where Heading= 0-Z * 10: P=SQR(P/100)
+REM W3XYZ>FM18sv/1:]${...^HP (for KAMS)
+REM W3XYZ>APRS    :>GG##gg/$ comments
+REM       K is    ^12345678901
+B$ = "[JJ55LL]"
+MID$(B$, 1) = UCASE$(MID$(a$, k + 1))
+Lon = 180 - (ASC(MID$(B$, 2, 1)) - 65) * 20
+Lat = (ASC(MID$(B$, 3, 1)) - 65) * 10 - 90
+CALL GScalc(B$, 4, Lat, Lon, Good)
+es$ = "Inside parseGdSq"
+
+Rndo = ASC(MID$(Call$, 4, 1)) - 65 '0 to 26 always positive
+Rnda = ASC(MID$(Call$, 2, 1)) - 48 '0 to 43
+IF INSTR("] ", MID$(B$, 6, 1)) THEN ' its 4 digit
+   'Since only 4 digit, add some randomness and sym$="q"
+   Lon = Lon - Rndo / 27
+   Lat = Lat + Rnda / 44
+   c$ = "q" + MID$(a$, k + 7)
+   MinRange = 128
+ELSE 'its 6 digits
+   IF MID$(B$, 6, 2) < "AA" THEN Good = 0
+   Lon = Lon - (ASC(MID$(B$, 6, 1)) - 65) * 5 / 60 - .005  '.02 adds 1/4 sq
+   Lat = Lat + (ASC(MID$(B$, 7, 1)) - 65) * 2.5 / 60 + .005
+   Lon = Lon - Rndo / 600
+   Lat = Lat + Rnda / 1300
+   L = LEN(a$): ct = INSTR(a$, "^")  'MScat pkts /p:...^HP (/p is port in KAM)
+   IF L = ct + 2 THEN
+      H = ASC(MID$(a$, ct + 1, 1)) - 48: IF H > 16 THEN H = H - 7
+      p = ASC(MID$(a$, ct + 2, 1)) - 48
+      IF p > 0 AND p < 10 THEN p = 100 * p ^ 2 ELSE p = 0
+      IF H > 0 AND H < 37 THEN H = H * 10 ELSE H = 0
+      c$ = "G" + LzN$(H, 3) + "/" + LzN$(p, 3) + " watts Meteor Scatter!"
+   ELSE c$ = "G" + MID$(a$, k + 9)
+   END IF
+   MinRange = 8
+END IF
+      
+IF Good AND ABS(Lat) < 90 AND ABS(Lon) < 180 THEN
+      CALL XYtoLL(Lat, Lon, "/", LALO$)
+      IF CWon THEN CALL SendCW(MID$(a$, k + 2, 4))
+      IF MinRange = 128 THEN
+            MID$(LALO$, 4, 4) = " .  ": MID$(LALO$, 14, 4) = " .  "
+      ELSE MID$(LALO$, 6, 2) = "  ": MID$(LALO$, 16, 2) = "  "
+      END IF
+      c$ = c$ + "...................................."
+ELSE LALO$ = "": c$ = "c"
+END IF
+
+es$ = "GS done"
+
+END SUB
+-------------------------------------------------------------------------
+
+SUB Decode COMPRESSED FORMAT  (i still need to comment this one)
+      
+ REM Format is !123456z/YYYYXXXX$csT
+ IF cf$ > "`" AND cf$ < "k" THEN cf$ = CHR$(ASC(cf$) - 49)
+ LA = 0: LO = 0
+ FOR i = 0 TO 2
+     c9 = 91 ^ (2 - i)
+     LA = LA + c9 * V91(a$, k7 + 3 + i)
+     LO = LO + c9 * V91(a$, k7 + 7 + i)
+ NEXT i
+
+ LA = 90 - LA / 4186   '75351/180 to .014 min
+ LO = 180 - LO / 2093   '75351/90  to .028 min 'DOS only
+ CALL XYtoLL(LA, LO, cf$, LL$)
+ c = V91(a$, k7 + 12)
+ S = V91(a$, k7 + 13)
+ T = V91(a$, k7 + 14)
+ Bt$ = "/"
+ ctx$ = MID$(a$, k7 + 15)
+ IF c < 0 THEN
+    cs$ = "": Bt$ = "" 'it was a SPACE char or less
+ ELSEIF c < 90 THEN
+    cs$ = LzN$(c * 4, 3) + "/" + LzN$((1.08 ^ S) - 1, 3)
+ ELSEIF c = 92 THEN cs$ = "Rng" + LzN$((2 * 1.08 ^ S), 4)
+ END IF
+ O = T AND 7
+ N = T AND 24
+ O$ = MID$("/0000/BTxt/APRS/3333/KPC3/Pico/Trkr/Cngd/", O * 5 + 1, 6)
+ IF T > 63 THEN G$ = "Good " ELSE G$ = "Last "
+ IF O > 3 AND N > 0 THEN ctx$ = O$ + G$ + MID$("GLL fix8GGA fix6RMC fix", N - 7, 7)
+ IF N = 16 THEN cs$ = "/A=" + LzN$((1.0023 ^ (c * 91 + S)), 6) + " "
+ a$ = LEFT$(a$, k7 + 1) + LL$ + MID$(a$, k7 + 11, 1) + cs$ + Bt$ + ctx$
+
+END SUB
+
+
+--------------------------------------------------------------------

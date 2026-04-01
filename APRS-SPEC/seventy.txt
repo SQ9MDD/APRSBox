@@ -1,0 +1,80 @@
+SEVENTY 9600 BAUD DATA CHANNELS ON 2M                    de WB4APR
+-------------------------------------                    ---------
+
+
+OVERVIEW:
+---------
+Here is how to stream more than 40 Megabytes per day per radio club
+on 2 meters for all kinds of applications.  And there are over 70
+channels on 2 meters available for this data already allocated.
+Its all there, we just need to use it...
+
+THink in terms of modern Internet type usage where users "request" data 
+in small request packets and then the "web page" comes back with all you 
+ever needed to know in response.  Thus the TO-USER channel has to be FAST
+and BIG but the user XMT-channel can be trivial (even be 1200 baud)!
+
+Here is how:
+------------
+The INPUT channel on every 2m repeater is rarely used.  In fact, in the
+area of any repeater coverage, it is the ONLY "receiver" that is tuned
+and listening to that frequency.  Every other user radio is listening 
+only on the OUTPUT of the repeater.  THus, the only "receiver" in the 
+whole county or state that is "listening" on that frequency is the repeater 
+INPUT "receiver".
+
+Now, then, the REPEATER, by listening on its input has full knowledge of
+whether it has any users trying to access the repeater or not.  It is the
+CZAR of authority on the use of that frequency.  If anyone keys
+up on the input to the repeater, the repeater then brings up its transmitter 
+and the system operates normally.  But that same INPUT receiver can also
+tell completely if the channel is NOT BUSY.
+
+When the input of the repeater is NOT busy, the REPEATER can decide to then
+send out 1 second bursts of 9600 baud packet data ALL DAY LONG when the
+repeater input channel is not busy.  Yet since it only sends the data in 
+one second bursts, it can still hear any USER that wants to use the repeater
+within one second of his keying his mic.  ANd since most repeaters have
+ker-chunk filters on their control systems such that it takes at least one
+full second of key down to bring up the repeater in the first place, the
+mobile users already know to wait about 1 second before beginning to talk.
+
+Thus, you have a system that can be used by the mobiles 100% just like they
+do now.  BUT for the other 99% of the time when the repeater is NOT in use,
+it can stream gigabytes of data to all HAMS in the county.
+
+WHAT KIND OF DATA?
+------------------
+Answer, HAM RADIO WEB pages and Databases.  If your radio and PC are listening
+all day long 24 hours a day, 7 days a week, then whenever you come home or
+otherwise access your favorite HAM radio sites from your mobile, your PC will 
+always have at least the most recent WEB page (no more than 24 hours old). 
+For any one that you need an instant update, just ask.  Not only you, but 
+everyone else will get the same instant update...
+
+CONCLUSION:
+-----------
+We have the means to deliver almost 3 gigabytes a day to all HAMS in any area
+on 2 meters.  Much Much more if we consider 220 and 440 repeater channels and
+all at 9600 baud which any radio can do these days.
+
+We have the bandwidth.  Even the most used yack-yack repeaters on 2 meters 
+run well under say  10% usage (on a 24 hour basis).  And this technique
+of data streaming FROM THE REPEATER on its own INPUT when it is not in use
+can be applied to ANY repeater with no impact on users whatsoever.
+
+DETAILS:
+--------
+The KEY to remember is that ONLY the repeater INPUT-RECEIVER is in the position
+to make the decision as to whether the channel is in use and to react instantly
+(within 1 second) to a user request for normal voice access.  No other receiver
+at any other location can make this decision.  Thus the data to be "streamed"
+must be "sourced" from that site.  But again, this is trivial to do via links,
+telephone, modems or what have you.. and I dont need to detail that here...
+
+This paper was written back in the 80's or 90's for the DCC proceedings but I 
+have lost it.  SO I just retyped the essentials here.  Also look for a paper
+by John Hanson on the WEB page FEEDING concepts...  I think he called it HAM-NET
+or something like that...
+
+de WB4APR, Bob

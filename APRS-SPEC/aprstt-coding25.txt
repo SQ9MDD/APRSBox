@@ -1,0 +1,782 @@
+APRStt SPECIFICATION  Version 2.50                           15 Aug 2013
++----------------------------------------------------------------------+
+
+15 Aug 13 Eliminated spelled and CKsumless SUFFIXes. Kept only AnnnVK# 
+          Added CKsumless field calls and object names A....*#
+          Added PREFIX/POSTFIX options for numeric-only calls/objs
+          Clarified GRID type (ADD or INSERT)
+          Updated ACK/NAK responses
+          Revised "callsign memory" from 6 bytes to 9 for objects
+          Relaxed conditions on APRStt gateway names
+          Incoming new full calls have to be SUFFIX checked for existing 
+                   matching suffixes and NAK'ed if there is a match.
+
+08 Aug 13 Reversed XX...YY... to YY...XX... to be consistent with APRS
+11 Mar 13 Changed my suggested variable names to match Byon's (eg B1XOD)
+13 Feb 13 D710 and D72 cannot decode 111111h and 111111/ so must use z.
+          Add ..--.. questionmark to ask for clarification (*=yes, #=no)
+          Removed any reference to a real-time -clock for decay timing.
+          Simplified decay algorithm to 16,32,64s,2m,4m,8m and stop.
+          Clarified that an APRStt station decays out of system in 80m.
+
+05 Feb 13 Added notes on CW and tone responses to DTMF commands
+30 Jan 13 Cleaned up a bit in prep for Jamboree 2013.  The positionless
+          callsign list shown on the map is now called the TT corral.  
+          I also clarified the name of shorted callsigns to SUFFIX.  
+          Also added some examples specific to Jamboree at the Summit 
+          in WV.
+10 May 10 Changed object timing for retries, W/WO real-time clocks
+          Clarified Abbreviated calls from Tactical calls
+31 May 09 Added details of variables used for sysop setup
+16 May 09 Incorporated lessons from Dayton test
+05 May 09 Changed symbol to use existing overlay-BOX symbol
+19 May 08 original creation of 2.0 to simplify the original APRStt
+
+APRStt KeyPad:
+--------------
+
+The following DTMF keypad layout is assumed for APRStt and is used on
+the most recent D72 and FT8R (though it diffrers from D7 and D700's).
+See the history of ham DTMF radios: http://aprs.org/aprstt/radios.txt
+
++------------------+  Latest Touch Tone Key pad alphabetic assignments.
+| 1    2    3   A  |  There are two spelling methods.  The APRS radio
+|     ABC  DEF --> |  MULTI-PRESS method presses the key the number of
+| 4    5    6   B  |  times needed to indicate the selected letter. So
+|GHI  JKL  MNO <-- |  the letter A would be one press of the "2" key, 
+| 7    8    9   C  |  B would be "22" and C would be "222". The digit 
+|PQRS TUV WXYZ del |  "2" (in text), would be "2222". If two adjacent 
+| *    0    #   D  |  letters use the same key, then press the "A" 
+|    space     OK! |  key between them.  Multiple presses of the # key 
++------------------+  can generate punctuation in the order ?!'.,-/ etc
+
+The other spelling method is the TWO-KEY method that is always 2 keys 
+per letter instead of from 1 to 4 for the multipress method.  APRStt
+uses the 2 key method to assure that all Ham callsigns can fit
+in any 16 key memory.  This method uses the digit of the key 
+with the letter on it, followed by either the A, B, C or D key to 
+show which of the letters the digit represents.  For example, the 
+letter L is 5C showing it is on the 5 key and is the 3rd letter. 
+To enter an actual numeric digit, just a single digit key is needed 
+that is not followed by one of the ABCD keys.
+
+APRStt TYPE KEY:  The first DTMF key in any APRStt DTMF string 
+indicates the type of APRStt entry.  The # key always ends the users
+data.  The * key is used like a comma to separate a data field, but 
+indicate that more information will follow (usually the callsign):
+
+   A.....# indicates a Callsign
+   B.....* indicates position data 
+   C.....* indicates comment text or status
+   D.....* indicates message text
+
+CALLSIGN FORMAT:  
+----------------
+
+All APRS callsigns are limited to 6 bytes plus an SSID.  All APRS
+callsigns must be at least 3 bytes in length. The callsign format is:
+
+ AcccccccccccVK#  Where....
+
+  A      The start key for all callsigns. 
+  ccc... callsign in two-key DTMF up to 12 digits 
+  V      oVerlay character (0-9) or (A-Z using two-key method)
+  K      checksum digit (The units digit after summing all keys)
+         sum ABCD keys as if they were HEX.
+  #      end
+
+STRING LENGTH:  The two-key method assures that all callsigns
+can be encoded into a minimum digit length of 15 DTMF digits IF the
+overlay character is chosen as a single numeric DIGIT.  This makes 
+sure that users with radios with only 15 key memories in their DTMF
+memory can still use APRStt. Sixteen digit memories can handle any 
+call AND any Overlay.  
+
+Callsigns may be abbreviated to a SUFFIX using either a two-key 
+SPELLED SUFFIX or single digits SUFFIX format or the shortest 
+possible digits only with no checksum (if it does not match
+an existing call heard by APRStt, then it will be rejected anyway).
+
+For example
+
+    A9A2B42A7A7C71#   FUll callsign WB4APR with overlay "7" & cksum
+*   A2A7A7C71#        APRS7 Spelled SUFFIX with overlay and cksum
+    A27773#           2777  SUFFIX digits with overlay 7 and cksum
+*   A277#             277   SUFFIX digits only, no overlay/checksum
+
+*   Propose to delete as a suffixes. The spelled suffix is indisting-
+uishable from a shorter call or tactical call.  And the last one does
+not have a checksum and is too prone to garbling calls in APRS.
+
+* NEW ***
+
+FIELD CALLSIGNS OR OBJECTS:  New in version 25, a checksum-less call
+or Object name format has been defined.  This allows for quickly
+entering short calls or object names at special events:
+
+   Accc...*#   Field enterable or tactical calls or object names
+
+In this case, the *# identifier indicates that no checksum is included.
+Notice the shortest possible call/object can be Annn*# when nnn is all
+numeric.  The shortest spelled object might be A2B6C2B*# for "BOB".
+These FIELD A...*# are never compared as possible suffixes.
+
+PRECURSOR "#" KEY:  (consider this an open item.  Usage in APRStt
+has not been finalized).  Since APRStt may share a radio channel with 
+other DTMF functions (such as repeaters) and VOIP systems, a user may
+preceed his APRStt string with a leading # key that may trigger some
+of these other systems to ignore the following digits.  This may work
+in some repeater controllers.  Thus, we can use # as an optional
+start of all APRStt sequences to force the normal repeater to ignore 
+the remainder of the APRStt sequence while passing the decode along
+to the APRStt processor.  
+
+EDITING KEYS: [SPEC OBSOLETE!]  This section describes how the 
+Kenwoods assign editing functions to the ABCD keys, but these make no
+sense in APRStt since there is no local display on which to EDIT and
+editing in the blind is too prone to even more errors.
+
+  A - ADVANCE. Digit separator when two letters share the same key.
+  B - A backspace character  (cancels the previous key)
+  C - CANCEL.  This aborts the whole string typed so far
+  D - Is reserved for future use.
+  * - is used as s field separator (like a comma for example)
+  # - is the ending key (like an ENTER key)
+  
+CALLSIGN-12 SSID:  By default, an APRStt user's callsign will be 
+assigned an SSID of -12 when it is gated over to the APRS system.  
+This makes it easy to destinguished APRStt users from other native
+APRS stations and callsigns.     (RFID users are also -12)
+
+CALLSIGN SUFFIX:  Since full calls are long and fill a DTMF memory,
+shorter calls take less airtime and can be combined into a single
+memory with a fixed posit.  These SUFFIX calls cannot be used until
+APRStt hears the full call first.  If there is a SUFFIX match
+local conflict, then APRStt NAKs the entry and asks the user 
+to choose a different OVERLAY and tries his SUFFIX again.  The 
+SUFFIX does not use the two-key method, but only the the digit
+of the last three characters in his call.  THey are always only 
+3 digits long (plus overlay).  He can always find a non-conflicting 
+overlay. The format for an abbreviated callsign is:
+ 
+ AcccVk#   for a numeric overlay  -or-  
+ AcccVVk#  for a letter overlay
+
+On receipt of any new tactical or FULL callsign, APRStt will compute
+the SUFFIX and then call the SUFFIX-match algorithm to see if there
+will be a conflict.  If no conflict, it will accept the new full call.
+If a conflict, it will NAK the call and a different full call will be
+needed (change the Overlay).
+
+This should not be a big problem since old calls will timeout of the
+list and frequent local conflicts will need to find non-conflicting
+calls anyway.  So for WB4APR with a 7 overlay would  be "APR" and that 
+would be abbreviated to 277, and adding a "7" overlay (to suggest a  
+hiker) would result as:
+
+    A27773#  (checksum 33 = 3)
+
+NB6G overlay 9 would be abbreviated as A26491#
+
+TACTICAL CALLS:  APRStt allows tactical calls as well.  The only
+distinction or limitation for tactical calls is that they cannot
+look like any SUFFIXes.  That is:
+
+*** Tactical Calls cannot be 3 decimal digits only WITH an overlay ***
+*** meaning they cannot be four decimal digits as in Annnn# ***
+
+This is because they must not be confused with abbreviated SUFFIX
+calls.  Otherwise, any other combination of digits, and numerals and 
+overlays will be considered a real call or tactical call.  Remember,
+the new FIELD CALLS/OBJECTS cannot be confused with SUFFIXes since
+they all end with *#.  For example:  A1234# is a SUFFIX with overlay
+"4" but A1234*# is an object or callsign of "1234".
+
+* NEW:
+
+PREFIX/POSTFIX:  APRStt authors may provide optional PREFIX or POSTFIX
+bytes when a callsign is not a SUFFIX and is all numeric.  This allows
+for numeric-only event numbers to be tagged unique to that event.
+
+So, A432*# with a sysop prefix of "BNA-" would translate to APRS as a
+runner object of BNA-432 making it unique for the "BNA" marathon.  This
+is important since multiple runner events may be going on at the same
+time anywhere in the world and the 432 itself would not be unique.
+
+MULTI-STRING-DELIMITER:  Generally, the * key is used as a field
+de-limiter.  A good example is sending the simplest position report
+of B1YX* which places the user on the map in a single digit XY grid.  
+The * terminates the position field, but indicates that there is 
+more to follow.  Usually, what follows is the full call or SUFFIX
+call replayed from DTMF memory. This way, the APRStt decoder can be 
+sure to associate the B1YX* with the sending callsign as one report.
+
+*** If any DTMF data string is not followed in X seconds by a valid 
+callsign, the pending DTMF string is dropped and the channel is 
+clear for the next data or user.  X may be 2 or 3 seconds?
+
+APRStt POSITION FORMATS:
+------------------------
+
+Positions, Comments, Text and Messages can be sent with APRStt.
+These are usually sent first, separated with a "*" key and then
+ended with sending the callsign from DTMF memory.  
+
+Position formats begin with the "B" key, and the second digit
+indicates the "type" of position format.  One, some or all position
+formats can be supported at each individual APRStt gateway depending
+on its exact applicaiton needs.  For example, the B9nn* format can be 
+set up as marathon mile marks, or the B1yx* format for a one-digit XY 
+grid as we do at Dayton since 2009.  Here are the formats:
+
+B0x*        One of 10 special positions
+B1yx*       1 digit yx grid   (digits scaled and added to 0/0 origin)
+B2yyxx*     2 digit yyxx grid (digits scaled and added to 0/0 origin)
+B3yyyxxx*   3 digit yyyxxx grid      (scaled and added to 0/0 origin)
+B4yyyyxxxx* 4 digit yyyyxxxx grid    (scaled and added to 0/0 origin)
+B5zzzmm*    Bearing zzz Range mm miles 
+B6EEENNN*   SAR UTM Grid - Easting and Northing 
+B7RRRMMM*   Road RRR, Milemark MMM 
+B8haaaoooo* Satellite Format (hemisphere, MSB's of lAt and long
+B9...   *   Table Interpolation.  Example B9nn* for a list of
+            100 named locations at Jamboree, then nn digits
+            can specify any of those 99 locations
+
+* NEW CLARIFICATION of difference between ADD and INSERT Grids
+
+LAT/LONG GRID - Many grids can be conveniently referenced to LAT/LON
+coordinates for easy use in the field without needing manually over-
+layed grids.  In this case the incoming position digits are inserted
+into the standard APRS DDMM.mmN/DDDMM.mmW digit positions.  Choose the
+type of BX format to give the grid size and number of reporting digits
+and locallly define (during sysop setup) where the y...x... digits are
+inserted.  For example:
+
+B1yx*       DDy-.--N/DDDx-.--W (10 mi in 60 mi area)
+            DDMy.--N/DDDMx.--W ( 1 mi in 10 mi area)
+            DDMM.y-N/DDDMM.y-W (.1 mi in  1 mi area) Dayton example
+B2yyxx*     DDyy.--N/DDDxx.--W ( 1 mi in 60 mi area) local rptr app
+            DDMy.y-N/DDDMx.x-W (.1 mi in 10 mi area) Marathon event
+            DDMM.yyN/DDDMM.xxW (60 ft in  1 mi area) small event
+B3yyyxxx*   DDyy.y-N/DDDxx.x-W (.1 mi in 60 mi area)  
+            DDMy.yyN/DDDMx.xxW (60 ft in 10 mi area) local precise
+B4yyyyxxxx* DDyy.yyN/DDDxx.xxW (60 ft in 60 mi area)  (default)
+
+The APRStt engine has a SETUP file for the SYSOP to establish the 
+various parameters to customize these different formats for his
+particular application.  See Appendix-A below.
+
+DTMF RESPONSES:  The DTMF user is blind to APRS, so he needs some
+audio feedback about his entry.  In a full up APRStt version with
+synthesized voice, all of the responses are spoken.  But in simple
+stand-alone systems, tones and CW are used.  Here are some of the
+suggested responses:
+
+NAK    "M" two dah's indicating the DTMF string was not understood
+
+..__.. a question mark to ask for clarification (*=yes, #=no)
+
+ACK    "R" for good call.  "K" for good call and position but 
+       only if there is no other response required.
+
+SUFFIX The 3 letter callsign SUFFIX of any string that contains
+       a callsign (most should).  This can optionally ACK calls.
+
+POS    The DTMF digits of a position report.  Can be
+       either 2,3,4,5 or 6 digits or more depending on the type
+       of report.  Separate the YYY from the XXX with a space.
+
+QUERY  The response to a general QUERY, (DTMF "11" uses the "QZ" key)
+       If heard within say 10 seconds of a previous user, APRStt
+       responds with the last SUFFIX.
+       If heard later, then respond with the SUFFIX and POS.
+
+SHORT CW:  For digit-only type responses, an option for is "short CW"
+       sent as the first part of each numeral.  IE, 12345 is 
+       . .. ... .... ..... and 67890 is
+       - -- --- ---- -----  Though a long single DAH is better for 0
+
+-------------------------------------------------------------------
+APRStt PROCESSING:
+-------------------------------------------------------------------
+
+The previous sections define how a USER identifies himself.  The
+rest of this text file describes what the APRStt processing does to 
+convert that call sign in to APRS information for transmitting onto 
+the APRS channel
+
+To setup any APRStt system, the APRStt engine needs to be configured 
+with some basic information.  Since the output of the APRStt engine 
+is an APRS object each time a new DTMF callsign identification comes 
+in, the APRStt engine has to have a basic template for the rest of
+the local data that needs to be added to the basic OBJECT packet that 
+will go out on APRS.
+
+-------------------------------------------------------------------
+Creating the APRStt object for transmission on APRS 
+-------------------------------------------------------------------
+
+APRStt OBJECT FORMAT: The following specifies the use of the APRS
+object format for the translation of the APRStt user data to the 
+APRS system.  These formats must be followed EXACTLY since multiple
+APRStt receivers may hear a single DTMF string and may generate 
+duplicate packets.  These packets MUST BE identical in the APRS-IS
+so that the normal existing dupe elimination system will only take
+one copy and ignore the others.  First is the AX.25 header for the
+packet data:
+
+ TTCALL-SS>APTvvv,WIDE1-1:   AX.25 Header
+
+     Where TTCALL-SS is the AX.25 Callsign of the APRStt Gateway
+     Where APTvvv is the APRStt software/hardware version number
+     Where WIDE1-1 is the typical one-hop or less path for the data
+
+TTCALLs are objects so up to 9 bytes are possible.  Since every APRStt
+instance must have a unique name, APRStt-XX and DTMF-abcd might be 
+good ideas.  Next is the actual object data format as follows:
+
+ ;CCCCCC-12*ddhhmmzDDMM.yyNVDDDMM.xxWA...
+    
+     Where ;CCCCCC-12* is the APRStt user's callsign (object Name)
+     where ddhhmmz     is the day-time field when heard (zulu time)
+                       [hhmmssh or local time ddhhmm/  should not be]
+                       [used because the D72 & 710 do not decode 'em]
+                       [If your clock is not realtime  use the  APRS]
+                       [Object NULL format 111111z.]
+     where DDMM.mmN    is the latitude (Y value) for the object
+     Where DDDMM.mmW   is the longitude (X value) for the object
+     Where V and ...A  are the Overlay V on the APRStt BOX symbol(A) 
+     Where ...         indicates additional information/comment fields
+
+TIME FIELD:  In order to update the timer in a hardware system, we
+have an on-air timer update.  Send "D88*HHMM#" where the D88 is 
+just the definition of a timer-update protocol and the HHMM are the
+hours and minutes.  For precision, send when the clock is at 00
+seconds.  We may use the "Dxx*...#" format for other such sysop on-
+channel updates as needed?
+
+ADDITIONAL-INFORMATION-FIELD: Like any APRS object or position packet,
+what follows the Symbol byte to the end of the packet is a free field 
+text area for additional information from the APRStt engine or from the
+user.  The max length permitted is 43 bytes, though shorter packets are 
+encouraged.  There are several commonly used additonal data fields in 
+APRS and some additional restrictions on how they are used as follows:
+
+     CSE/SPD     - Not applicable to APRStt
+     PHGphgd     - Not applicable to APRStt
+     FFF.FFFMHz  - Frequency, can be very useful to an APRStt user
+     /CCCCCCCCCC - Mic-E comment.  These are all 10 bytes in length
+      xxxxxx...   - anything else is free field with leading space
+      free text/CCCCCCCCCC           - example combinations
+     FFF.FFFMHz/CCCCCCCCCC           - example combinations
+     FFF.FFFMHz xxxxxx.../CCCCCCCCC  - example combinations
+
+Unlike traditional APRS packets that always arrive intact as a complete
+packet, these fields in the APRStt gateway may come into the APRStt
+engine in multiple DTMF bursts.  The APRStt engine will assemble these
+separate fields into the outgoing packet.  Each addition of a new
+piece of info will cause an update to the previous packet and a new
+transmission of that altered format.  Here are the incoming DTMF 
+strings and the resulting APRS packet output:  
+
+AcccccccccccVK# - CALLSIGN ONLY:
+   
+   This will generate the above OBJECT format with the position
+   synthesized from the known location of the APRStt station and the
+   offset to place it in the TT Corral on the map.  The Additional
+   INFO-Field will be added from the defaults loaded into the local 
+   APRStt node to match the event, or situation of the particular 
+   APRStt installation.  It can contain frequency and TONE and RANGE 
+   or event name for example...
+
+B?X..Y..*CALLSIGN# - Position Data:
+
+   This will generate a new packet with the position info provided.
+   The "?" indicates which of the 10 position formats is used.
+
+CFFFFFF*CALLSIGN#  - Frequency data:
+
+   This exact 6 digit numeric format will be expanded to "FFF.FFFMHz".  
+   If an existing frequency exists in the packet field, then it is 
+   overwritten.  If an existing frequency does not exist, then the
+   existing Additional-Infomration-Field is right shifted to make
+   room for the new frequency.
+     
+Cx*CALLSIGN#  - Position Comment:
+
+   This always expands to the one-of-9 pre-defined Mic-E position
+   comments such as /off duty, /enroute, /in service, /returning,
+   /committed, /special, /priority, /emergency, /custom 1.  It 
+   is appended to the end of the packet.
+
+Cxxxxxxxx...*CALLSIGN# - Free text comment:
+
+   This is a variable length free field comment.  It will replace 
+   any previous variable length comment if exists.  Otherwise it
+   will go to the RIGHT of any existing frequency field.  It will
+   completely overwrite/replace any previously existing position 
+   comment or other text to the right of the Frequency.  Words
+   are spelled using the Kenwood multi-press method.
+
+The TT-CORRAL:
+
+MAP LIST PLACEMENT:  APRStt places "positionless" callsigns on the map
+by making a raster or list of callsigns in a special "TT Corral" area
+on the map.  It does this by incrementing or decrementing the LATITUDE
+(and maybe longitude) from a given ORIGIN to create a raster list on 
+the map of the different DTMF users (until they send position data).  
+The raster step size is chosen to make an appropriate scale LIST of 
+these APRStt users on any APRS map display at the scale appropriate 
+for that APRStt event or area but in a little used area of the map.  
+This TT corral ORIGIN is a set-up variable for APRStt depending on the 
+typical scale of the map to be used at this venue.
+
+For special events like Dayton where users are typically zoomed way in 
+and there are lots of APRStt users the map step size for each call in 
+the TT Corral may need only 0.01 minute.  This step size is also an 
+APRStt sysop set-up item.  Some APRStt engines may want this TT Corral
+to be to the East.  Some may want it to the WEST, or North, or South or 
+in any of the quadrants around the APRStt engine to avoid placing them
+on an area where other APRS stations may appear.  So the base longitude 
+of the list is also a sysop parameter. This TT Corral location can be a 
+different location from the location of the APRStt gateway symbol, 
+because the APRStt symbol should be at the RF location of the APRStt 
+decoder.
+
+For JAMBOREE, the origin of the TT Corral should be at 3755.50N and
+08106.90W and work upward in increments of .02 upwards for 20 calls
+and then decrement longitude by .40 and begin the next vertical list.
+
+Here is an example of how a TT Corral to the East would show on the 
+map if it was simply centered at the  location of the 147.105
+repeaater object:
+
+   WB4APR-12
+   KB3GLF-12
+   W3ADO-12
+ []147.105-tt   <== this is the location of the APRStt engine.
+   AB3XYZ-12
+   KK3ABC-12
+
+In this case the location of the APRStt receiver is also at the TT
+corral origin and the calls are inc/decremented above and below the
+origin by about 0.1 minute (or about a 10th of a mile) for most normal 
+repeater areas. 
+
+LATITUDE TT Corral DIGITS:  Building the latitude yy steps is left up
+to the implementor, but new stations should not be added on top of
+other previous APRStt users unless their position is more than a
+time-out age.  Again, this TIME-OUT age is a variable for SYSOP
+set-up depending on the particluar application.  Normally, the default
+for APRS for this kind of inactivity time-out is 80 minutes.
+
+LONGITUDE TT Corral DIGITS:  Similarly, for applications where there 
+may be too many active DTMF users to keep in one vertical list, the 
+SYSOP may be able to assign additional Longitude offsets for additional
+columns to appear on the map.  Typically this longitude step
+size is about 10 times the latitude step size (calls being about 10
+times as long as they are high).
+
+MEMORY REQUIREMENTS:  The APRStt processor has to have a memory bank
+for as many DTMF users that are active per 80 minutes in its RF range.  
+After a DTMF user has not identified for more than 80 minutes or other
+local timeout parameter, then his call is dropped from the APRStt call
+buffer.  Maybe 32 might be a good local buffer size.
+The FIELDS that must be kept for each user are:
+
+CALL,V,L,LO,T,P
+
+Where CALL is 9 bytes (6 character callsign +SSID or obj name)
+Where V is the user defined overlay character (0-9 or A-Z)
+Where L is the last LATITUDE digit you used for him
+where LO is the last LONGITUDE digit used for his placement
+Where T is a single byte Timer down counter
+Where P is a next-period digit (minutes to next TX)
+
+PROCESSING FLOW CHART:  The following pseudo code describes the
+processing suggested for the APRStt process:
+
+NEW DTMF user callsign(only) comes in...
+
+  Scan above list of last N calls heard.
+
+  Is old call? <yes> then:
+     Set his Timer to 0 and RETRIES to 3 and reuse his LAT
+     if still available.  
+     If not, use next availble LAT slot
+     Update the DDMMSSz field if real-time clock is available
+            if no RTC, then send 111111z which is a null
+     goto * TRANSMIT routine...
+
+  Is NEW call? <yes> then:
+     Check if his abbreviation will be conflicted.
+        If so, NAK it, and ask for another call/overlay
+     If room, add him to next available LAT slot.
+     if not, Add him in place of the OLDEST call (biggest P) 
+     Re-use this oldest one's LAT digit
+     Set his Timer to 0 and RETRIRES to 3.
+     Update the DDMMSSz field if RTC is available.
+     goto * TRANSMIT routine...
+
+  DTMF Contains additional info, posit, freq, comment, etc
+     update packet, set timer to 0 and RETRIES to 3
+     Update the DDMMSSz field if RTC available.
+     goto * transmit routine
+
+  TRANSMIT ROUTINE:
+     Transmit the packet.
+     Decrement the users RETRIES.
+        (and/or update the decay algorithm)
+
+TIMING:  The general idea here is to refresh APRS with this object 
+over the next 30 minutes using the standard Decay algorithm.  THe
+time-stamp on the object does not change, so other recepients can
+tell that these refreshing objects are not new data, but just re-
+freshed old data.  The decay algorith assures delivery on the 
+congestion limited APRS channel.  THis means the original packet is 
+attempted and then followed with a repeat 16 seconds later.  Then
+32 and 64 seconds.  THen 2, 4, and 8 minutes.  Beyond that doubling
+scheme, retransmitting of that object stops.
+
+Of course, any new DTMF report will update the APRS object and 
+restart the timing. If there are multiple objects to be retransmitted 
+during the same time frame, it is best to provide a 5 second delay 
+between each separate object and digipeaters will not step on them.
+Many digipeaters may truncate all but the first one in a multiple
+burst.  
+
+DECAY ALGORITHM:  This decayed algorithm starting at 16 seconds 
+is based on the assumed 28 or 30 second DUPE filter built into most 
+APRS digipeaters.  This gives the new object several possibilities
+(original and retries) at getting out on a congested channel.  The 
+initial 16 seconds assures that 2 total attempts are made in the 
+first 28 seconds.  THis way, there is a double chance that the digi 
+will hear it, but if one IS heard, then the other two will be 
+suppressed as dupes by the digi and not add QRM on the channel.
+
+With the above scheme, the APRStt engine stops retrying the object
+after 15 minutes or so and if it is not updated by the DTMF sender,
+then it decays out of the system after 80 minutes (APRS standard).
+If the DTMF user wants to indicate he is still there, 
+then he should resend his info.
+
+LIST MAINTENANCE:  The APRStt engine needs to have an algorithm to 
+keep its TT Corral maplist of positionless DTMF users condensed.  
+One way is to assume any TT Corral position can be reused when it is
+older than 80 minutes (default or other local timeout).  Another
+technique is to always keep the list size at say 10 and let let
+newer ones overwrite the oldest one each time.
+
+Remember, once an OBJECT is transmitted, it remains in all APRS
+systems and maps until those clients timeout systems eliminate it.  
+SO locally reusing a list position (latitude) will be piling calls 
+on top of old calls in all clients.... but such is normal APRS too.
+
+-----------------------------------------------------------------
+APRStt GATEWAY IDENTIFICATION PACKET:  
+-----------------------------------------------------------------
+
+The above syntax is related to how the USER packets are generated.
+In addition, the APRStt has to put itself on the map as an object 
+every 10 minutes direct.  This object should have a recognizable
+APRStt.... or DTMF.... unique name or for repeaters, make it the
+standard unique FFF.FFxyz object for the repeater.  These names 
+must be unique in the world. If the frequency is not the aprstt
+object name then be sure the frequency is the first field in the
+object data field.
+
+REPEATER FREQUENCY format when APRStt is on a repeater frequency
+
+   ;FFF.FFFyz*111111zDDMM.5_N\DDDMM.m_WrAPRStt Gateway ...
+
+OTHER NAME FORMAT IF APRStt is on the national input channel
+
+   ;APRStt-NN*111111zDDMM.5_N\DDDMM.m_Wr146.58 MHz Rxxm ...
+
+Where FFF.FFFyz is the APRStt frequency and unique "yz" (or)
+Also  FFF.FFxyz is the APRStt frequency and unique "xyz"
+Where the LAT/LONG is the location of the APRStt DTMF receiver
+Where "=" is the symbol for an APRStt engine
+Where free text follows.  But this is also where a Tnnn tone or a
+      Rxxm mile range may be placed.
+
+Additional text can be used, but nothing after 28 bytes will be 
+seen on other D700 mobiles and nothing after 20 bytes will be seen 
+by D7 HT users.  For more detail on how these FREQUENCY OBJECTS 
+are made and desired formats, see:
+
+http://www.aprs.org/localinfo.html
+
+The symbol for the APRStt engine can also be the same "r" symbol 
+we use for other repeaters and frequency objects.
+
+TNC CONFIGURATION:
+
+In order to send the above OBJECT format over the  air, a TNC needs
+to be connected to the APRStt engine's serial port.  The TNC should
+be placed into CONVERSE mode, so that anything coming out the serial
+port will be immediately transmitted onto 144.39 in North America.
+
+Besides making sure the TNC is in CONVERSE mode, there are only 2
+other settings required:
+
+MYCALL - The sysops or APRStt owners callsign
+UNPROTO APTvvv VIA WIDE1-1
+
+Do not set any BText or other beacons.  The APRStt engine's code 
+will now be doing all of that.
+
+CHECKING THE SYSTEM:  At any time, you can see how the APRS system
+is parsing your data by using the following URL:
+
+http://map.findu.com/FFF.FFF*
+or
+http://map.findu.com/APRStt*
+
+This will find your FFF.FFF APRStt object and the * will let you
+see if anyone else is using your same Object Name (any where else in
+the world).  You need to choose the 2 or 3 bytes on the end of your 
+FFF.FFxyz to be unique in the world in order to have your repeater
+always show up at the same spot and not be replaced by someone 
+else's identical FFF.FFF repeater.  Those simplex APRStt engines
+on the 146.58 simplex frequency will have to also choose unique xyz
+characters if they use the 146.58xyz name.
+
+Tell your DTMF users to find themselves at the same URL:
+http://map.findu.com/CCCCCC*
+
+where CCCCCC is their callsign, and the * again is a wildcard to
+make it easier to see all of their APRS applications.
+
+Bob, WB4APR
+
+------------------------------------------------------------------
+
+Appendix A.  Position Format Setup Variables
+------------------------------------------------------------------
+
+Note that most APRStt positions are referenced to DECIMAL MINUTES
+of latitude and longitude, since 1 decimal minute is about 1 mile
+and it is the standard for GPS data.  So the math in APRStt is best
+done in DEGREES and DECIMAL minutes.  Of the form DDMM.mm for 
+latitude or DDDMM.mm for longitude.  It is up to the author to
+decide how to use these internally.  But for the formats below,
+all of the user data entry is in digits of MINUTES.
+
+The CONFIG file for any APRStt engine must have some basic setup
+parapeters as follows:
+
+T_LONG = DDD,MM.mm(mm) -  location of APRStt symbol.  If optional
+T_LAT  =  DD,MM.mm(mm) -  (mm) digits are used, then these are 
+                          converted to !DAO! format
+T_ambiguity = 0 digits -  Usually a precise position is given in
+                          small events or venues, though in large
+                          repeater coverage, precision for this
+                          object is not important.
+
+L_Xorigin = DDD,MM.mm(mm) - Location of the origin for the map LIST
+L_Yorigin =  DD,MM.mm(mm)   table of callsigns on the map
+L_LatStep   =  M.mm       - step size between each callsign in list
+L_LonStep   =  M.mm       - step size between each column
+                            (either positive or negative)
+
+In addition to the above set-up parameters, each of the 10 position 
+formats has some setup parameters for the APRStt SYSOP to customize 
+for his application.  Here are the suggested variables for each 
+format.  The defaults will be for the 60 mile case, so that APRStt 
+will work +/- 30 miles from any one location usin gthese defaults.
+
+B0TEN = filename of file with 10 positions
+B1100 = filename of file with 100 positions
+
+B1XOD = DDD  - degrees of Origin longitude
+B1XOM = MMhh - Minutes of Origin longitude in hundredths
+B1YOD = DD
+B1YOM = MMhh
+B1XIH = 1000 - X increment in hundredths (default= 10 nmile)
+B1YIH = 1000 - Y increment in hundredths (default= 10 nmile)
+B1amb = 3 digits (10 mile ambiguity) (TBD: may be automatic)
+
+B2XOD = DDD
+B2XOM = MMhh
+B2YOD = DD
+B2YOM = MMhh
+B2XIH = 100  - X increment in hundredths (default= 1 nmile)
+B2YIH = 100  - Y increment in hundredths (default= 1 nmile)
+B2amb = 2 digits (1 mile ambiguity) (TBD: may be automatic)
+
+B3XOD = DDD
+B3XOM = MMhh
+B3YOD = DD
+B3YOM = MMhh
+B3XIH = 10   - X increment in hundredths  (default= 0.1 nm)
+B3YIH = 10   - Y increment in hundredths  (default= 0.1 nm)
+B3amb = 1 digit (0.1 mile ambiguity)(TBD: may be automatic)
+
+
+B4XOD = DDD
+B4XOM = MMhh
+B4YOD = DD
+B4YOM = MMhh
+B4XIH = 1    - X increment in hundredths (default= 0.1 nm)
+B4YIH = 1    - Y increment in hundredths (default= 0.1 nm)
+B4ambiguity = 0  (precise to 60 feet)
+
+BEARING AND RANGE: 'B5bbbmm*  (bearing in deg, range nmiles
+
+B5XOD = DDD
+B5XOM = MMhh
+B5YOD = DD
+B5YOM = MMhh
+B5units = (Mi or Km)
+ 
+UTM GRID for SAR in Easting and Northing:  'B6EEENNN* 
+
+B6XOD = DDD
+B6XOM = MMhh
+B6YOD = DD
+B6YOM = MMhh
+B6units = ???
+
+ROADS and MILEMARKS:  'B7RRRMMM*  
+
+B7I95  = filename for I-95 milemarks in this state
+B7I295 = filename for I295 milemarks in this state
+B7RRR  = filename for route RRR milemarks in this state
+B7etc  = and so on
+
+Actually, all milemarks in the country already exist in one APRS 
+file that is well under 100k but by letting the sysop customise his 
+area, he can add milemarks for any local road that has them.  
+Remember, a straight road 100 miles long, only needs TWO points
+in this data file to allow precise positioning.  So you only need 
+points for significant changes in road direction.  That's why these 
+files may only have a few points for each road in simplex range of 
+this APRStt engine and it is very easy to set up.
+
+B8...*      Table Interpolation
+
+This table is used for maping regular systems of numbers to 
+geographic locations.  A good example is the fleamarket spaces at 
+Dayton.  A table has been prepared that will map any 4 digit NNNN 
+flea market space to a LAT/LONG.  Another example would be street 
+addresses.  Each row in the table is a linear set of numbers with 
+a start and ending point.  The software interpolates any input NNNN
+to the correct location between the end points.
+
+Each row has 6 data entries as follows:
+
+ N1, N2, A1D, A1M, L1D, L1M, A2D, A2M, L2D, L2M
+   Where N1 is the starting number of a series
+   Where N2 is the ending number of a series
+   Where A1D, A1M is the LAtitude of the the start number
+   Where L1D, L1M is the Longitude of the the start number
+   Where A2D, A2M is the LAtitude for the end number
+   Where L2D, L2M is the Longitude of the the end number
+
+
+For example, the Table for all 4000 flea market spaces at Dayton
+DAYTON-FLEA-N.TXT only has about 30 entries (one for each row in the 
+fleamarket area)!  see aprs.org/aprstt/DAYTON-FLEA-N.TXT
+
+Bob, Wb4APR

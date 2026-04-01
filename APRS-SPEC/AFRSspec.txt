@@ -1,0 +1,80 @@
+AFRS (Automatic Frequency Reporting System)                   1 Dec 2008
+------------------------------------------------------------------------
+                                                                  WB4APR
+Previous version: 8 Oct 2005
+
+Ham radio's biggest advantage of thousands of frequencies is also its 
+biggest stumbling block at rapidly and efficiently establishing 
+communications under emergent or immediate need.  We simply need a way 
+to determine the listening frequency of the other stations around us
+or to communicate to a distant user, a desired contact frequency.
+
+Fortunately, over the last decade, APRS, the Automatic Position 
+Reporting System, provides such a single resource for displaying not 
+only the position and other valuable resource information on each 
+station but it has the potential to display frequency information as 
+well.  Over 30,000 stations worldwide are currently in the system and 
+their live position/ status reports can be seen on the air on the single 
+national APRS frequency and on the internet.  Simply view any area or 
+station via any APRS client program or via any number of APRS web pages 
+such as the following:
+
+http://www.oaprs.net
+
+
+PRESENT RADIO COMPATIBILITY:  Already there are 5 radios than can send 
+and receive frequency information.  They are the TH-D7, TM-D700 and 
+D710 APRS radios, plus the YAESY VX8R and the TS-2000 with built-in 
+internal TNC could be upgraded with firmware to make it also transmit 
+its frequency information.
+
+FUTURE RADIO COMPATIBILITY:  We are encouraging all manufacturers to 
+consider adding AFRS capability to their transceivers to also transmit 
+their frequency of operation.
+
+BACKWARDS COMPATIBILITY:  The best news is that all existing 
+microprocessor controlled radios could be outfitted with simple (under 
+$99) PIC processor devices that can interrogate the radios via their 
+serial command ports and can then beacon on the national APRS frequency 
+their AFRS beacon.  This hardware currently exists in a number of small 
+devices called APRS TRACKRES which were originally designed to parse the 
+GPS data and transmit position info.  These same PIC processor devices 
+could just as easily query an attached radio for its operating frequency 
+and then include that information into its beacon as well.  A good 
+example is the pocket tracker which includes its own 1/4W transmitter 
+already tuned to the national APRS frequency.
+
+PRESENT NATIONAL VOICE ALERT FREQUENCY:  APRS operators have also 
+noted the immediate need to contact by voice a nearby mobile without 
+aprior-knowledge of this operating frequency.  For this reason, APRS 
+has established what it calls  VOICE ALERT.  This system is usually 
+for mobiles.  It simple means that instead of turning their national 
+APRS channel speaker OFF (to avoid the packet noise) that instead 
+they simply set CTCSS 100 and leave the volume up.  This means that 
+they operate APRS normally, but at the same time are ALWAYS monitoring 
+the national APRS channel for a voice call with PL 100 too.  This makes 
+it possible to contact such an operator at any time because you will 
+always know his voice monitoring frequency.  Read about it on: 
+http://www.aprs.org/VoiceAlert3.html
+
+
+OTHER SYSTEMS:  The other three global internet amateur radio linked 
+systems, IRLP, ECHOlink and WInlink also include provisions for 
+beaconing their POSIITON and FREQUENCY data onto the national APRS 
+systems.  This way, mobiles monitoring the national APRS frequency 
+can be aware of the position and frequency of all amateur radio 
+assets around them anywhere in the world.
+
+
+APRS FREQUENCY FORMATS:
+-----------------------
+
+The remainder of this file has been removed because it is duplicative
+of the Frequency information in the APRS frequency spec.  Please 
+refer to the details in this file:
+
+www.aprs.org/info/freqspec.txt
+
+de WB4APR
+Bob Bruninga
+

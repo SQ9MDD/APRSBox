@@ -1,0 +1,166 @@
+INSTALL.TXT       APRS DOS INSTALLATION
+Document version: 8.7.6
+Document dated:   2 Feb 2008 (Previous was 14 Sep 2001)
+Author(s):        Bob Bruninga, WB4APR@amsat.org
+ABSTRACT:         Installing APRS.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				  
+APRS is zipped into a single APRSxxx.ZIP file containing these files:
+You must use PKUNZIP -d option or WINZIP to cause it to unzip all 
+directories properly.  It will unzip with these directories:
+
+  APRSxxx.zip  - ALL major files.  Builds 6 subdirectories:
+		 MAPS - Holds all MAPS     POS      - Overlay files
+		 HSTS - History files      SYSTEM   - APRS system files
+		 BAKS - BACKUP files       README   - all README files
+		 LOGS - LOG directory      MAPLISTS - all maplists
+                                       PROGRAMS - misc Basic routines
+  
+It will run with some basic stick maps for the whole USA.  But for
+better maps in your region of the country, it is also best to get
+the lastest of the following files for your area:
+
+  Xmapsvv.zip  - Regional maps     
+  Emapsxx.zip  - East maps
+  NEAmapsx.zip - North East maps
+  Mmapsxx.zip  - Midwest maps
+  Cmapsxx.zip  - Central Maps
+  Wmapsxx.zip  - West Maps
+  SEmapsxx.zip - S.East maps
+  NWmapsxx.zip - Northwest maps
+  SOmapsxx.zip - South
+  EUmapsxx.zip - Europe
+
+There are also map packages for Germany, Finland, the UK, Africa,
+Japan, New Zeland, and South America, and Central America, Bosnia.
+
+The EXECUTABLE is always APRSxxx.exe but there is always an APRS.BAT file
+that will run the latest program direectly.  Also, there are many APRSdos
+executables tailored to specific applications:
+
+   APRSxxx.EXE  The latest version and will do everything.  But only
+		    can hold about 100 stations
+   APRSXxx.EXE  Has some stuff removed to make room for 250 stations
+   APRStk.EXE   Normal APRS but with Satellite tracking and auto-
+		    radio tuning for the satellites and RShack rotator control
+   APRSdata.EXE A regional data server of Tiny-Web-Pages for Kenwoods
+   APRSdr.EXE   Can dead-reckon runners around a marathon course
+
+And more.  THese you have to download separately from TAPR and also
+install with PKUNZIP -d.
+
+				 
+*YOU MUST USE THE PKUNZIP -dn (or WinZIP) TO GET THE APRS SUBDIRECTORIES!
+
+APRS will run on any 8088 through 486 PC with CGA,EGA, or VGA.  BUT NEEDS 
+ALMOST 550 K of free memory.   APRSMIN.EXE will run with only 411K.
+APRStxt.EXE will run on TEXT-ONLY palmtops.
+
+TO INSTALL APRS on your SYSTEM:               DOS COMMAND
+--------------------------------------------  --------------------------------
+1.  Create APRS directory on your Harddrive-  MD APRS
+2.  Change Directory into that directory   -  CD APRS
+3.  Put APRS disk into A and change to A   -  A:      (or B:)
+    Do Pkunzip with directories:           -  PKUNZIP -d  APRSxxx.ZIP  C:
+4.  Get the maps for your area             -  PKUNZIP -d  Xmapsxx.ZIP C:
+    (where X is your region, E,NEA,M,C,SE or W)
+5.  Execute APRS   (APRS.BAT is included)  -  APRS
+    All APRS commands are spelled out, but are actually single key strokes
+    a. Give your call and other info as prompted.
+    b. Use MAPS-CONFIG-CHANGE to select MAPs for your area. (USA default)
+    c. Move cursor to your QTH using arrow keys and PgDn (shft-PgDN)
+    d. Hit INPUT-MY-POS command and answer QTH questions
+    e. Use UNPROTO command to set your VIA Digipeater path (needs TNC)
+    f. Move and center map to your area of interest and range scale
+    g. Save a config file using alt-S-SAVE  (repeat steps b - g at anytime)
+    h. A Validation # is no longer needed for the SAVE command.
+    
+6.  Troubleshooting tips.  READ TROUBLE.txt!
+    a. Verify COMMS with TNC using the OPS-COMM-TNC command.
+    b. For AEA or KANTRONICS TNC's, use the TNC commands of 
+       EXPert ON or INTFACE TERMINAL in order for the TNC 
+       to respond to some APRS commands
+    
+7.  OPERATING TIPS:
+    a. APRS.BAT simply executes the latest APRSxxx.EXE version.  As a .BAT
+       file, it also makes Windows happier when you exit.
+    b. APRS has three command line options:  
+       *  APRSxxx/new will execute APRS from a brand new startup
+       *  APRSxxx/n will execute APRS and NOT load the last BACKUP file
+       *  APRSxxx/xyz will execute APRS from an alternate config file .xyz
+	  see 5g above.
+    c. You may customize the TNC commands INITIALIZED and RESTORED by APRS
+       in the files named InitXXXX.TNC and RESTORE.TNC, etc.
+       Add commands or use the * to REM out any unused lines. BE CAREFUL,
+       APRS will NOT work unless all the parameters are correct for ur TNC.
+
+The main APRSxxx.ZIP file contains the major crude USA maps.  You need
+the regional distribution to get better resolution.  But in some local
+areas, some locals have made local maps too which might be useful...
+Local STATE map distributions might have the file name of SSmaps.ZIP for
+your state (SS).  See MAPS.txt for info on additional maps, and 
+MAPMAKIN.txt on how to make maps or to customize your MAPLIST.xxx file 
+to your area.
+
+THE LATEST APRS is posted on the TAPR.ORG FTP site in the directory of
+aprssig/dosstuff/APRSdos.  That directory contains all other files for
+which I am responsible.  Other local maps may be found one directory up.
+Come join the aprsnews@tapr.org on the INTERNET for the latest, or aprssig
+@tapr.org for all the discussions!
+
+************    REMEMBER TO USE PKUNZIP -dn    ***********
+
+UPGRADES:  If you are unzipping an upgraded copy of APRS, or any of the 
+XMAPS.ZIP files, the command PKUNZIP -dn will unzip only the NEW files.
+Then READ NEWNOTES.txt to see what has changed!
+
+See DOWNLOAD.TXT for info on downloading APRS or to join the APRS Email
+reflector called APRSSIG... a great place to learn about APRS.
+
+See my web page: http://www.ew.usna.edu/~bruninga/aprs.html
+
+READ: README.1st, APRS.txt, HELP.txt, etc
+
+If you want to zoom into other areas of the country, not included on your
+distro disk, simply download and PKUNZIP -dn some of the other map.ZIP
+files, and use the MAPS-CONFIG-CHANGE command to temporarily load the
+MAPLIST appropriate to the new maps.  Then just zoom in and maps will
+automatically appear.  APRS defaults to the MAPLIST.APR which is an exact
+copy of MAPLIST.USA.  You can change this default by copying any other
+maplist to MAPLIST.APR.
+
+MINIMUM SYSTEMS:  Despite the 3 Mbyte size of the whole APRS system, a 
+minimum system can be built in under 500K with only the .EXE, MAPLIST.xxx, 
+at least one .MAP file, and all SYSTEM files.  All directories must be 
+at least created even if empty. 
+
+RUNNING ON A and B FLOPPY-ONLY SYSTEMS:  Build a Boot-System disk, copy 
+only APRSxxx.EXE onto that disk.  Put that in the A: drive.  On another
+disk put as much APRS as you need.  Put ALL of the SYSTEM directory there,
+Make MAPS and MAPLISTS directories and put at least the MAPLIST.USA and
+USA.MAP files there (add others as you have room).  Then at least create
+the LOGS,HSTS,POS,README directories.  Now Boot up on the A drive, Change
+default drive to B:.  Then RUN APRSxxx from B: with the command A:APRSxxx.
+APRS will then use the B: drive as the default and run just fine.
+
+DISTRO ON TWO 720K FLOPPIES:  It is easy for you to split the APRS distro 
+disk for sharing with others on TWO-720K disks as follows:
+  1) MD ATEMP                           (make a temporary directory)
+  2) PKunzip APRSxxx.zip MAPS\*.* ATEMP (Unzip just the USA MAPS there)
+  3) COPY APRSxxx.ZIP APRShalf.zip
+  4) PKZIP -d APRShalf.zip  MAPS\*.*    (DELETE all USA maps from this ZIP)
+  5) PKZIP USAMAPS.zip ATEMP\*.*        (Zip up all the maps into USAMAPS.zip)
+  6) Now copy APRShalf.zip, about 650K onto one disk
+	 Copy USAMAPS.zip and your regional XmapsYY.ZIP onto the other....
+  7) The 720K user then uses PKUNZIP -dn on the APRShalf and Xmaps files
+     then he changes into his MAPS directory and does a regular PKUNZIP
+     of the USAMAPS.zip file.
+
+RUN FROM A SINGLE BOOTABLE FLOPPY:
+APRSdos can be made to fit on a single SYSTEM disk.  This is useful for
+old PC's with dead hard drives for very low cost APRS applications.
+To build a single floppy system that will boot the PC and RUN APRSdos
+simply unzip the regional distribution for your area into a new directory.
+Stick a blank floppy into drive A.  Then in that directory, run the 
+MAKESYS.BAT file.   It will SYSTEM the A drive and copy a minimum APRS
+set onto the floppy.

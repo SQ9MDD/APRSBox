@@ -1,0 +1,75 @@
+APRS AREA COORDINATORS                                    20 June 2007
+----------------------------------------------------------------------
+
+This is a list of volunteer APRS coordinators for their areas.  In the
+USA, these areas are usuually associated with the country's "ARRL
+Sections".  This is because most ham radio volunteer communications 
+are also organized around those boundaries.  Since APRS is supposed to
+also support these public communications needs, then APRS has routing 
+indicators by SSn-N sections too.  Therefore, we need someone to help
+coordinate APRS usage in those areas.
+
+This original list has been expaned to include international 
+volunteers in other countries as well.  These countries are listed at 
+the end...
+
+Alabama            N8DEU   Tim 
+Alaska
+Arkansas(east)     KB4YTM  Richard, N5JPL Steve, SW - Travis KB5ILY
+California         NorCal  KE6AFE Cap; SoCalWB6ZSU Greg; yahoogroup: ca_aprs
+Colorado           KB0TVJ  Russ (net 147.225+ @ 700PM Sunday).
+Connecticut        W1GTT   Bill
+Delaware           KB1EJH  Carl Davis [kb1ejh@yahoo.com]
+Florida
+Georgia            N4SEG   Steve Garrison [n4seg@comcast.net]
+                   AB0OO   John Gorkos North Georgia [AB0OO@arrl.net]
+Idaho              NWAPRS: See http://www.nwaprs.info/
+Illinois           KK9H    Don Whiteman
+Indiana
+Kansas
+Kentucky(west)     KB4YTM  Richard
+Louisanna          KD5KNZ  Matt Anderson  http://www.lacouncil.net/
+Maine
+Maryland (MDC)     N3KTX   Mike Garber
+Massachusetts      N1YHR   Rick for Eastern Mass towards Cape Cod
+Michigan           W1LBR   Peter Maxfield (temp)
+Michigan SW        KB8ZGL  Mike Wolthuis - kb8zgl@miaprs.net
+Minnesota
+Mississippi(north) KB4YTM  Richard, kb5nmb, Jeff
+Missouri (heel)    KB4YTM  Richard
+Montanna           NWAPRS:  See http://www.nwaprs.info/
+Nebraska
+New Hempshire
+New Jersey
+New Mexico
+New York
+North Carolina
+North Dakota
+Ohio               KB1LCS, Matt
+Oklahoma
+Oregon             NWAPRS:  See http://www.nwaprs.info/
+Pennsylvania       WPA, Frank N3FLR
+Rhode Island
+South Carolina     KO4L  Lloyd
+South Dakota
+Tennessee(east)    KI4HDU  William McKeehan
+Tennessee(west)    KB4YTM  Richard
+Texas
+Utah               N7UWX (tyler) and AC7II (ted)
+Vermont
+Virginia
+Washington         NWAPRS:  See http://www.nwaprs.info/
+West Virginia
+Wyoming            KA7O, Tate  ka7o@ka7o.net
+
+
+AUSTRALIA          VK3JFK  Richard, www.aprs.net.au
+CANADA Maritime    VE1AIC  http://ve1cra.net/aprs/
+GERMANY            DL1LJ   Oliver 
+GREECE             SV1UY   Demetre, sv1uy@sz8l.gr and sv1uy@yahoo.com
+FRANCE             F8ARO   Leszek   http://f8aro.free.fr
+IRELAND            EI7IG   John Ronan, EI8JA - John McCarthy
+ITALY              IK2CHZ/K2CHZ Marco Bombelli ARI APRS Manager
+JAPAN              JF1AJE  Hachi
+POLAND             SP2BZW Dariusz Stefan and SP3LYR (AB9FX) Andy
+Trinidad/Tobago    9Z4FZ Julien Dedier 

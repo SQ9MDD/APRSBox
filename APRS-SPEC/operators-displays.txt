@@ -1,0 +1,78 @@
+APRS DISPLAYS AND OPERATOR ISSUES                        16 Jan 2008
+--------------------------------------------------------------------
+                                                              WB4APR
+
+ALthough APRS is the ideal tool for everyone at an event, it is un-
+realistic to ever assume that even a small segment of the volunteers
+in an situation will be familiar with it or can operate it.
+Therefore it is ver important to focus on a plan that optimizes the
+talents of your small APRS operator core.  While recognizing that
+most of the volunteers at an event will not be familiat with it.
+
+>> And the key to getting APRS used, is to not try to change those 
+>> volunteer operators, but instead, to place a PC APRS display in 
+>> front of them, not to make him an APRS opeator, but so that he 
+>> has a MAP display that he can zoom around on the map as needed to 
+>> see whatis going on.... [objects placed there by others]
+> 
+> And what program do you propose be used for 
+> this... something that already exists, or is 
+> this an invitation for someone to write a new 
+> one?
+
+I think ANY APRS program or clone can pretty well be used as the
+map display.  And just about anyone in the club can use those
+functions. There are really four very different DISPLAY 
+applications in APRS.
+
+PROJECTION DISPLAY:  This is the enviable large screen display
+that shows everyone in the room (at the EOC or other public venu)
+the "big picture".  This has great PR value but is practically
+USELESS as a communications tool.  If shwoing the big picture,
+then it is too hard to see specific details.  If zoomed in, then
+others cannot see other things.
+
+RADIO OPERATOR DISPLAY:  This is the fundamental application of
+APRS at the EOC.  There should be an APRS display in front of every
+radio operator so that that individual operator can see what HE
+needs right NOW and zoomed in on where his current situation
+focus is located.  This operator only needs to know how to center
+and zoom the map and to select informaiton for display.  EVERY
+member of a radio club that will sit in a radio operators position
+can easily master this display function.
+
+APRS OPERATOR DATA ENTRY POSITION:  This is the "back room" side
+of APRS that is the key to making APRS a success in any situation.
+It involves good APRS operators that are fully experienced in all 
+aspects of their clients and can rapidly enter objects, bulletins, 
+announcements and messages to maintain the tactical picture.  They
+also must have a sensitivity to the APRS network, and channel 
+loading and an understanding of the network operation and 
+vulnerability.  They should be able to troubleshoot information
+distribution problems and watch the raw channel activity as needed.
+
+OFF-SITE VOLUNTEERS:  A perfect example of an APRS operator data
+entry station is a home station where a volunteer can serve this
+"back room" function.  Without even leaving his room, he can
+tune to the nets in progress, listen for every tid-bit of information
+that is appearing on the nets, and then enter that onto his display
+that everyone then at the EOC can see.  He does not need to be at
+the EOC.  He can focus on all the on-air information that is flying
+by and make sure that everything gets entered into APRS.
+
+A few such phantom or "back room" APRS operators can GREATLy
+contribute to the situation, without crowding the EOC.  Further,
+responsibilities can be shared by category by these home station
+volunteers.  One can monitor the main VOICE net for info.  Another
+can monitor the FIRE dispatch.  Another can monitor the police 
+displatch.  Another can monitor CB channels or FRS. and on and
+on.  THe key is that EVERYTHING that is heard can be entered by
+these "back room" operators without any burden to the EOC radio
+operators.  Yet the RADIO OPERATORS benefit from this wealth of
+information in front of their operating positions.
+
+
+We have it all.  We just are not using it properly
+
+Bob, WB4APR
+

@@ -1,0 +1,84 @@
+IGATE Feedback Packet on the IS==>RF Interface               30 Oct 08
+----------------------------------------------------------------------
+
+For the last decade, a weak-link in the end-to-end connectivity in
+the overall APRS network has been the inconsistancy in the APRS-IS-
+-back-to-RF interface.  Not only is it very dependent on particular 
+IGate software, it is also completely dependent on individual user 
+IGate settings.  This makes end-to-end APRS message delivery 
+inconsitent, and unreliable.
+
+We need the APRS message backbone to become the overall ham radio 
+backbone for what we call "Universal Text-Messaging for Ham Radio".
+The end user clients can be whatever the operator is using, be it
+Winlink, an IPhone, a cell phone, a blackberry, or an APRS radio.
+Every "system" used by ham radio operators that can send and display
+text, we want to be integrated into this global/local text messaging
+system.
+
+Please see http://www.aprs.org/aprs-messaging.html
+
+But first, we need to nail down this weakness at the IS ==> RF
+interface.  We are proposing that all IGates that send a message
+packet from the IS to RF (IS==>RF) should also then send back a 
+report on the APRS-IS as to what it did with any message packet 
+for which it should have been accountable.  As a minimum, this 
+gate-status packet should contain:
+
+1) The Igate's callsign.
+2) A copy of the packet as it is sending to RF
+3) An indicator of the RF path that it used
+4) An indicator of the "rule" it used to Igate
+5) Anything else?
+
+We can use this information to troubelshoot the network.  From that,
+we can better define the ultimate functionality for IGates and the
+proper rules for operation.
+
+PROPOSED FORMAT:
+
+We will define a new packet format, since we cannot just stuff it 
+into the PATH fields of the same packet, since it will be rejected 
+as a dupe by all the other APRS-IS processes.  How about something 
+like this:
+
+IGATECALL>APXXXX,RULE:{IP-RF_PACKET_GOES_HERE
+
+* Where APXXX lets us see the Igate software version
+* RULE tells us what rule it used to decide to gate-to-RF
+* {IP- is the experimental format for this new Igate-Path format
+* RF_PACKET_GOES_HERE is the packet as it was transmitted on RF 
+
+Rules for gating to RF might be things like:
+ -Hd   meaning heard Direct
+ -H1   heard via one hop
+ -H2   heard via 2 hops etc
+ -CL   Callsign List
+ -LA   Local Area info
+
+Something like that.  Then we can finally see what is happening
+to messages (and maybe other IS==>RF packets "at the other end"!
+
+ITEM-IN-MESSAGE ***
+
+This is also related to the other new APRS1.2 proposal, to add
+ITEM-IN-MESSAGE capability.  This is so that a sender anywhere
+can send an object to a user in a remote location via the global
+APRSnetowrk.  It is simply placing the ITEM format inside a message
+to a recepient.  On receipt, that client software should display
+that ITEM on its local map.  But here, this is an end-client new
+feature and is not related to IGate code.
+
+see  http://www.aprs.org/aprs12/item-in-msg.txt
+
+Since these are message packets, we will also see how they are
+handled as well.  But me-thinks that all client software should
+read-the-mail and whenever it sees an ITEM-IN-MESSAGE in someone
+elses traffic, it should go ahead and plot it for all users too.
+
+This lets us send an important object to someone we are in 
+communication with or everyone in range of a distant point in
+which we are exchanging messages. These objects are of course,
+identifiable as to their source, since it is in a message...
+
+Bob, WB4APR

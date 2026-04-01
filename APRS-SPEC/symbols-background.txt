@@ -1,0 +1,77 @@
+Background on Updating APRS SYMBOLS                      17 April 2008
+----------------------------------------------------------------------
+
+The following information was summarized from Stephen Smith's WA8LMF's
+email and  does a good job of explaining what it takes to upgrade APRS 
+symbols in many client programs:
+
+As Stephen has pointed out many times before, the actual symbol 
+graphic IS NOT TRANSMITTED.  Only a two character alpha-numeric code 
+is sent over the air.  This code causes the appropriate symbol to be 
+selected by the client station software from a set of graphics 
+already stored on the recipient's machine.  
+
+To update symbols, everyone must change/update the stored symbol set 
+in their program(s) before a newly-defined symbol will become useful.
+
+As an example, Stephen tranmsmits the SSTV symbol from his car when
+he is doing mobile SSTV "livecam", but this causes a thundercloud to 
+show on findu.  [ This is the result of a symbol standards change 
+OVER A DECADE AGO! ]
+
+* Only UIview, APRSplus, XASTIR and AGWtracker can easily update their
+symbols by upgrading external files.
+
+* Win/MacAPRS have the symbols embededed in the compiled .EXE file
+so they cannot have new symbols without new codes and distributions.
+
+* APRSpoint doesn't even use the standard APRS symbol set.  It only
+uses the standard Microsoft MapPoint "pushpin" symbols. 
+
+OVERLAY SYMBOLS which were introduced in 1995 are even more of a 
+problem!   The only Windows application that even renders overlay 
+characters is UI-View.  
+
+    * WinAPRS DOES NOT render overlays.
+    * APRSpoint DOES NOT render overlays.
+    * APRSplus DOES NOT render overlays.
+    * The UIview plug-in for MapPoint DOES NOT render overlays.
+    * APRS-CE (for Pocket PC) DOES NOT render overlays.
+    * Pocket APRS (for Palm devices) DOES NOT render overlays.
+
+Further, even the base symbol sets in WinAPRS, Pocket APRS and APRS/Ce 
+are years out of date.  They cannot be updated (they are buried in the 
+compiled .EXE file of these programs and inaccessible). 
+
+To get UIview to render the new overlays in it's internally-displayed 
+maps (i.e. not in external display plugins like UI-Point, UI-Route, 
+etc),  will require revision of the _symbols.ini _file that is part of 
+UI-View's symbol display mechanism.   This is an excerpt from 
+symbols.ini for illustration.
+
+REM             Primary Table                  Alternate Table
+REM Symbol  GPSxyz Index  Description     GPSxyz Index   Description
+REM ------  ------ -----  -----------     ------ -----   -----------
+      !,     BB,     0,    Police Stn,     OB,     0,     Emergency
+      ",     BC,     1,    No Symbol,      OC,     1,     No Symbol
+      #,     BD,     2,    Digi,           OD,     2,     No. Digi
+      $,     BE,     3,    Phone,          OE,     3,     Bank
+      %,     BF,     4,    DX Cluster,     OF,     4,     No Symbol
+      &,     BG,     5,    HF Gateway,     OG,     5,     No. Diam'd
+
+Stephen SMith updates this file when new symbols are defined.  The 
+overlayable symbols requires placing "No. " in front of the symbol 
+label as in "Digi" and "HF Gateway" above.  Note that "No" without 
+the period, as in "No Symbol", denotes an unassigned slot.  
+
+"No." WITH the period and following space denotes an active symbol 
+slot that is overlayable.  Further, note that the entire Description 
+field is limited to about 10 characters due to a un-changeable  
+parser inside UIview. Placing the "No. " prefix on a symbol 
+description, limits the label that shows in the selection dialog to 
+only 6 characters.
+
+
+Finally, Bear in mind that any symbol must fit in a 16x16 pixel 
+grid and not be rendered illegible by overlay symbols.  
+
