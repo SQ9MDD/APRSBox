@@ -109,6 +109,7 @@
     let refreshTimer = null;
     let pathSaveTimer = null;
     const pathDrafts = new Map();
+    const messageDrafts = new Map();
 
     function conversationMessageSignature(conversation) {
         if (!conversation || !Array.isArray(conversation.messages) || !conversation.messages.length) {
@@ -439,6 +440,12 @@
     }
 
     function renderComposer(conversation) {
+        const desiredMessageValue = conversation
+            ? String(messageDrafts.get(conversation.id) ?? "")
+            : "";
+        if (composerInput.value !== desiredMessageValue) {
+            composerInput.value = desiredMessageValue;
+        }
         const validation = validateComposer(composerInput.value);
         composerCount.textContent = `${validation.length}`;
         const hasError = validation.tooLong || validation.asciiInvalid;
@@ -582,6 +589,7 @@
                 path: composerPathInput.value || defaultPath,
             }),
         }).then(async (payload) => {
+            messageDrafts.delete(conversation.id);
             composerInput.value = "";
             composerError.hidden = true;
             await applyServerState(payload.messages_view, conversation.id);
@@ -619,13 +627,17 @@
     });
 
     composerInput.addEventListener("input", () => {
+        const conversation = getActiveConversation();
         const filtered = normalizeMessageText(composerInput.value);
         const hadInvalid = filtered !== composerInput.value;
         if (hadInvalid) {
             composerInput.value = filtered;
         }
+        if (conversation) {
+            messageDrafts.set(conversation.id, composerInput.value);
+        }
         composerError.hidden = !hadInvalid;
-        renderComposer(getActiveConversation());
+        renderComposer(conversation);
     });
 
     composerPathInput.addEventListener("input", () => {
