@@ -58,20 +58,22 @@
                     ></textarea>
                 </label>
                 <div class="messages-composer-footer">
-                    <label class="messages-composer-path-field">
-                        <span>Path</span>
-                        <input
-                            type="text"
-                            id="messages-composer-path"
-                            name="message_path"
-                            placeholder="WIDE2-1"
-                            spellcheck="false"
-                        >
-                    </label>
+                    <div class="messages-composer-actions">
+                        <label class="messages-composer-path-field">
+                            <span>Path</span>
+                            <input
+                                type="text"
+                                id="messages-composer-path"
+                                name="message_path"
+                                placeholder="WIDE2-1"
+                                spellcheck="false"
+                            >
+                        </label>
+                        <button type="submit" class="button" id="messages-send-button">Send</button>
+                    </div>
                     <div class="messages-composer-meta">
                         <small class="field-validation-error" id="messages-composer-error" hidden>Only letters A-Z, a-z and digits 0-9 are allowed.</small>
                     </div>
-                    <button type="submit" class="button" id="messages-send-button">Send</button>
                 </div>
             </form>
         </section>

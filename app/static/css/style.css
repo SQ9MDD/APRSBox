@@ -2484,18 +2484,21 @@ body.modal-open {
 }
 
 .messages-composer-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
+    gap: var(--space-2);
+}
+
+.messages-composer-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
     gap: var(--space-3);
-    flex-wrap: wrap;
 }
 
 .messages-composer-path-field {
     display: grid;
     gap: 0.34rem;
-    flex: 1 1 14rem;
-    min-width: min(18rem, 100%);
+    min-width: 0;
 }
 
 .messages-composer-path-field input {
@@ -2505,7 +2508,6 @@ body.modal-open {
 .messages-composer-meta {
     display: grid;
     gap: 0.18rem;
-    flex: 0 1 auto;
 }
 
 @media (max-width: 980px) {
@@ -2604,6 +2606,10 @@ body.modal-open {
 
     .messages-conversation-list {
         max-height: 22rem;
+    }
+
+    .messages-composer-actions {
+        grid-template-columns: 1fr;
     }
 
     .message-bubble {
