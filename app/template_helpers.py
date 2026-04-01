@@ -16,6 +16,7 @@ PRIMARY_NAV = [
     {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
     {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator", "viewer")},
     {"key": "station", "label": "My Settings", "href": "/station", "roles": ("admin", "operator", "viewer"), "icon": "antenna.svg"},
+    {"key": "messages", "label": "Messages", "href": "/messages", "roles": ("admin", "operator", "viewer"), "icon": "message-reply-text-outline.svg"},
     {"key": "objects", "label": "Objects / Items", "href": "/objects", "roles": ("admin", "operator", "viewer"), "icon": "crosshairs.svg"},
     {"key": "bulletins", "label": "BLN / Ann.", "href": "/bulletins", "roles": ("admin", "operator", "viewer"), "icon": "message-text-outline.svg"},
     {"key": "digi", "label": "Digi Settings", "href": "/digi", "roles": ("admin", "operator", "viewer"), "icon": "radar.svg"},

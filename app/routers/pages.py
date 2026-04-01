@@ -14,6 +14,7 @@ from app.services.content import (
     delete_section_row,
     get_configured_modem_interfaces,
     get_aprs_symbol_icon_path,
+    get_messages_page_data,
     get_recent_station_packets,
     heard_stations,
     get_section_row,
@@ -940,6 +941,22 @@ def traffic_page(
         traffic_snapshot=traffic_snapshot,
     )
     return templates.TemplateResponse("traffic.html", context)
+
+
+@router.get("/messages")
+def messages_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Messages",
+        current_user=current_user,
+        active_nav="messages",
+        messages_view=get_messages_page_data(),
+    )
+    return templates.TemplateResponse("messages.html", context)
 
 
 @router.get("/api/traffic")

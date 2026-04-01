@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel messages-page-panel">
+    <div class="messages-shell" id="messages-app" data-static-root="{{ request.scope.root_path }}/static/">
+        <aside class="messages-sidebar">
+            <div class="messages-sidebar-top">
+                <div class="panel-header-copy">
+                    <h2>Conversations</h2>
+                    <p class="section-lead">APRS messages GUI scaffold. Conversation data is local to this view for now.</p>
+                </div>
+                <form class="messages-new-conversation" id="messages-new-conversation-form">
+                    <label class="messages-new-conversation-field">
+                        <span>Start new conversation</span>
+                        <div class="messages-new-conversation-control">
+                            <input
+                                type="text"
+                                id="messages-new-callsign"
+                                name="callsign"
+                                placeholder="SP9XYZ-7"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <button type="submit" class="button-secondary messages-new-conversation-button" aria-label="Start conversation" title="Start conversation">
+                                <img src="{{ request.scope.root_path }}/static/icons/chat-plus-outline.svg" alt="">
+                            </button>
+                        </div>
+                    </label>
+                </form>
+            </div>
+            <div class="messages-conversation-list" id="messages-conversation-list">
+                <div class="empty-state muted">No conversations loaded.</div>
+            </div>
+        </aside>
+
+        <section class="messages-thread">
+            <header class="messages-thread-header" id="messages-thread-header">
+                <div class="panel-header-copy">
+                    <h2>Select a conversation</h2>
+                    <p class="section-lead">Choose a callsign on the left or start a new APRS message thread.</p>
+                </div>
+            </header>
+
+            <div class="messages-thread-history" id="messages-thread-history">
+                <div class="empty-state muted">Select a conversation or start a new message.</div>
+            </div>
+
+            <form class="messages-composer" id="messages-composer">
+                <label class="messages-composer-field">
+                    <span>Message text</span>
+                    <textarea
+                        id="messages-composer-input"
+                        name="message_text"
+                        rows="2"
+                        maxlength="{{ messages_view.composer_limit }}"
+                        placeholder="Type APRS message text"
+                        spellcheck="false"
+                    ></textarea>
+                </label>
+                <div class="messages-composer-footer">
+                    <div class="messages-composer-meta">
+                        <small class="muted" id="messages-composer-count">0 / {{ messages_view.composer_limit }}</small>
+                        <small class="field-validation-error" id="messages-composer-error" hidden>Use 67 APRS-safe printable ASCII characters or fewer.</small>
+                    </div>
+                    <button type="submit" class="button" id="messages-send-button">Send</button>
+                </div>
+            </form>
+        </section>
+    </div>
+</section>
+
+<script type="application/json" id="messages-initial-data">{{ messages_view|tojson }}</script>
+<script>
+(() => {
+    const app = document.getElementById("messages-app");
+    const initialDataNode = document.getElementById("messages-initial-data");
+    if (!app || !initialDataNode) return;
+
+    const staticRoot = app.dataset.staticRoot || "";
+    const storageKey = "aprsbox-messages-gui-v1";
+    const initialData = JSON.parse(initialDataNode.textContent || "{}");
+    const composerLimit = Number(initialData.composer_limit || 67);
+    const conversationList = document.getElementById("messages-conversation-list");
+    const threadHeader = document.getElementById("messages-thread-header");
+    const historyNode = document.getElementById("messages-thread-history");
+    const composerForm = document.getElementById("messages-composer");
+    const composerInput = document.getElementById("messages-composer-input");
+    const composerCount = document.getElementById("messages-composer-count");
+    const composerError = document.getElementById("messages-composer-error");
+    const sendButton = document.getElementById("messages-send-button");
+    const newConversationForm = document.getElementById("messages-new-conversation-form");
+    const newConversationInput = document.getElementById("messages-new-callsign");
+
+    let state = buildInitialState(initialData);
+
+    function normalizeCallsign(value) {
+        return String(value || "").trim().toUpperCase();
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;")
+            .replaceAll("'", "&#39;");
+    }
+
+    function formatDateTime(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value || "";
+        }
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        const hour = String(date.getHours()).padStart(2, "0");
+        const minute = String(date.getMinutes()).padStart(2, "0");
+        return `${year}.${month}.${day} ${hour}:${minute}`;
+    }
+
+    function formatDay(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return "";
+        }
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}.${month}.${day}`;
+    }
+
+    function isAprsSafeAscii(value) {
+        return Array.from(String(value || "")).every((char) => {
+            const code = char.charCodeAt(0);
+            return code >= 32 && code <= 126;
+        });
+    }
+
+    function validateComposer(value) {
+        const text = String(value || "");
+        return {
+            length: text.length,
+            tooLong: text.length > composerLimit,
+            asciiInvalid: !isAprsSafeAscii(text),
+            empty: text.trim().length === 0,
+        };
+    }
+
+    function buildLocalMessageId(prefix) {
+        return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    }
+
+    function cloneConversation(conversation) {
+        return {
+            id: String(conversation.id || normalizeCallsign(conversation.callsign)),
+            callsign: normalizeCallsign(conversation.callsign),
+            created_at: String(conversation.created_at || new Date().toISOString()),
+            last_activity_at: String(conversation.last_activity_at || conversation.created_at || new Date().toISOString()),
+            last_message_preview: String(conversation.last_message_preview || ""),
+            unread_count: Number(conversation.unread_count || 0),
+            message_state: String(conversation.message_state || "read"),
+            recently_heard: Boolean(conversation.recently_heard),
+            heard_recently_label: String(conversation.heard_recently_label || ""),
+            messages: Array.isArray(conversation.messages) ? conversation.messages.map((message) => ({
+                id: String(message.id || buildLocalMessageId("msg")),
+                direction: message.direction === "rx" ? "rx" : "tx",
+                text: String(message.text || ""),
+                timestamp: String(message.timestamp || new Date().toISOString()),
+                unread: Boolean(message.unread),
+            })) : [],
+        };
+    }
+
+    function sortConversations(conversations) {
+        conversations.sort((left, right) => {
+            const leftTime = Date.parse(left.last_activity_at || left.created_at || "") || 0;
+            const rightTime = Date.parse(right.last_activity_at || right.created_at || "") || 0;
+            if (leftTime !== rightTime) {
+                return rightTime - leftTime;
+            }
+            return left.callsign.localeCompare(right.callsign);
+        });
+    }
+
+    function recomputeConversation(conversation) {
+        const messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+        const unreadCount = messages.filter((message) => message.direction === "rx" && message.unread).length;
+        const lastMessage = messages[messages.length - 1] || null;
+        conversation.unread_count = unreadCount;
+        conversation.message_state = unreadCount > 0 ? "unread" : "read";
+        conversation.last_message_preview = lastMessage ? lastMessage.text : "";
+        conversation.last_activity_at = String(
+            (lastMessage && lastMessage.timestamp) || conversation.created_at || new Date().toISOString()
+        );
+        return conversation;
+    }
+
+    function buildInitialState(serverData) {
+        const serverConversations = Array.isArray(serverData.conversations)
+            ? serverData.conversations.map(cloneConversation)
+            : [];
+        let storedConversations = [];
+        let storedActiveId = null;
+        try {
+            const storedRaw = window.localStorage.getItem(storageKey);
+            if (storedRaw) {
+                const parsed = JSON.parse(storedRaw);
+                if (Array.isArray(parsed.conversations)) {
+                    storedConversations = parsed.conversations.map(cloneConversation);
+                }
+                storedActiveId = parsed.activeConversationId ? String(parsed.activeConversationId) : null;
+            }
+        } catch (_error) {
+        }
+
+        const merged = [];
+        const mergedByCallsign = new Map();
+        serverConversations.forEach((conversation) => {
+            merged.push(conversation);
+            mergedByCallsign.set(conversation.callsign, conversation);
+        });
+        storedConversations.forEach((stored) => {
+            const existing = mergedByCallsign.get(stored.callsign);
+            if (existing) {
+                existing.messages = stored.messages;
+                existing.created_at = stored.created_at || existing.created_at;
+                recomputeConversation(existing);
+            } else {
+                merged.push(stored);
+                mergedByCallsign.set(stored.callsign, stored);
+            }
+        });
+        merged.forEach(recomputeConversation);
+        sortConversations(merged);
+
+        let activeConversationId = storedActiveId || serverData.active_conversation_id || null;
+        if (activeConversationId && !merged.some((conversation) => conversation.id === activeConversationId)) {
+            activeConversationId = null;
+        }
+        if (!activeConversationId && merged.length) {
+            const unreadConversation = merged.find((conversation) => conversation.unread_count > 0);
+            activeConversationId = unreadConversation ? unreadConversation.id : merged[0].id;
+        }
+        return {
+            conversations: merged,
+            activeConversationId,
+        };
+    }
+
+    function persistState() {
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify({
+                conversations: state.conversations,
+                activeConversationId: state.activeConversationId,
+            }));
+        } catch (_error) {
+        }
+    }
+
+    function getActiveConversation() {
+        return state.conversations.find((conversation) => conversation.id === state.activeConversationId) || null;
+    }
+
+    function markConversationRead(conversation) {
+        conversation.messages.forEach((message) => {
+            if (message.direction === "rx") {
+                message.unread = false;
+            }
+        });
+        recomputeConversation(conversation);
+    }
+
+    function openConversation(conversationId) {
+        const conversation = state.conversations.find((item) => item.id === conversationId);
+        if (!conversation) return;
+        state.activeConversationId = conversation.id;
+        markConversationRead(conversation);
+        sortConversations(state.conversations);
+        persistState();
+        render();
+    }
+
+    function createConversation(callsign) {
+        const normalized = normalizeCallsign(callsign);
+        if (!normalized) return null;
+        const existing = state.conversations.find((conversation) => conversation.callsign === normalized);
+        if (existing) {
+            openConversation(existing.id);
+            return existing;
+        }
+        const conversation = recomputeConversation({
+            id: normalized.toLowerCase(),
+            callsign: normalized,
+            created_at: new Date().toISOString(),
+            last_activity_at: new Date().toISOString(),
+            last_message_preview: "",
+            unread_count: 0,
+            message_state: "read",
+            recently_heard: false,
+            heard_recently_label: "",
+            messages: [],
+        });
+        state.conversations.unshift(conversation);
+        state.activeConversationId = conversation.id;
+        sortConversations(state.conversations);
+        persistState();
+        render();
+        return conversation;
+    }
+
+    function deleteConversation(conversationId) {
+        const index = state.conversations.findIndex((conversation) => conversation.id === conversationId);
+        if (index < 0) return;
+        state.conversations.splice(index, 1);
+        if (state.activeConversationId === conversationId) {
+            state.activeConversationId = state.conversations[0] ? state.conversations[0].id : null;
+        }
+        persistState();
+        render();
+    }
+
+    function appendOutgoingMessage(conversation, text) {
+        conversation.messages.push({
+            id: buildLocalMessageId(conversation.id),
+            direction: "tx",
+            text,
+            timestamp: new Date().toISOString(),
+            unread: false,
+        });
+        recomputeConversation(conversation);
+        sortConversations(state.conversations);
+        persistState();
+    }
+
+    function renderConversationList() {
+        if (!state.conversations.length) {
+            conversationList.innerHTML = '<div class="empty-state muted">No saved conversations yet. Start a new APRS message thread above.</div>';
+            return;
+        }
+        conversationList.innerHTML = state.conversations.map((conversation) => {
+            const isActive = conversation.id === state.activeConversationId;
+            const stateBadgeClass = conversation.unread_count > 0 ? "message-state-badge-unread" : "message-state-badge-read";
+            const stateBadgeLabel = conversation.unread_count > 0 ? `Unread (${conversation.unread_count})` : "Read";
+            const preview = conversation.last_message_preview || "No messages yet.";
+            return `
+                <div class="messages-conversation-row${isActive ? " active" : ""}" data-conversation-id="${escapeHtml(conversation.id)}">
+                    <button type="button" class="messages-conversation-button" data-open-conversation="${escapeHtml(conversation.id)}">
+                        <span class="messages-conversation-main">
+                            <span class="messages-conversation-title-row">
+                                <strong>${escapeHtml(conversation.callsign)}</strong>
+                                <span class="message-state-badge ${stateBadgeClass}">
+                                    <img src="${staticRoot}icons/${conversation.unread_count > 0 ? "email-mark-as-unread.svg" : "email-box.svg"}" alt="">
+                                    <span>${escapeHtml(stateBadgeLabel)}</span>
+                                </span>
+                            </span>
+                            <span class="messages-conversation-meta-row">
+                                ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot"></span><span>${escapeHtml(conversation.heard_recently_label || "Heard recently")}</span></span>` : '<span class="muted">No recent heard-station entry</span>'}
+                            </span>
+                            <span class="messages-conversation-preview">${escapeHtml(preview)}</span>
+                        </span>
+                    </button>
+                    <button type="button" class="table-icon-button messages-conversation-delete" data-delete-conversation="${escapeHtml(conversation.id)}" aria-label="Delete conversation ${escapeHtml(conversation.callsign)}" title="Delete conversation">
+                        <img src="${staticRoot}icons/delete-outline.svg" alt="">
+                    </button>
+                </div>
+            `;
+        }).join("");
+    }
+
+    function renderThreadHeader(conversation) {
+        if (!conversation) {
+            threadHeader.innerHTML = `
+                <div class="panel-header-copy">
+                    <h2>Select a conversation</h2>
+                    <p class="section-lead">Choose a callsign on the left or start a new APRS message thread.</p>
+                </div>
+            `;
+            return;
+        }
+        threadHeader.innerHTML = `
+            <div class="panel-header-copy">
+                <h2>${escapeHtml(conversation.callsign)}</h2>
+                <p class="section-lead">
+                    ${conversation.recently_heard ? escapeHtml(conversation.heard_recently_label || "Heard recently") : "No recent heard-station entry"}
+                </p>
+            </div>
+        `;
+    }
+
+    function renderThreadHistory(conversation) {
+        if (!conversation) {
+            historyNode.innerHTML = '<div class="messages-thread-empty"><strong>Select a conversation</strong><span class="muted">Or start a new message from the left panel.</span></div>';
+            return;
+        }
+        if (!conversation.messages.length) {
+            historyNode.innerHTML = `<div class="messages-thread-empty"><strong>${escapeHtml(conversation.callsign)}</strong><span class="muted">No messages in this conversation yet.</span></div>`;
+            return;
+        }
+        let previousDay = "";
+        historyNode.innerHTML = conversation.messages.map((message) => {
+            const dayLabel = formatDay(message.timestamp);
+            const showDay = dayLabel && dayLabel !== previousDay;
+            previousDay = dayLabel || previousDay;
+            return `
+                ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}
+                <div class="message-bubble-row ${message.direction === "rx" ? "message-bubble-row-rx" : "message-bubble-row-tx"}">
+                    <div class="message-bubble ${message.direction === "rx" ? "message-bubble-rx" : "message-bubble-tx"}">
+                        <p>${escapeHtml(message.text)}</p>
+                        <span class="message-bubble-meta">${escapeHtml(formatDateTime(message.timestamp))}</span>
+                    </div>
+                </div>
+            `;
+        }).join("");
+        historyNode.scrollTop = historyNode.scrollHeight;
+    }
+
+    function renderComposer(conversation) {
+        const validation = validateComposer(composerInput.value);
+        composerCount.textContent = `${validation.length} / ${composerLimit}`;
+        const hasError = validation.tooLong || validation.asciiInvalid;
+        composerError.hidden = !hasError;
+        sendButton.disabled = !conversation || validation.empty || hasError;
+        composerInput.disabled = !conversation;
+        composerInput.placeholder = conversation
+            ? "Type APRS message text"
+            : "Select a conversation to enable the composer";
+    }
+
+    function render() {
+        renderConversationList();
+        const activeConversation = getActiveConversation();
+        renderThreadHeader(activeConversation);
+        renderThreadHistory(activeConversation);
+        renderComposer(activeConversation);
+    }
+
+    conversationList.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const deleteButton = target.closest("[data-delete-conversation]");
+        if (deleteButton instanceof HTMLElement && deleteButton.dataset.deleteConversation) {
+            deleteConversation(deleteButton.dataset.deleteConversation);
+            return;
+        }
+        const openButton = target.closest("[data-open-conversation]");
+        if (openButton instanceof HTMLElement && openButton.dataset.openConversation) {
+            openConversation(openButton.dataset.openConversation);
+        }
+    });
+
+    newConversationForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const callsign = normalizeCallsign(newConversationInput.value);
+        if (!callsign) return;
+        createConversation(callsign);
+        newConversationInput.value = "";
+        composerInput.focus();
+    });
+
+    composerForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const conversation = getActiveConversation();
+        if (!conversation) return;
+        const text = composerInput.value;
+        const validation = validateComposer(text);
+        if (validation.empty || validation.tooLong || validation.asciiInvalid) {
+            renderComposer(conversation);
+            return;
+        }
+        appendOutgoingMessage(conversation, text.trim());
+        composerInput.value = "";
+        render();
+        composerInput.focus();
+    });
+
+    composerInput.addEventListener("input", () => {
+        renderComposer(getActiveConversation());
+    });
+
+    render();
+})();
+</script>
+{% endblock %}

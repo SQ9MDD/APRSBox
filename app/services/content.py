@@ -500,6 +500,72 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
     return stations
 
 
+def get_messages_page_data() -> dict[str, Any]:
+    conversations = _message_demo_conversations()
+    heard_snapshots = get_heard_station_snapshots()
+    heard_by_key: dict[str, dict[str, Any]] = {}
+    for snapshot in heard_snapshots:
+        display_key = str(snapshot.get("display_callsign") or "").strip().casefold()
+        base_key = str(snapshot.get("callsign") or "").strip().casefold()
+        if display_key and display_key not in heard_by_key:
+            heard_by_key[display_key] = snapshot
+        if base_key and base_key not in heard_by_key:
+            heard_by_key[base_key] = snapshot
+
+    prepared: list[dict[str, Any]] = []
+    for conversation in conversations:
+        callsign = str(conversation.get("callsign") or "").strip()
+        heard_snapshot = heard_by_key.get(callsign.casefold())
+        unread_count = sum(
+            1
+            for message in conversation.get("messages", [])
+            if str(message.get("direction") or "").strip() == "rx" and bool(message.get("unread"))
+        )
+        last_message = conversation["messages"][-1] if conversation.get("messages") else None
+        last_activity_at = str(
+            (last_message or {}).get("timestamp")
+            or conversation.get("created_at")
+            or utc_now()
+        )
+        recently_heard = bool(conversation.get("demo_recently_heard"))
+        heard_recently_label = "Heard recently" if recently_heard else ""
+        if heard_snapshot is not None:
+            age_s = heard_snapshot.get("last_heard_age_s")
+            recently_heard = bool(age_s is not None and age_s <= 30 * 60)
+            heard_recently_label = str(heard_snapshot.get("last_heard_relative") or heard_snapshot.get("last_heard_label") or "").strip()
+        prepared.append(
+            {
+                "id": str(conversation["id"]),
+                "callsign": callsign,
+                "messages": [dict(message) for message in conversation.get("messages", [])],
+                "created_at": str(conversation.get("created_at") or last_activity_at),
+                "last_activity_at": last_activity_at,
+                "last_message_preview": str((last_message or {}).get("text") or ""),
+                "unread_count": unread_count,
+                "message_state": "unread" if unread_count else "read",
+                "recently_heard": recently_heard,
+                "heard_recently_label": heard_recently_label,
+            }
+        )
+
+    prepared.sort(
+        key=lambda item: (
+            item["last_activity_at"],
+            item["callsign"].casefold(),
+        ),
+        reverse=True,
+    )
+    active_conversation_id = next((item["id"] for item in prepared if item["unread_count"] > 0), None)
+    if active_conversation_id is None and prepared:
+        active_conversation_id = prepared[0]["id"]
+    return {
+        "conversations": prepared,
+        "active_conversation_id": active_conversation_id,
+        "composer_limit": 67,
+        "recently_heard_window_minutes": 30,
+    }
+
+
 def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, Any] | None:
     normalized_callsign = callsign.strip()
     if not normalized_callsign:
@@ -729,6 +795,98 @@ def _new_station_snapshot(
         "latitude": "",
         "longitude": "",
     }
+
+
+def _message_demo_conversations() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "sq9mdd-7",
+            "callsign": "SQ9MDD-7",
+            "created_at": "2026-03-31T17:35:00+00:00",
+            "demo_recently_heard": True,
+            "messages": [
+                {
+                    "id": "sq9mdd-7-rx-1",
+                    "direction": "rx",
+                    "text": "Podejde pod przemiennik za 10 min.",
+                    "timestamp": "2026-03-31T17:35:00+00:00",
+                    "unread": False,
+                },
+                {
+                    "id": "sq9mdd-7-tx-1",
+                    "direction": "tx",
+                    "text": "QSL. Daj prosze raport po starcie.",
+                    "timestamp": "2026-03-31T17:39:00+00:00",
+                    "unread": False,
+                },
+                {
+                    "id": "sq9mdd-7-rx-2",
+                    "direction": "rx",
+                    "text": "Jasne. Dam znac jak wejde na 144.800.",
+                    "timestamp": "2026-03-31T17:42:00+00:00",
+                    "unread": False,
+                },
+            ],
+        },
+        {
+            "id": "sp8abc",
+            "callsign": "SP8ABC",
+            "created_at": "2026-03-31T18:02:00+00:00",
+            "demo_recently_heard": False,
+            "messages": [
+                {
+                    "id": "sp8abc-rx-1",
+                    "direction": "rx",
+                    "text": "Masz jeszcze wolny tracker dla balonu?",
+                    "timestamp": "2026-03-31T18:02:00+00:00",
+                    "unread": True,
+                },
+                {
+                    "id": "sp8abc-tx-1",
+                    "direction": "tx",
+                    "text": "Mam jeden testowy. Jaki termin lotu?",
+                    "timestamp": "2026-03-31T18:07:00+00:00",
+                    "unread": False,
+                },
+                {
+                    "id": "sp8abc-rx-2",
+                    "direction": "rx",
+                    "text": "Sobota 09:00 UTC. Potwierdze jutro.",
+                    "timestamp": "2026-03-31T18:11:00+00:00",
+                    "unread": True,
+                },
+            ],
+        },
+        {
+            "id": "oe1xuu",
+            "callsign": "OE1XUU",
+            "created_at": "2026-03-30T11:15:00+00:00",
+            "demo_recently_heard": False,
+            "messages": [],
+        },
+        {
+            "id": "dl1xyz-9",
+            "callsign": "DL1XYZ-9",
+            "created_at": "2026-03-29T07:21:00+00:00",
+            "demo_recently_heard": False,
+            "messages": [
+                {
+                    "id": "dl1xyz-9-rx-1",
+                    "direction": "rx",
+                    "text": "WX beacon odebrany. Dzieki za test.",
+                    "timestamp": "2026-03-29T07:21:00+00:00",
+                    "unread": False,
+                },
+                {
+                    "id": "dl1xyz-9-tx-1",
+                    "direction": "tx",
+                    "text": "QSL. Nastepna proba po 18 UTC.",
+                    "timestamp": "2026-03-29T07:28:00+00:00",
+                    "unread": False,
+                },
+            ],
+        },
+    ]
 
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
