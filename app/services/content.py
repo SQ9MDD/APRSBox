@@ -503,6 +503,7 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
 def get_messages_page_data() -> dict[str, Any]:
     conversations = _message_demo_conversations()
     heard_snapshots = get_heard_station_snapshots()
+    station_settings = get_station_settings()
     heard_by_key: dict[str, dict[str, Any]] = {}
     for snapshot in heard_snapshots:
         display_key = str(snapshot.get("display_callsign") or "").strip().casefold()
@@ -540,11 +541,11 @@ def get_messages_page_data() -> dict[str, Any]:
                 "messages": [dict(message) for message in conversation.get("messages", [])],
                 "created_at": str(conversation.get("created_at") or last_activity_at),
                 "last_activity_at": last_activity_at,
-                "last_message_preview": str((last_message or {}).get("text") or ""),
                 "unread_count": unread_count,
                 "message_state": "unread" if unread_count else "read",
                 "recently_heard": recently_heard,
                 "heard_recently_label": heard_recently_label,
+                "path": str(conversation.get("path") or ""),
             }
         )
 
@@ -563,6 +564,7 @@ def get_messages_page_data() -> dict[str, Any]:
         "active_conversation_id": active_conversation_id,
         "composer_limit": 67,
         "recently_heard_window_minutes": 30,
+        "default_path": str(station_settings.get("beacon_path") or "").strip(),
     }
 
 
@@ -804,6 +806,7 @@ def _message_demo_conversations() -> list[dict[str, Any]]:
             "callsign": "SQ9MDD-7",
             "created_at": "2026-03-31T17:35:00+00:00",
             "demo_recently_heard": True,
+            "path": "WIDE2-1",
             "messages": [
                 {
                     "id": "sq9mdd-7-rx-1",
@@ -818,6 +821,7 @@ def _message_demo_conversations() -> list[dict[str, Any]]:
                     "text": "QSL. Daj prosze raport po starcie.",
                     "timestamp": "2026-03-31T17:39:00+00:00",
                     "unread": False,
+                    "delivery_state": "acked",
                 },
                 {
                     "id": "sq9mdd-7-rx-2",
@@ -833,6 +837,7 @@ def _message_demo_conversations() -> list[dict[str, Any]]:
             "callsign": "SP8ABC",
             "created_at": "2026-03-31T18:02:00+00:00",
             "demo_recently_heard": False,
+            "path": "",
             "messages": [
                 {
                     "id": "sp8abc-rx-1",
@@ -847,6 +852,7 @@ def _message_demo_conversations() -> list[dict[str, Any]]:
                     "text": "Mam jeden testowy. Jaki termin lotu?",
                     "timestamp": "2026-03-31T18:07:00+00:00",
                     "unread": False,
+                    "delivery_state": "pending",
                 },
                 {
                     "id": "sp8abc-rx-2",
@@ -862,6 +868,7 @@ def _message_demo_conversations() -> list[dict[str, Any]]:
             "callsign": "OE1XUU",
             "created_at": "2026-03-30T11:15:00+00:00",
             "demo_recently_heard": False,
+            "path": "NOGATE",
             "messages": [],
         },
         {
@@ -869,6 +876,7 @@ def _message_demo_conversations() -> list[dict[str, Any]]:
             "callsign": "DL1XYZ-9",
             "created_at": "2026-03-29T07:21:00+00:00",
             "demo_recently_heard": False,
+            "path": "WIDE1-1",
             "messages": [
                 {
                     "id": "dl1xyz-9-rx-1",
@@ -883,6 +891,7 @@ def _message_demo_conversations() -> list[dict[str, Any]]:
                     "text": "QSL. Nastepna proba po 18 UTC.",
                     "timestamp": "2026-03-29T07:28:00+00:00",
                     "unread": False,
+                    "delivery_state": "acked",
                 },
             ],
         },

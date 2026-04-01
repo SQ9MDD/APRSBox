@@ -2289,14 +2289,6 @@ body.modal-open {
     font-size: 0.92rem;
 }
 
-.messages-conversation-preview {
-    color: var(--muted);
-    font-size: 0.78rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 .messages-conversation-delete {
     align-self: center;
     width: 1.85rem;
@@ -2439,11 +2431,37 @@ body.modal-open {
 }
 
 .message-bubble-meta {
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
     margin-top: 0.35rem;
     color: var(--muted);
     font-size: 0.7rem;
     text-align: right;
+    justify-content: flex-end;
+    width: 100%;
+}
+
+.message-delivery-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.08rem 0.35rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    white-space: nowrap;
+}
+
+.message-delivery-badge-acked {
+    color: var(--success);
+    border-color: rgba(107, 170, 121, 0.28);
+    background: rgba(107, 170, 121, 0.12);
+}
+
+.message-delivery-badge-pending {
+    color: var(--warning);
+    border-color: rgba(205, 178, 110, 0.28);
+    background: rgba(205, 178, 110, 0.12);
 }
 
 .messages-composer {

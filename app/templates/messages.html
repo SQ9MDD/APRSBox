@@ -57,10 +57,20 @@
                         spellcheck="false"
                     ></textarea>
                 </label>
+                <label class="messages-composer-field">
+                    <span>Path</span>
+                    <input
+                        type="text"
+                        id="messages-composer-path"
+                        name="message_path"
+                        placeholder="WIDE2-1"
+                        spellcheck="false"
+                    >
+                </label>
                 <div class="messages-composer-footer">
                     <div class="messages-composer-meta">
                         <small class="muted" id="messages-composer-count">0 / {{ messages_view.composer_limit }}</small>
-                        <small class="field-validation-error" id="messages-composer-error" hidden>Use 67 APRS-safe printable ASCII characters or fewer.</small>
+                        <small class="field-validation-error" id="messages-composer-error" hidden>Only letters A-Z, a-z and digits 0-9 are allowed.</small>
                     </div>
                     <button type="submit" class="button" id="messages-send-button">Send</button>
                 </div>
@@ -85,11 +95,13 @@
     const historyNode = document.getElementById("messages-thread-history");
     const composerForm = document.getElementById("messages-composer");
     const composerInput = document.getElementById("messages-composer-input");
+    const composerPathInput = document.getElementById("messages-composer-path");
     const composerCount = document.getElementById("messages-composer-count");
     const composerError = document.getElementById("messages-composer-error");
     const sendButton = document.getElementById("messages-send-button");
     const newConversationForm = document.getElementById("messages-new-conversation-form");
     const newConversationInput = document.getElementById("messages-new-callsign");
+    const defaultPath = String(initialData.default_path || "");
 
     let state = buildInitialState(initialData);
 
@@ -130,21 +142,22 @@
         return `${year}.${month}.${day}`;
     }
 
-    function isAprsSafeAscii(value) {
-        return Array.from(String(value || "")).every((char) => {
-            const code = char.charCodeAt(0);
-            return code >= 32 && code <= 126;
-        });
-    }
-
     function validateComposer(value) {
         const text = String(value || "");
         return {
             length: text.length,
             tooLong: text.length > composerLimit,
-            asciiInvalid: !isAprsSafeAscii(text),
+            asciiInvalid: !/^[A-Za-z0-9]*$/.test(text),
             empty: text.trim().length === 0,
         };
+    }
+
+    function normalizeMessageText(value) {
+        return String(value || "").replace(/[^A-Za-z0-9]/g, "").slice(0, composerLimit);
+    }
+
+    function normalizePath(value) {
+        return String(value || "").trim().toUpperCase();
     }
 
     function buildLocalMessageId(prefix) {
@@ -157,17 +170,18 @@
             callsign: normalizeCallsign(conversation.callsign),
             created_at: String(conversation.created_at || new Date().toISOString()),
             last_activity_at: String(conversation.last_activity_at || conversation.created_at || new Date().toISOString()),
-            last_message_preview: String(conversation.last_message_preview || ""),
             unread_count: Number(conversation.unread_count || 0),
             message_state: String(conversation.message_state || "read"),
             recently_heard: Boolean(conversation.recently_heard),
             heard_recently_label: String(conversation.heard_recently_label || ""),
+            path: normalizePath(conversation.path || defaultPath),
             messages: Array.isArray(conversation.messages) ? conversation.messages.map((message) => ({
                 id: String(message.id || buildLocalMessageId("msg")),
                 direction: message.direction === "rx" ? "rx" : "tx",
                 text: String(message.text || ""),
                 timestamp: String(message.timestamp || new Date().toISOString()),
                 unread: Boolean(message.unread),
+                delivery_state: String(message.delivery_state || ""),
             })) : [],
         };
     }
@@ -189,10 +203,10 @@
         const lastMessage = messages[messages.length - 1] || null;
         conversation.unread_count = unreadCount;
         conversation.message_state = unreadCount > 0 ? "unread" : "read";
-        conversation.last_message_preview = lastMessage ? lastMessage.text : "";
         conversation.last_activity_at = String(
             (lastMessage && lastMessage.timestamp) || conversation.created_at || new Date().toISOString()
         );
+        conversation.path = normalizePath(conversation.path || defaultPath);
         return conversation;
     }
 
@@ -294,11 +308,11 @@
             callsign: normalized,
             created_at: new Date().toISOString(),
             last_activity_at: new Date().toISOString(),
-            last_message_preview: "",
             unread_count: 0,
             message_state: "read",
             recently_heard: false,
             heard_recently_label: "",
+            path: defaultPath,
             messages: [],
         });
         state.conversations.unshift(conversation);
@@ -327,6 +341,7 @@
             text,
             timestamp: new Date().toISOString(),
             unread: false,
+            delivery_state: "pending",
         });
         recomputeConversation(conversation);
         sortConversations(state.conversations);
@@ -342,7 +357,6 @@
             const isActive = conversation.id === state.activeConversationId;
             const stateBadgeClass = conversation.unread_count > 0 ? "message-state-badge-unread" : "message-state-badge-read";
             const stateBadgeLabel = conversation.unread_count > 0 ? `Unread (${conversation.unread_count})` : "Read";
-            const preview = conversation.last_message_preview || "No messages yet.";
             return `
                 <div class="messages-conversation-row${isActive ? " active" : ""}" data-conversation-id="${escapeHtml(conversation.id)}">
                     <button type="button" class="messages-conversation-button" data-open-conversation="${escapeHtml(conversation.id)}">
@@ -357,7 +371,6 @@
                             <span class="messages-conversation-meta-row">
                                 ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot"></span><span>${escapeHtml(conversation.heard_recently_label || "Heard recently")}</span></span>` : '<span class="muted">No recent heard-station entry</span>'}
                             </span>
-                            <span class="messages-conversation-preview">${escapeHtml(preview)}</span>
                         </span>
                     </button>
                     <button type="button" class="table-icon-button messages-conversation-delete" data-delete-conversation="${escapeHtml(conversation.id)}" aria-label="Delete conversation ${escapeHtml(conversation.callsign)}" title="Delete conversation">
@@ -402,12 +415,15 @@
             const dayLabel = formatDay(message.timestamp);
             const showDay = dayLabel && dayLabel !== previousDay;
             previousDay = dayLabel || previousDay;
+            const deliveryBadge = message.direction === "tx"
+                ? `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}">${escapeHtml(message.delivery_state === "acked" ? "ACK" : "Waiting ACK")}</span>`
+                : "";
             return `
                 ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}
                 <div class="message-bubble-row ${message.direction === "rx" ? "message-bubble-row-rx" : "message-bubble-row-tx"}">
                     <div class="message-bubble ${message.direction === "rx" ? "message-bubble-rx" : "message-bubble-tx"}">
                         <p>${escapeHtml(message.text)}</p>
-                        <span class="message-bubble-meta">${escapeHtml(formatDateTime(message.timestamp))}</span>
+                        <span class="message-bubble-meta">${escapeHtml(formatDateTime(message.timestamp))}${deliveryBadge}</span>
                     </div>
                 </div>
             `;
@@ -422,6 +438,8 @@
         composerError.hidden = !hasError;
         sendButton.disabled = !conversation || validation.empty || hasError;
         composerInput.disabled = !conversation;
+        composerPathInput.disabled = !conversation;
+        composerPathInput.value = conversation ? normalizePath(conversation.path || defaultPath) : defaultPath;
         composerInput.placeholder = conversation
             ? "Type APRS message text"
             : "Select a conversation to enable the composer";
@@ -468,14 +486,56 @@
             renderComposer(conversation);
             return;
         }
+        conversation.path = normalizePath(composerPathInput.value || defaultPath);
         appendOutgoingMessage(conversation, text.trim());
         composerInput.value = "";
         render();
         composerInput.focus();
     });
 
-    composerInput.addEventListener("input", () => {
+    composerInput.addEventListener("beforeinput", (event) => {
+        if (event.data === null) {
+            return;
+        }
+        const start = composerInput.selectionStart || 0;
+        const end = composerInput.selectionEnd || 0;
+        const nextValue = composerInput.value.slice(0, start) + event.data + composerInput.value.slice(end);
+        if (nextValue.length > composerLimit || !/^[A-Za-z0-9]*$/.test(event.data) || !/^[A-Za-z0-9]*$/.test(nextValue)) {
+            event.preventDefault();
+            composerError.hidden = false;
+        }
+    });
+
+    composerInput.addEventListener("paste", (event) => {
+        const pasted = event.clipboardData ? event.clipboardData.getData("text") : "";
+        if (!pasted) {
+            return;
+        }
+        event.preventDefault();
+        const filtered = normalizeMessageText(pasted);
+        const available = composerLimit - composerInput.value.length + ((composerInput.selectionEnd || 0) - (composerInput.selectionStart || 0));
+        composerInput.setRangeText(filtered.slice(0, Math.max(available, 0)), composerInput.selectionStart || 0, composerInput.selectionEnd || 0, "end");
+        composerError.hidden = filtered === pasted && filtered.length <= available;
         renderComposer(getActiveConversation());
+    });
+
+    composerInput.addEventListener("input", () => {
+        const filtered = normalizeMessageText(composerInput.value);
+        const hadInvalid = filtered !== composerInput.value;
+        if (hadInvalid) {
+            composerInput.value = filtered;
+        }
+        composerError.hidden = !hadInvalid;
+        renderComposer(getActiveConversation());
+    });
+
+    composerPathInput.addEventListener("input", () => {
+        const conversation = getActiveConversation();
+        if (!conversation) {
+            return;
+        }
+        conversation.path = normalizePath(composerPathInput.value);
+        persistState();
     });
 
     render();
