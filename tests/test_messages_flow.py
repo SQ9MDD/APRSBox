@@ -14,6 +14,7 @@ from app.services.messages import (
     MESSAGE_STATUS_FAILED,
     MESSAGE_STATUS_RECEIVED,
     MESSAGE_STATUS_SENT,
+    _format_heard_parts,
     _heard_recently_state,
     get_messages_page_data,
     normalize_aprs_message_text,
@@ -81,6 +82,17 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_heard_recently_state(HEARD_WARN_SECONDS), "warn")
         self.assertEqual(_heard_recently_state(HEARD_WARN_SECONDS + 1), "stale")
         self.assertEqual(_heard_recently_state(None), "none")
+
+    def test_format_heard_parts_returns_human_readable_timestamp_and_age(self) -> None:
+        with patch("app.services.messages.datetime") as datetime_mock:
+            from datetime import datetime, timezone
+
+            datetime_mock.now.return_value = datetime(2026, 4, 1, 12, 12, 0, tzinfo=timezone.utc)
+            datetime_mock.fromisoformat.side_effect = datetime.fromisoformat
+            label, relative = _format_heard_parts("2026-04-01T12:00:00+00:00")
+
+        self.assertEqual(label, "2026.04.01 14:00")
+        self.assertEqual(relative, "12 minut temu")
 
     async def test_queue_send_and_ack_direct_message(self) -> None:
         with temporary_database():
@@ -264,6 +276,8 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             conversation = view["conversations"][0]
             self.assertTrue(conversation["recently_heard"])
             self.assertEqual(conversation["heard_recently_state"], "warn")
+            self.assertIn("(", conversation["heard_recently_label"])
+            self.assertIn(")", conversation["heard_recently_label"])
 
     def test_local_echo_to_another_local_ssid_is_not_shown_as_incoming_self_conversation(self) -> None:
         with temporary_database():

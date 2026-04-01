@@ -252,7 +252,12 @@ def get_messages_page_data() -> dict[str, Any]:
             age_s = heard_snapshot.get("last_heard_age_s")
             heard_recently_state = _heard_recently_state(age_s)
             recently_heard = heard_recently_state != "none"
-            heard_recently_label = str(heard_snapshot.get("last_heard_relative") or heard_snapshot.get("last_heard_label") or "").strip()
+            heard_label = str(heard_snapshot.get("last_heard_label") or "").strip()
+            heard_relative = str(heard_snapshot.get("last_heard_relative") or "").strip()
+            if heard_label and heard_relative:
+                heard_recently_label = f"{heard_label} ({heard_relative})"
+            else:
+                heard_recently_label = heard_relative or heard_label
         conversations.append(
             {
                 "id": str(conversation_id),
@@ -762,12 +767,14 @@ def _heard_station_lookup() -> dict[str, dict[str, Any]]:
         if source.casefold() in snapshots:
             continue
         base_callsign, ssid = split_callsign_ssid(source)
+        timestamp = str(row["created_at"])
+        heard_label, heard_relative = _format_heard_parts(timestamp)
         snapshots[source.casefold()] = {
             "callsign": base_callsign,
             "display_callsign": format_display_callsign(base_callsign, ssid),
-            "last_heard_label": str(row["created_at"]),
-            "last_heard_relative": str(row["created_at"]),
-            "last_heard_age_s": _heard_age_seconds(str(row["created_at"])),
+            "last_heard_label": heard_label,
+            "last_heard_relative": heard_relative,
+            "last_heard_age_s": _heard_age_seconds(timestamp),
         }
     return snapshots
 
@@ -778,6 +785,41 @@ def _heard_age_seconds(timestamp: str) -> int | None:
     except ValueError:
         return None
     return max(0, int((datetime.now(timezone.utc) - heard_at.astimezone(timezone.utc)).total_seconds()))
+
+
+def _format_heard_parts(timestamp: str) -> tuple[str, str]:
+    try:
+        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return timestamp, ""
+
+    local_time = heard_at.astimezone()
+    delta_seconds = max(0, int((datetime.now(timezone.utc) - heard_at.astimezone(timezone.utc)).total_seconds()))
+    if delta_seconds < 60:
+        relative = "teraz"
+    elif delta_seconds < 3600:
+        minutes = delta_seconds // 60
+        relative = _format_minutes_ago(minutes)
+    else:
+        hours = delta_seconds // 3600
+        relative = _format_hours_ago(hours)
+    return local_time.strftime("%Y.%m.%d %H:%M"), relative
+
+
+def _format_minutes_ago(value: int) -> str:
+    if value == 1:
+        return "1 minutę temu"
+    if value % 10 in {2, 3, 4} and value % 100 not in {12, 13, 14}:
+        return f"{value} minuty temu"
+    return f"{value} minut temu"
+
+
+def _format_hours_ago(value: int) -> str:
+    if value == 1:
+        return "1 godzinę temu"
+    if value % 10 in {2, 3, 4} and value % 100 not in {12, 13, 14}:
+        return f"{value} godziny temu"
+    return f"{value} godzin temu"
 
 
 def _heard_recently_state(age_s: Any) -> str:
