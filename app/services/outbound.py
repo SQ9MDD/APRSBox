@@ -276,6 +276,7 @@ def enqueue_message_job(
         "message_kind": str(bulletin.get("message_kind") or "bulletin").strip(),
         "bulletin_code": str(bulletin.get("bulletin_code") or "").strip().upper(),
         "group_name": str(bulletin.get("group_name") or "").strip().upper(),
+        "path": str(bulletin.get("path") or "").strip(),
         "message_text": str(bulletin.get("message_text") or "").strip(),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
     }
@@ -429,8 +430,12 @@ def build_status_tnc2(payload: dict[str, Any]) -> str:
 
 def build_message_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
+    path = str(payload.get("path") or "").strip()
     info = _build_message_info(payload)
-    return f"{source}>APRS:{info}"
+    header = f"{source}>APRS"
+    if path:
+        header = f"{header},{path}"
+    return f"{header}:{info}"
 
 
 def latest_object_dispatch_at() -> datetime | None:

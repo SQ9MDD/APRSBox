@@ -256,6 +256,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
+            {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "message_text", "label": "Message Text", "type": "textarea", "required": True, "maxlength": 67, "placeholder": "Net starts at 19:30 UTC"},
         ],

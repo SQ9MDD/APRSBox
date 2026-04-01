@@ -1860,6 +1860,10 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if interval_minutes not in {5, 10, 15, 30, 45, 60}:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
 
+    path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
+    if len(path) > 64:
+        raise ValueError("Future RF path must be 64 printable ASCII characters or fewer.")
+
     message_text = _normalize_aprs_message_text(str(payload.get("message_text") or "").strip())
     if not message_text:
         raise ValueError("Message text is required.")
@@ -1867,6 +1871,7 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized["bulletin_code"] = bulletin_code
     normalized["group_name"] = group_name
     normalized["interval_minutes"] = interval_minutes
+    normalized["path"] = path
     normalized["message_text"] = message_text
     return normalized
 
@@ -1986,6 +1991,7 @@ def _build_aprs_message_preview(payload: dict[str, Any]) -> str:
         "message_kind": payload.get("message_kind"),
         "bulletin_code": payload.get("bulletin_code"),
         "group_name": payload.get("group_name"),
+        "path": payload.get("path"),
         "message_text": payload.get("message_text"),
     }
     return build_message_tnc2(preview_payload)

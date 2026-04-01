@@ -274,6 +274,8 @@
                     <small class="muted">Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.</small>
                     {% elif section.slug == 'bulletins' and field.name == 'group_name' %}
                     <small class="muted">Group suffix, 1-5 chars: <code>A-Z</code> or <code>0-9</code>.</small>
+                    {% elif section.slug == 'bulletins' and field.name == 'path' %}
+                    <small class="muted">Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.</small>
                     {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
                     <small class="muted">Uses the same outbound queue and scheduler path as beacon, status and objects.</small>
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}

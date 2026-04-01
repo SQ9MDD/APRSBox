@@ -317,6 +317,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                     "bulletin_code": "A",
                     "group_name": "",
                     "interval_minutes": "15",
+                    "path": "WIDE2-1",
                     "is_enabled": "1",
                     "message_text": "Net starts at 19:30 UTC",
                 },
@@ -331,7 +332,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             self.assertEqual(decorated["target_display"], "BLNA")
             self.assertEqual(
                 decorated["raw_frame_preview"],
-                "SQ9XYZ-9>APRS::BLNA     :Net starts at 19:30 UTC",
+                "SQ9XYZ-9>APRS,WIDE2-1::BLNA     :Net starts at 19:30 UTC",
             )
 
     def test_group_bulletin_preview_uses_bln_addressee(self) -> None:
@@ -356,10 +357,10 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                 "bulletins",
                 {
                     "message_kind": "group_bulletin",
-                    "addressee": "",
                     "bulletin_code": "1",
                     "group_name": "WX",
                     "interval_minutes": "30",
+                    "path": "",
                     "message_text": "Wind 15 km/h",
                 },
             )
@@ -384,6 +385,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                     "message_kind": "bulletin",
                     "bulletin_code": "1",
                     "interval_minutes": "30",
+                    "path": "",
                     "message_text": "X" * 68,
                 },
             )
@@ -398,6 +400,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                     "message_kind": "bulletin",
                     "bulletin_code": "1",
                     "interval_minutes": "30",
+                    "path": "",
                     "message_text": "Zażółć",
                 },
             )
@@ -413,7 +416,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertIn("['digi', 'igate']", base_source)
         self.assertNotIn("['digi', 'igate', 'bulletins']", base_source)
         helpers_source = Path("app/template_helpers.py").read_text(encoding="utf-8")
-        self.assertIn("Bulletins / Announcements", helpers_source)
+        self.assertIn("BLN / Ann.", helpers_source)
 
 
 if __name__ == "__main__":

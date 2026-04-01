@@ -46,8 +46,8 @@ def insert_modem(*, name: str = "Test TNC", device_path: str = "127.0.0.1:9011")
 def insert_message_record(*, message_kind: str = "group_bulletin") -> int:
     execute(
         """
-        INSERT INTO bulletins(message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, message_text, updated_at)
-        VALUES (?, '', '1', 'WX', 1, 30, 'Wind 15 km/h', '2026-01-01T00:00:00+00:00')
+        INSERT INTO bulletins(message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, path, message_text, updated_at)
+        VALUES (?, '', '1', 'WX', 1, 30, 'WIDE2-1', 'Wind 15 km/h', '2026-01-01T00:00:00+00:00')
         """,
         (message_kind,),
     )
@@ -98,13 +98,14 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["message_kind"], "group_bulletin")
             self.assertEqual(payload["bulletin_code"], "1")
             self.assertEqual(payload["group_name"], "WX")
+            self.assertEqual(payload["path"], "WIDE2-1")
             self.assertEqual(payload["trigger"], "scheduled")
 
     async def test_outbound_runtime_sends_message_jobs(self) -> None:
         with temporary_database():
             insert_modem(device_path="127.0.0.1:9012")
             insert_message_record(message_kind="announcement")
-            execute("UPDATE bulletins SET bulletin_code = 'A', group_name = '', message_text = 'System maintenance 19:30 UTC'")
+            execute("UPDATE bulletins SET bulletin_code = 'A', group_name = '', path = 'WIDE1-1', message_text = 'System maintenance 19:30 UTC'")
             update_station_settings(
                 {
                     "callsign": "SQ9MDD",
@@ -160,6 +161,7 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             payload = json.loads(row["payload_json"])
             self.assertEqual(payload["message_kind"], "announcement")
             self.assertNotIn("addressee", payload)
+            self.assertEqual(payload["path"], "WIDE1-1")
 
             runtime_job = get_outbound_job(int(row["id"]))
             assert runtime_job is not None

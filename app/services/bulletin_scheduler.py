@@ -50,7 +50,7 @@ class BulletinSchedulerService:
         due_rows = []
         for row in fetch_all(
             """
-            SELECT id, message_kind, bulletin_code, group_name, is_enabled, interval_minutes, message_text, updated_at
+            SELECT id, message_kind, bulletin_code, group_name, is_enabled, interval_minutes, path, message_text, updated_at
             FROM bulletins
             WHERE is_enabled = 1
             ORDER BY id ASC
