@@ -6,6 +6,7 @@ from typing import Any
 from app.db import log_event
 from app.services.outbound import (
     build_beacon_tnc2,
+    build_message_tnc2,
     build_object_tnc2,
     build_status_tnc2,
     build_tnc2_kiss_frame,
@@ -66,6 +67,8 @@ class OutboundService:
                 tnc2_line = build_status_tnc2(job.get("payload") or {})
             elif kind == "object":
                 tnc2_line = build_object_tnc2(job.get("payload") or {})
+            elif kind == "message":
+                tnc2_line = build_message_tnc2(job.get("payload") or {})
             else:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
             log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")

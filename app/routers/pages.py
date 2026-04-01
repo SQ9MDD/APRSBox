@@ -731,32 +731,54 @@ def items_delete(
 def bulletins_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    edit: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "bulletins"))
+    edit_row = get_section_row("bulletins", edit) if edit is not None else None
+    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "bulletins", edit_row=edit_row))
 
 
 @router.post("/bulletins")
 def bulletins_create(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-    name: str = Form(...),
-    body: str = Form(...),
-    cadence_minutes: int | None = Form(None),
+    record_id: int | None = Form(None),
+    message_kind: str = Form("message"),
+    addressee: str = Form(""),
+    bulletin_code: str = Form(""),
+    group_name: str = Form(""),
+    interval_minutes: str = Form("30"),
     is_enabled: str | None = Form(None),
+    message_text: str = Form(...),
 ) -> object:
     templates = request.app.state.templates
-    success, error = safe_create_section_row(
-        "bulletins",
-        {
-            "name": name.strip(),
-            "body": body.strip(),
-            "cadence_minutes": cadence_minutes,
-            "is_enabled": is_enabled,
-        },
-    )
-    context = _section_template_context(request, current_user, "bulletins", flash=None if success else error)
+    payload = {
+        "message_kind": message_kind.strip(),
+        "addressee": addressee.strip(),
+        "bulletin_code": bulletin_code.strip(),
+        "group_name": group_name.strip(),
+        "interval_minutes": interval_minutes.strip(),
+        "is_enabled": is_enabled,
+        "message_text": message_text.strip(),
+    }
+    if record_id is None:
+        success, error = safe_create_section_row("bulletins", payload)
+        edit_row = None
+    else:
+        success, error = safe_update_section_row("bulletins", record_id, payload)
+        edit_row = get_section_row("bulletins", record_id) if error else None
+    context = _section_template_context(request, current_user, "bulletins", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/settings/bulletins/{record_id}/delete")
+def bulletins_delete(
+    record_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    delete_section_row("bulletins", record_id)
+    return RedirectResponse(url=_path(request, "/bulletins"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/station")

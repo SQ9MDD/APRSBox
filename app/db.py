@@ -177,10 +177,13 @@ CREATE TABLE IF NOT EXISTS aprs_items (
 
 CREATE TABLE IF NOT EXISTS bulletins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    message_kind TEXT NOT NULL DEFAULT 'bulletin' CHECK (message_kind IN ('message', 'bulletin', 'announcement', 'group_bulletin')),
+    addressee TEXT,
+    bulletin_code TEXT,
+    group_name TEXT,
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
-    body TEXT NOT NULL,
-    cadence_minutes INTEGER,
+    interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+    message_text TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 
@@ -308,6 +311,7 @@ def init_db() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA)
         _migrate_entity_interval_constraints(connection)
+        _migrate_bulletin_table(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
@@ -543,6 +547,45 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 updated_at
             FROM aprs_items_old;
             DROP TABLE aprs_items_old;
+            """
+        )
+
+
+def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
+    bulletins_sql = _table_sql(connection, "bulletins")
+    if bulletins_sql and "message_kind" not in bulletins_sql:
+        connection.executescript(
+            """
+            ALTER TABLE bulletins RENAME TO bulletins_old;
+            CREATE TABLE bulletins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_kind TEXT NOT NULL DEFAULT 'bulletin' CHECK (message_kind IN ('message', 'bulletin', 'announcement', 'group_bulletin')),
+                addressee TEXT,
+                bulletin_code TEXT,
+                group_name TEXT,
+                is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
+                interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                message_text TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO bulletins (
+                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, message_text, updated_at
+            )
+            SELECT
+                id,
+                'bulletin',
+                NULL,
+                '0',
+                '',
+                COALESCE(is_enabled, 0),
+                CASE
+                    WHEN cadence_minutes IN (5, 10, 15, 30, 45, 60) THEN cadence_minutes
+                    ELSE 30
+                END,
+                SUBSTR(COALESCE(body, ''), 1, 67),
+                updated_at
+            FROM bulletins_old;
+            DROP TABLE bulletins_old;
             """
         )
 

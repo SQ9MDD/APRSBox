@@ -291,5 +291,129 @@ class ObjectAndItemFormTests(unittest.TestCase):
             )
 
 
+class BulletinAndMessageFormTests(unittest.TestCase):
+    def test_message_row_contains_target_and_raw_frame_preview(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "9",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "message",
+                    "addressee": "sp8abc-1",
+                    "bulletin_code": "",
+                    "group_name": "",
+                    "interval_minutes": "15",
+                    "is_enabled": "1",
+                    "message_text": "Net starts at 19:30 UTC",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+
+            row = fetch_one("SELECT id FROM bulletins ORDER BY id DESC LIMIT 1")
+            assert row is not None
+            decorated = get_section_row("bulletins", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["target_display"], "SP8ABC-1")
+            self.assertEqual(
+                decorated["raw_frame_preview"],
+                "SQ9XYZ-9>APRS::SP8ABC-1 :Net starts at 19:30 UTC",
+            )
+
+    def test_group_bulletin_preview_uses_bln_addressee(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "group_bulletin",
+                    "addressee": "",
+                    "bulletin_code": "1",
+                    "group_name": "WX",
+                    "interval_minutes": "30",
+                    "message_text": "Wind 15 km/h",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+
+            row = fetch_one("SELECT id FROM bulletins ORDER BY id DESC LIMIT 1")
+            assert row is not None
+            decorated = get_section_row("bulletins", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["target_display"], "BLN1WX")
+            self.assertEqual(
+                decorated["raw_frame_preview"],
+                "SQ9XYZ>APRS::BLN1WX   :Wind 15 km/h",
+            )
+
+    def test_message_text_longer_than_sixty_seven_characters_is_rejected(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "message",
+                    "addressee": "SQ9XYZ-9",
+                    "interval_minutes": "30",
+                    "message_text": "X" * 68,
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "Message text must be 67 ASCII characters or fewer.")
+
+    def test_message_text_rejects_non_ascii_characters(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "message",
+                    "addressee": "SQ9XYZ-9",
+                    "interval_minutes": "30",
+                    "message_text": "Zażółć",
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "Message text may contain only APRS-safe printable ASCII characters.")
+
+    def test_bulletins_template_includes_counter_and_menu_is_not_struck(self) -> None:
+        template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
+        self.assertIn('id="bulletins-message-count"', template_source)
+        self.assertIn('id="bulletins-message-error"', template_source)
+
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn("['digi', 'igate']", base_source)
+        self.assertNotIn("['digi', 'igate', 'bulletins']", base_source)
+
+
 if __name__ == "__main__":
     unittest.main()

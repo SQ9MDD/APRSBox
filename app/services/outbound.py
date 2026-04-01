@@ -15,6 +15,7 @@ AX25_PID_NO_LAYER3 = 0xF0
 OUTBOUND_KIND_BEACON = "beacon"
 OUTBOUND_KIND_STATUS = "status"
 OUTBOUND_KIND_OBJECT = "object"
+OUTBOUND_KIND_MESSAGE = "message"
 OUTBOUND_STATUS_QUEUED = "queued"
 OUTBOUND_STATUS_PROCESSING = "processing"
 OUTBOUND_STATUS_SENT = "sent"
@@ -239,6 +240,72 @@ def enqueue_object_job(
     return True, f"Object queued as job #{job_id}."
 
 
+def enqueue_message_job(
+    bulletin: dict[str, Any],
+    station_settings: dict[str, Any],
+    *,
+    trigger: str = "scheduled",
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str]:
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    ssid = str(station_settings.get("ssid") or "").strip()
+    beacon_interface_id = station_settings.get("beacon_interface_id")
+    if not callsign:
+        return False, "Callsign is required."
+    if beacon_interface_id in {None, ""}:
+        return False, "Interface is required."
+    try:
+        interface_id = int(beacon_interface_id)
+    except (TypeError, ValueError):
+        return False, "Selected interface is invalid."
+    modem = fetch_one(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE id = ?
+        """,
+        (interface_id,),
+    )
+    if modem is None:
+        return False, "Selected interface does not exist."
+
+    payload = {
+        "message_id": int(bulletin["id"]),
+        "callsign": callsign,
+        "ssid": ssid,
+        "message_kind": str(bulletin.get("message_kind") or "message").strip(),
+        "addressee": str(bulletin.get("addressee") or "").strip().upper(),
+        "bulletin_code": str(bulletin.get("bulletin_code") or "").strip().upper(),
+        "group_name": str(bulletin.get("group_name") or "").strip().upper(),
+        "message_text": str(bulletin.get("message_text") or "").strip(),
+        "trigger": str(trigger or "scheduled").strip() or "scheduled",
+    }
+    now_text = utc_now()
+    scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text)
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO outbound_jobs(
+                kind, interface_id, payload_json, status, scheduled_at,
+                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+            """,
+            (
+                OUTBOUND_KIND_MESSAGE,
+                int(modem["id"]),
+                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
+                OUTBOUND_STATUS_QUEUED,
+                scheduled_at,
+                now_text,
+                now_text,
+            ),
+        )
+        job_id = cursor.lastrowid
+    log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_id} for interface {modem['name']}")
+    return True, f"Message queued as job #{job_id}."
+
+
 def claim_next_outbound_job() -> dict[str, Any] | None:
     with get_connection() as connection:
         row = connection.execute(
@@ -361,6 +428,12 @@ def build_status_tnc2(payload: dict[str, Any]) -> str:
     return f"{source}>APRS:{info}"
 
 
+def build_message_tnc2(payload: dict[str, Any]) -> str:
+    source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
+    info = _build_message_info(payload)
+    return f"{source}>APRS:{info}"
+
+
 def latest_object_dispatch_at() -> datetime | None:
     row = fetch_one(
         """
@@ -371,6 +444,22 @@ def latest_object_dispatch_at() -> datetime | None:
         LIMIT 1
         """,
         (OUTBOUND_KIND_OBJECT,),
+    )
+    if row is None or not row["dispatch_at"]:
+        return None
+    return _parse_timestamp(str(row["dispatch_at"]))
+
+
+def latest_message_dispatch_at() -> datetime | None:
+    row = fetch_one(
+        """
+        SELECT COALESCE(sent_at, started_at, scheduled_at, created_at) AS dispatch_at
+        FROM outbound_jobs
+        WHERE kind = ?
+        ORDER BY COALESCE(sent_at, started_at, scheduled_at, created_at) DESC, id DESC
+        LIMIT 1
+        """,
+        (OUTBOUND_KIND_MESSAGE,),
     )
     if row is None or not row["dispatch_at"]:
         return None
@@ -451,6 +540,25 @@ def _build_object_info(payload: dict[str, Any]) -> str:
 
 def _build_status_info(payload: dict[str, Any]) -> str:
     return f">{str(payload.get('status_text') or '').strip()}"
+
+
+def _build_message_info(payload: dict[str, Any]) -> str:
+    addressee = resolve_message_addressee(payload)
+    message_text = str(payload.get("message_text") or "").strip()
+    return f":{addressee}:{message_text}"
+
+
+def resolve_message_addressee(payload: dict[str, Any]) -> str:
+    message_kind = str(payload.get("message_kind") or "message").strip()
+    if message_kind == "message":
+        return str(payload.get("addressee") or "").strip().upper()[:9].ljust(9)
+    bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()[:1]
+    if message_kind == "announcement":
+        return f"BLN{bulletin_code}".ljust(9)
+    if message_kind == "group_bulletin":
+        group_name = str(payload.get("group_name") or "").strip().upper()[:5]
+        return f"BLN{bulletin_code}{group_name}".ljust(9)
+    return f"BLN{bulletin_code}".ljust(9)
 
 
 def _format_aprs_latitude(value: float) -> str:

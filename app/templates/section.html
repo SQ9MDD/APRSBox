@@ -22,6 +22,8 @@
         <div class="notice">Use object names up to 9 printable ASCII characters. The sender will later pad them to the fixed APRS 9-character object field and add the mandatory timestamp automatically.</div>
         {% elif section.slug == 'items' %}
         <div class="notice">Use item names from 3 to 9 printable ASCII characters. Avoid item format on RF unless you specifically need it; objects are generally the safer interoperable choice.</div>
+        {% elif section.slug == 'bulletins' %}
+        <div class="notice">General bulletins use <code>BLN0</code>-<code>BLN9</code>, announcements use <code>BLNA</code>-<code>BLNZ</code>, and group bulletins use <code>BLNnGROUP</code> in the fixed 9-character addressee field.</div>
         {% endif %}
         {% if flash %}
         <div class="alert">{{ flash }}</div>
@@ -62,6 +64,38 @@
                             </td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
                             <td class="prepared-entity-col-name">{{ row.name }}</td>
+                            <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5">No records yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% elif section.slug == 'bulletins' %}
+                <table class="data-table prepared-entity-table message-entry-table">
+                    <thead>
+                        <tr>
+                            <th class="prepared-entity-col-active">Active</th>
+                            <th class="prepared-entity-col-interval">Every</th>
+                            <th class="message-entry-col-type">Type</th>
+                            <th class="message-entry-col-target">Target</th>
+                            <th class="prepared-entity-col-raw">Raw Frame Preview</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
+                            <td class="prepared-entity-col-active">
+                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.is_enabled else 'tnc-badge-disabled' }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
+                                    <span>{{ 'On' if row.is_enabled else 'Off' }}</span>
+                                </span>
+                            </td>
+                            <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
+                            <td class="message-entry-col-type">{{ row.type_label }}</td>
+                            <td class="message-entry-col-target"><code>{{ row.target_display }}</code></td>
                             <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
                         </tr>
                         {% else %}
@@ -165,16 +199,21 @@
                     </button>
                 </label>
                 {% endif %}
-                <label class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}">
+                <label
+                    class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}"
+                    {% if section.slug == 'bulletins' and field.name == 'addressee' %}id="bulletins-addressee-row"{% endif %}
+                    {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
+                    {% if section.slug == 'bulletins' and field.name == 'group_name' %}id="bulletins-group-row"{% endif %}
+                >
                     {% if field.type == 'textarea' %}
                     <span>{{ field.label }}</span>
-                    <textarea name="{{ field.name }}" {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
+                    <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if edit_row and edit_row[field.name] %}checked{% endif %}>
                     <span>{{ field.label }}</span>
                     {% elif field.type == 'select' %}
                     <span>{{ field.label }}</span>
-                    <select name="{{ field.name }}" {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %} {% if field.required %}required{% endif %}>
+                    <select name="{{ field.name }}" {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}{% if section.slug == 'bulletins' and field.name == 'message_kind' %} id="bulletins-message-kind"{% endif %} {% if field.required %}required{% endif %}>
                         {% for option in field.options %}
                         <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name]|string == option.value|string) or (not edit_row and ((field.default is defined and field.default|string == option.value|string) or (field.default is not defined and loop.first))) %}selected{% endif %}>
                             {{ option.label }}
@@ -232,6 +271,19 @@
                     <small class="muted">Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.</small>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
                     <small class="muted">Prepared scheduling only. Default is 30m.</small>
+                    {% elif section.slug == 'bulletins' and field.name == 'addressee' %}
+                    <small class="muted">Direct APRS target, 1-9 chars: <code>A-Z</code>, <code>0-9</code> or <code>-</code>.</small>
+                    {% elif section.slug == 'bulletins' and field.name == 'bulletin_code' %}
+                    <small class="muted">Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.</small>
+                    {% elif section.slug == 'bulletins' and field.name == 'group_name' %}
+                    <small class="muted">Group suffix, 1-5 chars: <code>A-Z</code> or <code>0-9</code>.</small>
+                    {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
+                    <small class="muted">Uses the same outbound queue and scheduler path as beacon, status and objects.</small>
+                    {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
+                    <div class="field-counter-row">
+                        <small class="muted" id="bulletins-message-count">0 / 67</small>
+                        <small class="field-validation-error" id="bulletins-message-error" hidden>Only APRS-safe printable ASCII is allowed. National characters are blocked.</small>
+                    </div>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
                     <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.</small>
                     {% elif section.slug == 'items' and field.name == 'comment' %}
@@ -242,8 +294,8 @@
                 <div class="form-actions">
                     <button type="submit" class="button">Save</button>
                     {% if section.supports_editing and edit_row %}
-                    <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else '/settings/' ~ section.slug) }}" class="button button-secondary">Cancel</a>
-                    {% if section.slug in ['objects', 'items'] and section.supports_delete %}
+                    <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">Cancel</a>
+                    {% if section.supports_delete %}
                     <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post" onclick="return confirm('Delete this record?');">Delete</button>
                     {% endif %}
                     {% endif %}
@@ -388,6 +440,132 @@
                 }
             });
             syncPreview();
+        }
+
+        const bulletinForm = document.getElementById("bulletins-form");
+        if (bulletinForm) {
+            const kindSelect = document.getElementById("bulletins-message-kind");
+            const addresseeRow = document.getElementById("bulletins-addressee-row");
+            const codeRow = document.getElementById("bulletins-code-row");
+            const groupRow = document.getElementById("bulletins-group-row");
+            const addresseeInput = bulletinForm.querySelector('input[name="addressee"]');
+            const codeInput = bulletinForm.querySelector('input[name="bulletin_code"]');
+            const groupInput = bulletinForm.querySelector('input[name="group_name"]');
+            const textInput = document.getElementById("bulletins-message-text");
+            const countNode = document.getElementById("bulletins-message-count");
+            const errorNode = document.getElementById("bulletins-message-error");
+            const allowedTextPattern = /^[\x20-\x7E]*$/;
+            const blockedTextChars = /[{}|~]/;
+
+            const setTextError = (visible) => {
+                if (errorNode) {
+                    errorNode.hidden = !visible;
+                }
+            };
+
+            const isAllowedText = (value) => allowedTextPattern.test(value) && !blockedTextChars.test(value);
+
+            const filterAllowedText = (value) => Array.from(value).filter((char) => isAllowedText(char)).join("");
+
+            const updateCounter = () => {
+                if (textInput && countNode) {
+                    countNode.textContent = `${textInput.value.length} / 67`;
+                }
+            };
+
+            const syncBulletinFields = () => {
+                if (!kindSelect) {
+                    return;
+                }
+                const kind = kindSelect.value;
+                if (addresseeRow) {
+                    addresseeRow.hidden = kind !== "message";
+                }
+                if (codeRow) {
+                    codeRow.hidden = kind === "message";
+                }
+                if (groupRow) {
+                    groupRow.hidden = kind !== "group_bulletin";
+                }
+                if (addresseeInput) {
+                    addresseeInput.required = kind === "message";
+                }
+                if (codeInput) {
+                    codeInput.required = kind !== "message";
+                    codeInput.placeholder = kind === "announcement" ? "A" : "0";
+                }
+                if (groupInput) {
+                    groupInput.required = kind === "group_bulletin";
+                }
+            };
+
+            if (kindSelect) {
+                kindSelect.addEventListener("change", syncBulletinFields);
+                syncBulletinFields();
+            }
+
+            if (addresseeInput) {
+                addresseeInput.addEventListener("input", () => {
+                    const filtered = addresseeInput.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 9);
+                    if (filtered !== addresseeInput.value) {
+                        addresseeInput.value = filtered;
+                    }
+                });
+            }
+
+            if (codeInput) {
+                codeInput.addEventListener("input", () => {
+                    const isAnnouncement = kindSelect && kindSelect.value === "announcement";
+                    const filtered = codeInput.value.toUpperCase().replace(isAnnouncement ? /[^A-Z]/g : /[^0-9]/g, "").slice(0, 1);
+                    if (filtered !== codeInput.value) {
+                        codeInput.value = filtered;
+                    }
+                });
+            }
+
+            if (groupInput) {
+                groupInput.addEventListener("input", () => {
+                    const filtered = groupInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+                    if (filtered !== groupInput.value) {
+                        groupInput.value = filtered;
+                    }
+                });
+            }
+
+            if (textInput) {
+                textInput.addEventListener("beforeinput", (event) => {
+                    if (event.data === null) {
+                        return;
+                    }
+                    const nextValue = textInput.value.slice(0, textInput.selectionStart) + event.data + textInput.value.slice(textInput.selectionEnd);
+                    if (nextValue.length > 67 || !isAllowedText(event.data) || !isAllowedText(nextValue)) {
+                        event.preventDefault();
+                        setTextError(true);
+                    }
+                });
+                textInput.addEventListener("paste", (event) => {
+                    const pasted = event.clipboardData ? event.clipboardData.getData("text") : "";
+                    if (!pasted) {
+                        return;
+                    }
+                    event.preventDefault();
+                    const filtered = filterAllowedText(pasted);
+                    const available = 67 - textInput.value.length + (textInput.selectionEnd - textInput.selectionStart);
+                    textInput.setRangeText(filtered.slice(0, Math.max(available, 0)), textInput.selectionStart, textInput.selectionEnd, "end");
+                    setTextError(filtered !== pasted || filtered.length > available);
+                    updateCounter();
+                });
+                textInput.addEventListener("input", () => {
+                    const filtered = filterAllowedText(textInput.value).slice(0, 67);
+                    const hadInvalid = filtered !== textInput.value;
+                    if (hadInvalid) {
+                        textInput.value = filtered;
+                    }
+                    setTextError(hadInvalid);
+                    updateCounter();
+                });
+                updateCounter();
+            }
         }
 
         for (const slug of ["objects", "items"]) {

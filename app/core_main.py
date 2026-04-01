@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.db import init_db, log_event
 from app.services.beacon_scheduler import BeaconSchedulerService
+from app.services.bulletin_scheduler import BulletinSchedulerService
 from app.services.object_scheduler import ObjectSchedulerService
 from app.services.outbound_runtime import OutboundService
 from app.services.traffic import TrafficMonitorService
@@ -19,20 +20,24 @@ async def lifespan(app_instance: FastAPI):
     traffic_monitor = TrafficMonitorService()
     outbound_service = OutboundService()
     beacon_scheduler = BeaconSchedulerService()
+    bulletin_scheduler = BulletinSchedulerService()
     object_scheduler = ObjectSchedulerService()
     app_instance.state.traffic_monitor = traffic_monitor
     app_instance.state.outbound_service = outbound_service
     app_instance.state.beacon_scheduler = beacon_scheduler
+    app_instance.state.bulletin_scheduler = bulletin_scheduler
     app_instance.state.object_scheduler = object_scheduler
     await traffic_monitor.start()
     await outbound_service.start()
     await beacon_scheduler.start()
+    await bulletin_scheduler.start()
     await object_scheduler.start()
     log_event("INFO", "system", "APRSBox core started")
     try:
         yield
     finally:
         await object_scheduler.stop()
+        await bulletin_scheduler.stop()
         await beacon_scheduler.stop()
         await outbound_service.stop()
         await traffic_monitor.stop()

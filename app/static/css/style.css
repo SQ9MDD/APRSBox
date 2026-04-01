@@ -1929,6 +1929,30 @@ code {
     word-break: break-word;
 }
 
+.message-entry-col-type {
+    width: 8.5rem;
+}
+
+.message-entry-col-target {
+    width: 8rem;
+}
+
+.message-entry-col-target code {
+    white-space: pre;
+}
+
+.field-counter-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.field-validation-error {
+    color: var(--danger);
+}
+
 .location-picker-button {
     display: inline-flex;
     align-items: center;

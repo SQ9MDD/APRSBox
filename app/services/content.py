@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
-from app.services.outbound import build_beacon_tnc2, build_object_tnc2, build_status_tnc2
+from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_object_tnc2, build_status_tnc2, resolve_message_addressee
 from app.sections import SECTION_DEFINITIONS
 
 
@@ -35,6 +35,8 @@ def get_section_rows(slug: str) -> list[dict[str, Any]]:
     result = [dict(row) for row in rows]
     if slug in {"objects", "items"}:
         return [_decorate_aprs_entity_row(slug, row) for row in result]
+    if slug == "bulletins":
+        return [_decorate_aprs_message_row(row) for row in result]
     return result
 
 
@@ -46,6 +48,8 @@ def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
     result = dict(row)
     if slug in {"objects", "items"}:
         return _decorate_aprs_entity_row(slug, result)
+    if slug == "bulletins":
+        return _decorate_aprs_message_row(result)
     return result
 
 
@@ -1757,6 +1761,8 @@ def _normalize_section_payload(slug: str, payload: dict[str, Any]) -> dict[str, 
         return _normalize_aprs_entity_payload("object", payload)
     if slug == "items":
         return _normalize_aprs_entity_payload("item", payload)
+    if slug == "bulletins":
+        return _normalize_aprs_message_payload(payload)
     return payload
 
 
@@ -1822,6 +1828,59 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
     return normalized
 
 
+def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    message_kind = str(payload.get("message_kind") or "message").strip().lower()
+    if message_kind not in {"message", "bulletin", "announcement", "group_bulletin"}:
+        raise ValueError("Type must be message, bulletin, announcement or group bulletin.")
+    normalized["message_kind"] = message_kind
+
+    addressee = str(payload.get("addressee") or "").strip().upper()
+    bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()
+    group_name = str(payload.get("group_name") or "").strip().upper()
+
+    if message_kind == "message":
+        if not addressee:
+            raise ValueError("Addressee is required for APRS messages.")
+        if not re.fullmatch(r"[A-Z0-9-]{1,9}", addressee):
+            raise ValueError("Addressee must be 1-9 characters: A-Z, 0-9 or -.")
+    else:
+        addressee = ""
+
+    if message_kind in {"bulletin", "group_bulletin"}:
+        if not re.fullmatch(r"[0-9]", bulletin_code):
+            raise ValueError("Bulletin code must be a single digit from 0 to 9.")
+    elif message_kind == "announcement":
+        if not re.fullmatch(r"[A-Z]", bulletin_code):
+            raise ValueError("Announcement code must be a single letter from A to Z.")
+    else:
+        bulletin_code = ""
+
+    if message_kind == "group_bulletin":
+        if not re.fullmatch(r"[A-Z0-9]{1,5}", group_name):
+            raise ValueError("Group must be 1-5 characters: A-Z or 0-9.")
+    else:
+        group_name = ""
+
+    try:
+        interval_minutes = int(str(payload.get("interval_minutes") or "30").strip())
+    except ValueError as exc:
+        raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.") from exc
+    if interval_minutes not in {5, 10, 15, 30, 45, 60}:
+        raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
+
+    message_text = _normalize_aprs_message_text(str(payload.get("message_text") or "").strip())
+    if not message_text:
+        raise ValueError("Message text is required.")
+
+    normalized["addressee"] = addressee
+    normalized["bulletin_code"] = bulletin_code
+    normalized["group_name"] = group_name
+    normalized["interval_minutes"] = interval_minutes
+    normalized["message_text"] = message_text
+    return normalized
+
+
 def _normalize_symbol_code_value(value: Any) -> str:
     text = str(value or ">").strip()
     if len(text) != 1:
@@ -1835,6 +1894,16 @@ def _normalize_symbol_code_value(value: Any) -> str:
 def _normalize_printable_ascii(value: str) -> str:
     if any(ord(char) < 32 or ord(char) > 126 for char in value):
         raise ValueError("Only printable ASCII characters are allowed in APRS object/item fields.")
+    return value
+
+
+def _normalize_aprs_message_text(value: str) -> str:
+    if len(value) > 67:
+        raise ValueError("Message text must be 67 ASCII characters or fewer.")
+    for char in value:
+        codepoint = ord(char)
+        if codepoint < 32 or codepoint > 126 or char in {"{", "}", "|", "~"}:
+            raise ValueError("Message text may contain only APRS-safe printable ASCII characters.")
     return value
 
 
@@ -1863,6 +1932,19 @@ def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
     symbol_code = str(result.get("symbol_code") or ">")
     result["symbol_icon"] = get_aprs_symbol_icon_path(f"{symbol_table}{symbol_code}")
     result["raw_frame_preview"] = _build_aprs_entity_preview(slug, result)
+    return result
+
+
+def _decorate_aprs_message_row(row: dict[str, Any]) -> dict[str, Any]:
+    result = dict(row)
+    result["target_display"] = resolve_message_addressee(result).rstrip()
+    result["type_label"] = {
+        "message": "Message",
+        "bulletin": "Bulletin",
+        "announcement": "Announcement",
+        "group_bulletin": "Group Bulletin",
+    }.get(str(result.get("message_kind") or ""), "Message")
+    result["raw_frame_preview"] = _build_aprs_message_preview(result)
     return result
 
 
@@ -1902,6 +1984,23 @@ def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
         f"{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}{symbol_code}{comment}"
     )
     return f"{header}:{info}"
+
+
+def _build_aprs_message_preview(payload: dict[str, Any]) -> str:
+    station_settings = get_station_settings()
+    source = _build_preview_source(station_settings)
+    if not source:
+        return "Preview requires station callsign."
+    preview_payload = {
+        "callsign": station_settings.get("callsign"),
+        "ssid": station_settings.get("ssid"),
+        "message_kind": payload.get("message_kind"),
+        "addressee": payload.get("addressee"),
+        "bulletin_code": payload.get("bulletin_code"),
+        "group_name": payload.get("group_name"),
+        "message_text": payload.get("message_text"),
+    }
+    return build_message_tnc2(preview_payload)
 
 
 def _build_preview_source(station_settings: dict[str, Any]) -> str:
