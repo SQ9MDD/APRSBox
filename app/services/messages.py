@@ -72,7 +72,7 @@ def normalize_aprs_path(value: str) -> str:
     return path
 
 
-def create_or_update_conversation(callsign: str, *, path: str = "") -> dict[str, Any]:
+def create_or_update_conversation(callsign: str, *, path: str | None = None) -> dict[str, Any]:
     remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
     timestamp = utc_now()
     with get_connection() as connection:
@@ -90,19 +90,20 @@ def create_or_update_conversation(callsign: str, *, path: str = "") -> dict[str,
                 INSERT INTO aprs_message_conversations(remote_callsign, remote_ssid, path, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (remote_callsign, remote_ssid, path, timestamp, timestamp),
+                (remote_callsign, remote_ssid, path or "", timestamp, timestamp),
             )
             conversation_id = int(cursor.lastrowid)
         else:
             conversation_id = int(row["id"])
-            connection.execute(
-                """
-                UPDATE aprs_message_conversations
-                SET path = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (path, timestamp, conversation_id),
-            )
+            if path is not None:
+                connection.execute(
+                    """
+                    UPDATE aprs_message_conversations
+                    SET path = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (path, timestamp, conversation_id),
+                )
     conversation = fetch_one(
         """
         SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
@@ -133,6 +134,9 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     normalized_path = normalize_aprs_path(path)
     message_number = next_message_number()
     timestamp = utc_now()
+    local_sender = _local_station_identity()
+    if not local_sender:
+        raise ValueError("Local station callsign is required.")
     conversation = create_or_update_conversation(normalized_callsign, path=normalized_path)
     update_conversation_path(int(conversation["id"]), normalized_path)
 
@@ -149,7 +153,7 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
             (
                 int(conversation["id"]),
                 MESSAGE_DIRECTION_TX,
-                normalized_callsign,
+                local_sender,
                 normalized_callsign,
                 normalized_text,
                 normalized_path,
@@ -216,7 +220,11 @@ def get_messages_page_data() -> dict[str, Any]:
     )
     conversations: list[dict[str, Any]] = []
     active_conversation_id: str | None = None
+    local_sender = _local_station_identity()
     for row in conversation_rows:
+        display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
+        if local_sender and display_callsign == local_sender:
+            continue
         conversation_id = int(row["id"])
         messages = [dict(item) for item in fetch_all(
             """
@@ -229,7 +237,6 @@ def get_messages_page_data() -> dict[str, Any]:
             """,
             (conversation_id,),
         )]
-        display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
         heard_snapshot = heard_by_key.get(display_callsign.casefold()) or heard_by_key.get(str(row["remote_callsign"]).casefold())
         unread_count = sum(1 for item in messages if item["direction"] == MESSAGE_DIRECTION_RX and int(item["is_unread"] or 0))
         if active_conversation_id is None and unread_count > 0:
@@ -461,6 +468,9 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
 
     sender = normalize_aprs_destination_callsign(parsed["source"])
+    local_sender = _local_station_identity()
+    if local_sender and sender == local_sender:
+        return
     received_at = _normalize_timestamp(timestamp)
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
@@ -494,13 +504,13 @@ def acknowledge_outgoing_message(*, sender: str, addressee: str, message_number:
         SELECT id
         FROM aprs_messages
         WHERE direction = ?
-          AND sender = ?
           AND message_number = ?
           AND status IN (?, ?)
+          AND (addressee = ? OR sender = ?)
         ORDER BY id DESC
         LIMIT 1
         """,
-        (MESSAGE_DIRECTION_TX, sender, message_number, MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT),
+        (MESSAGE_DIRECTION_TX, message_number, MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT, sender, sender),
     )
     if row is None:
         return
@@ -524,13 +534,13 @@ def reject_outgoing_message(*, sender: str, addressee: str, message_number: str,
         SELECT id
         FROM aprs_messages
         WHERE direction = ?
-          AND sender = ?
           AND message_number = ?
           AND status IN (?, ?)
+          AND (addressee = ? OR sender = ?)
         ORDER BY id DESC
         LIMIT 1
         """,
-        (MESSAGE_DIRECTION_TX, sender, message_number, MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT),
+        (MESSAGE_DIRECTION_TX, message_number, MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT, sender, sender),
     )
     if row is None:
         return
@@ -717,3 +727,12 @@ def _get_station_settings() -> dict[str, Any]:
         """
     )
     return dict(row) if row else {}
+
+
+def _local_station_identity() -> str:
+    station = _get_station_settings()
+    callsign = str(station.get("callsign") or "").strip().upper()
+    if not callsign:
+        return ""
+    ssid = str(station.get("ssid") or "").strip()
+    return f"{callsign}-{ssid}" if ssid else callsign

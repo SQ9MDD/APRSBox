@@ -223,6 +223,30 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(conversation["messages"][0]["text"], "QSL")
             self.assertEqual(conversation["messages"][0]["delivery_state"], "queued")
 
+    def test_local_echo_to_another_local_ssid_is_not_shown_as_incoming_self_conversation(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            local_echo_line = build_message_tnc2(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "message_kind": "direct_message",
+                    "addressee": "SQ9MDD-7",
+                    "message_text": "Echo should be ignored",
+                    "message_number": "AB",
+                }
+            )
+            process_incoming_tnc2_message(local_echo_line, timestamp="2026-01-01T00:02:00+00:00")
+
+            message_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert message_count is not None
+            self.assertEqual(int(message_count["total"]), 0)
+
+            view = get_messages_page_data()
+            self.assertEqual(view["conversations"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
