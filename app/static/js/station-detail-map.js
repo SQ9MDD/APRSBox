@@ -18,6 +18,8 @@
     const rootPath = pageRoot.dataset.rootPath || "";
     const refreshMs = Number.parseInt(pageRoot.dataset.refreshMs || "30000", 10);
     const legacyMaskOpacityStorageKey = "aprsbox-map-mask-opacity";
+    const aprsIconSize = [20, 20];
+    const aprsIconAnchor = [10, 10];
     let map = null;
     let marker = null;
     let tileLayer = null;
@@ -179,8 +181,8 @@
         const icon = window.L.divIcon({
             className: "map-station-icon",
             html: buildIconHtml(station.display_callsign || "", symbolIcon),
-            iconSize: [36, 24],
-            iconAnchor: [8, 8],
+            iconSize: aprsIconSize,
+            iconAnchor: aprsIconAnchor,
         });
 
         if (!map) {

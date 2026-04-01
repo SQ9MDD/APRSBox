@@ -24,6 +24,8 @@
     const rootPath = root.dataset.rootPath || "";
     const stationLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
+    const aprsIconSize = [20, 20];
+    const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
 
     function currentThemeName() {
@@ -245,8 +247,8 @@
                 <img class="map-station-aprs-icon" src="${escapeHtml(iconPath)}" alt="${escapeHtml(iconAlt)}">
                 <span class="map-station-label">${escapeHtml(station.display_callsign || station.callsign || "")}</span>
             `,
-            iconSize: [36, 24],
-            iconAnchor: [8, 8],
+            iconSize: aprsIconSize,
+            iconAnchor: aprsIconAnchor,
             tooltipAnchor: [0, -10],
         });
     }

@@ -2452,6 +2452,10 @@ body.modal-open {
     white-space: nowrap;
 }
 
+button.message-delivery-badge {
+    cursor: pointer;
+}
+
 .message-delivery-badge-acked {
     color: var(--success);
     border-color: rgba(107, 170, 121, 0.28);

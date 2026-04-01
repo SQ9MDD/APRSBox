@@ -102,8 +102,8 @@
 
 .map-station-aprs-icon {
     position: absolute;
-    left: -3px;
-    top: -3px;
+    left: 0;
+    top: 0;
     width: 20px;
     height: 20px;
     image-rendering: pixelated;
@@ -112,8 +112,8 @@
 
 .map-station-label {
     position: absolute;
-    left: 18px;
-    top: -6px;
+    left: 22px;
+    top: -2px;
     display: inline-flex;
     align-items: center;
     padding: 0.15rem 0.38rem;
