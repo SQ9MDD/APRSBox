@@ -1015,6 +1015,20 @@ def messages_mark_read(
     return JSONResponse({"ok": True})
 
 
+@router.post("/api/messages/conversations/{conversation_id}/path")
+async def messages_update_path(
+    conversation_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    try:
+        update_conversation_path(conversation_id, str(payload.get("path") or ""))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+
+
 @router.post("/api/messages/conversations/{conversation_id}/delete")
 def messages_delete(
     conversation_id: int,

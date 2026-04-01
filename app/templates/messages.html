@@ -106,6 +106,7 @@
 
     let state = buildInitialState(initialData);
     let refreshTimer = null;
+    let pathSaveTimer = null;
 
     function normalizeCallsign(value) {
         return String(value || "").trim().toUpperCase();
@@ -520,6 +521,20 @@
             return;
         }
         conversation.path = String(composerPathInput.value || "").trim().toUpperCase();
+        if (pathSaveTimer !== null) {
+            window.clearTimeout(pathSaveTimer);
+        }
+        pathSaveTimer = window.setTimeout(() => {
+            void apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversation.id)}/path`, {
+                method: "POST",
+                body: JSON.stringify({ path: conversation.path }),
+            }).then(async (payload) => {
+                await applyServerState(payload.messages_view, conversation.id);
+            }).catch((error) => {
+                composerError.hidden = false;
+                composerError.textContent = error.message;
+            });
+        }, 250);
     });
 
     render();
@@ -529,6 +544,9 @@
     window.addEventListener("beforeunload", () => {
         if (refreshTimer !== null) {
             window.clearInterval(refreshTimer);
+        }
+        if (pathSaveTimer !== null) {
+            window.clearTimeout(pathSaveTimer);
         }
     });
 })();
