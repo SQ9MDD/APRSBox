@@ -405,7 +405,22 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                 },
             )
             self.assertFalse(success)
-            self.assertEqual(error, "Message text may contain only APRS-safe printable ASCII characters.")
+            self.assertEqual(error, "Message text may contain only printable ASCII characters.")
+
+    def test_bulletin_text_allows_extended_printable_ascii_punctuation(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "bulletin",
+                    "bulletin_code": "1",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "message_text": ''',.:?/\\()<>-_+=[]{}"'&$@#!''',
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
 
     def test_bulletins_template_includes_counter_and_menu_label(self) -> None:
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")

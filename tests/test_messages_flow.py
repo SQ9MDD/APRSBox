@@ -13,6 +13,7 @@ from app.services.messages import (
     MESSAGE_STATUS_RECEIVED,
     MESSAGE_STATUS_SENT,
     get_messages_page_data,
+    normalize_aprs_message_text,
     process_incoming_tnc2_message,
     queue_outgoing_message,
     retry_failed_message,
@@ -67,6 +68,10 @@ def station_payload(interface_id: int) -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_message_text_allows_extended_printable_ascii_punctuation(self) -> None:
+        allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
+        self.assertEqual(normalize_aprs_message_text(allowed), allowed)
+
     async def test_queue_send_and_ack_direct_message(self) -> None:
         with temporary_database():
             interface_id = insert_modem()

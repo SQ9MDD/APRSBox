@@ -72,7 +72,7 @@
                         <button type="submit" class="button" id="messages-send-button">Send</button>
                     </div>
                     <div class="messages-composer-meta">
-                        <small class="field-validation-error" id="messages-composer-error" hidden>Use APRS-safe printable ASCII, max {{ messages_view.composer_limit }} chars, without <code>{ }</code> or telemetry delimiters.</small>
+                        <small class="field-validation-error" id="messages-composer-error" hidden>Use printable ASCII only, max {{ messages_view.composer_limit }} chars. National characters are blocked.</small>
                     </div>
                 </div>
             </form>
@@ -156,14 +156,14 @@
         return {
             length: text.length,
             tooLong: text.length > composerLimit,
-            asciiInvalid: /[\x00-\x1F\x7F{}|~]/.test(text) || [...text].some((char) => char.charCodeAt(0) > 126),
+            asciiInvalid: /[\x00-\x1F\x7F]/.test(text) || [...text].some((char) => char.charCodeAt(0) > 126),
             empty: text.trim().length === 0,
         };
     }
 
     function normalizeMessageText(value) {
         return String(value || "")
-            .replace(/[\x00-\x1F\x7F{}|~]/g, "")
+            .replace(/[\x00-\x1F\x7F]/g, "")
             .replace(/[^\x20-\x7E]/g, "")
             .slice(0, composerLimit);
     }

@@ -56,8 +56,8 @@ def normalize_aprs_message_text(value: str) -> str:
         raise ValueError("Message text must be 67 ASCII characters or fewer.")
     for char in text:
         codepoint = ord(char)
-        if codepoint < 32 or codepoint > 126 or char in {"{", "}", "|", "~"}:
-            raise ValueError("Message text may contain only APRS-safe printable ASCII characters.")
+        if codepoint < 32 or codepoint > 126:
+            raise ValueError("Message text may contain only printable ASCII characters.")
     return text
 
 

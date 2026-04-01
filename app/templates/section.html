@@ -279,7 +279,7 @@
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
-                        <small class="field-validation-error" id="bulletins-message-error" hidden>Only APRS-safe printable ASCII is allowed. National characters are blocked.</small>
+                        <small class="field-validation-error" id="bulletins-message-error" hidden>Only printable ASCII is allowed. National characters are blocked.</small>
                     </div>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
                     <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.</small>
@@ -450,7 +450,6 @@
             const countNode = document.getElementById("bulletins-message-count");
             const errorNode = document.getElementById("bulletins-message-error");
             const allowedTextPattern = /^[\x20-\x7E]*$/;
-            const blockedTextChars = /[{}|~]/;
 
             const setTextError = (visible) => {
                 if (errorNode) {
@@ -458,7 +457,7 @@
                 }
             };
 
-            const isAllowedText = (value) => allowedTextPattern.test(value) && !blockedTextChars.test(value);
+            const isAllowedText = (value) => allowedTextPattern.test(value);
 
             const filterAllowedText = (value) => Array.from(value).filter((char) => isAllowedText(char)).join("");
 
