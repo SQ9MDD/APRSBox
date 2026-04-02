@@ -1142,6 +1142,10 @@ select:focus-visible,
     opacity: 0.9;
 }
 
+:root:not([data-theme="light"]) .digi-runtime-icon {
+    filter: brightness(0) invert(1);
+}
+
 .digi-steps-chain {
     display: grid;
     gap: 0.6rem;
