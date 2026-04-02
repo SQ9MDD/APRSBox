@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -36,6 +37,7 @@ from app.services.digi_flows import (
     TARGET_STEP_TYPES,
     build_digi_flow_editor_payload,
     delete_digi_flow,
+    get_digi_flow_event_log,
     get_digi_flow_endpoint_options,
     get_digi_flow,
     get_digi_flow_reference_options,
@@ -182,6 +184,7 @@ def _digi_flow_editor_context(
         source_step_types=SOURCE_STEP_TYPES,
         filter_step_types=FILTER_STEP_TYPES,
         target_step_types=TARGET_STEP_TYPES,
+        flow_event_log=get_digi_flow_event_log(flow_id, limit=200) if flow_id is not None else [],
         flash=flash,
         flash_success=flash_success,
     )
@@ -828,7 +831,13 @@ def digi_flow_toggle(
     _: UserIdentity = Depends(require_roles("admin", "operator")),
     enabled: int = Form(...),
 ) -> RedirectResponse:
-    set_digi_flow_enabled(flow_id, bool(enabled))
+    try:
+        set_digi_flow_enabled(flow_id, bool(enabled))
+    except ValueError as exc:
+        return RedirectResponse(
+            url=_path(request, f"/digi-flows?flash={quote(str(exc))}&success=0"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
     return RedirectResponse(
         url=_path(request, f"/digi-flows?flash={'DIGI%20Flow%20status%20updated.'}&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,

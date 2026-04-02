@@ -1350,6 +1350,24 @@ select:focus-visible,
     word-break: break-word;
 }
 
+.digi-flow-debug-table {
+    table-layout: auto;
+}
+
+.digi-flow-debug-table td:nth-child(1),
+.digi-flow-debug-table td:nth-child(2),
+.digi-flow-debug-table td:nth-child(3),
+.digi-flow-debug-table td:nth-child(4),
+.digi-flow-debug-table td:nth-child(5),
+.digi-flow-debug-table td:nth-child(6),
+.digi-flow-debug-table td:nth-child(7) {
+    white-space: nowrap;
+}
+
+.digi-flow-debug-table td:nth-child(8) {
+    word-break: break-word;
+}
+
 .log-row-warning td {
     color: #d24b4b;
 }

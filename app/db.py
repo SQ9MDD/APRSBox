@@ -223,6 +223,19 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
     UNIQUE (flow_id, step_order)
 );
 
+CREATE TABLE IF NOT EXISTS digi_flow_event_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    frame_uid TEXT NOT NULL,
+    flow_id INTEGER NOT NULL,
+    step_id INTEGER,
+    event_type TEXT NOT NULL,
+    decision TEXT,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE,
+    FOREIGN KEY (step_id) REFERENCES digi_flow_steps(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS aprs_objects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -375,6 +388,8 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
 
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);

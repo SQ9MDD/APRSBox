@@ -219,6 +219,14 @@ def _normalize_multiline_list(value: Any) -> list[str]:
     return lines
 
 
+def _flow_requires_path_rule(target_kind: str) -> bool:
+    return target_kind in {"tx_rf", "tx_aprsis"}
+
+
+def _has_enabled_path_rule(steps: list[dict[str, Any]]) -> bool:
+    return any(step["step_type"] == "filter_path" and int(step.get("enabled") or 0) == 1 for step in steps[1:-1])
+
+
 def _default_step_title(step_type: str) -> str:
     return str(STEP_TYPE_META[step_type]["label"])
 
@@ -445,6 +453,7 @@ def get_digi_flow_endpoint_options() -> dict[str, list[dict[str, str]]]:
         for row in aprsis_rows
         if row["name"]
     )
+    target_options.append({"value": "action_drop::drop", "label": "Drop", "kind": "action_drop", "ref": "drop"})
     target_options.append({"value": "action_log::log-only", "label": "Log Only", "kind": "action_log", "ref": "log-only"})
     return {"source": source_options, "target": target_options}
 
@@ -484,6 +493,24 @@ def list_digi_flows() -> list[dict[str, Any]]:
         ORDER BY updated_at DESC, id DESC
         """
     )
+    return [_serialize_flow_row(row, steps=get_digi_flow_steps(int(row["id"]))) for row in rows]
+
+
+def list_enabled_digi_flows(*, source_kind: str | None = None, source_ref: str | None = None) -> list[dict[str, Any]]:
+    query = """
+        SELECT id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+        FROM digi_flows
+        WHERE enabled = 1
+    """
+    params: list[Any] = []
+    if source_kind is not None:
+        query += " AND source_kind = ?"
+        params.append(source_kind)
+    if source_ref is not None:
+        query += " AND source_ref = ?"
+        params.append(source_ref)
+    query += " ORDER BY updated_at DESC, id DESC"
+    rows = fetch_all(query, tuple(params))
     return [_serialize_flow_row(row, steps=get_digi_flow_steps(int(row["id"]))) for row in rows]
 
 
@@ -627,15 +654,14 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     for middle_step in normalized_steps[1:-1]:
         if _step_category(middle_step["step_type"]) != "filter":
             raise ValueError("All middle flow steps must be filter steps.")
-    if target_kind != "action_log" and not any(step["step_type"] == "filter_path" for step in normalized_steps[1:-1]):
-        raise ValueError("Flow with a non-log target must include at least one Path Rule step.")
-
     first_ref = _step_ref_value(first_step["step_type"], first_step["config"])
     last_ref = _step_ref_value(last_step["step_type"], last_step["config"])
     if source_kind != first_step["step_type"] or source_ref != first_ref:
         raise ValueError("Flow source must match the first step type and reference.")
     if target_kind != last_step["step_type"] or target_ref != last_ref:
         raise ValueError("Flow target must match the last step type and reference.")
+    if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
+        raise ValueError("Flow with an RF or APRS-IS TX target must include at least one enabled Path Rule step.")
 
     duplicate = fetch_one(
         """
@@ -773,6 +799,12 @@ def delete_digi_flow(flow_id: int) -> None:
 
 
 def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
+    if enabled:
+        flow = get_digi_flow(flow_id)
+        if flow is None:
+            raise ValueError("DIGI Flow not found.")
+        if _flow_requires_path_rule(str(flow.get("target_kind") or "")) and not _has_enabled_path_rule(list(flow.get("steps") or [])):
+            raise ValueError("DIGI Flow with an RF or APRS-IS TX target cannot be enabled without an enabled Path Rule step.")
     with get_connection() as connection:
         connection.execute(
             """
@@ -803,3 +835,53 @@ def safe_update_digi_flow(flow_id: int, payload: dict[str, Any]) -> str | None:
     except sqlite3.IntegrityError:
         return "A DIGI Flow with the same source and target already exists."
     return None
+
+
+def log_digi_flow_event(
+    *,
+    frame_uid: str,
+    flow_id: int,
+    step_id: int | None,
+    event_type: str,
+    message: str,
+    decision: str | None = None,
+    created_at: str | None = None,
+) -> None:
+    timestamp = created_at or utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (frame_uid, flow_id, step_id, event_type, decision, message, timestamp),
+        )
+
+
+def get_digi_flow_event_log(flow_id: int, *, limit: int = 200) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT
+            l.id,
+            l.frame_uid,
+            l.flow_id,
+            l.step_id,
+            l.event_type,
+            l.decision,
+            l.message,
+            l.created_at,
+            f.name AS flow_name,
+            f.source_kind,
+            f.source_ref,
+            s.title AS step_title,
+            s.step_type
+        FROM digi_flow_event_log l
+        JOIN digi_flows f ON f.id = l.flow_id
+        LEFT JOIN digi_flow_steps s ON s.id = l.step_id
+        WHERE l.flow_id = ?
+        ORDER BY l.created_at DESC, l.id DESC
+        LIMIT ?
+        """,
+        (flow_id, limit),
+    )
+    return [dict(row) for row in rows]

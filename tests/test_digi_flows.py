@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from app.db import connect, init_db
-from app.services.digi_flows import create_digi_flow, get_digi_flow, normalize_digi_flow_payload
+from app.services.digi_flows import create_digi_flow, get_digi_flow, normalize_digi_flow_payload, set_digi_flow_enabled
 
 
 @contextlib.contextmanager
@@ -190,8 +190,101 @@ class DigiFlowsTests(unittest.TestCase):
             payload["steps"][2],
         ]
         with temporary_database():
-            with self.assertRaisesRegex(ValueError, "must include at least one Path Rule"):
+            with self.assertRaisesRegex(ValueError, "must include at least one enabled Path Rule"):
                 normalize_digi_flow_payload(payload)
+
+    def test_action_drop_target_does_not_require_path_filter(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_drop"
+        payload["target_ref"] = "Test drop"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_callsign",
+                "title": "Callsign Filter",
+                "enabled": 1,
+                "config": {"mode": "deny", "callsigns": ["SP9XYZ"]},
+            },
+            {
+                "step_type": "action_drop",
+                "title": "Action Drop",
+                "enabled": 1,
+                "config": {"note": "Test drop"},
+            },
+        ]
+        with temporary_database():
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual(normalized["target_kind"], "action_drop")
+
+    def test_enabling_tx_flow_without_enabled_path_rule_is_blocked(self) -> None:
+        with temporary_database():
+            connection = connect()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO digi_flows (
+                        name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "Legacy TX flow",
+                        "",
+                        "receiver_rf",
+                        "TNC-1",
+                        "tx_aprsis",
+                        "APRS-IS Main",
+                        0,
+                        "2026-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
+                flow_id = int(connection.execute("SELECT id FROM digi_flows WHERE name = 'Legacy TX flow'").fetchone()["id"])
+                connection.executemany(
+                    """
+                    INSERT INTO digi_flow_steps (
+                        flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        (
+                            flow_id,
+                            1,
+                            "receiver_rf",
+                            "Receiver RF",
+                            1,
+                            '{"rf_port":"TNC-1"}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            flow_id,
+                            2,
+                            "filter_path",
+                            "Path Rule",
+                            0,
+                            '{"mode":"allow","trace_paths":["WIDE1-1"],"no_trace_paths":[]}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            flow_id,
+                            3,
+                            "tx_aprsis",
+                            "TX APRS-IS",
+                            1,
+                            '{"aprsis_target":"APRS-IS Main"}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            with self.assertRaisesRegex(ValueError, "cannot be enabled without an enabled Path Rule"):
+                set_digi_flow_enabled(flow_id, True)
 
     def test_path_filter_allows_only_allow_mode(self) -> None:
         payload = sample_flow_payload()

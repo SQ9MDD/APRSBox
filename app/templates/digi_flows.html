@@ -6,7 +6,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>DIGI Flows</h2>
-                <p class="section-lead">Configure ordered DIGI pipelines as a vertical chain of source, filters and target. Runtime packet processing is intentionally not implemented in this stage.</p>
+                <p class="section-lead">Configure ordered DIGI pipelines as a vertical chain of source, filters and target. Stage 2 enables a small runtime skeleton for RF ingress, filter testing and debug logging.</p>
             </div>
             <div class="form-actions">
                 {% if can_edit %}
@@ -14,7 +14,7 @@
                 {% endif %}
             </div>
         </div>
-        <div class="notice">This screen stores flow definitions only. It does not execute packets, start workers or connect to transports.</div>
+        <div class="notice">Runtime currently covers active RF flows, sequential step execution, LOG_ONLY, callsign filtering, Path Rule handling and TX stubs.</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
         {% endif %}

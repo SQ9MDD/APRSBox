@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
 from app.services.band_condition import process_incoming_frame
@@ -17,9 +17,16 @@ AX25_PID_NO_LAYER3 = 0xF0
 
 
 class TrafficMonitorService:
-    def __init__(self, *, reconnect_delay: float = 5.0, max_frames: int = 400) -> None:
+    def __init__(
+        self,
+        *,
+        reconnect_delay: float = 5.0,
+        max_frames: int = 400,
+        frame_consumer: Callable[[str], None] | Callable[..., None] | None = None,
+    ) -> None:
         self._reconnect_delay = reconnect_delay
         self._max_frames = max_frames
+        self._frame_consumer = frame_consumer
         self._lock = Lock()
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
@@ -392,6 +399,8 @@ class TrafficMonitorService:
         if entry["format"] == "TNC2":
             process_incoming_frame(entry["line"], band=active_band, timestamp=timestamp)
             process_incoming_tnc2_message(entry["line"], timestamp=timestamp)
+            if self._frame_consumer is not None:
+                self._frame_consumer(entry["line"], source_ref=self._format_modem_label())
 
     async def _sleep(self, delay: float) -> None:
         try:

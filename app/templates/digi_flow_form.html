@@ -6,10 +6,10 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ "Edit DIGI Flow" if flow_id else "New DIGI Flow" }}</h2>
-                <p class="section-lead">Define one source, zero or more filter steps and one target. The chain is stored for future processing, but runtime execution is not active in stage 1.</p>
+                <p class="section-lead">Define one source, zero or more filter steps and one target. Stage 2 executes active RF flows through a small runtime skeleton with per-flow debug logging.</p>
             </div>
         </div>
-        <div class="notice">Source must be the first step, target must be the last step, and the source+target pair must be unique.</div>
+        <div class="notice">Source must be the first step, target must be the last step, the source+target pair must be unique, and RF/APRS-IS TX targets require an enabled Path Rule step.</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
         {% endif %}
@@ -108,6 +108,56 @@
         </form>
     </div>
 </section>
+
+{% if flow_id %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Runtime Debug Log</h2>
+                <p class="section-lead">Latest execution events for this flow. Refresh the page after traffic or test injection to inspect the pipeline.</p>
+            </div>
+            <div class="form-actions">
+                <a href="{{ request.scope.root_path }}/digi-flows/{{ flow_id }}" class="button button-secondary">Refresh log</a>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table logs-table digi-flow-debug-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Frame UID</th>
+                        <th>Source</th>
+                        <th>Flow</th>
+                        <th>Step</th>
+                        <th>Event</th>
+                        <th>Decision</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in flow_event_log %}
+                    <tr>
+                        <td>{{ row.created_at }}</td>
+                        <td><code>{{ row.frame_uid }}</code></td>
+                        <td><code>{{ row.source_kind }}:{{ row.source_ref }}</code></td>
+                        <td><strong>#{{ row.flow_id }}</strong> {{ row.flow_name }}</td>
+                        <td>{{ row.step_title or "-" }}</td>
+                        <td><code>{{ row.event_type }}</code></td>
+                        <td>{{ row.decision or "-" }}</td>
+                        <td>{{ row.message }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8">No runtime events recorded for this flow yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endif %}
 
 <template id="digi-step-config-template">
     <div class="digi-step-editor"></div>
@@ -495,7 +545,7 @@
                     const showMinimumPathFilterWarning =
                         steps.length === 2 &&
                         index === 0 &&
-                        steps[steps.length - 1]?.step_type !== "action_log";
+                        ["tx_rf", "tx_aprsis"].includes(steps[steps.length - 1]?.step_type);
                     if (showMinimumPathFilterWarning) {
                         connector.className = "digi-step-connector digi-step-connector-warning";
 
@@ -506,7 +556,7 @@
 
                         const text = document.createElement("span");
                         text.className = "digi-step-warning-text";
-                        text.textContent = "Minimum Path Rule is required before a non-log target.";
+                        text.textContent = "Minimum Path Rule is required before an RF or APRS-IS TX target.";
                         connector.appendChild(text);
                     } else {
                         connector.className = "digi-step-connector";
