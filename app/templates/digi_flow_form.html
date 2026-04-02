@@ -670,7 +670,16 @@
                                 <span class="digi-execution-time">${formatTimestamp(execution.created_at)}</span>
                                 <span class="muted">Flow ${escapeHtml(execution.step_count)} steps</span>
                             </div>
-                            <h3 class="digi-execution-packet">${escapeHtml(execution.raw_packet || "-")}</h3>
+                            <div class="digi-execution-packets">
+                                <div class="digi-execution-packet-row">
+                                    <span class="digi-execution-packet-label">Input</span>
+                                    <h3 class="digi-execution-packet">${escapeHtml(execution.raw_packet || "-")}</h3>
+                                </div>
+                                <div class="digi-execution-packet-row">
+                                    <span class="digi-execution-packet-label">Output</span>
+                                    <h3 class="digi-execution-packet">${escapeHtml(execution.processed_packet || execution.raw_packet || "-")}</h3>
+                                </div>
+                            </div>
                             <div class="digi-execution-meta">
                                 <span><strong>Source:</strong> <code>${escapeHtml(execution.source_display || "-")}</code></span>
                                 <span><strong>UID:</strong> <code>${escapeHtml(execution.frame_uid)}</code></span>

@@ -1357,6 +1357,24 @@ select:focus-visible,
     font-family: "SFMono-Regular", "SF Mono", "Consolas", "Liberation Mono", monospace;
 }
 
+.digi-execution-packets {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.digi-execution-packet-row {
+    display: grid;
+    gap: 0.16rem;
+}
+
+.digi-execution-packet-label {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
 .digi-execution-meta {
     margin-top: 0.6rem;
     color: var(--text-muted);

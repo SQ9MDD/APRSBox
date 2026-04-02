@@ -933,6 +933,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         }
 
     raw_packet = ""
+    processed_packet = ""
     source_display = ""
     final_decision = ""
     final_message = ""
@@ -941,6 +942,9 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         source_display = f"{event.get('source_kind') or ''}:{event.get('source_ref') or ''}".strip(":") or source_display
         if not raw_packet:
             raw_packet = _extract_line_from_message(str(event.get("message") or ""))
+        line_value = _extract_line_from_message(str(event.get("message") or ""))
+        if line_value:
+            processed_packet = line_value
         event_type = str(event.get("event_type") or "")
         decision = str(event.get("decision") or "")
         message = str(event.get("message") or "").strip()
@@ -985,6 +989,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         "final_step_number": final_step.get("number"),
         "final_step_title": final_step.get("title"),
         "raw_packet": raw_packet or "-",
+        "processed_packet": processed_packet or raw_packet or "-",
         "source_display": source_display or "-",
         "step_count": len(steps),
         "step_path": " -> ".join(str(index) for index in range(1, len(steps) + 1)),
