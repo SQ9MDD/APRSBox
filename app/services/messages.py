@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
-from app.services.outbound import enqueue_ack_job, enqueue_direct_message_job, mark_outbound_job_cancelled
+from app.services.outbound import enqueue_ack_job, enqueue_direct_message_job, enqueue_query_message_job, mark_outbound_job_cancelled
 
 MESSAGE_DIRECTION_RX = "rx"
 MESSAGE_DIRECTION_TX = "tx"
@@ -15,6 +15,7 @@ MESSAGE_STATUS_ACKED = "acked"
 MESSAGE_STATUS_FAILED = "failed"
 MESSAGE_STATUS_RECEIVED = "received"
 DIRECT_MESSAGE_KIND = "direct_message"
+QUERY_MESSAGE_KIND = "query"
 ACK_MESSAGE_KIND = "ack"
 MESSAGE_NUMBER_KEY = "messages.next_message_number"
 MESSAGE_NUMBER_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -28,17 +29,6 @@ HEARD_WARN_SECONDS = 30 * 60
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
 _MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?)?$")
-
-
-def build_local_callsign_family() -> set[str]:
-    station_row = fetch_one("SELECT callsign FROM station_settings WHERE id = 1")
-    base_callsign = str(station_row["callsign"] if station_row is not None else "").strip().upper()
-    if not base_callsign:
-        return set()
-    family = {base_callsign}
-    for ssid in range(16):
-        family.add(f"{base_callsign}-{ssid}")
-    return family
 
 
 def normalize_aprs_destination_callsign(value: str) -> str:
@@ -134,7 +124,8 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     normalized_callsign = normalize_aprs_destination_callsign(callsign)
     normalized_text = normalize_aprs_message_text(message_text)
     normalized_path = normalize_aprs_path(path)
-    message_number = next_message_number()
+    message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
+    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND else None
     timestamp = utc_now()
     local_sender = _local_station_identity()
     if not local_sender:
@@ -168,17 +159,17 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
         message_id = int(cursor.lastrowid)
 
     station_settings = _get_station_settings()
-    success, error = enqueue_direct_message_job(
-        {
-            "id": message_id,
-            "addressee": normalized_callsign,
-            "message_text": normalized_text,
-            "path": normalized_path,
-            "message_number": message_number,
-        },
-        station_settings,
-        trigger="manual",
-    )
+    outbound_message = {
+        "id": message_id,
+        "addressee": normalized_callsign,
+        "message_text": normalized_text,
+        "path": normalized_path,
+        "message_number": message_number,
+    }
+    if message_kind == QUERY_MESSAGE_KIND:
+        success, error = enqueue_query_message_job(outbound_message, station_settings, trigger="manual")
+    else:
+        success, error = enqueue_direct_message_job(outbound_message, station_settings, trigger="manual")
     if not success:
         mark_message_failed(message_id, error or "Failed to queue outbound APRS message.")
         raise ValueError(error or "Failed to queue outbound APRS message.")
@@ -332,7 +323,7 @@ def register_outbound_job_link(message_id: int, job_id: int) -> None:
         )
 
 
-def register_direct_message_transmission(message_id: int, job_id: int) -> None:
+def _register_outbound_message_transmission(message_id: int, job_id: int, *, allow_retry: bool) -> None:
     message = get_message(message_id)
     if message is None or str(message.get("status")) == MESSAGE_STATUS_ACKED:
         return
@@ -361,8 +352,16 @@ def register_direct_message_transmission(message_id: int, job_id: int) -> None:
             """,
             (now, int(message["conversation_id"])),
         )
-    if next_attempt < MAX_TX_ATTEMPTS:
+    if allow_retry and next_attempt < MAX_TX_ATTEMPTS:
         schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[next_attempt - 1])
+
+
+def register_direct_message_transmission(message_id: int, job_id: int) -> None:
+    _register_outbound_message_transmission(message_id, job_id, allow_retry=True)
+
+
+def register_query_message_transmission(message_id: int, job_id: int) -> None:
+    _register_outbound_message_transmission(message_id, job_id, allow_retry=False)
 
 
 def mark_message_failed(message_id: int, reason: str) -> None:
@@ -528,12 +527,11 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
     if addressee.upper().startswith("BLN"):
         return
-    local_family = build_local_callsign_family()
-    if addressee.upper() not in local_family:
+    local_sender = _local_station_identity()
+    if not local_sender or addressee.upper() != local_sender:
         return
 
     sender = normalize_aprs_destination_callsign(parsed["source"])
-    local_sender = _local_station_identity()
     if local_sender and sender == local_sender:
         return
     received_at = _normalize_timestamp(timestamp)
@@ -722,6 +720,7 @@ def _parse_tnc2_line(line: str) -> dict[str, str] | None:
 
 def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
     timestamp = str(row.get("created_at") or row.get("updated_at") or utc_now())
+    has_message_number = bool(str(row.get("message_number") or "").strip())
     return {
         "id": str(row["id"]),
         "direction": str(row["direction"]),
@@ -732,7 +731,7 @@ def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
         "message_number": str(row.get("message_number") or ""),
         "failure_reason": str(row.get("failure_reason") or ""),
         "tx_attempt_count": int(row.get("tx_attempt_count") or 0),
-        "tx_attempt_limit": MAX_TX_ATTEMPTS,
+        "tx_attempt_limit": MAX_TX_ATTEMPTS if has_message_number else 0,
     }
 
 

@@ -14,6 +14,7 @@ from app.services.messages import (
     MESSAGE_STATUS_FAILED,
     MESSAGE_STATUS_RECEIVED,
     MESSAGE_STATUS_SENT,
+    QUERY_MESSAGE_KIND,
     _format_heard_parts,
     _heard_recently_state,
     get_messages_page_data,
@@ -194,7 +195,84 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
 
-    def test_incoming_message_matches_local_ssid_family_and_persists(self) -> None:
+    async def test_queue_send_query_without_message_number_and_retry(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="?APRSP", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+            self.assertIsNone(message["message_number"])
+
+            queued_job = fetch_one(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (int(message["id"]),),
+            )
+            assert queued_job is not None
+            self.assertIn('"message_kind":"query"', str(queued_job["payload_json"]))
+            self.assertNotIn('"message_number"', str(queued_job["payload_json"]))
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            written_frames: list[bytes] = []
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    written_frames.append(data)
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9201)
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await OutboundService()._process_job(job)
+
+            message_row = fetch_one(
+                """
+                SELECT status, tx_attempt_count
+                FROM aprs_messages
+                WHERE id = ?
+                """,
+                (int(message["id"]),),
+            )
+            assert message_row is not None
+            self.assertEqual(message_row["status"], MESSAGE_STATUS_SENT)
+            self.assertEqual(int(message_row["tx_attempt_count"]), 1)
+            self.assertTrue(written_frames)
+
+            self.assertEqual(str(job["payload"].get("message_kind")), QUERY_MESSAGE_KIND)
+            self.assertEqual(build_message_tnc2(job["payload"]), "SQ9MDD-4>APRS,WIDE1-1::SP8ABC   :?APRSP")
+
+            retry_job = fetch_one(
+                """
+                SELECT id
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                  AND status = 'queued'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(message["id"]),),
+            )
+            self.assertIsNone(retry_job)
+
+    def test_incoming_message_matches_exact_local_ssid_and_persists(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id))
@@ -204,7 +282,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                     "callsign": "SP8ABC",
                     "ssid": "",
                     "message_kind": "direct_message",
-                    "addressee": "SQ9MDD-2",
+                    "addressee": "SQ9MDD-4",
                     "message_text": "Inbound test",
                     "message_number": "AA",
                 }
@@ -222,7 +300,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             assert row is not None
             self.assertEqual(row["direction"], "rx")
-            self.assertEqual(row["addressee"], "SQ9MDD-2")
+            self.assertEqual(row["addressee"], "SQ9MDD-4")
             self.assertEqual(row["message_text"], "Inbound test")
             self.assertEqual(row["message_number"], "AA")
             self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
@@ -238,6 +316,27 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 """
             )
             self.assertEqual(len(ack_jobs), 2)
+
+    def test_incoming_message_to_other_local_ssid_is_ignored(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "direct_message",
+                    "addressee": "SQ9MDD-2",
+                    "message_text": "Should be ignored",
+                    "message_number": "AA",
+                }
+            )
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert row is not None
+            self.assertEqual(int(row["total"]), 0)
 
     def test_messages_page_data_uses_persisted_rows(self) -> None:
         with temporary_database():

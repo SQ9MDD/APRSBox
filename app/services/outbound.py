@@ -330,6 +330,28 @@ def enqueue_direct_message_job(
     return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
 
 
+def enqueue_query_message_job(
+    message: dict[str, Any],
+    station_settings: dict[str, Any],
+    *,
+    trigger: str = "manual",
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str]:
+    addressee = str(message.get("addressee") or "").strip().upper()
+    message_text = str(message.get("message_text") or "").strip()
+    payload = {
+        "aprs_message_id": int(message["id"]),
+        "callsign": str(station_settings.get("callsign") or "").strip().upper(),
+        "ssid": str(station_settings.get("ssid") or "").strip(),
+        "message_kind": "query",
+        "addressee": addressee,
+        "path": str(message.get("path") or "").strip(),
+        "message_text": message_text,
+        "trigger": str(trigger or "manual").strip() or "manual",
+    }
+    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+
+
 def enqueue_ack_job(
     addressee: str,
     ack_number: str,
@@ -614,7 +636,7 @@ def _build_message_info(payload: dict[str, Any]) -> str:
 
 def resolve_message_addressee(payload: dict[str, Any]) -> str:
     message_kind = str(payload.get("message_kind") or "bulletin").strip()
-    if message_kind in {"direct_message", "ack"}:
+    if message_kind in {"direct_message", "query", "ack"}:
         return str(payload.get("addressee") or "").strip().upper()[:9].ljust(9)
     bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()[:1]
     if message_kind == "announcement":

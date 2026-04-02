@@ -414,12 +414,12 @@
             } else if (message.delivery_state === "acked") {
                 deliveryLabel = "ACK";
             } else if (message.delivery_state === "failed") {
-                deliveryLabel = "No ACK";
+                deliveryLabel = Number(message.tx_attempt_limit || 0) > 0 ? "No ACK" : "Failed";
             } else if (message.delivery_state === "received") {
                 deliveryLabel = "Received";
             }
             let deliveryBadge = "";
-            if (message.direction === "tx" && message.delivery_state === "failed") {
+            if (message.direction === "tx" && message.delivery_state === "failed" && Number(message.tx_attempt_limit || 0) > 0) {
                 deliveryBadge = `<button type="button" class="message-delivery-badge message-delivery-badge-pending" data-retry-message="${escapeHtml(message.id)}" title="${escapeHtml(message.failure_reason || "No ACK received. Click to retry.")}">${escapeHtml(deliveryLabel || "No ACK")}</button>`;
             } else if (message.direction === "tx") {
                 deliveryBadge = `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || "Sent")}</span>`;
