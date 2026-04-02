@@ -52,7 +52,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     "filter_path": {
         "category": "filter",
         "label": "Path Rule",
-        "badge": "Filter",
+        "badge": "Rule",
         "description": "Defines which TRACE and NO TRACE paths are repeated and whether packets are traced.",
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow",)},
