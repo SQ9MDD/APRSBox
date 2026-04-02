@@ -36,6 +36,7 @@ from app.services.digi_flows import (
     TARGET_STEP_TYPES,
     build_digi_flow_editor_payload,
     delete_digi_flow,
+    get_digi_flow_endpoint_options,
     get_digi_flow,
     get_digi_flow_reference_options,
     get_digi_flow_type_meta,
@@ -130,6 +131,14 @@ def _path(request: Request, suffix: str) -> str:
 
 
 def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:
+    source_selector = str(form_data.get("source_selector") or "").strip()
+    target_selector = str(form_data.get("target_selector") or "").strip()
+    if "::" not in source_selector:
+        raise ValueError("Source interface is required.")
+    if "::" not in target_selector:
+        raise ValueError("Target interface is required.")
+    source_kind, source_ref = source_selector.split("::", 1)
+    target_kind, target_ref = target_selector.split("::", 1)
     raw_steps_json = str(form_data.get("steps_json") or "[]")
     try:
         raw_steps = json.loads(raw_steps_json)
@@ -140,10 +149,12 @@ def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:
     return {
         "name": str(form_data.get("name") or "").strip(),
         "description": str(form_data.get("description") or "").strip(),
-        "source_kind": str(form_data.get("source_kind") or "").strip(),
-        "source_ref": str(form_data.get("source_ref") or "").strip(),
-        "target_kind": str(form_data.get("target_kind") or "").strip(),
-        "target_ref": str(form_data.get("target_ref") or "").strip(),
+        "source_selector": source_selector,
+        "target_selector": target_selector,
+        "source_kind": source_kind,
+        "source_ref": source_ref,
+        "target_kind": target_kind,
+        "target_ref": target_ref,
         "enabled": 1 if form_data.get("enabled") else 0,
         "steps": raw_steps,
     }
@@ -166,6 +177,7 @@ def _digi_flow_editor_context(
         flow_id=flow_id,
         form_data=form_data,
         type_meta=get_digi_flow_type_meta(),
+        endpoint_options=get_digi_flow_endpoint_options(),
         reference_options=get_digi_flow_reference_options(),
         source_step_types=SOURCE_STEP_TYPES,
         filter_step_types=FILTER_STEP_TYPES,

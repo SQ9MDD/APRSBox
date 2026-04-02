@@ -42,72 +42,64 @@
                 </label>
             </div>
 
+            <input type="hidden" name="source_kind" id="flow-source-kind" value="{{ form_data.source_kind }}">
+            <input type="hidden" name="source_ref" id="flow-source-ref-hidden" value="{{ form_data.source_ref }}">
+            <input type="hidden" name="target_kind" id="flow-target-kind" value="{{ form_data.target_kind }}">
+            <input type="hidden" name="target_ref" id="flow-target-ref-hidden" value="{{ form_data.target_ref }}">
+
             <section class="digi-flow-endpoints">
                 <div class="digi-flow-endpoint-card">
                     <h3>Source</h3>
-                    <div class="form-grid">
-                        <label>
-                            <span>Source</span>
-                            <select name="source_kind" id="flow-source-kind" required>
-                                {% for step_type in source_step_types %}
-                                <option value="{{ step_type }}" {% if form_data.source_kind == step_type %}selected{% endif %}>{{ type_meta[step_type].label }}</option>
-                                {% endfor %}
-                            </select>
-                        </label>
-                        <label>
-                            <span>Source Interface</span>
-                            <select name="source_ref" id="flow-source-ref" required></select>
-                        </label>
-                    </div>
+                    <label>
+                        <span>Source Interface</span>
+                        <select name="source_selector" id="flow-source-selector" required></select>
+                    </label>
                 </div>
 
                 <div class="digi-flow-endpoint-card">
                     <h3>Target</h3>
-                    <div class="form-grid">
-                        <label>
-                            <span>Target</span>
-                            <select name="target_kind" id="flow-target-kind" required>
-                                {% for step_type in target_step_types %}
-                                <option value="{{ step_type }}" {% if form_data.target_kind == step_type %}selected{% endif %}>{{ type_meta[step_type].label }}</option>
-                                {% endfor %}
-                            </select>
-                        </label>
-                        <label>
-                            <span>Target Interface</span>
-                            <select name="target_ref" id="flow-target-ref"></select>
-                        </label>
-                    </div>
+                    <label>
+                        <span>Target Interface</span>
+                        <select name="target_selector" id="flow-target-selector" required></select>
+                    </label>
                 </div>
             </section>
 
-            <section class="digi-flow-steps-section">
-                <div class="panel-header">
-                    <div class="panel-header-copy">
-                        <h2>Flow Steps</h2>
-                        <p class="section-lead">Vertical pipeline from top to bottom. Source and target cards are synchronized with the fields above.</p>
+            <section class="digi-flow-builder">
+                <aside class="digi-flow-palette">
+                    <div class="panel-header">
+                        <div class="panel-header-copy">
+                            <h2>Available Steps</h2>
+                            <p class="section-lead">Click once to insert a step before the target.</p>
+                        </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="button" class="button button-secondary" id="digi-add-step">Add step</button>
+                    <div class="digi-step-palette" id="digi-step-palette">
+                        {% for step_type in filter_step_types %}
+                        <button
+                            type="button"
+                            class="digi-palette-button"
+                            data-step-type="{{ step_type }}"
+                        >
+                            <span class="digi-step-badge">{{ type_meta[step_type].badge }}</span>
+                            <span class="digi-palette-copy">
+                                <strong>{{ type_meta[step_type].label }}</strong>
+                                <span class="muted small">{{ type_meta[step_type].description }}</span>
+                            </span>
+                        </button>
+                        {% endfor %}
                     </div>
-                </div>
+                </aside>
 
-                <input type="hidden" name="steps_json" id="digi-steps-json">
-                <div class="digi-step-add-row" id="digi-step-add-row" hidden>
-                    <label>
-                        <span>Filter Type</span>
-                        <select id="digi-new-step-type">
-                            {% for step_type in filter_step_types %}
-                            <option value="{{ step_type }}">{{ type_meta[step_type].label }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <div class="form-actions">
-                        <button type="button" class="button" id="digi-confirm-add-step">Add</button>
-                        <button type="button" class="button button-secondary" id="digi-cancel-add-step">Cancel</button>
+                <div class="digi-flow-steps-section">
+                    <div class="panel-header">
+                        <div class="panel-header-copy">
+                            <h2>Flow Steps</h2>
+                            <p class="section-lead">Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.</p>
+                        </div>
                     </div>
+                    <input type="hidden" name="steps_json" id="digi-steps-json">
+                    <div class="digi-steps-chain" id="digi-steps-chain"></div>
                 </div>
-
-                <div class="digi-steps-chain" id="digi-steps-chain"></div>
             </section>
 
             <div class="form-actions">
@@ -131,23 +123,19 @@
         const form = document.getElementById("digi-flow-form");
         const stepsJsonInput = document.getElementById("digi-steps-json");
         const stepsChain = document.getElementById("digi-steps-chain");
-        const addStepButton = document.getElementById("digi-add-step");
-        const addStepRow = document.getElementById("digi-step-add-row");
-        const newStepType = document.getElementById("digi-new-step-type");
-        const confirmAddStep = document.getElementById("digi-confirm-add-step");
-        const cancelAddStep = document.getElementById("digi-cancel-add-step");
+        const sourceSelectorInput = document.getElementById("flow-source-selector");
+        const targetSelectorInput = document.getElementById("flow-target-selector");
         const sourceKindInput = document.getElementById("flow-source-kind");
-        const sourceRefInput = document.getElementById("flow-source-ref");
+        const sourceRefInput = document.getElementById("flow-source-ref-hidden");
         const targetKindInput = document.getElementById("flow-target-kind");
-        const targetRefInput = document.getElementById("flow-target-ref");
-        if (!form || !stepsJsonInput || !stepsChain || !addStepButton || !addStepRow || !newStepType || !confirmAddStep || !cancelAddStep || !sourceKindInput || !sourceRefInput || !targetKindInput || !targetRefInput) {
+        const targetRefInput = document.getElementById("flow-target-ref-hidden");
+        const paletteButtons = Array.from(document.querySelectorAll(".digi-palette-button"));
+        if (!form || !stepsJsonInput || !stepsChain || !sourceSelectorInput || !targetSelectorInput || !sourceKindInput || !sourceRefInput || !targetKindInput || !targetRefInput) {
             return;
         }
 
         const typeMeta = {{ type_meta|tojson }};
-        const referenceOptions = {{ reference_options|tojson }};
-        const sourceTypes = {{ source_step_types|tojson }};
-        const targetTypes = {{ target_step_types|tojson }};
+        const endpointOptions = {{ endpoint_options|tojson }};
         const filterTypes = {{ filter_step_types|tojson }};
         let steps = {{ form_data.steps|tojson }};
 
@@ -202,15 +190,19 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
 
-        const syncReferenceSelect = (kindInput, selectElement, currentValue) => {
-            const options = referenceOptions[kindInput.value] || [];
+        const syncEndpointSelect = (selectElement, options, currentValue) => {
             const selectedValue = String(currentValue || "");
-            const resolvedOptions = options.slice();
-            if (selectedValue && !resolvedOptions.includes(selectedValue)) {
-                resolvedOptions.unshift(selectedValue);
-            }
             selectElement.innerHTML = "";
-            if (!resolvedOptions.length) {
+            for (const option of options) {
+                const optionElement = document.createElement("option");
+                optionElement.value = option.value;
+                optionElement.textContent = option.label;
+                if (option.value === selectedValue) {
+                    optionElement.selected = true;
+                }
+                selectElement.appendChild(optionElement);
+            }
+            if (!options.length) {
                 const optionElement = document.createElement("option");
                 optionElement.value = "";
                 optionElement.textContent = "Not configured";
@@ -218,25 +210,26 @@
                 selectElement.value = "";
                 return;
             }
-            for (const option of resolvedOptions) {
-                const optionElement = document.createElement("option");
-                optionElement.value = option;
-                optionElement.textContent = option;
-                if (option === selectedValue) {
-                    optionElement.selected = true;
-                }
-                selectElement.appendChild(optionElement);
-            }
-            if (selectedValue) {
-                selectElement.value = selectedValue;
-            } else {
-                selectElement.value = resolvedOptions[0];
-            }
+            selectElement.value = selectedValue && options.some((option) => option.value === selectedValue) ? selectedValue : options[0].value;
+        };
+
+        const selectedEndpoint = (selectElement, group) => {
+            const options = endpointOptions[group] || [];
+            return options.find((option) => option.value === selectElement.value) || null;
         };
 
         const syncBoundarySteps = () => {
-            syncReferenceSelect(sourceKindInput, sourceRefInput, sourceRefInput.value || {{ form_data.source_ref|tojson }});
-            syncReferenceSelect(targetKindInput, targetRefInput, targetRefInput.value || {{ form_data.target_ref|tojson }});
+            syncEndpointSelect(sourceSelectorInput, endpointOptions.source || [], sourceSelectorInput.value || {{ form_data.source_selector|tojson }});
+            syncEndpointSelect(targetSelectorInput, endpointOptions.target || [], targetSelectorInput.value || {{ form_data.target_selector|tojson }});
+            const selectedSource = selectedEndpoint(sourceSelectorInput, "source");
+            const selectedTarget = selectedEndpoint(targetSelectorInput, "target");
+            if (!selectedSource || !selectedTarget) {
+                return;
+            }
+            sourceKindInput.value = selectedSource.kind;
+            sourceRefInput.value = selectedSource.ref;
+            targetKindInput.value = selectedTarget.kind;
+            targetRefInput.value = selectedTarget.ref;
             const sourceStep = steps[0];
             const targetStep = steps[steps.length - 1];
             if (!sourceStep || !targetStep) return;
@@ -317,7 +310,6 @@
         };
 
         const render = () => {
-            targetRefInput.required = targetKindInput.value === "tx_rf" || targetKindInput.value === "tx_aprsis";
             syncBoundarySteps();
             stepsJsonInput.value = JSON.stringify(steps);
             stepsChain.innerHTML = "";
@@ -466,40 +458,41 @@
             });
         };
 
-        addStepButton.addEventListener("click", () => {
-            addStepRow.hidden = false;
+        paletteButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const stepType = button.dataset.stepType || "";
+                if (!filterTypes.includes(stepType)) {
+                    return;
+                }
+                steps.splice(steps.length - 1, 0, {
+                    step_type: stepType,
+                    title: stepLabel(stepType),
+                    enabled: 1,
+                    config: clone(defaultConfig(stepType)),
+                    __editing: true,
+                });
+                render();
+            });
         });
 
-        cancelAddStep.addEventListener("click", () => {
-            addStepRow.hidden = true;
-        });
-
-        confirmAddStep.addEventListener("click", () => {
-            const stepType = newStepType.value;
-            if (!filterTypes.includes(stepType)) {
+        sourceSelectorInput.addEventListener("change", () => {
+            const selected = selectedEndpoint(sourceSelectorInput, "source");
+            if (!selected) {
                 return;
             }
-            steps.splice(steps.length - 1, 0, {
-                step_type: stepType,
-                title: stepLabel(stepType),
-                enabled: 1,
-                config: clone(defaultConfig(stepType)),
-                __editing: true,
-            });
-            addStepRow.hidden = true;
+            sourceKindInput.value = selected.kind;
+            sourceRefInput.value = selected.ref;
             render();
         });
-
-        sourceKindInput.addEventListener("change", () => {
-            syncReferenceSelect(sourceKindInput, sourceRefInput, "");
+        targetSelectorInput.addEventListener("change", () => {
+            const selected = selectedEndpoint(targetSelectorInput, "target");
+            if (!selected) {
+                return;
+            }
+            targetKindInput.value = selected.kind;
+            targetRefInput.value = selected.ref;
             render();
         });
-        sourceRefInput.addEventListener("change", render);
-        targetKindInput.addEventListener("change", () => {
-            syncReferenceSelect(targetKindInput, targetRefInput, "");
-            render();
-        });
-        targetRefInput.addEventListener("change", render);
 
         form.addEventListener("submit", () => {
             syncBoundarySteps();
@@ -514,8 +507,8 @@
 
         if (!Array.isArray(steps) || steps.length < 2) {
             steps = [
-                { step_type: sourceKindInput.value, title: stepLabel(sourceKindInput.value), enabled: 1, config: defaultConfig(sourceKindInput.value, sourceRefInput.value) },
-                { step_type: targetKindInput.value, title: stepLabel(targetKindInput.value), enabled: 1, config: defaultConfig(targetKindInput.value, targetRefInput.value) },
+                { step_type: "receiver_rf", title: stepLabel("receiver_rf"), enabled: 1, config: defaultConfig("receiver_rf", "") },
+                { step_type: "action_log", title: stepLabel("action_log"), enabled: 1, config: defaultConfig("action_log", "log-only") },
             ];
         }
 

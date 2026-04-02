@@ -1038,12 +1038,29 @@ select:focus-visible,
     table-layout: auto;
 }
 
+.digi-flows-table th,
+.digi-flows-table td {
+    white-space: nowrap;
+}
+
+.digi-flows-table td:first-child {
+    width: 100%;
+}
+
 .digi-flow-endpoints {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
 }
 
+.digi-flow-builder {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr);
+    gap: var(--space-3);
+    align-items: start;
+}
+
+.digi-flow-palette,
 .digi-flow-endpoint-card,
 .digi-flow-steps-section {
     display: grid;
@@ -1059,11 +1076,33 @@ select:focus-visible,
     font-size: 0.96rem;
 }
 
-.digi-step-add-row {
+.digi-step-palette {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-3);
-    align-items: end;
+}
+
+.digi-palette-button {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+    width: 100%;
+    padding: 0.85rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel));
+    text-align: left;
+}
+
+.digi-palette-button:hover,
+.digi-palette-button:focus-visible {
+    background: var(--panel-emphasis);
+}
+
+.digi-palette-copy {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
 }
 
 .digi-steps-chain {
@@ -2729,7 +2768,8 @@ button.message-delivery-badge {
     .band-condition-layout,
     .form-grid,
     .station-detail-hero,
-    .digi-flow-endpoints {
+    .digi-flow-endpoints,
+    .digi-flow-builder {
         grid-template-columns: 1fr;
     }
 

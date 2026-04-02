@@ -329,6 +329,44 @@ def get_digi_flow_reference_options() -> dict[str, list[str]]:
     }
 
 
+def get_digi_flow_endpoint_options() -> dict[str, list[dict[str, str]]]:
+    rf_rows = fetch_all("SELECT name FROM modems ORDER BY name COLLATE NOCASE ASC, id ASC")
+    aprsis_rows = fetch_all("SELECT name FROM aprsis_servers ORDER BY name COLLATE NOCASE ASC, id ASC")
+    source_options = [
+        {"value": f"receiver_rf::{row['name']}", "label": str(row["name"]), "kind": "receiver_rf", "ref": str(row["name"])}
+        for row in rf_rows
+        if row["name"]
+    ]
+    source_options.extend(
+        {
+            "value": f"receiver_aprsis::{row['name']}",
+            "label": str(row["name"]),
+            "kind": "receiver_aprsis",
+            "ref": str(row["name"]),
+        }
+        for row in aprsis_rows
+        if row["name"]
+    )
+    target_options = [
+        {"value": f"tx_rf::{row['name']}", "label": str(row["name"]), "kind": "tx_rf", "ref": str(row["name"])}
+        for row in rf_rows
+        if row["name"]
+    ]
+    target_options.extend(
+        {
+            "value": f"tx_aprsis::{row['name']}",
+            "label": str(row["name"]),
+            "kind": "tx_aprsis",
+            "ref": str(row["name"]),
+        }
+        for row in aprsis_rows
+        if row["name"]
+    )
+    target_options.append({"value": "action_log::log-only", "label": "Log Only", "kind": "action_log", "ref": "log-only"})
+    target_options.append({"value": "action_drop::drop", "label": "Drop", "kind": "action_drop", "ref": "drop"})
+    return {"source": source_options, "target": target_options}
+
+
 def _serialize_step_row(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     step = dict(row)
     try:
@@ -399,6 +437,8 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
         return {
             "name": flow.get("name", ""),
             "description": flow.get("description", ""),
+            "source_selector": f"{flow.get('source_kind')}::{flow.get('source_ref')}",
+            "target_selector": f"{flow.get('target_kind')}::{flow.get('target_ref')}",
             "source_kind": flow.get("source_kind", "receiver_rf"),
             "source_ref": flow.get("source_ref", ""),
             "target_kind": flow.get("target_kind", "tx_rf"),
@@ -418,10 +458,12 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
     return {
         "name": "",
         "description": "",
+        "source_selector": "",
+        "target_selector": "action_log::log-only",
         "source_kind": "receiver_rf",
         "source_ref": "",
-        "target_kind": "tx_rf",
-        "target_ref": "",
+        "target_kind": "action_log",
+        "target_ref": "log-only",
         "enabled": 1,
         "steps": [
             {
@@ -431,10 +473,10 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
                 "config": _default_step_config("receiver_rf"),
             },
             {
-                "step_type": "tx_rf",
-                "title": _default_step_title("tx_rf"),
+                "step_type": "action_log",
+                "title": _default_step_title("action_log"),
                 "enabled": 1,
-                "config": _default_step_config("tx_rf"),
+                "config": _default_step_config("action_log", "log-only"),
             },
         ],
     }

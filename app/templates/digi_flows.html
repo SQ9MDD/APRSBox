@@ -33,11 +33,7 @@
                 <thead>
                     <tr>
                         <th>Name</th>
-                        <th>Source</th>
-                        <th>Target</th>
-                        <th>Steps</th>
                         <th>Status</th>
-                        <th>Updated</th>
                         {% if can_edit %}
                         <th>Actions</th>
                         {% endif %}
@@ -46,24 +42,13 @@
                 <tbody>
                         {% for flow in flows %}
                         <tr>
-                            <td>
-                            <div class="stack-sm">
-                                <strong>{{ flow.name }}</strong>
-                                {% if flow.description %}
-                                <span class="muted small">{{ flow.description }}</span>
-                                {% endif %}
-                            </div>
-                        </td>
-                        <td><code>{{ flow.source_display }}</code></td>
-                        <td><code>{{ flow.target_display }}</code></td>
-                        <td>{{ flow.step_count }}</td>
+                        <td><strong>{{ flow.name }}</strong></td>
                         <td>
                             <span class="tnc-badge {{ 'tnc-badge-enabled' if flow.enabled else 'tnc-badge-disabled' }}">
                                 <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if flow.enabled else 'close-circle.svg' }}" alt="">
                                 <span>{{ 'Enabled' if flow.enabled else 'Disabled' }}</span>
                             </span>
                         </td>
-                        <td>{{ flow.updated_at }}</td>
                         {% if can_edit %}
                         <td class="users-action-cell">
                             <a
@@ -118,7 +103,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 7 if can_edit else 6 }}">No DIGI Flows configured yet.</td>
+                        <td colspan="{{ 3 if can_edit else 2 }}">No DIGI Flows configured yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
