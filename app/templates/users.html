@@ -54,27 +54,15 @@
                                     onsubmit="event.stopPropagation();"
                                 >
                                     <input type="hidden" name="is_active" value="{{ 0 if user.is_active else 1 }}">
-                                    {% if user.is_active %}
                                     <button
                                         type="submit"
                                         class="table-icon-button"
-                                        title="Disable user"
-                                        aria-label="Disable user {{ user.username }}"
+                                        title="{{ 'Disable' if user.is_active else 'Enable' }} user"
+                                        aria-label="{{ 'Disable' if user.is_active else 'Enable' }} user {{ user.username }}"
                                         {% if user.is_current_user %}disabled{% endif %}
                                     >
-                                        <img src="{{ request.scope.root_path }}/static/icons/account-off.svg" alt="">
+                                        <img src="{{ request.scope.root_path }}/static/icons/{{ 'account-off.svg' if user.is_active else 'account-reactivate.svg' }}" alt="">
                                     </button>
-                                    {% else %}
-                                    <button
-                                        type="submit"
-                                        class="button button-secondary users-toggle-button"
-                                        title="Enable user"
-                                        aria-label="Enable user {{ user.username }}"
-                                        {% if user.is_current_user %}disabled{% endif %}
-                                    >
-                                        Enable
-                                    </button>
-                                    {% endif %}
                                 </form>
                                 <form
                                     method="post"
