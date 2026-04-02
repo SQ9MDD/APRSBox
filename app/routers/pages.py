@@ -759,6 +759,17 @@ def digi_flow_edit_page(
     return templates.TemplateResponse("digi_flow_form.html", context)
 
 
+@router.get("/api/digi-flows/{flow_id}/events")
+def digi_flow_event_log_api(
+    flow_id: int,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    flow = get_digi_flow(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
+    return JSONResponse({"flow_id": flow_id, "events": get_digi_flow_event_log(flow_id, limit=200)})
+
+
 @router.post("/digi-flows")
 async def digi_flow_create(
     request: Request,

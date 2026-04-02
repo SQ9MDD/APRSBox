@@ -135,7 +135,7 @@
                         <th>Message</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="digi-flow-debug-log-body">
                     {% for row in flow_event_log %}
                     <tr>
                         <td>{{ row.created_at }}</td>
@@ -630,6 +630,69 @@
         setExpandedStep(initiallyExpandedIndex);
 
         render();
+    })();
+
+    (() => {
+        const flowId = {{ flow_id|tojson }};
+        const rootPath = {{ request.scope.root_path|tojson }};
+        const logBody = document.getElementById("digi-flow-debug-log-body");
+        if (!flowId || !logBody) {
+            return;
+        }
+
+        let previousPayload = "";
+
+        const escapeHtml = (value) => String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+
+        const renderRows = (rows) => {
+            if (!rows.length) {
+                logBody.innerHTML = '<tr><td colspan="8">No runtime events recorded for this flow yet.</td></tr>';
+                return;
+            }
+
+            logBody.innerHTML = rows.map((row) => `
+                <tr>
+                    <td>${escapeHtml(row.created_at)}</td>
+                    <td><code>${escapeHtml(row.frame_uid)}</code></td>
+                    <td><code>${escapeHtml(row.source_kind)}:${escapeHtml(row.source_ref)}</code></td>
+                    <td><strong>#${escapeHtml(row.flow_id)}</strong> ${escapeHtml(row.flow_name)}</td>
+                    <td>${escapeHtml(row.step_title || "-")}</td>
+                    <td><code>${escapeHtml(row.event_type)}</code></td>
+                    <td>${escapeHtml(row.decision || "-")}</td>
+                    <td>${escapeHtml(row.message)}</td>
+                </tr>
+            `).join("");
+        };
+
+        const refreshLog = async () => {
+            try {
+                const response = await fetch(`${rootPath}/api/digi-flows/${flowId}/events`, {
+                    headers: { "Accept": "application/json" },
+                    cache: "no-store",
+                    credentials: "same-origin",
+                });
+                if (!response.ok) {
+                    return;
+                }
+                const payload = await response.json();
+                const serialized = JSON.stringify(payload.events || []);
+                if (serialized === previousPayload) {
+                    return;
+                }
+                previousPayload = serialized;
+                renderRows(payload.events || []);
+            } catch (_error) {
+                // Keep the last visible log if polling fails.
+            }
+        };
+
+        previousPayload = JSON.stringify({{ flow_event_log|tojson }});
+        window.setInterval(refreshLog, 2000);
     })();
 </script>
 {% endblock %}
