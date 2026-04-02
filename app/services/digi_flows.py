@@ -123,11 +123,17 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
             {
                 "name": "packet_types",
-                "label": "Packet Groups (one per line)",
+                "label": "Packet Groups To Match (one per line)",
                 "type": "textarea",
                 "required": False,
                 "placeholder": "position\nobject\nitem\nmessage\nstatus\nweather\ntelemetry\nquery",
                 "help_lines": (
+                    "Wpisz dokladnie jedna z tych wartosci w osobnej linii:",
+                    "position, object, item, message, status, weather, telemetry, query",
+                    "Przyklad: jesli chcesz przepuscic tylko pozycje i pogode, wpisz:",
+                    "position",
+                    "weather",
+                    "",
                     "position: pozycje zwykle, z timestampem, compressed i Mic-E",
                     "object: obiekty APRS (;)",
                     "item: itemy APRS ())",
