@@ -1043,8 +1043,25 @@ select:focus-visible,
     white-space: nowrap;
 }
 
-.digi-flows-table td:first-child {
-    width: 100%;
+.digi-flows-table th:nth-child(1),
+.digi-flows-table td:nth-child(1) {
+    width: 18rem;
+}
+
+.digi-flows-table th:nth-child(2),
+.digi-flows-table td:nth-child(2) {
+    width: auto;
+    white-space: normal;
+}
+
+.digi-flows-table th:nth-child(3),
+.digi-flows-table td:nth-child(3) {
+    width: 8.5rem;
+}
+
+.digi-flows-table th:last-child,
+.digi-flows-table td:last-child {
+    width: 9.5rem;
 }
 
 .digi-flow-endpoints {

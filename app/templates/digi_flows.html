@@ -33,6 +33,7 @@
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>Description</th>
                         <th>Status</th>
                         {% if can_edit %}
                         <th>Actions</th>
@@ -43,6 +44,7 @@
                         {% for flow in flows %}
                         <tr>
                         <td><strong>{{ flow.name }}</strong></td>
+                        <td>{{ flow.description or "-" }}</td>
                         <td>
                             <span class="tnc-badge {{ 'tnc-badge-enabled' if flow.enabled else 'tnc-badge-disabled' }}">
                                 <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if flow.enabled else 'close-circle.svg' }}" alt="">
@@ -103,7 +105,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 3 if can_edit else 2 }}">No DIGI Flows configured yet.</td>
+                        <td colspan="{{ 4 if can_edit else 3 }}">No DIGI Flows configured yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
