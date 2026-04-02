@@ -1050,7 +1050,7 @@ select:focus-visible,
 
 .digi-flows-table th:nth-child(2),
 .digi-flows-table td:nth-child(2) {
-    width: auto;
+    width: 70%;
     white-space: normal;
 }
 
@@ -1061,7 +1061,7 @@ select:focus-visible,
 
 .digi-flows-table th:last-child,
 .digi-flows-table td:last-child {
-    width: 9.5rem;
+    width: 12rem;
 }
 
 .digi-flow-endpoints {
