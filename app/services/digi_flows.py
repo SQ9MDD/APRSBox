@@ -53,9 +53,9 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Path Filter",
         "badge": "Filter",
-        "description": "Stores path allow or deny rules.",
+        "description": "Allows only explicitly listed TRACE and NO TRACE paths.",
         "config_fields": (
-            {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
+            {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow",)},
             {"name": "trace_paths", "label": "Paths (TRACE)", "type": "textarea", "required": False},
             {"name": "no_trace_paths", "label": "Paths (NO TRACE)", "type": "textarea", "required": False},
         ),
@@ -269,8 +269,8 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         return {"window_sec": _normalize_number(config.get("window_sec"), label="Duplicate window", minimum=1)}
     if step_type == "filter_path":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
-        if mode not in {"allow", "deny"}:
-            raise ValueError("Path filter mode must be allow or deny.")
+        if mode != "allow":
+            raise ValueError("Path filter mode must be allow.")
         legacy_paths = _normalize_multiline_list(config.get("paths"))
         trace_paths = _normalize_multiline_list(config.get("trace_paths")) or legacy_paths
         no_trace_paths = _normalize_multiline_list(config.get("no_trace_paths"))
@@ -341,7 +341,7 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
     if step_type == "filter_path":
         trace_paths = config.get("trace_paths") or []
         no_trace_paths = config.get("no_trace_paths") or []
-        return f"Mode: {config.get('mode', 'allow')}, trace: {len(trace_paths)}, no-trace: {len(no_trace_paths)}"
+        return f"Allow only, paths: {len(trace_paths) + len(no_trace_paths)}"
     if step_type == "filter_callsign":
         callsigns = config.get("callsigns") or []
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
@@ -613,6 +613,8 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     for middle_step in normalized_steps[1:-1]:
         if _step_category(middle_step["step_type"]) != "filter":
             raise ValueError("All middle flow steps must be filter steps.")
+    if target_kind != "action_log" and not any(step["step_type"] == "filter_path" for step in normalized_steps[1:-1]):
+        raise ValueError("Flow with a non-log target must include at least one Path Filter step.")
 
     first_ref = _step_ref_value(first_step["step_type"], first_step["config"])
     last_ref = _step_ref_value(last_step["step_type"], last_step["config"])

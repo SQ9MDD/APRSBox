@@ -42,10 +42,10 @@ def sample_flow_payload() -> dict:
                 "config": {"rf_port": "TNC-1"},
             },
             {
-                "step_type": "filter_dupe",
-                "title": "Duplicate Filter",
+                "step_type": "filter_path",
+                "title": "Path Filter",
                 "enabled": 1,
-                "config": {"window_sec": 30},
+                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": ["SP2-2"]},
             },
             {
                 "step_type": "tx_aprsis",
@@ -109,7 +109,7 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(flow["target_kind"], "tx_aprsis")
             self.assertEqual(len(flow["steps"]), 3)
             self.assertEqual(flow["steps"][0]["step_type"], "receiver_rf")
-            self.assertEqual(flow["steps"][1]["step_type"], "filter_dupe")
+            self.assertEqual(flow["steps"][1]["step_type"], "filter_path")
             self.assertEqual(flow["steps"][2]["step_type"], "tx_aprsis")
 
     def test_new_filter_types_and_packet_type_mode_are_accepted(self) -> None:
@@ -121,6 +121,12 @@ class DigiFlowsTests(unittest.TestCase):
                 "title": "DIGI Filter",
                 "enabled": 1,
                 "config": {"mode": "deny", "digis": ["WIDE1-1", "TRACE2-2"]},
+            },
+            {
+                "step_type": "filter_path",
+                "title": "Path Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": ["SP2-2"]},
             },
             {
                 "step_type": "filter_packet_type",
@@ -145,9 +151,10 @@ class DigiFlowsTests(unittest.TestCase):
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["steps"][1]["config"]["mode"], "deny")
-            self.assertEqual(normalized["steps"][2]["config"]["mode"], "allow")
-            self.assertEqual(normalized["steps"][3]["config"]["icons"], ["/>", "\\#"])
-            self.assertEqual(normalized["steps"][4]["config"]["packets_per_minute"], 5)
+            self.assertEqual(normalized["steps"][2]["config"]["trace_paths"], ["WIDE1-1"])
+            self.assertEqual(normalized["steps"][3]["config"]["mode"], "allow")
+            self.assertEqual(normalized["steps"][4]["config"]["icons"], ["/>", "\\#"])
+            self.assertEqual(normalized["steps"][5]["config"]["packets_per_minute"], 5)
 
     def test_path_filter_uses_trace_and_no_trace_fields(self) -> None:
         payload = sample_flow_payload()
@@ -169,6 +176,42 @@ class DigiFlowsTests(unittest.TestCase):
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["steps"][1]["config"]["trace_paths"], ["TRACE2-2", "WIDE1-1"])
             self.assertEqual(normalized["steps"][1]["config"]["no_trace_paths"], ["TCPIP", "NOGATE"])
+
+    def test_non_log_target_requires_path_filter(self) -> None:
+        payload = sample_flow_payload()
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 30},
+            },
+            payload["steps"][2],
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "must include at least one Path Filter"):
+                normalize_digi_flow_payload(payload)
+
+    def test_path_filter_allows_only_allow_mode(self) -> None:
+        payload = sample_flow_payload()
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_path",
+                "title": "Path Filter",
+                "enabled": 1,
+                "config": {
+                    "mode": "deny",
+                    "trace_paths": ["WIDE1-1"],
+                    "no_trace_paths": [],
+                },
+            },
+            payload["steps"][2],
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "Path filter mode must be allow"):
+                normalize_digi_flow_payload(payload)
 
 
 if __name__ == "__main__":

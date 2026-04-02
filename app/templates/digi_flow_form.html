@@ -143,7 +143,7 @@
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
             if (stepType === "filter_dupe") return { window_sec: 30 };
-            if (stepType === "filter_path") return { mode: "allow", paths: [] };
+            if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
             if (stepType === "filter_callsign") return { mode: "allow", callsigns: [] };
             if (stepType === "filter_packet_type") return { packet_types: [] };
             if (stepType === "filter_distance") return { max_km: 50 };
@@ -167,7 +167,11 @@
             if (step.step_type === "receiver_rf") return `RF port: ${config.rf_port || "-"}`;
             if (step.step_type === "receiver_aprsis") return `APRS-IS source: ${config.aprsis_source || "-"}`;
             if (step.step_type === "filter_dupe") return `Window: ${config.window_sec || "-"} sec`;
-            if (step.step_type === "filter_path") return `Mode: ${config.mode || "allow"}, paths: ${(config.paths || []).length}`;
+            if (step.step_type === "filter_path") {
+                const tracePaths = config.trace_paths || config.paths || [];
+                const noTracePaths = config.no_trace_paths || [];
+                return `Mode: ${config.mode || "allow"}, paths: ${tracePaths.length + noTracePaths.length}`;
+            }
             if (step.step_type === "filter_callsign") return `Mode: ${config.mode || "allow"}, callsigns: ${(config.callsigns || []).length}`;
             if (step.step_type === "filter_packet_type") return `Packet types: ${(config.packet_types || []).join(", ") || "none"}`;
             if (step.step_type === "filter_distance") return `Max distance: ${config.max_km || "-"} km`;
