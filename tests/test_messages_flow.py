@@ -503,12 +503,12 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(job["kind"], "beacon")
             self.assertEqual(
                 build_beacon_tnc2(job["payload"]),
-                "SQ9MDD-4>APRS,WIDE2-1:!5213.78N/02100.73E>",
+                "SQ9MDD-4>APRS,WIDE2-1:=5213.78N/02100.73E>",
             )
             rows = fetch_all("SELECT direction, message_text, status FROM aprs_messages ORDER BY id ASC")
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["message_text"], "?APRSP")
-            self.assertEqual(rows[1]["message_text"], "!5213.78N/02100.73E>")
+            self.assertEqual(rows[1]["message_text"], "=5213.78N/02100.73E>")
 
     def test_incoming_aprss_query_queues_single_status_response(self) -> None:
         with temporary_database():

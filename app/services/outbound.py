@@ -645,7 +645,7 @@ def _build_beacon_info(payload: dict[str, Any]) -> str:
     symbol_table = _normalize_symbol_table(payload.get("symbol_table"))
     symbol_code = _normalize_symbol_code(payload.get("symbol_code"))
     comment = str(payload.get("beacon_comment") or "").strip()
-    return f"!{latitude}{symbol_table}{longitude}{symbol_code}{comment}"
+    return f"={latitude}{symbol_table}{longitude}{symbol_code}{comment}"
 
 
 def _build_object_info(payload: dict[str, Any]) -> str:

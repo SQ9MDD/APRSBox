@@ -1031,7 +1031,7 @@ def _build_query_position_text(station_settings: dict[str, Any]) -> str:
     symbol_code = str(station_settings.get("symbol_code") or ">")
     comment = str(station_settings.get("beacon_comment") or "").strip()
     return (
-        f"!{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}"
+        f"={_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}"
         f"{symbol_code}{comment}"
     )
 
