@@ -40,7 +40,7 @@ QUERY_RESPONSE_DELAY_SECONDS = 3
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
-_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?)?$")
+_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?)?$")
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
 
 
@@ -571,8 +571,8 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         )
         _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
         return
-    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
-    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
+    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?", text_field, flags=re.IGNORECASE)
+    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?", text_field, flags=re.IGNORECASE)
     if ack_match:
         acknowledge_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=ack_match.group("number").upper(), timestamp=received_at)
         return

@@ -196,6 +196,41 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
 
+    def test_incoming_message_with_closed_brace_suffix_is_acked(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SQ9MDD>APQTH1,RFONLY::SQ9MDD-4 :test{02}"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one(
+                """
+                SELECT direction, sender, addressee, message_text, message_number, status
+                FROM aprs_messages
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert row is not None
+            self.assertEqual(row["direction"], "rx")
+            self.assertEqual(row["sender"], "SQ9MDD")
+            self.assertEqual(row["addressee"], "SQ9MDD-4")
+            self.assertEqual(row["message_text"], "test")
+            self.assertEqual(row["message_number"], "02")
+            self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"message_text":"ack02"' in str(job["payload_json"]) for job in ack_jobs))
+
     async def test_queue_send_query_without_message_number_and_retry(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
