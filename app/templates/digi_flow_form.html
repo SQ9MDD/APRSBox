@@ -374,7 +374,7 @@
 
                 const toggleButton = document.createElement("button");
                 toggleButton.type = "button";
-                toggleButton.className = `table-icon-button digi-step-toggle-button${step.__editing ? " is-open" : ""}`;
+                toggleButton.className = `table-icon-button digi-step-icon-button digi-step-toggle-button${step.__editing ? " is-open" : ""}`;
                 toggleButton.title = step.__editing ? "Collapse step" : "Expand step";
                 toggleButton.setAttribute("aria-label", step.__editing ? "Collapse step" : "Expand step");
                 const toggleIcon = document.createElement("img");
@@ -393,7 +393,7 @@
 
                 const moveUpButton = document.createElement("button");
                 moveUpButton.type = "button";
-                moveUpButton.className = "table-icon-button";
+                moveUpButton.className = "table-icon-button digi-step-icon-button";
                 moveUpButton.title = "Move step up";
                 moveUpButton.setAttribute("aria-label", "Move step up");
                 moveUpButton.disabled = index <= 1;
@@ -412,7 +412,7 @@
 
                 const moveDownButton = document.createElement("button");
                 moveDownButton.type = "button";
-                moveDownButton.className = "table-icon-button";
+                moveDownButton.className = "table-icon-button digi-step-icon-button";
                 moveDownButton.title = "Move step down";
                 moveDownButton.setAttribute("aria-label", "Move step down");
                 moveDownButton.disabled = index >= steps.length - 2;
@@ -431,7 +431,7 @@
 
                 const deleteButton = document.createElement("button");
                 deleteButton.type = "button";
-                deleteButton.className = "table-icon-button";
+                deleteButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
                 deleteButton.title = "Delete step";
                 deleteButton.setAttribute("aria-label", "Delete step");
                 deleteButton.disabled = stepCategory(step.step_type) !== "filter";

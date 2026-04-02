@@ -1244,6 +1244,30 @@ select:focus-visible,
     transform: rotate(180deg);
 }
 
+.digi-step-icon-button {
+    border-color: var(--border);
+    background: var(--panel-soft);
+}
+
+.digi-step-icon-button:hover:not(:disabled) {
+    background: var(--panel-emphasis);
+    border-color: var(--border-hover);
+}
+
+.digi-step-icon-button:focus-visible {
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.digi-step-icon-button-danger {
+    border-color: rgba(201, 122, 122, 0.35);
+    background: rgba(201, 122, 122, 0.08);
+}
+
+.digi-step-icon-button-danger:hover:not(:disabled) {
+    background: rgba(201, 122, 122, 0.16);
+    border-color: rgba(201, 122, 122, 0.5);
+}
+
 .digi-step-editor-grid {
     padding-top: 0.55rem;
     border-top: 1px solid var(--border);
