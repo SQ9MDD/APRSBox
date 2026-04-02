@@ -6,7 +6,14 @@ import unittest
 from pathlib import Path
 
 from app.db import connect, fetch_one, init_db
-from app.services.digi_flows import create_digi_flow, get_digi_flow, normalize_digi_flow_payload, set_digi_flow_enabled, update_digi_flow
+from app.services.digi_flows import (
+    create_digi_flow,
+    get_digi_flow,
+    get_digi_flow_endpoint_options,
+    normalize_digi_flow_payload,
+    set_digi_flow_enabled,
+    update_digi_flow,
+)
 
 
 @contextlib.contextmanager
@@ -173,6 +180,14 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(flow["steps"][0]["step_type"], "receiver_rf")
             self.assertEqual(flow["steps"][1]["step_type"], "filter_path")
             self.assertEqual(flow["steps"][2]["step_type"], "tx_aprsis")
+
+    def test_endpoint_options_hide_drop_target_unless_current_flow_uses_it(self) -> None:
+        with temporary_database():
+            default_targets = get_digi_flow_endpoint_options()["target"]
+            self.assertFalse(any(option["value"] == "action_drop::drop" for option in default_targets))
+
+            preserved_targets = get_digi_flow_endpoint_options(selected_target_selector="action_drop::drop")["target"]
+            self.assertTrue(any(option["value"] == "action_drop::drop" for option in preserved_targets))
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():

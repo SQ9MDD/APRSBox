@@ -450,7 +450,7 @@ def get_digi_flow_reference_options() -> dict[str, list[str]]:
     }
 
 
-def get_digi_flow_endpoint_options() -> dict[str, list[dict[str, str]]]:
+def get_digi_flow_endpoint_options(*, selected_target_selector: str | None = None) -> dict[str, list[dict[str, str]]]:
     rf_rows = fetch_all("SELECT name FROM modems ORDER BY name COLLATE NOCASE ASC, id ASC")
     aprsis_rows = fetch_all("SELECT name FROM aprsis_servers ORDER BY name COLLATE NOCASE ASC, id ASC")
     source_options = [
@@ -483,7 +483,8 @@ def get_digi_flow_endpoint_options() -> dict[str, list[dict[str, str]]]:
         for row in aprsis_rows
         if row["name"]
     )
-    target_options.append({"value": "action_drop::drop", "label": "Drop", "kind": "action_drop", "ref": "drop"})
+    if str(selected_target_selector or "").strip() == "action_drop::drop":
+        target_options.append({"value": "action_drop::drop", "label": "Drop", "kind": "action_drop", "ref": "drop"})
     target_options.append({"value": "action_log::log-only", "label": "Log Only", "kind": "action_log", "ref": "log-only"})
     return {"source": source_options, "target": target_options}
 
