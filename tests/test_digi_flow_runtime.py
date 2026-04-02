@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
-from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log
+from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries
 
 
 @contextlib.contextmanager
@@ -195,7 +195,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_filter_then_path_rule_reaches_tx_stub(self) -> None:
         with temporary_database():
             set_local_station_identity()
-            create_flow(
+            flow_id = create_flow(
                 {
                     "name": "TX stub",
                     "description": "",
@@ -239,6 +239,14 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows))
             self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "tx" and "would transmit to target RF:RF-OUT" in row["message"] for row in rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "tx" for row in rows))
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0]["final_result"], "TX")
+            self.assertEqual(summaries[0]["step_path"], "1 -> 2 -> 3 -> 4")
+            self.assertEqual(summaries[0]["steps"][1]["status"], "passed")
+            self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
+            self.assertEqual(summaries[0]["steps"][3]["status"], "executed")
 
 
 if __name__ == "__main__":

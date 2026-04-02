@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
@@ -885,3 +886,161 @@ def get_digi_flow_event_log(flow_id: int, *, limit: int = 200) -> list[dict[str,
         (flow_id, limit),
     )
     return [dict(row) for row in rows]
+
+
+def get_digi_flow_execution_summaries(flow_id: int, *, execution_limit: int = 20, event_limit: int = 600) -> list[dict[str, Any]]:
+    flow = get_digi_flow(flow_id)
+    if flow is None:
+        return []
+
+    events = get_digi_flow_event_log(flow_id, limit=event_limit)
+    if not events:
+        return []
+
+    grouped: list[dict[str, Any]] = []
+    grouped_by_key: dict[tuple[str, int], dict[str, Any]] = {}
+    for row in events:
+        key = (str(row["frame_uid"]), int(row["flow_id"]))
+        if key not in grouped_by_key:
+            grouped_by_key[key] = {"frame_uid": key[0], "flow_id": key[1], "events": []}
+            grouped.append(grouped_by_key[key])
+        grouped_by_key[key]["events"].append(dict(row))
+
+    summaries: list[dict[str, Any]] = []
+    for group in grouped[:execution_limit]:
+        summary = _build_execution_summary(flow, list(group["events"]))
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
+def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not events_desc:
+        return None
+
+    events = sorted(events_desc, key=lambda item: (str(item["created_at"]), int(item["id"])))
+    steps = [dict(step) for step in flow.get("steps") or []]
+    step_state_by_id: dict[int, dict[str, Any]] = {}
+    for index, step in enumerate(steps, start=1):
+        step_id = int(step["id"])
+        step_state_by_id[step_id] = {
+            "step_id": step_id,
+            "number": index,
+            "title": str(step.get("title") or step.get("step_label") or step.get("step_type") or f"Step {index}"),
+            "step_type": str(step.get("step_type") or ""),
+            "status": "not_reached",
+            "description": "Step not reached.",
+        }
+
+    raw_packet = ""
+    source_display = ""
+    final_decision = ""
+    final_message = ""
+    output_action_decision = ""
+    for event in events:
+        source_display = f"{event.get('source_kind') or ''}:{event.get('source_ref') or ''}".strip(":") or source_display
+        if not raw_packet:
+            raw_packet = _extract_line_from_message(str(event.get("message") or ""))
+        event_type = str(event.get("event_type") or "")
+        decision = str(event.get("decision") or "")
+        message = str(event.get("message") or "").strip()
+        step_id = event.get("step_id")
+
+        if step_id not in {None, ""}:
+            step_key = int(step_id)
+            step_state = step_state_by_id.get(step_key)
+            if step_state is not None:
+                if event_type == "source_step":
+                    step_state["status"] = "passed"
+                    step_state["description"] = "Source matched and packet entered the flow."
+                elif event_type in {"filter_callsign", "path_rule"}:
+                    step_state["status"] = "rejected" if decision == "rejected" else "passed"
+                    step_state["description"] = message
+                elif event_type == "output_action":
+                    step_state["status"] = "executed"
+                    step_state["description"] = _strip_line_suffix(message)
+                    output_action_decision = decision or output_action_decision
+                elif event_type == "step_stub":
+                    step_state["status"] = "executed"
+                    step_state["description"] = message
+                elif event_type == "step_skipped":
+                    step_state["status"] = "not_reached"
+                    step_state["description"] = "Step disabled."
+
+        if event_type == "pipeline_finished":
+            final_decision = decision
+            final_message = message
+
+    final_result = _execution_final_result(final_decision=final_decision, output_action_decision=output_action_decision, steps=step_state_by_id)
+    final_step = _execution_final_step(step_state_by_id, final_result=final_result)
+    timestamp = str(events[0].get("created_at") or "")
+    return {
+        "frame_uid": str(events[0]["frame_uid"]),
+        "flow_id": int(flow["id"]),
+        "flow_name": str(flow.get("name") or ""),
+        "created_at": timestamp,
+        "display_created_at": _format_local_execution_time(timestamp),
+        "final_result": final_result,
+        "final_message": final_message,
+        "final_step_number": final_step.get("number"),
+        "final_step_title": final_step.get("title"),
+        "raw_packet": raw_packet or "-",
+        "source_display": source_display or "-",
+        "step_count": len(steps),
+        "step_path": " -> ".join(str(index) for index in range(1, len(steps) + 1)),
+        "steps": [step_state_by_id[int(step["id"])] for step in steps],
+    }
+
+
+def _execution_final_result(
+    *,
+    final_decision: str,
+    output_action_decision: str,
+    steps: dict[int, dict[str, Any]],
+) -> str:
+    if final_decision == "log_only" or output_action_decision == "log_only":
+        return "LOGGED"
+    if final_decision == "tx" or output_action_decision == "tx":
+        return "TX"
+    if output_action_decision == "drop":
+        return "DROPPED"
+    if final_decision == "drop" or any(step["status"] == "rejected" for step in steps.values()):
+        return "REJECTED"
+    return "RUNNING"
+
+
+def _execution_final_step(steps: dict[int, dict[str, Any]], *, final_result: str) -> dict[str, Any]:
+    reached_steps = [step for step in steps.values() if step["status"] != "not_reached"]
+    if not reached_steps:
+        return {}
+    reached_steps.sort(key=lambda item: int(item["number"]))
+    if final_result in {"REJECTED", "DROPPED", "LOGGED", "TX"}:
+        return reached_steps[-1]
+    return reached_steps[-1]
+
+
+def _extract_line_from_message(message: str) -> str:
+    marker = "| line="
+    if marker in message:
+        return message.split(marker, 1)[1].strip()
+    line_marker = "line="
+    if line_marker in message:
+        return message.split(line_marker, 1)[1].strip()
+    return ""
+
+
+def _strip_line_suffix(message: str) -> str:
+    marker = " | line="
+    if marker in message:
+        return message.split(marker, 1)[0].strip()
+    return message.strip()
+
+
+def _format_local_execution_time(value: str) -> str:
+    if not value:
+        return "-"
+    try:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+    except ValueError:
+        return value
+    return timestamp.strftime("%Y-%m-%d %H:%M:%S")

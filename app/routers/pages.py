@@ -37,6 +37,7 @@ from app.services.digi_flows import (
     TARGET_STEP_TYPES,
     build_digi_flow_editor_payload,
     delete_digi_flow,
+    get_digi_flow_execution_summaries,
     get_digi_flow_event_log,
     get_digi_flow_endpoint_options,
     get_digi_flow,
@@ -184,7 +185,7 @@ def _digi_flow_editor_context(
         source_step_types=SOURCE_STEP_TYPES,
         filter_step_types=FILTER_STEP_TYPES,
         target_step_types=TARGET_STEP_TYPES,
-        flow_event_log=get_digi_flow_event_log(flow_id, limit=200) if flow_id is not None else [],
+        flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=20) if flow_id is not None else [],
         flash=flash,
         flash_success=flash_success,
     )
@@ -768,6 +769,17 @@ def digi_flow_event_log_api(
     if flow is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
     return JSONResponse({"flow_id": flow_id, "events": get_digi_flow_event_log(flow_id, limit=200)})
+
+
+@router.get("/api/digi-flows/{flow_id}/executions")
+def digi_flow_execution_summaries_api(
+    flow_id: int,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    flow = get_digi_flow(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
+    return JSONResponse({"flow_id": flow_id, "executions": get_digi_flow_execution_summaries(flow_id, execution_limit=20)})
 
 
 @router.post("/digi-flows")

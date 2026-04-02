@@ -105,7 +105,7 @@ class DigiFlowRuntimeService:
                 step_id=None,
                 event_type="frame_received",
                 decision="queued",
-                message=f"Frame accepted from {source_label}.",
+                message=f"Frame accepted from {source_label} | line={frame['raw_payload']}",
                 created_at=str(frame["created_at"]),
             )
             log_digi_flow_event(

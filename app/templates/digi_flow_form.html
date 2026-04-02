@@ -114,46 +114,16 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>Runtime Debug Log</h2>
-                <p class="section-lead">Latest execution events for this flow. Refresh the page after traffic or test injection to inspect the pipeline.</p>
+                <h2>Recent Packet Executions</h2>
+                <p class="section-lead">Each block below shows one packet running through this flow from source to final outcome.</p>
             </div>
             <div class="form-actions">
                 <a href="{{ request.scope.root_path }}/digi-flows/{{ flow_id }}" class="button button-secondary">Refresh log</a>
             </div>
         </div>
-        <div class="table-wrap">
-            <table class="data-table compact-table logs-table digi-flow-debug-table">
-                <thead>
-                    <tr>
-                        <th>Timestamp</th>
-                        <th>Frame UID</th>
-                        <th>Source</th>
-                        <th>Flow</th>
-                        <th>Step</th>
-                        <th>Event</th>
-                        <th>Decision</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody id="digi-flow-debug-log-body">
-                    {% for row in flow_event_log %}
-                    <tr>
-                        <td>{{ row.created_at }}</td>
-                        <td><code>{{ row.frame_uid }}</code></td>
-                        <td><code>{{ row.source_kind }}:{{ row.source_ref }}</code></td>
-                        <td><strong>#{{ row.flow_id }}</strong> {{ row.flow_name }}</td>
-                        <td>{{ row.step_title or "-" }}</td>
-                        <td><code>{{ row.event_type }}</code></td>
-                        <td>{{ row.decision or "-" }}</td>
-                        <td>{{ row.message }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="8">No runtime events recorded for this flow yet.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="digi-execution-list" id="digi-flow-executions"></div>
+        <div class="empty-state muted" id="digi-flow-executions-empty" {% if flow_execution_summaries %}hidden{% endif %}>
+            No packet executions recorded for this flow yet.
         </div>
     </div>
 </section>
@@ -635,8 +605,9 @@
     (() => {
         const flowId = {{ flow_id|tojson }};
         const rootPath = {{ request.scope.root_path|tojson }};
-        const logBody = document.getElementById("digi-flow-debug-log-body");
-        if (!flowId || !logBody) {
+        const executionsContainer = document.getElementById("digi-flow-executions");
+        const emptyState = document.getElementById("digi-flow-executions-empty");
+        if (!flowId || !executionsContainer || !emptyState) {
             return;
         }
 
@@ -649,29 +620,83 @@
             .replaceAll('"', "&quot;")
             .replaceAll("'", "&#39;");
 
-        const renderRows = (rows) => {
-            if (!rows.length) {
-                logBody.innerHTML = '<tr><td colspan="8">No runtime events recorded for this flow yet.</td></tr>';
+        const formatTimestamp = (value) => {
+            if (!value) {
+                return "-";
+            }
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return escapeHtml(value);
+            }
+            return escapeHtml(new Intl.DateTimeFormat(undefined, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+            }).format(parsed));
+        };
+
+        const executionBadgeClass = (result) => {
+            if (result === "LOGGED" || result === "TX") return "status-running";
+            if (result === "DROPPED" || result === "REJECTED") return "status-stopped";
+            return "status-unknown";
+        };
+
+        const stepStatusClass = (status) => {
+            if (status === "passed" || status === "executed") return "digi-execution-step-success";
+            if (status === "rejected") return "digi-execution-step-danger";
+            return "digi-execution-step-muted";
+        };
+
+        const renderExecutions = (executions) => {
+            if (!executions.length) {
+                executionsContainer.innerHTML = "";
+                emptyState.hidden = false;
                 return;
             }
+            emptyState.hidden = true;
 
-            logBody.innerHTML = rows.map((row) => `
-                <tr>
-                    <td>${escapeHtml(row.created_at)}</td>
-                    <td><code>${escapeHtml(row.frame_uid)}</code></td>
-                    <td><code>${escapeHtml(row.source_kind)}:${escapeHtml(row.source_ref)}</code></td>
-                    <td><strong>#${escapeHtml(row.flow_id)}</strong> ${escapeHtml(row.flow_name)}</td>
-                    <td>${escapeHtml(row.step_title || "-")}</td>
-                    <td><code>${escapeHtml(row.event_type)}</code></td>
-                    <td>${escapeHtml(row.decision || "-")}</td>
-                    <td>${escapeHtml(row.message)}</td>
-                </tr>
+            executionsContainer.innerHTML = executions.map((execution) => `
+                <article class="digi-execution-card">
+                    <div class="digi-execution-card-header">
+                        <div class="digi-execution-card-copy">
+                            <div class="digi-execution-card-topline">
+                                <span class="status-pill ${executionBadgeClass(execution.final_result)}">${escapeHtml(execution.final_result)}</span>
+                                <span class="digi-execution-time">${formatTimestamp(execution.created_at)}</span>
+                                <span class="muted">Flow ${escapeHtml(execution.step_count)} steps</span>
+                            </div>
+                            <h3 class="digi-execution-packet">${escapeHtml(execution.raw_packet || "-")}</h3>
+                            <div class="digi-execution-meta">
+                                <span><strong>Source:</strong> <code>${escapeHtml(execution.source_display || "-")}</code></span>
+                                <span><strong>UID:</strong> <code>${escapeHtml(execution.frame_uid)}</code></span>
+                                <span><strong>Pipeline:</strong> <code>${escapeHtml(execution.step_path)}</code></span>
+                                <span><strong>Finished:</strong> ${execution.final_step_number ? `step ${escapeHtml(execution.final_step_number)} ${escapeHtml(execution.final_step_title || "")}` : "-"}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="digi-execution-steps">
+                        ${Array.isArray(execution.steps) ? execution.steps.map((step) => `
+                            <div class="digi-execution-step">
+                                <div class="digi-execution-step-index">${escapeHtml(step.number)}</div>
+                                <div class="digi-execution-step-body">
+                                    <div class="digi-execution-step-heading">
+                                        <strong>${escapeHtml(step.title)}</strong>
+                                        <span class="digi-execution-step-status ${stepStatusClass(step.status)}">${escapeHtml(step.status)}</span>
+                                    </div>
+                                    <div class="digi-execution-step-message">${escapeHtml(step.description || "-")}</div>
+                                </div>
+                            </div>
+                        `).join("") : ""}
+                    </div>
+                </article>
             `).join("");
         };
 
-        const refreshLog = async () => {
+        const refreshExecutions = async () => {
             try {
-                const response = await fetch(`${rootPath}/api/digi-flows/${flowId}/events`, {
+                const response = await fetch(`${rootPath}/api/digi-flows/${flowId}/executions`, {
                     headers: { "Accept": "application/json" },
                     cache: "no-store",
                     credentials: "same-origin",
@@ -680,19 +705,21 @@
                     return;
                 }
                 const payload = await response.json();
-                const serialized = JSON.stringify(payload.events || []);
+                const serialized = JSON.stringify(payload.executions || []);
                 if (serialized === previousPayload) {
                     return;
                 }
                 previousPayload = serialized;
-                renderRows(payload.events || []);
+                renderExecutions(payload.executions || []);
             } catch (_error) {
-                // Keep the last visible log if polling fails.
+                // Keep the last visible execution summaries if polling fails.
             }
         };
 
-        previousPayload = JSON.stringify({{ flow_event_log|tojson }});
-        window.setInterval(refreshLog, 2000);
+        const initialExecutions = {{ flow_execution_summaries|tojson }};
+        previousPayload = JSON.stringify(initialExecutions);
+        renderExecutions(initialExecutions);
+        window.setInterval(refreshExecutions, 2000);
     })();
 </script>
 {% endblock %}

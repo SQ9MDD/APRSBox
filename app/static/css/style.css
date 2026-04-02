@@ -1315,6 +1315,118 @@ select:focus-visible,
     overflow-wrap: anywhere;
 }
 
+.digi-execution-list {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.digi-execution-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--panel-soft);
+    padding: 1rem;
+}
+
+.digi-execution-card-header {
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.digi-execution-card-topline,
+.digi-execution-meta,
+.digi-execution-step-heading {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem 0.85rem;
+    align-items: center;
+}
+
+.digi-execution-card-topline {
+    margin-bottom: 0.55rem;
+}
+
+.digi-execution-time {
+    font-weight: 600;
+}
+
+.digi-execution-packet {
+    margin: 0;
+    font-size: 0.96rem;
+    line-height: 1.45;
+    word-break: break-word;
+    font-family: "SFMono-Regular", "SF Mono", "Consolas", "Liberation Mono", monospace;
+}
+
+.digi-execution-meta {
+    margin-top: 0.6rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.digi-execution-steps {
+    display: grid;
+    gap: 0.7rem;
+    margin-top: 0.85rem;
+}
+
+.digi-execution-step {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 0.8rem;
+    align-items: start;
+}
+
+.digi-execution-step-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    font-weight: 700;
+}
+
+.digi-execution-step-body {
+    min-width: 0;
+    padding: 0.15rem 0 0;
+}
+
+.digi-execution-step-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.14rem 0.46rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.digi-execution-step-success {
+    background: rgba(107, 170, 121, 0.14);
+    color: var(--success);
+}
+
+.digi-execution-step-danger {
+    background: rgba(201, 122, 122, 0.14);
+    color: var(--danger);
+}
+
+.digi-execution-step-muted {
+    background: rgba(156, 161, 169, 0.12);
+    color: var(--text-muted);
+}
+
+.digi-execution-step-message {
+    margin-top: 0.28rem;
+    color: var(--text-muted);
+    word-break: break-word;
+}
+
 .logs-table {
     table-layout: fixed;
 }
