@@ -8,9 +8,6 @@
                 <h2>{{ "Edit DIGI Flow" if flow_id else "New DIGI Flow" }}</h2>
                 <p class="section-lead">Define one source, zero or more filter steps and one target. The chain is stored for future processing, but runtime execution is not active in stage 1.</p>
             </div>
-            <div class="form-actions">
-                <a href="{{ request.scope.root_path }}/digi-flows" class="button button-secondary">Back to list</a>
-            </div>
         </div>
         <div class="notice">Source must be the first step, target must be the last step, and the source+target pair must be unique.</div>
         {% if flash %}
@@ -32,13 +29,13 @@
                     <span>Name</span>
                     <input type="text" name="name" value="{{ form_data.name }}" required>
                 </label>
+                <label>
+                    <span>Description</span>
+                    <input type="text" name="description" value="{{ form_data.description }}">
+                </label>
                 <label class="checkbox-row">
                     <input type="checkbox" name="enabled" value="1" {% if form_data.enabled %}checked{% endif %}>
                     <span>Flow is enabled</span>
-                </label>
-                <label class="full">
-                    <span>Description</span>
-                    <textarea name="description">{{ form_data.description }}</textarea>
                 </label>
             </div>
 
