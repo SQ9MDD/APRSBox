@@ -672,11 +672,19 @@
                             </div>
                             <div class="digi-execution-packets">
                                 <div class="digi-execution-packet-row">
-                                    <span class="digi-execution-packet-label">Input</span>
+                                    <img
+                                        class="digi-execution-packet-icon"
+                                        src="${iconPath("login.svg")}"
+                                        alt="Input packet"
+                                    >
                                     <h3 class="digi-execution-packet">${escapeHtml(execution.raw_packet || "-")}</h3>
                                 </div>
                                 <div class="digi-execution-packet-row">
-                                    <span class="digi-execution-packet-label">Output</span>
+                                    <img
+                                        class="digi-execution-packet-icon"
+                                        src="${iconPath("send-variant.svg")}"
+                                        alt="Output packet"
+                                    >
                                     <h3 class="digi-execution-packet">${escapeHtml(execution.processed_packet || execution.raw_packet || "-")}</h3>
                                 </div>
                             </div>
