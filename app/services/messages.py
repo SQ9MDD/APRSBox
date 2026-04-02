@@ -559,7 +559,7 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
             path=parsed["path"],
             timestamp=received_at,
         )
-        _handle_incoming_query(sender=sender, query_text=query_text, timestamp=received_at)
+        _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
         return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
@@ -587,15 +587,17 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
     )
 
 
-def _handle_incoming_query(*, sender: str, query_text: str, timestamp: str) -> None:
+def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | None, timestamp: str) -> None:
     query_type = str(query_text or "").strip().upper().split()[0]
     station_settings = _get_station_settings()
+    scheduled_for = _query_response_scheduled_for(query_number)
     if query_type in {"?APRS", "?APRS?"}:
         enqueue_automatic_query_text_response(
             sender=sender,
             station_settings=station_settings,
             message_text=f"Queries: {' '.join(SUPPORTED_QUERY_TYPES)}",
             trigger="query-aprs",
+            scheduled_for=scheduled_for,
             timestamp=timestamp,
         )
         return
@@ -604,6 +606,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, timestamp: str) -> N
             sender=sender,
             station_settings=station_settings,
             trigger="query-aprsp",
+            scheduled_for=scheduled_for,
             timestamp=timestamp,
         )
         if not success:
@@ -614,6 +617,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, timestamp: str) -> N
             sender=sender,
             station_settings=station_settings,
             trigger="query-aprss",
+            scheduled_for=scheduled_for,
             timestamp=timestamp,
         )
         if not success:
@@ -625,6 +629,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, timestamp: str) -> N
             station_settings=station_settings,
             message_text=f"APRSBox {get_version()}",
             trigger="query-version",
+            scheduled_for=scheduled_for,
             timestamp=timestamp,
         )
         return
@@ -637,6 +642,7 @@ def enqueue_automatic_query_text_response(
     station_settings: dict[str, Any],
     message_text: str,
     trigger: str,
+    scheduled_for: datetime | None,
     timestamp: str,
 ) -> None:
     response_text = normalize_aprs_message_text(message_text)
@@ -654,6 +660,7 @@ def enqueue_automatic_query_text_response(
         trigger=trigger,
         path=response_path,
         aprs_message_id=message_id,
+        scheduled_for=scheduled_for,
     )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRS query response.")
@@ -667,6 +674,7 @@ def enqueue_automatic_query_position_response(
     sender: str,
     station_settings: dict[str, Any],
     trigger: str,
+    scheduled_for: datetime | None,
     timestamp: str,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_position_text(station_settings)
@@ -677,7 +685,12 @@ def enqueue_automatic_query_position_response(
         path=response_path,
         timestamp=timestamp,
     )
-    success, error = enqueue_beacon_job(station_settings, trigger=trigger, aprs_message_id=message_id)
+    success, error = enqueue_beacon_job(
+        station_settings,
+        trigger=trigger,
+        aprs_message_id=message_id,
+        scheduled_for=scheduled_for,
+    )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRSP response.")
         return False, error
@@ -690,6 +703,7 @@ def enqueue_automatic_query_status_response(
     sender: str,
     station_settings: dict[str, Any],
     trigger: str,
+    scheduled_for: datetime | None,
     timestamp: str,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_status_text(station_settings)
@@ -700,7 +714,12 @@ def enqueue_automatic_query_status_response(
         path=response_path,
         timestamp=timestamp,
     )
-    success, error = enqueue_status_job(station_settings, trigger=trigger, aprs_message_id=message_id)
+    success, error = enqueue_status_job(
+        station_settings,
+        trigger=trigger,
+        aprs_message_id=message_id,
+        scheduled_for=scheduled_for,
+    )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRSS response.")
         return False, error
@@ -958,6 +977,12 @@ def _build_query_position_text(station_settings: dict[str, Any]) -> str:
 
 def _build_query_status_text(station_settings: dict[str, Any]) -> str:
     return f">{str(station_settings.get('status_text') or '').strip()}"
+
+
+def _query_response_scheduled_for(query_number: str | None) -> datetime | None:
+    if not query_number:
+        return None
+    return datetime.now(timezone.utc) + timedelta(seconds=2)
 
 
 def split_callsign_ssid(value: str) -> tuple[str, str]:

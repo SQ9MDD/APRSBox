@@ -409,6 +409,19 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert row is not None
             self.assertEqual(int(row["total"]), 3)
 
+            jobs = fetch_all(
+                """
+                SELECT status, scheduled_at, payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(jobs), 3)
+            ack_now_job = next(job for job in jobs if '"message_text":"ack49"' in str(job["payload_json"]) and '"trigger":"ack-now"' in str(job["payload_json"]))
+            response_job = next(job for job in jobs if '"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"' in str(job["payload_json"]))
+            self.assertGreater(str(response_job["scheduled_at"]), str(ack_now_job["scheduled_at"]))
+
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():
             interface_id = insert_modem()

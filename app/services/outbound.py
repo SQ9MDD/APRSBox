@@ -27,6 +27,7 @@ def enqueue_beacon_job(
     *,
     trigger: str = "manual",
     aprs_message_id: int | None = None,
+    scheduled_for: datetime | None = None,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -67,7 +68,8 @@ def enqueue_beacon_job(
         "beacon_path": str(station_settings.get("beacon_path") or "").strip(),
         "trigger": str(trigger or "manual").strip() or "manual",
     }
-    timestamp = utc_now()
+    now_text = utc_now()
+    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -82,9 +84,9 @@ def enqueue_beacon_job(
                 int(modem["id"]),
                 json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
                 OUTBOUND_STATUS_QUEUED,
-                timestamp,
-                timestamp,
-                timestamp,
+                scheduled_at,
+                now_text,
+                now_text,
             ),
         )
         job_id = cursor.lastrowid
@@ -97,6 +99,7 @@ def enqueue_status_job(
     *,
     trigger: str = "manual",
     aprs_message_id: int | None = None,
+    scheduled_for: datetime | None = None,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -130,7 +133,8 @@ def enqueue_status_job(
         "status_text": status_text,
         "trigger": str(trigger or "manual").strip() or "manual",
     }
-    timestamp = utc_now()
+    now_text = utc_now()
+    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -145,9 +149,9 @@ def enqueue_status_job(
                 int(modem["id"]),
                 json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
                 OUTBOUND_STATUS_QUEUED,
-                timestamp,
-                timestamp,
-                timestamp,
+                scheduled_at,
+                now_text,
+                now_text,
             ),
         )
         job_id = cursor.lastrowid
