@@ -201,11 +201,14 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
         'receiver_rf',
         'receiver_aprsis',
         'filter_dupe',
+        'filter_digi',
         'filter_path',
         'filter_callsign',
         'filter_packet_type',
+        'filter_icon',
         'filter_distance',
         'filter_rate_limit',
+        'filter_rate_limit_per_callsign',
         'tx_rf',
         'tx_aprsis',
         'action_drop',
@@ -392,6 +395,7 @@ def init_db() -> None:
         connection.executescript(SCHEMA)
         _migrate_entity_interval_constraints(connection)
         _migrate_bulletin_table(connection)
+        _migrate_digi_flow_steps_table(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
@@ -765,6 +769,60 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
             DROP TABLE bulletins_old;
             """
         )
+
+
+def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
+    steps_sql = _table_sql(connection, "digi_flow_steps")
+    if not steps_sql:
+        return
+    required_step_types = (
+        "filter_digi",
+        "filter_icon",
+        "filter_rate_limit_per_callsign",
+    )
+    if all(step_type in steps_sql for step_type in required_step_types):
+        return
+    connection.executescript(
+        """
+        ALTER TABLE digi_flow_steps RENAME TO digi_flow_steps_old;
+        CREATE TABLE digi_flow_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            flow_id INTEGER NOT NULL,
+            step_order INTEGER NOT NULL,
+            step_type TEXT NOT NULL CHECK (step_type IN (
+                'receiver_rf',
+                'receiver_aprsis',
+                'filter_dupe',
+                'filter_digi',
+                'filter_path',
+                'filter_callsign',
+                'filter_packet_type',
+                'filter_icon',
+                'filter_distance',
+                'filter_rate_limit',
+                'filter_rate_limit_per_callsign',
+                'tx_rf',
+                'tx_aprsis',
+                'action_drop',
+                'action_log'
+            )),
+            title TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            config_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE,
+            UNIQUE (flow_id, step_order)
+        );
+        INSERT INTO digi_flow_steps (
+            id, flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+        )
+        SELECT
+            id, flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+        FROM digi_flow_steps_old;
+        DROP TABLE digi_flow_steps_old;
+        """
+    )
 
 
 def _table_sql(connection: sqlite3.Connection, table_name: str) -> str:

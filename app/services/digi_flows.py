@@ -9,11 +9,14 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 SOURCE_STEP_TYPES = ("receiver_rf", "receiver_aprsis")
 FILTER_STEP_TYPES = (
     "filter_dupe",
+    "filter_digi",
     "filter_path",
     "filter_callsign",
     "filter_packet_type",
+    "filter_icon",
     "filter_distance",
     "filter_rate_limit",
+    "filter_rate_limit_per_callsign",
 )
 TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
@@ -56,6 +59,16 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
             {"name": "paths", "label": "Paths (one per line)", "type": "textarea", "required": False},
         ),
     },
+    "filter_digi": {
+        "category": "filter",
+        "label": "DIGI Filter",
+        "badge": "Filter",
+        "description": "Allows or denies packets repeated by specific digi callsigns.",
+        "config_fields": (
+            {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
+            {"name": "digis", "label": "DIGI Callsigns (one per line)", "type": "textarea", "required": False},
+        ),
+    },
     "filter_callsign": {
         "category": "filter",
         "label": "Callsign Filter",
@@ -70,9 +83,20 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Packet Type Filter",
         "badge": "Filter",
-        "description": "Stores APRS packet type selection.",
+        "description": "Allows or denies selected APRS packet types.",
         "config_fields": (
+            {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
             {"name": "packet_types", "label": "Packet Types (one per line)", "type": "textarea", "required": False},
+        ),
+    },
+    "filter_icon": {
+        "category": "filter",
+        "label": "Icon Filter",
+        "badge": "Filter",
+        "description": "Allows or denies selected APRS icons.",
+        "config_fields": (
+            {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
+            {"name": "icons", "label": "Icons (one per line)", "type": "textarea", "required": False},
         ),
     },
     "filter_distance": {
@@ -89,6 +113,15 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Rate Limit Filter",
         "badge": "Filter",
         "description": "Stores a packet rate limit.",
+        "config_fields": (
+            {"name": "packets_per_minute", "label": "Packets / Minute", "type": "number", "required": True},
+        ),
+    },
+    "filter_rate_limit_per_callsign": {
+        "category": "filter",
+        "label": "Rate Limit Per Callsign",
+        "badge": "Filter",
+        "description": "Stores a packet rate limit applied separately for each callsign.",
         "config_fields": (
             {"name": "packets_per_minute", "label": "Packets / Minute", "type": "number", "required": True},
         ),
@@ -171,6 +204,8 @@ def _normalize_number(value: Any, *, label: str, minimum: int = 0) -> int:
 
 
 def _normalize_multiline_list(value: Any) -> list[str]:
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
     lines = []
     for raw_line in str(value or "").splitlines():
         item = raw_line.strip()
@@ -190,16 +225,22 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
         return {"aprsis_source": ref_value}
     if step_type == "filter_dupe":
         return {"window_sec": 30}
+    if step_type == "filter_digi":
+        return {"mode": "allow", "digis": []}
     if step_type == "filter_path":
         return {"mode": "allow", "paths": []}
     if step_type == "filter_callsign":
         return {"mode": "allow", "callsigns": []}
     if step_type == "filter_packet_type":
-        return {"packet_types": []}
+        return {"mode": "allow", "packet_types": []}
+    if step_type == "filter_icon":
+        return {"mode": "allow", "icons": []}
     if step_type == "filter_distance":
         return {"max_km": 50}
     if step_type == "filter_rate_limit":
         return {"packets_per_minute": 60}
+    if step_type == "filter_rate_limit_per_callsign":
+        return {"packets_per_minute": 30}
     if step_type == "tx_rf":
         return {"rf_target": ref_value}
     if step_type == "tx_aprsis":
@@ -230,16 +271,31 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         if mode not in {"allow", "deny"}:
             raise ValueError("Path filter mode must be allow or deny.")
         return {"mode": mode, "paths": _normalize_multiline_list(config.get("paths"))}
+    if step_type == "filter_digi":
+        mode = _normalize_text(config.get("mode")).lower() or "allow"
+        if mode not in {"allow", "deny"}:
+            raise ValueError("DIGI filter mode must be allow or deny.")
+        return {"mode": mode, "digis": _normalize_multiline_list(config.get("digis"))}
     if step_type == "filter_callsign":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
             raise ValueError("Callsign filter mode must be allow or deny.")
         return {"mode": mode, "callsigns": _normalize_multiline_list(config.get("callsigns"))}
     if step_type == "filter_packet_type":
-        return {"packet_types": _normalize_multiline_list(config.get("packet_types"))}
+        mode = _normalize_text(config.get("mode")).lower() or "allow"
+        if mode not in {"allow", "deny"}:
+            raise ValueError("Packet type filter mode must be allow or deny.")
+        return {"mode": mode, "packet_types": _normalize_multiline_list(config.get("packet_types"))}
+    if step_type == "filter_icon":
+        mode = _normalize_text(config.get("mode")).lower() or "allow"
+        if mode not in {"allow", "deny"}:
+            raise ValueError("Icon filter mode must be allow or deny.")
+        return {"mode": mode, "icons": _normalize_multiline_list(config.get("icons"))}
     if step_type == "filter_distance":
         return {"max_km": _normalize_number(config.get("max_km"), label="Max distance", minimum=1)}
     if step_type == "filter_rate_limit":
+        return {"packets_per_minute": _normalize_number(config.get("packets_per_minute"), label="Packets per minute", minimum=1)}
+    if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": _normalize_number(config.get("packets_per_minute"), label="Packets per minute", minimum=1)}
     if step_type == "tx_rf":
         value = _normalize_text(config.get("rf_target"))
@@ -275,6 +331,9 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         return f"APRS-IS source: {_normalize_text(config.get('aprsis_source')) or '-'}"
     if step_type == "filter_dupe":
         return f"Window: {config.get('window_sec', '-')!s} sec"
+    if step_type == "filter_digi":
+        digis = config.get("digis") or []
+        return f"Mode: {config.get('mode', 'allow')}, digis: {len(digis)}"
     if step_type == "filter_path":
         paths = config.get("paths") or []
         return f"Mode: {config.get('mode', 'allow')}, paths: {len(paths)}"
@@ -283,11 +342,16 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
     if step_type == "filter_packet_type":
         packet_types = config.get("packet_types") or []
-        return f"Packet types: {', '.join(packet_types) if packet_types else 'none'}"
+        return f"Mode: {config.get('mode', 'allow')}, packet types: {', '.join(packet_types) if packet_types else 'none'}"
+    if step_type == "filter_icon":
+        icons = config.get("icons") or []
+        return f"Mode: {config.get('mode', 'allow')}, icons: {', '.join(icons) if icons else 'none'}"
     if step_type == "filter_distance":
         return f"Max distance: {config.get('max_km', '-')!s} km"
     if step_type == "filter_rate_limit":
         return f"Rate: {config.get('packets_per_minute', '-')!s} pkt/min"
+    if step_type == "filter_rate_limit_per_callsign":
+        return f"Per callsign: {config.get('packets_per_minute', '-')!s} pkt/min"
     if step_type == "tx_rf":
         return f"RF target: {_normalize_text(config.get('rf_target')) or '-'}"
     if step_type == "tx_aprsis":
@@ -363,7 +427,6 @@ def get_digi_flow_endpoint_options() -> dict[str, list[dict[str, str]]]:
         if row["name"]
     )
     target_options.append({"value": "action_log::log-only", "label": "Log Only", "kind": "action_log", "ref": "log-only"})
-    target_options.append({"value": "action_drop::drop", "label": "Drop", "kind": "action_drop", "ref": "drop"})
     return {"source": source_options, "target": target_options}
 
 

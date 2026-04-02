@@ -112,6 +112,43 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(flow["steps"][1]["step_type"], "filter_dupe")
             self.assertEqual(flow["steps"][2]["step_type"], "tx_aprsis")
 
+    def test_new_filter_types_and_packet_type_mode_are_accepted(self) -> None:
+        payload = sample_flow_payload()
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_digi",
+                "title": "DIGI Filter",
+                "enabled": 1,
+                "config": {"mode": "deny", "digis": ["WIDE1-1", "TRACE2-2"]},
+            },
+            {
+                "step_type": "filter_packet_type",
+                "title": "Packet Type Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "packet_types": ["position", "message"]},
+            },
+            {
+                "step_type": "filter_icon",
+                "title": "Icon Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "icons": ["/>", "\\#"]},
+            },
+            {
+                "step_type": "filter_rate_limit_per_callsign",
+                "title": "Rate Limit Per Callsign",
+                "enabled": 1,
+                "config": {"packets_per_minute": 5},
+            },
+            payload["steps"][2],
+        ]
+        with temporary_database():
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual(normalized["steps"][1]["config"]["mode"], "deny")
+            self.assertEqual(normalized["steps"][2]["config"]["mode"], "allow")
+            self.assertEqual(normalized["steps"][3]["config"]["icons"], ["/>", "\\#"])
+            self.assertEqual(normalized["steps"][4]["config"]["packets_per_minute"], 5)
+
 
 if __name__ == "__main__":
     unittest.main()
