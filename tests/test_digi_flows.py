@@ -149,6 +149,27 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(normalized["steps"][3]["config"]["icons"], ["/>", "\\#"])
             self.assertEqual(normalized["steps"][4]["config"]["packets_per_minute"], 5)
 
+    def test_path_filter_uses_trace_and_no_trace_fields(self) -> None:
+        payload = sample_flow_payload()
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_path",
+                "title": "Path Filter",
+                "enabled": 1,
+                "config": {
+                    "mode": "allow",
+                    "trace_paths": ["TRACE2-2", "WIDE1-1"],
+                    "no_trace_paths": ["TCPIP", "NOGATE"],
+                },
+            },
+            payload["steps"][2],
+        ]
+        with temporary_database():
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual(normalized["steps"][1]["config"]["trace_paths"], ["TRACE2-2", "WIDE1-1"])
+            self.assertEqual(normalized["steps"][1]["config"]["no_trace_paths"], ["TCPIP", "NOGATE"])
+
 
 if __name__ == "__main__":
     unittest.main()

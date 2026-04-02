@@ -56,7 +56,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "description": "Stores path allow or deny rules.",
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
-            {"name": "paths", "label": "Paths (one per line)", "type": "textarea", "required": False},
+            {"name": "trace_paths", "label": "Paths (TRACE)", "type": "textarea", "required": False},
+            {"name": "no_trace_paths", "label": "Paths (NO TRACE)", "type": "textarea", "required": False},
         ),
     },
     "filter_digi": {
@@ -228,7 +229,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "filter_digi":
         return {"mode": "allow", "digis": []}
     if step_type == "filter_path":
-        return {"mode": "allow", "paths": []}
+        return {"mode": "allow", "trace_paths": [], "no_trace_paths": []}
     if step_type == "filter_callsign":
         return {"mode": "allow", "callsigns": []}
     if step_type == "filter_packet_type":
@@ -270,7 +271,10 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
             raise ValueError("Path filter mode must be allow or deny.")
-        return {"mode": mode, "paths": _normalize_multiline_list(config.get("paths"))}
+        legacy_paths = _normalize_multiline_list(config.get("paths"))
+        trace_paths = _normalize_multiline_list(config.get("trace_paths")) or legacy_paths
+        no_trace_paths = _normalize_multiline_list(config.get("no_trace_paths"))
+        return {"mode": mode, "trace_paths": trace_paths, "no_trace_paths": no_trace_paths}
     if step_type == "filter_digi":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
@@ -335,8 +339,9 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         digis = config.get("digis") or []
         return f"Mode: {config.get('mode', 'allow')}, digis: {len(digis)}"
     if step_type == "filter_path":
-        paths = config.get("paths") or []
-        return f"Mode: {config.get('mode', 'allow')}, paths: {len(paths)}"
+        trace_paths = config.get("trace_paths") or []
+        no_trace_paths = config.get("no_trace_paths") or []
+        return f"Mode: {config.get('mode', 'allow')}, trace: {len(trace_paths)}, no-trace: {len(no_trace_paths)}"
     if step_type == "filter_callsign":
         callsigns = config.get("callsigns") or []
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
