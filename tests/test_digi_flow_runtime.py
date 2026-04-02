@@ -93,6 +93,35 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
             self.assertTrue(get_digi_flow_event_log(flow_id))
 
+    async def test_runtime_matches_rf_source_with_and_without_tnc_prefix(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Alias LOG",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "Bailly",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "Bailly"}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                runtime.enqueue_rx_tnc2_frame("SP8ABC-9>APRS,WIDE1-1:>Alias test", source_ref="TNC@Bailly")
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = get_digi_flow_event_log(flow_id)
+            self.assertTrue(any(row["event_type"] == "flow_matched" for row in rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
+
     async def test_callsign_filter_logs_pass_and_reject(self) -> None:
         with temporary_database():
             create_flow(

@@ -73,7 +73,13 @@ class DigiFlowRuntimeService:
         }
 
     def enqueue_rx_tnc2_frame(self, line: str, *, source_ref: str) -> None:
-        if not list_enabled_digi_flows(source_kind="receiver_rf", source_ref=source_ref):
+        matching_flows = self._matching_flows(source_kind="receiver_rf", source_ref=source_ref)
+        if not matching_flows:
+            log_event(
+                "INFO",
+                "digi_flow_runtime",
+                f"Ignored RF frame for source {source_ref} because no enabled DIGI Flow matched that receiver.",
+            )
             return
         self.enqueue_tnc2_frame(
             source_kind="receiver_rf",
@@ -97,7 +103,7 @@ class DigiFlowRuntimeService:
                 self._queue.task_done()
 
     async def _process_frame(self, frame: dict[str, Any]) -> None:
-        flows = list_enabled_digi_flows(
+        flows = self._matching_flows(
             source_kind=str(frame["source_kind"]),
             source_ref=str(frame["source_ref"]),
         )
@@ -137,6 +143,18 @@ class DigiFlowRuntimeService:
                 "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
             }
             await self._execute_flow(context)
+
+    def _matching_flows(self, *, source_kind: str, source_ref: str) -> list[dict[str, Any]]:
+        normalized_kind = str(source_kind or "").strip()
+        normalized_ref = str(source_ref or "").strip()
+        flows = list_enabled_digi_flows(source_kind=normalized_kind)
+        if normalized_kind != "receiver_rf":
+            return [flow for flow in flows if str(flow.get("source_ref") or "").strip() == normalized_ref]
+        return [
+            flow
+            for flow in flows
+            if _receiver_source_ref_matches(str(flow.get("source_ref") or ""), normalized_ref)
+        ]
 
     async def _execute_flow(self, context: dict[str, Any]) -> None:
         flow = context["flow"]
@@ -485,6 +503,22 @@ class DigiFlowRuntimeService:
 
 def _split_path_tokens(path: str) -> list[str]:
     return [item.strip().upper() for item in path.split(",") if item.strip()]
+
+
+def _receiver_source_ref_matches(flow_source_ref: str, runtime_source_ref: str) -> bool:
+    return not _receiver_source_ref_aliases(flow_source_ref).isdisjoint(_receiver_source_ref_aliases(runtime_source_ref))
+
+
+def _receiver_source_ref_aliases(value: str) -> set[str]:
+    normalized = str(value or "").strip().casefold()
+    if not normalized:
+        return set()
+    aliases = {normalized}
+    if normalized.startswith("tnc@") and len(normalized) > 4:
+        aliases.add(normalized[4:].strip())
+    elif normalized:
+        aliases.add(f"tnc@{normalized}")
+    return {alias for alias in aliases if alias}
 
 
 def _find_matching_path_spec(token: str, specs: list[str]) -> str | None:

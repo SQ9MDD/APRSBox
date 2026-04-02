@@ -9,7 +9,7 @@
                 <p class="section-lead">Define one source, zero or more filter steps and one target. Stage 2 executes active RF flows through a small runtime skeleton with per-flow debug logging.</p>
             </div>
         </div>
-        <div class="notice">Source must be the first step, target must be the last step, the source+target pair must be unique, APRS-IS TX targets require an enabled Path Rule step, and RF TX targets require enabled Path Rule and Strict Filter steps.</div>
+        <div class="notice">Source must be the first step, target must be the last step, the source+target pair must be unique, and RF/APRS-IS TX targets require an enabled Path Rule step.</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
         {% endif %}
@@ -121,7 +121,74 @@
                 <button type="button" class="button button-secondary" id="digi-flow-executions-toggle">Freeze</button>
             </div>
         </div>
-        <div class="digi-execution-list" id="digi-flow-executions"></div>
+        <div class="digi-execution-list" id="digi-flow-executions">
+            {% for execution in flow_execution_summaries %}
+            {% set execution_badge_class = 'status-unknown' %}
+            {% if execution.final_result in ('LOGGED', 'TX') %}
+            {% set execution_badge_class = 'status-running' %}
+            {% elif execution.final_result in ('DROPPED', 'REJECTED') %}
+            {% set execution_badge_class = 'status-stopped' %}
+            {% endif %}
+            <article class="digi-execution-card">
+                <div class="digi-execution-card-header">
+                    <div class="digi-execution-card-copy">
+                        <div class="digi-execution-card-topline">
+                            <span class="status-pill {{ execution_badge_class }}">{{ execution.final_result }}</span>
+                            <span class="digi-execution-time">{{ execution.display_created_at or execution.created_at }}</span>
+                            <span class="muted">Flow {{ execution.step_count }} steps</span>
+                        </div>
+                        <div class="digi-execution-packets">
+                            <div class="digi-execution-packet-row">
+                                <img
+                                    class="digi-execution-packet-icon"
+                                    src="{{ request.scope.root_path }}/static/icons/login.svg"
+                                    alt="Input packet"
+                                >
+                                <h3 class="digi-execution-packet">{{ execution.raw_packet or "-" }}</h3>
+                            </div>
+                            <div class="digi-execution-packet-row">
+                                <img
+                                    class="digi-execution-packet-icon"
+                                    src="{{ request.scope.root_path }}/static/icons/send-variant.svg"
+                                    alt="Output packet"
+                                >
+                                <h3 class="digi-execution-packet">{{ execution.processed_packet or execution.raw_packet or "-" }}</h3>
+                            </div>
+                        </div>
+                        <div class="digi-execution-meta">
+                            <span><strong>Source:</strong> <code>{{ execution.source_display or "-" }}</code></span>
+                            <span><strong>UID:</strong> <code>{{ execution.frame_uid }}</code></span>
+                            <span><strong>Pipeline:</strong> <code>{{ execution.step_path }}</code></span>
+                            <span><strong>Finished:</strong> {% if execution.final_step_number %}step {{ execution.final_step_number }} {{ execution.final_step_title or "" }}{% else %}-{% endif %}</span>
+                        </div>
+                        {% if execution.layout_changed %}
+                        <div class="digi-execution-layout-note">{{ execution.layout_note or "" }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="digi-execution-steps">
+                    {% for step in execution.steps %}
+                    {% set step_status_class = 'digi-execution-step-muted' %}
+                    {% if step.status in ('passed', 'executed') %}
+                    {% set step_status_class = 'digi-execution-step-success' %}
+                    {% elif step.status == 'rejected' %}
+                    {% set step_status_class = 'digi-execution-step-danger' %}
+                    {% endif %}
+                    <div class="digi-execution-step">
+                        <div class="digi-execution-step-index">{{ step.number }}</div>
+                        <div class="digi-execution-step-body">
+                            <div class="digi-execution-step-heading">
+                                <strong>{{ step.title }}</strong>
+                                <span class="digi-execution-step-status {{ step_status_class }}">{{ step.status }}</span>
+                            </div>
+                            <div class="digi-execution-step-message">{{ step.description or "-" }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
         <div class="empty-state muted" id="digi-flow-executions-empty" {% if flow_execution_summaries %}hidden{% endif %}>
             No packet executions recorded for this flow yet.
         </div>
