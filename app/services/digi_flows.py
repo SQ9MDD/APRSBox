@@ -852,20 +852,15 @@ def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
                 flow_id,
             ),
         )
-        retained_existing_ids = [_normalize_step_id(step.get("id")) for step in normalized["steps"]]
-        retained_existing_ids = [step_id for step_id in retained_existing_ids if step_id is not None]
-        if retained_existing_ids:
-            placeholders = ", ".join("?" for _ in retained_existing_ids)
-            connection.execute(
-                f"""
-                UPDATE digi_flow_steps
-                SET step_order = -id,
-                    updated_at = ?
-                WHERE flow_id = ?
-                  AND id IN ({placeholders})
-                """,
-                (timestamp, flow_id, *retained_existing_ids),
-            )
+        connection.execute(
+            """
+            UPDATE digi_flow_steps
+            SET step_order = -id,
+                updated_at = ?
+            WHERE flow_id = ?
+            """,
+            (timestamp, flow_id),
+        )
         retained_step_ids: set[int] = set()
         for step in normalized["steps"]:
             step_id = _normalize_step_id(step.get("id"))
@@ -958,8 +953,11 @@ def safe_create_digi_flow(payload: dict[str, Any]) -> tuple[int | None, str | No
         return create_digi_flow(payload), None
     except ValueError as exc:
         return None, str(exc)
-    except sqlite3.IntegrityError:
-        return None, "A DIGI Flow with the same source and target already exists."
+    except sqlite3.IntegrityError as exc:
+        message = str(exc).strip()
+        if "digi_flows.source_kind, digi_flows.source_ref, digi_flows.target_kind, digi_flows.target_ref" in message:
+            return None, "A DIGI Flow with the same source and target already exists."
+        return None, f"Failed to save DIGI Flow: {message or 'database integrity error'}."
 
 
 def safe_update_digi_flow(flow_id: int, payload: dict[str, Any]) -> str | None:
@@ -967,8 +965,11 @@ def safe_update_digi_flow(flow_id: int, payload: dict[str, Any]) -> str | None:
         update_digi_flow(flow_id, payload)
     except ValueError as exc:
         return str(exc)
-    except sqlite3.IntegrityError:
-        return "A DIGI Flow with the same source and target already exists."
+    except sqlite3.IntegrityError as exc:
+        message = str(exc).strip()
+        if "digi_flows.source_kind, digi_flows.source_ref, digi_flows.target_kind, digi_flows.target_ref" in message:
+            return "A DIGI Flow with the same source and target already exists."
+        return f"Failed to update DIGI Flow: {message or 'database integrity error'}."
     return None
 
 

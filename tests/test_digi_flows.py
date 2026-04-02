@@ -166,6 +166,77 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(int(updated_steps["tx_aprsis"]["id"]), original_ids["tx_aprsis"])
             self.assertIn("filter_strict", updated_steps)
 
+    def test_update_digi_flow_can_replace_middle_step_without_step_order_conflict(self) -> None:
+        with temporary_database():
+            flow_id = create_digi_flow(
+                {
+                    "name": "RF log",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {
+                            "step_type": "receiver_rf",
+                            "title": "Receiver RF",
+                            "enabled": 1,
+                            "config": {"rf_port": "TNC-1"},
+                        },
+                        {
+                            "step_type": "filter_callsign",
+                            "title": "Callsign Filter",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "callsigns": ["SQ9MDD*"]},
+                        },
+                        {
+                            "step_type": "action_log",
+                            "title": "Log Only",
+                            "enabled": 1,
+                            "config": {"log_tag": "log-only", "note": ""},
+                        },
+                    ],
+                }
+            )
+
+            update_digi_flow(
+                flow_id,
+                {
+                    "name": "RF log",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {
+                            "step_type": "receiver_rf",
+                            "title": "Receiver RF",
+                            "enabled": 1,
+                            "config": {"rf_port": "TNC-1"},
+                        },
+                        {
+                            "step_type": "filter_strict",
+                            "title": "Strict Filter",
+                            "enabled": 1,
+                            "config": {},
+                        },
+                        {
+                            "step_type": "action_log",
+                            "title": "Log Only",
+                            "enabled": 1,
+                            "config": {"log_tag": "log-only", "note": ""},
+                        },
+                    ],
+                },
+            )
+
+            updated = get_digi_flow(flow_id)
+            assert updated is not None
+            self.assertEqual([step["step_type"] for step in updated["steps"]], ["receiver_rf", "filter_strict", "action_log"])
+
     def test_new_filter_types_and_packet_type_mode_are_accepted(self) -> None:
         payload = sample_flow_payload()
         payload["steps"] = [
