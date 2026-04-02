@@ -1094,6 +1094,7 @@ select:focus-visible,
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+    color: var(--text);
 }
 
 .digi-flow-endpoint-card h3 {
@@ -1117,6 +1118,7 @@ select:focus-visible,
     border-radius: var(--radius-md);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel));
     text-align: left;
+    color: var(--text);
 }
 
 .digi-palette-button:hover,
@@ -1143,6 +1145,7 @@ select:focus-visible,
     border-radius: var(--radius-md);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel));
     box-shadow: var(--shadow-soft);
+    color: var(--text);
 }
 
 .digi-step-card-source {
@@ -1196,6 +1199,7 @@ select:focus-visible,
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    color: var(--text);
 }
 
 .digi-step-order {
@@ -1209,6 +1213,7 @@ select:focus-visible,
 .digi-step-title-inline {
     font-weight: 700;
     min-width: 0;
+    color: var(--text);
 }
 
 .digi-step-summary-inline {
