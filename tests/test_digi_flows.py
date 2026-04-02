@@ -375,8 +375,32 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(normalized["steps"][2]["config"]["mode"], "deny")
             self.assertEqual(normalized["steps"][3]["config"]["trace_paths"], ["WIDE1-1"])
             self.assertEqual(normalized["steps"][4]["config"]["mode"], "allow")
+            self.assertEqual(normalized["steps"][4]["config"]["packet_types"], ["position", "message"])
             self.assertEqual(normalized["steps"][5]["config"]["icons"], ["/>", "\\#"])
             self.assertEqual(normalized["steps"][6]["config"]["packets_per_minute"], 5)
+
+    def test_packet_type_filter_normalizes_main_groups_and_preserves_legacy_codes(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_packet_type",
+                "title": "Packet Type Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "packet_types": ["Position", "QUERY", "m", " W "]},
+            },
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+        with temporary_database():
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual(normalized["steps"][1]["config"]["packet_types"], ["position", "query", "M", "W"])
 
     def test_path_filter_uses_trace_and_no_trace_fields(self) -> None:
         payload = sample_flow_payload()

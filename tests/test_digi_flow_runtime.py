@@ -257,7 +257,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "step_type": "filter_packet_type",
                             "title": "Packet Type Filter",
                             "enabled": 1,
-                            "config": {"mode": "allow", "packet_types": ["M"]},
+                            "config": {"mode": "allow", "packet_types": ["position"]},
                         },
                         {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
                     ],
@@ -274,7 +274,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 denied = runtime.enqueue_tnc2_frame(
                     source_kind="receiver_rf",
                     source_ref="TNC-1",
-                    raw_payload="SP8ABC-9>APRS,WIDE1-1:!5228.23N/02101.28E>Fixed station",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Station online",
                 )
                 await runtime.wait_until_idle()
             finally:
@@ -282,16 +282,16 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             allowed_rows = event_rows_for_frame(str(allowed["frame_uid"]))
             denied_rows = event_rows_for_frame(str(denied["frame_uid"]))
-            self.assertTrue(any(row["event_type"] == "filter_packet_type" and row["decision"] == "passed" and "inspected M" in row["message"] for row in allowed_rows))
+            self.assertTrue(any(row["event_type"] == "filter_packet_type" and row["decision"] == "passed" and "group position" in row["message"] for row in allowed_rows))
             self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in allowed_rows))
-            self.assertTrue(any(row["event_type"] == "filter_packet_type" and row["decision"] == "rejected" and "inspected S" in row["message"] for row in denied_rows))
+            self.assertTrue(any(row["event_type"] == "filter_packet_type" and row["decision"] == "rejected" and "group status" in row["message"] for row in denied_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in denied_rows))
 
             summaries = get_digi_flow_execution_summaries(flow_id)
             allowed_summary = next(summary for summary in summaries if summary["frame_uid"] == str(allowed["frame_uid"]))
             allowed_step = next(step for step in allowed_summary["steps"] if step["step_type"] == "filter_packet_type")
             self.assertEqual(allowed_step["status"], "passed")
-            self.assertIn("inspected M", allowed_step["description"])
+            self.assertIn("group position", allowed_step["description"])
 
     async def test_icon_filter_logs_pass_and_reject(self) -> None:
         with temporary_database():
@@ -345,6 +345,44 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             allowed_step = next(step for step in allowed_summary["steps"] if step["step_type"] == "filter_icon")
             self.assertEqual(allowed_step["status"], "passed")
             self.assertIn("inspected />", allowed_step["description"])
+
+    async def test_packet_type_filter_preserves_legacy_frame_type_codes(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Packet type legacy",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_packet_type",
+                            "title": "Packet Type Filter",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "packet_types": ["M"]},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                allowed = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-7>URQU02,WIDE1-1:'0SWl \x1c\x1dW[/\"55}Mic-E mobile",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            allowed_rows = event_rows_for_frame(str(allowed["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_packet_type" and row["decision"] == "passed" and "matched configured group M" in row["message"] for row in allowed_rows))
 
     async def test_path_rule_logs_trace_no_trace_and_reject(self) -> None:
         with temporary_database():

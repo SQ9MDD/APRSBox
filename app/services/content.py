@@ -569,6 +569,8 @@ def get_recent_station_packets(callsign: str, limit: int = 10) -> list[dict[str,
         aprs_data = _parse_aprs_packet(parsed)
         if aprs_data is None:
             continue
+        if not _aprs_data_has_station_snapshot_fields(aprs_data):
+            continue
         row_station_key = (aprs_data.get("entity_name") or parsed["source"]).strip()
         if row_station_key.casefold() != station_key.casefold():
             continue
@@ -656,6 +658,8 @@ def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
         aprs_data = _parse_aprs_packet(parsed)
         if aprs_data is None:
             continue
+        if not _aprs_data_has_station_snapshot_fields(aprs_data):
+            continue
 
         station_key = (aprs_data.get("entity_name") or callsign).strip()
         if not station_key:
@@ -732,7 +736,28 @@ def _new_station_snapshot(
     }
 
 
+def _aprs_data_has_station_snapshot_fields(aprs_data: dict[str, Any]) -> bool:
+    return any(
+        bool(aprs_data.get(field))
+        for field in ("frame_type", "symbol", "latitude", "longitude", "entity_name")
+    )
+
+
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
+_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?)?$")
+_ACK_MESSAGE_RE = re.compile(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?$", flags=re.IGNORECASE)
+_REJECT_MESSAGE_RE = re.compile(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?$", flags=re.IGNORECASE)
+_TELEMETRY_MESSAGE_PREFIXES = ("PARM.", "UNIT.", "EQNS.", "BITS.")
+_PACKET_GROUP_LABELS = {
+    "position": "Position",
+    "object": "Object",
+    "item": "Item",
+    "message": "Message",
+    "status": "Status",
+    "weather": "Weather",
+    "telemetry": "Telemetry",
+    "query": "Query",
+}
 
 
 def _parse_tnc2_line(line: str) -> dict[str, str] | None:
@@ -958,12 +983,20 @@ def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         return _parse_position_with_timestamp(info)
     if packet_type in {"`", "'"}:
         return _parse_mic_e_packet(packet)
+    if packet_type == ">":
+        return _parse_status_packet(info)
     if packet_type == "_":
         return _parse_weather_only_packet(info)
     if packet_type == ";":
         return _parse_object_packet(info)
+    if packet_type == ")":
+        return _parse_item_packet(info)
     if packet_type == ":":
-        return None
+        return _parse_message_packet(info)
+    if packet_type == "T" and info.upper().startswith("T#"):
+        return _parse_telemetry_packet(info)
+    if packet_type == "}":
+        return _parse_third_party_packet(info)
     return None
 
 
@@ -985,6 +1018,9 @@ def _parse_position_without_timestamp(info: str) -> dict[str, Any] | None:
         "entity_class": "stationary",
         "frame_type": "S",
         "frame_type_label": "S - stała",
+        "packet_group": "position",
+        "packet_group_label": _packet_group_label("position"),
+        "packet_type_code": "position",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
@@ -1012,6 +1048,9 @@ def _parse_position_with_timestamp(info: str) -> dict[str, Any] | None:
         "entity_class": "stationary",
         "frame_type": "S",
         "frame_type_label": "S - stała",
+        "packet_group": "position",
+        "packet_group_label": _packet_group_label("position"),
+        "packet_type_code": "position_timestamped",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
@@ -1104,6 +1143,9 @@ def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, 
         "entity_class": "stationary",
         "frame_type": "S",
         "frame_type_label": "S - stała",
+        "packet_group": "position",
+        "packet_group_label": _packet_group_label("position"),
+        "packet_type_code": "position_compressed_timestamped" if with_timestamp else "position_compressed",
         "latitude": f"{latitude:.5f}",
         "longitude": f"{longitude:.5f}",
         "symbol": f"{symbol_table}{symbol_code}",
@@ -1131,6 +1173,9 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         "entity_class": "mobile",
         "frame_type": "M",
         "frame_type_label": "M - ruch",
+        "packet_group": "position",
+        "packet_group_label": _packet_group_label("position"),
+        "packet_type_code": "mic_e",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
@@ -1226,6 +1271,9 @@ def _parse_weather_only_packet(info: str) -> dict[str, Any] | None:
         "entity_class": "stationary",
         "frame_type": "W",
         "frame_type_label": "W - pogoda",
+        "packet_group": "weather",
+        "packet_group_label": _packet_group_label("weather"),
+        "packet_type_code": "weather",
         "symbol": "/_",
         "comment": _clean_decoded_tokens(info),
         "data": weather,
@@ -1252,6 +1300,9 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
         "entity_class": "object",
         "frame_type": "O",
         "frame_type_label": "O - obiekt",
+        "packet_group": "object",
+        "packet_group_label": _packet_group_label("object"),
+        "packet_type_code": "object",
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
@@ -1263,6 +1314,144 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
         result["comment"] = _clean_decoded_tokens(result["comment"])
     _attach_comment_extensions(result)
     return result
+
+
+def _parse_item_packet(info: str) -> dict[str, Any] | None:
+    if len(info) < 5:
+        return None
+    delimiter_index = next((index for index in range(2, min(len(info), 11)) if info[index] in {"!", "_"}), None)
+    if delimiter_index is None:
+        return None
+    name = info[1:delimiter_index].strip()
+    if len(name) < 3 or len(name) > 9:
+        return None
+    return {
+        "entity_name": name,
+        "packet_group": "item",
+        "packet_group_label": _packet_group_label("item"),
+        "packet_type_code": "item",
+        "comment": info[delimiter_index + 1 :].strip(),
+    }
+
+
+def _parse_status_packet(info: str) -> dict[str, Any] | None:
+    return {
+        "packet_group": "status",
+        "packet_group_label": _packet_group_label("status"),
+        "packet_type_code": "status",
+        "comment": info[1:].strip(),
+    }
+
+
+def _parse_message_packet(info: str) -> dict[str, Any] | None:
+    separator_index = info.find(":", 1)
+    addressee = ""
+    text_field = ""
+    if separator_index != -1 and 1 < separator_index <= 10:
+        addressee = info[1:separator_index].rstrip()
+        text_field = info[separator_index + 1 :]
+    if text_field:
+        upper_text = text_field.upper()
+        upper_addressee = addressee.upper()
+        if upper_addressee.startswith("BLN"):
+            return {
+                "packet_group": "message",
+                "packet_group_label": _packet_group_label("message"),
+                "packet_type_code": _bulletin_packet_type_code(upper_addressee),
+                "comment": text_field.strip(),
+                "addressee": addressee,
+            }
+        if upper_text.startswith("?"):
+            return {
+                "packet_group": "query",
+                "packet_group_label": _packet_group_label("query"),
+                "packet_type_code": "query",
+                "comment": text_field.strip(),
+                "addressee": addressee,
+            }
+        if _ACK_MESSAGE_RE.fullmatch(text_field):
+            return {
+                "packet_group": "message",
+                "packet_group_label": _packet_group_label("message"),
+                "packet_type_code": "ack",
+                "comment": text_field.strip(),
+                "addressee": addressee,
+            }
+        if _REJECT_MESSAGE_RE.fullmatch(text_field):
+            return {
+                "packet_group": "message",
+                "packet_group_label": _packet_group_label("message"),
+                "packet_type_code": "reject",
+                "comment": text_field.strip(),
+                "addressee": addressee,
+            }
+        if upper_text.startswith(_TELEMETRY_MESSAGE_PREFIXES):
+            return {
+                "packet_group": "telemetry",
+                "packet_group_label": _packet_group_label("telemetry"),
+                "packet_type_code": "telemetry_definition",
+                "comment": text_field.strip(),
+                "addressee": addressee,
+            }
+        suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
+        message_text = str((suffix_match.group("text") if suffix_match else text_field) or "").strip()
+        return {
+            "packet_group": "message",
+            "packet_group_label": _packet_group_label("message"),
+            "packet_type_code": "message",
+            "comment": message_text,
+            "addressee": addressee,
+        }
+
+    return {
+        "packet_group": "message",
+        "packet_group_label": _packet_group_label("message"),
+        "packet_type_code": "message",
+        "comment": info[1:].strip(),
+        "addressee": addressee,
+    }
+
+
+def _parse_telemetry_packet(info: str) -> dict[str, Any] | None:
+    return {
+        "packet_group": "telemetry",
+        "packet_group_label": _packet_group_label("telemetry"),
+        "packet_type_code": "telemetry",
+        "comment": info.strip(),
+    }
+
+
+def _parse_third_party_packet(info: str) -> dict[str, Any] | None:
+    encapsulated = info[1:].strip()
+    parsed = _parse_tnc2_line(encapsulated)
+    if parsed is None:
+        return {
+            "packet_type_code": "third_party",
+            "comment": encapsulated,
+        }
+    embedded = _parse_aprs_packet(parsed)
+    if embedded is None:
+        return {
+            "packet_type_code": "third_party",
+            "comment": encapsulated,
+        }
+    result = dict(embedded)
+    result["wrapped_packet_type_code"] = str(embedded.get("packet_type_code") or "")
+    result["packet_type_code"] = "third_party"
+    return result
+
+
+def _bulletin_packet_type_code(addressee: str) -> str:
+    normalized = str(addressee or "").strip().upper()
+    if re.fullmatch(r"BLN[A-Z]", normalized):
+        return "announcement"
+    if re.fullmatch(r"BLN[0-9][A-Z0-9]{1,5}", normalized):
+        return "group_bulletin"
+    return "bulletin"
+
+
+def _packet_group_label(group: str) -> str:
+    return _PACKET_GROUP_LABELS.get(str(group or "").strip().casefold(), "")
 
 
 def _parse_weather_fields(text: str) -> dict[str, float | int] | None:

@@ -1,6 +1,12 @@
 import unittest
 
-from app.services.content import _clean_decoded_tokens, _parse_position_with_timestamp, _parse_position_without_timestamp, _parse_qsy_fields
+from app.services.content import (
+    _clean_decoded_tokens,
+    _parse_position_with_timestamp,
+    _parse_position_without_timestamp,
+    _parse_qsy_fields,
+    parse_tnc2_frame,
+)
 
 
 class AprsContentParsingTests(unittest.TestCase):
@@ -53,6 +59,30 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertEqual(parsed["latitude"], "52.22970")
         self.assertEqual(parsed["longitude"], "21.01220")
+
+    def test_parse_tnc2_frame_exposes_packet_group_for_status_query_telemetry_and_item(self) -> None:
+        status = parse_tnc2_frame("SP8ABC-9>APRS:>Station online")
+        query = parse_tnc2_frame("SP8ABC-9>APRS::SQ9MDD-4:?APRSP")
+        telemetry = parse_tnc2_frame("SP8ABC-9>APRS:T#001,111,222,333,444,555,00000000")
+        item = parse_tnc2_frame("SP8ABC-9>APRS:)AID01!5228.23N/02101.28E#Test item")
+
+        self.assertEqual((status or {}).get("aprs_data", {}).get("packet_group"), "status")
+        self.assertEqual((status or {}).get("aprs_data", {}).get("packet_type_code"), "status")
+        self.assertEqual((query or {}).get("aprs_data", {}).get("packet_group"), "query")
+        self.assertEqual((query or {}).get("aprs_data", {}).get("packet_type_code"), "query")
+        self.assertEqual((telemetry or {}).get("aprs_data", {}).get("packet_group"), "telemetry")
+        self.assertEqual((telemetry or {}).get("aprs_data", {}).get("packet_type_code"), "telemetry")
+        self.assertEqual((item or {}).get("aprs_data", {}).get("packet_group"), "item")
+        self.assertEqual((item or {}).get("aprs_data", {}).get("packet_type_code"), "item")
+
+    def test_parse_tnc2_frame_exposes_message_group_for_bulletin_and_ack(self) -> None:
+        bulletin = parse_tnc2_frame("SP8ABC-9>APRS::BLN1     :System bulletin")
+        ack = parse_tnc2_frame("SP8ABC-9>APRS::SQ9MDD-4:ack12")
+
+        self.assertEqual((bulletin or {}).get("aprs_data", {}).get("packet_group"), "message")
+        self.assertEqual((bulletin or {}).get("aprs_data", {}).get("packet_type_code"), "bulletin")
+        self.assertEqual((ack or {}).get("aprs_data", {}).get("packet_group"), "message")
+        self.assertEqual((ack or {}).get("aprs_data", {}).get("packet_type_code"), "ack")
 
 
 if __name__ == "__main__":

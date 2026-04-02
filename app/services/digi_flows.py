@@ -22,6 +22,17 @@ FILTER_STEP_TYPES = (
 )
 TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
 DIGI_FLOW_EXECUTION_RETENTION_LIMIT = 200
+PACKET_TYPE_FILTER_GROUPS = (
+    "position",
+    "object",
+    "item",
+    "message",
+    "status",
+    "weather",
+    "telemetry",
+    "query",
+)
+PACKET_TYPE_FILTER_LEGACY_CODES = {"M", "S", "O", "W"}
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_rf",
@@ -107,16 +118,26 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Packet Type Filter",
         "badge": "Filter",
-        "description": "Allows or denies selected APRS packet types such as M, S, O or W.",
+        "description": "Allows or denies the 8 main APRS packet groups used in DIGI flows.",
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
             {
                 "name": "packet_types",
-                "label": "Packet Types (one per line)",
+                "label": "Packet Groups (one per line)",
                 "type": "textarea",
                 "required": False,
-                "placeholder": "M\nS\nO\nW",
-                "help_text": "Use APRS packet type codes parsed by APRSBox, for example M (mobile), S (stationary), O (object), W (weather).",
+                "placeholder": "position\nobject\nitem\nmessage\nstatus\nweather\ntelemetry\nquery",
+                "help_lines": (
+                    "position: pozycje zwykle, z timestampem, compressed i Mic-E",
+                    "object: obiekty APRS (;)",
+                    "item: itemy APRS ())",
+                    "message: wiadomosci, ACK/REJ, bulletiny i announcementy",
+                    "status: ramki status (>...)",
+                    "weather: ramki pogodowe (_...)",
+                    "telemetry: T# oraz definicje PARM/UNIT/EQNS/BITS",
+                    "query: zapytania APRS zaczynajace sie od ?",
+                ),
+                "help_text": "Starsze konfiguracje z kodami M, S, O, W nadal sa obslugiwane dla zgodnosci wstecznej.",
             },
         ),
     },
@@ -284,6 +305,19 @@ def _normalize_multiline_list(value: Any) -> list[str]:
     return lines
 
 
+def _normalize_packet_type_filter_value(value: Any) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return ""
+    folded = normalized.casefold()
+    if folded in PACKET_TYPE_FILTER_GROUPS:
+        return folded
+    upper = normalized.upper()
+    if upper in PACKET_TYPE_FILTER_LEGACY_CODES:
+        return upper
+    return normalized
+
+
 def _flow_requires_path_rule(target_kind: str) -> bool:
     return target_kind in {"tx_rf", "tx_aprsis"}
 
@@ -384,7 +418,17 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
             raise ValueError("Packet type filter mode must be allow or deny.")
-        return {"mode": mode, "packet_types": _normalize_multiline_list(config.get("packet_types"))}
+        return {
+            "mode": mode,
+            "packet_types": [
+                normalized
+                for normalized in (
+                    _normalize_packet_type_filter_value(item)
+                    for item in _normalize_multiline_list(config.get("packet_types"))
+                )
+                if normalized
+            ],
+        }
     if step_type == "filter_icon":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
@@ -444,7 +488,7 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
     if step_type == "filter_packet_type":
         packet_types = config.get("packet_types") or []
-        return f"Mode: {config.get('mode', 'allow')}, packet types: {', '.join(packet_types) if packet_types else 'none'}"
+        return f"Mode: {config.get('mode', 'allow')}, packet groups: {', '.join(packet_types) if packet_types else 'none'}"
     if step_type == "filter_icon":
         icons = config.get("icons") or []
         return f"Mode: {config.get('mode', 'allow')}, icons: {', '.join(icons) if icons else 'none'}"

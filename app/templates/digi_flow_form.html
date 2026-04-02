@@ -273,7 +273,7 @@
             }
             if (step.step_type === "filter_strict") return "Rejects TCP, NOGATE, RFONLY";
             if (step.step_type === "filter_callsign") return `Mode: ${config.mode || "allow"}, callsigns: ${(config.callsigns || []).length}`;
-            if (step.step_type === "filter_packet_type") return `Mode: ${config.mode || "allow"}, packet types: ${(config.packet_types || []).join(", ") || "none"}`;
+            if (step.step_type === "filter_packet_type") return `Mode: ${config.mode || "allow"}, packet groups: ${(config.packet_types || []).join(", ") || "none"}`;
             if (step.step_type === "filter_icon") return `Mode: ${config.mode || "allow"}, icons: ${(config.icons || []).join(", ") || "none"}`;
             if (step.step_type === "filter_distance") return `Max distance: ${config.max_km || "-"} km`;
             if (step.step_type === "filter_rate_limit") return `Rate: ${config.packets_per_minute || "-"} pkt/min`;
@@ -389,6 +389,25 @@
             title.textContent = field.label;
             wrapper.appendChild(title);
 
+            const appendFieldHelp = () => {
+                if (Array.isArray(field.help_lines) && field.help_lines.length) {
+                    const hintBlock = document.createElement("div");
+                    hintBlock.className = "muted small";
+                    for (const line of field.help_lines) {
+                        const hintLine = document.createElement("div");
+                        hintLine.textContent = line;
+                        hintBlock.appendChild(hintLine);
+                    }
+                    wrapper.appendChild(hintBlock);
+                }
+                if (field.help_text) {
+                    const hint = document.createElement("span");
+                    hint.className = "muted small";
+                    hint.textContent = field.help_text;
+                    wrapper.appendChild(hint);
+                }
+            };
+
             if (field.type === "select") {
                 const select = document.createElement("select");
                 for (const optionValue of field.options || []) {
@@ -405,6 +424,7 @@
                     render();
                 });
                 wrapper.appendChild(select);
+                appendFieldHelp();
                 return wrapper;
             }
 
@@ -419,12 +439,7 @@
                     step.config[field.name] = textToLines(textarea.value);
                 });
                 wrapper.appendChild(textarea);
-                if (field.help_text) {
-                    const hint = document.createElement("span");
-                    hint.className = "muted small";
-                    hint.textContent = field.help_text;
-                    wrapper.appendChild(hint);
-                }
+                appendFieldHelp();
                 return wrapper;
             }
 
@@ -439,12 +454,7 @@
                 step.config[field.name] = field.type === "number" ? input.value : input.value;
             });
             wrapper.appendChild(input);
-            if (field.help_text) {
-                const hint = document.createElement("span");
-                hint.className = "muted small";
-                hint.textContent = field.help_text;
-                wrapper.appendChild(hint);
-            }
+            appendFieldHelp();
             return wrapper;
         };
 

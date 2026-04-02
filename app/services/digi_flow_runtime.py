@@ -454,38 +454,42 @@ class DigiFlowRuntimeService:
         step_id = int(step["id"])
         config = dict(step.get("config") or {})
         mode = str(config.get("mode") or "allow").strip().lower() or "allow"
-        configured = [str(item).strip().upper() for item in config.get("packet_types") or [] if str(item).strip()]
-        packet_type = _parsed_aprs_packet_type(parsed)
+        configured = [str(item).strip() for item in config.get("packet_types") or [] if str(item).strip()]
+        matched_selector = _find_matching_packet_type_selector(parsed, configured)
+        packet_group = _parsed_aprs_packet_group(parsed)
+        packet_type_code = _parsed_aprs_packet_type_code(parsed)
 
-        if not packet_type:
+        if not packet_group and not packet_type_code:
             decision = "drop" if mode == "allow" else "continue"
             message = (
-                "Packet type filter rejected frame because APRS packet type could not be decoded."
+                "Packet type filter rejected frame because APRS packet group could not be decoded."
                 if decision == "drop"
-                else "Packet type filter passed because APRS packet type could not be decoded and deny list applies only to decoded types."
+                else "Packet type filter passed because APRS packet group could not be decoded and deny list applies only to decoded groups."
             )
         elif mode == "allow":
-            matched = packet_type in configured
+            matched = matched_selector is not None
             decision = "continue" if matched else "drop"
+            inspected = _packet_type_filter_inspected_label(packet_group=packet_group, packet_type_code=packet_type_code)
             if configured:
                 message = (
-                    f"Packet type filter ({mode}) inspected {packet_type}: "
+                    f"Packet type filter ({mode}) inspected {inspected}: "
                     f"{'passed' if matched else 'rejected'} because it "
-                    f"{'matched configured type ' + packet_type if matched else 'did not match any allow type'}."
+                    f"{'matched configured group ' + str(matched_selector) if matched else 'did not match any allow group'}."
                 )
             else:
-                message = f"Packet type filter ({mode}) inspected {packet_type}: rejected because the allow list is empty."
+                message = f"Packet type filter ({mode}) inspected {inspected}: rejected because the allow list is empty."
         else:
-            blocked = packet_type in configured
+            blocked = matched_selector is not None
             decision = "drop" if blocked else "continue"
+            inspected = _packet_type_filter_inspected_label(packet_group=packet_group, packet_type_code=packet_type_code)
             if configured:
                 message = (
-                    f"Packet type filter ({mode}) inspected {packet_type}: "
+                    f"Packet type filter ({mode}) inspected {inspected}: "
                     f"{'rejected' if blocked else 'passed'} because it "
-                    f"{'matched configured type ' + packet_type if blocked else 'did not match any deny type'}."
+                    f"{'matched configured group ' + str(matched_selector) if blocked else 'did not match any deny group'}."
                 )
             else:
-                message = f"Packet type filter ({mode}) inspected {packet_type}: passed because the deny list is empty."
+                message = f"Packet type filter ({mode}) inspected {inspected}: passed because the deny list is empty."
 
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
@@ -769,3 +773,40 @@ def _parsed_aprs_packet_type(parsed: dict[str, Any] | None) -> str:
 def _parsed_aprs_symbol(parsed: dict[str, Any] | None) -> str:
     aprs_data = dict((parsed or {}).get("aprs_data") or {})
     return str(aprs_data.get("symbol") or "").strip().upper()
+
+
+def _parsed_aprs_packet_group(parsed: dict[str, Any] | None) -> str:
+    aprs_data = dict((parsed or {}).get("aprs_data") or {})
+    return str(aprs_data.get("packet_group") or "").strip().casefold()
+
+
+def _parsed_aprs_packet_type_code(parsed: dict[str, Any] | None) -> str:
+    aprs_data = dict((parsed or {}).get("aprs_data") or {})
+    return str(aprs_data.get("packet_type_code") or "").strip().casefold()
+
+
+def _find_matching_packet_type_selector(parsed: dict[str, Any] | None, selectors: list[str]) -> str | None:
+    packet_group = _parsed_aprs_packet_group(parsed)
+    packet_type_code = _parsed_aprs_packet_type_code(parsed)
+    frame_type = _parsed_aprs_packet_type(parsed)
+    for selector in selectors:
+        normalized = str(selector or "").strip()
+        if not normalized:
+            continue
+        if packet_group and normalized.casefold() == packet_group:
+            return normalized
+        if packet_type_code and normalized.casefold() == packet_type_code:
+            return normalized
+        if frame_type and normalized.upper() == frame_type:
+            return normalized
+    return None
+
+
+def _packet_type_filter_inspected_label(*, packet_group: str, packet_type_code: str) -> str:
+    if packet_group and packet_type_code:
+        return f"group {packet_group} (type {packet_type_code})"
+    if packet_group:
+        return f"group {packet_group}"
+    if packet_type_code:
+        return f"type {packet_type_code}"
+    return "unknown"
