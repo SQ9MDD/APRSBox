@@ -220,29 +220,30 @@ class DigiFlowRuntimeService:
         config = dict(step.get("config") or {})
         mode = str(config.get("mode") or "allow").strip().lower() or "allow"
         configured = [str(item).strip().upper() for item in config.get("callsigns") or [] if str(item).strip()]
+        matched_pattern = _find_matching_callsign_pattern(callsign, configured) if callsign else None
 
         if not callsign:
             decision = "drop"
             message = "Callsign filter rejected frame because source callsign could not be parsed."
         elif mode == "allow":
-            passed = callsign in configured
+            passed = matched_pattern is not None
             decision = "continue" if passed else "drop"
             if configured:
                 message = (
                     f"Callsign filter ({mode}) inspected {callsign}: "
-                    f"{'passed' if passed else 'rejected'} because it is "
-                    f"{'present' if passed else 'absent'} in the allow list."
+                    f"{'passed' if passed else 'rejected'} because it "
+                    f"{'matched pattern ' + matched_pattern if passed else 'did not match any allow pattern'}."
                 )
             else:
                 message = f"Callsign filter ({mode}) inspected {callsign}: rejected because the allow list is empty."
         else:
-            blocked = callsign in configured
+            blocked = matched_pattern is not None
             decision = "drop" if blocked else "continue"
             if configured:
                 message = (
                     f"Callsign filter ({mode}) inspected {callsign}: "
-                    f"{'rejected' if blocked else 'passed'} because it is "
-                    f"{'present' if blocked else 'absent'} in the deny list."
+                    f"{'rejected' if blocked else 'passed'} because it "
+                    f"{'matched pattern ' + matched_pattern if blocked else 'did not match any deny pattern'}."
                 )
             else:
                 message = f"Callsign filter ({mode}) inspected {callsign}: passed because the deny list is empty."
@@ -439,6 +440,24 @@ def _find_matching_path_spec(token: str, specs: list[str]) -> str | None:
         if "-" not in normalized_spec and family_match and str(family_match.group("alias")) == normalized_spec:
             return normalized_spec
     return None
+
+
+def _find_matching_callsign_pattern(callsign: str, patterns: list[str]) -> str | None:
+    normalized_callsign = callsign.strip().upper()
+    for pattern in patterns:
+        normalized_pattern = pattern.strip().upper()
+        if _callsign_matches_pattern(normalized_callsign, normalized_pattern):
+            return normalized_pattern
+    return None
+
+
+def _callsign_matches_pattern(callsign: str, pattern: str) -> bool:
+    if not callsign or not pattern:
+        return False
+    if "*" not in pattern:
+        return callsign == pattern
+    regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+    return re.match(regex, callsign) is not None
 
 
 def _rewrite_trace_path(path_tokens: list[str], token_index: int, local_identity: str) -> list[str]:

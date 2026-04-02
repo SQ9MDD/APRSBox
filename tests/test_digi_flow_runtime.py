@@ -139,6 +139,58 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "filter_callsign" and row["decision"] == "rejected" for row in denied_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in denied_rows))
 
+    async def test_callsign_filter_supports_wildcard_patterns(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Callsign wildcard",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_callsign",
+                            "title": "Callsign Filter",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "callsigns": ["SQ9MDD*", "SQ*"]},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                exact_prefix = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-4>APRS,WIDE1-1:>Wildcard SSID",
+                )
+                broad_prefix = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ5ABC-1>APRS,WIDE1-1:>Wildcard prefix",
+                )
+                rejected = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Out of pattern",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            exact_rows = event_rows_for_frame(str(exact_prefix["frame_uid"]))
+            broad_rows = event_rows_for_frame(str(broad_prefix["frame_uid"]))
+            rejected_rows = event_rows_for_frame(str(rejected["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_callsign" and row["decision"] == "passed" and "matched pattern SQ9MDD*" in row["message"] for row in exact_rows))
+            self.assertTrue(any(row["event_type"] == "filter_callsign" and row["decision"] == "passed" and "matched pattern SQ*" in row["message"] for row in broad_rows))
+            self.assertTrue(any(row["event_type"] == "filter_callsign" and row["decision"] == "rejected" and "did not match any allow pattern" in row["message"] for row in rejected_rows))
+
     async def test_path_rule_logs_trace_no_trace_and_reject(self) -> None:
         with temporary_database():
             set_local_station_identity()
