@@ -336,6 +336,21 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "drop"}
 
+        local_identity = _local_station_identity()
+        if local_identity and _path_has_consumed_local_identity(path_tokens, local_identity):
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=(
+                    "Path rule rejected frame because local DIGI "
+                    f"{local_identity} already appears as a consumed hop in path {input_path or '-'}."
+                ),
+            )
+            return {"decision": "drop"}
+
         candidate = path_tokens[first_unconsumed_index]
         config = dict(step.get("config") or {})
         trace_specs = [str(item).strip().upper() for item in config.get("trace_paths") or [] if str(item).strip()]
@@ -344,7 +359,6 @@ class DigiFlowRuntimeService:
         matched_no_trace = _find_matching_path_spec(candidate, no_trace_specs)
 
         if matched_trace:
-            local_identity = _local_station_identity()
             if not local_identity:
                 log_digi_flow_event(
                     frame_uid=context["frame_uid"],
@@ -531,6 +545,13 @@ class DigiFlowRuntimeService:
 
 def _split_path_tokens(path: str) -> list[str]:
     return [item.strip().upper() for item in path.split(",") if item.strip()]
+
+
+def _path_has_consumed_local_identity(path_tokens: list[str], local_identity: str) -> bool:
+    normalized_identity = str(local_identity or "").strip().upper()
+    if not normalized_identity:
+        return False
+    return any(token.rstrip("*") == normalized_identity and token.endswith("*") for token in path_tokens)
 
 
 def _receiver_source_ref_matches(flow_source_ref: str, runtime_source_ref: str) -> bool:

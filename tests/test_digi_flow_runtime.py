@@ -350,6 +350,54 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in nogate_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rfonly_rows))
 
+    async def test_path_rule_rejects_when_local_digi_is_already_consumed_in_path(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            create_flow(
+                {
+                    "name": "Path self-repeat guard",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1", "WIDE2-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                rejected = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,SQ9MDD-4*,WIDE2-1:>Do not repeat self",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rejected_rows = event_rows_for_frame(str(rejected["frame_uid"]))
+            self.assertTrue(
+                any(
+                    row["event_type"] == "path_rule"
+                    and row["decision"] == "rejected"
+                    and "already appears as a consumed hop" in row["message"]
+                    for row in rejected_rows
+                )
+            )
+            self.assertFalse(any(row["event_type"] == "output_action" for row in rejected_rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rejected_rows))
+
     async def test_filter_then_path_rule_reaches_rf_tx_queue(self) -> None:
         with temporary_database():
             insert_modem(name="RF-OUT", device_path="127.0.0.1:9003")
