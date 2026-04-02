@@ -996,8 +996,10 @@ select:focus-visible,
 
 .users-table th:nth-child(1),
 .users-table td:nth-child(1) {
-    width: 9.9rem;
-    min-width: 9.9rem;
+    width: 7.5rem;
+    min-width: 7.5rem;
+    max-width: 7.5rem;
+    overflow-wrap: anywhere;
 }
 
 .users-table th:nth-child(2),
@@ -1021,9 +1023,9 @@ select:focus-visible,
 
 .users-table th:nth-child(5),
 .users-table td:nth-child(5) {
-    width: 3.2rem;
-    min-width: 3.2rem;
-    text-align: center;
+    width: 10.5rem;
+    min-width: 10.5rem;
+    text-align: right;
 }
 
 .users-table .status-pill {
@@ -1594,6 +1596,18 @@ select:focus-visible,
     min-width: 0;
 }
 
+.station-detail-message-link {
+    width: 2.6rem;
+    min-width: 2.6rem;
+    height: 2.6rem;
+    min-height: 2.6rem;
+}
+
+.station-detail-message-link img {
+    width: 1.2rem;
+    height: 1.2rem;
+}
+
 .station-detail-hero {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
@@ -2112,7 +2126,11 @@ body.modal-open {
 }
 
 .users-action-cell {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    flex-wrap: wrap;
 }
 
 .table-icon-button {
@@ -2146,6 +2164,23 @@ body.modal-open {
 .table-icon-button:disabled {
     cursor: not-allowed;
     opacity: 0.42;
+}
+
+.users-management-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(20rem, 0.9fr);
+    align-items: start;
+}
+
+.users-list-panel,
+.users-editor-panel {
+    min-width: 0;
+}
+
+.users-toggle-button {
+    min-height: 1.9rem;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.74rem;
+    white-space: nowrap;
 }
 
 .checkbox-row {

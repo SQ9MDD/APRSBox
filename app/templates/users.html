@@ -15,12 +15,12 @@
     </div>
 </section>
 
-<section class="grid two">
-    <div class="panel">
+<section class="grid two users-management-grid">
+    <div class="panel users-list-panel">
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Existing Users</h2>
+                    <h2>Users List</h2>
                 </div>
             </div>
             <div class="table-wrap">
@@ -48,6 +48,24 @@
                             <td class="users-action-cell">
                                 <form
                                     method="post"
+                                    action="{{ request.scope.root_path }}/admin/users/{{ user.id }}/toggle"
+                                    class="table-action-form"
+                                    onclick="event.stopPropagation();"
+                                    onsubmit="event.stopPropagation();"
+                                >
+                                    <input type="hidden" name="is_active" value="{{ 0 if user.is_active else 1 }}">
+                                    <button
+                                        type="submit"
+                                        class="button button-secondary users-toggle-button"
+                                        title="{{ 'Disable' if user.is_active else 'Enable' }} user"
+                                        aria-label="{{ 'Disable' if user.is_active else 'Enable' }} user {{ user.username }}"
+                                        {% if user.is_current_user %}disabled{% endif %}
+                                    >
+                                        {{ "Disable" if user.is_active else "Enable" }}
+                                    </button>
+                                </form>
+                                <form
+                                    method="post"
                                     action="{{ request.scope.root_path }}/admin/users/{{ user.id }}/delete"
                                     class="table-action-form"
                                     onclick="event.stopPropagation();"
@@ -72,7 +90,7 @@
         </div>
     </div>
 
-    <div class="panel">
+    <div class="panel users-editor-panel">
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">

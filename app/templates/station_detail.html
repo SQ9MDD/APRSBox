@@ -21,11 +21,11 @@
             </div>
             <a
                 href="{{ request.scope.root_path }}/messages?callsign={{ station.display_callsign|urlencode }}"
-                class="table-icon-button"
+                class="table-icon-button station-detail-message-link"
                 aria-label="Open message conversation with {{ station.display_callsign }}"
                 title="Open in Messages"
             >
-                <img src="{{ request.scope.root_path }}/static/icons/message-arrow-right-outline.svg" alt="">
+                <img src="{{ request.scope.root_path }}/static/icons/forum.svg" alt="">
             </a>
         </div>
     </div>
