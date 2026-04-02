@@ -394,7 +394,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["direction"], "rx")
-            self.assertEqual(rows[0]["message_text"], "?APRS{49")
+            self.assertEqual(rows[0]["message_text"], "?APRS")
             self.assertEqual(rows[0]["message_number"], "49")
             self.assertEqual(rows[1]["direction"], "tx")
             self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
@@ -402,12 +402,12 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             view = get_messages_page_data()
             self.assertEqual(len(view["conversations"]), 1)
             self.assertEqual(len(view["conversations"][0]["messages"]), 2)
-            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "?APRS{49")
+            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "?APRS")
             self.assertEqual(view["conversations"][0]["messages"][1]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
 
             row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
             assert row is not None
-            self.assertEqual(int(row["total"]), 1)
+            self.assertEqual(int(row["total"]), 3)
 
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():

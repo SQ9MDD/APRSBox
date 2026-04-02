@@ -554,7 +554,7 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         store_incoming_query(
             sender=sender,
             addressee=addressee.upper(),
-            query_text=text_field,
+            query_text=query_text,
             query_number=query_number,
             path=parsed["path"],
             timestamp=received_at,
@@ -877,6 +877,17 @@ def store_incoming_query(
             ),
         )
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
+    if not query_number:
+        return
+    station_settings = _get_station_settings()
+    enqueue_ack_job(sender, query_number, station_settings, trigger="ack-now")
+    enqueue_ack_job(
+        sender,
+        query_number,
+        station_settings,
+        trigger="ack-delayed",
+        scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
+    )
 
 
 def create_automatic_query_response(*, sender: str, message_text: str, path: str, timestamp: str) -> int:
