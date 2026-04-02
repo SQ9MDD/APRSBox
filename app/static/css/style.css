@@ -1034,6 +1034,133 @@ select:focus-visible,
     padding: 0.22rem 0.48rem;
 }
 
+.digi-flows-table {
+    table-layout: auto;
+}
+
+.digi-flow-endpoints {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+.digi-flow-endpoint-card,
+.digi-flow-steps-section {
+    display: grid;
+    gap: var(--space-3);
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+}
+
+.digi-flow-endpoint-card h3 {
+    margin: 0;
+    font-size: 0.96rem;
+}
+
+.digi-step-add-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    align-items: end;
+}
+
+.digi-steps-chain {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.digi-step-card {
+    display: grid;
+    gap: var(--space-3);
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel));
+    box-shadow: var(--shadow-soft);
+}
+
+.digi-step-card-source {
+    border-left: 4px solid var(--accent);
+}
+
+.digi-step-card-filter {
+    border-left: 4px solid var(--warning);
+}
+
+.digi-step-card-target {
+    border-left: 4px solid var(--success);
+}
+
+.digi-step-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.digi-step-meta,
+.digi-step-actions {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.digi-step-order,
+.digi-step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.9rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.digi-step-order {
+    min-width: 1.9rem;
+}
+
+.digi-step-title-wrap {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+    flex: 1 1 12rem;
+}
+
+.digi-step-title-wrap h3,
+.digi-flow-steps-section h2 {
+    margin: 0;
+}
+
+.digi-step-summary {
+    margin: 0;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+.digi-step-editor-grid {
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--border);
+}
+
+.digi-step-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.8rem;
+    color: var(--muted);
+    font-size: 1.1rem;
+}
+
 .logs-table {
     table-layout: fixed;
 }
@@ -2601,7 +2728,8 @@ button.message-delivery-badge {
     .dashboard-detail-grid,
     .band-condition-layout,
     .form-grid,
-    .station-detail-hero {
+    .station-detail-hero,
+    .digi-flow-endpoints {
         grid-template-columns: 1fr;
     }
 
@@ -2620,7 +2748,8 @@ button.message-delivery-badge {
     .panel-header,
     .stations-summary-header,
     .traffic-status-row,
-    .traffic-toolbar {
+    .traffic-toolbar,
+    .digi-step-card-header {
         flex-direction: column;
         align-items: flex-start;
     }

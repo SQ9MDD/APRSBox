@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>DIGI Flows</h2>
+                <p class="section-lead">Configure ordered DIGI pipelines as a vertical chain of source, filters and target. Runtime packet processing is intentionally not implemented in this stage.</p>
+            </div>
+            <div class="form-actions">
+                {% if can_edit %}
+                <a href="{{ request.scope.root_path }}/digi-flows/new" class="button">New flow</a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="notice">This screen stores flow definitions only. It does not execute packets, start workers or connect to transports.</div>
+        {% if flash %}
+        <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>Configured Flows</h2>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table digi-flows-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Source</th>
+                        <th>Target</th>
+                        <th>Steps</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                        {% if can_edit %}
+                        <th>Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                        {% for flow in flows %}
+                        <tr>
+                            <td>
+                            <div class="stack-sm">
+                                <strong>{{ flow.name }}</strong>
+                                {% if flow.description %}
+                                <span class="muted small">{{ flow.description }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td><code>{{ flow.source_display }}</code></td>
+                        <td><code>{{ flow.target_display }}</code></td>
+                        <td>{{ flow.step_count }}</td>
+                        <td>
+                            <span class="tnc-badge {{ 'tnc-badge-enabled' if flow.enabled else 'tnc-badge-disabled' }}">
+                                <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if flow.enabled else 'close-circle.svg' }}" alt="">
+                                <span>{{ 'Enabled' if flow.enabled else 'Disabled' }}</span>
+                            </span>
+                        </td>
+                        <td>{{ flow.updated_at }}</td>
+                        {% if can_edit %}
+                        <td class="users-action-cell">
+                            <a
+                                href="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}"
+                                class="table-icon-button"
+                                title="Edit flow"
+                                aria-label="Edit flow {{ flow.name }}"
+                            >
+                                <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
+                            </a>
+                            <form
+                                method="post"
+                                action="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}/toggle"
+                                class="table-action-form"
+                                onsubmit="return true;"
+                            >
+                                <input type="hidden" name="enabled" value="{{ 0 if flow.enabled else 1 }}">
+                                <button
+                                    type="submit"
+                                    class="table-icon-button"
+                                    title="{{ 'Disable' if flow.enabled else 'Enable' }} flow"
+                                    aria-label="{{ 'Disable' if flow.enabled else 'Enable' }} flow {{ flow.name }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'pause-circle-outline.svg' if flow.enabled else 'play-circle-outline.svg' }}" alt="">
+                                </button>
+                            </form>
+                            <a
+                                href="{{ request.scope.root_path }}/digi-flows/new?duplicate={{ flow.id }}"
+                                class="table-icon-button"
+                                title="Duplicate into new draft"
+                                aria-label="Duplicate flow {{ flow.name }}"
+                            >
+                                <img src="{{ request.scope.root_path }}/static/icons/content-copy.svg" alt="">
+                            </a>
+                            <form
+                                method="post"
+                                action="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}/delete"
+                                class="table-action-form"
+                                onsubmit="return confirm('Delete DIGI Flow {{ flow.name }}?');"
+                            >
+                                <button
+                                    type="submit"
+                                    class="table-icon-button"
+                                    title="Delete flow"
+                                    aria-label="Delete flow {{ flow.name }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                </button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{{ 7 if can_edit else 6 }}">No DIGI Flows configured yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}

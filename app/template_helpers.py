@@ -19,6 +19,7 @@ PRIMARY_NAV = [
     {"key": "messages", "label": "Messages", "href": "/messages", "roles": ("admin", "operator", "viewer"), "icon": "message-reply-text-outline.svg"},
     {"key": "objects", "label": "Objects / Items", "href": "/objects", "roles": ("admin", "operator", "viewer"), "icon": "crosshairs.svg"},
     {"key": "bulletins", "label": "BLN / Ann.", "href": "/bulletins", "roles": ("admin", "operator", "viewer"), "icon": "message-text-outline.svg"},
+    {"key": "digi-flows", "label": "DIGI Flows", "href": "/digi-flows", "roles": ("admin", "operator", "viewer"), "icon": "source-branch-check.svg"},
     {"key": "digi", "label": "Digi Settings", "href": "/digi", "roles": ("admin", "operator", "viewer"), "icon": "radar.svg"},
     {"key": "igate", "label": "iGate Settings", "href": "/igate", "roles": ("admin", "operator", "viewer"), "icon": "router-network.svg"},
     {"key": "nav-separator-secondary", "separator": True, "roles": ("admin", "operator", "viewer")},

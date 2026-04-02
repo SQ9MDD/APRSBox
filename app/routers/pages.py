@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -28,6 +29,20 @@ from app.services.content import (
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
     safe_update_section_row,
+)
+from app.services.digi_flows import (
+    FILTER_STEP_TYPES,
+    SOURCE_STEP_TYPES,
+    TARGET_STEP_TYPES,
+    build_digi_flow_editor_payload,
+    delete_digi_flow,
+    get_digi_flow,
+    get_digi_flow_reference_options,
+    get_digi_flow_type_meta,
+    list_digi_flows,
+    safe_create_digi_flow,
+    safe_update_digi_flow,
+    set_digi_flow_enabled,
 )
 from app.services.messages import (
     create_or_update_conversation,
@@ -112,6 +127,52 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
+
+
+def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:
+    raw_steps_json = str(form_data.get("steps_json") or "[]")
+    try:
+        raw_steps = json.loads(raw_steps_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid flow steps payload.") from exc
+    if not isinstance(raw_steps, list):
+        raise ValueError("Invalid flow steps payload.")
+    return {
+        "name": str(form_data.get("name") or "").strip(),
+        "description": str(form_data.get("description") or "").strip(),
+        "source_kind": str(form_data.get("source_kind") or "").strip(),
+        "source_ref": str(form_data.get("source_ref") or "").strip(),
+        "target_kind": str(form_data.get("target_kind") or "").strip(),
+        "target_ref": str(form_data.get("target_ref") or "").strip(),
+        "enabled": 1 if form_data.get("enabled") else 0,
+        "steps": raw_steps,
+    }
+
+
+def _digi_flow_editor_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    form_data: dict[str, object],
+    flow_id: int | None = None,
+    flash: str | None = None,
+    flash_success: bool = False,
+) -> dict[str, object]:
+    return build_template_context(
+        request,
+        page_title="DIGI Flow Editor" if flow_id else "New DIGI Flow",
+        current_user=current_user,
+        active_nav="digi-flows",
+        flow_id=flow_id,
+        form_data=form_data,
+        type_meta=get_digi_flow_type_meta(),
+        reference_options=get_digi_flow_reference_options(),
+        source_step_types=SOURCE_STEP_TYPES,
+        filter_step_types=FILTER_STEP_TYPES,
+        target_step_types=TARGET_STEP_TYPES,
+        flash=flash,
+        flash_success=flash_success,
+    )
 
 
 def _dashboard_band_condition_card() -> dict | None:
@@ -612,6 +673,167 @@ def digi_create(
     )
     context = _section_template_context(request, current_user, "digi", flash=None if success else error)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.get("/digi-flows")
+def digi_flows_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+    flash: str | None = None,
+    success: int = 0,
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="DIGI Flows",
+        current_user=current_user,
+        active_nav="digi-flows",
+        flows=list_digi_flows(),
+        can_edit=current_user.role in {"admin", "operator"},
+        flash=flash,
+        flash_success=bool(success),
+    )
+    return templates.TemplateResponse("digi_flows.html", context)
+
+
+@router.get("/digi-flows/new")
+def digi_flow_new_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+    duplicate: int | None = None,
+) -> object:
+    templates = request.app.state.templates
+    flash = None
+    flash_success = False
+    if duplicate is not None:
+        duplicate_flow = get_digi_flow(duplicate)
+        if duplicate_flow is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
+        form_data = build_digi_flow_editor_payload(duplicate_flow)
+        form_data["name"] = f"{form_data['name']} copy"
+        flash = "Flow duplicated into a new draft. Change source or target before saving because the source+target pair must stay unique."
+        flash_success = True
+    else:
+        form_data = build_digi_flow_editor_payload()
+    context = _digi_flow_editor_context(
+        request,
+        current_user,
+        form_data=form_data,
+        flash=flash,
+        flash_success=flash_success,
+    )
+    return templates.TemplateResponse("digi_flow_form.html", context)
+
+
+@router.get("/digi-flows/{flow_id}")
+def digi_flow_edit_page(
+    flow_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    flow = get_digi_flow(flow_id)
+    if flow is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
+    context = _digi_flow_editor_context(
+        request,
+        current_user,
+        flow_id=flow_id,
+        form_data=build_digi_flow_editor_payload(flow),
+    )
+    return templates.TemplateResponse("digi_flow_form.html", context)
+
+
+@router.post("/digi-flows")
+async def digi_flow_create(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    form = await request.form()
+    try:
+        payload = _parse_digi_flow_form_payload(form)
+    except ValueError as exc:
+        context = _digi_flow_editor_context(request, current_user, form_data=build_digi_flow_editor_payload(), flash=str(exc))
+        return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    flow_id, error = safe_create_digi_flow(payload)
+    if error:
+        context = _digi_flow_editor_context(request, current_user, form_data=payload, flash=error)
+        return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    assert flow_id is not None
+    flow = get_digi_flow(flow_id)
+    context = _digi_flow_editor_context(
+        request,
+        current_user,
+        flow_id=flow_id,
+        form_data=build_digi_flow_editor_payload(flow),
+        flash="DIGI Flow created.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("digi_flow_form.html", context)
+
+
+@router.post("/digi-flows/{flow_id}")
+async def digi_flow_update(
+    flow_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    if get_digi_flow(flow_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
+
+    form = await request.form()
+    try:
+        payload = _parse_digi_flow_form_payload(form)
+    except ValueError as exc:
+        context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=build_digi_flow_editor_payload(), flash=str(exc))
+        return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    error = safe_update_digi_flow(flow_id, payload)
+    if error:
+        context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=payload, flash=error)
+        return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    flow = get_digi_flow(flow_id)
+    context = _digi_flow_editor_context(
+        request,
+        current_user,
+        flow_id=flow_id,
+        form_data=build_digi_flow_editor_payload(flow),
+        flash="DIGI Flow updated.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("digi_flow_form.html", context)
+
+
+@router.post("/digi-flows/{flow_id}/toggle")
+def digi_flow_toggle(
+    flow_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+    enabled: int = Form(...),
+) -> RedirectResponse:
+    set_digi_flow_enabled(flow_id, bool(enabled))
+    return RedirectResponse(
+        url=_path(request, f"/digi-flows?flash={'DIGI%20Flow%20status%20updated.'}&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/digi-flows/{flow_id}/delete")
+def digi_flow_delete(
+    flow_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    delete_digi_flow(flow_id)
+    return RedirectResponse(
+        url=_path(request, f"/digi-flows?flash={'DIGI%20Flow%20deleted.'}&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/objects")

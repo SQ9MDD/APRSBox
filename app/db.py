@@ -179,6 +179,47 @@ CREATE TABLE IF NOT EXISTS digi_rules (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS digi_flows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis')),
+    source_ref TEXT NOT NULL,
+    target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
+    target_ref TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (source_kind, source_ref, target_kind, target_ref)
+);
+
+CREATE TABLE IF NOT EXISTS digi_flow_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    flow_id INTEGER NOT NULL,
+    step_order INTEGER NOT NULL,
+    step_type TEXT NOT NULL CHECK (step_type IN (
+        'receiver_rf',
+        'receiver_aprsis',
+        'filter_dupe',
+        'filter_path',
+        'filter_callsign',
+        'filter_packet_type',
+        'filter_distance',
+        'filter_rate_limit',
+        'tx_rf',
+        'tx_aprsis',
+        'action_drop',
+        'action_log'
+    )),
+    title TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    config_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE,
+    UNIQUE (flow_id, step_order)
+);
+
 CREATE TABLE IF NOT EXISTS aprs_objects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -433,9 +474,9 @@ def init_db() -> None:
             )
         connection.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
-            ON outbound_jobs(aprs_message_id, status, scheduled_at, id)
-            """
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
+    ON outbound_jobs(aprs_message_id, status, scheduled_at, id)
+"""
         )
         if "state" not in object_columns:
             connection.execute(

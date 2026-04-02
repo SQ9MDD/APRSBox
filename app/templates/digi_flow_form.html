@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ "Edit DIGI Flow" if flow_id else "New DIGI Flow" }}</h2>
+                <p class="section-lead">Define one source, zero or more filter steps and one target. The chain is stored for future processing, but runtime execution is not active in stage 1.</p>
+            </div>
+            <div class="form-actions">
+                <a href="{{ request.scope.root_path }}/digi-flows" class="button button-secondary">Back to list</a>
+            </div>
+        </div>
+        <div class="notice">Source must be the first step, target must be the last step, and the source+target pair must be unique.</div>
+        {% if flash %}
+        <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}{{ '/digi-flows/' ~ flow_id if flow_id else '/digi-flows' }}"
+            class="form-stack"
+            id="digi-flow-form"
+        >
+            <div class="form-grid">
+                <label>
+                    <span>Name</span>
+                    <input type="text" name="name" value="{{ form_data.name }}" required>
+                </label>
+                <label class="checkbox-row">
+                    <input type="checkbox" name="enabled" value="1" {% if form_data.enabled %}checked{% endif %}>
+                    <span>Flow is enabled</span>
+                </label>
+                <label class="full">
+                    <span>Description</span>
+                    <textarea name="description">{{ form_data.description }}</textarea>
+                </label>
+            </div>
+
+            <section class="digi-flow-endpoints">
+                <div class="digi-flow-endpoint-card">
+                    <h3>Source</h3>
+                    <div class="form-grid">
+                        <label>
+                            <span>Source Type</span>
+                            <select name="source_kind" id="flow-source-kind" required>
+                                {% for step_type in source_step_types %}
+                                <option value="{{ step_type }}" {% if form_data.source_kind == step_type %}selected{% endif %}>{{ type_meta[step_type].label }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            <span>Source Reference</span>
+                            <input type="text" name="source_ref" id="flow-source-ref" value="{{ form_data.source_ref }}" list="digi-flow-source-ref-list" required>
+                        </label>
+                    </div>
+                    <datalist id="digi-flow-source-ref-list"></datalist>
+                </div>
+
+                <div class="digi-flow-endpoint-card">
+                    <h3>Target</h3>
+                    <div class="form-grid">
+                        <label>
+                            <span>Target Type</span>
+                            <select name="target_kind" id="flow-target-kind" required>
+                                {% for step_type in target_step_types %}
+                                <option value="{{ step_type }}" {% if form_data.target_kind == step_type %}selected{% endif %}>{{ type_meta[step_type].label }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            <span>Target Reference</span>
+                            <input type="text" name="target_ref" id="flow-target-ref" value="{{ form_data.target_ref }}" list="digi-flow-target-ref-list">
+                        </label>
+                    </div>
+                    <datalist id="digi-flow-target-ref-list"></datalist>
+                </div>
+            </section>
+
+            <section class="digi-flow-steps-section">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>Flow Steps</h2>
+                        <p class="section-lead">Vertical pipeline from top to bottom. Source and target cards are synchronized with the fields above.</p>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="button button-secondary" id="digi-add-step">Add step</button>
+                    </div>
+                </div>
+
+                <input type="hidden" name="steps_json" id="digi-steps-json">
+                <div class="digi-step-add-row" id="digi-step-add-row" hidden>
+                    <label>
+                        <span>Filter Type</span>
+                        <select id="digi-new-step-type">
+                            {% for step_type in filter_step_types %}
+                            <option value="{{ step_type }}">{{ type_meta[step_type].label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <div class="form-actions">
+                        <button type="button" class="button" id="digi-confirm-add-step">Add</button>
+                        <button type="button" class="button button-secondary" id="digi-cancel-add-step">Cancel</button>
+                    </div>
+                </div>
+
+                <div class="digi-steps-chain" id="digi-steps-chain"></div>
+            </section>
+
+            <div class="form-actions">
+                <button type="submit" class="button">{{ "Save Changes" if flow_id else "Create Flow" }}</button>
+                {% if flow_id %}
+                <a href="{{ request.scope.root_path }}/digi-flows/new?duplicate={{ flow_id }}" class="button button-secondary">Duplicate into draft</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</section>
+
+<template id="digi-step-config-template">
+    <div class="digi-step-editor"></div>
+</template>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (() => {
+        const form = document.getElementById("digi-flow-form");
+        const stepsJsonInput = document.getElementById("digi-steps-json");
+        const stepsChain = document.getElementById("digi-steps-chain");
+        const addStepButton = document.getElementById("digi-add-step");
+        const addStepRow = document.getElementById("digi-step-add-row");
+        const newStepType = document.getElementById("digi-new-step-type");
+        const confirmAddStep = document.getElementById("digi-confirm-add-step");
+        const cancelAddStep = document.getElementById("digi-cancel-add-step");
+        const sourceKindInput = document.getElementById("flow-source-kind");
+        const sourceRefInput = document.getElementById("flow-source-ref");
+        const targetKindInput = document.getElementById("flow-target-kind");
+        const targetRefInput = document.getElementById("flow-target-ref");
+        const sourceRefList = document.getElementById("digi-flow-source-ref-list");
+        const targetRefList = document.getElementById("digi-flow-target-ref-list");
+        if (!form || !stepsJsonInput || !stepsChain || !addStepButton || !addStepRow || !newStepType || !confirmAddStep || !cancelAddStep || !sourceKindInput || !sourceRefInput || !targetKindInput || !targetRefInput || !sourceRefList || !targetRefList) {
+            return;
+        }
+
+        const typeMeta = {{ type_meta|tojson }};
+        const referenceOptions = {{ reference_options|tojson }};
+        const sourceTypes = {{ source_step_types|tojson }};
+        const targetTypes = {{ target_step_types|tojson }};
+        const filterTypes = {{ filter_step_types|tojson }};
+        let steps = {{ form_data.steps|tojson }};
+
+        const clone = (value) => JSON.parse(JSON.stringify(value));
+
+        const defaultConfig = (stepType, refValue = "") => {
+            if (stepType === "receiver_rf") return { rf_port: refValue || "" };
+            if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
+            if (stepType === "filter_dupe") return { window_sec: 30 };
+            if (stepType === "filter_path") return { mode: "allow", paths: [] };
+            if (stepType === "filter_callsign") return { mode: "allow", callsigns: [] };
+            if (stepType === "filter_packet_type") return { packet_types: [] };
+            if (stepType === "filter_distance") return { max_km: 50 };
+            if (stepType === "filter_rate_limit") return { packets_per_minute: 60 };
+            if (stepType === "tx_rf") return { rf_target: refValue || "" };
+            if (stepType === "tx_aprsis") return { aprsis_target: refValue || "" };
+            if (stepType === "action_drop") return { note: "" };
+            if (stepType === "action_log") return { log_tag: "", note: "" };
+            return {};
+        };
+
+        const configLinesToText = (value) => Array.isArray(value) ? value.join("\n") : "";
+
+        const textToLines = (value) => String(value || "")
+            .split(/\r?\n/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+        const stepSummary = (step) => {
+            const config = step.config || {};
+            if (step.step_type === "receiver_rf") return `RF port: ${config.rf_port || "-"}`;
+            if (step.step_type === "receiver_aprsis") return `APRS-IS source: ${config.aprsis_source || "-"}`;
+            if (step.step_type === "filter_dupe") return `Window: ${config.window_sec || "-"} sec`;
+            if (step.step_type === "filter_path") return `Mode: ${config.mode || "allow"}, paths: ${(config.paths || []).length}`;
+            if (step.step_type === "filter_callsign") return `Mode: ${config.mode || "allow"}, callsigns: ${(config.callsigns || []).length}`;
+            if (step.step_type === "filter_packet_type") return `Packet types: ${(config.packet_types || []).join(", ") || "none"}`;
+            if (step.step_type === "filter_distance") return `Max distance: ${config.max_km || "-"} km`;
+            if (step.step_type === "filter_rate_limit") return `Rate: ${config.packets_per_minute || "-"} pkt/min`;
+            if (step.step_type === "tx_rf") return `RF target: ${config.rf_target || "-"}`;
+            if (step.step_type === "tx_aprsis") return `APRS-IS target: ${config.aprsis_target || "-"}`;
+            if (step.step_type === "action_drop") return config.note || "Drop packet";
+            if (step.step_type === "action_log") {
+                const parts = [];
+                if (config.log_tag) parts.push(`Tag: ${config.log_tag}`);
+                if (config.note) parts.push(config.note);
+                return parts.join(" | ") || "Log packet";
+            }
+            return "";
+        };
+
+        const stepLabel = (stepType) => (typeMeta[stepType] || {}).label || stepType;
+        const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
+        const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
+
+        const syncReferenceList = (kindInput, listElement) => {
+            const options = referenceOptions[kindInput.value] || [];
+            listElement.innerHTML = "";
+            for (const option of options) {
+                const optionElement = document.createElement("option");
+                optionElement.value = option;
+                listElement.appendChild(optionElement);
+            }
+        };
+
+        const syncBoundarySteps = () => {
+            const sourceStep = steps[0];
+            const targetStep = steps[steps.length - 1];
+            if (!sourceStep || !targetStep) return;
+
+            sourceStep.step_type = sourceKindInput.value;
+            sourceStep.title = stepLabel(sourceStep.step_type);
+            if (!sourceStep.config || stepCategory(sourceStep.step_type) !== "source") {
+                sourceStep.config = defaultConfig(sourceStep.step_type, sourceRefInput.value);
+            }
+            if (sourceStep.step_type === "receiver_rf") {
+                sourceStep.config.rf_port = sourceRefInput.value;
+            } else if (sourceStep.step_type === "receiver_aprsis") {
+                sourceStep.config.aprsis_source = sourceRefInput.value;
+            }
+
+            targetStep.step_type = targetKindInput.value;
+            targetStep.title = stepLabel(targetStep.step_type);
+            if (!targetStep.config || stepCategory(targetStep.step_type) !== "target") {
+                targetStep.config = defaultConfig(targetStep.step_type, targetRefInput.value);
+            }
+            if (targetStep.step_type === "tx_rf") {
+                targetStep.config.rf_target = targetRefInput.value;
+            } else if (targetStep.step_type === "tx_aprsis") {
+                targetStep.config.aprsis_target = targetRefInput.value;
+            } else if (targetStep.step_type === "action_log" && !targetStep.config.log_tag) {
+                targetStep.config.log_tag = targetRefInput.value;
+            } else if (targetStep.step_type === "action_drop" && !targetStep.config.note) {
+                targetStep.config.note = targetRefInput.value;
+            }
+        };
+
+        const renderConfigField = (step, field) => {
+            const wrapper = document.createElement("label");
+            wrapper.className = field.type === "textarea" ? "full" : "";
+            const title = document.createElement("span");
+            title.textContent = field.label;
+            wrapper.appendChild(title);
+
+            if (field.type === "select") {
+                const select = document.createElement("select");
+                for (const optionValue of field.options || []) {
+                    const option = document.createElement("option");
+                    option.value = optionValue;
+                    option.textContent = optionValue;
+                    if (String(step.config[field.name] || "") === String(optionValue)) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                }
+                select.addEventListener("change", () => {
+                    step.config[field.name] = select.value;
+                    render();
+                });
+                wrapper.appendChild(select);
+                return wrapper;
+            }
+
+            if (field.type === "textarea") {
+                const textarea = document.createElement("textarea");
+                const value = step.config[field.name];
+                textarea.value = configLinesToText(value);
+                textarea.addEventListener("input", () => {
+                    step.config[field.name] = textToLines(textarea.value);
+                });
+                wrapper.appendChild(textarea);
+                return wrapper;
+            }
+
+            const input = document.createElement("input");
+            input.type = field.type === "number" ? "number" : "text";
+            input.value = step.config[field.name] ?? "";
+            if (field.required) input.required = true;
+            input.addEventListener("input", () => {
+                step.config[field.name] = field.type === "number" ? input.value : input.value;
+            });
+            wrapper.appendChild(input);
+            return wrapper;
+        };
+
+        const render = () => {
+            syncReferenceList(sourceKindInput, sourceRefList);
+            syncReferenceList(targetKindInput, targetRefList);
+            targetRefInput.required = targetKindInput.value === "tx_rf" || targetKindInput.value === "tx_aprsis";
+            syncBoundarySteps();
+            stepsJsonInput.value = JSON.stringify(steps);
+            stepsChain.innerHTML = "";
+
+            steps.forEach((step, index) => {
+                const stepCard = document.createElement("article");
+                stepCard.className = `digi-step-card digi-step-card-${stepCategory(step.step_type)}`;
+
+                const header = document.createElement("div");
+                header.className = "digi-step-card-header";
+
+                const meta = document.createElement("div");
+                meta.className = "digi-step-meta";
+
+                const order = document.createElement("span");
+                order.className = "digi-step-order";
+                order.textContent = `${index + 1}`;
+                meta.appendChild(order);
+
+                const badge = document.createElement("span");
+                badge.className = "digi-step-badge";
+                badge.textContent = stepBadge(step.step_type);
+                meta.appendChild(badge);
+
+                const titleWrap = document.createElement("div");
+                titleWrap.className = "digi-step-title-wrap";
+
+                const title = document.createElement("h3");
+                title.textContent = step.title || stepLabel(step.step_type);
+                titleWrap.appendChild(title);
+
+                const typeLabel = document.createElement("div");
+                typeLabel.className = "muted small";
+                typeLabel.textContent = stepLabel(step.step_type);
+                titleWrap.appendChild(typeLabel);
+
+                header.appendChild(meta);
+                header.appendChild(titleWrap);
+
+                const actions = document.createElement("div");
+                actions.className = "digi-step-actions";
+
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.className = "button button-secondary";
+                editButton.textContent = step.__editing ? "Close" : "Edit";
+                editButton.addEventListener("click", () => {
+                    step.__editing = !step.__editing;
+                    render();
+                });
+                actions.appendChild(editButton);
+
+                const moveUpButton = document.createElement("button");
+                moveUpButton.type = "button";
+                moveUpButton.className = "button button-secondary";
+                moveUpButton.textContent = "Move up";
+                moveUpButton.disabled = index <= 1;
+                moveUpButton.addEventListener("click", () => {
+                    const current = steps[index];
+                    steps[index] = steps[index - 1];
+                    steps[index - 1] = current;
+                    render();
+                });
+                actions.appendChild(moveUpButton);
+
+                const moveDownButton = document.createElement("button");
+                moveDownButton.type = "button";
+                moveDownButton.className = "button button-secondary";
+                moveDownButton.textContent = "Move down";
+                moveDownButton.disabled = index >= steps.length - 2;
+                moveDownButton.addEventListener("click", () => {
+                    const current = steps[index];
+                    steps[index] = steps[index + 1];
+                    steps[index + 1] = current;
+                    render();
+                });
+                actions.appendChild(moveDownButton);
+
+                const deleteButton = document.createElement("button");
+                deleteButton.type = "button";
+                deleteButton.className = "button button-secondary";
+                deleteButton.textContent = "Delete";
+                deleteButton.disabled = stepCategory(step.step_type) !== "filter";
+                deleteButton.addEventListener("click", () => {
+                    steps.splice(index, 1);
+                    render();
+                });
+                actions.appendChild(deleteButton);
+
+                header.appendChild(actions);
+                stepCard.appendChild(header);
+
+                const summary = document.createElement("p");
+                summary.className = "digi-step-summary";
+                summary.textContent = stepSummary(step);
+                stepCard.appendChild(summary);
+
+                const enabledRow = document.createElement("label");
+                enabledRow.className = "checkbox-row";
+                const enabledInput = document.createElement("input");
+                enabledInput.type = "checkbox";
+                enabledInput.value = "1";
+                enabledInput.checked = !!step.enabled;
+                enabledInput.addEventListener("change", () => {
+                    step.enabled = enabledInput.checked ? 1 : 0;
+                    render();
+                });
+                const enabledLabel = document.createElement("span");
+                enabledLabel.textContent = step.enabled ? "Step enabled" : "Step disabled";
+                enabledRow.appendChild(enabledInput);
+                enabledRow.appendChild(enabledLabel);
+                stepCard.appendChild(enabledRow);
+
+                if (step.__editing) {
+                    const editor = document.createElement("div");
+                    editor.className = "form-grid digi-step-editor-grid";
+
+                    const titleField = document.createElement("label");
+                    const titleCaption = document.createElement("span");
+                    titleCaption.textContent = "Card Title";
+                    const titleInput = document.createElement("input");
+                    titleInput.type = "text";
+                    titleInput.value = step.title || "";
+                    titleInput.addEventListener("input", () => {
+                        step.title = titleInput.value;
+                    });
+                    titleField.appendChild(titleCaption);
+                    titleField.appendChild(titleInput);
+                    editor.appendChild(titleField);
+
+                    const fields = (typeMeta[step.step_type] || {}).config_fields || [];
+                    for (const field of fields) {
+                        editor.appendChild(renderConfigField(step, field));
+                    }
+                    stepCard.appendChild(editor);
+                }
+
+                stepsChain.appendChild(stepCard);
+
+                if (index < steps.length - 1) {
+                    const connector = document.createElement("div");
+                    connector.className = "digi-step-connector";
+                    connector.textContent = "↓";
+                    stepsChain.appendChild(connector);
+                }
+            });
+        };
+
+        addStepButton.addEventListener("click", () => {
+            addStepRow.hidden = false;
+        });
+
+        cancelAddStep.addEventListener("click", () => {
+            addStepRow.hidden = true;
+        });
+
+        confirmAddStep.addEventListener("click", () => {
+            const stepType = newStepType.value;
+            if (!filterTypes.includes(stepType)) {
+                return;
+            }
+            steps.splice(steps.length - 1, 0, {
+                step_type: stepType,
+                title: stepLabel(stepType),
+                enabled: 1,
+                config: clone(defaultConfig(stepType)),
+                __editing: true,
+            });
+            addStepRow.hidden = true;
+            render();
+        });
+
+        sourceKindInput.addEventListener("change", render);
+        sourceRefInput.addEventListener("input", render);
+        targetKindInput.addEventListener("change", render);
+        targetRefInput.addEventListener("input", render);
+
+        form.addEventListener("submit", () => {
+            syncBoundarySteps();
+            stepsJsonInput.value = JSON.stringify(steps.map((step) => ({
+                id: step.id || null,
+                step_type: step.step_type,
+                title: step.title,
+                enabled: step.enabled ? 1 : 0,
+                config: step.config || {},
+            })));
+        });
+
+        if (!Array.isArray(steps) || steps.length < 2) {
+            steps = [
+                { step_type: sourceKindInput.value, title: stepLabel(sourceKindInput.value), enabled: 1, config: defaultConfig(sourceKindInput.value, sourceRefInput.value) },
+                { step_type: targetKindInput.value, title: stepLabel(targetKindInput.value), enabled: 1, config: defaultConfig(targetKindInput.value, targetRefInput.value) },
+            ];
+        }
+
+        render();
+    })();
+</script>
+{% endblock %}
