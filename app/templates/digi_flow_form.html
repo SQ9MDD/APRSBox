@@ -77,18 +77,21 @@
                             class="digi-palette-button"
                             data-step-type="{{ step_type }}"
                         >
+                            {% if type_meta[step_type].runtime_status == 'implemented' %}
+                            <img
+                                class="digi-runtime-icon"
+                                src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg"
+                                alt="Implemented in runtime"
+                            >
+                            {% endif %}
                             <span class="digi-step-badge">{{ type_meta[step_type].badge }}</span>
                             <span class="digi-palette-copy">
-                                <span class="digi-palette-heading">
-                                    <strong>{{ type_meta[step_type].label }}</strong>
-                                    <span class="digi-runtime-badge digi-runtime-badge-{{ type_meta[step_type].runtime_status }}">{{ type_meta[step_type].runtime_label }}</span>
-                                </span>
+                                <strong>{{ type_meta[step_type].label }}</strong>
                                 <span class="muted small">{{ type_meta[step_type].description }}</span>
                             </span>
                         </button>
                         {% endfor %}
                     </div>
-                    <div class="muted small">Runtime = active in executor, Stub = safe pass-through/log, Config only = not executed yet.</div>
                 </aside>
 
                 <div class="digi-flow-steps-section">
