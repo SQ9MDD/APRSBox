@@ -605,6 +605,7 @@
     (() => {
         const flowId = {{ flow_id|tojson }};
         const rootPath = {{ request.scope.root_path|tojson }};
+        const iconPath = (name) => `${rootPath}/static/icons/${name}`;
         const executionsContainer = document.getElementById("digi-flow-executions");
         const emptyState = document.getElementById("digi-flow-executions-empty");
         const toggleButton = document.getElementById("digi-flow-executions-toggle");
