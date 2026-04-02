@@ -1035,33 +1035,41 @@ select:focus-visible,
 }
 
 .digi-flows-table {
-    table-layout: auto;
+    table-layout: fixed;
 }
 
 .digi-flows-table th,
 .digi-flows-table td {
+    vertical-align: middle;
+}
+
+.digi-flows-col-name {
+    width: 18rem;
     white-space: nowrap;
 }
 
-.digi-flows-table th:nth-child(1),
-.digi-flows-table td:nth-child(1) {
-    width: 18rem;
-}
-
-.digi-flows-table th:nth-child(2),
-.digi-flows-table td:nth-child(2) {
-    width: 70%;
+.digi-flows-col-description {
+    width: auto;
     white-space: normal;
+    overflow-wrap: anywhere;
 }
 
-.digi-flows-table th:nth-child(3),
-.digi-flows-table td:nth-child(3) {
+.digi-flows-col-status {
     width: 8.5rem;
+    white-space: nowrap;
 }
 
-.digi-flows-table th:last-child,
-.digi-flows-table td:last-child {
-    width: 12rem;
+.digi-flows-col-actions {
+    width: 14rem;
+    white-space: nowrap;
+}
+
+.digi-flows-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.45rem;
+    flex-wrap: nowrap;
 }
 
 .digi-flow-endpoints {

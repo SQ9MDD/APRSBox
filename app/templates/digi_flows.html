@@ -32,27 +32,28 @@
             <table class="data-table digi-flows-table">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Description</th>
-                        <th>Status</th>
+                        <th class="digi-flows-col-name">Name</th>
+                        <th class="digi-flows-col-description">Description</th>
+                        <th class="digi-flows-col-status">Status</th>
                         {% if can_edit %}
-                        <th>Actions</th>
+                        <th class="digi-flows-col-actions">Actions</th>
                         {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                         {% for flow in flows %}
                         <tr>
-                        <td><strong>{{ flow.name }}</strong></td>
-                        <td>{{ flow.description or "-" }}</td>
-                        <td>
+                        <td class="digi-flows-col-name"><strong>{{ flow.name }}</strong></td>
+                        <td class="digi-flows-col-description">{{ flow.description or "-" }}</td>
+                        <td class="digi-flows-col-status">
                             <span class="tnc-badge {{ 'tnc-badge-enabled' if flow.enabled else 'tnc-badge-disabled' }}">
                                 <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if flow.enabled else 'close-circle.svg' }}" alt="">
                                 <span>{{ 'Enabled' if flow.enabled else 'Disabled' }}</span>
                             </span>
                         </td>
                         {% if can_edit %}
-                        <td class="users-action-cell">
+                        <td class="digi-flows-col-actions">
+                            <div class="digi-flows-actions">
                             <a
                                 href="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}"
                                 class="table-icon-button"
@@ -100,6 +101,7 @@
                                     <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                 </button>
                             </form>
+                            </div>
                         </td>
                         {% endif %}
                     </tr>
