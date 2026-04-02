@@ -699,6 +699,7 @@
                                 <span><strong>Pipeline:</strong> <code>${escapeHtml(execution.step_path)}</code></span>
                                 <span><strong>Finished:</strong> ${execution.final_step_number ? `step ${escapeHtml(execution.final_step_number)} ${escapeHtml(execution.final_step_title || "")}` : "-"}</span>
                             </div>
+                            ${execution.layout_changed ? `<div class="digi-execution-layout-note">${escapeHtml(execution.layout_note || "")}</div>` : ""}
                         </div>
                     </div>
                     <div class="digi-execution-steps">

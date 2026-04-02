@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from app.db import connect, init_db
-from app.services.digi_flows import create_digi_flow, get_digi_flow, normalize_digi_flow_payload, set_digi_flow_enabled
+from app.services.digi_flows import create_digi_flow, get_digi_flow, normalize_digi_flow_payload, set_digi_flow_enabled, update_digi_flow
 
 
 @contextlib.contextmanager
@@ -111,6 +111,60 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(flow["steps"][0]["step_type"], "receiver_rf")
             self.assertEqual(flow["steps"][1]["step_type"], "filter_path")
             self.assertEqual(flow["steps"][2]["step_type"], "tx_aprsis")
+
+    def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
+        with temporary_database():
+            flow_id = create_digi_flow(sample_flow_payload())
+            original = get_digi_flow(flow_id)
+            assert original is not None
+            original_ids = {step["step_type"]: int(step["id"]) for step in original["steps"]}
+
+            update_digi_flow(
+                flow_id,
+                {
+                    "name": "RF ingress",
+                    "description": "Simple flow",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "APRS-IS Main",
+                    "enabled": 1,
+                    "steps": [
+                        {
+                            "step_type": "receiver_rf",
+                            "title": "Receiver RF",
+                            "enabled": 1,
+                            "config": {"rf_port": "TNC-1"},
+                        },
+                        {
+                            "step_type": "filter_strict",
+                            "title": "Strict Filter",
+                            "enabled": 1,
+                            "config": {},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": ["SP2-2"]},
+                        },
+                        {
+                            "step_type": "tx_aprsis",
+                            "title": "TX APRS-IS",
+                            "enabled": 1,
+                            "config": {"aprsis_target": "APRS-IS Main"},
+                        },
+                    ],
+                },
+            )
+
+            updated = get_digi_flow(flow_id)
+            assert updated is not None
+            updated_steps = {step["step_type"]: step for step in updated["steps"]}
+            self.assertEqual(int(updated_steps["receiver_rf"]["id"]), original_ids["receiver_rf"])
+            self.assertEqual(int(updated_steps["filter_path"]["id"]), original_ids["filter_path"])
+            self.assertEqual(int(updated_steps["tx_aprsis"]["id"]), original_ids["tx_aprsis"])
+            self.assertIn("filter_strict", updated_steps)
 
     def test_new_filter_types_and_packet_type_mode_are_accepted(self) -> None:
         payload = sample_flow_payload()

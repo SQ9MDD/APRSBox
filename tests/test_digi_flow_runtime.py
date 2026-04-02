@@ -437,6 +437,8 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(summaries), 1)
             self.assertEqual(str(summaries[0]["frame_uid"]), str(result["frame_uid"]))
             self.assertEqual(summaries[0]["final_result"], "LOGGED")
+            self.assertTrue(summaries[0]["layout_changed"])
+            self.assertIn("before the current flow layout was saved", summaries[0]["layout_note"])
             self.assertEqual(summaries[0]["steps"][0]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][1]["status"], "not_reached")
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")

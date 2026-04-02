@@ -1382,6 +1382,17 @@ select:focus-visible,
     font-size: 0.82rem;
 }
 
+.digi-execution-layout-note {
+    margin-top: 0.7rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    background: color-mix(in srgb, var(--surface) 84%, var(--accent-soft, #d9e7ef) 16%);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
 .digi-execution-steps {
     display: grid;
     gap: 0.7rem;

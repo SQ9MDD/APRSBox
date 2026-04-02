@@ -217,6 +217,17 @@ def _normalize_number(value: Any, *, label: str, minimum: int = 0) -> int:
     return parsed
 
 
+def _normalize_step_id(value: Any) -> int | None:
+    text = _normalize_text(value)
+    if not text:
+        return None
+    try:
+        parsed = int(text)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
 def _normalize_multiline_list(value: Any) -> list[str]:
     if isinstance(value, (list, tuple)):
         return [str(item).strip() for item in value if str(item).strip()]
@@ -659,6 +670,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         title = _normalize_step_title(step_type, raw_step.get("title"))
         normalized_steps.append(
             {
+                "id": _normalize_step_id(raw_step.get("id")),
                 "step_order": index,
                 "step_type": step_type,
                 "title": title,
@@ -720,6 +732,46 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     }
 
 
+def _step_signature(step: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(step.get("step_type") or ""),
+        str(step.get("title") or ""),
+        json.dumps(step.get("config") or {}, sort_keys=True, separators=(",", ":"), ensure_ascii=True),
+    )
+
+
+def _preserve_existing_step_ids(existing_steps: list[dict[str, Any]], normalized_steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    available_by_id = {int(step["id"]): dict(step) for step in existing_steps}
+    available_ids = set(available_by_id)
+    available_by_signature: dict[tuple[str, str, str], list[int]] = {}
+    for step in existing_steps:
+        step_id = int(step["id"])
+        available_by_signature.setdefault(_step_signature(step), []).append(step_id)
+
+    preserved_steps: list[dict[str, Any]] = []
+    for step in normalized_steps:
+        normalized_step = dict(step)
+        requested_id = _normalize_step_id(normalized_step.get("id"))
+        resolved_id: int | None = None
+        if requested_id is not None and requested_id in available_ids:
+            existing = available_by_id[requested_id]
+            if str(existing.get("step_type") or "") == str(normalized_step.get("step_type") or ""):
+                resolved_id = requested_id
+        if resolved_id is None:
+            signature = _step_signature(normalized_step)
+            candidates = available_by_signature.get(signature, [])
+            while candidates:
+                candidate_id = candidates.pop(0)
+                if candidate_id in available_ids:
+                    resolved_id = candidate_id
+                    break
+        if resolved_id is not None:
+            available_ids.discard(resolved_id)
+        normalized_step["id"] = resolved_id
+        preserved_steps.append(normalized_step)
+    return preserved_steps
+
+
 def create_digi_flow(payload: dict[str, Any]) -> int:
     normalized = normalize_digi_flow_payload(payload)
     timestamp = utc_now()
@@ -771,6 +823,8 @@ def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
     if get_digi_flow(flow_id) is None:
         raise ValueError("DIGI Flow not found.")
     normalized = normalize_digi_flow_payload(payload, existing_flow_id=flow_id)
+    existing_steps = get_digi_flow_steps(flow_id)
+    normalized["steps"] = _preserve_existing_step_ids(existing_steps, list(normalized["steps"]))
     timestamp = utc_now()
     with get_connection() as connection:
         connection.execute(
@@ -798,9 +852,51 @@ def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
                 flow_id,
             ),
         )
-        connection.execute("DELETE FROM digi_flow_steps WHERE flow_id = ?", (flow_id,))
-        for step in normalized["steps"]:
+        retained_existing_ids = [_normalize_step_id(step.get("id")) for step in normalized["steps"]]
+        retained_existing_ids = [step_id for step_id in retained_existing_ids if step_id is not None]
+        if retained_existing_ids:
+            placeholders = ", ".join("?" for _ in retained_existing_ids)
             connection.execute(
+                f"""
+                UPDATE digi_flow_steps
+                SET step_order = -id,
+                    updated_at = ?
+                WHERE flow_id = ?
+                  AND id IN ({placeholders})
+                """,
+                (timestamp, flow_id, *retained_existing_ids),
+            )
+        retained_step_ids: set[int] = set()
+        for step in normalized["steps"]:
+            step_id = _normalize_step_id(step.get("id"))
+            config_json = json.dumps(step["config"], separators=(",", ":"), ensure_ascii=True)
+            if step_id is not None:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET step_order = ?,
+                        step_type = ?,
+                        title = ?,
+                        enabled = ?,
+                        config_json = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                      AND flow_id = ?
+                    """,
+                    (
+                        step["step_order"],
+                        step["step_type"],
+                        step["title"],
+                        step["enabled"],
+                        config_json,
+                        timestamp,
+                        step_id,
+                        flow_id,
+                    ),
+                )
+                retained_step_ids.add(step_id)
+                continue
+            cursor = connection.execute(
                 """
                 INSERT INTO digi_flow_steps (
                     flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
@@ -813,10 +909,18 @@ def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
                     step["step_type"],
                     step["title"],
                     step["enabled"],
-                    json.dumps(step["config"], separators=(",", ":"), ensure_ascii=True),
+                    config_json,
                     timestamp,
                     timestamp,
                 ),
+            )
+            retained_step_ids.add(int(cursor.lastrowid))
+        stale_step_ids = [int(step["id"]) for step in existing_steps if int(step["id"]) not in retained_step_ids]
+        if stale_step_ids:
+            placeholders = ", ".join("?" for _ in stale_step_ids)
+            connection.execute(
+                f"DELETE FROM digi_flow_steps WHERE flow_id = ? AND id IN ({placeholders})",
+                (flow_id, *stale_step_ids),
             )
     log_event("INFO", "config", f"Updated DIGI Flow #{flow_id}")
 
@@ -968,6 +1072,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
     final_decision = ""
     final_message = ""
     output_action_decision = ""
+    unresolved_step_reference = False
     for event in events:
         source_display = f"{event.get('source_kind') or ''}:{event.get('source_ref') or ''}".strip(":") or source_display
         if not raw_packet:
@@ -979,6 +1084,8 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         decision = str(event.get("decision") or "")
         message = str(event.get("message") or "").strip()
         step_id = event.get("step_id")
+        if step_id not in {None, ""} and int(step_id) not in step_state_by_id:
+            unresolved_step_reference = True
 
         step_state = _resolve_execution_step_state(flow=flow, steps=steps, step_state_by_id=step_state_by_id, step_id=step_id, event=event)
         if step_state is not None:
@@ -1006,6 +1113,10 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
     final_result = _execution_final_result(final_decision=final_decision, output_action_decision=output_action_decision, steps=step_state_by_id)
     final_step = _execution_final_step(step_state_by_id, final_result=final_result)
     timestamp = str(events[0].get("created_at") or "")
+    flow_changed_after_execution = _execution_predates_flow_update(timestamp, str(flow.get("updated_at") or ""))
+    layout_changed = flow_changed_after_execution and (
+        unresolved_step_reference or _execution_has_reached_gap(step_state_by_id)
+    )
     return {
         "frame_uid": str(events[0]["frame_uid"]),
         "flow_id": int(flow["id"]),
@@ -1019,6 +1130,12 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         "raw_packet": raw_packet or "-",
         "processed_packet": processed_packet or raw_packet or "-",
         "source_display": source_display or "-",
+        "layout_changed": layout_changed,
+        "layout_note": (
+            "This packet was processed before the current flow layout was saved. Historical step mapping may be partial."
+            if layout_changed
+            else ""
+        ),
         "step_count": len(steps),
         "step_path": " -> ".join(str(index) for index in range(1, len(steps) + 1)),
         "steps": [step_state_by_id[int(step["id"])] for step in steps],
@@ -1127,3 +1244,24 @@ def _format_local_execution_time(value: str) -> str:
     except ValueError:
         return value
     return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _execution_predates_flow_update(execution_created_at: str, flow_updated_at: str) -> bool:
+    if not execution_created_at or not flow_updated_at:
+        return False
+    try:
+        execution_ts = datetime.fromisoformat(execution_created_at.replace("Z", "+00:00"))
+        flow_ts = datetime.fromisoformat(flow_updated_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return execution_ts <= flow_ts
+
+
+def _execution_has_reached_gap(steps: dict[int, dict[str, Any]]) -> bool:
+    ordered_steps = sorted(steps.values(), key=lambda item: int(item["number"]))
+    for index, step in enumerate(ordered_steps):
+        if step["status"] != "not_reached":
+            continue
+        if any(candidate["status"] != "not_reached" for candidate in ordered_steps[index + 1 :]):
+            return True
+    return False
