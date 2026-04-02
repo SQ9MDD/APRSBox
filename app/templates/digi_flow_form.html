@@ -243,7 +243,8 @@
             if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
             if (stepType === "filter_strict") return {};
             if (stepType === "filter_callsign") return { mode: "allow", callsigns: [] };
-            if (stepType === "filter_packet_type") return { packet_types: [] };
+            if (stepType === "filter_packet_type") return { mode: "allow", packet_types: [] };
+            if (stepType === "filter_icon") return { mode: "allow", icons: [] };
             if (stepType === "filter_distance") return { max_km: 50 };
             if (stepType === "filter_rate_limit") return { packets_per_minute: 60 };
             if (stepType === "tx_rf") return { rf_target: refValue || "" };
@@ -272,7 +273,8 @@
             }
             if (step.step_type === "filter_strict") return "Rejects TCP, NOGATE, RFONLY";
             if (step.step_type === "filter_callsign") return `Mode: ${config.mode || "allow"}, callsigns: ${(config.callsigns || []).length}`;
-            if (step.step_type === "filter_packet_type") return `Packet types: ${(config.packet_types || []).join(", ") || "none"}`;
+            if (step.step_type === "filter_packet_type") return `Mode: ${config.mode || "allow"}, packet types: ${(config.packet_types || []).join(", ") || "none"}`;
+            if (step.step_type === "filter_icon") return `Mode: ${config.mode || "allow"}, icons: ${(config.icons || []).join(", ") || "none"}`;
             if (step.step_type === "filter_distance") return `Max distance: ${config.max_km || "-"} km`;
             if (step.step_type === "filter_rate_limit") return `Rate: ${config.packets_per_minute || "-"} pkt/min`;
             if (step.step_type === "tx_rf") return `RF target: ${config.rf_target || "-"}`;
@@ -410,21 +412,39 @@
                 const textarea = document.createElement("textarea");
                 const value = step.config[field.name];
                 textarea.value = configLinesToText(value);
+                if (field.placeholder) {
+                    textarea.placeholder = field.placeholder;
+                }
                 textarea.addEventListener("input", () => {
                     step.config[field.name] = textToLines(textarea.value);
                 });
                 wrapper.appendChild(textarea);
+                if (field.help_text) {
+                    const hint = document.createElement("span");
+                    hint.className = "muted small";
+                    hint.textContent = field.help_text;
+                    wrapper.appendChild(hint);
+                }
                 return wrapper;
             }
 
             const input = document.createElement("input");
             input.type = field.type === "number" ? "number" : "text";
             input.value = step.config[field.name] ?? "";
+            if (field.placeholder) {
+                input.placeholder = field.placeholder;
+            }
             if (field.required) input.required = true;
             input.addEventListener("input", () => {
                 step.config[field.name] = field.type === "number" ? input.value : input.value;
             });
             wrapper.appendChild(input);
+            if (field.help_text) {
+                const hint = document.createElement("span");
+                hint.className = "muted small";
+                hint.textContent = field.help_text;
+                wrapper.appendChild(hint);
+            }
             return wrapper;
         };
 

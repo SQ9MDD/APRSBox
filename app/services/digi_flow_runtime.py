@@ -233,6 +233,10 @@ class DigiFlowRuntimeService:
             return self._execute_path_rule(context, step)
         if step_type == "filter_strict":
             return self._execute_strict_filter(context, step)
+        if step_type == "filter_packet_type":
+            return self._execute_packet_type_filter(context, step)
+        if step_type == "filter_icon":
+            return self._execute_icon_filter(context, step)
         if step_type == "action_log":
             return self._execute_log_only(context, step)
         if step_type == "action_drop":
@@ -443,6 +447,104 @@ class DigiFlowRuntimeService:
             message=f"Strict filter rejected frame because path contains blocked token {blocked_token}. Input path: {input_path or '-'}",
         )
         return {"decision": "drop"}
+
+    def _execute_packet_type_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        parsed = context.get("parsed")
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        config = dict(step.get("config") or {})
+        mode = str(config.get("mode") or "allow").strip().lower() or "allow"
+        configured = [str(item).strip().upper() for item in config.get("packet_types") or [] if str(item).strip()]
+        packet_type = _parsed_aprs_packet_type(parsed)
+
+        if not packet_type:
+            decision = "drop" if mode == "allow" else "continue"
+            message = (
+                "Packet type filter rejected frame because APRS packet type could not be decoded."
+                if decision == "drop"
+                else "Packet type filter passed because APRS packet type could not be decoded and deny list applies only to decoded types."
+            )
+        elif mode == "allow":
+            matched = packet_type in configured
+            decision = "continue" if matched else "drop"
+            if configured:
+                message = (
+                    f"Packet type filter ({mode}) inspected {packet_type}: "
+                    f"{'passed' if matched else 'rejected'} because it "
+                    f"{'matched configured type ' + packet_type if matched else 'did not match any allow type'}."
+                )
+            else:
+                message = f"Packet type filter ({mode}) inspected {packet_type}: rejected because the allow list is empty."
+        else:
+            blocked = packet_type in configured
+            decision = "drop" if blocked else "continue"
+            if configured:
+                message = (
+                    f"Packet type filter ({mode}) inspected {packet_type}: "
+                    f"{'rejected' if blocked else 'passed'} because it "
+                    f"{'matched configured type ' + packet_type if blocked else 'did not match any deny type'}."
+                )
+            else:
+                message = f"Packet type filter ({mode}) inspected {packet_type}: passed because the deny list is empty."
+
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="filter_packet_type",
+            decision="passed" if decision == "continue" else "rejected",
+            message=message,
+        )
+        return {"decision": decision}
+
+    def _execute_icon_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        parsed = context.get("parsed")
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        config = dict(step.get("config") or {})
+        mode = str(config.get("mode") or "allow").strip().lower() or "allow"
+        configured = [str(item).strip().upper() for item in config.get("icons") or [] if str(item).strip()]
+        symbol = _parsed_aprs_symbol(parsed)
+
+        if not symbol:
+            decision = "drop" if mode == "allow" else "continue"
+            message = (
+                "Icon filter rejected frame because APRS symbol could not be decoded."
+                if decision == "drop"
+                else "Icon filter passed because APRS symbol could not be decoded and deny list applies only to decoded symbols."
+            )
+        elif mode == "allow":
+            matched = symbol in configured
+            decision = "continue" if matched else "drop"
+            if configured:
+                message = (
+                    f"Icon filter ({mode}) inspected {symbol}: "
+                    f"{'passed' if matched else 'rejected'} because it "
+                    f"{'matched configured symbol ' + symbol if matched else 'did not match any allow symbol'}."
+                )
+            else:
+                message = f"Icon filter ({mode}) inspected {symbol}: rejected because the allow list is empty."
+        else:
+            blocked = symbol in configured
+            decision = "drop" if blocked else "continue"
+            if configured:
+                message = (
+                    f"Icon filter ({mode}) inspected {symbol}: "
+                    f"{'rejected' if blocked else 'passed'} because it "
+                    f"{'matched configured symbol ' + symbol if blocked else 'did not match any deny symbol'}."
+                )
+            else:
+                message = f"Icon filter ({mode}) inspected {symbol}: passed because the deny list is empty."
+
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="filter_icon",
+            decision="passed" if decision == "continue" else "rejected",
+            message=message,
+        )
+        return {"decision": decision}
 
     def _execute_log_only(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         config = dict(step.get("config") or {})
@@ -657,3 +759,13 @@ def _local_station_identity() -> str:
         return ""
     ssid = str(station_settings.get("ssid") or "").strip()
     return f"{callsign}-{ssid}" if ssid else callsign
+
+
+def _parsed_aprs_packet_type(parsed: dict[str, Any] | None) -> str:
+    aprs_data = dict((parsed or {}).get("aprs_data") or {})
+    return str(aprs_data.get("frame_type") or "").strip().upper()
+
+
+def _parsed_aprs_symbol(parsed: dict[str, Any] | None) -> str:
+    aprs_data = dict((parsed or {}).get("aprs_data") or {})
+    return str(aprs_data.get("symbol") or "").strip().upper()
