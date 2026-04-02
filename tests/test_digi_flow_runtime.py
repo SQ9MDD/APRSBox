@@ -244,6 +244,64 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "no_trace" and "SP2-2*,SP2-1" in row["message"] for row in no_trace_rows))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "rejected" for row in rejected_rows))
 
+    async def test_strict_filter_rejects_tcp_nogate_and_rfonly_paths(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Strict LOG",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                clean = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Clean",
+                )
+                tcp = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,TCPIP*:>TCP reject",
+                )
+                nogate = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,NOGATE:>NOGATE reject",
+                )
+                rfonly = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,RFONLY:>RFONLY reject",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            clean_rows = event_rows_for_frame(str(clean["frame_uid"]))
+            tcp_rows = event_rows_for_frame(str(tcp["frame_uid"]))
+            nogate_rows = event_rows_for_frame(str(nogate["frame_uid"]))
+            rfonly_rows = event_rows_for_frame(str(rfonly["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "passed" for row in clean_rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in clean_rows))
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "TCPIP" in row["message"] for row in tcp_rows))
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "NOGATE" in row["message"] for row in nogate_rows))
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "RFONLY" in row["message"] for row in rfonly_rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in tcp_rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in nogate_rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rfonly_rows))
+
     async def test_filter_then_path_rule_reaches_tx_stub(self) -> None:
         with temporary_database():
             set_local_station_identity()
@@ -270,6 +328,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "enabled": 1,
                             "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
                         },
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
                         {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
                     ],
                 }
@@ -289,16 +348,18 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             rows = event_rows_for_frame(str(result["frame_uid"]))
             self.assertTrue(any(row["event_type"] == "filter_callsign" and row["decision"] == "passed" for row in rows))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows))
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "passed" for row in rows))
             self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "tx" and "would transmit to target RF:RF-OUT" in row["message"] for row in rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "tx" for row in rows))
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
             self.assertEqual(len(summaries), 1)
             self.assertEqual(summaries[0]["final_result"], "TX")
-            self.assertEqual(summaries[0]["step_path"], "1 -> 2 -> 3 -> 4")
+            self.assertEqual(summaries[0]["step_path"], "1 -> 2 -> 3 -> 4 -> 5")
             self.assertEqual(summaries[0]["steps"][1]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
-            self.assertEqual(summaries[0]["steps"][3]["status"], "executed")
+            self.assertEqual(summaries[0]["steps"][3]["status"], "passed")
+            self.assertEqual(summaries[0]["steps"][4]["status"], "executed")
 
 
 if __name__ == "__main__":

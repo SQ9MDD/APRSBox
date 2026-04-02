@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
         'filter_dupe',
         'filter_digi',
         'filter_path',
+        'filter_strict',
         'filter_callsign',
         'filter_packet_type',
         'filter_icon',
@@ -794,6 +795,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         "filter_digi",
         "filter_icon",
         "filter_rate_limit_per_callsign",
+        "filter_strict",
     )
     if all(step_type in steps_sql for step_type in required_step_types):
         return
@@ -810,6 +812,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
                 'filter_dupe',
                 'filter_digi',
                 'filter_path',
+                'filter_strict',
                 'filter_callsign',
                 'filter_packet_type',
                 'filter_icon',

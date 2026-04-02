@@ -195,6 +195,8 @@ class DigiFlowRuntimeService:
             return self._execute_callsign_filter(context, step)
         if step_type == "filter_path":
             return self._execute_path_rule(context, step)
+        if step_type == "filter_strict":
+            return self._execute_strict_filter(context, step)
         if step_type == "action_log":
             return self._execute_log_only(context, step)
         if step_type == "action_drop":
@@ -354,6 +356,44 @@ class DigiFlowRuntimeService:
         )
         return {"decision": "drop"}
 
+    def _execute_strict_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        parsed = context.get("parsed")
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        if parsed is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="strict_filter",
+                decision="rejected",
+                message="Strict filter rejected frame because TNC2 parsing failed.",
+            )
+            return {"decision": "drop"}
+
+        input_path = str(parsed.get("path") or "").strip().upper()
+        blocked_token = _find_blocked_strict_path_token(_split_path_tokens(input_path))
+        if blocked_token is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="strict_filter",
+                decision="passed",
+                message=f"Strict filter passed. Input path: {input_path or '-'}",
+            )
+            return {"decision": "continue"}
+
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="strict_filter",
+            decision="rejected",
+            message=f"Strict filter rejected frame because path contains blocked token {blocked_token}. Input path: {input_path or '-'}",
+        )
+        return {"decision": "drop"}
+
     def _execute_log_only(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         config = dict(step.get("config") or {})
         tag = str(config.get("log_tag") or "").strip()
@@ -448,6 +488,16 @@ def _find_matching_callsign_pattern(callsign: str, patterns: list[str]) -> str |
         normalized_pattern = pattern.strip().upper()
         if _callsign_matches_pattern(normalized_callsign, normalized_pattern):
             return normalized_pattern
+    return None
+
+
+def _find_blocked_strict_path_token(path_tokens: list[str]) -> str | None:
+    for token in path_tokens:
+        normalized = token.strip().upper().rstrip("*")
+        if normalized in {"NOGATE", "RFONLY"}:
+            return normalized
+        if normalized.startswith("TCP"):
+            return normalized
     return None
 
 

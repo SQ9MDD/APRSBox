@@ -9,7 +9,7 @@
                 <p class="section-lead">Define one source, zero or more filter steps and one target. Stage 2 executes active RF flows through a small runtime skeleton with per-flow debug logging.</p>
             </div>
         </div>
-        <div class="notice">Source must be the first step, target must be the last step, the source+target pair must be unique, and RF/APRS-IS TX targets require an enabled Path Rule step.</div>
+        <div class="notice">Source must be the first step, target must be the last step, the source+target pair must be unique, APRS-IS TX targets require an enabled Path Rule step, and RF TX targets require enabled Path Rule and Strict Filter steps.</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
         {% endif %}
@@ -167,6 +167,7 @@
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
             if (stepType === "filter_dupe") return { window_sec: 30 };
             if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
+            if (stepType === "filter_strict") return {};
             if (stepType === "filter_callsign") return { mode: "allow", callsigns: [] };
             if (stepType === "filter_packet_type") return { packet_types: [] };
             if (stepType === "filter_distance") return { max_km: 50 };
@@ -195,6 +196,7 @@
                 const noTracePaths = config.no_trace_paths || [];
                 return `Mode: ${config.mode || "allow"}, paths: ${tracePaths.length + noTracePaths.length}`;
             }
+            if (step.step_type === "filter_strict") return "Rejects TCP, NOGATE, RFONLY";
             if (step.step_type === "filter_callsign") return `Mode: ${config.mode || "allow"}, callsigns: ${(config.callsigns || []).length}`;
             if (step.step_type === "filter_packet_type") return `Packet types: ${(config.packet_types || []).join(", ") || "none"}`;
             if (step.step_type === "filter_distance") return `Max distance: ${config.max_km || "-"} km`;
@@ -526,7 +528,9 @@
 
                         const text = document.createElement("span");
                         text.className = "digi-step-warning-text";
-                        text.textContent = "Minimum Path Rule is required before an RF or APRS-IS TX target.";
+                        text.textContent = steps[steps.length - 1]?.step_type === "tx_rf"
+                            ? "Minimum Path Rule and Strict Filter are required before an RF TX target."
+                            : "Minimum Path Rule is required before an APRS-IS TX target.";
                         connector.appendChild(text);
                     } else {
                         connector.className = "digi-step-connector";

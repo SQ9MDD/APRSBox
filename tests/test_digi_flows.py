@@ -117,6 +117,12 @@ class DigiFlowsTests(unittest.TestCase):
         payload["steps"] = [
             payload["steps"][0],
             {
+                "step_type": "filter_strict",
+                "title": "Strict Filter",
+                "enabled": 1,
+                "config": {},
+            },
+            {
                 "step_type": "filter_digi",
                 "title": "DIGI Filter",
                 "enabled": 1,
@@ -150,11 +156,12 @@ class DigiFlowsTests(unittest.TestCase):
         ]
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
-            self.assertEqual(normalized["steps"][1]["config"]["mode"], "deny")
-            self.assertEqual(normalized["steps"][2]["config"]["trace_paths"], ["WIDE1-1"])
-            self.assertEqual(normalized["steps"][3]["config"]["mode"], "allow")
-            self.assertEqual(normalized["steps"][4]["config"]["icons"], ["/>", "\\#"])
-            self.assertEqual(normalized["steps"][5]["config"]["packets_per_minute"], 5)
+            self.assertEqual(normalized["steps"][1]["config"], {})
+            self.assertEqual(normalized["steps"][2]["config"]["mode"], "deny")
+            self.assertEqual(normalized["steps"][3]["config"]["trace_paths"], ["WIDE1-1"])
+            self.assertEqual(normalized["steps"][4]["config"]["mode"], "allow")
+            self.assertEqual(normalized["steps"][5]["config"]["icons"], ["/>", "\\#"])
+            self.assertEqual(normalized["steps"][6]["config"]["packets_per_minute"], 5)
 
     def test_path_filter_uses_trace_and_no_trace_fields(self) -> None:
         payload = sample_flow_payload()
@@ -191,6 +198,29 @@ class DigiFlowsTests(unittest.TestCase):
         ]
         with temporary_database():
             with self.assertRaisesRegex(ValueError, "must include at least one enabled Path Rule"):
+                normalize_digi_flow_payload(payload)
+
+    def test_rf_target_requires_strict_filter(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "tx_rf"
+        payload["target_ref"] = "RF-OUT"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_path",
+                "title": "Path Rule",
+                "enabled": 1,
+                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+            },
+            {
+                "step_type": "tx_rf",
+                "title": "TX RF",
+                "enabled": 1,
+                "config": {"rf_target": "RF-OUT"},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "must include at least one enabled Strict Filter"):
                 normalize_digi_flow_payload(payload)
 
     def test_action_drop_target_does_not_require_path_filter(self) -> None:
@@ -284,6 +314,76 @@ class DigiFlowsTests(unittest.TestCase):
             finally:
                 connection.close()
             with self.assertRaisesRegex(ValueError, "cannot be enabled without an enabled Path Rule"):
+                set_digi_flow_enabled(flow_id, True)
+
+    def test_enabling_rf_tx_flow_without_enabled_strict_filter_is_blocked(self) -> None:
+        with temporary_database():
+            connection = connect()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO digi_flows (
+                        name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "Legacy RF TX flow",
+                        "",
+                        "receiver_rf",
+                        "TNC-1",
+                        "tx_rf",
+                        "RF-OUT",
+                        0,
+                        "2026-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
+                flow_id = int(connection.execute("SELECT id FROM digi_flows WHERE name = 'Legacy RF TX flow'").fetchone()["id"])
+                connection.executemany(
+                    """
+                    INSERT INTO digi_flow_steps (
+                        flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        (
+                            flow_id,
+                            1,
+                            "receiver_rf",
+                            "Receiver RF",
+                            1,
+                            '{"rf_port":"TNC-1"}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            flow_id,
+                            2,
+                            "filter_path",
+                            "Path Rule",
+                            1,
+                            '{"mode":"allow","trace_paths":["WIDE1-1"],"no_trace_paths":[]}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            flow_id,
+                            3,
+                            "tx_rf",
+                            "TX RF",
+                            1,
+                            '{"rf_target":"RF-OUT"}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            with self.assertRaisesRegex(ValueError, "cannot be enabled without an enabled Strict Filter"):
                 set_digi_flow_enabled(flow_id, True)
 
     def test_path_filter_allows_only_allow_mode(self) -> None:

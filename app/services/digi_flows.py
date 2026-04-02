@@ -9,9 +9,10 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 
 SOURCE_STEP_TYPES = ("receiver_rf", "receiver_aprsis")
 FILTER_STEP_TYPES = (
+    "filter_path",
+    "filter_strict",
     "filter_dupe",
     "filter_digi",
-    "filter_path",
     "filter_callsign",
     "filter_packet_type",
     "filter_icon",
@@ -60,6 +61,13 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
             {"name": "trace_paths", "label": "Paths (TRACE)", "type": "textarea", "required": False},
             {"name": "no_trace_paths", "label": "Paths (NO TRACE)", "type": "textarea", "required": False},
         ),
+    },
+    "filter_strict": {
+        "category": "filter",
+        "label": "Strict Filter",
+        "badge": "Rule",
+        "description": "Rejects frames when the path contains TCP, NOGATE or RFONLY.",
+        "config_fields": (),
     },
     "filter_digi": {
         "category": "filter",
@@ -224,8 +232,20 @@ def _flow_requires_path_rule(target_kind: str) -> bool:
     return target_kind in {"tx_rf", "tx_aprsis"}
 
 
+def _flow_requires_strict_filter(target_kind: str) -> bool:
+    return target_kind == "tx_rf"
+
+
+def _has_enabled_step_type(steps: list[dict[str, Any]], step_type: str) -> bool:
+    return any(step["step_type"] == step_type and int(step.get("enabled") or 0) == 1 for step in steps[1:-1])
+
+
 def _has_enabled_path_rule(steps: list[dict[str, Any]]) -> bool:
-    return any(step["step_type"] == "filter_path" and int(step.get("enabled") or 0) == 1 for step in steps[1:-1])
+    return _has_enabled_step_type(steps, "filter_path")
+
+
+def _has_enabled_strict_filter(steps: list[dict[str, Any]]) -> bool:
+    return _has_enabled_step_type(steps, "filter_strict")
 
 
 def _default_step_title(step_type: str) -> str:
@@ -253,6 +273,8 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
         return {"mode": "allow", "digis": []}
     if step_type == "filter_path":
         return {"mode": "allow", "trace_paths": [], "no_trace_paths": []}
+    if step_type == "filter_strict":
+        return {}
     if step_type == "filter_callsign":
         return {"mode": "allow", "callsigns": []}
     if step_type == "filter_packet_type":
@@ -298,6 +320,8 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         trace_paths = _normalize_multiline_list(config.get("trace_paths")) or legacy_paths
         no_trace_paths = _normalize_multiline_list(config.get("no_trace_paths"))
         return {"mode": mode, "trace_paths": trace_paths, "no_trace_paths": no_trace_paths}
+    if step_type == "filter_strict":
+        return {}
     if step_type == "filter_digi":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
@@ -365,6 +389,8 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         trace_paths = config.get("trace_paths") or []
         no_trace_paths = config.get("no_trace_paths") or []
         return f"Allow only, paths: {len(trace_paths) + len(no_trace_paths)}"
+    if step_type == "filter_strict":
+        return "Rejects TCP, NOGATE, RFONLY"
     if step_type == "filter_callsign":
         callsigns = config.get("callsigns") or []
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
@@ -663,6 +689,8 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError("Flow target must match the last step type and reference.")
     if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
         raise ValueError("Flow with an RF or APRS-IS TX target must include at least one enabled Path Rule step.")
+    if _flow_requires_strict_filter(target_kind) and not _has_enabled_strict_filter(normalized_steps):
+        raise ValueError("Flow with an RF TX target must include at least one enabled Strict Filter step.")
 
     duplicate = fetch_one(
         """
@@ -806,6 +834,8 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
             raise ValueError("DIGI Flow not found.")
         if _flow_requires_path_rule(str(flow.get("target_kind") or "")) and not _has_enabled_path_rule(list(flow.get("steps") or [])):
             raise ValueError("DIGI Flow with an RF or APRS-IS TX target cannot be enabled without an enabled Path Rule step.")
+        if _flow_requires_strict_filter(str(flow.get("target_kind") or "")) and not _has_enabled_strict_filter(list(flow.get("steps") or [])):
+            raise ValueError("DIGI Flow with an RF TX target cannot be enabled without an enabled Strict Filter step.")
     with get_connection() as connection:
         connection.execute(
             """
@@ -957,7 +987,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
                 if event_type == "source_step":
                     step_state["status"] = "passed"
                     step_state["description"] = "Source matched and packet entered the flow."
-                elif event_type in {"filter_callsign", "path_rule"}:
+                elif event_type in {"filter_callsign", "path_rule", "strict_filter"}:
                     step_state["status"] = "rejected" if decision == "rejected" else "passed"
                     step_state["description"] = message
                 elif event_type == "output_action":
