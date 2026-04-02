@@ -529,7 +529,7 @@
                         const text = document.createElement("span");
                         text.className = "digi-step-warning-text";
                         text.textContent = steps[steps.length - 1]?.step_type === "tx_rf"
-                            ? "Minimum Path Rule and Strict Filter are required before an RF TX target."
+                            ? "Minimum Path Rule is required before an RF TX target."
                             : "Minimum Path Rule is required before an APRS-IS TX target.";
                         connector.appendChild(text);
                     } else {
@@ -620,6 +620,7 @@
         let previousPayload = "";
         let pollingTimer = null;
         let frozen = false;
+        let refreshInFlight = false;
 
         const escapeHtml = (value) => String(value ?? "")
             .replaceAll("&", "&amp;")
@@ -627,6 +628,15 @@
             .replaceAll(">", "&gt;")
             .replaceAll('"', "&quot;")
             .replaceAll("'", "&#39;");
+
+        const executionSignature = (executions) => (Array.isArray(executions) ? executions : [])
+            .map((execution) => [
+                execution.frame_uid || "",
+                execution.created_at || "",
+                execution.final_result || "",
+                execution.final_step_number || "",
+            ].join(":"))
+            .join("|");
 
         const formatTimestamp = (value) => {
             if (!value) {
@@ -721,9 +731,10 @@
         };
 
         const refreshExecutions = async () => {
-            if (frozen) {
+            if (frozen || refreshInFlight) {
                 return;
             }
+            refreshInFlight = true;
             try {
                 const response = await fetch(`${rootPath}/api/digi-flows/${flowId}/executions`, {
                     headers: { "Accept": "application/json" },
@@ -734,21 +745,25 @@
                     return;
                 }
                 const payload = await response.json();
-                const serialized = JSON.stringify(payload.executions || []);
+                const serialized = executionSignature(payload.executions || []);
                 if (serialized === previousPayload) {
                     return;
                 }
                 previousPayload = serialized;
                 renderExecutions(payload.executions || []);
-            } catch (_error) {
+            } catch (error) {
+                console.error("Failed to refresh DIGI Flow execution summaries.", error);
                 // Keep the last visible execution summaries if polling fails.
+            } finally {
+                refreshInFlight = false;
             }
         };
 
         const initialExecutions = {{ flow_execution_summaries|tojson }};
-        previousPayload = JSON.stringify(initialExecutions);
+        previousPayload = executionSignature(initialExecutions);
         renderExecutions(initialExecutions);
         pollingTimer = window.setInterval(refreshExecutions, 2000);
+        refreshExecutions();
 
         toggleButton.addEventListener("click", () => {
             frozen = !frozen;
