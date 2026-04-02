@@ -16,6 +16,7 @@ OUTBOUND_KIND_BEACON = "beacon"
 OUTBOUND_KIND_STATUS = "status"
 OUTBOUND_KIND_OBJECT = "object"
 OUTBOUND_KIND_MESSAGE = "message"
+OUTBOUND_KIND_DIGI_TX = "digi_tx"
 OUTBOUND_STATUS_QUEUED = "queued"
 OUTBOUND_STATUS_PROCESSING = "processing"
 OUTBOUND_STATUS_SENT = "sent"
@@ -320,6 +321,65 @@ def enqueue_message_job(
         job_id = cursor.lastrowid
     log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_id} for interface {modem['name']}")
     return True, f"Message queued as job #{job_id}."
+
+
+def enqueue_digi_tx_job(
+    *,
+    interface_name: str,
+    line: str,
+    trigger: str = "digi_flow",
+    flow_id: int | None = None,
+    frame_uid: str | None = None,
+) -> tuple[bool, str]:
+    target_name = str(interface_name or "").strip()
+    tnc2_line = str(line or "").strip()
+    if not target_name:
+        return False, "RF target is required."
+    if not tnc2_line:
+        return False, "Packet line is required."
+
+    modem = fetch_one(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE name = ?
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (target_name,),
+    )
+    if modem is None:
+        return False, "Selected interface does not exist."
+
+    payload = {
+        "line": tnc2_line,
+        "trigger": str(trigger or "digi_flow").strip() or "digi_flow",
+        "flow_id": int(flow_id) if flow_id is not None else None,
+        "frame_uid": str(frame_uid).strip() if frame_uid is not None else None,
+    }
+    now_text = utc_now()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO outbound_jobs(
+                kind, interface_id, payload_json, status, scheduled_at,
+                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+            """,
+            (
+                OUTBOUND_KIND_DIGI_TX,
+                int(modem["id"]),
+                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
+                OUTBOUND_STATUS_QUEUED,
+                now_text,
+                now_text,
+                now_text,
+            ),
+        )
+        job_id = int(cursor.lastrowid)
+    log_event("INFO", "outbound", f"Queued {payload['trigger']} DIGI TX job #{job_id} for interface {modem['name']}")
+    return True, f"DIGI TX queued as job #{job_id}."
 
 
 def enqueue_direct_message_job(

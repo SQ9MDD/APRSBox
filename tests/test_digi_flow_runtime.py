@@ -1,12 +1,16 @@
 import contextlib
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
+from app.services.outbound import claim_next_outbound_job, enqueue_digi_tx_job, get_outbound_job
+from app.services.outbound_runtime import OutboundService
 
 
 @contextlib.contextmanager
@@ -39,6 +43,19 @@ def set_local_station_identity(callsign: str = "SQ9MDD", ssid: str = "4") -> Non
 def create_flow(payload: dict) -> int:
     flow_id = create_digi_flow(payload)
     row = fetch_one("SELECT id FROM digi_flows WHERE id = ?", (flow_id,))
+    assert row is not None
+    return int(row["id"])
+
+
+def insert_modem(*, name: str = "RF-OUT", device_path: str = "127.0.0.1:9001") -> int:
+    execute(
+        """
+        INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
+        VALUES (?, 'TCP', '2m', ?, 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        """,
+        (name, device_path),
+    )
+    row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
     assert row is not None
     return int(row["id"])
 
@@ -332,8 +349,9 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in nogate_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rfonly_rows))
 
-    async def test_filter_then_path_rule_reaches_tx_stub(self) -> None:
+    async def test_filter_then_path_rule_reaches_rf_tx_queue(self) -> None:
         with temporary_database():
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9003")
             set_local_station_identity()
             flow_id = create_flow(
                 {
@@ -377,10 +395,18 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             rows = event_rows_for_frame(str(result["frame_uid"]))
             self.assertTrue(any(row["event_type"] == "filter_callsign" and row["decision"] == "passed" for row in rows))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows))
-            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "tx" and "would transmit to target RF:RF-OUT" in row["message"] for row in rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "tx" and "Queued DIGI TX for target RF:RF-OUT." in row["message"] for row in rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "tx" for row in rows))
             self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
             self.assertEqual(sum(1 for row in rows if row["event_type"] == "output_action"), 1)
+
+            job_row = fetch_one("SELECT kind, status, payload_json FROM outbound_jobs ORDER BY id DESC LIMIT 1")
+            assert job_row is not None
+            self.assertEqual(job_row["kind"], "digi_tx")
+            self.assertEqual(job_row["status"], "queued")
+            payload = json.loads(job_row["payload_json"])
+            self.assertEqual(payload["frame_uid"], str(result["frame_uid"]))
+            self.assertEqual(payload["flow_id"], flow_id)
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
             self.assertEqual(len(summaries), 1)
@@ -389,6 +415,56 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summaries[0]["steps"][1]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][3]["status"], "executed")
+
+    async def test_outbound_service_sends_digi_tx_job(self) -> None:
+        with temporary_database():
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9004")
+            success, detail = enqueue_digi_tx_job(
+                interface_name="RF-OUT",
+                line="SQ9MDD-4>APRS,SQ9MDD-4*:>DIGI outbound test",
+                flow_id=7,
+                frame_uid="frame-123",
+            )
+            self.assertTrue(success)
+            self.assertIn("job #", detail)
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "digi_tx")
+
+            written_frames: list[bytes] = []
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    written_frames.append(data)
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9004)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await outbound_service._process_job(job)
+
+            runtime_job = get_outbound_job(int(job["id"]))
+            assert runtime_job is not None
+            self.assertEqual(runtime_job["status"], "sent")
+            self.assertTrue(written_frames)
+
+            traffic_row = fetch_one("SELECT source, line FROM traffic_frames ORDER BY id DESC LIMIT 1")
+            assert traffic_row is not None
+            self.assertEqual(traffic_row["source"], "RF-OUT")
+            self.assertEqual(traffic_row["line"], "SQ9MDD-4>APRS,SQ9MDD-4*:>DIGI outbound test")
 
     async def test_unimplemented_digi_filter_is_safe_stub_and_finishes_once(self) -> None:
         with temporary_database():

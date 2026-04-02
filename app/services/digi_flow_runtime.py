@@ -8,6 +8,7 @@ from typing import Any
 from app.db import log_event, utc_now
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.digi_flows import list_enabled_digi_flows, log_digi_flow_event
+from app.services.outbound import enqueue_digi_tx_job
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
 
@@ -237,7 +238,7 @@ class DigiFlowRuntimeService:
         if step_type == "action_drop":
             return self._execute_drop(context, step)
         if step_type == "tx_rf":
-            return self._execute_tx_stub(context, step, target_label="RF")
+            return self._execute_tx_rf(context, step)
         if step_type == "tx_aprsis":
             return self._execute_tx_stub(context, step, target_label="APRS-IS")
 
@@ -457,6 +458,33 @@ class DigiFlowRuntimeService:
             message=message,
         )
         return {"decision": "drop"}
+
+    def _execute_tx_rf(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        config = dict(step.get("config") or {})
+        target = str(config.get("rf_target") or "").strip()
+        success, detail = enqueue_digi_tx_job(
+            interface_name=target,
+            line=str(context["current_line"]),
+            flow_id=int(context["flow"]["id"]),
+            frame_uid=str(context["frame_uid"]),
+        )
+        decision = "tx" if success else "drop"
+        message = (
+            f"Queued DIGI TX for target RF:{target or '-'}."
+            if success
+            else f"Failed to queue DIGI TX for target RF:{target or '-'}."
+        )
+        if detail:
+            message = f"{message} {detail}"
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=int(context["flow"]["id"]),
+            step_id=int(step["id"]),
+            event_type="output_action",
+            decision=decision,
+            message=f"{message} | line={context['current_line']}",
+        )
+        return {"decision": decision}
 
     def _execute_tx_stub(self, context: dict[str, Any], step: dict[str, Any], *, target_label: str) -> dict[str, str]:
         config = dict(step.get("config") or {})
