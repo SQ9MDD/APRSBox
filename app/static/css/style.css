@@ -1876,6 +1876,68 @@ select:focus-visible,
     text-transform: uppercase;
 }
 
+.digi-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.5rem;
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+}
+
+.digi-mode-badge-allow {
+    color: #0f5132;
+    background: rgba(47, 133, 90, 0.14);
+    border-color: rgba(47, 133, 90, 0.3);
+}
+
+.digi-mode-badge-deny {
+    color: #842029;
+    background: rgba(187, 65, 82, 0.14);
+    border-color: rgba(187, 65, 82, 0.3);
+}
+
+.digi-mode-select {
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.digi-mode-select-allow {
+    border-color: rgba(47, 133, 90, 0.42);
+    background: linear-gradient(180deg, rgba(47, 133, 90, 0.08), var(--panel));
+}
+
+.digi-mode-select-deny {
+    border-color: rgba(187, 65, 82, 0.42);
+    background: linear-gradient(180deg, rgba(187, 65, 82, 0.08), var(--panel));
+}
+
+:root:not([data-theme="light"]) .digi-mode-badge-allow {
+    color: #d6ffe8;
+    background: rgba(47, 133, 90, 0.24);
+    border-color: rgba(120, 220, 165, 0.35);
+}
+
+:root:not([data-theme="light"]) .digi-mode-badge-deny {
+    color: #ffd7dc;
+    background: rgba(187, 65, 82, 0.24);
+    border-color: rgba(255, 160, 171, 0.35);
+}
+
+:root:not([data-theme="light"]) .digi-mode-select-allow {
+    border-color: rgba(120, 220, 165, 0.35);
+    background: linear-gradient(180deg, rgba(47, 133, 90, 0.18), var(--panel));
+}
+
+:root:not([data-theme="light"]) .digi-mode-select-deny {
+    border-color: rgba(255, 160, 171, 0.35);
+    background: linear-gradient(180deg, rgba(187, 65, 82, 0.18), var(--panel));
+}
+
 .band-condition-hero-copy strong {
     font-size: 1.42rem;
     line-height: 1.05;

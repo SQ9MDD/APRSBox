@@ -308,6 +308,10 @@
         };
 
         const stepLabel = (stepType) => (typeMeta[stepType] || {}).label || stepType;
+        const stepMode = (step) => {
+            const mode = String((step.config || {}).mode || "").trim().toLowerCase();
+            return mode === "allow" || mode === "deny" ? mode : "";
+        };
         const normalizedStepTitle = (step) => {
             const title = String(step.title || "").trim();
             const currentLabel = stepLabel(step.step_type);
@@ -428,6 +432,9 @@
 
             if (field.type === "select") {
                 const select = document.createElement("select");
+                if (field.name === "mode") {
+                    select.className = `digi-mode-select${stepMode(step) ? ` digi-mode-select-${stepMode(step)}` : ""}`;
+                }
                 for (const optionValue of field.options || []) {
                     const option = document.createElement("option");
                     option.value = optionValue;
@@ -500,6 +507,13 @@
                 badge.className = "digi-step-badge";
                 badge.textContent = stepBadge(step.step_type);
                 meta.appendChild(badge);
+
+                if (stepMode(step)) {
+                    const modeBadge = document.createElement("span");
+                    modeBadge.className = `digi-mode-badge digi-mode-badge-${stepMode(step)}`;
+                    modeBadge.textContent = stepMode(step).toUpperCase();
+                    meta.appendChild(modeBadge);
+                }
 
                 const title = document.createElement("span");
                 title.className = "digi-step-title-inline";
