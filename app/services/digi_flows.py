@@ -243,20 +243,12 @@ def _flow_requires_path_rule(target_kind: str) -> bool:
     return target_kind in {"tx_rf", "tx_aprsis"}
 
 
-def _flow_requires_strict_filter(target_kind: str) -> bool:
-    return target_kind == "tx_rf"
-
-
 def _has_enabled_step_type(steps: list[dict[str, Any]], step_type: str) -> bool:
     return any(step["step_type"] == step_type and int(step.get("enabled") or 0) == 1 for step in steps[1:-1])
 
 
 def _has_enabled_path_rule(steps: list[dict[str, Any]]) -> bool:
     return _has_enabled_step_type(steps, "filter_path")
-
-
-def _has_enabled_strict_filter(steps: list[dict[str, Any]]) -> bool:
-    return _has_enabled_step_type(steps, "filter_strict")
 
 
 def _default_step_title(step_type: str) -> str:
@@ -701,8 +693,6 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError("Flow target must match the last step type and reference.")
     if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
         raise ValueError("Flow with an RF or APRS-IS TX target must include at least one enabled Path Rule step.")
-    if _flow_requires_strict_filter(target_kind) and not _has_enabled_strict_filter(normalized_steps):
-        raise ValueError("Flow with an RF TX target must include at least one enabled Strict Filter step.")
 
     duplicate = fetch_one(
         """
@@ -933,8 +923,6 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
             raise ValueError("DIGI Flow not found.")
         if _flow_requires_path_rule(str(flow.get("target_kind") or "")) and not _has_enabled_path_rule(list(flow.get("steps") or [])):
             raise ValueError("DIGI Flow with an RF or APRS-IS TX target cannot be enabled without an enabled Path Rule step.")
-        if _flow_requires_strict_filter(str(flow.get("target_kind") or "")) and not _has_enabled_strict_filter(list(flow.get("steps") or [])):
-            raise ValueError("DIGI Flow with an RF TX target cannot be enabled without an enabled Strict Filter step.")
     with get_connection() as connection:
         connection.execute(
             """

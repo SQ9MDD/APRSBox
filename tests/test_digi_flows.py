@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.db import connect, init_db
+from app.db import connect, fetch_one, init_db
 from app.services.digi_flows import create_digi_flow, get_digi_flow, normalize_digi_flow_payload, set_digi_flow_enabled, update_digi_flow
 
 
@@ -325,7 +325,7 @@ class DigiFlowsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must include at least one enabled Path Rule"):
                 normalize_digi_flow_payload(payload)
 
-    def test_rf_target_requires_strict_filter(self) -> None:
+    def test_rf_target_does_not_require_strict_filter(self) -> None:
         payload = sample_flow_payload()
         payload["target_kind"] = "tx_rf"
         payload["target_ref"] = "RF-OUT"
@@ -345,8 +345,8 @@ class DigiFlowsTests(unittest.TestCase):
             },
         ]
         with temporary_database():
-            with self.assertRaisesRegex(ValueError, "must include at least one enabled Strict Filter"):
-                normalize_digi_flow_payload(payload)
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual(normalized["target_kind"], "tx_rf")
 
     def test_action_drop_target_does_not_require_path_filter(self) -> None:
         payload = sample_flow_payload()
@@ -441,7 +441,7 @@ class DigiFlowsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "cannot be enabled without an enabled Path Rule"):
                 set_digi_flow_enabled(flow_id, True)
 
-    def test_enabling_rf_tx_flow_without_enabled_strict_filter_is_blocked(self) -> None:
+    def test_enabling_rf_tx_flow_without_enabled_strict_filter_is_allowed(self) -> None:
         with temporary_database():
             connection = connect()
             try:
@@ -508,8 +508,10 @@ class DigiFlowsTests(unittest.TestCase):
                 connection.commit()
             finally:
                 connection.close()
-            with self.assertRaisesRegex(ValueError, "cannot be enabled without an enabled Strict Filter"):
-                set_digi_flow_enabled(flow_id, True)
+            set_digi_flow_enabled(flow_id, True)
+            refreshed = fetch_one("SELECT enabled FROM digi_flows WHERE id = ?", (flow_id,))
+            assert refreshed is not None
+            self.assertEqual(int(refreshed["enabled"]), 1)
 
     def test_path_filter_allows_only_allow_mode(self) -> None:
         payload = sample_flow_payload()

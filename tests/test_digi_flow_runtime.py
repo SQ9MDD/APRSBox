@@ -90,6 +90,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(rows[0]["event_type"], "frame_received")
             self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "log_only" for row in rows))
+            self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
             self.assertTrue(get_digi_flow_event_log(flow_id))
 
     async def test_callsign_filter_logs_pass_and_reject(self) -> None:
@@ -328,7 +329,6 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "enabled": 1,
                             "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
                         },
-                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
                         {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
                     ],
                 }
@@ -348,18 +348,63 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             rows = event_rows_for_frame(str(result["frame_uid"]))
             self.assertTrue(any(row["event_type"] == "filter_callsign" and row["decision"] == "passed" for row in rows))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows))
-            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "passed" for row in rows))
             self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "tx" and "would transmit to target RF:RF-OUT" in row["message"] for row in rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "tx" for row in rows))
+            self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
+            self.assertEqual(sum(1 for row in rows if row["event_type"] == "output_action"), 1)
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
             self.assertEqual(len(summaries), 1)
             self.assertEqual(summaries[0]["final_result"], "TX")
-            self.assertEqual(summaries[0]["step_path"], "1 -> 2 -> 3 -> 4 -> 5")
+            self.assertEqual(summaries[0]["step_path"], "1 -> 2 -> 3 -> 4")
             self.assertEqual(summaries[0]["steps"][1]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
-            self.assertEqual(summaries[0]["steps"][3]["status"], "passed")
-            self.assertEqual(summaries[0]["steps"][4]["status"], "executed")
+            self.assertEqual(summaries[0]["steps"][3]["status"], "executed")
+
+    async def test_unimplemented_digi_filter_is_safe_stub_and_finishes_once(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "DIGI stub",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_digi",
+                            "title": "DIGI Filter",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "digis": ["WIDE1-1"]},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                result = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Stub filter",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = event_rows_for_frame(str(result["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "step_stub" and row["decision"] == "continue" for row in rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
+            self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
+            self.assertEqual(sum(1 for row in rows if row["event_type"] == "output_action"), 1)
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0]["final_result"], "LOGGED")
 
     async def test_execution_summary_survives_flow_step_id_changes(self) -> None:
         with temporary_database():

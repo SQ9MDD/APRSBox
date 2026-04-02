@@ -56,6 +56,15 @@ class DigiFlowRuntimeService:
             created_at=created_at,
         )
         self._queue.put_nowait(frame)
+        log_event(
+            "INFO",
+            "digi_flow_runtime",
+            (
+                "Enqueued DIGI Flow frame "
+                f"{frame['frame_uid']} from {frame['source_kind']}:{frame['source_ref']} "
+                f"(queue_depth={self._queue.qsize()}) | line={frame['raw_payload']}"
+            ),
+        )
         return {
             "frame_uid": frame["frame_uid"],
             "created_at": frame["created_at"],
@@ -159,6 +168,14 @@ class DigiFlowRuntimeService:
             )
             result = self._execute_step(context, step)
             last_decision = str(result["decision"])
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="step_decision",
+                decision=last_decision,
+                message=f"Step {step_title} returned decision {last_decision}.",
+            )
             if last_decision != "continue":
                 log_digi_flow_event(
                     frame_uid=context["frame_uid"],
