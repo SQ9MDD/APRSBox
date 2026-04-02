@@ -1390,6 +1390,10 @@ select:focus-visible,
     opacity: 0.78;
 }
 
+:root:not([data-theme="light"]) .digi-execution-packet-icon {
+    filter: brightness(0) invert(1);
+}
+
 .digi-execution-meta {
     margin-top: 0.6rem;
     color: var(--text-muted);
