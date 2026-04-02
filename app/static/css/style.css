@@ -996,9 +996,9 @@ select:focus-visible,
 
 .users-table th:nth-child(1),
 .users-table td:nth-child(1) {
-    width: 7.5rem;
-    min-width: 7.5rem;
-    max-width: 7.5rem;
+    width: 6.2rem;
+    min-width: 6.2rem;
+    max-width: 6.2rem;
     overflow-wrap: anywhere;
 }
 
@@ -1016,15 +1016,15 @@ select:focus-visible,
 
 .users-table th:nth-child(4),
 .users-table td:nth-child(4) {
-    width: 13rem;
-    min-width: 13rem;
+    width: 10.75rem;
+    min-width: 10.75rem;
     white-space: nowrap;
 }
 
 .users-table th:nth-child(5),
 .users-table td:nth-child(5) {
-    width: 10.5rem;
-    min-width: 10.5rem;
+    width: 7.4rem;
+    min-width: 7.4rem;
     text-align: right;
 }
 
