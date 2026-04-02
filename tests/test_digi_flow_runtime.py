@@ -11,6 +11,7 @@ from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
 from app.services.outbound import claim_next_outbound_job, enqueue_digi_tx_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
+from app.services.traffic import TrafficMonitorService
 
 
 @contextlib.contextmanager
@@ -421,7 +422,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             insert_modem(name="RF-OUT", device_path="127.0.0.1:9004")
             success, detail = enqueue_digi_tx_job(
                 interface_name="RF-OUT",
-                line="SQ9MDD-4>APRS,SQ9MDD-4*:>DIGI outbound test",
+                line="SQ9MDD-4>APRS,SQ9MDD-4*,WIDE2-1:>DIGI outbound test",
                 flow_id=7,
                 frame_uid="frame-123",
             )
@@ -461,10 +462,15 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(runtime_job["status"], "sent")
             self.assertTrue(written_frames)
 
+            monitor = TrafficMonitorService()
+            unescaped_payload = monitor._kiss_unescape(written_frames[0][1:-1])
+            decoded = monitor._decode_ax25_to_tnc2(unescaped_payload[1:])
+            self.assertEqual(decoded, "SQ9MDD-4 > APRS , SQ9MDD-4*,WIDE2-1:>DIGI outbound test")
+
             traffic_row = fetch_one("SELECT source, line FROM traffic_frames ORDER BY id DESC LIMIT 1")
             assert traffic_row is not None
             self.assertEqual(traffic_row["source"], "RF-OUT")
-            self.assertEqual(traffic_row["line"], "SQ9MDD-4>APRS,SQ9MDD-4*:>DIGI outbound test")
+            self.assertEqual(traffic_row["line"], "SQ9MDD-4>APRS,SQ9MDD-4*,WIDE2-1:>DIGI outbound test")
 
     async def test_unimplemented_digi_filter_is_safe_stub_and_finishes_once(self) -> None:
         with temporary_database():

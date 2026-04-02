@@ -657,7 +657,13 @@ def build_tnc2_kiss_frame(line: str) -> bytes:
         if path_parts:
             addresses[1] = _encode_ax25_address(source, is_last=False)
             for index, item in enumerate(path_parts):
-                addresses.append(_encode_ax25_address(item.rstrip("*"), is_last=index == len(path_parts) - 1))
+                addresses.append(
+                    _encode_ax25_address(
+                        item.rstrip("*"),
+                        is_last=index == len(path_parts) - 1,
+                        has_been_repeated=item.endswith("*"),
+                    )
+                )
     for chunk in addresses:
         ax25.extend(chunk)
     ax25.append(AX25_CONTROL_UI)
@@ -789,11 +795,13 @@ def _parse_tnc2_line(line: str) -> tuple[str, str, str, str]:
     return source.strip(), destination.strip(), ",".join(item.strip() for item in path_parts if item.strip()), info
 
 
-def _encode_ax25_address(value: str, *, is_last: bool) -> bytes:
+def _encode_ax25_address(value: str, *, is_last: bool, has_been_repeated: bool = False) -> bytes:
     callsign, ssid = _split_callsign_ssid(value)
     padded = callsign.ljust(6)
     encoded = bytearray((ord(char) << 1) for char in padded[:6])
     control = 0x60 | ((ssid & 0x0F) << 1)
+    if has_been_repeated:
+        control |= 0x80
     if is_last:
         control |= 0x01
     encoded.append(control)
