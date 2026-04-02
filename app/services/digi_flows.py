@@ -23,6 +23,17 @@ FILTER_STEP_TYPES = (
 TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
 DIGI_FLOW_EXECUTION_RETENTION_LIMIT = 200
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
+RUNTIME_IMPLEMENTED_STEP_TYPES = {
+    "receiver_rf",
+    "receiver_aprsis",
+    "filter_path",
+    "filter_strict",
+    "filter_callsign",
+    "tx_rf",
+    "action_drop",
+    "action_log",
+}
+RUNTIME_STUB_STEP_TYPES = {"filter_digi", "tx_aprsis"}
 
 STEP_TYPE_META: dict[str, dict[str, Any]] = {
     "receiver_rf": {
@@ -192,6 +203,23 @@ STEP_TYPE_TO_REF_FIELD = {
 
 def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _runtime_status(step_type: str) -> str:
+    if step_type in RUNTIME_IMPLEMENTED_STEP_TYPES:
+        return "implemented"
+    if step_type in RUNTIME_STUB_STEP_TYPES:
+        return "stub"
+    return "config_only"
+
+
+def _runtime_status_label(step_type: str) -> str:
+    status = _runtime_status(step_type)
+    if status == "implemented":
+        return "Runtime"
+    if status == "stub":
+        return "Stub"
+    return "Config only"
 
 
 def _step_category(step_type: str) -> str:
@@ -432,6 +460,8 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
             "label": meta["label"],
             "badge": meta["badge"],
             "description": meta["description"],
+            "runtime_status": _runtime_status(step_type),
+            "runtime_label": _runtime_status_label(step_type),
             "config_fields": [dict(field) for field in meta["config_fields"]],
         }
         for step_type, meta in STEP_TYPE_META.items()

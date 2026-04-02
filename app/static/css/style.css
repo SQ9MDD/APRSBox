@@ -1132,6 +1132,45 @@ select:focus-visible,
     min-width: 0;
 }
 
+.digi-palette-heading {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.digi-runtime-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.55rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.digi-runtime-badge-implemented {
+    border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+    background: color-mix(in srgb, var(--success) 16%, var(--panel-soft));
+    color: var(--success-strong, var(--success));
+}
+
+.digi-runtime-badge-stub {
+    border-color: color-mix(in srgb, var(--warning) 35%, var(--border));
+    background: color-mix(in srgb, var(--warning) 16%, var(--panel-soft));
+    color: var(--warning-strong, var(--warning));
+}
+
+.digi-runtime-badge-config_only {
+    border-color: color-mix(in srgb, var(--text-muted) 30%, var(--border));
+    background: var(--panel-soft);
+    color: var(--text-muted);
+}
+
 .digi-steps-chain {
     display: grid;
     gap: 0.6rem;

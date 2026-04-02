@@ -10,6 +10,7 @@ from app.services.digi_flows import (
     create_digi_flow,
     get_digi_flow,
     get_digi_flow_endpoint_options,
+    get_digi_flow_type_meta,
     normalize_digi_flow_payload,
     set_digi_flow_enabled,
     update_digi_flow,
@@ -188,6 +189,16 @@ class DigiFlowsTests(unittest.TestCase):
 
             preserved_targets = get_digi_flow_endpoint_options(selected_target_selector="action_drop::drop")["target"]
             self.assertTrue(any(option["value"] == "action_drop::drop" for option in preserved_targets))
+
+    def test_type_meta_exposes_runtime_status_for_filters(self) -> None:
+        with temporary_database():
+            type_meta = get_digi_flow_type_meta()
+            self.assertEqual(type_meta["filter_path"]["runtime_status"], "implemented")
+            self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
+            self.assertEqual(type_meta["filter_digi"]["runtime_status"], "stub")
+            self.assertEqual(type_meta["filter_digi"]["runtime_label"], "Stub")
+            self.assertEqual(type_meta["filter_dupe"]["runtime_status"], "config_only")
+            self.assertEqual(type_meta["filter_dupe"]["runtime_label"], "Config only")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():
