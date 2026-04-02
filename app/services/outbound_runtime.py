@@ -107,13 +107,17 @@ class OutboundService:
                     register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
                 elif message_kind == QUERY_MESSAGE_KIND:
                     register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+            elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
             log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
         except Exception as exc:
             error = str(exc).strip() or exc.__class__.__name__
             mark_outbound_job_failed(job_id, error)
             kind = str(job.get("kind") or "unknown").strip() or "unknown"
             payload = job.get("payload") or {}
-            if kind == "message" and str(payload.get("message_kind") or "").strip() in {"direct_message", QUERY_MESSAGE_KIND} and payload.get("aprs_message_id") is not None:
+            if kind in {"message", "beacon", "status"} and (
+                kind != "message" or str(payload.get("message_kind") or "").strip() in {"direct_message", QUERY_MESSAGE_KIND}
+            ) and payload.get("aprs_message_id") is not None:
                 mark_message_failed(int(payload["aprs_message_id"]), error)
             log_event("WARNING", "outbound", f"{kind.capitalize()} outbound job #{job_id} failed: {error}")
 

@@ -364,9 +364,50 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 "SQ9MDD-4>APRS,WIDE2-1::SP8ABC   :Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER",
             )
 
-            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            rows = fetch_all(
+                """
+                SELECT direction, message_text, status
+                FROM aprs_messages
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["direction"], "rx")
+            self.assertEqual(rows[0]["message_text"], "?APRS")
+            self.assertEqual(rows[1]["direction"], "tx")
+            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
+    def test_incoming_numbered_aprs_query_is_accepted_and_shown_in_conversation(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SQ9MDD-7>APK005,RFONLY::SQ9MDD-4 :?APRS{49"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            rows = fetch_all(
+                """
+                SELECT direction, message_text, message_number
+                FROM aprs_messages
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["direction"], "rx")
+            self.assertEqual(rows[0]["message_text"], "?APRS{49")
+            self.assertEqual(rows[0]["message_number"], "49")
+            self.assertEqual(rows[1]["direction"], "tx")
+            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
+            view = get_messages_page_data()
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(len(view["conversations"][0]["messages"]), 2)
+            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "?APRS{49")
+            self.assertEqual(view["conversations"][0]["messages"][1]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
             assert row is not None
-            self.assertEqual(int(row["total"]), 0)
+            self.assertEqual(int(row["total"]), 1)
 
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():
@@ -391,6 +432,10 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 build_beacon_tnc2(job["payload"]),
                 "SQ9MDD-4>APRS,WIDE2-1:!5213.78N/02100.73E>",
             )
+            rows = fetch_all("SELECT direction, message_text, status FROM aprs_messages ORDER BY id ASC")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["message_text"], "?APRSP")
+            self.assertEqual(rows[1]["message_text"], "!5213.78N/02100.73E>")
 
     def test_incoming_aprss_query_queues_single_status_response(self) -> None:
         with temporary_database():
@@ -414,6 +459,10 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert job is not None
             self.assertEqual(job["kind"], "status")
             self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APRS:>Station online")
+            rows = fetch_all("SELECT direction, message_text, status FROM aprs_messages ORDER BY id ASC")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["message_text"], "?APRSS")
+            self.assertEqual(rows[1]["message_text"], ">Station online")
 
     def test_incoming_version_queries_return_single_text_response(self) -> None:
         with temporary_database():
@@ -449,6 +498,8 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             expected_line = f"SQ9MDD-4>APRS,WIDE2-1::SP8ABC   :APRSBox {get_version()}"
             self.assertEqual(build_message_tnc2(first_job["payload"]), expected_line)
             self.assertEqual(build_message_tnc2(second_job["payload"]), expected_line)
+            rows = fetch_all("SELECT direction, message_text FROM aprs_messages ORDER BY id ASC")
+            self.assertEqual(len(rows), 4)
 
     def test_messages_page_data_uses_persisted_rows(self) -> None:
         with temporary_database():

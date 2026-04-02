@@ -22,7 +22,12 @@ OUTBOUND_STATUS_SENT = "sent"
 OUTBOUND_STATUS_FAILED = "failed"
 
 
-def enqueue_beacon_job(station_settings: dict[str, Any], *, trigger: str = "manual") -> tuple[bool, str]:
+def enqueue_beacon_job(
+    station_settings: dict[str, Any],
+    *,
+    trigger: str = "manual",
+    aprs_message_id: int | None = None,
+) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
     beacon_interface_id = station_settings.get("beacon_interface_id")
@@ -51,6 +56,7 @@ def enqueue_beacon_job(station_settings: dict[str, Any], *, trigger: str = "manu
         return False, "Latitude and longitude must be valid decimal coordinates."
 
     payload = {
+        "aprs_message_id": aprs_message_id,
         "callsign": callsign,
         "ssid": ssid,
         "latitude": latitude,
@@ -86,7 +92,12 @@ def enqueue_beacon_job(station_settings: dict[str, Any], *, trigger: str = "manu
     return True, f"Beacon queued as job #{job_id}."
 
 
-def enqueue_status_job(station_settings: dict[str, Any], *, trigger: str = "manual") -> tuple[bool, str]:
+def enqueue_status_job(
+    station_settings: dict[str, Any],
+    *,
+    trigger: str = "manual",
+    aprs_message_id: int | None = None,
+) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
     beacon_interface_id = station_settings.get("beacon_interface_id")
@@ -113,6 +124,7 @@ def enqueue_status_job(station_settings: dict[str, Any], *, trigger: str = "manu
         return False, "Selected interface does not exist."
 
     payload = {
+        "aprs_message_id": aprs_message_id,
         "callsign": callsign,
         "ssid": ssid,
         "status_text": status_text,
@@ -359,9 +371,11 @@ def enqueue_query_response_job(
     station_settings: dict[str, Any],
     trigger: str = "query-response",
     path: str = "",
+    aprs_message_id: int | None = None,
     scheduled_for: datetime | None = None,
 ) -> tuple[bool, str]:
     payload = {
+        "aprs_message_id": aprs_message_id,
         "callsign": str(station_settings.get("callsign") or "").strip().upper(),
         "ssid": str(station_settings.get("ssid") or "").strip(),
         "message_kind": "query",

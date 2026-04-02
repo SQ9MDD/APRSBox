@@ -7,6 +7,8 @@ from typing import Any
 from app import get_version
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.services.outbound import (
+    _format_aprs_latitude,
+    _format_aprs_longitude,
     enqueue_ack_job,
     enqueue_beacon_job,
     enqueue_direct_message_job,
@@ -546,7 +548,18 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
     received_at = _normalize_timestamp(timestamp)
     if text_field.startswith("?"):
-        _handle_incoming_query(sender=sender, query_text=text_field, timestamp=received_at)
+        query_text, query_number = _parse_query_text(text_field)
+        if not query_text:
+            return
+        store_incoming_query(
+            sender=sender,
+            addressee=addressee.upper(),
+            query_text=text_field,
+            query_number=query_number,
+            path=parsed["path"],
+            timestamp=received_at,
+        )
+        _handle_incoming_query(sender=sender, query_text=query_text, timestamp=received_at)
         return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
@@ -578,46 +591,121 @@ def _handle_incoming_query(*, sender: str, query_text: str, timestamp: str) -> N
     query_type = str(query_text or "").strip().upper().split()[0]
     station_settings = _get_station_settings()
     if query_type in {"?APRS", "?APRS?"}:
-        _enqueue_query_text_response(
+        enqueue_automatic_query_text_response(
             sender=sender,
             station_settings=station_settings,
             message_text=f"Queries: {' '.join(SUPPORTED_QUERY_TYPES)}",
             trigger="query-aprs",
+            timestamp=timestamp,
         )
         return
     if query_type == "?APRSP":
-        success, error = enqueue_beacon_job(station_settings, trigger="query-aprsp")
+        success, error = enqueue_automatic_query_position_response(
+            sender=sender,
+            station_settings=station_settings,
+            trigger="query-aprsp",
+            timestamp=timestamp,
+        )
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSP from {sender}: {error or 'position unavailable'}")
         return
     if query_type == "?APRSS":
-        success, error = enqueue_status_job(station_settings, trigger="query-aprss")
+        success, error = enqueue_automatic_query_status_response(
+            sender=sender,
+            station_settings=station_settings,
+            trigger="query-aprss",
+            timestamp=timestamp,
+        )
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSS from {sender}: {error or 'status unavailable'}")
         return
     if query_type in {"?APRSV", "?VER"}:
-        _enqueue_query_text_response(
+        enqueue_automatic_query_text_response(
             sender=sender,
             station_settings=station_settings,
             message_text=f"APRSBox {get_version()}",
             trigger="query-version",
+            timestamp=timestamp,
         )
         return
     log_event("INFO", "messages", f"Ignored unsupported query from {sender}: {query_text.strip()[:80]}")
 
 
-def _enqueue_query_text_response(*, sender: str, station_settings: dict[str, Any], message_text: str, trigger: str) -> None:
+def enqueue_automatic_query_text_response(
+    *,
+    sender: str,
+    station_settings: dict[str, Any],
+    message_text: str,
+    trigger: str,
+    timestamp: str,
+) -> None:
     response_text = normalize_aprs_message_text(message_text)
     response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    message_id = create_automatic_query_response(
+        sender=sender,
+        message_text=response_text,
+        path=response_path,
+        timestamp=timestamp,
+    )
     success, error = enqueue_query_response_job(
         addressee=sender,
         message_text=response_text,
         station_settings=station_settings,
         trigger=trigger,
         path=response_path,
+        aprs_message_id=message_id,
     )
     if not success:
+        mark_message_failed(message_id, error or "Failed to queue automatic APRS query response.")
         log_event("INFO", "messages", f"Ignored {trigger} response to {sender}: {error or 'response unavailable'}")
+        return
+    _link_latest_outbound_job(message_id)
+
+
+def enqueue_automatic_query_position_response(
+    *,
+    sender: str,
+    station_settings: dict[str, Any],
+    trigger: str,
+    timestamp: str,
+) -> tuple[bool, str | None]:
+    response_text = _build_query_position_text(station_settings)
+    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    message_id = create_automatic_query_response(
+        sender=sender,
+        message_text=response_text,
+        path=response_path,
+        timestamp=timestamp,
+    )
+    success, error = enqueue_beacon_job(station_settings, trigger=trigger, aprs_message_id=message_id)
+    if not success:
+        mark_message_failed(message_id, error or "Failed to queue automatic APRSP response.")
+        return False, error
+    _link_latest_outbound_job(message_id)
+    return True, None
+
+
+def enqueue_automatic_query_status_response(
+    *,
+    sender: str,
+    station_settings: dict[str, Any],
+    trigger: str,
+    timestamp: str,
+) -> tuple[bool, str | None]:
+    response_text = _build_query_status_text(station_settings)
+    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    message_id = create_automatic_query_response(
+        sender=sender,
+        message_text=response_text,
+        path=response_path,
+        timestamp=timestamp,
+    )
+    success, error = enqueue_status_job(station_settings, trigger=trigger, aprs_message_id=message_id)
+    if not success:
+        mark_message_failed(message_id, error or "Failed to queue automatic APRSS response.")
+        return False, error
+    _link_latest_outbound_job(message_id)
+    return True, None
 
 
 def acknowledge_outgoing_message(*, sender: str, addressee: str, message_number: str, timestamp: str) -> None:
@@ -736,6 +824,129 @@ def store_incoming_message(
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
     )
+
+
+def store_incoming_query(
+    *,
+    sender: str,
+    addressee: str,
+    query_text: str,
+    query_number: str | None,
+    path: str,
+    timestamp: str,
+) -> None:
+    conversation = create_or_update_conversation(sender, path=path)
+    existing = None
+    if query_number:
+        existing = fetch_one(
+            """
+            SELECT id
+            FROM aprs_messages
+            WHERE conversation_id = ?
+              AND direction = ?
+              AND sender = ?
+              AND message_number = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, query_number),
+        )
+    if existing is not None:
+        return
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO aprs_messages(
+                conversation_id, direction, sender, addressee, message_text, path, message_number,
+                status, tx_attempt_count, is_unread, outbound_job_id, created_at, updated_at,
+                sent_at, acked_at, last_attempt_at, failed_at, failure_reason
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
+            """,
+            (
+                int(conversation["id"]),
+                MESSAGE_DIRECTION_RX,
+                sender,
+                addressee,
+                query_text,
+                normalize_aprs_path(path),
+                query_number,
+                MESSAGE_STATUS_RECEIVED,
+                timestamp,
+                timestamp,
+            ),
+        )
+    log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
+
+
+def create_automatic_query_response(*, sender: str, message_text: str, path: str, timestamp: str) -> int:
+    local_sender = _local_station_identity()
+    if not local_sender:
+        raise ValueError("Local station callsign is required.")
+    conversation = create_or_update_conversation(sender, path=path)
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO aprs_messages(
+                conversation_id, direction, sender, addressee, message_text, path, message_number,
+                status, tx_attempt_count, is_unread, outbound_job_id, created_at, updated_at,
+                sent_at, acked_at, last_attempt_at, failed_at, failure_reason
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
+            """,
+            (
+                int(conversation["id"]),
+                MESSAGE_DIRECTION_TX,
+                local_sender,
+                sender,
+                message_text,
+                path,
+                MESSAGE_STATUS_QUEUED,
+                timestamp,
+                timestamp,
+            ),
+        )
+    return int(cursor.lastrowid)
+
+
+def _link_latest_outbound_job(message_id: int) -> None:
+    queued_job = fetch_one(
+        """
+        SELECT id
+        FROM outbound_jobs
+        WHERE aprs_message_id = ? AND status = 'queued'
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (message_id,),
+    )
+    if queued_job is not None:
+        register_outbound_job_link(message_id, int(queued_job["id"]))
+
+
+def _parse_query_text(text_field: str) -> tuple[str, str | None]:
+    suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
+    if suffix_match is None:
+        return "", None
+    query_text = str(suffix_match.group("text") or "").strip()
+    message_number = suffix_match.group("number")
+    return query_text, message_number.upper() if message_number else None
+
+
+def _build_query_position_text(station_settings: dict[str, Any]) -> str:
+    latitude = float(station_settings["latitude"])
+    longitude = float(station_settings["longitude"])
+    symbol_table = str(station_settings.get("symbol_table") or "/")
+    symbol_code = str(station_settings.get("symbol_code") or ">")
+    comment = str(station_settings.get("beacon_comment") or "").strip()
+    return (
+        f"!{_format_aprs_latitude(latitude)}{symbol_table}{_format_aprs_longitude(longitude)}"
+        f"{symbol_code}{comment}"
+    )
+
+
+def _build_query_status_text(station_settings: dict[str, Any]) -> str:
+    return f">{str(station_settings.get('status_text') or '').strip()}"
 
 
 def split_callsign_ssid(value: str) -> tuple[str, str]:
