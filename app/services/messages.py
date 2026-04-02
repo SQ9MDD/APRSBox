@@ -538,13 +538,22 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
     text_field = info[11:] if len(info) >= 11 and info[10] == ":" else ""
     if not addressee or not text_field:
         return
+
+    sender = normalize_aprs_destination_callsign(parsed["source"])
     if addressee.upper().startswith("BLN"):
+        store_incoming_bulletin(
+            sender=sender,
+            addressee=addressee.upper(),
+            message_text=text_field,
+            path=parsed["path"],
+            timestamp=_normalize_timestamp(timestamp),
+        )
         return
+
     local_sender = _local_station_identity()
     if not local_sender or addressee.upper() != local_sender:
         return
 
-    sender = normalize_aprs_destination_callsign(parsed["source"])
     if local_sender and sender == local_sender:
         return
     received_at = _normalize_timestamp(timestamp)
@@ -910,6 +919,57 @@ def store_incoming_query(
     )
 
 
+def store_incoming_bulletin(
+    *,
+    sender: str,
+    addressee: str,
+    message_text: str,
+    path: str,
+    timestamp: str,
+) -> None:
+    conversation = create_or_update_conversation(sender, path=path)
+    display_text = _format_bulletin_display_text(addressee, message_text)
+    existing = fetch_one(
+        """
+        SELECT id
+        FROM aprs_messages
+        WHERE conversation_id = ?
+          AND direction = ?
+          AND sender = ?
+          AND addressee = ?
+          AND message_text = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, addressee, display_text),
+    )
+    if existing is not None:
+        return
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO aprs_messages(
+                conversation_id, direction, sender, addressee, message_text, path, message_number,
+                status, tx_attempt_count, is_unread, outbound_job_id, created_at, updated_at,
+                sent_at, acked_at, last_attempt_at, failed_at, failure_reason
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 1, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
+            """,
+            (
+                int(conversation["id"]),
+                MESSAGE_DIRECTION_RX,
+                sender,
+                addressee,
+                display_text,
+                normalize_aprs_path(path),
+                MESSAGE_STATUS_RECEIVED,
+                timestamp,
+                timestamp,
+            ),
+        )
+    log_event("INFO", "messages", f"Stored inbound APRS bulletin from {sender} to {addressee}")
+
+
 def create_automatic_query_response(*, sender: str, message_text: str, path: str, timestamp: str) -> int:
     local_sender = _local_station_identity()
     if not local_sender:
@@ -984,6 +1044,12 @@ def _query_response_scheduled_for(query_number: str | None) -> datetime | None:
     if not query_number:
         return None
     return datetime.now(timezone.utc) + timedelta(seconds=QUERY_RESPONSE_DELAY_SECONDS)
+
+
+def _format_bulletin_display_text(addressee: str, message_text: str) -> str:
+    target = str(addressee or "").strip().upper()
+    text = str(message_text or "").strip()
+    return f"{target}: {text}" if target else text
 
 
 def split_callsign_ssid(value: str) -> tuple[str, str]:

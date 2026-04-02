@@ -339,6 +339,66 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert row is not None
             self.assertEqual(int(row["total"]), 0)
 
+    def test_incoming_bulletin_is_visible_in_sender_conversation_without_ack_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SP5XYZ-9>APRS::BLN1     :Net starts at 19:30"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one(
+                """
+                SELECT m.direction, m.sender, m.addressee, m.message_text, m.message_number, m.status,
+                       c.remote_callsign, c.remote_ssid
+                FROM aprs_messages m
+                JOIN aprs_message_conversations c ON c.id = m.conversation_id
+                ORDER BY m.id DESC
+                LIMIT 1
+                """
+            )
+            assert row is not None
+            self.assertEqual(row["direction"], "rx")
+            self.assertEqual(row["sender"], "SP5XYZ-9")
+            self.assertEqual(row["addressee"], "BLN1")
+            self.assertEqual(row["message_text"], "BLN1: Net starts at 19:30")
+            self.assertEqual(row["message_number"], None)
+            self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
+            self.assertEqual(row["remote_callsign"], "SP5XYZ")
+            self.assertEqual(row["remote_ssid"], "9")
+
+            jobs = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")
+            assert jobs is not None
+            self.assertEqual(int(jobs["total"]), 0)
+
+            view = get_messages_page_data()
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(view["conversations"][0]["callsign"], "SP5XYZ-9")
+            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "BLN1: Net starts at 19:30")
+
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:06:00+00:00")
+            total = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert total is not None
+            self.assertEqual(int(total["total"]), 1)
+
+    def test_incoming_announcement_is_visible_in_sender_conversation_without_ack_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SP5XYZ>APRS::BLNA     :System maintenance 19:30 UTC"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one("SELECT addressee, message_text, message_number FROM aprs_messages ORDER BY id DESC LIMIT 1")
+            assert row is not None
+            self.assertEqual(row["addressee"], "BLNA")
+            self.assertEqual(row["message_text"], "BLNA: System maintenance 19:30 UTC")
+            self.assertEqual(row["message_number"], None)
+
+            jobs = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")
+            assert jobs is not None
+            self.assertEqual(int(jobs["total"]), 0)
+
     def test_incoming_aprs_query_returns_supported_query_list(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
