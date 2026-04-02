@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
-from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries
+from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
 
 
 @contextlib.contextmanager
@@ -357,6 +357,88 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summaries[0]["final_result"], "TX")
             self.assertEqual(summaries[0]["step_path"], "1 -> 2 -> 3 -> 4 -> 5")
             self.assertEqual(summaries[0]["steps"][1]["status"], "passed")
+            self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
+            self.assertEqual(summaries[0]["steps"][3]["status"], "passed")
+            self.assertEqual(summaries[0]["steps"][4]["status"], "executed")
+
+    async def test_execution_summary_survives_flow_step_id_changes(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            flow_id = create_flow(
+                {
+                    "name": "Mutable LOG",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_callsign",
+                            "title": "Callsign Filter",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "callsigns": ["SP8ABC-9"]},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                result = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Before edit",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            update_digi_flow(
+                flow_id,
+                {
+                    "name": "Mutable LOG",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {
+                            "step_type": "filter_callsign",
+                            "title": "Callsign Filter",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "callsigns": ["SP8ABC-9"]},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                },
+            )
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(str(summaries[0]["frame_uid"]), str(result["frame_uid"]))
+            self.assertEqual(summaries[0]["final_result"], "LOGGED")
+            self.assertEqual(summaries[0]["steps"][0]["status"], "passed")
+            self.assertEqual(summaries[0]["steps"][1]["status"], "not_reached")
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][3]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][4]["status"], "executed")

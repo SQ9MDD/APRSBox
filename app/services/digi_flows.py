@@ -980,26 +980,24 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         message = str(event.get("message") or "").strip()
         step_id = event.get("step_id")
 
-        if step_id not in {None, ""}:
-            step_key = int(step_id)
-            step_state = step_state_by_id.get(step_key)
-            if step_state is not None:
-                if event_type == "source_step":
-                    step_state["status"] = "passed"
-                    step_state["description"] = "Source matched and packet entered the flow."
-                elif event_type in {"filter_callsign", "path_rule", "strict_filter"}:
-                    step_state["status"] = "rejected" if decision == "rejected" else "passed"
-                    step_state["description"] = message
-                elif event_type == "output_action":
-                    step_state["status"] = "executed"
-                    step_state["description"] = _strip_line_suffix(message)
-                    output_action_decision = decision or output_action_decision
-                elif event_type == "step_stub":
-                    step_state["status"] = "executed"
-                    step_state["description"] = message
-                elif event_type == "step_skipped":
-                    step_state["status"] = "not_reached"
-                    step_state["description"] = "Step disabled."
+        step_state = _resolve_execution_step_state(flow=flow, steps=steps, step_state_by_id=step_state_by_id, step_id=step_id, event=event)
+        if step_state is not None:
+            if event_type == "source_step":
+                step_state["status"] = "passed"
+                step_state["description"] = "Source matched and packet entered the flow."
+            elif event_type in {"filter_callsign", "path_rule", "strict_filter"}:
+                step_state["status"] = "rejected" if decision == "rejected" else "passed"
+                step_state["description"] = message
+            elif event_type == "output_action":
+                step_state["status"] = "executed"
+                step_state["description"] = _strip_line_suffix(message)
+                output_action_decision = decision or output_action_decision
+            elif event_type == "step_stub":
+                step_state["status"] = "executed"
+                step_state["description"] = message
+            elif event_type == "step_skipped":
+                step_state["status"] = "not_reached"
+                step_state["description"] = "Step disabled."
 
         if event_type == "pipeline_finished":
             final_decision = decision
@@ -1052,6 +1050,56 @@ def _execution_final_step(steps: dict[int, dict[str, Any]], *, final_result: str
     if final_result in {"REJECTED", "DROPPED", "LOGGED", "TX"}:
         return reached_steps[-1]
     return reached_steps[-1]
+
+
+def _resolve_execution_step_state(
+    *,
+    flow: dict[str, Any],
+    steps: list[dict[str, Any]],
+    step_state_by_id: dict[int, dict[str, Any]],
+    step_id: Any,
+    event: dict[str, Any],
+) -> dict[str, Any] | None:
+    if step_id not in {None, ""}:
+        resolved = step_state_by_id.get(int(step_id))
+        if resolved is not None:
+            return resolved
+
+    hinted_step_type = _execution_event_step_type(flow=flow, event=event)
+    if not hinted_step_type:
+        return None
+
+    matching_states = [
+        step_state_by_id[int(step["id"])]
+        for step in steps
+        if str(step.get("step_type") or "") == hinted_step_type
+    ]
+    if not matching_states:
+        return None
+
+    unreached = next((state for state in matching_states if state["status"] == "not_reached"), None)
+    return unreached or matching_states[-1]
+
+
+def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -> str:
+    event_type = str(event.get("event_type") or "")
+    if event_type == "source_step":
+        return str(flow.get("source_kind") or "")
+    if event_type == "filter_callsign":
+        return "filter_callsign"
+    if event_type == "path_rule":
+        return "filter_path"
+    if event_type == "strict_filter":
+        return "filter_strict"
+    if event_type == "output_action":
+        return str(flow.get("target_kind") or "")
+    if event_type == "step_stub":
+        message = str(event.get("message") or "").strip()
+        marker = "Step type "
+        if marker in message:
+            step_type = message.split(marker, 1)[1].split(" ", 1)[0].strip().rstrip(".")
+            return step_type
+    return ""
 
 
 def _extract_line_from_message(message: str) -> str:
