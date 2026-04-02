@@ -115,10 +115,10 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>Recent Packet Executions</h2>
-                <p class="section-lead">Each block below shows one packet running through this flow from source to final outcome.</p>
+                <p class="section-lead">Each block below shows one packet running through this flow from source to final outcome. The list is limited to the latest 10 frames.</p>
             </div>
             <div class="form-actions">
-                <a href="{{ request.scope.root_path }}/digi-flows/{{ flow_id }}" class="button button-secondary">Refresh log</a>
+                <button type="button" class="button button-secondary" id="digi-flow-executions-toggle">Freeze</button>
             </div>
         </div>
         <div class="digi-execution-list" id="digi-flow-executions"></div>
@@ -607,11 +607,14 @@
         const rootPath = {{ request.scope.root_path|tojson }};
         const executionsContainer = document.getElementById("digi-flow-executions");
         const emptyState = document.getElementById("digi-flow-executions-empty");
-        if (!flowId || !executionsContainer || !emptyState) {
+        const toggleButton = document.getElementById("digi-flow-executions-toggle");
+        if (!flowId || !executionsContainer || !emptyState || !toggleButton) {
             return;
         }
 
         let previousPayload = "";
+        let pollingTimer = null;
+        let frozen = false;
 
         const escapeHtml = (value) => String(value ?? "")
             .replaceAll("&", "&amp;")
@@ -695,6 +698,9 @@
         };
 
         const refreshExecutions = async () => {
+            if (frozen) {
+                return;
+            }
             try {
                 const response = await fetch(`${rootPath}/api/digi-flows/${flowId}/executions`, {
                     headers: { "Accept": "application/json" },
@@ -719,7 +725,15 @@
         const initialExecutions = {{ flow_execution_summaries|tojson }};
         previousPayload = JSON.stringify(initialExecutions);
         renderExecutions(initialExecutions);
-        window.setInterval(refreshExecutions, 2000);
+        pollingTimer = window.setInterval(refreshExecutions, 2000);
+
+        toggleButton.addEventListener("click", () => {
+            frozen = !frozen;
+            toggleButton.textContent = frozen ? "Release" : "Freeze";
+            if (!frozen) {
+                refreshExecutions();
+            }
+        });
     })();
 </script>
 {% endblock %}

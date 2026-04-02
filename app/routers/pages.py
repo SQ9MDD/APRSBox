@@ -185,7 +185,7 @@ def _digi_flow_editor_context(
         source_step_types=SOURCE_STEP_TYPES,
         filter_step_types=FILTER_STEP_TYPES,
         target_step_types=TARGET_STEP_TYPES,
-        flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=20) if flow_id is not None else [],
+        flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=10) if flow_id is not None else [],
         flash=flash,
         flash_success=flash_success,
     )
@@ -779,7 +779,7 @@ def digi_flow_execution_summaries_api(
     flow = get_digi_flow(flow_id)
     if flow is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
-    return JSONResponse({"flow_id": flow_id, "executions": get_digi_flow_execution_summaries(flow_id, execution_limit=20)})
+    return JSONResponse({"flow_id": flow_id, "executions": get_digi_flow_execution_summaries(flow_id, execution_limit=10)})
 
 
 @router.post("/digi-flows")
