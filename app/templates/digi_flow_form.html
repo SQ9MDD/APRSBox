@@ -342,23 +342,34 @@
                 badge.textContent = stepBadge(step.step_type);
                 meta.appendChild(badge);
 
-                const titleWrap = document.createElement("div");
-                titleWrap.className = "digi-step-title-wrap";
-
-                const title = document.createElement("h3");
+                const title = document.createElement("span");
+                title.className = "digi-step-title-inline";
                 title.textContent = step.title || stepLabel(step.step_type);
-                titleWrap.appendChild(title);
+                meta.appendChild(title);
 
-                const typeLabel = document.createElement("div");
-                typeLabel.className = "muted small";
-                typeLabel.textContent = stepLabel(step.step_type);
-                titleWrap.appendChild(typeLabel);
-
-                header.appendChild(meta);
-                header.appendChild(titleWrap);
+                const summary = document.createElement("span");
+                summary.className = "digi-step-summary-inline";
+                summary.textContent = stepSummary(step);
+                meta.appendChild(summary);
 
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
+
+                const enabledRow = document.createElement("label");
+                enabledRow.className = "digi-step-inline-toggle";
+                const enabledInput = document.createElement("input");
+                enabledInput.type = "checkbox";
+                enabledInput.value = "1";
+                enabledInput.checked = !!step.enabled;
+                enabledInput.addEventListener("change", () => {
+                    step.enabled = enabledInput.checked ? 1 : 0;
+                    render();
+                });
+                const enabledLabel = document.createElement("span");
+                enabledLabel.textContent = "Enabled";
+                enabledRow.appendChild(enabledInput);
+                enabledRow.appendChild(enabledLabel);
+                actions.appendChild(enabledRow);
 
                 const toggleButton = document.createElement("button");
                 toggleButton.type = "button";
@@ -378,21 +389,6 @@
                     render();
                 });
                 actions.appendChild(toggleButton);
-
-                const editButton = document.createElement("button");
-                editButton.type = "button";
-                editButton.className = "table-icon-button";
-                editButton.title = "Edit step";
-                editButton.setAttribute("aria-label", "Edit step");
-                const editIcon = document.createElement("img");
-                editIcon.src = iconPath("pencil.svg");
-                editIcon.alt = "";
-                editButton.appendChild(editIcon);
-                editButton.addEventListener("click", () => {
-                    setExpandedStep(index);
-                    render();
-                });
-                actions.appendChild(editButton);
 
                 const moveUpButton = document.createElement("button");
                 moveUpButton.type = "button";
@@ -449,29 +445,9 @@
                 });
                 actions.appendChild(deleteButton);
 
+                header.appendChild(meta);
                 header.appendChild(actions);
                 stepCard.appendChild(header);
-
-                const summary = document.createElement("p");
-                summary.className = "digi-step-summary";
-                summary.textContent = stepSummary(step);
-                stepCard.appendChild(summary);
-
-                const enabledRow = document.createElement("label");
-                enabledRow.className = "checkbox-row";
-                const enabledInput = document.createElement("input");
-                enabledInput.type = "checkbox";
-                enabledInput.value = "1";
-                enabledInput.checked = !!step.enabled;
-                enabledInput.addEventListener("change", () => {
-                    step.enabled = enabledInput.checked ? 1 : 0;
-                    render();
-                });
-                const enabledLabel = document.createElement("span");
-                enabledLabel.textContent = step.enabled ? "Step enabled" : "Step disabled";
-                enabledRow.appendChild(enabledInput);
-                enabledRow.appendChild(enabledLabel);
-                stepCard.appendChild(enabledRow);
 
                 if (step.__editing) {
                     const editor = document.createElement("div");
