@@ -1258,6 +1258,34 @@ select:focus-visible,
     font-size: 1.1rem;
 }
 
+.digi-step-connector-warning {
+    gap: 0.55rem;
+    min-height: 2.2rem;
+    padding: 0.5rem 0.8rem;
+    border: 1px solid rgba(201, 122, 122, 0.28);
+    border-radius: var(--radius-md);
+    background: rgba(201, 122, 122, 0.08);
+    color: var(--danger);
+    font-size: 0.84rem;
+}
+
+.digi-step-warning-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.45rem;
+    min-width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.digi-step-warning-text {
+    overflow-wrap: anywhere;
+}
+
 .logs-table {
     table-layout: fixed;
 }

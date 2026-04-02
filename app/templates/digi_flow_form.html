@@ -474,8 +474,26 @@
 
                 if (index < steps.length - 1) {
                     const connector = document.createElement("div");
-                    connector.className = "digi-step-connector";
-                    connector.textContent = "↓";
+                    const showMinimumPathFilterWarning =
+                        steps.length === 2 &&
+                        index === 0 &&
+                        steps[steps.length - 1]?.step_type !== "action_log";
+                    if (showMinimumPathFilterWarning) {
+                        connector.className = "digi-step-connector digi-step-connector-warning";
+
+                        const marker = document.createElement("span");
+                        marker.className = "digi-step-warning-mark";
+                        marker.textContent = "X";
+                        connector.appendChild(marker);
+
+                        const text = document.createElement("span");
+                        text.className = "digi-step-warning-text";
+                        text.textContent = "Minimum Path Filter is required before a non-log target.";
+                        connector.appendChild(text);
+                    } else {
+                        connector.className = "digi-step-connector";
+                        connector.textContent = "↓";
+                    }
                     stepsChain.appendChild(connector);
                 }
             });
