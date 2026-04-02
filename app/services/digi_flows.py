@@ -1161,7 +1161,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
             if event_type == "source_step":
                 step_state["status"] = "passed"
                 step_state["description"] = "Source matched and packet entered the flow."
-            elif event_type in {"filter_callsign", "path_rule", "strict_filter"}:
+            elif event_type in {"filter_callsign", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
                 step_state["status"] = "rejected" if decision == "rejected" else "passed"
                 step_state["description"] = message
             elif event_type == "output_action":
@@ -1277,6 +1277,10 @@ def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -
         return "filter_path"
     if event_type == "strict_filter":
         return "filter_strict"
+    if event_type == "filter_packet_type":
+        return "filter_packet_type"
+    if event_type == "filter_icon":
+        return "filter_icon"
     if event_type == "output_action":
         return str(flow.get("target_kind") or "")
     if event_type == "step_stub":

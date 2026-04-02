@@ -242,7 +242,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_packet_type_filter_logs_pass_and_reject(self) -> None:
         with temporary_database():
-            create_flow(
+            flow_id = create_flow(
                 {
                     "name": "Packet type LOG",
                     "description": "",
@@ -287,9 +287,15 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "filter_packet_type" and row["decision"] == "rejected" and "inspected S" in row["message"] for row in denied_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in denied_rows))
 
+            summaries = get_digi_flow_execution_summaries(flow_id)
+            allowed_summary = next(summary for summary in summaries if summary["frame_uid"] == str(allowed["frame_uid"]))
+            allowed_step = next(step for step in allowed_summary["steps"] if step["step_type"] == "filter_packet_type")
+            self.assertEqual(allowed_step["status"], "passed")
+            self.assertIn("inspected M", allowed_step["description"])
+
     async def test_icon_filter_logs_pass_and_reject(self) -> None:
         with temporary_database():
-            create_flow(
+            flow_id = create_flow(
                 {
                     "name": "Icon LOG",
                     "description": "",
@@ -333,6 +339,12 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in allowed_rows))
             self.assertTrue(any(row["event_type"] == "filter_icon" and row["decision"] == "rejected" and "did not match any allow symbol" in row["message"] for row in denied_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in denied_rows))
+
+            summaries = get_digi_flow_execution_summaries(flow_id)
+            allowed_summary = next(summary for summary in summaries if summary["frame_uid"] == str(allowed["frame_uid"]))
+            allowed_step = next(step for step in allowed_summary["steps"] if step["step_type"] == "filter_icon")
+            self.assertEqual(allowed_step["status"], "passed")
+            self.assertIn("inspected />", allowed_step["description"])
 
     async def test_path_rule_logs_trace_no_trace_and_reject(self) -> None:
         with temporary_database():
