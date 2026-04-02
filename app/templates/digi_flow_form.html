@@ -137,6 +137,7 @@
         const typeMeta = {{ type_meta|tojson }};
         const endpointOptions = {{ endpoint_options|tojson }};
         const filterTypes = {{ filter_step_types|tojson }};
+        const rootPath = {{ request.scope.root_path|tojson }};
         let steps = {{ form_data.steps|tojson }};
 
         const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -189,6 +190,13 @@
         const stepLabel = (stepType) => (typeMeta[stepType] || {}).label || stepType;
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
+        const iconPath = (name) => `${rootPath}/static/icons/${name}`;
+
+        const setExpandedStep = (targetIndex) => {
+            steps.forEach((step, index) => {
+                step.__editing = index === targetIndex;
+            });
+        };
 
         const syncEndpointSelect = (selectElement, options, currentValue) => {
             const selectedValue = String(currentValue || "");
@@ -352,49 +360,91 @@
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
 
+                const toggleButton = document.createElement("button");
+                toggleButton.type = "button";
+                toggleButton.className = `table-icon-button digi-step-toggle-button${step.__editing ? " is-open" : ""}`;
+                toggleButton.title = step.__editing ? "Collapse step" : "Expand step";
+                toggleButton.setAttribute("aria-label", step.__editing ? "Collapse step" : "Expand step");
+                const toggleIcon = document.createElement("img");
+                toggleIcon.src = iconPath("chevron-down.svg");
+                toggleIcon.alt = "";
+                toggleButton.appendChild(toggleIcon);
+                toggleButton.addEventListener("click", () => {
+                    if (step.__editing) {
+                        setExpandedStep(-1);
+                    } else {
+                        setExpandedStep(index);
+                    }
+                    render();
+                });
+                actions.appendChild(toggleButton);
+
                 const editButton = document.createElement("button");
                 editButton.type = "button";
-                editButton.className = "button button-secondary";
-                editButton.textContent = step.__editing ? "Close" : "Edit";
+                editButton.className = "table-icon-button";
+                editButton.title = "Edit step";
+                editButton.setAttribute("aria-label", "Edit step");
+                const editIcon = document.createElement("img");
+                editIcon.src = iconPath("pencil.svg");
+                editIcon.alt = "";
+                editButton.appendChild(editIcon);
                 editButton.addEventListener("click", () => {
-                    step.__editing = !step.__editing;
+                    setExpandedStep(index);
                     render();
                 });
                 actions.appendChild(editButton);
 
                 const moveUpButton = document.createElement("button");
                 moveUpButton.type = "button";
-                moveUpButton.className = "button button-secondary";
-                moveUpButton.textContent = "Move up";
+                moveUpButton.className = "table-icon-button";
+                moveUpButton.title = "Move step up";
+                moveUpButton.setAttribute("aria-label", "Move step up");
                 moveUpButton.disabled = index <= 1;
+                const moveUpIcon = document.createElement("img");
+                moveUpIcon.src = iconPath("arrow-up.svg");
+                moveUpIcon.alt = "";
+                moveUpButton.appendChild(moveUpIcon);
                 moveUpButton.addEventListener("click", () => {
                     const current = steps[index];
                     steps[index] = steps[index - 1];
                     steps[index - 1] = current;
+                    setExpandedStep(index - 1);
                     render();
                 });
                 actions.appendChild(moveUpButton);
 
                 const moveDownButton = document.createElement("button");
                 moveDownButton.type = "button";
-                moveDownButton.className = "button button-secondary";
-                moveDownButton.textContent = "Move down";
+                moveDownButton.className = "table-icon-button";
+                moveDownButton.title = "Move step down";
+                moveDownButton.setAttribute("aria-label", "Move step down");
                 moveDownButton.disabled = index >= steps.length - 2;
+                const moveDownIcon = document.createElement("img");
+                moveDownIcon.src = iconPath("arrow-down.svg");
+                moveDownIcon.alt = "";
+                moveDownButton.appendChild(moveDownIcon);
                 moveDownButton.addEventListener("click", () => {
                     const current = steps[index];
                     steps[index] = steps[index + 1];
                     steps[index + 1] = current;
+                    setExpandedStep(index + 1);
                     render();
                 });
                 actions.appendChild(moveDownButton);
 
                 const deleteButton = document.createElement("button");
                 deleteButton.type = "button";
-                deleteButton.className = "button button-secondary";
-                deleteButton.textContent = "Delete";
+                deleteButton.className = "table-icon-button";
+                deleteButton.title = "Delete step";
+                deleteButton.setAttribute("aria-label", "Delete step");
                 deleteButton.disabled = stepCategory(step.step_type) !== "filter";
+                const deleteIcon = document.createElement("img");
+                deleteIcon.src = iconPath("delete-outline.svg");
+                deleteIcon.alt = "";
+                deleteButton.appendChild(deleteIcon);
                 deleteButton.addEventListener("click", () => {
                     steps.splice(index, 1);
+                    setExpandedStep(-1);
                     render();
                 });
                 actions.appendChild(deleteButton);
@@ -469,8 +519,9 @@
                     title: stepLabel(stepType),
                     enabled: 1,
                     config: clone(defaultConfig(stepType)),
-                    __editing: true,
+                    __editing: false,
                 });
+                setExpandedStep(steps.length - 2);
                 render();
             });
         });
@@ -511,6 +562,8 @@
                 { step_type: "action_log", title: stepLabel("action_log"), enabled: 1, config: defaultConfig("action_log", "log-only") },
             ];
         }
+        const initiallyExpandedIndex = steps.findIndex((step) => !!step.__editing);
+        setExpandedStep(initiallyExpandedIndex);
 
         render();
     })();

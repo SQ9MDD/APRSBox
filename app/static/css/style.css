@@ -1173,6 +1173,10 @@ select:focus-visible,
     flex-wrap: wrap;
 }
 
+.digi-step-actions {
+    flex-wrap: nowrap;
+}
+
 .digi-step-order,
 .digi-step-badge {
     display: inline-flex;
@@ -1209,6 +1213,14 @@ select:focus-visible,
     margin: 0;
     color: var(--muted);
     overflow-wrap: anywhere;
+}
+
+.digi-step-toggle-button img {
+    transition: transform var(--transition-fast);
+}
+
+.digi-step-toggle-button.is-open img {
+    transform: rotate(180deg);
 }
 
 .digi-step-editor-grid {
