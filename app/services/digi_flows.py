@@ -51,9 +51,9 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_path": {
         "category": "filter",
-        "label": "Path Filter",
+        "label": "Path Rule",
         "badge": "Filter",
-        "description": "Allows only explicitly listed TRACE and NO TRACE paths.",
+        "description": "Defines which TRACE and NO TRACE paths are repeated and whether packets are traced.",
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow",)},
             {"name": "trace_paths", "label": "Paths (TRACE)", "type": "textarea", "required": False},
@@ -166,6 +166,10 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
 }
 
+LEGACY_DEFAULT_STEP_TITLES = {
+    "filter_path": {"Path Filter"},
+}
+
 STEP_TYPE_TO_REF_FIELD = {
     "receiver_rf": "rf_port",
     "receiver_aprsis": "aprsis_source",
@@ -217,6 +221,16 @@ def _normalize_multiline_list(value: Any) -> list[str]:
 
 def _default_step_title(step_type: str) -> str:
     return str(STEP_TYPE_META[step_type]["label"])
+
+
+def _normalize_step_title(step_type: str, raw_title: Any) -> str:
+    title = _normalize_text(raw_title)
+    default_title = _default_step_title(step_type)
+    if not title:
+        return default_title
+    if title in LEGACY_DEFAULT_STEP_TITLES.get(step_type, set()):
+        return default_title
+    return title
 
 
 def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
@@ -588,7 +602,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
             target_count += 1
 
         config = _normalize_step_config(step_type, dict(raw_step.get("config") or {}))
-        title = _normalize_text(raw_step.get("title")) or _default_step_title(step_type)
+        title = _normalize_step_title(step_type, raw_step.get("title"))
         normalized_steps.append(
             {
                 "step_order": index,
@@ -614,7 +628,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         if _step_category(middle_step["step_type"]) != "filter":
             raise ValueError("All middle flow steps must be filter steps.")
     if target_kind != "action_log" and not any(step["step_type"] == "filter_path" for step in normalized_steps[1:-1]):
-        raise ValueError("Flow with a non-log target must include at least one Path Filter step.")
+        raise ValueError("Flow with a non-log target must include at least one Path Rule step.")
 
     first_ref = _step_ref_value(first_step["step_type"], first_step["config"])
     last_ref = _step_ref_value(last_step["step_type"], last_step["config"])

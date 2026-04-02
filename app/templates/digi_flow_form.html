@@ -66,7 +66,7 @@
                 <aside class="digi-flow-palette">
                     <div class="panel-header">
                         <div class="panel-header-copy">
-                            <h2>Available Steps</h2>
+                            <h2>Available filter and rules</h2>
                             <p class="section-lead">Click once to insert a step before the target.</p>
                         </div>
                     </div>
@@ -90,7 +90,7 @@
                 <div class="digi-flow-steps-section">
                     <div class="panel-header">
                         <div class="panel-header-copy">
-                            <h2>Flow Steps</h2>
+                            <h2>Current flow steps</h2>
                             <p class="section-lead">Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.</p>
                         </div>
                     </div>
@@ -136,6 +136,9 @@
         const filterTypes = {{ filter_step_types|tojson }};
         const rootPath = {{ request.scope.root_path|tojson }};
         let steps = {{ form_data.steps|tojson }};
+        const legacyDefaultTitles = {
+            filter_path: ["Path Filter"],
+        };
 
         const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -189,6 +192,17 @@
         };
 
         const stepLabel = (stepType) => (typeMeta[stepType] || {}).label || stepType;
+        const normalizedStepTitle = (step) => {
+            const title = String(step.title || "").trim();
+            const currentLabel = stepLabel(step.step_type);
+            if (!title) {
+                return currentLabel;
+            }
+            if ((legacyDefaultTitles[step.step_type] || []).includes(title)) {
+                return currentLabel;
+            }
+            return title;
+        };
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const iconPath = (name) => `${rootPath}/static/icons/${name}`;
@@ -345,7 +359,7 @@
 
                 const title = document.createElement("span");
                 title.className = "digi-step-title-inline";
-                title.textContent = step.title || stepLabel(step.step_type);
+                title.textContent = normalizedStepTitle(step);
                 meta.appendChild(title);
 
                 const summary = document.createElement("span");
@@ -459,7 +473,7 @@
                     titleCaption.textContent = "Card Title";
                     const titleInput = document.createElement("input");
                     titleInput.type = "text";
-                    titleInput.value = step.title || "";
+                    titleInput.value = normalizedStepTitle(step);
                     titleInput.addEventListener("input", () => {
                         step.title = titleInput.value;
                     });
@@ -492,7 +506,7 @@
 
                         const text = document.createElement("span");
                         text.className = "digi-step-warning-text";
-                        text.textContent = "Minimum Path Filter is required before a non-log target.";
+                        text.textContent = "Minimum Path Rule is required before a non-log target.";
                         connector.appendChild(text);
                     } else {
                         connector.className = "digi-step-connector";
@@ -502,6 +516,11 @@
                 }
             });
         };
+
+        steps = steps.map((step) => ({
+            ...step,
+            title: normalizedStepTitle(step),
+        }));
 
         paletteButtons.forEach((button) => {
             button.addEventListener("click", () => {

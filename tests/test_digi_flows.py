@@ -190,7 +190,7 @@ class DigiFlowsTests(unittest.TestCase):
             payload["steps"][2],
         ]
         with temporary_database():
-            with self.assertRaisesRegex(ValueError, "must include at least one Path Filter"):
+            with self.assertRaisesRegex(ValueError, "must include at least one Path Rule"):
                 normalize_digi_flow_payload(payload)
 
     def test_path_filter_allows_only_allow_mode(self) -> None:
