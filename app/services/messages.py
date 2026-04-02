@@ -36,6 +36,7 @@ MAX_TX_ATTEMPTS = 1 + len(RETRY_DELAYS_SECONDS)
 FINAL_ACK_WAIT_SECONDS = 30
 HEARD_FRESH_SECONDS = 10 * 60
 HEARD_WARN_SECONDS = 30 * 60
+QUERY_RESPONSE_DELAY_SECONDS = 3
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -982,7 +983,7 @@ def _build_query_status_text(station_settings: dict[str, Any]) -> str:
 def _query_response_scheduled_for(query_number: str | None) -> datetime | None:
     if not query_number:
         return None
-    return datetime.now(timezone.utc) + timedelta(seconds=2)
+    return datetime.now(timezone.utc) + timedelta(seconds=QUERY_RESPONSE_DELAY_SECONDS)
 
 
 def split_callsign_ssid(value: str) -> tuple[str, str]:
