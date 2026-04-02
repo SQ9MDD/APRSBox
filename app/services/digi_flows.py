@@ -139,7 +139,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                     "item: itemy APRS ())",
                     "message: wiadomosci, ACK/REJ, bulletiny i announcementy",
                     "status: ramki status (>...)",
-                    "weather: ramki pogodowe (_...)",
+                    "weather: tylko ramki weather-only (_...)",
+                    "Jesli stacja pogodowa nadaje pozycje z danymi pogody, to taka ramka liczy sie jako position, nie weather.",
                     "telemetry: T# oraz definicje PARM/UNIT/EQNS/BITS",
                     "query: zapytania APRS zaczynajace sie od ?",
                 ),
@@ -324,6 +325,39 @@ def _normalize_packet_type_filter_value(value: Any) -> str:
     return normalized
 
 
+def _packet_type_filter_value_label(value: Any) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return ""
+    folded = normalized.casefold()
+    if folded == "position":
+        return "position"
+    if folded == "object":
+        return "object"
+    if folded == "item":
+        return "item"
+    if folded == "message":
+        return "message"
+    if folded == "status":
+        return "status"
+    if folded == "weather":
+        return "weather"
+    if folded == "telemetry":
+        return "telemetry"
+    if folded == "query":
+        return "query"
+    upper = normalized.upper()
+    if upper == "M":
+        return "legacy M (mobile position)"
+    if upper == "S":
+        return "legacy S (stationary position)"
+    if upper == "O":
+        return "legacy O (object)"
+    if upper == "W":
+        return "legacy W (weather-only)"
+    return normalized
+
+
 def _flow_requires_path_rule(target_kind: str) -> bool:
     return target_kind in {"tx_rf", "tx_aprsis"}
 
@@ -494,7 +528,10 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
     if step_type == "filter_packet_type":
         packet_types = config.get("packet_types") or []
-        return f"Mode: {config.get('mode', 'allow')}, packet groups: {', '.join(packet_types) if packet_types else 'none'}"
+        labels = [_packet_type_filter_value_label(item) for item in packet_types if _packet_type_filter_value_label(item)]
+        if not labels:
+            return f"Mode: {config.get('mode', 'allow')}, packet groups: none"
+        return f"Mode: {config.get('mode', 'allow')}, packet groups: {', '.join(labels)}"
     if step_type == "filter_icon":
         icons = config.get("icons") or []
         return f"Mode: {config.get('mode', 'allow')}, icons: {', '.join(icons) if icons else 'none'}"

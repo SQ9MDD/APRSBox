@@ -261,6 +261,21 @@
             .map((item) => item.trim())
             .filter(Boolean);
 
+        const packetTypeValueLabel = (value) => {
+            const normalized = String(value || "").trim();
+            if (!normalized) return "";
+            const folded = normalized.toLowerCase();
+            if (["position", "object", "item", "message", "status", "weather", "telemetry", "query"].includes(folded)) {
+                return folded;
+            }
+            const upper = normalized.toUpperCase();
+            if (upper === "M") return "legacy M (mobile position)";
+            if (upper === "S") return "legacy S (stationary position)";
+            if (upper === "O") return "legacy O (object)";
+            if (upper === "W") return "legacy W (weather-only)";
+            return normalized;
+        };
+
         const stepSummary = (step) => {
             const config = step.config || {};
             if (step.step_type === "receiver_rf") return `RF port: ${config.rf_port || "-"}`;
@@ -273,7 +288,10 @@
             }
             if (step.step_type === "filter_strict") return "Rejects TCP, NOGATE, RFONLY";
             if (step.step_type === "filter_callsign") return `Mode: ${config.mode || "allow"}, callsigns: ${(config.callsigns || []).length}`;
-            if (step.step_type === "filter_packet_type") return `Mode: ${config.mode || "allow"}, packet groups: ${(config.packet_types || []).join(", ") || "none"}`;
+            if (step.step_type === "filter_packet_type") {
+                const labels = (config.packet_types || []).map(packetTypeValueLabel).filter(Boolean);
+                return `Mode: ${config.mode || "allow"}, packet groups: ${labels.join(", ") || "none"}`;
+            }
             if (step.step_type === "filter_icon") return `Mode: ${config.mode || "allow"}, icons: ${(config.icons || []).join(", ") || "none"}`;
             if (step.step_type === "filter_distance") return `Max distance: ${config.max_km || "-"} km`;
             if (step.step_type === "filter_rate_limit") return `Rate: ${config.packets_per_minute || "-"} pkt/min`;
