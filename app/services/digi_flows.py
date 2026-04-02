@@ -21,6 +21,7 @@ FILTER_STEP_TYPES = (
     "filter_rate_limit_per_callsign",
 )
 TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
+DIGI_FLOW_EXECUTION_RETENTION_LIMIT = 200
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 
 STEP_TYPE_META: dict[str, dict[str, Any]] = {
@@ -981,6 +982,38 @@ def log_digi_flow_event(
             """,
             (frame_uid, flow_id, step_id, event_type, decision, message, timestamp),
         )
+        if event_type == "pipeline_finished":
+            _prune_digi_flow_event_log(connection, flow_id=flow_id)
+
+
+def _prune_digi_flow_event_log(
+    connection: sqlite3.Connection,
+    *,
+    flow_id: int,
+    keep_execution_limit: int | None = None,
+) -> None:
+    if keep_execution_limit is None:
+        keep_execution_limit = DIGI_FLOW_EXECUTION_RETENTION_LIMIT
+    if keep_execution_limit < 1:
+        return
+    connection.execute(
+        """
+        DELETE FROM digi_flow_event_log
+        WHERE flow_id = ?
+          AND frame_uid NOT IN (
+              SELECT frame_uid
+              FROM (
+                  SELECT frame_uid, MAX(id) AS latest_event_id
+                  FROM digi_flow_event_log
+                  WHERE flow_id = ?
+                  GROUP BY frame_uid
+                  ORDER BY latest_event_id DESC
+                  LIMIT ?
+              )
+          )
+        """,
+        (flow_id, flow_id, keep_execution_limit),
+    )
 
 
 def get_digi_flow_event_log(flow_id: int, *, limit: int = 200) -> list[dict[str, Any]]:

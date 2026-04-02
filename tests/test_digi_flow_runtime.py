@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import app.services.digi_flows as digi_flows
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
@@ -397,6 +398,63 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertFalse(any(row["event_type"] == "output_action" for row in rejected_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rejected_rows))
+
+    async def test_digi_flow_event_log_retains_only_latest_completed_executions_per_flow(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Retention LOG",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            with patch.object(digi_flows, "DIGI_FLOW_EXECUTION_RETENTION_LIMIT", 2):
+                await runtime.start()
+                try:
+                    first = runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SP8ABC-9>APRS:>Retention 1",
+                    )
+                    second = runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SP8ABC-9>APRS:>Retention 2",
+                    )
+                    third = runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SP8ABC-9>APRS:>Retention 3",
+                    )
+                    await runtime.wait_until_idle()
+                finally:
+                    await runtime.stop()
+
+            remaining = fetch_all(
+                """
+                SELECT DISTINCT frame_uid
+                FROM digi_flow_event_log
+                WHERE flow_id = ?
+                ORDER BY id ASC
+                """,
+                (flow_id,),
+            )
+            remaining_frame_uids = [str(row["frame_uid"]) for row in remaining]
+            self.assertEqual(remaining_frame_uids, [str(second["frame_uid"]), str(third["frame_uid"])])
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=10)
+            self.assertEqual([str(item["frame_uid"]) for item in summaries], [str(third["frame_uid"]), str(second["frame_uid"])])
+            self.assertTrue(all(item["final_result"] == "LOGGED" for item in summaries))
+            self.assertFalse(any(str(item["frame_uid"]) == str(first["frame_uid"]) for item in summaries))
 
     async def test_filter_then_path_rule_reaches_rf_tx_queue(self) -> None:
         with temporary_database():
