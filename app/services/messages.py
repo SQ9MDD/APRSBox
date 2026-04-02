@@ -4,8 +4,17 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from app import get_version
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
-from app.services.outbound import enqueue_ack_job, enqueue_direct_message_job, enqueue_query_message_job, mark_outbound_job_cancelled
+from app.services.outbound import (
+    enqueue_ack_job,
+    enqueue_beacon_job,
+    enqueue_direct_message_job,
+    enqueue_query_message_job,
+    enqueue_query_response_job,
+    enqueue_status_job,
+    mark_outbound_job_cancelled,
+)
 
 MESSAGE_DIRECTION_RX = "rx"
 MESSAGE_DIRECTION_TX = "tx"
@@ -29,6 +38,7 @@ HEARD_WARN_SECONDS = 30 * 60
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
 _MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?)?$")
+SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
 
 
 def normalize_aprs_destination_callsign(value: str) -> str:
@@ -535,6 +545,9 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
     if local_sender and sender == local_sender:
         return
     received_at = _normalize_timestamp(timestamp)
+    if text_field.startswith("?"):
+        _handle_incoming_query(sender=sender, query_text=text_field, timestamp=received_at)
+        return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2}))?", text_field, flags=re.IGNORECASE)
     if ack_match:
@@ -559,6 +572,52 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         path=parsed["path"],
         timestamp=received_at,
     )
+
+
+def _handle_incoming_query(*, sender: str, query_text: str, timestamp: str) -> None:
+    query_type = str(query_text or "").strip().upper().split()[0]
+    station_settings = _get_station_settings()
+    if query_type in {"?APRS", "?APRS?"}:
+        _enqueue_query_text_response(
+            sender=sender,
+            station_settings=station_settings,
+            message_text=f"Queries: {' '.join(SUPPORTED_QUERY_TYPES)}",
+            trigger="query-aprs",
+        )
+        return
+    if query_type == "?APRSP":
+        success, error = enqueue_beacon_job(station_settings, trigger="query-aprsp")
+        if not success:
+            log_event("INFO", "messages", f"Ignored ?APRSP from {sender}: {error or 'position unavailable'}")
+        return
+    if query_type == "?APRSS":
+        success, error = enqueue_status_job(station_settings, trigger="query-aprss")
+        if not success:
+            log_event("INFO", "messages", f"Ignored ?APRSS from {sender}: {error or 'status unavailable'}")
+        return
+    if query_type in {"?APRSV", "?VER"}:
+        _enqueue_query_text_response(
+            sender=sender,
+            station_settings=station_settings,
+            message_text=f"APRSBox {get_version()}",
+            trigger="query-version",
+        )
+        return
+    log_event("INFO", "messages", f"Ignored unsupported query from {sender}: {query_text.strip()[:80]}")
+
+
+def _enqueue_query_text_response(*, sender: str, station_settings: dict[str, Any], message_text: str, trigger: str) -> None:
+    response_text = normalize_aprs_message_text(message_text)
+    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    success, error = enqueue_query_response_job(
+        addressee=sender,
+        message_text=response_text,
+        station_settings=station_settings,
+        trigger=trigger,
+        path=response_path,
+    )
+    if not success:
+        log_event("INFO", "messages", f"Ignored {trigger} response to {sender}: {error or 'response unavailable'}")
 
 
 def acknowledge_outgoing_message(*, sender: str, addressee: str, message_number: str, timestamp: str) -> None:
@@ -836,7 +895,9 @@ def _heard_recently_state(age_s: Any) -> str:
 def _get_station_settings() -> dict[str, Any]:
     row = fetch_one(
         """
-        SELECT callsign, ssid, beacon_interface_id, beacon_path
+        SELECT callsign, ssid, beacon_interface_id, beacon_path,
+               latitude, longitude, symbol_table, symbol_code,
+               beacon_comment, status_text
         FROM station_settings
         WHERE id = 1
         """

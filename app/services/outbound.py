@@ -352,6 +352,27 @@ def enqueue_query_message_job(
     return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
 
 
+def enqueue_query_response_job(
+    *,
+    addressee: str,
+    message_text: str,
+    station_settings: dict[str, Any],
+    trigger: str = "query-response",
+    path: str = "",
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str]:
+    payload = {
+        "callsign": str(station_settings.get("callsign") or "").strip().upper(),
+        "ssid": str(station_settings.get("ssid") or "").strip(),
+        "message_kind": "query",
+        "addressee": str(addressee or "").strip().upper(),
+        "path": str(path or "").strip(),
+        "message_text": str(message_text or "").strip(),
+        "trigger": str(trigger or "query-response").strip() or "query-response",
+    }
+    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+
+
 def enqueue_ack_job(
     addressee: str,
     ack_number: str,

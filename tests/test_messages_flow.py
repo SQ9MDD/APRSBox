@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from app import get_version
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.content import update_station_settings
 from app.services.messages import (
@@ -23,7 +24,7 @@ from app.services.messages import (
     queue_outgoing_message,
     retry_failed_message,
 )
-from app.services.outbound import build_message_tnc2, claim_next_outbound_job
+from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
 
 
@@ -337,6 +338,117 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
             assert row is not None
             self.assertEqual(int(row["total"]), 0)
+
+    def test_incoming_aprs_query_returns_supported_query_list(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "query",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "?APRS",
+                }
+            )
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "message")
+            self.assertEqual(str(job["payload"].get("message_kind")), QUERY_MESSAGE_KIND)
+            self.assertEqual(
+                build_message_tnc2(job["payload"]),
+                "SQ9MDD-4>APRS,WIDE2-1::SP8ABC   :Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER",
+            )
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert row is not None
+            self.assertEqual(int(row["total"]), 0)
+
+    def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "query",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "?APRSP",
+                }
+            )
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "beacon")
+            self.assertEqual(
+                build_beacon_tnc2(job["payload"]),
+                "SQ9MDD-4>APRS,WIDE2-1:!5213.78N/02100.73E>",
+            )
+
+    def test_incoming_aprss_query_queues_single_status_response(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id)
+            payload["status_text"] = "Station online"
+            update_station_settings(payload)
+
+            inbound_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "query",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "?APRSS",
+                }
+            )
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "status")
+            self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APRS:>Station online")
+
+    def test_incoming_version_queries_return_single_text_response(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            for query_text in ("?APRSV", "?VER"):
+                inbound_line = build_message_tnc2(
+                    {
+                        "callsign": "SP8ABC",
+                        "ssid": "",
+                        "message_kind": "query",
+                        "addressee": "SQ9MDD-4",
+                        "message_text": query_text,
+                    }
+                )
+                process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            jobs = fetch_all(
+                """
+                SELECT id
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(jobs), 2)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+            expected_line = f"SQ9MDD-4>APRS,WIDE2-1::SP8ABC   :APRSBox {get_version()}"
+            self.assertEqual(build_message_tnc2(first_job["payload"]), expected_line)
+            self.assertEqual(build_message_tnc2(second_job["payload"]), expected_line)
 
     def test_messages_page_data_uses_persisted_rows(self) -> None:
         with temporary_database():
