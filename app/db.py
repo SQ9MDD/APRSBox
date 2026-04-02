@@ -412,6 +412,7 @@ def init_db() -> None:
         _migrate_entity_interval_constraints(connection)
         _migrate_bulletin_table(connection)
         _migrate_digi_flow_steps_table(connection)
+        _migrate_digi_flow_event_log_table(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
@@ -839,6 +840,39 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
             id, flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
         FROM digi_flow_steps_old;
         DROP TABLE digi_flow_steps_old;
+        """
+    )
+
+
+def _migrate_digi_flow_event_log_table(connection: sqlite3.Connection) -> None:
+    event_log_sql = _table_sql(connection, "digi_flow_event_log")
+    if not event_log_sql:
+        return
+    foreign_keys = list(connection.execute("PRAGMA foreign_key_list(digi_flow_event_log)").fetchall())
+    if not any(str(row["table"] or "") == "digi_flow_steps_old" for row in foreign_keys):
+        return
+    connection.executescript(
+        """
+        ALTER TABLE digi_flow_event_log RENAME TO digi_flow_event_log_old;
+        CREATE TABLE digi_flow_event_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            frame_uid TEXT NOT NULL,
+            flow_id INTEGER NOT NULL,
+            step_id INTEGER,
+            event_type TEXT NOT NULL,
+            decision TEXT,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE,
+            FOREIGN KEY (step_id) REFERENCES digi_flow_steps(id) ON DELETE SET NULL
+        );
+        INSERT INTO digi_flow_event_log (
+            id, frame_uid, flow_id, step_id, event_type, decision, message, created_at
+        )
+        SELECT
+            id, frame_uid, flow_id, step_id, event_type, decision, message, created_at
+        FROM digi_flow_event_log_old;
+        DROP TABLE digi_flow_event_log_old;
         """
     )
 

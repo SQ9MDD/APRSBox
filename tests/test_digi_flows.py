@@ -93,6 +93,68 @@ class DigiFlowsTests(unittest.TestCase):
             finally:
                 connection.close()
 
+    def test_init_db_repairs_digi_flow_event_log_foreign_key_after_steps_table_rebuild(self) -> None:
+        with temporary_database() as database_path:
+            connection = sqlite3.connect(database_path)
+            connection.row_factory = sqlite3.Row
+            try:
+                connection.executescript(
+                    """
+                    ALTER TABLE digi_flow_steps RENAME TO digi_flow_steps_old;
+                    CREATE TABLE digi_flow_steps (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        flow_id INTEGER NOT NULL,
+                        step_order INTEGER NOT NULL,
+                        step_type TEXT NOT NULL CHECK (step_type IN (
+                            'receiver_rf',
+                            'receiver_aprsis',
+                            'filter_dupe',
+                            'filter_digi',
+                            'filter_path',
+                            'filter_strict',
+                            'filter_callsign',
+                            'filter_packet_type',
+                            'filter_icon',
+                            'filter_distance',
+                            'filter_rate_limit',
+                            'filter_rate_limit_per_callsign',
+                            'tx_rf',
+                            'tx_aprsis',
+                            'action_drop',
+                            'action_log'
+                        )),
+                        title TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+                        config_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE,
+                        UNIQUE (flow_id, step_order)
+                    );
+                    INSERT INTO digi_flow_steps (
+                        id, flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                    )
+                    SELECT
+                        id, flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                    FROM digi_flow_steps_old;
+                    DROP TABLE digi_flow_steps_old;
+                    """
+                )
+                broken_fk = connection.execute("PRAGMA foreign_key_list(digi_flow_event_log)").fetchall()
+                self.assertTrue(any(str(row["table"]) == "digi_flow_steps_old" for row in broken_fk))
+            finally:
+                connection.close()
+
+            init_db()
+
+            connection = connect()
+            try:
+                repaired_fk = connection.execute("PRAGMA foreign_key_list(digi_flow_event_log)").fetchall()
+                self.assertTrue(any(str(row["table"]) == "digi_flow_steps" for row in repaired_fk))
+                self.assertFalse(any(str(row["table"]) == "digi_flow_steps_old" for row in repaired_fk))
+            finally:
+                connection.close()
+
     def test_normalize_digi_flow_requires_source_first_and_target_last(self) -> None:
         payload = sample_flow_payload()
         payload["steps"] = [payload["steps"][1], payload["steps"][0], payload["steps"][2]]
