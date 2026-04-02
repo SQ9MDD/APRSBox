@@ -122,7 +122,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "action_log": {
         "category": "target",
-        "label": "Action Log",
+        "label": "Log Only",
         "badge": "Target",
         "description": "Logs the packet at the end of the flow.",
         "config_fields": (
@@ -324,8 +324,8 @@ def get_digi_flow_reference_options() -> dict[str, list[str]]:
         "tx_rf": [str(row["name"]) for row in rf_rows if row["name"]],
         "receiver_aprsis": [str(row["name"]) for row in aprsis_rows if row["name"]],
         "tx_aprsis": [str(row["name"]) for row in aprsis_rows if row["name"]],
-        "action_drop": [],
-        "action_log": [],
+        "action_drop": ["drop"],
+        "action_log": ["log-only"],
     }
 
 

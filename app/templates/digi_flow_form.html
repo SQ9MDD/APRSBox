@@ -47,7 +47,7 @@
                     <h3>Source</h3>
                     <div class="form-grid">
                         <label>
-                            <span>Source Type</span>
+                            <span>Source</span>
                             <select name="source_kind" id="flow-source-kind" required>
                                 {% for step_type in source_step_types %}
                                 <option value="{{ step_type }}" {% if form_data.source_kind == step_type %}selected{% endif %}>{{ type_meta[step_type].label }}</option>
@@ -55,18 +55,17 @@
                             </select>
                         </label>
                         <label>
-                            <span>Source Reference</span>
-                            <input type="text" name="source_ref" id="flow-source-ref" value="{{ form_data.source_ref }}" list="digi-flow-source-ref-list" required>
+                            <span>Source Interface</span>
+                            <select name="source_ref" id="flow-source-ref" required></select>
                         </label>
                     </div>
-                    <datalist id="digi-flow-source-ref-list"></datalist>
                 </div>
 
                 <div class="digi-flow-endpoint-card">
                     <h3>Target</h3>
                     <div class="form-grid">
                         <label>
-                            <span>Target Type</span>
+                            <span>Target</span>
                             <select name="target_kind" id="flow-target-kind" required>
                                 {% for step_type in target_step_types %}
                                 <option value="{{ step_type }}" {% if form_data.target_kind == step_type %}selected{% endif %}>{{ type_meta[step_type].label }}</option>
@@ -74,11 +73,10 @@
                             </select>
                         </label>
                         <label>
-                            <span>Target Reference</span>
-                            <input type="text" name="target_ref" id="flow-target-ref" value="{{ form_data.target_ref }}" list="digi-flow-target-ref-list">
+                            <span>Target Interface</span>
+                            <select name="target_ref" id="flow-target-ref"></select>
                         </label>
                     </div>
-                    <datalist id="digi-flow-target-ref-list"></datalist>
                 </div>
             </section>
 
@@ -142,9 +140,7 @@
         const sourceRefInput = document.getElementById("flow-source-ref");
         const targetKindInput = document.getElementById("flow-target-kind");
         const targetRefInput = document.getElementById("flow-target-ref");
-        const sourceRefList = document.getElementById("digi-flow-source-ref-list");
-        const targetRefList = document.getElementById("digi-flow-target-ref-list");
-        if (!form || !stepsJsonInput || !stepsChain || !addStepButton || !addStepRow || !newStepType || !confirmAddStep || !cancelAddStep || !sourceKindInput || !sourceRefInput || !targetKindInput || !targetRefInput || !sourceRefList || !targetRefList) {
+        if (!form || !stepsJsonInput || !stepsChain || !addStepButton || !addStepRow || !newStepType || !confirmAddStep || !cancelAddStep || !sourceKindInput || !sourceRefInput || !targetKindInput || !targetRefInput) {
             return;
         }
 
@@ -206,17 +202,41 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
 
-        const syncReferenceList = (kindInput, listElement) => {
+        const syncReferenceSelect = (kindInput, selectElement, currentValue) => {
             const options = referenceOptions[kindInput.value] || [];
-            listElement.innerHTML = "";
-            for (const option of options) {
+            const selectedValue = String(currentValue || "");
+            const resolvedOptions = options.slice();
+            if (selectedValue && !resolvedOptions.includes(selectedValue)) {
+                resolvedOptions.unshift(selectedValue);
+            }
+            selectElement.innerHTML = "";
+            if (!resolvedOptions.length) {
+                const optionElement = document.createElement("option");
+                optionElement.value = "";
+                optionElement.textContent = "Not configured";
+                selectElement.appendChild(optionElement);
+                selectElement.value = "";
+                return;
+            }
+            for (const option of resolvedOptions) {
                 const optionElement = document.createElement("option");
                 optionElement.value = option;
-                listElement.appendChild(optionElement);
+                optionElement.textContent = option;
+                if (option === selectedValue) {
+                    optionElement.selected = true;
+                }
+                selectElement.appendChild(optionElement);
+            }
+            if (selectedValue) {
+                selectElement.value = selectedValue;
+            } else {
+                selectElement.value = resolvedOptions[0];
             }
         };
 
         const syncBoundarySteps = () => {
+            syncReferenceSelect(sourceKindInput, sourceRefInput, sourceRefInput.value || {{ form_data.source_ref|tojson }});
+            syncReferenceSelect(targetKindInput, targetRefInput, targetRefInput.value || {{ form_data.target_ref|tojson }});
             const sourceStep = steps[0];
             const targetStep = steps[steps.length - 1];
             if (!sourceStep || !targetStep) return;
@@ -241,9 +261,9 @@
                 targetStep.config.rf_target = targetRefInput.value;
             } else if (targetStep.step_type === "tx_aprsis") {
                 targetStep.config.aprsis_target = targetRefInput.value;
-            } else if (targetStep.step_type === "action_log" && !targetStep.config.log_tag) {
+            } else if (targetStep.step_type === "action_log") {
                 targetStep.config.log_tag = targetRefInput.value;
-            } else if (targetStep.step_type === "action_drop" && !targetStep.config.note) {
+            } else if (targetStep.step_type === "action_drop") {
                 targetStep.config.note = targetRefInput.value;
             }
         };
@@ -297,8 +317,6 @@
         };
 
         const render = () => {
-            syncReferenceList(sourceKindInput, sourceRefList);
-            syncReferenceList(targetKindInput, targetRefList);
             targetRefInput.required = targetKindInput.value === "tx_rf" || targetKindInput.value === "tx_aprsis";
             syncBoundarySteps();
             stepsJsonInput.value = JSON.stringify(steps);
@@ -472,10 +490,16 @@
             render();
         });
 
-        sourceKindInput.addEventListener("change", render);
-        sourceRefInput.addEventListener("input", render);
-        targetKindInput.addEventListener("change", render);
-        targetRefInput.addEventListener("input", render);
+        sourceKindInput.addEventListener("change", () => {
+            syncReferenceSelect(sourceKindInput, sourceRefInput, "");
+            render();
+        });
+        sourceRefInput.addEventListener("change", render);
+        targetKindInput.addEventListener("change", () => {
+            syncReferenceSelect(targetKindInput, targetRefInput, "");
+            render();
+        });
+        targetRefInput.addEventListener("change", render);
 
         form.addEventListener("submit", () => {
             syncBoundarySteps();
