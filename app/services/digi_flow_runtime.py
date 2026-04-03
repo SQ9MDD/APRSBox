@@ -6,11 +6,20 @@ import uuid
 from typing import Any
 
 from app.db import log_event, utc_now
+from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.digi_flows import list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import enqueue_digi_tx_job
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
+
+
+def _t(message: object) -> str:
+    return get_translator(get_app_language())(message)
+
+
+def _tf(message: object, params: dict[str, object] | None = None) -> str:
+    return get_format_translator(get_app_language())(message, params)
 
 
 class DigiFlowRuntimeService:
@@ -463,7 +472,7 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="direct_only",
                 decision="rejected",
-                message="Direct Only filter rejected frame because TNC2 parsing failed.",
+                message=_t("Direct Only filter rejected frame because TNC2 parsing failed."),
             )
             return {"decision": "drop"}
 
@@ -476,9 +485,9 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="direct_only",
                 decision="rejected",
-                message=(
-                    "Direct Only filter rejected frame because the path already contains consumed digi hops: "
-                    f"{', '.join(consumed_hops)}. Input path: {input_path or '-'}"
+                message=_tf(
+                    "Direct Only filter rejected frame because the path already contains consumed digi hops: {hops}. Input path: {path}",
+                    {"hops": ", ".join(consumed_hops), "path": input_path or "-"},
                 ),
             )
             return {"decision": "drop"}
@@ -489,7 +498,10 @@ class DigiFlowRuntimeService:
             step_id=step_id,
             event_type="direct_only",
             decision="passed",
-            message=f"Direct Only filter passed because the path has no consumed digi hops. Input path: {input_path or '-'}",
+            message=_tf(
+                "Direct Only filter passed because the path has no consumed digi hops. Input path: {path}",
+                {"path": input_path or "-"},
+            ),
         )
         return {"decision": "continue"}
 
@@ -508,7 +520,7 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="filter_digi",
                 decision="rejected",
-                message="DIGI filter rejected frame because TNC2 parsing failed.",
+                message=_t("DIGI filter rejected frame because TNC2 parsing failed."),
             )
             return {"decision": "drop"}
 
@@ -521,23 +533,35 @@ class DigiFlowRuntimeService:
             decision = "continue" if passed else "drop"
             if configured:
                 message = (
-                    f"DIGI filter ({mode}) inspected consumed hops {', '.join(consumed_hops) or '-'}: "
-                    f"{'passed' if passed else 'rejected'} because it "
-                    f"{'matched pattern ' + matched_pattern + ' on hop ' + str(matched_hop) if passed else 'did not match any allow pattern'}."
+                    _tf(
+                        "DIGI filter ({mode}) inspected consumed hops {hops}: passed because it matched pattern {pattern} on hop {hop}.",
+                        {"mode": mode, "hops": ", ".join(consumed_hops) or "-", "pattern": matched_pattern or "", "hop": matched_hop or "-"},
+                    )
+                    if passed
+                    else _tf(
+                        "DIGI filter ({mode}) inspected consumed hops {hops}: rejected because it did not match any allow pattern.",
+                        {"mode": mode, "hops": ", ".join(consumed_hops) or "-"},
+                    )
                 )
             else:
-                message = "DIGI filter (allow) rejected frame because the allow list is empty."
+                message = _t("DIGI filter (allow) rejected frame because the allow list is empty.")
         else:
             blocked = matched_pattern is not None
             decision = "drop" if blocked else "continue"
             if configured:
                 message = (
-                    f"DIGI filter ({mode}) inspected consumed hops {', '.join(consumed_hops) or '-'}: "
-                    f"{'rejected' if blocked else 'passed'} because it "
-                    f"{'matched pattern ' + matched_pattern + ' on hop ' + str(matched_hop) if blocked else 'did not match any deny pattern'}."
+                    _tf(
+                        "DIGI filter ({mode}) inspected consumed hops {hops}: rejected because it matched pattern {pattern} on hop {hop}.",
+                        {"mode": mode, "hops": ", ".join(consumed_hops) or "-", "pattern": matched_pattern or "", "hop": matched_hop or "-"},
+                    )
+                    if blocked
+                    else _tf(
+                        "DIGI filter ({mode}) inspected consumed hops {hops}: passed because it did not match any deny pattern.",
+                        {"mode": mode, "hops": ", ".join(consumed_hops) or "-"},
+                    )
                 )
             else:
-                message = "DIGI filter (deny) passed because the deny list is empty."
+                message = _t("DIGI filter (deny) passed because the deny list is empty.")
 
         log_digi_flow_event(
             frame_uid=context["frame_uid"],

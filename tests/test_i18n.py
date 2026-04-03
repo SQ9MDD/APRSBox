@@ -32,6 +32,7 @@ class I18nTests(unittest.TestCase):
     def test_translator_uses_catalog_and_falls_back_to_source_text(self) -> None:
         translator = get_translator("pl")
         self.assertEqual(translator("Settings"), "Ustawienia")
+        self.assertEqual(translator("Direct Only"), "Tylko direct")
         self.assertEqual(translator("Unmapped text"), "Unmapped text")
 
     def test_get_app_language_reads_saved_setting(self) -> None:

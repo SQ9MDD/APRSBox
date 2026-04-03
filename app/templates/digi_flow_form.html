@@ -274,6 +274,7 @@
             freeze: {{ t("Freeze")|tojson }},
             release: {{ t("Release")|tojson }},
             rejectsTcpNogateRfonly: {{ t("Rejects TCP, NOGATE, RFONLY")|tojson }},
+            directPacketsOnly: {{ t("Passes only direct packets")|tojson }},
             LOGGED: {{ t("LOGGED")|tojson }},
             DROPPED: {{ t("DROPPED")|tojson }},
             REJECTED: {{ t("REJECTED")|tojson }},
@@ -364,7 +365,7 @@
                 return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.paths}: ${tracePaths.length + noTracePaths.length}`;
             }
             if (step.step_type === "filter_strict") return i18n.rejectsTcpNogateRfonly;
-            if (step.step_type === "filter_direct_only") return "Direct packets only";
+            if (step.step_type === "filter_direct_only") return i18n.directPacketsOnly;
             if (step.step_type === "filter_callsign") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.callsigns}: ${(config.callsigns || []).length}`;
             if (step.step_type === "filter_packet_type") {
                 const labels = (config.packet_types || []).map(packetTypeValueLabel).filter(Boolean);

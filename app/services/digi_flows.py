@@ -547,7 +547,7 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
     if step_type == "filter_strict":
         return "Rejects TCP, NOGATE, RFONLY"
     if step_type == "filter_direct_only":
-        return "Passes only direct packets"
+        return _t("Passes only direct packets")
     if step_type == "filter_callsign":
         callsigns = config.get("callsigns") or []
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
