@@ -158,7 +158,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             },
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
-            {"name": "comment", "label": "Comment", "type": "textarea", "required": False, "maxlength": 43, "placeholder": "Local voice repeater"},
+            {"name": "comment", "label": "Comment", "type": "textarea", "required": True, "maxlength": 43, "placeholder": "Local voice repeater"},
         ],
     ),
     "items": SectionDefinition(

@@ -2192,6 +2192,8 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
     normalized["path"] = path
 
     comment = _normalize_printable_ascii(str(payload.get("comment") or "").strip())
+    if kind == "object" and not comment:
+        raise ValueError("Object comment is required.")
     if len(comment) > 43:
         raise ValueError("Comment must be 43 printable ASCII characters or fewer.")
     normalized["comment"] = comment

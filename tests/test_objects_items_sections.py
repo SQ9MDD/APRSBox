@@ -121,6 +121,26 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertEqual(error, "Object name must be 1-9 printable ASCII characters.")
 
+    def test_object_comment_is_required(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "comment": "",
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "Object comment is required.")
+
     def test_item_name_must_be_between_three_and_nine_characters(self) -> None:
         with temporary_database():
             success, error = safe_create_section_row(
