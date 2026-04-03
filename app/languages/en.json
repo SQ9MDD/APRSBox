@@ -590,6 +590,7 @@
   "DIGI Flow updated.": "DIGI Flow updated.",
   "DIGI Flow status updated.": "DIGI Flow status updated.",
   "DIGI Flow deleted.": "DIGI Flow deleted.",
+  "Digi Queue Log": "Digi Queue Log",
   "Invalid flow steps payload.": "Invalid flow steps payload.",
   "Unsupported flow step type: {step_type}.": "Unsupported flow step type: {step_type}.",
   "APRS-IS source": "APRS-IS source"

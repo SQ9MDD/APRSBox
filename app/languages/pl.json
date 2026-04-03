@@ -590,6 +590,7 @@
   "DIGI Flow updated.": "Zaktualizowano regułę Digi.",
   "DIGI Flow status updated.": "Zaktualizowano status reguły Digi.",
   "DIGI Flow deleted.": "Usunięto regułę Digi.",
+  "Digi Queue Log": "Log kolejki Digi",
   "Invalid flow steps payload.": "Nieprawidłowy payload kroków reguły.",
   "Unsupported flow step type: {step_type}.": "Nieobsługiwany typ kroku reguły: {step_type}.",
   "APRS-IS source": "Źródło APRS-IS"

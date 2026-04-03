@@ -121,7 +121,7 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("Recent Packet Executions") }}</h2>
+                <h2>{{ t("Digi Queue Log") }}</h2>
                 <p class="section-lead">{{ t("Each block below shows one packet running through this flow from source to final outcome. The list is limited to the latest 10 frames.") }}</p>
             </div>
             <div class="form-actions">
@@ -821,6 +821,29 @@
         const flowId = {{ flow_id|tojson }};
         const rootPath = {{ request.scope.root_path|tojson }};
         const iconPath = (name) => `${rootPath}/static/icons/${name}`;
+        const i18n = Object.freeze({
+            flowSteps: {{ t("Flow {count} steps")|tojson }},
+            inputPacket: {{ t("Input packet")|tojson }},
+            outputPacket: {{ t("Output packet")|tojson }},
+            sourceLabel: {{ t("Source:")|tojson }},
+            pipelineLabel: {{ t("Pipeline:")|tojson }},
+            finishedLabel: {{ t("Finished:")|tojson }},
+            stepWord: {{ t("step")|tojson }},
+            failedRefreshExecutions: {{ t("Failed to refresh DIGI Flow execution summaries.")|tojson }},
+            freeze: {{ t("Freeze")|tojson }},
+            release: {{ t("Release")|tojson }},
+            LOGGED: {{ t("LOGGED")|tojson }},
+            DROPPED: {{ t("DROPPED")|tojson }},
+            REJECTED: {{ t("REJECTED")|tojson }},
+            RUNNING: {{ t("RUNNING")|tojson }},
+            TX: {{ t("TX")|tojson }},
+            passed: {{ t("passed")|tojson }},
+            executed: {{ t("executed")|tojson }},
+            rejected: {{ t("rejected")|tojson }},
+        });
+        const formatText = (template, params = {}) => String(template || "").replace(/\{(\w+)\}/g, (match, key) => (
+            Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match
+        ));
         const executionsContainer = document.getElementById("digi-flow-executions");
         const emptyState = document.getElementById("digi-flow-executions-empty");
         const toggleButton = document.getElementById("digi-flow-executions-toggle");
