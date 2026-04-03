@@ -359,15 +359,15 @@
             if (step.step_type === "filter_path") {
                 const tracePaths = config.trace_paths || config.paths || [];
                 const noTracePaths = config.no_trace_paths || [];
-                return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.paths}: ${tracePaths.length + noTracePaths.length}`;
+                return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.paths}: ${tracePaths.length + noTracePaths.length}`;
             }
             if (step.step_type === "filter_strict") return i18n.rejectsTcpNogateRfonly;
-            if (step.step_type === "filter_callsign") return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.callsigns}: ${(config.callsigns || []).length}`;
+            if (step.step_type === "filter_callsign") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.callsigns}: ${(config.callsigns || []).length}`;
             if (step.step_type === "filter_packet_type") {
                 const labels = (config.packet_types || []).map(packetTypeValueLabel).filter(Boolean);
-                return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.packetGroups}: ${labels.join(", ") || i18n.none}`;
+                return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.packetGroups}: ${labels.join(", ") || i18n.none}`;
             }
-            if (step.step_type === "filter_icon") return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.icons}: ${(config.icons || []).join(", ") || i18n.none}`;
+            if (step.step_type === "filter_icon") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.icons}: ${(config.icons || []).join(", ") || i18n.none}`;
             if (step.step_type === "filter_distance") return `${i18n.maxDistance}: ${config.max_km || "-"} km`;
             if (step.step_type === "filter_rate_limit") return `${i18n.rate}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
             if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
@@ -386,6 +386,11 @@
         const stepMode = (step) => {
             const mode = String((step.config || {}).mode || "").trim().toLowerCase();
             return mode === "allow" || mode === "deny" ? mode : "";
+        };
+        const stepModeLabel = (mode) => {
+            if (mode === "allow") return i18n.allow;
+            if (mode === "deny") return i18n.deny;
+            return mode;
         };
         const normalizedStepTitle = (step) => {
             const title = String(step.title || "").trim();
@@ -513,7 +518,7 @@
                 for (const optionValue of field.options || []) {
                     const option = document.createElement("option");
                     option.value = optionValue;
-                    option.textContent = optionValue === "allow" ? i18n.allow : (optionValue === "deny" ? i18n.deny : optionValue);
+                    option.textContent = stepModeLabel(optionValue);
                     if (String(step.config[field.name] || "") === String(optionValue)) {
                         option.selected = true;
                     }
@@ -586,7 +591,7 @@
                 if (stepMode(step)) {
                     const modeBadge = document.createElement("span");
                     modeBadge.className = `digi-mode-badge digi-mode-badge-${stepMode(step)}`;
-                    modeBadge.textContent = stepMode(step).toUpperCase();
+                    modeBadge.textContent = stepModeLabel(stepMode(step)).toUpperCase();
                     meta.appendChild(modeBadge);
                 }
 
