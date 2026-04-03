@@ -5,8 +5,7 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("DIGI Flows") }}</h2>
-                <p class="section-lead">{{ t("Configure ordered DIGI pipelines as a vertical chain of source, filters and target. Stage 2 enables a small runtime skeleton for RF ingress, filter testing and debug logging.") }}</p>
+                <h2>{{ t("Configured Flows") }}</h2>
             </div>
             <div class="form-actions">
                 {% if can_edit %}
@@ -14,20 +13,9 @@
                 {% endif %}
             </div>
         </div>
-        <div class="notice">{{ t("Runtime currently covers active RF flows, sequential step execution, LOG_ONLY, callsign filtering, Path Rule handling and TX stubs.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
-    </div>
-</section>
-
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Configured Flows") }}</h2>
-            </div>
-        </div>
         <div class="table-wrap">
             <table class="data-table digi-flows-table">
                 <thead>
