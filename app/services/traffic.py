@@ -549,7 +549,7 @@ class TrafficMonitorService:
         peer = writer.get_extra_info("peername")
         client_host = str(peer[0]) if isinstance(peer, tuple) and peer else "unknown"
 
-        if self._proxy_server is None or self._tnc_writer is None:
+        if self._proxy_server is None or (self._tnc_writer is None and self._tnc_serial_fd is None):
             await self._close_proxy_client(writer)
             return
 
