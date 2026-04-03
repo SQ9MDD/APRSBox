@@ -16,12 +16,27 @@
             {% endif %}
             · {{ t("Clients") }}: {{ traffic_snapshot.expose.active_clients }}
         </div>
+        <div class="traffic-stream" id="traffic-interface-summary">
+            {% for interface in traffic_snapshot.interfaces %}
+            <div class="traffic-log-row">
+                <span class="traffic-log-time">{{ interface.band or '-' }}</span>
+                <span class="traffic-log-source">{{ interface.name }}</span>
+                <span class="traffic-log-line">
+                    {{ interface.status }} · {{ interface.status_detail }}
+                    {% if interface.expose.listen_endpoint %}
+                    · {{ t("Listening") }} {{ interface.expose.listen_endpoint }}
+                    · {{ t("Clients") }}: {{ interface.expose.active_clients }}
+                    {% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
         <div class="traffic-stream" id="traffic-stream">
             {% if traffic_snapshot.frames %}
             {% for frame in traffic_snapshot.frames %}
             <div class="traffic-log-row">
                 <span class="traffic-log-time">{{ frame.timestamp }}</span>
-                <span class="traffic-log-source">{{ frame.source }}</span>
+                <span class="traffic-log-source">{{ frame.source }}{% if frame.band %} · {{ frame.band }}{% endif %} · {{ frame.direction }}</span>
                 <span class="traffic-log-line">{{ frame.line }}</span>
             </div>
             {% endfor %}
@@ -37,6 +52,7 @@
         const streamContainer = document.getElementById("traffic-stream");
         const count = document.getElementById("traffic-frame-count");
         const exposeSummary = document.getElementById("traffic-expose-summary");
+        const interfaceSummary = document.getElementById("traffic-interface-summary");
         const noFramesText = {{ t("No frames received yet.")|tojson }};
         const entriesText = {{ t("entries")|tojson }};
         const exposePortText = {{ t("Expose port")|tojson }};
@@ -44,6 +60,37 @@
         const disabledText = {{ t("Disabled")|tojson }};
         const listeningText = {{ t("Listening")|tojson }};
         const clientsText = {{ t("Clients")|tojson }};
+        const noInterfacesText = {{ t("No enabled TNC is configured.")|tojson }};
+
+        const renderInterfaces = (interfaces) => {
+            if (!interfaceSummary) {
+                return;
+            }
+            if (!interfaces.length) {
+                interfaceSummary.innerHTML = `<div class="empty-state muted">${noInterfacesText}</div>`;
+                return;
+            }
+            interfaceSummary.innerHTML = interfaces.map((item) => `
+                <div class="traffic-log-row">
+                    <span class="traffic-log-time"></span>
+                    <span class="traffic-log-source"></span>
+                    <span class="traffic-log-line"></span>
+                </div>
+            `).join("");
+            const timeNodes = interfaceSummary.querySelectorAll(".traffic-log-time");
+            const sourceNodes = interfaceSummary.querySelectorAll(".traffic-log-source");
+            const lineNodes = interfaceSummary.querySelectorAll(".traffic-log-line");
+            interfaces.forEach((item, index) => {
+                timeNodes[index].textContent = item.band || "-";
+                sourceNodes[index].textContent = item.name || "-";
+                const parts = [item.status || "-", item.status_detail || ""].filter(Boolean);
+                if (item.expose && item.expose.listen_endpoint) {
+                    parts.push(`${listeningText} ${item.expose.listen_endpoint}`);
+                    parts.push(`${clientsText}: ${item.expose.active_clients || 0}`);
+                }
+                lineNodes[index].textContent = parts.join(" · ");
+            });
+        };
 
         const renderFrames = (frames) => {
             if (!frames.length) {
@@ -64,7 +111,10 @@
             const lineNodes = streamContainer.querySelectorAll(".traffic-log-line");
             frames.forEach((frame, index) => {
                 timeNodes[index].textContent = frame.timestamp;
-                sourceNodes[index].textContent = frame.source;
+                const sourceParts = [frame.source];
+                if (frame.band) sourceParts.push(frame.band);
+                if (frame.direction) sourceParts.push(frame.direction);
+                sourceNodes[index].textContent = sourceParts.join(" · ");
                 lineNodes[index].textContent = frame.line;
             });
         };
@@ -86,6 +136,7 @@
         const applySnapshot = (snapshot) => {
             count.textContent = `${snapshot.frames.length} ${entriesText}`;
             renderExpose(snapshot.expose);
+            renderInterfaces(snapshot.interfaces || []);
             renderFrames(snapshot.frames);
         };
 

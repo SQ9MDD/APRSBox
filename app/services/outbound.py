@@ -565,6 +565,8 @@ def mark_outbound_job_cancelled(job_id: int) -> None:
 def persist_outbound_frame(
     *,
     source: str,
+    interface_id: int | None = None,
+    band: str = "",
     line: str,
     port: str = "0",
     command: str = "TX",
@@ -573,10 +575,23 @@ def persist_outbound_frame(
     with get_connection() as connection:
         connection.execute(
             """
-            INSERT INTO traffic_frames(source, format, line, port, command, length, hex, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO traffic_frames(
+                source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+            )
+            VALUES (?, ?, 'tx', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (source, "TNC2-TX", line, port, command, len(line.encode("utf-8")), payload_hex, utc_now()),
+            (
+                source,
+                interface_id,
+                str(band or "").strip(),
+                "TNC2-TX",
+                line,
+                port,
+                command,
+                len(line.encode("utf-8")),
+                payload_hex,
+                utc_now(),
+            ),
         )
 
 

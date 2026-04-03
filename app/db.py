@@ -296,6 +296,9 @@ CREATE TABLE IF NOT EXISTS event_logs (
 CREATE TABLE IF NOT EXISTS traffic_frames (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,
+    interface_id INTEGER,
+    direction TEXT,
+    band TEXT,
     format TEXT NOT NULL,
     line TEXT NOT NULL,
     port TEXT,
@@ -317,6 +320,22 @@ CREATE TABLE IF NOT EXISTS traffic_runtime_state (
     expose_active_clients INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS traffic_runtime_interfaces (
+    modem_id INTEGER PRIMARY KEY,
+    modem_name TEXT NOT NULL,
+    modem_endpoint TEXT,
+    band TEXT,
+    status TEXT NOT NULL,
+    status_detail TEXT NOT NULL,
+    expose_port_enabled INTEGER NOT NULL DEFAULT 0 CHECK (expose_port_enabled IN (0, 1)),
+    expose_bind_address TEXT,
+    expose_port INTEGER,
+    expose_active_clients INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (modem_id) REFERENCES modems(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS band_condition_reference_stations (
@@ -397,6 +416,8 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
 
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_interface_created_at ON traffic_frames(interface_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
@@ -427,6 +448,7 @@ def init_db() -> None:
         object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
+        traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
@@ -530,6 +552,27 @@ def init_db() -> None:
                 """
                 ALTER TABLE outbound_jobs
                 ADD COLUMN aprs_message_id INTEGER
+                """
+            )
+        if "interface_id" not in traffic_frame_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_frames
+                ADD COLUMN interface_id INTEGER
+                """
+            )
+        if "direction" not in traffic_frame_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_frames
+                ADD COLUMN direction TEXT
+                """
+            )
+        if "band" not in traffic_frame_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_frames
+                ADD COLUMN band TEXT
                 """
             )
         if "expose_port_enabled" not in traffic_runtime_columns:

@@ -125,6 +125,8 @@ class OutboundService:
                     if sent_via_monitor:
                         persist_outbound_frame(
                             source=interface_name,
+                            interface_id=normalized_interface_id,
+                            band=str(job.get("band") or "").strip(),
                             line=tnc2_line,
                             payload_hex=frame.hex(" ").upper(),
                         )
@@ -152,6 +154,8 @@ class OutboundService:
 
             persist_outbound_frame(
                 source=interface_name,
+                interface_id=int(job["interface_id"]) if job.get("interface_id") is not None else None,
+                band=str(job.get("band") or "").strip(),
                 line=tnc2_line,
                 payload_hex=frame.hex(" ").upper(),
             )

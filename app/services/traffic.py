@@ -26,14 +26,16 @@ AX25_PID_NO_LAYER3 = 0xF0
 EXPOSE_PORT_MAX_CONNECTIONS = 3
 
 
-class TrafficMonitorService:
+class _TrafficModemRuntime:
     def __init__(
         self,
         *,
+        modem_id: int | None = None,
         reconnect_delay: float = 5.0,
         max_frames: int = 400,
         frame_consumer: Callable[[str], None] | Callable[..., None] | None = None,
     ) -> None:
+        self._modem_id = modem_id
         self._reconnect_delay = reconnect_delay
         self._max_frames = max_frames
         self._frame_consumer = frame_consumer
@@ -149,6 +151,33 @@ class TrafficMonitorService:
             "last_error": last_error,
             "updated_at": updated_at,
             "frames": frames,
+        }
+
+    def runtime_snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            active_modem = dict(self._active_modem) if self._active_modem else None
+            expose = {
+                "enabled": self._proxy_enabled,
+                "bind_address": self._proxy_bind_address,
+                "port": self._proxy_port,
+                "active_clients": self._proxy_active_clients,
+            }
+            status = self._status
+            status_detail = self._status_detail
+            last_error = self._last_error
+            updated_at = self._updated_at
+        expose["listen_endpoint"] = (
+            f"{expose['bind_address']}:{expose['port']}"
+            if expose["enabled"] and expose["bind_address"] and expose["port"] is not None
+            else None
+        )
+        return {
+            "status": status,
+            "status_detail": status_detail,
+            "active_modem": active_modem,
+            "expose": expose,
+            "last_error": last_error,
+            "updated_at": updated_at,
         }
 
     async def _run(self) -> None:
@@ -730,20 +759,27 @@ class TrafficMonitorService:
 
     def _persist_runtime_state(self) -> None:
         payload = self._runtime_state_payload()
+        modem_id = payload.get("modem_id")
+        if modem_id in {None, ""}:
+            return
+        if fetch_one("SELECT id FROM modems WHERE id = ?", (modem_id,)) is None:
+            return
         with get_connection() as connection:
             connection.execute(
                 """
-                INSERT INTO traffic_runtime_state(
-                    id, status, status_detail, active_modem_name, active_modem_endpoint,
+                INSERT INTO traffic_runtime_interfaces(
+                    modem_id, modem_name, modem_endpoint, band,
+                    status, status_detail,
                     expose_port_enabled, expose_bind_address, expose_port, expose_active_clients,
                     last_error, updated_at
                 )
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(modem_id) DO UPDATE SET
+                    modem_name = excluded.modem_name,
+                    modem_endpoint = excluded.modem_endpoint,
+                    band = excluded.band,
                     status = excluded.status,
                     status_detail = excluded.status_detail,
-                    active_modem_name = excluded.active_modem_name,
-                    active_modem_endpoint = excluded.active_modem_endpoint,
                     expose_port_enabled = excluded.expose_port_enabled,
                     expose_bind_address = excluded.expose_bind_address,
                     expose_port = excluded.expose_port,
@@ -752,10 +788,12 @@ class TrafficMonitorService:
                     updated_at = excluded.updated_at
                 """,
                 (
-                    payload["status"],
-                    payload["detail"],
+                    modem_id,
                     payload["modem_name"],
                     payload["modem_endpoint"],
+                    payload["band"],
+                    payload["status"],
+                    payload["detail"],
                     payload["proxy_enabled"],
                     payload["proxy_bind_address"],
                     payload["proxy_port"],
@@ -769,10 +807,12 @@ class TrafficMonitorService:
         with self._lock:
             modem = dict(self._active_modem) if self._active_modem else None
             return {
+                "modem_id": int(modem["id"]) if modem and modem.get("id") is not None else self._modem_id,
                 "status": self._status,
                 "detail": self._status_detail,
                 "modem_name": str(modem.get("name") or "").strip() if modem else None,
                 "modem_endpoint": str(modem.get("device_path") or "").strip() if modem else None,
+                "band": str(modem.get("band") or "").strip() if modem else None,
                 "proxy_enabled": int(self._proxy_enabled),
                 "proxy_bind_address": self._proxy_bind_address,
                 "proxy_port": self._proxy_port,
@@ -791,17 +831,26 @@ class TrafficMonitorService:
     def _persist_frame(self, entry: dict[str, str], timestamp: str) -> None:
         cutoff = traffic_retention_cutoff()
         active_band = ""
+        interface_id: int | None = None
         with self._lock:
             if self._active_modem:
                 active_band = str(self._active_modem.get("band") or "").strip()
+                try:
+                    interface_id = int(self._active_modem["id"])
+                except (TypeError, ValueError, KeyError):
+                    interface_id = None
         with get_connection() as connection:
             connection.execute(
                 """
-                INSERT INTO traffic_frames(source, format, line, port, command, length, hex, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, ?, 'rx', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry["source"],
+                    interface_id,
+                    active_band,
                     entry["format"],
                     entry["line"],
                     entry["port"],
@@ -825,7 +874,191 @@ class TrafficMonitorService:
             pass
 
     def _load_active_modem(self) -> dict[str, Any] | None:
-        row = fetch_one(
+        params: tuple[Any, ...] = ()
+        if self._modem_id is None:
+            query = """
+                SELECT
+                    id,
+                    name,
+                    band,
+                    modem_type,
+                    device_path,
+                    baud_rate,
+                    enabled,
+                    expose_port_enabled,
+                    expose_bind_address,
+                    expose_port,
+                    expose_whitelist,
+                    notes,
+                    created_at,
+                    updated_at
+                FROM modems
+                WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+                ORDER BY id ASC
+                LIMIT 1
+            """
+        else:
+            query = """
+                SELECT
+                    id,
+                    name,
+                    band,
+                    modem_type,
+                    device_path,
+                    baud_rate,
+                    enabled,
+                    expose_port_enabled,
+                    expose_bind_address,
+                    expose_port,
+                    expose_whitelist,
+                    notes,
+                    created_at,
+                    updated_at
+                FROM modems
+                WHERE id = ? AND enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+                LIMIT 1
+            """
+            params = (self._modem_id,)
+        row = fetch_one(query, params)
+        return dict(row) if row else None
+
+    def _parse_endpoint(self, value: str) -> tuple[str, int] | None:
+        host, separator, port_text = value.strip().rpartition(":")
+        if not separator or not host or not port_text:
+            return None
+        try:
+            port = int(port_text)
+        except ValueError:
+            return None
+        if port < 1 or port > 65535:
+            return None
+        return host.strip(), port
+
+
+class TrafficMonitorService:
+    def __init__(
+        self,
+        *,
+        reconnect_delay: float = 5.0,
+        max_frames: int = 400,
+        frame_consumer: Callable[[str], None] | Callable[..., None] | None = None,
+    ) -> None:
+        self._reconnect_delay = reconnect_delay
+        self._max_frames = max_frames
+        self._frame_consumer = frame_consumer
+        self._lock = Lock()
+        self._task: asyncio.Task[None] | None = None
+        self._stop_event = asyncio.Event()
+        self._runtimes: dict[int, _TrafficModemRuntime] = {}
+        self._runtime_signatures: dict[int, tuple[Any, ...]] = {}
+
+    async def start(self) -> None:
+        if self._task is not None:
+            return
+        self._stop_event.clear()
+        self._task = asyncio.create_task(self._run(), name="aprsbox-traffic-monitor-manager")
+
+    async def stop(self) -> None:
+        self._stop_event.set()
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        runtimes = self._runtime_instances()
+        for runtime in runtimes:
+            await runtime.stop()
+        with self._lock:
+            self._runtimes.clear()
+            self._runtime_signatures.clear()
+        with get_connection() as connection:
+            connection.execute("DELETE FROM traffic_runtime_interfaces")
+        self._persist_summary_state()
+
+    async def send_outbound_frame(self, *, interface_id: int | None, frame: bytes) -> bool:
+        if interface_id is None:
+            return False
+        runtime = self._runtime_for_interface(interface_id)
+        if runtime is None:
+            return False
+        return await runtime.send_outbound_frame(interface_id=interface_id, frame=frame)
+
+    def snapshot(self) -> dict[str, Any]:
+        interfaces = self._runtime_snapshots()
+        summary = self._aggregate_runtime_snapshot(interfaces)
+        rows = fetch_all(
+            """
+            SELECT source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+            FROM traffic_frames
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (self._max_frames,),
+        )
+        summary["interfaces"] = interfaces
+        summary["frames"] = [
+            {
+                "timestamp": row["created_at"],
+                "source": row["source"],
+                "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
+                "direction": str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX"),
+                "band": str(row["band"] or "").strip(),
+                "format": row["format"],
+                "line": row["line"],
+                "port": row["port"] or "",
+                "command": row["command"] or "",
+                "length": str(row["length"]),
+                "hex": row["hex"] or "",
+            }
+            for row in rows
+        ]
+        return summary
+
+    async def _run(self) -> None:
+        try:
+            while not self._stop_event.is_set():
+                await self._sync_runtimes()
+                self._persist_summary_state()
+                await self._sleep(1.0)
+        finally:
+            self._persist_summary_state()
+
+    async def _sync_runtimes(self) -> None:
+        enabled_modems = self._load_enabled_modems()
+        desired_by_id = {int(modem["id"]): modem for modem in enabled_modems}
+        existing_ids = set(self._runtime_signatures)
+        desired_ids = set(desired_by_id)
+
+        for modem_id in sorted(existing_ids - desired_ids):
+            runtime = self._pop_runtime(modem_id)
+            if runtime is not None:
+                await runtime.stop()
+            self._delete_runtime_state(modem_id)
+
+        for modem in enabled_modems:
+            modem_id = int(modem["id"])
+            signature = self._runtime_signature(modem)
+            current_signature = self._runtime_signatures.get(modem_id)
+            if current_signature == signature and self._runtime_for_interface(modem_id) is not None:
+                continue
+            runtime = self._pop_runtime(modem_id)
+            if runtime is not None:
+                await runtime.stop()
+            runtime = _TrafficModemRuntime(
+                modem_id=modem_id,
+                reconnect_delay=self._reconnect_delay,
+                max_frames=self._max_frames,
+                frame_consumer=self._frame_consumer,
+            )
+            with self._lock:
+                self._runtimes[modem_id] = runtime
+                self._runtime_signatures[modem_id] = signature
+            await runtime.start()
+
+    def _load_enabled_modems(self) -> list[dict[str, Any]]:
+        rows = fetch_all(
             """
             SELECT
                 id,
@@ -845,19 +1078,203 @@ class TrafficMonitorService:
             FROM modems
             WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
             ORDER BY id ASC
-            LIMIT 1
             """
         )
-        return dict(row) if row else None
+        return [dict(row) for row in rows]
 
-    def _parse_endpoint(self, value: str) -> tuple[str, int] | None:
-        host, separator, port_text = value.strip().rpartition(":")
-        if not separator or not host or not port_text:
-            return None
+    def _runtime_signature(self, modem: dict[str, Any]) -> tuple[Any, ...]:
+        return (
+            int(modem["id"]),
+            str(modem.get("name") or "").strip(),
+            str(modem.get("band") or "").strip(),
+            str(modem.get("modem_type") or "").strip(),
+            str(modem.get("device_path") or "").strip(),
+            modem.get("baud_rate"),
+            int(bool(modem.get("expose_port_enabled"))),
+            str(modem.get("expose_bind_address") or "").strip(),
+            int(modem.get("expose_port") or 0),
+            str(modem.get("expose_whitelist") or "").strip(),
+        )
+
+    def _runtime_instances(self) -> list[_TrafficModemRuntime]:
+        with self._lock:
+            return list(self._runtimes.values())
+
+    def _runtime_for_interface(self, modem_id: int) -> _TrafficModemRuntime | None:
+        with self._lock:
+            return self._runtimes.get(modem_id)
+
+    def _pop_runtime(self, modem_id: int) -> _TrafficModemRuntime | None:
+        with self._lock:
+            self._runtime_signatures.pop(modem_id, None)
+            return self._runtimes.pop(modem_id, None)
+
+    def _runtime_snapshots(self) -> list[dict[str, Any]]:
+        snapshots: list[dict[str, Any]] = []
+        for runtime in self._runtime_instances():
+            snapshot = runtime.runtime_snapshot()
+            modem = snapshot.get("active_modem") or {}
+            expose = dict(snapshot.get("expose") or {})
+            expose["listen_endpoint"] = (
+                f"{expose.get('bind_address')}:{expose.get('port')}"
+                if expose.get("enabled") and expose.get("bind_address") and expose.get("port") is not None
+                else None
+            )
+            snapshots.append(
+                {
+                    "modem_id": int(modem["id"]) if modem.get("id") is not None else None,
+                    "name": str(modem.get("name") or "").strip(),
+                    "device_path": str(modem.get("device_path") or "").strip(),
+                    "band": str(modem.get("band") or "").strip(),
+                    "status": snapshot.get("status") or "idle",
+                    "status_detail": snapshot.get("status_detail") or "",
+                    "last_error": snapshot.get("last_error"),
+                    "updated_at": snapshot.get("updated_at"),
+                    "expose": expose,
+                }
+            )
+        snapshots.sort(key=lambda item: ((item.get("modem_id") is None), item.get("modem_id") or 0, item.get("name") or ""))
+        return snapshots
+
+    def _aggregate_runtime_snapshot(self, interfaces: list[dict[str, Any]]) -> dict[str, Any]:
+        if not interfaces:
+            return {
+                "status": "idle",
+                "status_detail": "No enabled TNC is configured.",
+                "active_modem": None,
+                "expose": {
+                    "enabled": False,
+                    "bind_address": None,
+                    "port": None,
+                    "active_clients": 0,
+                    "listen_endpoint": None,
+                },
+                "last_error": None,
+                "updated_at": None,
+                "connected_interfaces": 0,
+                "modem_count": 0,
+            }
+
+        if len(interfaces) == 1:
+            interface = interfaces[0]
+            active_modem = None
+            if interface["name"] or interface["device_path"]:
+                active_modem = {
+                    "id": interface["modem_id"],
+                    "name": interface["name"],
+                    "device_path": interface["device_path"],
+                    "band": interface["band"],
+                }
+            return {
+                "status": interface["status"],
+                "status_detail": interface["status_detail"],
+                "active_modem": active_modem,
+                "expose": dict(interface["expose"]),
+                "last_error": interface["last_error"],
+                "updated_at": interface["updated_at"],
+                "connected_interfaces": 1 if interface["status"] == "connected" else 0,
+                "modem_count": 1,
+            }
+
+        connected = [item for item in interfaces if item["status"] == "connected"]
+        connecting = [item for item in interfaces if item["status"] == "connecting"]
+        errored = [item for item in interfaces if item.get("last_error")]
+        preferred = connected[0] if connected else interfaces[0]
+        if connected:
+            status = "connected"
+            detail = f"{len(connected)}/{len(interfaces)} TNC interfaces connected."
+        elif connecting:
+            status = "connecting"
+            detail = f"Connecting {len(connecting)} TNC interface(s)."
+        elif errored:
+            status = "error"
+            detail = str(errored[0].get("last_error") or preferred["status_detail"] or "TNC interfaces failed.")
+        else:
+            status = preferred["status"]
+            detail = preferred["status_detail"]
+        active_modem = None
+        if preferred["name"] or preferred["device_path"]:
+            active_modem = {
+                "id": preferred["modem_id"],
+                "name": preferred["name"],
+                "device_path": preferred["device_path"],
+                "band": preferred["band"],
+            }
+        total_clients = sum(int((item.get("expose") or {}).get("active_clients") or 0) for item in interfaces)
+        updated_at = max((str(item.get("updated_at") or "") for item in interfaces), default="") or None
+        return {
+            "status": status,
+            "status_detail": detail,
+            "active_modem": active_modem,
+            "expose": {
+                "enabled": any(bool((item.get("expose") or {}).get("enabled")) for item in interfaces),
+                "bind_address": None,
+                "port": None,
+                "active_clients": total_clients,
+                "listen_endpoint": None,
+            },
+            "last_error": str(errored[0].get("last_error")) if errored else None,
+            "updated_at": updated_at,
+            "connected_interfaces": len(connected),
+            "modem_count": len(interfaces),
+        }
+
+    def _persist_summary_state(self) -> None:
+        interfaces = self._runtime_snapshots()
+        summary = self._aggregate_runtime_snapshot(interfaces)
+        active_modem = dict(summary.get("active_modem") or {})
+        expose = dict(summary.get("expose") or {})
+        updated_at = str(summary.get("updated_at") or utc_now())
+        with get_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO traffic_runtime_state (
+                    id, status, status_detail, active_modem_name, active_modem_endpoint,
+                    expose_port_enabled, expose_bind_address, expose_port, expose_active_clients,
+                    last_error, updated_at
+                )
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    status_detail = excluded.status_detail,
+                    active_modem_name = excluded.active_modem_name,
+                    active_modem_endpoint = excluded.active_modem_endpoint,
+                    expose_port_enabled = excluded.expose_port_enabled,
+                    expose_bind_address = excluded.expose_bind_address,
+                    expose_port = excluded.expose_port,
+                    expose_active_clients = excluded.expose_active_clients,
+                    last_error = excluded.last_error,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    summary["status"],
+                    summary["status_detail"],
+                    active_modem.get("name"),
+                    active_modem.get("device_path"),
+                    int(bool(expose.get("enabled"))),
+                    expose.get("bind_address"),
+                    expose.get("port"),
+                    int(expose.get("active_clients") or 0),
+                    summary.get("last_error"),
+                    updated_at,
+                ),
+            )
+
+    def _delete_runtime_state(self, modem_id: int) -> None:
+        with get_connection() as connection:
+            connection.execute("DELETE FROM traffic_runtime_interfaces WHERE modem_id = ?", (modem_id,))
+
+    async def _sleep(self, delay: float) -> None:
         try:
-            port = int(port_text)
-        except ValueError:
-            return None
-        if port < 1 or port > 65535:
-            return None
-        return host.strip(), port
+            await asyncio.wait_for(self._stop_event.wait(), timeout=delay)
+        except TimeoutError:
+            pass
+
+    def _kiss_unescape(self, payload: bytes) -> bytes:
+        return _TrafficModemRuntime._kiss_unescape(self, payload)
+
+    def _decode_ax25_address(self, chunk: bytes) -> tuple[str, bool, bool] | None:
+        return _TrafficModemRuntime._decode_ax25_address(self, chunk)
+
+    def _decode_ax25_to_tnc2(self, payload: bytes) -> str | None:
+        return _TrafficModemRuntime._decode_ax25_to_tnc2(self, payload)

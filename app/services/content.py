@@ -289,6 +289,25 @@ def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
+    interface_rows = fetch_all(
+        """
+        SELECT
+            modem_id,
+            modem_name,
+            modem_endpoint,
+            band,
+            status,
+            status_detail,
+            expose_port_enabled,
+            expose_bind_address,
+            expose_port,
+            expose_active_clients,
+            last_error,
+            updated_at
+        FROM traffic_runtime_interfaces
+        ORDER BY modem_id ASC
+        """
+    )
     state_row = fetch_one(
         """
         SELECT
@@ -308,41 +327,101 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     )
     frame_rows = fetch_all(
         """
-        SELECT source, format, line, port, command, length, hex, created_at
+        SELECT source, interface_id, direction, band, format, line, port, command, length, hex, created_at
         FROM traffic_frames
         ORDER BY created_at DESC, id DESC
         LIMIT ?
         """,
         (limit,),
     )
+    interfaces = []
+    for row in interface_rows:
+        expose = {
+            "enabled": bool(row["expose_port_enabled"]),
+            "bind_address": row["expose_bind_address"],
+            "port": int(row["expose_port"]) if row["expose_port"] is not None else None,
+            "active_clients": int(row["expose_active_clients"]) if row["expose_active_clients"] is not None else 0,
+        }
+        expose["listen_endpoint"] = (
+            f"{expose['bind_address']}:{expose['port']}"
+            if expose["enabled"] and expose["bind_address"] and expose["port"] is not None
+            else None
+        )
+        interfaces.append(
+            {
+                "modem_id": int(row["modem_id"]),
+                "name": row["modem_name"] or "",
+                "device_path": row["modem_endpoint"] or "",
+                "band": row["band"] or "",
+                "status": row["status"] or "idle",
+                "status_detail": row["status_detail"] or "",
+                "last_error": row["last_error"],
+                "updated_at": _format_monitor_timestamp(row["updated_at"]),
+                "expose": expose,
+            }
+        )
     active_modem = None
-    if state_row and (state_row["active_modem_name"] or state_row["active_modem_endpoint"]):
+    if interfaces:
+        preferred = next((item for item in interfaces if item["status"] == "connected"), interfaces[0])
+        if preferred["name"] or preferred["device_path"]:
+            active_modem = {
+                "id": preferred["modem_id"],
+                "name": preferred["name"],
+                "device_path": preferred["device_path"],
+                "band": preferred["band"],
+            }
+    elif state_row and (state_row["active_modem_name"] or state_row["active_modem_endpoint"]):
         active_modem = {
             "name": state_row["active_modem_name"] or "",
             "device_path": state_row["active_modem_endpoint"] or "",
         }
-    expose = {
-        "enabled": bool(state_row["expose_port_enabled"]) if state_row else False,
-        "bind_address": state_row["expose_bind_address"] if state_row else None,
-        "port": int(state_row["expose_port"]) if state_row and state_row["expose_port"] is not None else None,
-        "active_clients": int(state_row["expose_active_clients"]) if state_row and state_row["expose_active_clients"] is not None else 0,
-    }
-    expose["listen_endpoint"] = (
-        f"{expose['bind_address']}:{expose['port']}"
-        if expose["enabled"] and expose["bind_address"] and expose["port"] is not None
-        else None
-    )
+    if len(interfaces) == 1:
+        expose = dict(interfaces[0]["expose"])
+    else:
+        expose = {
+            "enabled": any(bool(item["expose"]["enabled"]) for item in interfaces),
+            "bind_address": None,
+            "port": None,
+            "active_clients": sum(int(item["expose"]["active_clients"]) for item in interfaces),
+            "listen_endpoint": None,
+        }
+    status = state_row["status"] if state_row else "idle"
+    status_detail = state_row["status_detail"] if state_row else "Traffic monitor state unavailable."
+    updated_at = _format_monitor_timestamp(state_row["updated_at"]) if state_row else None
+    if interfaces and len(interfaces) > 1:
+        connected = [item for item in interfaces if item["status"] == "connected"]
+        connecting = [item for item in interfaces if item["status"] == "connecting"]
+        if connected:
+            status = "connected"
+            status_detail = f"{len(connected)}/{len(interfaces)} TNC interfaces connected."
+        elif connecting:
+            status = "connecting"
+            status_detail = f"Connecting {len(connecting)} TNC interface(s)."
+        else:
+            status = "error" if any(item["last_error"] for item in interfaces) else interfaces[0]["status"]
+            status_detail = (
+                next((str(item["last_error"]) for item in interfaces if item["last_error"]), None)
+                or interfaces[0]["status_detail"]
+            )
+        updated_at = max((item["updated_at"] for item in interfaces if item["updated_at"]), default=updated_at)
+    last_error = next((item["last_error"] for item in interfaces if item["last_error"]), None)
+    if last_error is None and state_row:
+        last_error = state_row["last_error"]
     return {
-        "status": state_row["status"] if state_row else "idle",
-        "status_detail": state_row["status_detail"] if state_row else "Traffic monitor state unavailable.",
+        "status": status,
+        "status_detail": status_detail,
         "active_modem": active_modem,
         "expose": expose,
-        "last_error": state_row["last_error"] if state_row else None,
-        "updated_at": _format_monitor_timestamp(state_row["updated_at"]) if state_row else None,
+        "interfaces": interfaces,
+        "last_error": last_error,
+        "updated_at": updated_at,
         "frames": [
             {
                 "timestamp": _format_monitor_timestamp(row["created_at"]),
                 "source": row["source"],
+                "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
+                "direction": str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX"),
+                "band": row["band"] or "",
                 "format": row["format"],
                 "line": row["line"],
                 "port": row["port"] or "",
