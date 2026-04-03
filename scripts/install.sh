@@ -480,8 +480,8 @@ main() {
     prepare_staging_installation
     sync_application_files
     setup_venv
-    verify_python_runtime
     initialize_database
+    verify_python_runtime
     create_admin_user
     activate_staged_installation
     install_service_units
