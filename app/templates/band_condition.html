@@ -309,7 +309,7 @@
                     </thead>
                     <tbody>
                         {% for row in references %}
-                        <tr {% if current_user.role in ("admin", "operator") %}class="clickable-row" data-href="?edit_reference={{ row.id }}"{% endif %}>
+                        <tr {% if current_user.role in ("admin", "operator") %}class="clickable-row" data-href="{{ request.scope.root_path }}/band-condition?edit_reference={{ row.id }}"{% endif %}>
                             <td>{{ row.band_label }}</td>
                             <td><code>{{ row.station_key }}</code></td>
                             <td>{{ t(row.station_type_label) }}</td>

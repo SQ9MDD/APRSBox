@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from app.services.band_condition import (
     _condition_score,
@@ -13,6 +14,10 @@ from app.services.content import parse_tnc2_frame
 
 
 class BandConditionHelpersTests(unittest.TestCase):
+    def test_reference_station_rows_use_canonical_band_condition_edit_url(self) -> None:
+        template = Path("/Users/rysiek/Documents/GitHub/APRSBox/app/templates/band_condition.html").read_text(encoding="utf-8")
+        self.assertIn('data-href="{{ request.scope.root_path }}/band-condition?edit_reference={{ row.id }}"', template)
+
     def test_parse_tnc2_frame_accepts_spacing_from_kiss_decoder(self) -> None:
         parsed = parse_tnc2_frame("SRCCALL-9 > APRS , WIDE1-1,WIDE2-1 :!5218.37N/02104.87E-Test")
         self.assertIsNotNone(parsed)

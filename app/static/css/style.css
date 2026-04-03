@@ -1492,7 +1492,7 @@ select:focus-visible,
 }
 
 .logs-col-category {
-    width: 7rem;
+    width: 9rem;
 }
 
 .logs-col-message {
@@ -1501,12 +1501,20 @@ select:focus-visible,
 
 .logs-table td:nth-child(1),
 .logs-table td:nth-child(2),
-.logs-table td:nth-child(3),
-.logs-table td:nth-child(4) {
+.logs-table td:nth-child(3) {
     white-space: nowrap;
 }
 
+.logs-table th:nth-child(4),
+.logs-table td:nth-child(4) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
 .logs-table td:nth-child(5) {
+    white-space: normal;
+    overflow-wrap: anywhere;
     word-break: break-word;
 }
 
