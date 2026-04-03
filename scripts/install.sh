@@ -25,6 +25,7 @@ SERVICES_STARTED="0"
 SERVICE_MANAGER="unknown"
 CORE_PIDFILE="/run/aprsbox-core.pid"
 WEB_PIDFILE="/run/aprsbox-web.pid"
+SERIAL_DEVICE_GLOBS="${APRSBOX_SERIAL_DEVICE_GLOBS:-/dev/ttyACM* /dev/ttyUSB*}"
 
 log() {
     printf '%s\n' "$*"
@@ -149,6 +150,66 @@ ensure_user() {
                 ;;
         esac
     fi
+}
+
+group_exists() {
+    getent group "$1" >/dev/null 2>&1
+}
+
+user_in_group() {
+    id -nG "$APP_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx "$1" >/dev/null 2>&1
+}
+
+add_user_to_group() {
+    group_name="$1"
+    if ! group_exists "$group_name"; then
+        return
+    fi
+    if user_in_group "$group_name"; then
+        return
+    fi
+    if command -v usermod >/dev/null 2>&1; then
+        usermod -a -G "$group_name" "$APP_USER"
+    else
+        case "$OS_ID" in
+            alpine)
+                addgroup "$APP_USER" "$group_name"
+                ;;
+            *)
+                adduser "$APP_USER" "$group_name"
+                ;;
+        esac
+    fi
+    log "Granted serial access group '$group_name' to user '$APP_USER'."
+}
+
+device_group_name() {
+    device_path="$1"
+    if command -v stat >/dev/null 2>&1; then
+        if group_name="$(stat -c '%G' "$device_path" 2>/dev/null)"; then
+            printf '%s\n' "$group_name"
+            return 0
+        fi
+    fi
+    ls -ld "$device_path" 2>/dev/null | awk '{print $4}'
+}
+
+grant_serial_permissions() {
+    for group_name in dialout uucp tty; do
+        add_user_to_group "$group_name"
+    done
+
+    for pattern in $SERIAL_DEVICE_GLOBS; do
+        for device_path in $pattern; do
+            if [ ! -e "$device_path" ]; then
+                continue
+            fi
+            group_name="$(device_group_name "$device_path" | tr -d '\n' || true)"
+            if [ -n "$group_name" ]; then
+                add_user_to_group "$group_name"
+            fi
+        done
+    done
 }
 
 prepare_directories() {
@@ -412,6 +473,7 @@ main() {
     detect_service_manager
     obtain_source_tree
     ensure_user
+    grant_serial_permissions
     prepare_directories
     stop_services
     backup_database
