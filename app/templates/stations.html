@@ -8,29 +8,29 @@
     <div class="panel-body">
         <div class="stations-summary-header">
             <div class="panel-header-copy">
-                <h2>Heard Stations</h2>
+                <h2>{{ t("Heard Stations") }}</h2>
             </div>
             <div class="stations-summary-toolbar">
                 <div class="stations-summary" id="stations-summary">
                     <div class="metric-card">
                         <span class="metric-value" id="summary-total">{{ station_summary.total }}</span>
-                        <span class="metric-label">Wszystkie stacje</span>
+                        <span class="metric-label">{{ t("All stations") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
-                        <span class="metric-label">Stacje mobilne</span>
+                        <span class="metric-label">{{ t("Mobile stations") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
-                        <span class="metric-label">Stacje stałe</span>
+                        <span class="metric-label">{{ t("Fixed stations") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
-                        <span class="metric-label">Obiekty</span>
+                        <span class="metric-label">{{ t("Objects") }}</span>
                     </div>
                 </div>
                 <label class="stations-refresh-control">
-                    <span class="muted">Refresh rate</span>
+                    <span class="muted">{{ t("Refresh rate") }}</span>
                     <select id="stations-refresh-rate">
                         <option value="5000">5s</option>
                         <option value="10000">10s</option>
@@ -60,14 +60,14 @@
                 </colgroup>
                 <thead>
                     <tr>
-                        <th>Callsign</th>
-                        <th>Typ</th>
-                        <th>Last Heard</th>
-                        <th>APRS Icon</th>
-                        <th>Latitude</th>
-                        <th>Longitude</th>
-                        <th>Dane</th>
-                        <th>Comment</th>
+                        <th>{{ t("Callsign") }}</th>
+                        <th>{{ t("Type") }}</th>
+                        <th>{{ t("Last Heard") }}</th>
+                        <th>{{ t("APRS Icon") }}</th>
+                        <th>{{ t("Latitude") }}</th>
+                        <th>{{ t("Longitude") }}</th>
+                        <th>{{ t("Data") }}</th>
+                        <th>{{ t("Comment") }}</th>
                     </tr>
                 </thead>
                 <tbody id="stations-table-body">
@@ -114,7 +114,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="muted">No decoded APRS stations heard yet.</td>
+                        <td colspan="8" class="muted">{{ t("No decoded APRS stations heard yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -137,6 +137,7 @@
     const summaryObjects = document.getElementById("summary-objects");
     const refreshSelect = document.getElementById("stations-refresh-rate");
     const refreshStorageKey = "aprsbox-stations-refresh-ms";
+    const noStationsText = {{ t("No decoded APRS stations heard yet.")|tojson }};
     let refreshTimer = null;
 
     function escapeHtml(value) {
@@ -166,7 +167,7 @@
 
     function renderRows(stations) {
         if (!stations.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="muted">No decoded APRS stations heard yet.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="8" class="muted">${noStationsText}</td></tr>`;
             return;
         }
         const resolvePath = (value) => value && value.startsWith("/") ? `${rootPath}${value}` : (value || "");

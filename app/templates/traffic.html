@@ -5,8 +5,8 @@
 <section class="panel">
     <div class="panel-body">
         <div class="traffic-toolbar">
-            <h2>Traffic Log</h2>
-            <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} entries</span>
+            <h2>{{ t("Traffic Log") }}</h2>
+            <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
         </div>
         <div class="traffic-stream" id="traffic-stream">
             {% if traffic_snapshot.frames %}
@@ -18,7 +18,7 @@
             </div>
             {% endfor %}
             {% else %}
-            <div class="empty-state muted" id="traffic-empty-state">No frames received yet.</div>
+            <div class="empty-state muted" id="traffic-empty-state">{{ t("No frames received yet.") }}</div>
             {% endif %}
         </div>
     </div>
@@ -28,10 +28,12 @@
     (() => {
         const streamContainer = document.getElementById("traffic-stream");
         const count = document.getElementById("traffic-frame-count");
+        const noFramesText = {{ t("No frames received yet.")|tojson }};
+        const entriesText = {{ t("entries")|tojson }};
 
         const renderFrames = (frames) => {
             if (!frames.length) {
-                streamContainer.innerHTML = '<div class="empty-state muted" id="traffic-empty-state">No frames received yet.</div>';
+                streamContainer.innerHTML = `<div class="empty-state muted" id="traffic-empty-state">${noFramesText}</div>`;
                 return;
             }
 
@@ -54,7 +56,7 @@
         };
 
         const applySnapshot = (snapshot) => {
-            count.textContent = `${snapshot.frames.length} entries`;
+            count.textContent = `${snapshot.frames.length} ${entriesText}`;
             renderFrames(snapshot.frames);
         };
 

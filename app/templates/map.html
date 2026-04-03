@@ -21,11 +21,11 @@
             data-static-root="{{ request.scope.root_path }}/static/"
             data-root-path="{{ request.scope.root_path }}"
         >
-            <div class="map-toolbar" role="toolbar" aria-label="Map controls">
+            <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
-                    <button type="button" class="button button-secondary" id="map-reset-view">Reset view</button>
+                    <button type="button" class="button button-secondary" id="map-reset-view">{{ t("Reset view") }}</button>
                     <label class="map-mask-opacity-control" for="map-mask-opacity">
-                        <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="Mask opacity">
+                        <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="{{ t('Mask opacity') }}">
                             {% for value in range(0, 101, 10) %}
                             <option value="{{ value }}">{{ value }}%</option>
                             {% endfor %}
@@ -33,13 +33,13 @@
                     </label>
                 </div>
                 <div class="map-info-strip" aria-live="polite">
-                    <span><strong>Tiles:</strong> <span id="map-tile-source">{{ map_config.tile_source_name }}</span></span>
-                    <span><strong>Center:</strong> <span id="map-center">--</span></span>
-                    <span><strong>Zoom:</strong> <span id="map-zoom">--</span></span>
+                    <span><strong>{{ t("Tiles") }}:</strong> <span id="map-tile-source">{{ map_config.tile_source_name }}</span></span>
+                    <span><strong>{{ t("Center") }}:</strong> <span id="map-center">--</span></span>
+                    <span><strong>{{ t("Zoom") }}:</strong> <span id="map-zoom">--</span></span>
                 </div>
             </div>
             <div id="map-stage" class="map-stage">
-                <div id="map-canvas" class="map-canvas" aria-label="Map viewer"></div>
+                <div id="map-canvas" class="map-canvas" aria-label="{{ t('Map viewer') }}"></div>
                 <div id="map-mask" class="map-mask" aria-hidden="true"></div>
             </div>
         </div>
