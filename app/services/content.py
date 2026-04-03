@@ -429,13 +429,16 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
 
     if traffic["heard_stations"] > 0 and traffic["decoded_aprs"] > 0:
         hero = {
+            "kind": "receiving",
             "tone": "good",
             "title": "Station is receiving APRS traffic",
-            "summary": f"Heard {traffic['heard_stations']} stations and decoded {traffic['decoded_aprs']} APRS frames.",
             "status": "Receiving",
+            "heard_stations": traffic["heard_stations"],
+            "decoded_aprs": traffic["decoded_aprs"],
         }
     elif beacon_ready:
         hero = {
+            "kind": "ready",
             "tone": "neutral",
             "title": "Station is ready for a beacon test",
             "summary": "Basic station data and interface selection are configured. You can try manual beacon send.",
@@ -443,6 +446,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         }
     else:
         hero = {
+            "kind": "setup",
             "tone": "caution",
             "title": "Finish station setup",
             "summary": "Complete the basic station data so APRSBox can beacon and present your station properly.",
@@ -459,10 +463,10 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     return {
         "hero": hero,
         "stats": [
-            {"label": "Heard stations", "value": f"{traffic['heard_stations']} in last h"},
-            {"label": "APRS frames", "value": f"{traffic['decoded_aprs']} / h"},
-            {"label": "Active interfaces", "value": str(len(enabled_interfaces))},
-            {"label": "Last traffic", "value": latest_activity},
+            {"label": "Heard stations", "value": str(traffic["heard_stations"]), "suffix": "in last h"},
+            {"label": "APRS frames", "value": str(traffic["decoded_aprs"]), "suffix": "/ h"},
+            {"label": "Active interfaces", "value": str(len(enabled_interfaces)), "suffix": ""},
+            {"label": "Last traffic", "value": latest_activity, "suffix": ""},
         ],
         "checks": checks,
         "next_steps": next_steps,
