@@ -263,8 +263,8 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_packet_type"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_icon"]["runtime_status"], "implemented")
-            self.assertEqual(type_meta["filter_digi"]["runtime_status"], "stub")
-            self.assertEqual(type_meta["filter_digi"]["runtime_label"], "Stub")
+            self.assertEqual(type_meta["filter_digi"]["runtime_status"], "implemented")
+            self.assertEqual(type_meta["filter_digi"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_dupe"]["runtime_status"], "config_only")
             self.assertEqual(type_meta["filter_dupe"]["runtime_label"], "Config only")
 

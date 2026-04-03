@@ -233,6 +233,8 @@ class DigiFlowRuntimeService:
             return self._execute_path_rule(context, step)
         if step_type == "filter_strict":
             return self._execute_strict_filter(context, step)
+        if step_type == "filter_digi":
+            return self._execute_digi_filter(context, step)
         if step_type == "filter_packet_type":
             return self._execute_packet_type_filter(context, step)
         if step_type == "filter_icon":
@@ -447,6 +449,62 @@ class DigiFlowRuntimeService:
             message=f"Strict filter rejected frame because path contains blocked token {blocked_token}. Input path: {input_path or '-'}",
         )
         return {"decision": "drop"}
+
+    def _execute_digi_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        parsed = context.get("parsed")
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        config = dict(step.get("config") or {})
+        mode = str(config.get("mode") or "allow").strip().lower() or "allow"
+        configured = [str(item).strip().upper() for item in config.get("digis") or [] if str(item).strip()]
+
+        if parsed is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_digi",
+                decision="rejected",
+                message="DIGI filter rejected frame because TNC2 parsing failed.",
+            )
+            return {"decision": "drop"}
+
+        input_path = str(parsed.get("path") or "").strip().upper()
+        consumed_hops = _consumed_path_hops(_split_path_tokens(input_path))
+        matched_pattern, matched_hop = _find_matching_digi_pattern(consumed_hops, configured)
+
+        if mode == "allow":
+            passed = matched_pattern is not None
+            decision = "continue" if passed else "drop"
+            if configured:
+                message = (
+                    f"DIGI filter ({mode}) inspected consumed hops {', '.join(consumed_hops) or '-'}: "
+                    f"{'passed' if passed else 'rejected'} because it "
+                    f"{'matched pattern ' + matched_pattern + ' on hop ' + str(matched_hop) if passed else 'did not match any allow pattern'}."
+                )
+            else:
+                message = "DIGI filter (allow) rejected frame because the allow list is empty."
+        else:
+            blocked = matched_pattern is not None
+            decision = "drop" if blocked else "continue"
+            if configured:
+                message = (
+                    f"DIGI filter ({mode}) inspected consumed hops {', '.join(consumed_hops) or '-'}: "
+                    f"{'rejected' if blocked else 'passed'} because it "
+                    f"{'matched pattern ' + matched_pattern + ' on hop ' + str(matched_hop) if blocked else 'did not match any deny pattern'}."
+                )
+            else:
+                message = "DIGI filter (deny) passed because the deny list is empty."
+
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="filter_digi",
+            decision="passed" if decision == "continue" else "rejected",
+            message=message,
+        )
+        return {"decision": decision}
 
     def _execute_packet_type_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         parsed = context.get("parsed")
@@ -695,6 +753,18 @@ def _find_matching_callsign_pattern(callsign: str, patterns: list[str]) -> str |
         if _callsign_matches_pattern(normalized_callsign, normalized_pattern):
             return normalized_pattern
     return None
+
+
+def _consumed_path_hops(path_tokens: list[str]) -> list[str]:
+    return [token.rstrip("*") for token in path_tokens if token.endswith("*") and token.rstrip("*")]
+
+
+def _find_matching_digi_pattern(consumed_hops: list[str], patterns: list[str]) -> tuple[str | None, str | None]:
+    for hop in consumed_hops:
+        matched_pattern = _find_matching_callsign_pattern(hop, patterns)
+        if matched_pattern is not None:
+            return matched_pattern, hop
+    return None, None
 
 
 def _find_blocked_strict_path_token(path_tokens: list[str]) -> str | None:

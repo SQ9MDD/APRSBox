@@ -40,6 +40,7 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_aprsis",
     "filter_path",
     "filter_strict",
+    "filter_digi",
     "filter_callsign",
     "filter_packet_type",
     "filter_icon",
@@ -47,7 +48,7 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "action_drop",
     "action_log",
 }
-RUNTIME_STUB_STEP_TYPES = {"filter_digi", "tx_aprsis"}
+RUNTIME_STUB_STEP_TYPES = {"tx_aprsis"}
 
 STEP_TYPE_META: dict[str, dict[str, Any]] = {
     "receiver_rf": {
@@ -1271,7 +1272,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
             if event_type == "source_step":
                 step_state["status"] = "passed"
                 step_state["description"] = _t("Source matched and packet entered the flow.")
-            elif event_type in {"filter_callsign", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
+            elif event_type in {"filter_callsign", "filter_digi", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
                 step_state["status"] = "rejected" if decision == "rejected" else "passed"
                 step_state["description"] = message
             elif event_type == "output_action":

@@ -722,11 +722,11 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(traffic_row["source"], "RF-OUT")
             self.assertEqual(traffic_row["line"], "SQ9MDD-4>APRS,SQ9MDD-4*,WIDE2-1:>DIGI outbound test")
 
-    async def test_unimplemented_digi_filter_is_safe_stub_and_finishes_once(self) -> None:
+    async def test_digi_filter_allow_matches_consumed_digi_with_wildcards(self) -> None:
         with temporary_database():
             flow_id = create_flow(
                 {
-                    "name": "DIGI stub",
+                    "name": "DIGI allow",
                     "description": "",
                     "source_kind": "receiver_rf",
                     "source_ref": "TNC-1",
@@ -739,7 +739,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "step_type": "filter_digi",
                             "title": "DIGI Filter",
                             "enabled": 1,
-                            "config": {"mode": "allow", "digis": ["WIDE1-1"]},
+                            "config": {"mode": "allow", "digis": ["SR5ABC", "SR5BCD*", "SR5*"]},
                         },
                         {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
                     ],
@@ -748,24 +748,85 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             runtime = DigiFlowRuntimeService()
             await runtime.start()
             try:
-                result = runtime.enqueue_tnc2_frame(
+                allowed = runtime.enqueue_tnc2_frame(
                     source_kind="receiver_rf",
                     source_ref="TNC-1",
-                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Stub filter",
+                    raw_payload="SP8ABC-9>APRS,SR5BCD-2*,WIDE1-1:>Allowed digi",
+                )
+                denied = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,SQ7XYZ-1*,WIDE1-1:>Denied digi",
                 )
                 await runtime.wait_until_idle()
             finally:
                 await runtime.stop()
 
-            rows = event_rows_for_frame(str(result["frame_uid"]))
-            self.assertTrue(any(row["event_type"] == "step_stub" and row["decision"] == "continue" for row in rows))
-            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
-            self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
-            self.assertEqual(sum(1 for row in rows if row["event_type"] == "output_action"), 1)
+            allowed_rows = event_rows_for_frame(str(allowed["frame_uid"]))
+            denied_rows = event_rows_for_frame(str(denied["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_digi" and row["decision"] == "passed" for row in allowed_rows))
+            self.assertTrue(any("SR5BCD*" in row["message"] for row in allowed_rows if row["event_type"] == "filter_digi"))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in allowed_rows))
+            self.assertTrue(any(row["event_type"] == "filter_digi" and row["decision"] == "rejected" for row in denied_rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in denied_rows))
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
-            self.assertEqual(len(summaries), 1)
-            self.assertEqual(summaries[0]["final_result"], "LOGGED")
+            self.assertEqual(len(summaries), 2)
+            self.assertEqual(sum(1 for item in summaries if item["final_result"] == "LOGGED"), 1)
+            self.assertEqual(sum(1 for item in summaries if item["final_result"] == "REJECTED"), 1)
+
+    async def test_digi_filter_supports_global_wildcard_and_deny_mode(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "DIGI deny wildcard",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_digi",
+                            "title": "DIGI Filter",
+                            "enabled": 1,
+                            "config": {"mode": "deny", "digis": ["*"]},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                blocked = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,SR5ABC*,WIDE1-1:>Repeated frame",
+                )
+                passed = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Not repeated yet",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            blocked_rows = event_rows_for_frame(str(blocked["frame_uid"]))
+            passed_rows = event_rows_for_frame(str(passed["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_digi" and row["decision"] == "rejected" for row in blocked_rows))
+            self.assertTrue(any("matched pattern *" in row["message"] for row in blocked_rows if row["event_type"] == "filter_digi"))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in blocked_rows))
+            self.assertTrue(any(row["event_type"] == "filter_digi" and row["decision"] == "passed" for row in passed_rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in passed_rows))
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
+            self.assertEqual(len(summaries), 2)
+            self.assertEqual(sum(1 for item in summaries if item["final_result"] == "REJECTED"), 1)
+            self.assertEqual(sum(1 for item in summaries if item["final_result"] == "LOGGED"), 1)
 
     async def test_execution_summary_survives_flow_step_id_changes(self) -> None:
         with temporary_database():
