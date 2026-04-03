@@ -8,6 +8,14 @@
             <h2>{{ t("Traffic Log") }}</h2>
             <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
         </div>
+        <div class="muted small" id="traffic-expose-summary">
+            {{ t("Expose port") }}:
+            {{ t("Enabled" if traffic_snapshot.expose.enabled else "Disabled") }}
+            {% if traffic_snapshot.expose.listen_endpoint %}
+            · {{ t("Listening") }} {{ traffic_snapshot.expose.listen_endpoint }}
+            {% endif %}
+            · {{ t("Clients") }}: {{ traffic_snapshot.expose.active_clients }}
+        </div>
         <div class="traffic-stream" id="traffic-stream">
             {% if traffic_snapshot.frames %}
             {% for frame in traffic_snapshot.frames %}
@@ -28,8 +36,14 @@
     (() => {
         const streamContainer = document.getElementById("traffic-stream");
         const count = document.getElementById("traffic-frame-count");
+        const exposeSummary = document.getElementById("traffic-expose-summary");
         const noFramesText = {{ t("No frames received yet.")|tojson }};
         const entriesText = {{ t("entries")|tojson }};
+        const exposePortText = {{ t("Expose port")|tojson }};
+        const enabledText = {{ t("Enabled")|tojson }};
+        const disabledText = {{ t("Disabled")|tojson }};
+        const listeningText = {{ t("Listening")|tojson }};
+        const clientsText = {{ t("Clients")|tojson }};
 
         const renderFrames = (frames) => {
             if (!frames.length) {
@@ -55,8 +69,23 @@
             });
         };
 
+        const renderExpose = (expose) => {
+            if (!exposeSummary || !expose) {
+                return;
+            }
+            const parts = [
+                `${exposePortText}: ${expose.enabled ? enabledText : disabledText}`,
+                `${clientsText}: ${expose.active_clients || 0}`,
+            ];
+            if (expose.listen_endpoint) {
+                parts.splice(1, 0, `${listeningText} ${expose.listen_endpoint}`);
+            }
+            exposeSummary.textContent = parts.join(" · ");
+        };
+
         const applySnapshot = (snapshot) => {
             count.textContent = `${snapshot.frames.length} ${entriesText}`;
+            renderExpose(snapshot.expose);
             renderFrames(snapshot.frames);
         };
 

@@ -515,6 +515,10 @@ def modems_create(
     device_path: str = Form(""),
     baud_rate: int | None = Form(None),
     enabled: str | None = Form(None),
+    expose_port_enabled: str | None = Form(None),
+    expose_bind_address: str = Form("0.0.0.0"),
+    expose_port: int | None = Form(8002),
+    expose_whitelist: str = Form(""),
     notes: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
@@ -529,6 +533,10 @@ def modems_create(
         "device_path": device_path.strip(),
         "baud_rate": baud_rate,
         "enabled": enabled,
+        "expose_port_enabled": expose_port_enabled,
+        "expose_bind_address": expose_bind_address.strip(),
+        "expose_port": expose_port,
+        "expose_whitelist": expose_whitelist,
         "notes": notes.strip(),
     }
     if record_id is None:

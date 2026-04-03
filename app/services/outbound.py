@@ -506,7 +506,7 @@ def get_outbound_job(job_id: int) -> dict[str, Any] | None:
         """
         SELECT j.id, j.kind, j.interface_id, j.payload_json, j.status, j.scheduled_at, j.locked_at,
                j.started_at, j.sent_at, j.attempt_count, j.last_error, j.created_at, j.updated_at,
-               m.name AS interface_name, m.modem_type, m.device_path, m.enabled AS interface_enabled, m.band
+               m.name AS interface_name, m.modem_type, m.device_path, m.baud_rate, m.enabled AS interface_enabled, m.band
         FROM outbound_jobs j
         LEFT JOIN modems m ON m.id = j.interface_id
         WHERE j.id = ?

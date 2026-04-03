@@ -242,7 +242,7 @@ def monitored_band_for_active_modem() -> str:
         """
         SELECT band
         FROM modems
-        WHERE enabled = 1 AND modem_type = 'TCP'
+        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
         ORDER BY id ASC
         LIMIT 1
         """

@@ -23,6 +23,13 @@ from app.services.outbound import (
     mark_outbound_job_sent,
     persist_outbound_frame,
 )
+from app.services.serial_tnc import (
+    close_serial_device,
+    normalize_serial_baud_rate,
+    normalize_serial_device_path,
+    open_serial_device,
+    write_serial_data,
+)
 
 
 class OutboundService:
@@ -63,11 +70,6 @@ class OutboundService:
             modem_type = str(job.get("modem_type") or "").strip().upper()
             interface_name = str(job.get("interface_name") or f"interface-{job.get('interface_id') or 'unknown'}")
             device_path = str(job.get("device_path") or "").strip()
-            if modem_type != "TCP":
-                raise ValueError(f"Interface {interface_name} uses unsupported modem type {modem_type or '-'}")
-            endpoint = self._parse_endpoint(device_path)
-            if endpoint is None:
-                raise ValueError(f"Interface {interface_name} has invalid TCP endpoint.")
 
             kind = str(job.get("kind") or "").strip()
             if kind == "beacon":
@@ -86,18 +88,32 @@ class OutboundService:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
             log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
             frame = build_tnc2_kiss_frame(tnc2_line)
-            host, port = endpoint
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5)
-            try:
-                writer.write(frame)
-                await writer.drain()
-            finally:
-                writer.close()
+            if modem_type == "TCP":
+                endpoint = self._parse_endpoint(device_path)
+                if endpoint is None:
+                    raise ValueError(f"Interface {interface_name} has invalid TCP endpoint.")
+                host, port = endpoint
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5)
                 try:
-                    await writer.wait_closed()
-                except OSError:
-                    pass
-                _ = reader
+                    writer.write(frame)
+                    await writer.drain()
+                finally:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
+                    _ = reader
+            elif modem_type == "SERIALL":
+                serial_path = normalize_serial_device_path(device_path)
+                baud_rate = normalize_serial_baud_rate(job.get("baud_rate"))
+                serial_fd = await asyncio.to_thread(open_serial_device, serial_path, baud_rate)
+                try:
+                    await asyncio.to_thread(write_serial_data, serial_fd, frame)
+                finally:
+                    await asyncio.to_thread(close_serial_device, serial_fd)
+            else:
+                raise ValueError(f"Interface {interface_name} uses unsupported modem type {modem_type or '-'}")
 
             persist_outbound_frame(
                 source=interface_name,

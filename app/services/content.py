@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import ipaddress
 import json
 import re
 import sqlite3
@@ -13,6 +14,7 @@ from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.messages import get_messages_page_data
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_object_tnc2, build_status_tnc2, resolve_message_addressee
+from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
 from app.sections import SECTION_DEFINITIONS
 
 
@@ -289,7 +291,17 @@ def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     state_row = fetch_one(
         """
-        SELECT status, status_detail, active_modem_name, active_modem_endpoint, last_error, updated_at
+        SELECT
+            status,
+            status_detail,
+            active_modem_name,
+            active_modem_endpoint,
+            expose_port_enabled,
+            expose_bind_address,
+            expose_port,
+            expose_active_clients,
+            last_error,
+            updated_at
         FROM traffic_runtime_state
         WHERE id = 1
         """
@@ -309,10 +321,22 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             "name": state_row["active_modem_name"] or "",
             "device_path": state_row["active_modem_endpoint"] or "",
         }
+    expose = {
+        "enabled": bool(state_row["expose_port_enabled"]) if state_row else False,
+        "bind_address": state_row["expose_bind_address"] if state_row else None,
+        "port": int(state_row["expose_port"]) if state_row and state_row["expose_port"] is not None else None,
+        "active_clients": int(state_row["expose_active_clients"]) if state_row and state_row["expose_active_clients"] is not None else 0,
+    }
+    expose["listen_endpoint"] = (
+        f"{expose['bind_address']}:{expose['port']}"
+        if expose["enabled"] and expose["bind_address"] and expose["port"] is not None
+        else None
+    )
     return {
         "status": state_row["status"] if state_row else "idle",
         "status_detail": state_row["status_detail"] if state_row else "Traffic monitor state unavailable.",
         "active_modem": active_modem,
+        "expose": expose,
         "last_error": state_row["last_error"] if state_row else None,
         "updated_at": _format_monitor_timestamp(state_row["updated_at"]) if state_row else None,
         "frames": [
@@ -1951,6 +1975,8 @@ def safe_update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> 
 
 
 def _normalize_section_payload(slug: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if slug == "modems":
+        return _normalize_modem_payload(payload)
     if slug == "objects":
         return _normalize_aprs_entity_payload("object", payload)
     if slug == "items":
@@ -1958,6 +1984,35 @@ def _normalize_section_payload(slug: str, payload: dict[str, Any]) -> dict[str, 
     if slug == "bulletins":
         return _normalize_aprs_message_payload(payload)
     return payload
+
+
+def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    modem_type = str(payload.get("modem_type") or "").strip().upper()
+    expose_port_enabled = int(bool(payload.get("expose_port_enabled")))
+    expose_bind_address = _normalize_ipv4_address(
+        payload.get("expose_bind_address"),
+        default="0.0.0.0",
+        label="Bind address",
+    )
+    expose_port = _normalize_tcp_port(payload.get("expose_port"), default=8002, label="Expose port")
+    expose_whitelist = _normalize_ip_whitelist(payload.get("expose_whitelist"))
+
+    normalized["modem_type"] = modem_type
+    normalized["expose_port_enabled"] = expose_port_enabled
+    normalized["expose_bind_address"] = expose_bind_address
+    normalized["expose_port"] = expose_port
+    normalized["expose_whitelist"] = expose_whitelist
+    normalized["name"] = str(payload.get("name") or "").strip()
+    normalized["band"] = str(payload.get("band") or "").strip().lower()
+    if modem_type == "SERIALL":
+        normalized["device_path"] = normalize_serial_device_path(payload.get("device_path"))
+        normalized["baud_rate"] = normalize_serial_baud_rate(payload.get("baud_rate"))
+    else:
+        normalized["device_path"] = str(payload.get("device_path") or "").strip()
+        normalized["baud_rate"] = None
+    normalized["notes"] = str(payload.get("notes") or "").strip()
+    return normalized
 
 
 def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -2104,6 +2159,61 @@ def _normalize_station_interval(value: Any, *, label: str) -> int:
     if interval_minutes not in {15, 30, 45, 60}:
         raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.")
     return interval_minutes
+
+
+def _normalize_ipv4_address(value: Any, *, default: str, label: str) -> str:
+    text = str(value or "").strip() or default
+    try:
+        parsed = ipaddress.ip_address(text)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a valid IPv4 address.") from exc
+    if parsed.version != 4:
+        raise ValueError(f"{label} must be a valid IPv4 address.")
+    return str(parsed)
+
+
+def _normalize_tcp_port(value: Any, *, default: int, label: str) -> int:
+    raw = str(value or "").strip()
+    if not raw:
+        return default
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be between 1 and 65535.") from exc
+    if port < 1 or port > 65535:
+        raise ValueError(f"{label} must be between 1 and 65535.")
+    return port
+
+
+def _normalize_ip_whitelist(value: Any) -> str:
+    entries = re.split(r"[\n,]+", str(value or ""))
+    normalized_entries: list[str] = []
+    seen: set[str] = set()
+    for raw_entry in entries:
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        normalized_entry = _normalize_ip_whitelist_entry(entry)
+        if normalized_entry in seen:
+            continue
+        normalized_entries.append(normalized_entry)
+        seen.add(normalized_entry)
+    return "\n".join(normalized_entries)
+
+
+def _normalize_ip_whitelist_entry(value: str) -> str:
+    try:
+        if "/" in value:
+            network = ipaddress.ip_network(value, strict=False)
+            if network.version != 4:
+                raise ValueError
+            return str(network)
+        address = ipaddress.ip_address(value)
+    except ValueError as exc:
+        raise ValueError("Whitelist entries must be valid IPv4 addresses or CIDR ranges.") from exc
+    if address.version != 4:
+        raise ValueError("Whitelist entries must be valid IPv4 addresses or CIDR ranges.")
+    return str(address)
 
 
 def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: str) -> None:

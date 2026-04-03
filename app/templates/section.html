@@ -108,7 +108,7 @@
                     <thead>
                         <tr>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'notes'] %}
+                            {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <th>{{ t("Status") }}</th>
                             {% else %}
@@ -127,7 +127,7 @@
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'notes'] %}
+                            {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <td>
                                 <span class="tnc-badge {{ 'tnc-badge-enabled' if row[field.name] else 'tnc-badge-disabled' }}">
@@ -165,7 +165,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ (3 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">{{ t("No records yet.") }}</td>
+                            <td colspan="{{ (5 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -201,12 +201,17 @@
                     class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}"
                     {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
                     {% if section.slug == 'bulletins' and field.name == 'group_name' %}id="bulletins-group-row"{% endif %}
+                    {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-toggle-row"{% endif %}
+                    {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-row"{% endif %}
+                    {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port-row"{% endif %}
+                    {% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist-row"{% endif %}
+                    {% if section.slug == 'modems' and field.name in ['expose_bind_address', 'expose_port', 'expose_whitelist'] and not (edit_row and edit_row.expose_port_enabled) %}hidden{% endif %}
                 >
                     {% if field.type == 'textarea' %}
                     <span>{{ t(field.label) }}</span>
-                    <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
+                    <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else (field.default if field.default is defined else '') }}</textarea>
                     {% elif field.type == 'checkbox' %}
-                    <input type="checkbox" name="{{ field.name }}" value="1" {% if edit_row and edit_row[field.name] %}checked{% endif %}>
+                    <input type="checkbox" name="{{ field.name }}" value="1" {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-enabled"{% endif %} {% if edit_row and edit_row[field.name] %}checked{% endif %}>
                     <span>{{ t(field.label) }}</span>
                     {% elif field.type == 'select' %}
                     <span>{{ t(field.label) }}</span>
@@ -254,7 +259,9 @@
                         type="{{ field.type }}"
                         name="{{ field.name }}"
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
-                        value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}"
+                        {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-address"{% endif %}
+                        {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port"{% endif %}
+                        value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
                         {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
                     >
                     {% if section.slug == 'items' and field.name == 'longitude' %}
@@ -281,6 +288,12 @@
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
                         <small class="field-validation-error" id="bulletins-message-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
+                    {% elif section.slug == 'modems' and field.name == 'expose_bind_address' %}
+                    <small class="muted">{{ t("LAN listen address. Use <code>0.0.0.0</code> for all interfaces.")|safe }}</small>
+                    {% elif section.slug == 'modems' and field.name == 'expose_port' %}
+                    <small class="muted">{{ t("TCP port exposed by APRSBox for LAN clients. Maximum simultaneous clients: 3.") }}</small>
+                    {% elif section.slug == 'modems' and field.name == 'expose_whitelist' %}
+                    <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
                     <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
                     {% elif section.slug == 'items' and field.name == 'comment' %}
@@ -357,17 +370,30 @@
         if (modemForm) {
             const typeSelect = modemForm.querySelector('select[name="modem_type"]');
             const baudInput = modemForm.querySelector('input[name="baud_rate"]');
+            const exposeToggle = document.getElementById("modems-expose-port-enabled");
+            const exposeRows = [
+                document.getElementById("modems-expose-bind-row"),
+                document.getElementById("modems-expose-port-row"),
+                document.getElementById("modems-expose-whitelist-row"),
+            ].filter(Boolean);
             if (typeSelect && baudInput) {
-                const syncBaudState = () => {
+                const syncModemFields = () => {
                     const isTcp = typeSelect.value === "TCP";
                     baudInput.disabled = isTcp;
                     if (isTcp) {
                         baudInput.value = "";
                     }
+                    const showExposeFields = Boolean(exposeToggle && exposeToggle.checked);
+                    for (const row of exposeRows) {
+                        row.hidden = !showExposeFields;
+                    }
                 };
 
-                typeSelect.addEventListener("change", syncBaudState);
-                syncBaudState();
+                typeSelect.addEventListener("change", syncModemFields);
+                if (exposeToggle) {
+                    exposeToggle.addEventListener("change", syncModemFields);
+                }
+                syncModemFields();
             }
         }
 

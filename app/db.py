@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS modems (
     device_path TEXT,
     baud_rate INTEGER,
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    expose_port_enabled INTEGER NOT NULL DEFAULT 0 CHECK (expose_port_enabled IN (0, 1)),
+    expose_bind_address TEXT NOT NULL DEFAULT '0.0.0.0',
+    expose_port INTEGER NOT NULL DEFAULT 8002 CHECK (expose_port BETWEEN 1 AND 65535),
+    expose_whitelist TEXT NOT NULL DEFAULT '',
     notes TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -307,6 +311,10 @@ CREATE TABLE IF NOT EXISTS traffic_runtime_state (
     status_detail TEXT NOT NULL,
     active_modem_name TEXT,
     active_modem_endpoint TEXT,
+    expose_port_enabled INTEGER NOT NULL DEFAULT 0 CHECK (expose_port_enabled IN (0, 1)),
+    expose_bind_address TEXT,
+    expose_port INTEGER,
+    expose_active_clients INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     updated_at TEXT NOT NULL
 );
@@ -419,6 +427,7 @@ def init_db() -> None:
         object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
+        traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -486,11 +495,70 @@ def init_db() -> None:
                 ADD COLUMN band TEXT NOT NULL DEFAULT ''
                 """
             )
+        if "expose_port_enabled" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN expose_port_enabled INTEGER NOT NULL DEFAULT 0
+                CHECK (expose_port_enabled IN (0, 1))
+                """
+            )
+        if "expose_bind_address" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN expose_bind_address TEXT NOT NULL DEFAULT '0.0.0.0'
+                """
+            )
+        if "expose_port" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN expose_port INTEGER NOT NULL DEFAULT 8002
+                CHECK (expose_port BETWEEN 1 AND 65535)
+                """
+            )
+        if "expose_whitelist" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN expose_whitelist TEXT NOT NULL DEFAULT ''
+                """
+            )
         if "aprs_message_id" not in outbound_columns:
             connection.execute(
                 """
                 ALTER TABLE outbound_jobs
                 ADD COLUMN aprs_message_id INTEGER
+                """
+            )
+        if "expose_port_enabled" not in traffic_runtime_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_state
+                ADD COLUMN expose_port_enabled INTEGER NOT NULL DEFAULT 0
+                CHECK (expose_port_enabled IN (0, 1))
+                """
+            )
+        if "expose_bind_address" not in traffic_runtime_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_state
+                ADD COLUMN expose_bind_address TEXT
+                """
+            )
+        if "expose_port" not in traffic_runtime_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_state
+                ADD COLUMN expose_port INTEGER
+                """
+            )
+        if "expose_active_clients" not in traffic_runtime_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_state
+                ADD COLUMN expose_active_clients INTEGER NOT NULL DEFAULT 0
                 """
             )
         connection.execute(
@@ -568,9 +636,11 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
         connection.execute(
             """
             INSERT INTO traffic_runtime_state (
-                id, status, status_detail, active_modem_name, active_modem_endpoint, last_error, updated_at
+                id, status, status_detail, active_modem_name, active_modem_endpoint,
+                expose_port_enabled, expose_bind_address, expose_port, expose_active_clients,
+                last_error, updated_at
             )
-            VALUES (1, 'idle', 'Traffic monitor is starting.', NULL, NULL, NULL, ?)
+            VALUES (1, 'idle', 'Traffic monitor is starting.', NULL, NULL, 0, NULL, NULL, 0, NULL, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),
