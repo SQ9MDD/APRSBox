@@ -18,57 +18,57 @@
             <div class="band-condition-card-heading">
                 <div>
                     <h2>{{ item.band_label }}</h2>
-                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}" title="Ogólna ocena pasma wyliczona z połączenia lokalnej słyszalności referencji, zajętości kanału i pojawiania się rzadkich stałych stacji.">{{ item.label }}</span>
+                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}" title="Ogólna ocena pasma wyliczona z połączenia lokalnej słyszalności referencji, zajętości kanału i pojawiania się rzadkich stałych stacji.">{{ t(item.label) }}</span>
                 </div>
             </div>
 
             <section class="band-condition-hero band-condition-hero-{{ item.diagnosis_tone }}">
                 <div class="band-condition-hero-copy">
                     <span class="band-condition-eyebrow">{{ item.band_label }}</span>
-                    <strong>{{ item.diagnosis_title }}</strong>
-                    <p>{{ item.diagnosis_summary }}</p>
+                    <strong>{{ t(item.diagnosis_title) }}</strong>
+                    <p>{{ t(item.diagnosis_summary) }}</p>
                 </div>
                 <div class="band-condition-hero-score" title="Końcowy wynik kondycji pasma zbudowany z lokalnej słyszalności referencji, zajętości kanału i openingu wykrytego przez rzadkie stałe stacje.">
-                    <span class="muted">Condition</span>
+                    <span class="muted">{{ t("Condition") }}</span>
                     <strong>{{ "%.2f"|format(item.condition_score) }}</strong>
                 </div>
             </section>
 
             <div class="band-condition-card-header">
                 <div class="band-condition-confidence" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
-                    <span class="muted">{{ item.band_label }} {{ item.label }}</span>
-                    <strong>Confidence {{ "%.0f"|format(item.confidence_score * 100) }}%</strong>
+                    <span class="muted">{{ item.band_label }} {{ t(item.label) }}</span>
+                    <strong>{{ t("Confidence") }} {{ "%.0f"|format(item.confidence_score * 100) }}%</strong>
                 </div>
                 <div class="band-condition-score-explainer">
-                    <span class="muted">Condition index</span>
-                    <span>Scale <code>-1.00</code> to <code>+1.00</code>. <code>0.00</code> = typical, minus = worse than usual, plus = better than usual.</span>
+                    <span class="muted">{{ t("Condition index") }}</span>
+                    <span>{{ t("Scale <code>-1.00</code> to <code>+1.00</code>. <code>0.00</code> = typical, minus = worse than usual, plus = better than usual.")|safe }}</span>
                 </div>
             </div>
 
             <div class="band-condition-pill-grid">
                 <div class="band-condition-pill band-condition-pill-{{ item.opening_tone }}" title="Wskaźnik openingu wyliczony z obecności stałych stacji, które historycznie są słyszane rzadko albo wcale o tej porze na tym paśmie.">
-                    <span class="band-condition-pill-label">Opening</span>
-                    <strong>{{ item.opening_label }}</strong>
+                    <span class="band-condition-pill-label">{{ t("Opening") }}</span>
+                    <strong>{{ t(item.opening_label) }}</strong>
                     <span class="band-condition-pill-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
                 </div>
                 <div class="band-condition-pill band-condition-pill-{{ item.load_tone }}" title="Wskaźnik zajętości kanału wyliczony z korelacji ruchu całkowitego, mobilnego i lokalnej słyszalności referencji.">
-                    <span class="band-condition-pill-label">Load</span>
-                    <strong>{{ item.load_label }}</strong>
+                    <span class="band-condition-pill-label">{{ t("Load") }}</span>
+                    <strong>{{ t(item.load_label) }}</strong>
                     <span class="band-condition-pill-value">{{ "%.2f"|format(item.occupancy_score) }}</span>
                 </div>
                 <div class="band-condition-pill band-condition-pill-{{ item.reference_tone }}" title="Znormalizowany wynik pokazujący, czy lokalne stacje referencyjne są słyszane gorzej lub lepiej niż zwykle o tej porze dla tego pasma.">
-                    <span class="band-condition-pill-label">References</span>
-                    <strong>{{ item.reference_label }}</strong>
+                    <span class="band-condition-pill-label">{{ t("References") }}</span>
+                    <strong>{{ t(item.reference_label) }}</strong>
                     <span class="band-condition-pill-value">{{ "%.2f"|format(item.local_reference_score) }}</span>
                 </div>
             </div>
 
-            {% if item.why_items %}
+            {% if item.why_item_defs %}
             <div class="band-condition-why">
-                <span class="band-condition-why-title">Why</span>
+                <span class="band-condition-why-title">{{ t("Why") }}</span>
                 <ul class="band-condition-why-list">
-                    {% for reason in item.why_items %}
-                    <li>{{ reason }}</li>
+                    {% for reason in item.why_item_defs %}
+                    <li>{{ tf(reason.message, reason.params) }}</li>
                     {% endfor %}
                 </ul>
             </div>
@@ -76,89 +76,97 @@
 
             <dl class="band-condition-stats">
                 <div title="Liczba unikalnych stałych stacji słyszanych w bieżącym krótkim oknie oceny, niezależnie od tego czy są referencjami.">
-                    <dt>Current fixed stations</dt>
+                    <dt>{{ t("Current fixed stations") }}</dt>
                     <dd>{{ item.current_fixed_station_count }}</dd>
                 </div>
                 <div title="Liczba stałych stacji spoza listy reference, które zostały uznane za rzadkie lub nowe dla tej pory dnia i weszły do składowej openingu.">
-                    <dt>Rare fixed stations now</dt>
+                    <dt>{{ t("Rare fixed stations now") }}</dt>
                     <dd>{{ item.dx_station_count }}</dd>
                 </div>
                 <div title="Długoterminowa średnia aktywność ruchu mobilnego dla tej godziny doby i tego pasma. Służy do porównania z aktualnym obciążeniem kanału.">
-                    <dt>Baseline mobile activity</dt>
+                    <dt>{{ t("Baseline mobile activity") }}</dt>
                     <dd>{{ "%.1f"|format(item.baseline_mobile_activity) }}</dd>
                 </div>
                 <div title="Średnia bieżąca liczba wszystkich ramek w krótkim oknie oceny dla tego pasma, niezależnie od typu stacji.">
-                    <dt>Current total activity</dt>
+                    <dt>{{ t("Current total activity") }}</dt>
                     <dd>{{ "%.1f"|format(item.current_total_activity) }}</dd>
                 </div>
                 <div title="Długoterminowa średnia liczba wszystkich ramek dla tej godziny doby i tego pasma. Pomaga ocenić, czy kanał jest obecnie bardziej lub mniej zajęty niż zwykle.">
-                    <dt>Baseline total activity</dt>
+                    <dt>{{ t("Baseline total activity") }}</dt>
                     <dd>{{ "%.1f"|format(item.baseline_total_activity) }}</dd>
                 </div>
                 <div title="Liczba historycznych 5-minutowych bucketów dla tej godziny doby, które zasilają baseline aktywności i wykrywanie rzadkich stałych stacji.">
-                    <dt>Activity baseline samples</dt>
+                    <dt>{{ t("Activity baseline samples") }}</dt>
                     <dd>{{ item.baseline_activity_samples }}</dd>
                 </div>
             </dl>
 
             <details class="band-condition-details">
-                <summary>Technical summary</summary>
+                <summary>{{ t("Technical summary") }}</summary>
                 <div class="metrics-grid">
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(item.condition_score) }}</span>
-                        <span class="metric-label">Condition index</span>
+                        <span class="metric-label">{{ t("Condition index") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
-                        <span class="metric-label">DX opening score</span>
+                        <span class="metric-label">{{ t("DX opening score") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(item.occupancy_score) }}</span>
-                        <span class="metric-label">Occupancy score</span>
+                        <span class="metric-label">{{ t("Occupancy score") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(item.local_reference_score) }}</span>
-                        <span class="metric-label">Local reference score</span>
+                        <span class="metric-label">{{ t("Local reference score") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ item.active_reference_station_count }}/{{ item.reference_station_count }}</span>
-                        <span class="metric-label">Active references</span>
+                        <span class="metric-label">{{ t("Active references") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.1f"|format(item.current_mobile_activity) }}</span>
-                        <span class="metric-label">Mobile activity / 5 min</span>
+                        <span class="metric-label">{{ t("Mobile activity / 5 min") }}</span>
                     </div>
                 </div>
-                <p class="section-lead">{{ item.explanation }}</p>
+                {% if item.explanation_parts %}
+                <p class="section-lead">
+                    {% for part in item.explanation_parts %}
+                    {{ tf(part.message, part.params) }}{% if not loop.last %} {% endif %}
+                    {% endfor %}
+                </p>
+                {% else %}
+                <p class="section-lead">{{ t(item.explanation) }}</p>
+                {% endif %}
             </details>
 
             {% if item.per_reference %}
             <details class="band-condition-details">
-                <summary>Reference station details</summary>
+                <summary>{{ t("Reference station details") }}</summary>
                 <div class="table-wrap">
                     <table class="data-table compact-table">
                         <thead>
                             <tr>
-                                <th>Station</th>
-                                <th>Type</th>
-                                <th>Weight</th>
-                                <th>Current heard</th>
-                                <th>Frames</th>
-                                <th>Baseline heard ratio</th>
-                                <th>Baseline samples</th>
+                                <th>{{ t("Station") }}</th>
+                                <th>{{ t("Type") }}</th>
+                                <th>{{ t("Weight") }}</th>
+                                <th>{{ t("Current heard") }}</th>
+                                <th>{{ t("Frames") }}</th>
+                                <th>{{ t("Baseline heard ratio") }}</th>
+                                <th>{{ t("Baseline samples") }}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for ref in item.per_reference %}
                             <tr>
                                 <td><code>{{ ref.station_key }}</code></td>
-                                <td>{{ ref.station_type }}</td>
+                                <td>{{ t(ref.station_type_label) }}</td>
                                 <td>{{ "%.1f"|format(ref.weight) }}</td>
                                 <td>
                                     {% if ref.current_heard is none %}
-                                    <span class="muted">n/a</span>
+                                    <span class="muted">{{ t("n/a") }}</span>
                                     {% else %}
-                                    {{ "Yes" if ref.current_heard else "No" }}
+                                    {{ t("Yes") if ref.current_heard else t("No") }}
                                     {% endif %}
                                 </td>
                                 <td>{{ ref.current_frame_count }}</td>
@@ -180,16 +188,16 @@
 
             {% if item.dx_station_details %}
             <details class="band-condition-details">
-                <summary>Rare fixed stations now</summary>
+                <summary>{{ t("Rare fixed stations now") }}</summary>
                 <div class="table-wrap">
                     <table class="data-table compact-table">
                         <thead>
                             <tr>
-                                <th>Station</th>
-                                <th>Window buckets</th>
-                                <th>Baseline heard ratio</th>
-                                <th>Baseline hits</th>
-                                <th>Rarity score</th>
+                                <th>{{ t("Station") }}</th>
+                                <th>{{ t("Window buckets") }}</th>
+                                <th>{{ t("Baseline heard ratio") }}</th>
+                                <th>{{ t("Baseline hits") }}</th>
+                                <th>{{ t("Rarity score") }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -218,28 +226,36 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Confidence</h2>
-                    <p class="section-lead">Confidence summary for {{ primary_band.band_label }}.</p>
+                    <h2>{{ t("Confidence") }}</h2>
+                    <p class="section-lead">{{ t("Confidence summary for") }} {{ primary_band.band_label }}.</p>
                 </div>
             </div>
             <div class="band-condition-confidence-panel">
                 <div class="band-condition-confidence-score" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
                     <span class="muted">{{ primary_band.band_label }}</span>
                     <strong>{{ "%.0f"|format(primary_band.confidence_score * 100) }}%</strong>
-                    <span class="status-pill band-condition-status {% if primary_band.label == 'Insufficient data' %}status-unknown{% elif primary_band.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ primary_band.label }}</span>
+                    <span class="status-pill band-condition-status {% if primary_band.label == 'Insufficient data' %}status-unknown{% elif primary_band.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ t(primary_band.label) }}</span>
                 </div>
                 <div class="metrics-grid">
                     <div class="metric-card">
                         <span class="metric-value">{{ primary_band.active_reference_station_count }}/{{ primary_band.reference_station_count }}</span>
-                        <span class="metric-label">Active references</span>
+                        <span class="metric-label">{{ t("Active references") }}</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-value">{{ "%.2f"|format(primary_band.condition_score) }}</span>
-                        <span class="metric-label">Condition index</span>
+                        <span class="metric-label">{{ t("Condition index") }}</span>
                     </div>
                 </div>
-                <p class="muted small">Scale: <code>-1.00</code> weak, <code>0.00</code> typical for this band and hour, <code>+1.00</code> unusually good.</p>
-                <p class="section-lead">{{ primary_band.explanation }}</p>
+                <p class="muted small">{{ t("Scale: <code>-1.00</code> weak, <code>0.00</code> typical for this band and hour, <code>+1.00</code> unusually good.")|safe }}</p>
+                {% if primary_band.explanation_parts %}
+                <p class="section-lead">
+                    {% for part in primary_band.explanation_parts %}
+                    {{ tf(part.message, part.params) }}{% if not loop.last %} {% endif %}
+                    {% endfor %}
+                </p>
+                {% else %}
+                <p class="section-lead">{{ t(primary_band.explanation) }}</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -249,22 +265,22 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Algorithm</h2>
-                    <p class="section-lead">Short explanation of what drives the estimate.</p>
+                    <h2>{{ t("Algorithm") }}</h2>
+                    <p class="section-lead">{{ t("Short explanation of what drives the estimate.") }}</p>
                 </div>
             </div>
             <div class="stack-sm">
                 <div class="empty-state">
-                    <strong>Reference stations estimate the local baseline.</strong>
-                    <p class="section-lead">Configured fixed stations show whether local audibility is below, near, or above its long-term norm for this hour.</p>
+                    <strong>{{ t("Reference stations estimate the local baseline.") }}</strong>
+                    <p class="section-lead">{{ t("Configured fixed stations show whether local audibility is below, near, or above its long-term norm for this hour.") }}</p>
                 </div>
                 <div class="empty-state">
-                    <strong>Traffic estimates occupancy, not opening by itself.</strong>
-                    <p class="section-lead">Total and mobile traffic are compared against their hour-of-day baseline to detect likely channel load or local congestion.</p>
+                    <strong>{{ t("Traffic estimates occupancy, not opening by itself.") }}</strong>
+                    <p class="section-lead">{{ t("Total and mobile traffic are compared against their hour-of-day baseline to detect likely channel load or local congestion.") }}</p>
                 </div>
                 <div class="empty-state">
-                    <strong>Rare fixed stations indicate opening.</strong>
-                    <p class="section-lead">If fixed stations that are usually absent begin to appear, they raise the opening score and can outweigh pure occupancy effects.</p>
+                    <strong>{{ t("Rare fixed stations indicate opening.") }}</strong>
+                    <p class="section-lead">{{ t("If fixed stations that are usually absent begin to appear, they raise the opening score and can outweigh pure occupancy effects.") }}</p>
                 </div>
             </div>
         </div>
@@ -273,21 +289,21 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Reference Stations</h2>
-                    <p class="section-lead">Only fixed/reference stations should be configured here. Mobile stations do not belong in the baseline table.</p>
+                    <h2>{{ t("Reference Stations") }}</h2>
+                    <p class="section-lead">{{ t("Only fixed/reference stations should be configured here. Mobile stations do not belong in the baseline table.") }}</p>
                 </div>
             </div>
             <div class="table-wrap">
                 <table class="data-table compact-table">
                     <thead>
                         <tr>
-                            <th>Band</th>
-                            <th>Station</th>
-                            <th>Type</th>
-                            <th>Weight</th>
-                            <th>Status</th>
+                            <th>{{ t("Band") }}</th>
+                            <th>{{ t("Station") }}</th>
+                            <th>{{ t("Type") }}</th>
+                            <th>{{ t("Weight") }}</th>
+                            <th>{{ t("Status") }}</th>
                             {% if current_user.role in ("admin", "operator") %}
-                            <th>Actions</th>
+                            <th>{{ t("Actions") }}</th>
                             {% endif %}
                         </tr>
                     </thead>
@@ -296,17 +312,17 @@
                         <tr {% if current_user.role in ("admin", "operator") %}class="clickable-row" data-href="?edit_reference={{ row.id }}"{% endif %}>
                             <td>{{ row.band_label }}</td>
                             <td><code>{{ row.station_key }}</code></td>
-                            <td>{{ row.station_type }}</td>
+                            <td>{{ t(row.station_type_label) }}</td>
                             <td>{{ "%.1f"|format(row.weight) }}</td>
-                            <td>{{ "Enabled" if row.enabled else "Disabled" }}</td>
+                            <td>{{ t("Enabled") if row.enabled else t("Disabled") }}</td>
                             {% if current_user.role in ("admin", "operator") %}
                             <td>
-                                <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this reference station?');">
+                                <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm({{ t('Delete this reference station?')|tojson }});">
                                     <button
                                         type="submit"
                                         class="table-icon-button"
-                                        title="Delete reference station"
-                                        aria-label="Delete reference station {{ row.station_key }}"
+                                        title="{{ t('Delete reference station') }}"
+                                        aria-label="{{ t('Delete reference station') }} {{ row.station_key }}"
                                     >
                                         <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                     </button>
@@ -316,7 +332,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ 6 if current_user.role in ('admin', 'operator') else 5 }}" class="muted">No reference stations configured yet.</td>
+                            <td colspan="{{ 6 if current_user.role in ('admin', 'operator') else 5 }}" class="muted">{{ t("No reference stations configured yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -329,7 +345,7 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>{% if edit_reference %}Edit Reference Station{% else %}Add Reference Station{% endif %}</h2>
+                    <h2>{{ t("Edit Reference Station") if edit_reference else t("Add Reference Station") }}</h2>
                 </div>
             </div>
             {% if current_user.role in ("admin", "operator") %}
@@ -338,7 +354,7 @@
                 <input type="hidden" name="record_id" value="{{ edit_reference.id }}">
                 {% endif %}
                 <label>
-                    <span>Band</span>
+                    <span>{{ t("Band") }}</span>
                     <select name="band" id="reference-band" required>
                         {% for option in band_options %}
                         <option value="{{ option.value }}" {% if (edit_reference and edit_reference.band == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ option.label }}</option>
@@ -346,34 +362,34 @@
                     </select>
                 </label>
                 <label>
-                    <span>Station</span>
+                    <span>{{ t("Station") }}</span>
                     <select name="station_key" id="reference-station-key" required></select>
                 </label>
                 <label>
-                    <span>Station type</span>
+                    <span>{{ t("Station type") }}</span>
                     <select name="station_type" required>
                         {% for option in station_type_options %}
-                        <option value="{{ option.value }}" {% if (edit_reference and edit_reference.station_type == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ option.label }}</option>
+                        <option value="{{ option.value }}" {% if (edit_reference and edit_reference.station_type == option.value) or (not edit_reference and loop.first) %}selected{% endif %}>{{ t(option.label) }}</option>
                         {% endfor %}
                     </select>
                 </label>
                 <label>
-                    <span>Weight</span>
+                    <span>{{ t("Weight") }}</span>
                     <input type="number" step="0.1" min="0.1" name="weight" value="{{ edit_reference.weight if edit_reference else '1.0' }}" required>
                 </label>
                 <label class="full checkbox-row">
                     <input type="checkbox" name="enabled" value="1" {% if not edit_reference or edit_reference.enabled %}checked{% endif %}>
-                    <span>Enabled</span>
+                    <span>{{ t("Enabled") }}</span>
                 </label>
                 <div class="form-actions">
-                    <button type="submit" class="button">Save</button>
+                    <button type="submit" class="button">{{ t("Save") }}</button>
                     {% if edit_reference %}
-                    <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">Cancel</a>
+                    <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% endif %}
                 </div>
             </form>
             {% else %}
-            <p class="muted">Your role is read-only for reference station management.</p>
+            <p class="muted">{{ t("Your role is read-only for reference station management.") }}</p>
             {% endif %}
         </div>
     </div>
@@ -416,7 +432,7 @@
                 value: item.station_key,
                 label: item.station_key,
             }));
-            fillSelect(stationKeySelect, stationOptions, initialStationKey || stationKeySelect.value, "No fixed stations heard");
+            fillSelect(stationKeySelect, stationOptions, initialStationKey || stationKeySelect.value, {{ t("No fixed stations heard")|tojson }});
             initialStationKey = "";
         };
 

@@ -15,6 +15,13 @@ INSUFFICIENT_CONFIDENCE = 0.2
 DX_RARE_STATION_RATIO = 0.18
 FIXED_REFERENCE_STATION_TYPES = ("home", "digi", "igate", "wx-fixed", "fixed")
 BAND_OPTIONS = ("2m", "70cm", "6m")
+STATION_TYPE_LABELS = {
+    "home": "Home",
+    "digi": "DIGI",
+    "igate": "iGate",
+    "wx-fixed": "WX Fixed",
+    "fixed": "Other Fixed",
+}
 
 
 def normalize_band(value: str) -> str:
@@ -70,13 +77,7 @@ def current_bucket_start(reference: datetime | None = None) -> str:
 
 
 def station_type_options() -> list[dict[str, str]]:
-    return [
-        {"value": "home", "label": "Home"},
-        {"value": "digi", "label": "DIGI"},
-        {"value": "igate", "label": "iGate"},
-        {"value": "wx-fixed", "label": "WX Fixed"},
-        {"value": "fixed", "label": "Other Fixed"},
-    ]
+    return [{"value": value, "label": label} for value, label in STATION_TYPE_LABELS.items()]
 
 
 def band_options() -> list[dict[str, str]]:
@@ -140,6 +141,7 @@ def list_reference_stations(*, band: str | None = None) -> list[dict[str, Any]]:
         item = dict(row)
         item["station_key"] = build_station_key(item["callsign"], item["ssid"])
         item["band_label"] = format_band_label(item["band"])
+        item["station_type_label"] = STATION_TYPE_LABELS.get(str(item["station_type"]), str(item["station_type"]))
         result.append(item)
     return result
 
@@ -158,6 +160,7 @@ def get_reference_station(record_id: int) -> dict[str, Any] | None:
     item = dict(row)
     item["station_key"] = build_station_key(item["callsign"], item["ssid"])
     item["band_label"] = format_band_label(item["band"])
+    item["station_type_label"] = STATION_TYPE_LABELS.get(str(item["station_type"]), str(item["station_type"]))
     return item
 
 
@@ -678,6 +681,7 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
                 {
                     "station_key": station_key,
                     "station_type": reference["station_type"],
+                    "station_type_label": STATION_TYPE_LABELS.get(str(reference["station_type"]), str(reference["station_type"])),
                     "weight": reference["weight"],
                     "current_heard": None,
                     "current_frame_count": int((audibility_map.get(station_key) or {}).get("frame_count") or 0),
@@ -699,6 +703,7 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
             {
                 "station_key": station_key,
                 "station_type": reference["station_type"],
+                "station_type_label": STATION_TYPE_LABELS.get(str(reference["station_type"]), str(reference["station_type"])),
                 "weight": weight,
                 "current_heard": bool(current_heard),
                 "current_frame_count": int((audibility_map.get(station_key) or {}).get("frame_count") or 0),
@@ -774,7 +779,27 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         baseline_total_activity=baseline_total_activity,
         local_reference_score=local_reference_score,
     )
+    why_item_defs = _why_item_defs(
+        active_reference_station_count=active_reference_station_count,
+        reference_count=reference_count,
+        dx_station_count=len(dx_station_details),
+        current_mobile_activity=current_mobile_activity,
+        baseline_mobile_activity=baseline_mobile_activity,
+        current_total_activity=current_total_activity,
+        baseline_total_activity=baseline_total_activity,
+        local_reference_score=local_reference_score,
+    )
     explanation = _build_explanation(
+        local_reference_score=local_reference_score,
+        dx_opening_score=dx_opening_score,
+        occupancy_score=occupancy_score,
+        current_mobile_activity=current_mobile_activity,
+        baseline_mobile_activity=baseline_mobile_activity,
+        confidence_score=confidence_score,
+        active_reference_station_count=active_reference_station_count,
+        dx_station_count=len(dx_station_details),
+    )
+    explanation_parts = _build_explanation_parts(
         local_reference_score=local_reference_score,
         dx_opening_score=dx_opening_score,
         occupancy_score=occupancy_score,
@@ -813,7 +838,9 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
         "dx_station_count": len(dx_station_details),
         "baseline_activity_samples": baseline_activity_samples,
         "explanation": explanation,
+        "explanation_parts": explanation_parts,
         "why_items": why_items,
+        "why_item_defs": why_item_defs,
         "per_reference": per_reference,
         "dx_station_details": dx_station_details,
     }
@@ -855,7 +882,9 @@ def _insufficient_band_snapshot(
         "dx_station_count": 0,
         "baseline_activity_samples": 0,
         "explanation": explanation,
+        "explanation_parts": [{"message": explanation, "params": {}}],
         "why_items": [],
+        "why_item_defs": [],
         "per_reference": per_reference or [],
         "dx_station_details": [],
     }
@@ -916,6 +945,38 @@ def _build_explanation(
     active_reference_station_count: int,
     dx_station_count: int,
 ) -> str:
+    parts = _build_explanation_parts(
+        local_reference_score=local_reference_score,
+        dx_opening_score=dx_opening_score,
+        occupancy_score=occupancy_score,
+        current_mobile_activity=current_mobile_activity,
+        baseline_mobile_activity=baseline_mobile_activity,
+        confidence_score=confidence_score,
+        active_reference_station_count=active_reference_station_count,
+        dx_station_count=dx_station_count,
+    )
+    rendered: list[str] = []
+    for part in parts:
+        message = str(part.get("message") or "")
+        params = dict(part.get("params") or {})
+        if params:
+            rendered.append(message.format(**params))
+        else:
+            rendered.append(message)
+    return " ".join(rendered)
+
+
+def _build_explanation_parts(
+    *,
+    local_reference_score: float,
+    dx_opening_score: float,
+    occupancy_score: float,
+    current_mobile_activity: float,
+    baseline_mobile_activity: float,
+    confidence_score: float,
+    active_reference_station_count: int,
+    dx_station_count: int,
+) -> list[dict[str, Any]]:
     reference_phrase = "local reference audibility is near normal"
     if local_reference_score <= -0.45:
         reference_phrase = "local reference audibility is clearly below normal"
@@ -946,12 +1007,18 @@ def _build_explanation(
     elif confidence_score >= 0.45:
         confidence_phrase = "moderate confidence"
 
-    return (
-        f"{reference_phrase}. "
-        f"{dx_phrase}. "
-        f"{occupancy_phrase}. "
-        f"Estimate uses {active_reference_station_count} baseline-backed reference stations with {confidence_phrase}."
-    )
+    return [
+        {"message": f"{reference_phrase}.", "params": {}},
+        {"message": f"{dx_phrase}.", "params": {}},
+        {"message": f"{occupancy_phrase}.", "params": {}},
+        {
+            "message": "Estimate uses {active_reference_station_count} baseline-backed reference stations with {confidence_phrase}.",
+            "params": {
+                "active_reference_station_count": active_reference_station_count,
+                "confidence_phrase": confidence_phrase,
+            },
+        },
+    ]
 
 
 def _build_dx_station_details(
@@ -1176,24 +1243,69 @@ def _why_items(
     baseline_total_activity: float,
     local_reference_score: float,
 ) -> list[str]:
+    items = _why_item_defs(
+        active_reference_station_count=active_reference_station_count,
+        reference_count=reference_count,
+        dx_station_count=dx_station_count,
+        current_mobile_activity=current_mobile_activity,
+        baseline_mobile_activity=baseline_mobile_activity,
+        current_total_activity=current_total_activity,
+        baseline_total_activity=baseline_total_activity,
+        local_reference_score=local_reference_score,
+    )
+    rendered: list[str] = []
+    for item in items:
+        message = str(item.get("message") or "")
+        params = dict(item.get("params") or {})
+        if params:
+            rendered.append(message.format(**params))
+        else:
+            rendered.append(message)
+    return rendered[:4]
+
+
+def _why_item_defs(
+    *,
+    active_reference_station_count: int,
+    reference_count: int,
+    dx_station_count: int,
+    current_mobile_activity: float,
+    baseline_mobile_activity: float,
+    current_total_activity: float,
+    baseline_total_activity: float,
+    local_reference_score: float,
+) -> list[dict[str, Any]]:
     items: list[str] = []
-    items.append(f"{active_reference_station_count}/{reference_count} local references are baseline-backed")
+    items.append(
+        {
+            "message": "{active_reference_station_count}/{reference_count} local references are baseline-backed",
+            "params": {
+                "active_reference_station_count": active_reference_station_count,
+                "reference_count": reference_count,
+            },
+        }
+    )
     if dx_station_count > 0:
-        items.append(f"{dx_station_count} rare fixed stations are present now")
+        items.append(
+            {
+                "message": "{dx_station_count} rare fixed stations are present now",
+                "params": {"dx_station_count": dx_station_count},
+            }
+        )
     else:
-        items.append("No rare fixed stations are visible right now")
+        items.append({"message": "No rare fixed stations are visible right now", "params": {}})
     if current_total_activity > baseline_total_activity * 1.35 and current_total_activity > 0:
-        items.append("Total traffic is above its normal level")
+        items.append({"message": "Total traffic is above its normal level", "params": {}})
     elif current_total_activity < baseline_total_activity * 0.75 and baseline_total_activity > 0:
-        items.append("Total traffic is below its normal level")
+        items.append({"message": "Total traffic is below its normal level", "params": {}})
     else:
-        items.append("Total traffic is close to its normal level")
+        items.append({"message": "Total traffic is close to its normal level", "params": {}})
     if current_mobile_activity > baseline_mobile_activity * 1.35 and current_mobile_activity > 0:
-        items.append("Mobile traffic suggests elevated local channel load")
+        items.append({"message": "Mobile traffic suggests elevated local channel load", "params": {}})
     elif local_reference_score >= 0.1:
-        items.append("Local references are being heard at or above their normal level")
+        items.append({"message": "Local references are being heard at or above their normal level", "params": {}})
     else:
-        items.append("Local references are not outperforming their usual baseline")
+        items.append({"message": "Local references are not outperforming their usual baseline", "params": {}})
     return items[:4]
 
 

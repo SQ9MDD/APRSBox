@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import Request
 
 from app import get_version
-from app.i18n import get_app_language, get_supported_languages, get_translator
+from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
 
 
 PRIMARY_NAV = [
@@ -39,6 +39,7 @@ def build_template_context(
 ) -> dict[str, Any]:
     app_language = get_app_language()
     translate = get_translator(app_language)
+    translate_format = get_format_translator(app_language)
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
         if current_user and current_user.role in item["roles"]:
@@ -58,5 +59,6 @@ def build_template_context(
         "active_nav": active_nav,
         "navigation": navigation,
         "t": translate,
+        "tf": translate_format,
         **extra,
     }

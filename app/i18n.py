@@ -56,3 +56,18 @@ def get_translator(language: str) -> Callable[[object], str]:
         return language_catalog.get(text, english_catalog.get(text, text))
 
     return translate
+
+
+def get_format_translator(language: str) -> Callable[[object, dict[str, object] | None], str]:
+    translate = get_translator(language)
+
+    def translate_format(message: object, params: dict[str, object] | None = None) -> str:
+        template = translate(message)
+        if not params:
+            return template
+        try:
+            return template.format(**params)
+        except (KeyError, ValueError):
+            return template
+
+    return translate_format
