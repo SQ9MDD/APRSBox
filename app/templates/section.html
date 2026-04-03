@@ -265,17 +265,17 @@
                     {% endif %}
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
-                    <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.") }}</small>
+                    <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
                     <small class="muted">{{ t("Prepared scheduling only. Default is 30m.") }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'bulletin_code' %}
-                    <small class="muted">Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.</small>
+                    <small class="muted">{{ t("Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.")|safe }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'group_name' %}
-                    <small class="muted">Group suffix, 1-5 chars: <code>A-Z</code> or <code>0-9</code>.</small>
+                    <small class="muted">{{ t("Group suffix, 1-5 chars: <code>A-Z</code> or <code>0-9</code>.")|safe }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'path' %}
-                    <small class="muted">Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.</small>
+                    <small class="muted">{{ t("Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
-                    <small class="muted">Uses the same outbound queue and scheduler path as beacon, status and objects.</small>
+                    <small class="muted">{{ t("Uses the same outbound queue and scheduler path as beacon, status and objects.") }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
