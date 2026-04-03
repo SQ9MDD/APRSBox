@@ -9,7 +9,7 @@
                 <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. Stage 2 executes active RF flows through a small runtime skeleton with per-flow debug logging.") }}</p>
             </div>
         </div>
-        <div class="notice">{{ t("Source must be the first step, target must be the last step, the source+target pair must be unique, each RF TX target can belong to only one enabled flow, and RF/APRS-IS TX targets require an enabled Path Rule step.") }}</div>
+        <div class="notice">{{ t("Source must be the first step, target must be the last step, the source+target pair must be unique, and RF/APRS-IS TX targets require an enabled Path Rule step.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}

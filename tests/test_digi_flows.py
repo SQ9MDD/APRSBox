@@ -222,7 +222,7 @@ class DigiFlowsTests(unittest.TestCase):
             preserved_targets = get_digi_flow_endpoint_options(selected_target_selector="action_drop::drop")["target"]
             self.assertTrue(any(option["value"] == "action_drop::drop" for option in preserved_targets))
 
-    def test_endpoint_options_hide_rf_target_used_by_another_enabled_flow(self) -> None:
+    def test_endpoint_options_keep_rf_target_available_for_multiple_sources(self) -> None:
         with temporary_database():
             connection = connect()
             try:
@@ -245,7 +245,7 @@ class DigiFlowsTests(unittest.TestCase):
                 connection.close()
             flow_id = create_digi_flow(sample_rf_flow_payload(name="2m to 70cm", source_ref="TNC-2m", target_ref="TNC-70cm"))
             target_values = {option["value"] for option in get_digi_flow_endpoint_options()["target"]}
-            self.assertNotIn("tx_rf::TNC-70cm", target_values)
+            self.assertIn("tx_rf::TNC-70cm", target_values)
 
             preserved_values = {
                 option["value"]
@@ -528,11 +528,17 @@ class DigiFlowsTests(unittest.TestCase):
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["target_kind"], "tx_rf")
 
-    def test_create_enabled_rf_flow_rejects_target_used_by_other_enabled_flow(self) -> None:
+    def test_create_enabled_rf_flow_allows_shared_target_when_source_differs(self) -> None:
         with temporary_database():
             create_digi_flow(sample_rf_flow_payload(name="2m to 70cm", source_ref="TNC-2m", target_ref="TNC-70cm"))
-            with self.assertRaisesRegex(ValueError, "Selected RF TX target is already used by another enabled DIGI Flow"):
-                create_digi_flow(sample_rf_flow_payload(name="70cm to 70cm", source_ref="TNC-70cm", target_ref="TNC-70cm"))
+            second_flow_id = create_digi_flow(sample_rf_flow_payload(name="70cm to 70cm", source_ref="TNC-70cm", target_ref="TNC-70cm"))
+            self.assertIsInstance(second_flow_id, int)
+
+    def test_create_enabled_rf_flow_rejects_duplicate_source_target_pair(self) -> None:
+        with temporary_database():
+            create_digi_flow(sample_rf_flow_payload(name="2m to 70cm", source_ref="TNC-2m", target_ref="TNC-70cm"))
+            with self.assertRaisesRegex(ValueError, "same source and target already exists"):
+                create_digi_flow(sample_rf_flow_payload(name="2m to 70cm clone", source_ref="TNC-2m", target_ref="TNC-70cm"))
 
     def test_action_drop_target_does_not_require_path_filter(self) -> None:
         payload = sample_flow_payload()
@@ -699,14 +705,16 @@ class DigiFlowsTests(unittest.TestCase):
             assert refreshed is not None
             self.assertEqual(int(refreshed["enabled"]), 1)
 
-    def test_enabling_rf_flow_rejects_target_used_by_other_enabled_flow(self) -> None:
+    def test_enabling_rf_flow_allows_shared_target_when_source_differs(self) -> None:
         with temporary_database():
             create_digi_flow(sample_rf_flow_payload(name="2m to 70cm", source_ref="TNC-2m", target_ref="TNC-70cm"))
             second_flow_id = create_digi_flow(
                 sample_rf_flow_payload(name="70cm standby", source_ref="TNC-70cm", target_ref="TNC-70cm", enabled=0)
             )
-            with self.assertRaisesRegex(ValueError, "Selected RF TX target is already used by another enabled DIGI Flow"):
-                set_digi_flow_enabled(second_flow_id, True)
+            set_digi_flow_enabled(second_flow_id, True)
+            refreshed = fetch_one("SELECT enabled FROM digi_flows WHERE id = ?", (second_flow_id,))
+            assert refreshed is not None
+            self.assertEqual(int(refreshed["enabled"]), 1)
 
     def test_path_filter_allows_only_allow_mode(self) -> None:
         payload = sample_flow_payload()

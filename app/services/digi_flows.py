@@ -609,7 +609,6 @@ def get_digi_flow_endpoint_options(
 ) -> dict[str, list[dict[str, str]]]:
     rf_rows = fetch_all("SELECT name FROM modems ORDER BY name COLLATE NOCASE ASC, id ASC")
     aprsis_rows = fetch_all("SELECT name FROM aprsis_servers ORDER BY name COLLATE NOCASE ASC, id ASC")
-    occupied_rf_targets = reserved_tx_rf_targets(exclude_flow_id=current_flow_id)
     source_options = [
         {"value": f"receiver_rf::{row['name']}", "label": str(row["name"]), "kind": "receiver_rf", "ref": str(row["name"])}
         for row in rf_rows
@@ -629,10 +628,6 @@ def get_digi_flow_endpoint_options(
         {"value": f"tx_rf::{row['name']}", "label": str(row["name"]), "kind": "tx_rf", "ref": str(row["name"])}
         for row in rf_rows
         if row["name"]
-        and (
-            str(row["name"]) not in occupied_rf_targets
-            or f"tx_rf::{row['name']}" == str(selected_target_selector or "").strip()
-        )
     ]
     target_options.extend(
         {
@@ -647,33 +642,8 @@ def get_digi_flow_endpoint_options(
     if str(selected_target_selector or "").strip() == "action_drop::drop":
         target_options.append({"value": "action_drop::drop", "label": _t("Drop"), "kind": "action_drop", "ref": "drop"})
     target_options.append({"value": "action_log::log-only", "label": _t("Log Only"), "kind": "action_log", "ref": "log-only"})
+    _ = current_flow_id
     return {"source": source_options, "target": target_options}
-
-
-def reserved_tx_rf_targets(*, exclude_flow_id: int | None = None) -> set[str]:
-    params: list[Any] = ["tx_rf", 1]
-    query = """
-        SELECT target_ref
-        FROM digi_flows
-        WHERE target_kind = ?
-          AND enabled = ?
-    """
-    if exclude_flow_id is not None:
-        query += " AND id <> ?"
-        params.append(exclude_flow_id)
-    rows = fetch_all(query, tuple(params))
-    return {str(row["target_ref"]).strip() for row in rows if str(row["target_ref"]).strip()}
-
-
-def _validate_exclusive_rf_target(*, target_kind: str, target_ref: str, enabled: int, existing_flow_id: int | None = None) -> None:
-    if int(enabled or 0) != 1:
-        return
-    if target_kind != "tx_rf":
-        return
-    if not target_ref:
-        return
-    if target_ref in reserved_tx_rf_targets(exclude_flow_id=existing_flow_id):
-        raise ValueError(_t("Selected RF TX target is already used by another enabled DIGI Flow."))
 
 
 def _serialize_step_row(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
@@ -898,13 +868,6 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     if duplicate is not None:
         raise ValueError(_t("A DIGI Flow with the same source and target already exists."))
 
-    _validate_exclusive_rf_target(
-        target_kind=target_kind,
-        target_ref=target_ref,
-        enabled=_normalize_enabled(payload.get("enabled", 0)),
-        existing_flow_id=existing_flow_id,
-    )
-
     return {
         "name": name,
         "description": description,
@@ -1118,12 +1081,6 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
             raise ValueError(_t("DIGI Flow not found."))
         if _flow_requires_path_rule(str(flow.get("target_kind") or "")) and not _has_enabled_path_rule(list(flow.get("steps") or [])):
             raise ValueError(_t("DIGI Flow with an RF or APRS-IS TX target cannot be enabled without an enabled Path Rule step."))
-        _validate_exclusive_rf_target(
-            target_kind=str(flow.get("target_kind") or ""),
-            target_ref=str(flow.get("target_ref") or "").strip(),
-            enabled=1,
-            existing_flow_id=flow_id,
-        )
     with get_connection() as connection:
         connection.execute(
             """
