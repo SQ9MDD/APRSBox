@@ -710,6 +710,29 @@
                     const editor = document.createElement("div");
                     editor.className = "form-grid digi-step-editor-grid";
 
+                    const stepMeta = typeMeta[step.step_type] || {};
+                    if (stepMeta.description || (Array.isArray(stepMeta.editor_help_lines) && stepMeta.editor_help_lines.length)) {
+                        const helpBlock = document.createElement("div");
+                        helpBlock.className = "full";
+                        if (stepMeta.description) {
+                            const lead = document.createElement("div");
+                            lead.className = "muted small";
+                            lead.textContent = stepMeta.description;
+                            helpBlock.appendChild(lead);
+                        }
+                        if (Array.isArray(stepMeta.editor_help_lines) && stepMeta.editor_help_lines.length) {
+                            const lines = document.createElement("div");
+                            lines.className = "muted small";
+                            for (const line of stepMeta.editor_help_lines) {
+                                const lineNode = document.createElement("div");
+                                lineNode.textContent = line;
+                                lines.appendChild(lineNode);
+                            }
+                            helpBlock.appendChild(lines);
+                        }
+                        editor.appendChild(helpBlock);
+                    }
+
                     const titleField = document.createElement("label");
                     const titleCaption = document.createElement("span");
                     titleCaption.textContent = i18n.cardTitle;

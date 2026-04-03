@@ -85,10 +85,28 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Path Rule",
         "badge": "Rule",
         "description": "Defines which TRACE and NO TRACE paths are repeated and whether packets are traced.",
+        "editor_help_lines": (
+            "This step inspects the first remaining path element that has not been consumed yet.",
+            "TRACE replaces the matched hop with the local digi callsign and keeps N-N continuation when needed.",
+            "NO TRACE marks the matched hop as consumed without inserting the local digi callsign.",
+            "If the first remaining hop matches neither TRACE nor NO TRACE, the packet is rejected.",
+        ),
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow",)},
-            {"name": "trace_paths", "label": "Paths (TRACE)", "type": "textarea", "required": False},
-            {"name": "no_trace_paths", "label": "Paths (NO TRACE)", "type": "textarea", "required": False},
+            {
+                "name": "trace_paths",
+                "label": "Paths (TRACE)",
+                "type": "textarea",
+                "required": False,
+                "help_text": "One path alias or explicit hop per line. Example: WIDE1-1 or TRACE2-2.",
+            },
+            {
+                "name": "no_trace_paths",
+                "label": "Paths (NO TRACE)",
+                "type": "textarea",
+                "required": False,
+                "help_text": "One path alias or explicit hop per line. Matching hops are consumed without inserting the local digi callsign.",
+            },
         ),
     },
     "filter_strict": {
@@ -96,6 +114,10 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Strict Filter",
         "badge": "Rule",
         "description": "Rejects frames when the path contains TCP, NOGATE or RFONLY.",
+        "editor_help_lines": (
+            "Use this when the flow must never process packets marked TCP, NOGATE or RFONLY.",
+            "The whole path is inspected. If any blocked token is present, the packet is rejected immediately.",
+        ),
         "config_fields": (),
     },
     "filter_direct_only": {
@@ -103,6 +125,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Direct Only",
         "badge": "Filter",
         "description": "Passes only packets heard direct, without any consumed digipeater hop in the path.",
+        "editor_help_lines": (
+            "This filter passes only packets heard direct from RF.",
+            "If the path already contains any consumed hop marked with *, the packet is rejected.",
+            "Use it when the flow should ignore packets already repeated by any digi.",
+        ),
         "config_fields": (),
     },
     "filter_digi": {
@@ -110,9 +137,22 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "DIGI Filter",
         "badge": "Filter",
         "description": "Allows or denies packets repeated by specific digi callsigns.",
+        "editor_help_lines": (
+            "Only already consumed hops are inspected, which means only path elements marked with * are checked.",
+            "Patterns support * wildcard, for example SR5ABC, SR5BCD*, SR5* or *.",
+            "allow passes packets only when at least one consumed hop matches.",
+            "deny rejects packets when any consumed hop matches.",
+        ),
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
-            {"name": "digis", "label": "DIGI Callsigns (one per line)", "type": "textarea", "required": False},
+            {
+                "name": "digis",
+                "label": "DIGI Callsigns (one per line)",
+                "type": "textarea",
+                "required": False,
+                "placeholder": "SR5ABC\nSR5BCD*\nSR5*\n*",
+                "help_text": "Match against consumed digi hops only. Wildcard * is supported.",
+            },
         ),
     },
     "filter_callsign": {
@@ -120,9 +160,22 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Callsign Filter",
         "badge": "Filter",
         "description": "Stores callsign allow or deny rules.",
+        "editor_help_lines": (
+            "This filter matches the source callsign of the packet.",
+            "Patterns support * wildcard, for example SQ9MDD, SQ9MDD* or SQ*.",
+            "allow passes only matching source callsigns.",
+            "deny rejects matching source callsigns.",
+        ),
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
-            {"name": "callsigns", "label": "Callsigns (one per line)", "type": "textarea", "required": False},
+            {
+                "name": "callsigns",
+                "label": "Callsigns (one per line)",
+                "type": "textarea",
+                "required": False,
+                "placeholder": "SQ9MDD\nSQ9MDD*\nSQ*",
+                "help_text": "Match against the source callsign. Wildcard * is supported.",
+            },
         ),
     },
     "filter_packet_type": {
@@ -588,6 +641,7 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
             "label": _t(meta["label"]),
             "badge": _t(meta["badge"]),
             "description": _t(meta["description"]),
+            **({"editor_help_lines": [_t(line) for line in meta["editor_help_lines"]]} if meta.get("editor_help_lines") else {}),
             "runtime_status": _runtime_status(step_type),
             "runtime_label": _runtime_status_label(step_type),
             "config_fields": [
