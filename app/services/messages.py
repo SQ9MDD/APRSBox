@@ -6,6 +6,7 @@ from typing import Any
 
 from app import get_version
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.i18n import get_app_language, get_translator
 from app.services.outbound import (
     _format_aprs_latitude,
     _format_aprs_longitude,
@@ -44,36 +45,40 @@ _MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
 
 
+def _t(message: str) -> str:
+    return get_translator(get_app_language())(message)
+
+
 def normalize_aprs_destination_callsign(value: str) -> str:
     normalized = str(value or "").strip().upper()
     if not normalized:
-        raise ValueError("Destination callsign is required.")
+        raise ValueError(_t("Destination callsign is required."))
     if not _CALLSIGN_RE.fullmatch(normalized):
-        raise ValueError("Destination callsign must be an AX.25/APRS callsign with optional SSID 0-15.")
+        raise ValueError(_t("Destination callsign must be an AX.25/APRS callsign with optional SSID 0-15."))
     return normalized
 
 
 def normalize_aprs_message_text(value: str) -> str:
     text = str(value or "").strip()
     if not text:
-        raise ValueError("Message text is required.")
+        raise ValueError(_t("Message text is required."))
     if len(text) > MESSAGE_MAX_LENGTH:
-        raise ValueError("Message text must be 67 ASCII characters or fewer.")
+        raise ValueError(_t("Message text must be 67 ASCII characters or fewer."))
     for char in text:
         codepoint = ord(char)
         if codepoint < 32 or codepoint > 126:
-            raise ValueError("Message text may contain only printable ASCII characters.")
+            raise ValueError(_t("Message text may contain only printable ASCII characters."))
     return text
 
 
 def normalize_aprs_path(value: str) -> str:
     path = str(value or "").strip().upper()
     if len(path) > 64:
-        raise ValueError("Future RF path must be 64 printable ASCII characters or fewer.")
+        raise ValueError(_t("Future RF path must be 64 printable ASCII characters or fewer."))
     for char in path:
         codepoint = ord(char)
         if codepoint < 32 or codepoint > 126:
-            raise ValueError("Future RF path must use printable ASCII only.")
+            raise ValueError(_t("Future RF path must use printable ASCII only."))
     return path
 
 
@@ -142,7 +147,7 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     timestamp = utc_now()
     local_sender = _local_station_identity()
     if not local_sender:
-        raise ValueError("Local station callsign is required.")
+        raise ValueError(_t("Local station callsign is required."))
     conversation = create_or_update_conversation(normalized_callsign, path=normalized_path)
     update_conversation_path(int(conversation["id"]), normalized_path)
 
@@ -185,7 +190,7 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
         success, error = enqueue_direct_message_job(outbound_message, station_settings, trigger="manual")
     if not success:
         mark_message_failed(message_id, error or "Failed to queue outbound APRS message.")
-        raise ValueError(error or "Failed to queue outbound APRS message.")
+        raise ValueError(error or _t("Failed to queue outbound APRS message."))
 
     queued_job = fetch_one(
         """
@@ -210,7 +215,7 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
 
     message = get_message(message_id)
     if message is None:
-        raise ValueError("Queued message could not be loaded.")
+        raise ValueError(_t("Queued message could not be loaded."))
     return message
 
 
@@ -393,11 +398,11 @@ def mark_message_failed(message_id: int, reason: str) -> None:
 def retry_failed_message(message_id: int) -> dict[str, Any]:
     message = get_message(message_id)
     if message is None:
-        raise ValueError("Message does not exist.")
+        raise ValueError(_t("Message does not exist."))
     if str(message.get("direction") or "") != MESSAGE_DIRECTION_TX:
-        raise ValueError("Only outbound messages can be retried.")
+        raise ValueError(_t("Only outbound messages can be retried."))
     if str(message.get("status") or "") != MESSAGE_STATUS_FAILED:
-        raise ValueError("Only failed messages can be retried.")
+        raise ValueError(_t("Only failed messages can be retried."))
 
     cancel_pending_message_jobs(message_id)
     now = utc_now()
@@ -420,12 +425,12 @@ def retry_failed_message(message_id: int) -> dict[str, Any]:
 
     refreshed = get_message(message_id)
     if refreshed is None:
-        raise ValueError("Message could not be reloaded.")
+        raise ValueError(_t("Message could not be reloaded."))
     station_settings = _get_station_settings()
     success, error = enqueue_direct_message_job(refreshed, station_settings, trigger="manual-retry")
     if not success:
         mark_message_failed(message_id, error or "Failed to queue manual retry.")
-        raise ValueError(error or "Failed to queue manual retry.")
+        raise ValueError(error or _t("Failed to queue manual retry."))
 
     queued_job = fetch_one(
         """
@@ -441,7 +446,7 @@ def retry_failed_message(message_id: int) -> dict[str, Any]:
         register_outbound_job_link(message_id, int(queued_job["id"]))
     result = get_message(message_id)
     if result is None:
-        raise ValueError("Retried message could not be loaded.")
+        raise ValueError(_t("Retried message could not be loaded."))
     return result
 
 
@@ -973,7 +978,7 @@ def store_incoming_bulletin(
 def create_automatic_query_response(*, sender: str, message_text: str, path: str, timestamp: str) -> int:
     local_sender = _local_station_identity()
     if not local_sender:
-        raise ValueError("Local station callsign is required.")
+        raise ValueError(_t("Local station callsign is required."))
     conversation = create_or_update_conversation(sender, path=path)
     with get_connection() as connection:
         cursor = connection.execute(

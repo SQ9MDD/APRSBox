@@ -6,12 +6,12 @@
         <aside class="messages-sidebar">
             <div class="messages-sidebar-top">
                 <div class="panel-header-copy">
-                    <h2>Conversations</h2>
-                    <p class="section-lead">Stored APRS message conversations from the local SQLite database.</p>
+                    <h2>{{ t("Conversations") }}</h2>
+                    <p class="section-lead">{{ t("Stored APRS message conversations from the local SQLite database.") }}</p>
                 </div>
                 <form class="messages-new-conversation" id="messages-new-conversation-form">
                     <label class="messages-new-conversation-field">
-                        <span>Start new conversation</span>
+                        <span>{{ t("Start new conversation") }}</span>
                         <div class="messages-new-conversation-control">
                             <input
                                 type="text"
@@ -21,7 +21,7 @@
                                 autocomplete="off"
                                 spellcheck="false"
                             >
-                            <button type="submit" class="button-secondary messages-new-conversation-button" aria-label="Start conversation" title="Start conversation">
+                            <button type="submit" class="button-secondary messages-new-conversation-button" aria-label="{{ t('Start conversation') }}" title="{{ t('Start conversation') }}">
                                 <img src="{{ request.scope.root_path }}/static/icons/chat-plus-outline.svg" alt="">
                             </button>
                         </div>
@@ -29,38 +29,38 @@
                 </form>
             </div>
             <div class="messages-conversation-list" id="messages-conversation-list">
-                <div class="empty-state muted">No conversations loaded.</div>
+                <div class="empty-state muted">{{ t("No conversations loaded.") }}</div>
             </div>
         </aside>
 
         <section class="messages-thread">
             <header class="messages-thread-header" id="messages-thread-header">
                 <div class="panel-header-copy">
-                    <h2>Select a conversation</h2>
-                    <p class="section-lead">Choose a callsign on the left or start a new APRS message thread.</p>
+                    <h2>{{ t("Select a conversation") }}</h2>
+                    <p class="section-lead">{{ t("Choose a callsign on the left or start a new APRS message thread.") }}</p>
                 </div>
             </header>
 
             <div class="messages-thread-history" id="messages-thread-history">
-                <div class="empty-state muted">Select a conversation or start a new message.</div>
+                <div class="empty-state muted">{{ t("Select a conversation or start a new message.") }}</div>
             </div>
 
             <form class="messages-composer" id="messages-composer">
                 <label class="messages-composer-field">
-                    <span>Message text (<span id="messages-composer-count">0</span> / {{ messages_view.composer_limit }})</span>
+                    <span>{{ t("Message text") }} (<span id="messages-composer-count">0</span> / {{ messages_view.composer_limit }})</span>
                     <textarea
                         id="messages-composer-input"
                         name="message_text"
                         rows="2"
                         maxlength="{{ messages_view.composer_limit }}"
-                        placeholder="Type APRS message text"
+                        placeholder="{{ t('Type APRS message text') }}"
                         spellcheck="false"
                     ></textarea>
                 </label>
                 <div class="messages-composer-footer">
                     <div class="messages-composer-actions">
                         <label class="messages-composer-path-field">
-                            <span>Path</span>
+                            <span>{{ t("Path") }}</span>
                             <input
                                 type="text"
                                 id="messages-composer-path"
@@ -69,10 +69,10 @@
                                 spellcheck="false"
                             >
                         </label>
-                        <button type="submit" class="button" id="messages-send-button">Send</button>
+                        <button type="submit" class="button" id="messages-send-button">{{ t("Send") }}</button>
                     </div>
                     <div class="messages-composer-meta">
-                        <small class="field-validation-error" id="messages-composer-error" hidden>Use printable ASCII only, max {{ messages_view.composer_limit }} chars. National characters are blocked.</small>
+                        <small class="field-validation-error" id="messages-composer-error" hidden>{{ tf("Use printable ASCII only, max {limit} chars. National characters are blocked.", {"limit": messages_view.composer_limit}) }}</small>
                     </div>
                 </div>
             </form>
@@ -104,6 +104,31 @@
     const defaultPath = String(initialData.default_path || "");
     const messagesApi = `${window.location.pathname.replace(/\/messages$/, "")}/api/messages`.replace(/\/\//g, "/");
     const requestedCallsign = new URLSearchParams(window.location.search).get("callsign");
+    const i18n = Object.freeze({
+        requestFailed: {{ t("Request failed.")|tojson }},
+        noSavedConversations: {{ t("No saved conversations yet. Start a new APRS message thread above.")|tojson }},
+        unreadWithCount: {{ t("Unread ({count})")|tojson }},
+        read: {{ t("Read")|tojson }},
+        heardRecently: {{ t("Heard recently")|tojson }},
+        noRecentHeardStationEntry: {{ t("No recent heard-station entry")|tojson }},
+        deleteConversation: {{ t("Delete conversation")|tojson }},
+        deleteConversationWithCallsign: {{ t("Delete conversation {callsign}")|tojson }},
+        selectConversation: {{ t("Select a conversation")|tojson }},
+        chooseConversationLead: {{ t("Choose a callsign on the left or start a new APRS message thread.")|tojson }},
+        startNewMessageFromLeft: {{ t("Or start a new message from the left panel.")|tojson }},
+        noMessagesInConversationYet: {{ t("No messages in this conversation yet.")|tojson }},
+        queued: {{ t("Queued")|tojson }},
+        sent: {{ t("Sent")|tojson }},
+        sentWithAttempts: {{ t("Sent {attemptCount}/{attemptLimit}")|tojson }},
+        failed: {{ t("Failed")|tojson }},
+        noAck: {{ t("No ACK")|tojson }},
+        received: {{ t("Received")|tojson }},
+        noAckRetryHint: {{ t("No ACK received. Click to retry.")|tojson }},
+        typeAprsMessageText: {{ t("Type APRS message text")|tojson }},
+        selectConversationToEnableComposer: {{ t("Select a conversation to enable the composer")|tojson }},
+        repeatSendingMessage: {{ t("Repeat sending this APRS message?")|tojson }},
+        invalidDestinationCallsign: {{ t("Destination callsign must be an AX.25/APRS callsign with optional SSID 0-15.")|tojson }},
+    });
 
     let state = buildInitialState(initialData);
     let refreshTimer = null;
@@ -143,6 +168,12 @@
             .replaceAll(">", "&gt;")
             .replaceAll("\"", "&quot;")
             .replaceAll("'", "&#39;");
+    }
+
+    function formatText(template, params = {}) {
+        return String(template || "").replace(/\{(\w+)\}/g, (match, key) => (
+            Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match
+        ));
     }
 
     function formatDateTime(value) {
@@ -283,7 +314,7 @@
         });
         const payload = await response.json();
         if (!response.ok) {
-            throw new Error(payload.error || "Request failed.");
+            throw new Error(payload.error || i18n.requestFailed);
         }
         return payload;
     }
@@ -333,14 +364,16 @@
 
     function renderConversationList() {
         if (!state.conversations.length) {
-            conversationList.innerHTML = '<div class="empty-state muted">No saved conversations yet. Start a new APRS message thread above.</div>';
+            conversationList.innerHTML = `<div class="empty-state muted">${escapeHtml(i18n.noSavedConversations)}</div>`;
             return;
         }
         conversationList.innerHTML = state.conversations.map((conversation) => {
             const isActive = conversation.id === state.activeConversationId;
             const unreadCount = isActive ? 0 : conversation.unread_count;
             const stateBadgeClass = unreadCount > 0 ? "message-state-badge-unread" : "message-state-badge-read";
-            const stateBadgeLabel = unreadCount > 0 ? `Unread (${unreadCount})` : "Read";
+            const stateBadgeLabel = unreadCount > 0
+                ? formatText(i18n.unreadWithCount, { count: unreadCount })
+                : i18n.read;
             const heardStateClass = {
                 fresh: "messages-heard-dot-fresh",
                 warn: "messages-heard-dot-warn",
@@ -358,11 +391,11 @@
                                 </span>
                             </span>
                             <span class="messages-conversation-meta-row">
-                                ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || "Heard recently")}</span></span>` : '<span class="muted">No recent heard-station entry</span>'}
+                                ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || i18n.heardRecently)}</span></span>` : `<span class="muted">${escapeHtml(i18n.noRecentHeardStationEntry)}</span>`}
                             </span>
                         </span>
                     </button>
-                    <button type="button" class="table-icon-button messages-conversation-delete" data-delete-conversation="${escapeHtml(conversation.id)}" aria-label="Delete conversation ${escapeHtml(conversation.callsign)}" title="Delete conversation">
+                    <button type="button" class="table-icon-button messages-conversation-delete" data-delete-conversation="${escapeHtml(conversation.id)}" aria-label="${escapeHtml(formatText(i18n.deleteConversationWithCallsign, { callsign: conversation.callsign }))}" title="${escapeHtml(i18n.deleteConversation)}">
                         <img src="${staticRoot}icons/delete-outline.svg" alt="">
                     </button>
                 </div>
@@ -374,8 +407,8 @@
         if (!conversation) {
             threadHeader.innerHTML = `
                 <div class="panel-header-copy">
-                    <h2>Select a conversation</h2>
-                    <p class="section-lead">Choose a callsign on the left or start a new APRS message thread.</p>
+                    <h2>${escapeHtml(i18n.selectConversation)}</h2>
+                    <p class="section-lead">${escapeHtml(i18n.chooseConversationLead)}</p>
                 </div>
             `;
             return;
@@ -384,7 +417,7 @@
             <div class="panel-header-copy">
                 <h2>${escapeHtml(conversation.callsign)}</h2>
                 <p class="section-lead">
-                    ${conversation.recently_heard ? escapeHtml(conversation.heard_recently_label || "Heard recently") : "No recent heard-station entry"}
+                    ${conversation.recently_heard ? escapeHtml(conversation.heard_recently_label || i18n.heardRecently) : escapeHtml(i18n.noRecentHeardStationEntry)}
                 </p>
             </div>
         `;
@@ -392,11 +425,11 @@
 
     function renderThreadHistory(conversation, options = {}) {
         if (!conversation) {
-            historyNode.innerHTML = '<div class="messages-thread-empty"><strong>Select a conversation</strong><span class="muted">Or start a new message from the left panel.</span></div>';
+            historyNode.innerHTML = `<div class="messages-thread-empty"><strong>${escapeHtml(i18n.selectConversation)}</strong><span class="muted">${escapeHtml(i18n.startNewMessageFromLeft)}</span></div>`;
             return;
         }
         if (!conversation.messages.length) {
-            historyNode.innerHTML = `<div class="messages-thread-empty"><strong>${escapeHtml(conversation.callsign)}</strong><span class="muted">No messages in this conversation yet.</span></div>`;
+            historyNode.innerHTML = `<div class="messages-thread-empty"><strong>${escapeHtml(conversation.callsign)}</strong><span class="muted">${escapeHtml(i18n.noMessagesInConversationYet)}</span></div>`;
             return;
         }
         let previousDay = "";
@@ -406,23 +439,25 @@
             previousDay = dayLabel || previousDay;
             let deliveryLabel = message.delivery_state || "";
             if (message.delivery_state === "queued") {
-                deliveryLabel = "Queued";
+                deliveryLabel = i18n.queued;
             } else if (message.delivery_state === "sent") {
                 const attemptCount = Number(message.tx_attempt_count || 0);
                 const attemptLimit = Number(message.tx_attempt_limit || 0);
-                deliveryLabel = attemptLimit > 0 ? `Sent ${attemptCount}/${attemptLimit}` : "Sent";
+                deliveryLabel = attemptLimit > 0
+                    ? formatText(i18n.sentWithAttempts, { attemptCount, attemptLimit })
+                    : i18n.sent;
             } else if (message.delivery_state === "acked") {
                 deliveryLabel = "ACK";
             } else if (message.delivery_state === "failed") {
-                deliveryLabel = Number(message.tx_attempt_limit || 0) > 0 ? "No ACK" : "Failed";
+                deliveryLabel = Number(message.tx_attempt_limit || 0) > 0 ? i18n.noAck : i18n.failed;
             } else if (message.delivery_state === "received") {
-                deliveryLabel = "Received";
+                deliveryLabel = i18n.received;
             }
             let deliveryBadge = "";
             if (message.direction === "tx" && message.delivery_state === "failed" && Number(message.tx_attempt_limit || 0) > 0) {
-                deliveryBadge = `<button type="button" class="message-delivery-badge message-delivery-badge-pending" data-retry-message="${escapeHtml(message.id)}" title="${escapeHtml(message.failure_reason || "No ACK received. Click to retry.")}">${escapeHtml(deliveryLabel || "No ACK")}</button>`;
+                deliveryBadge = `<button type="button" class="message-delivery-badge message-delivery-badge-pending" data-retry-message="${escapeHtml(message.id)}" title="${escapeHtml(message.failure_reason || i18n.noAckRetryHint)}">${escapeHtml(deliveryLabel || i18n.noAck)}</button>`;
             } else if (message.direction === "tx") {
-                deliveryBadge = `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || "Sent")}</span>`;
+                deliveryBadge = `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || i18n.sent)}</span>`;
             }
             return `
                 ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}
@@ -460,8 +495,8 @@
             composerPathInput.value = desiredPathValue;
         }
         composerInput.placeholder = conversation
-            ? "Type APRS message text"
-            : "Select a conversation to enable the composer";
+            ? i18n.typeAprsMessageText
+            : i18n.selectConversationToEnableComposer;
     }
 
     function render(options = {}) {
@@ -536,7 +571,7 @@
         if (!(retryButton instanceof HTMLElement) || !retryButton.dataset.retryMessage) {
             return;
         }
-        if (!window.confirm("Repeat sending this APRS message?")) {
+        if (!window.confirm(i18n.repeatSendingMessage)) {
             return;
         }
         const activeConversation = getActiveConversation();
@@ -557,7 +592,7 @@
         if (!callsign) return;
         if (!validateCallsign(callsign)) {
             composerError.hidden = false;
-            composerError.textContent = "Destination callsign must be an AX.25/APRS callsign with optional SSID 0-15.";
+            composerError.textContent = i18n.invalidDestinationCallsign;
             return;
         }
         void createConversation(callsign).then(() => {

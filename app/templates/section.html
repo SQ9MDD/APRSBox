@@ -43,7 +43,7 @@
                 <table class="data-table prepared-entity-table">
                     <thead>
                         <tr>
-                            <th class="prepared-entity-col-icon">Icon</th>
+                            <th class="prepared-entity-col-icon">{{ t("Icon") }}</th>
                             <th class="prepared-entity-col-active">{{ t("Active") }}</th>
                             <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
                             <th class="prepared-entity-col-name">{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}</th>
@@ -265,9 +265,9 @@
                     {% endif %}
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
-                    <small class="muted">Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.</small>
+                    <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.") }}</small>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
-                    <small class="muted">Prepared scheduling only. Default is 30m.</small>
+                    <small class="muted">{{ t("Prepared scheduling only. Default is 30m.") }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'bulletin_code' %}
                     <small class="muted">Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.</small>
                     {% elif section.slug == 'bulletins' and field.name == 'group_name' %}
@@ -282,9 +282,9 @@
                         <small class="field-validation-error" id="bulletins-message-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
-                    <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.</small>
+                    <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
                     {% elif section.slug == 'items' and field.name == 'comment' %}
-                    <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.</small>
+                    <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.") }}</small>
                     {% endif %}
                 </label>
                 {% endfor %}
