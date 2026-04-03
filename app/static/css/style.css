@@ -1569,8 +1569,8 @@ select:focus-visible,
 .stations-table td:nth-child(5),
 .stations-table th:nth-child(6),
 .stations-table td:nth-child(6) {
-    width: 6.75rem;
-    min-width: 6.75rem;
+    width: 5rem;
+    min-width: 5rem;
     white-space: nowrap;
 }
 
