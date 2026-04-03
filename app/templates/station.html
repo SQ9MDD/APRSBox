@@ -136,13 +136,6 @@
                     </div>
                 </div>
             </label>
-            <label>
-                <span>{{ t("Units") }}</span>
-                <select name="default_units">
-                    <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>{{ t("Metric") }}</option>
-                    <option value="imperial" {% if station.default_units == "imperial" %}selected{% endif %}>{{ t("Imperial") }}</option>
-                </select>
-            </label>
             <label class="checkbox-row">
                 <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
                 <span>{{ t("Enable automatic beacon transmission every selected interval") }}</span>
@@ -198,7 +191,6 @@
             <dt>{{ t("Latitude") }}</dt><dd>{{ station.latitude }}</dd>
             <dt>{{ t("Longitude") }}</dt><dd>{{ station.longitude }}</dd>
             <dt>{{ t("Symbol") }}</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
-            <dt>{{ t("Units") }}</dt><dd>{{ t("Imperial") if station.default_units == "imperial" else t("Metric") }}</dd>
             <dt>{{ t("TX Enabled") }}</dt><dd>{{ station.tx_enabled }}</dd>
         </dl>
         {% endif %}

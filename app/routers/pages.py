@@ -255,6 +255,35 @@ def _station_page_context(
     )
 
 
+def _settings_page_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    latest_version_result: dict | None = None,
+    flash: str | None = None,
+    flash_success: bool = True,
+    current_language: str | None = None,
+    current_default_units: str | None = None,
+) -> dict:
+    station_settings = get_station_settings()
+    return build_template_context(
+        request,
+        page_title="Settings",
+        current_user=current_user,
+        active_nav="settings",
+        current_gui_version=current_gui_version(),
+        gui_update_url=request.app.state.settings.gui_update_url,
+        gui_update_branch=request.app.state.settings.gui_update_branch,
+        latest_version_result=latest_version_result,
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_updates=current_user.role in {"admin", "operator"},
+        can_manage_global_settings=current_user.role in {"admin", "operator"},
+        current_language=current_language if current_language is not None else get_app_language(),
+        current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
+    )
+
+
 @router.get("/")
 def root(request: Request) -> RedirectResponse:
     return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
@@ -537,21 +566,7 @@ def settings_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    context = build_template_context(
-        request,
-        page_title="Settings",
-        current_user=current_user,
-        active_nav="settings",
-        current_gui_version=current_gui_version(),
-        gui_update_url=request.app.state.settings.gui_update_url,
-        gui_update_branch=request.app.state.settings.gui_update_branch,
-        latest_version_result=None,
-        flash=None,
-        flash_success=True,
-        can_manage_updates=current_user.role in {"admin", "operator"},
-        can_manage_language=current_user.role in {"admin", "operator"},
-        current_language=get_app_language(),
-    )
+    context = _settings_page_context(request, current_user)
     return templates.TemplateResponse("settings.html", context)
 
 
@@ -563,21 +578,7 @@ def settings_check_gui_version(
     templates = request.app.state.templates
     result = latest_gui_version()
     flash = None if result.get("ok") else result.get("error")
-    context = build_template_context(
-        request,
-        page_title="Settings",
-        current_user=current_user,
-        active_nav="settings",
-        current_gui_version=current_gui_version(),
-        gui_update_url=request.app.state.settings.gui_update_url,
-        gui_update_branch=request.app.state.settings.gui_update_branch,
-        latest_version_result=result,
-        flash=flash,
-        flash_success=False if flash else True,
-        can_manage_updates=current_user.role in {"admin", "operator"},
-        can_manage_language=current_user.role in {"admin", "operator"},
-        current_language=get_app_language(),
-    )
+    context = _settings_page_context(request, current_user, latest_version_result=result, flash=flash, flash_success=False if flash else True)
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if flash else 200)
 
 
@@ -593,22 +594,68 @@ def settings_update_gui(
         flash = result.get("error")
     else:
         flash = f"GUI update started in background. Log: {result['log_file']}"
-    context = build_template_context(
-        request,
-        page_title="Settings",
-        current_user=current_user,
-        active_nav="settings",
-        current_gui_version=current_gui_version(),
-        gui_update_url=request.app.state.settings.gui_update_url,
-        gui_update_branch=request.app.state.settings.gui_update_branch,
-        latest_version_result=None,
-        flash=flash,
-        flash_success=bool(result.get("ok")),
-        can_manage_updates=True,
-        can_manage_language=True,
-        current_language=get_app_language(),
-    )
+    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/global")
+def settings_update_global(
+    request: Request,
+    language: str = Form(...),
+    default_units: str = Form(...),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    raw_language = str(language or "").strip().lower()
+    selected_language = normalize_language(language)
+    selected_default_units = str(default_units or "").strip().lower()
+    station_settings = get_station_settings()
+    current_default_units = station_settings.get("default_units", "metric")
+    if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
+        context = _settings_page_context(
+            request,
+            current_user,
+            flash="Unsupported language selection.",
+            flash_success=False,
+            current_language=raw_language or get_app_language(),
+            current_default_units=selected_default_units or current_default_units,
+        )
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    if selected_default_units not in {"metric", "imperial"}:
+        context = _settings_page_context(
+            request,
+            current_user,
+            flash="Unsupported unit selection.",
+            flash_success=False,
+            current_language=selected_language,
+            current_default_units=selected_default_units or current_default_units,
+        )
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    station_payload = dict(station_settings)
+    station_payload["default_units"] = selected_default_units
+    success, error = safe_update_station_settings(station_payload)
+    if not success:
+        context = _settings_page_context(
+            request,
+            current_user,
+            flash=error,
+            flash_success=False,
+            current_language=selected_language,
+            current_default_units=selected_default_units,
+        )
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    set_app_setting("app_language", selected_language)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Global settings updated.",
+        flash_success=True,
+        current_language=selected_language,
+        current_default_units=selected_default_units,
+    )
+    return templates.TemplateResponse("settings.html", context)
 
 
 @router.post("/settings/language")
@@ -620,39 +667,11 @@ def settings_update_language(
     templates = request.app.state.templates
     selected_language = normalize_language(language)
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != str(language or "").strip().lower():
-        context = build_template_context(
-            request,
-            page_title="Settings",
-            current_user=current_user,
-            active_nav="settings",
-            current_gui_version=current_gui_version(),
-            gui_update_url=request.app.state.settings.gui_update_url,
-            gui_update_branch=request.app.state.settings.gui_update_branch,
-            latest_version_result=None,
-            flash="Unsupported language selection.",
-            flash_success=False,
-            can_manage_updates=True,
-            can_manage_language=True,
-            current_language=get_app_language(),
-        )
+        context = _settings_page_context(request, current_user, flash="Unsupported language selection.", flash_success=False)
         return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     set_app_setting("app_language", selected_language)
-    context = build_template_context(
-        request,
-        page_title="Settings",
-        current_user=current_user,
-        active_nav="settings",
-        current_gui_version=current_gui_version(),
-        gui_update_url=request.app.state.settings.gui_update_url,
-        gui_update_branch=request.app.state.settings.gui_update_branch,
-        latest_version_result=None,
-        flash="GUI language updated.",
-        flash_success=True,
-        can_manage_updates=True,
-        can_manage_language=True,
-        current_language=selected_language,
-    )
+    context = _settings_page_context(request, current_user, flash="GUI language updated.", flash_success=True, current_language=selected_language)
     return templates.TemplateResponse("settings.html", context)
 
 
@@ -1165,10 +1184,11 @@ def station_update(
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
-    default_units: str = Form("metric"),
+    default_units: str | None = Form(None),
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
         "ssid": ssid.strip(),
@@ -1183,7 +1203,7 @@ def station_update(
         "longitude": longitude.strip(),
         "symbol_table": symbol_table.strip(),
         "symbol_code": symbol_code.strip(),
-        "default_units": default_units.strip(),
+        "default_units": default_units.strip() if default_units is not None else current_default_units,
         "tx_enabled": tx_enabled,
     }
     success, error = safe_update_station_settings(payload)
@@ -1211,10 +1231,11 @@ def station_send_beacon(
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
-    default_units: str = Form("metric"),
+    default_units: str | None = Form(None),
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
         "ssid": ssid.strip(),
@@ -1229,7 +1250,7 @@ def station_send_beacon(
         "longitude": longitude.strip(),
         "symbol_table": symbol_table.strip(),
         "symbol_code": symbol_code.strip(),
-        "default_units": default_units.strip(),
+        "default_units": default_units.strip() if default_units is not None else current_default_units,
         "tx_enabled": tx_enabled,
     }
     success, error = safe_update_station_settings(payload)
