@@ -1296,7 +1296,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         "flow_id": int(flow["id"]),
         "flow_name": str(flow.get("name") or ""),
         "created_at": timestamp,
-        "display_created_at": _format_local_execution_time(timestamp),
+        "display_created_at": _format_execution_time_utc(timestamp),
         "final_result": final_result,
         "final_message": final_message,
         "final_step_number": final_step.get("number"),
@@ -1414,14 +1414,14 @@ def _strip_line_suffix(message: str) -> str:
     return message.strip()
 
 
-def _format_local_execution_time(value: str) -> str:
+def _format_execution_time_utc(value: str) -> str:
     if not value:
         return "-"
     try:
-        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return value
-    return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _execution_predates_flow_update(execution_created_at: str, flow_updated_at: str) -> bool:
