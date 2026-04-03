@@ -82,6 +82,25 @@ class TrafficMonitorService:
             await asyncio.to_thread(close_serial_device, self._tnc_serial_fd)
             self._tnc_serial_fd = None
 
+    async def send_outbound_frame(self, *, interface_id: int | None, frame: bytes) -> bool:
+        with self._lock:
+            modem = dict(self._active_modem) if self._active_modem else None
+        if modem is None:
+            return False
+        if interface_id is None:
+            return False
+        try:
+            active_interface_id = int(modem.get("id"))
+        except (TypeError, ValueError):
+            return False
+        if active_interface_id != interface_id:
+            return False
+        try:
+            await self._forward_client_chunk_to_tnc(frame)
+        except (OSError, RuntimeError):
+            return False
+        return True
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             active_modem = dict(self._active_modem) if self._active_modem else None

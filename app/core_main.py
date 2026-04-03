@@ -20,7 +20,7 @@ async def lifespan(app_instance: FastAPI):
     init_db()
     digi_flow_runtime = DigiFlowRuntimeService()
     traffic_monitor = TrafficMonitorService(frame_consumer=digi_flow_runtime.enqueue_rx_tnc2_frame)
-    outbound_service = OutboundService()
+    outbound_service = OutboundService(traffic_monitor=traffic_monitor)
     beacon_scheduler = BeaconSchedulerService()
     bulletin_scheduler = BulletinSchedulerService()
     object_scheduler = ObjectSchedulerService()

@@ -30,11 +30,18 @@ from app.services.serial_tnc import (
     open_serial_device,
     write_serial_data,
 )
+from app.services.traffic import TrafficMonitorService
 
 
 class OutboundService:
-    def __init__(self, *, poll_interval: float = 1.0) -> None:
+    def __init__(
+        self,
+        *,
+        poll_interval: float = 1.0,
+        traffic_monitor: TrafficMonitorService | None = None,
+    ) -> None:
         self._poll_interval = poll_interval
+        self._traffic_monitor = traffic_monitor
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
@@ -105,6 +112,34 @@ class OutboundService:
                         pass
                     _ = reader
             elif modem_type == "SERIALL":
+                interface_id = job.get("interface_id")
+                try:
+                    normalized_interface_id = int(interface_id) if interface_id is not None else None
+                except (TypeError, ValueError):
+                    normalized_interface_id = None
+                if self._traffic_monitor is not None:
+                    sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
+                        interface_id=normalized_interface_id,
+                        frame=frame,
+                    )
+                    if sent_via_monitor:
+                        persist_outbound_frame(
+                            source=interface_name,
+                            line=tnc2_line,
+                            payload_hex=frame.hex(" ").upper(),
+                        )
+                        mark_outbound_job_sent(job_id)
+                        payload = job.get("payload") or {}
+                        message_kind = str(payload.get("message_kind") or "").strip()
+                        if kind == "message" and payload.get("aprs_message_id") is not None:
+                            if message_kind == "direct_message":
+                                register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
+                            elif message_kind == QUERY_MESSAGE_KIND:
+                                register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                        elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                            register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                        log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
+                        return
                 serial_path = normalize_serial_device_path(device_path)
                 baud_rate = normalize_serial_baud_rate(job.get("baud_rate"))
                 serial_fd = await asyncio.to_thread(open_serial_device, serial_path, baud_rate)
