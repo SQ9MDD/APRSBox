@@ -268,9 +268,31 @@ backup_database() {
 
     timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
     backup_path="$INSTALL_ROOT/backups/aprsbox-db-$timestamp.sqlite3"
-    cp "$DB_PATH" "$backup_path"
-    chown "$APP_USER":"$APP_USER" "$backup_path" 2>/dev/null || true
-    log "Database backup created: $backup_path"
+    rm -f "$backup_path" "$backup_path-wal" "$backup_path-shm"
+
+    if command -v sqlite3 >/dev/null 2>&1; then
+        if sqlite3 "$DB_PATH" ".timeout 5000" ".backup '$backup_path'" >/dev/null 2>&1; then
+            chown "$APP_USER":"$APP_USER" "$backup_path" 2>/dev/null || true
+            log "Database backup created: $backup_path"
+            return
+        fi
+        log "WARNING: sqlite3 backup failed for $DB_PATH, falling back to file copy."
+        rm -f "$backup_path" "$backup_path-wal" "$backup_path-shm"
+    fi
+
+    if cp "$DB_PATH" "$backup_path"; then
+        if [ -f "$DB_PATH-wal" ]; then
+            cp "$DB_PATH-wal" "$backup_path-wal" || true
+        fi
+        if [ -f "$DB_PATH-shm" ]; then
+            cp "$DB_PATH-shm" "$backup_path-shm" || true
+        fi
+        chown "$APP_USER":"$APP_USER" "$backup_path" "$backup_path-wal" "$backup_path-shm" 2>/dev/null || true
+        log "Database backup created: $backup_path"
+        return
+    fi
+
+    log "WARNING: database backup could not be created for $DB_PATH. Continuing without a backup."
 }
 
 prepare_staging_installation() {
