@@ -828,6 +828,54 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sum(1 for item in summaries if item["final_result"] == "REJECTED"), 1)
             self.assertEqual(sum(1 for item in summaries if item["final_result"] == "LOGGED"), 1)
 
+    async def test_direct_only_filter_rejects_any_already_digipeated_frame(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Direct only",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_direct_only", "title": "Direct Only", "enabled": 1, "config": {}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                direct = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Direct frame",
+                )
+                repeated = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,SP1-1*,WIDE1-1:>Already repeated",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            direct_rows = event_rows_for_frame(str(direct["frame_uid"]))
+            repeated_rows = event_rows_for_frame(str(repeated["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "direct_only" and row["decision"] == "passed" for row in direct_rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in direct_rows))
+            self.assertTrue(any(row["event_type"] == "direct_only" and row["decision"] == "rejected" for row in repeated_rows))
+            self.assertTrue(any("SP1-1" in row["message"] for row in repeated_rows if row["event_type"] == "direct_only"))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in repeated_rows))
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
+            self.assertEqual(len(summaries), 2)
+            self.assertEqual(sum(1 for item in summaries if item["final_result"] == "LOGGED"), 1)
+            self.assertEqual(sum(1 for item in summaries if item["final_result"] == "REJECTED"), 1)
+
     async def test_execution_summary_survives_flow_step_id_changes(self) -> None:
         with temporary_database():
             set_local_station_identity()

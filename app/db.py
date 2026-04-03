@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
         'receiver_rf',
         'receiver_aprsis',
         'filter_dupe',
+        'filter_direct_only',
         'filter_digi',
         'filter_path',
         'filter_strict',
@@ -911,6 +912,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
     if not steps_sql:
         return
     required_step_types = (
+        "filter_direct_only",
         "filter_digi",
         "filter_icon",
         "filter_rate_limit_per_callsign",
@@ -929,6 +931,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
                 'receiver_rf',
                 'receiver_aprsis',
                 'filter_dupe',
+                'filter_direct_only',
                 'filter_digi',
                 'filter_path',
                 'filter_strict',

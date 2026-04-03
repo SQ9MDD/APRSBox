@@ -290,6 +290,7 @@
             receiver_rf: ["Receiver RF"],
             receiver_aprsis: ["Receiver APRS-IS"],
             filter_dupe: ["Duplicate Filter"],
+            filter_direct_only: ["Direct Only"],
             filter_path: ["Path Filter"],
             filter_strict: ["Strict Filter"],
             filter_digi: ["DIGI Filter"],
@@ -315,6 +316,7 @@
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
             if (stepType === "filter_dupe") return { window_sec: 30 };
+            if (stepType === "filter_direct_only") return {};
             if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
             if (stepType === "filter_strict") return {};
             if (stepType === "filter_callsign") return { mode: "allow", callsigns: [] };
@@ -362,6 +364,7 @@
                 return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.paths}: ${tracePaths.length + noTracePaths.length}`;
             }
             if (step.step_type === "filter_strict") return i18n.rejectsTcpNogateRfonly;
+            if (step.step_type === "filter_direct_only") return "Direct packets only";
             if (step.step_type === "filter_callsign") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.callsigns}: ${(config.callsigns || []).length}`;
             if (step.step_type === "filter_packet_type") {
                 const labels = (config.packet_types || []).map(packetTypeValueLabel).filter(Boolean);

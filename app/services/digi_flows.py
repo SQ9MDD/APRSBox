@@ -13,6 +13,7 @@ FILTER_STEP_TYPES = (
     "filter_path",
     "filter_strict",
     "filter_dupe",
+    "filter_direct_only",
     "filter_digi",
     "filter_callsign",
     "filter_packet_type",
@@ -40,6 +41,7 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_aprsis",
     "filter_path",
     "filter_strict",
+    "filter_direct_only",
     "filter_digi",
     "filter_callsign",
     "filter_packet_type",
@@ -94,6 +96,13 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Strict Filter",
         "badge": "Rule",
         "description": "Rejects frames when the path contains TCP, NOGATE or RFONLY.",
+        "config_fields": (),
+    },
+    "filter_direct_only": {
+        "category": "filter",
+        "label": "Direct Only",
+        "badge": "Filter",
+        "description": "Passes only packets heard direct, without any consumed digipeater hop in the path.",
         "config_fields": (),
     },
     "filter_digi": {
@@ -401,6 +410,8 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
         return {"aprsis_source": ref_value}
     if step_type == "filter_dupe":
         return {"window_sec": 30}
+    if step_type == "filter_direct_only":
+        return {}
     if step_type == "filter_digi":
         return {"mode": "allow", "digis": []}
     if step_type == "filter_path":
@@ -453,6 +464,8 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         no_trace_paths = _normalize_multiline_list(config.get("no_trace_paths"))
         return {"mode": mode, "trace_paths": trace_paths, "no_trace_paths": no_trace_paths}
     if step_type == "filter_strict":
+        return {}
+    if step_type == "filter_direct_only":
         return {}
     if step_type == "filter_digi":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
@@ -533,6 +546,8 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         return f"Allow only, paths: {len(trace_paths) + len(no_trace_paths)}"
     if step_type == "filter_strict":
         return "Rejects TCP, NOGATE, RFONLY"
+    if step_type == "filter_direct_only":
+        return "Passes only direct packets"
     if step_type == "filter_callsign":
         callsigns = config.get("callsigns") or []
         return f"Mode: {config.get('mode', 'allow')}, callsigns: {len(callsigns)}"
@@ -1272,7 +1287,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
             if event_type == "source_step":
                 step_state["status"] = "passed"
                 step_state["description"] = _t("Source matched and packet entered the flow.")
-            elif event_type in {"filter_callsign", "filter_digi", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
+            elif event_type in {"filter_callsign", "filter_digi", "direct_only", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
                 step_state["status"] = "rejected" if decision == "rejected" else "passed"
                 step_state["description"] = message
             elif event_type == "output_action":

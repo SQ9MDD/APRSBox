@@ -233,6 +233,8 @@ class DigiFlowRuntimeService:
             return self._execute_path_rule(context, step)
         if step_type == "filter_strict":
             return self._execute_strict_filter(context, step)
+        if step_type == "filter_direct_only":
+            return self._execute_direct_only_filter(context, step)
         if step_type == "filter_digi":
             return self._execute_digi_filter(context, step)
         if step_type == "filter_packet_type":
@@ -449,6 +451,47 @@ class DigiFlowRuntimeService:
             message=f"Strict filter rejected frame because path contains blocked token {blocked_token}. Input path: {input_path or '-'}",
         )
         return {"decision": "drop"}
+
+    def _execute_direct_only_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        parsed = context.get("parsed")
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        if parsed is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="direct_only",
+                decision="rejected",
+                message="Direct Only filter rejected frame because TNC2 parsing failed.",
+            )
+            return {"decision": "drop"}
+
+        input_path = str(parsed.get("path") or "").strip().upper()
+        consumed_hops = _consumed_path_hops(_split_path_tokens(input_path))
+        if consumed_hops:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="direct_only",
+                decision="rejected",
+                message=(
+                    "Direct Only filter rejected frame because the path already contains consumed digi hops: "
+                    f"{', '.join(consumed_hops)}. Input path: {input_path or '-'}"
+                ),
+            )
+            return {"decision": "drop"}
+
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="direct_only",
+            decision="passed",
+            message=f"Direct Only filter passed because the path has no consumed digi hops. Input path: {input_path or '-'}",
+        )
+        return {"decision": "continue"}
 
     def _execute_digi_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         parsed = context.get("parsed")

@@ -149,6 +149,7 @@ class DigiFlowsTests(unittest.TestCase):
                             'receiver_rf',
                             'receiver_aprsis',
                             'filter_dupe',
+                            'filter_direct_only',
                             'filter_digi',
                             'filter_path',
                             'filter_strict',
@@ -261,6 +262,8 @@ class DigiFlowsTests(unittest.TestCase):
             type_meta = get_digi_flow_type_meta()
             self.assertEqual(type_meta["filter_path"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
+            self.assertEqual(type_meta["filter_direct_only"]["runtime_status"], "implemented")
+            self.assertEqual(type_meta["filter_direct_only"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_packet_type"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_icon"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_digi"]["runtime_status"], "implemented")
