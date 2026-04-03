@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app_language }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login | APRSBox</title>
+    <title>{{ page_title }} | APRSBox</title>
     <script>
         (() => {
             const storedTheme = localStorage.getItem("aprsbox-theme");
@@ -17,32 +17,36 @@
         <div class="panel-body">
             <div class="login-topbar">
                 <h1>APRSBox</h1>
-                <button type="button" class="theme-toggle" id="theme-toggle">Night Mode</button>
+                <button type="button" class="theme-toggle" id="theme-toggle">{{ t("Switch to night mode") }}</button>
             </div>
             {% if login_error %}
-            <div class="alert">{{ login_error }}</div>
+            <div class="alert">{{ t(login_error) }}</div>
             {% endif %}
             <form action="{{ request.scope.root_path }}/login" method="post" class="form-stack">
                 <label class="full">
-                    <span>Username</span>
+                    <span>{{ t("Username") }}</span>
                     <input type="text" name="username" autocomplete="username" required>
                 </label>
                 <label class="full">
-                    <span>Password</span>
+                    <span>{{ t("Password") }}</span>
                     <input type="password" name="password" autocomplete="current-password" required>
                 </label>
-                <button type="submit" class="button">Sign In</button>
+                <button type="submit" class="button">{{ t("Sign In") }}</button>
             </form>
         </div>
     </main>
     <script>
         (() => {
+            const labels = {
+                switchToDay: {{ t("Switch to day mode")|tojson }},
+                switchToNight: {{ t("Switch to night mode")|tojson }}
+            };
             const root = document.documentElement;
             const button = document.getElementById("theme-toggle");
             if (!button) return;
             const syncLabel = () => {
                 const isLight = root.getAttribute("data-theme") === "light";
-                button.textContent = isLight ? "Switch to Night Mode" : "Switch to Day Mode";
+                button.textContent = isLight ? labels.switchToNight : labels.switchToDay;
             };
             syncLabel();
             button.addEventListener("click", () => {

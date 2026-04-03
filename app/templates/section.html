@@ -13,18 +13,18 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ section.title }}</h2>
-                <p class="section-lead">{{ section.description }}</p>
+                <h2>{{ t(section.title) }}</h2>
+                <p class="section-lead">{{ t(section.description) }}</p>
             </div>
         </div>
-        <div class="notice">{{ section.readonly_message }}</div>
+        <div class="notice">{{ t(section.readonly_message) }}</div>
         {% if section.slug == 'objects' %}
-        <div class="notice">Use object names up to 9 printable ASCII characters. The sender will later pad them to the fixed APRS 9-character object field and add the mandatory timestamp automatically.</div>
+        <div class="notice">{{ t("Use object names up to 9 printable ASCII characters. The sender will later pad them to the fixed APRS 9-character object field and add the mandatory timestamp automatically.") }}</div>
         {% elif section.slug == 'items' %}
-        <div class="notice">Use item names from 3 to 9 printable ASCII characters. Avoid item format on RF unless you specifically need it; objects are generally the safer interoperable choice.</div>
+        <div class="notice">{{ t("Use item names from 3 to 9 printable ASCII characters. Avoid item format on RF unless you specifically need it; objects are generally the safer interoperable choice.") }}</div>
         {% endif %}
         {% if flash %}
-        <div class="alert">{{ flash }}</div>
+        <div class="alert">{{ t(flash) }}</div>
         {% endif %}
     </div>
 </section>
@@ -35,7 +35,7 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>{{ section.list_title }}</h2>
+                    <h2>{{ t(section.list_title) }}</h2>
                 </div>
             </div>
             <div class="table-wrap">
@@ -44,10 +44,10 @@
                     <thead>
                         <tr>
                             <th class="prepared-entity-col-icon">Icon</th>
-                            <th class="prepared-entity-col-active">Active</th>
-                            <th class="prepared-entity-col-interval">Every</th>
-                            <th class="prepared-entity-col-name">{{ 'Object Name' if section.slug == 'objects' else 'Item Name' }}</th>
-                            <th class="prepared-entity-col-raw">Raw Frame Preview</th>
+                            <th class="prepared-entity-col-active">{{ t("Active") }}</th>
+                            <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
+                            <th class="prepared-entity-col-name">{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}</th>
+                            <th class="prepared-entity-col-raw">{{ t("Raw Frame Preview") }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -57,7 +57,7 @@
                             <td class="prepared-entity-col-active">
                                 <span class="tnc-badge {{ 'tnc-badge-enabled' if row.is_enabled else 'tnc-badge-disabled' }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
-                                    <span>{{ 'On' if row.is_enabled else 'Off' }}</span>
+                                    <span>{{ t('On' if row.is_enabled else 'Off') }}</span>
                                 </span>
                             </td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
@@ -66,7 +66,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5">No records yet.</td>
+                            <td colspan="5">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -75,11 +75,11 @@
                 <table class="data-table prepared-entity-table message-entry-table">
                     <thead>
                         <tr>
-                            <th class="prepared-entity-col-active">Active</th>
-                            <th class="prepared-entity-col-interval">Every</th>
-                            <th class="message-entry-col-type">Type</th>
-                            <th class="message-entry-col-target">Target</th>
-                            <th class="prepared-entity-col-raw">Raw Frame Preview</th>
+                            <th class="prepared-entity-col-active">{{ t("Active") }}</th>
+                            <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
+                            <th class="message-entry-col-type">{{ t("Type") }}</th>
+                            <th class="message-entry-col-target">{{ t("Target") }}</th>
+                            <th class="prepared-entity-col-raw">{{ t("Raw Frame Preview") }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -88,17 +88,17 @@
                             <td class="prepared-entity-col-active">
                                 <span class="tnc-badge {{ 'tnc-badge-enabled' if row.is_enabled else 'tnc-badge-disabled' }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
-                                    <span>{{ 'On' if row.is_enabled else 'Off' }}</span>
+                                    <span>{{ t('On' if row.is_enabled else 'Off') }}</span>
                                 </span>
                             </td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
-                            <td class="message-entry-col-type">{{ row.type_label }}</td>
+                            <td class="message-entry-col-type">{{ t(row.type_label) }}</td>
                             <td class="message-entry-col-target"><code>{{ row.target_display }}</code></td>
                             <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5">No records yet.</td>
+                            <td colspan="5">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -110,16 +110,16 @@
                             {% for field in section.fields %}
                             {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
-                            <th>Status</th>
+                            <th>{{ t("Status") }}</th>
                             {% else %}
-                            <th>{{ field.label }}</th>
+                            <th>{{ t(field.label) }}</th>
                             {% endif %}
                             {% endfor %}
                             {% if section.slug != 'modems' %}
-                            <th>Updated</th>
+                            <th>{{ t("Updated") }}</th>
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
-                            <th>Actions</th>
+                            <th>{{ t("Actions") }}</th>
                             {% endif %}
                         </tr>
                     </thead>
@@ -132,13 +132,13 @@
                             <td>
                                 <span class="tnc-badge {{ 'tnc-badge-enabled' if row[field.name] else 'tnc-badge-disabled' }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row[field.name] else 'close-circle.svg' }}" alt="">
-                                    <span>{{ 'Enabled' if row[field.name] else 'Disabled' }}</span>
+                                    <span>{{ t('Enabled' if row[field.name] else 'Disabled') }}</span>
                                 </span>
                             </td>
                             {% else %}
                             <td>
                                 {% if field.type == 'checkbox' %}
-                                {{ 'Yes' if row[field.name] else 'No' }}
+                                {{ t('Yes' if row[field.name] else 'No') }}
                                 {% else %}
                                 {{ row[field.name] if row[field.name] is not none else '' }}
                                 {% endif %}
@@ -150,12 +150,12 @@
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
                             <td>
-                                <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm('Delete this record?');">
+                                <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm({{ t('Delete this record?')|tojson }});">
                                     <button
                                         type="submit"
                                         class="table-icon-button"
-                                        title="Delete record"
-                                        aria-label="Delete record {{ row.id }}"
+                                        title="{{ t('Delete record') }}"
+                                        aria-label="{{ t('Delete record') }} {{ row.id }}"
                                     >
                                         <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                     </button>
@@ -165,7 +165,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ (3 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">No records yet.</td>
+                            <td colspan="{{ (3 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -179,7 +179,7 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>{{ section.edit_title if section.supports_editing and edit_row else section.create_title }}</h2>
+                    <h2>{{ t(section.edit_title if section.supports_editing and edit_row else section.create_title) }}</h2>
                 </div>
             </div>
             {% if can_edit %}
@@ -190,10 +190,10 @@
                 {% for field in section.fields %}
                 {% if section.slug == 'objects' and field.name == 'latitude' %}
                 <label class="full">
-                    <span>Get location</span>
+                    <span>{{ t("Get location") }}</span>
                     <button type="button" class="button button-secondary location-picker-button" id="objects-open-map-picker">
                         <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
-                        <span>Get location</span>
+                        <span>{{ t("Get location") }}</span>
                     </button>
                 </label>
                 {% endif %}
@@ -203,33 +203,33 @@
                     {% if section.slug == 'bulletins' and field.name == 'group_name' %}id="bulletins-group-row"{% endif %}
                 >
                     {% if field.type == 'textarea' %}
-                    <span>{{ field.label }}</span>
-                    <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
+                    <span>{{ t(field.label) }}</span>
+                    <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else '' }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if edit_row and edit_row[field.name] %}checked{% endif %}>
-                    <span>{{ field.label }}</span>
+                    <span>{{ t(field.label) }}</span>
                     {% elif field.type == 'select' %}
-                    <span>{{ field.label }}</span>
+                    <span>{{ t(field.label) }}</span>
                     <select name="{{ field.name }}" {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}{% if section.slug == 'bulletins' and field.name == 'message_kind' %} id="bulletins-message-kind"{% endif %} {% if field.required %}required{% endif %}>
                         {% for option in field.options %}
                         <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name]|string == option.value|string) or (not edit_row and ((field.default is defined and field.default|string == option.value|string) or (field.default is not defined and loop.first))) %}selected{% endif %}>
-                            {{ option.label }}
+                            {{ t(option.label) }}
                         </option>
                         {% endfor %}
                     </select>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'symbol_code' %}
-                    <span>{{ field.label }}</span>
+                    <span>{{ t(field.label) }}</span>
                     <div class="station-symbol-picker">
                         <input type="hidden" name="symbol_code" id="{{ section.slug }}-symbol-code" value="{{ edit_row[field.name] if edit_row and edit_row[field.name] else field.placeholder or '>' }}">
                         <div class="station-symbol-dropdown" id="{{ section.slug }}-symbol-dropdown">
                             <button type="button" class="station-symbol-trigger" id="{{ section.slug }}-symbol-trigger" aria-haspopup="listbox" aria-expanded="false">
                                 <span class="station-symbol-trigger-copy">
                                     <img id="{{ section.slug }}-symbol-trigger-image" src="{{ request.scope.root_path }}/static/icons/verG/x.gif" alt="">
-                                    <span id="{{ section.slug }}-symbol-trigger-text">Select symbol</span>
+                                    <span id="{{ section.slug }}-symbol-trigger-text">{{ t("Select symbol") }}</span>
                                 </span>
                                 <span class="station-symbol-trigger-caret">▾</span>
                             </button>
-                            <div class="station-symbol-menu" id="{{ section.slug }}-symbol-menu" role="listbox" tabindex="-1" aria-label="Symbol code">
+                            <div class="station-symbol-menu" id="{{ section.slug }}-symbol-menu" role="listbox" tabindex="-1" aria-label="{{ t('Symbol Code') }}">
                                 {% for option in symbol_code_options %}
                                 <button
                                     type="button"
@@ -249,18 +249,18 @@
                         </div>
                     </div>
                     {% else %}
-                    <span>{{ field.label }}</span>
+                    <span>{{ t(field.label) }}</span>
                     <input
                         type="{{ field.type }}"
                         name="{{ field.name }}"
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
                         value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else '' }}"
-                        {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ field.placeholder }}"{% endif %}
+                        {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
                     >
                     {% if section.slug == 'items' and field.name == 'longitude' %}
                     <button type="button" class="button button-secondary location-picker-button" id="{{ section.slug }}-open-map-picker">
                         <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
-                        <span>Get location</span>
+                        <span>{{ t("Get location") }}</span>
                     </button>
                     {% endif %}
                     {% endif %}
@@ -279,7 +279,7 @@
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
-                        <small class="field-validation-error" id="bulletins-message-error" hidden>Only printable ASCII is allowed. National characters are blocked.</small>
+                        <small class="field-validation-error" id="bulletins-message-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
                     <small class="muted">Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.</small>
@@ -289,11 +289,11 @@
                 </label>
                 {% endfor %}
                 <div class="form-actions">
-                    <button type="submit" class="button">Save</button>
+                    <button type="submit" class="button">{{ t("Save") }}</button>
                     {% if section.supports_editing and edit_row %}
-                    <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">Cancel</a>
+                    <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% if section.supports_delete %}
-                    <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post" onclick="return confirm('Delete this record?');">Delete</button>
+                    <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post" onclick="return confirm({{ t('Delete this record?')|tojson }});">{{ t("Delete") }}</button>
                     {% endif %}
                     {% endif %}
                 </div>
@@ -313,8 +313,8 @@
                     data-default-zoom="{{ map_picker_config.default_zoom }}"
                 >
                     <div class="location-picker-header">
-                        <h3 id="{{ section.slug }}-location-picker-title">Get location</h3>
-                        <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="Close location picker" title="Close location picker">
+                        <h3 id="{{ section.slug }}-location-picker-title">{{ t("Get location") }}</h3>
+                        <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="{{ t('Close location picker') }}" title="{{ t('Close location picker') }}">
                             <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
                         </button>
                     </div>
@@ -325,15 +325,15 @@
                     <div class="location-picker-footer">
                         <div class="muted small" id="{{ section.slug }}-location-picker-center">--</div>
                         <div class="location-picker-actions">
-                            <button type="button" class="button button-secondary" data-close-location-picker>Cancel</button>
-                            <button type="button" class="button" id="{{ section.slug }}-apply-location-picker">Get coordinates</button>
+                            <button type="button" class="button button-secondary" data-close-location-picker>{{ t("Cancel") }}</button>
+                            <button type="button" class="button" id="{{ section.slug }}-apply-location-picker">{{ t("Get coordinates") }}</button>
                         </div>
                     </div>
                 </div>
             </div>
             {% endif %}
             {% else %}
-            <p class="muted">Your role is read-only for this section.</p>
+            <p class="muted">{{ t("Your role is read-only for this section.") }}</p>
             {% endif %}
         </div>
     </div>

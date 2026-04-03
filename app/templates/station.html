@@ -9,42 +9,42 @@
     <div class="panel-body">
         {% set selected_beacon_interface_id = station.beacon_interface_id|string if station.beacon_interface_id is not none else '' %}
         {% if flash %}
-        <div class="alert {% if flash_success is not defined or flash_success %}success{% endif %}">{{ flash }}</div>
+        <div class="alert {% if flash_success is not defined or flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
         {% if can_edit %}
         <form method="post" class="form-grid" id="station-form">
             <div class="full station-settings-group stack-sm">
                 <div class="station-settings-group-header">
-                    <h2>Position Beacon</h2>
-                    <p class="section-lead">Configure the APRS position beacon. Beacon comment stays part of the position frame.</p>
+                    <h2>{{ t("Position Beacon") }}</h2>
+                    <p class="section-lead">{{ t("Configure the APRS position beacon. Beacon comment stays part of the position frame.") }}</p>
                 </div>
                 <div class="form-grid station-settings-subgrid">
             <label>
-                <span>Callsign</span>
+                <span>{{ t("Callsign") }}</span>
                 <input type="text" name="callsign" value="{{ station.callsign }}">
             </label>
             <label>
-                <span>SSID</span>
+                <span>{{ t("SSID") }}</span>
                 <select name="ssid">
                     {% for option in ssid_options %}
-                    <option value="{{ option.value }}" {% if station.ssid == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    <option value="{{ option.value }}" {% if station.ssid == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
             </label>
             <label>
-                <span>Interface</span>
+                <span>{{ t("Interface") }}</span>
                 <select name="beacon_interface_id">
                     {% for option in interface_options %}
-                    <option value="{{ option.value }}" {% if selected_beacon_interface_id == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    <option value="{{ option.value }}" {% if selected_beacon_interface_id == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
             </label>
             <label>
-                <span>Beacon Comment</span>
+                <span>{{ t("Beacon Comment") }}</span>
                 <input type="text" name="beacon_comment" value="{{ station.beacon_comment }}">
             </label>
             <label>
-                <span>Beacon at every</span>
+                <span>{{ t("Beacon at every") }}</span>
                 <select name="beacon_interval_minutes">
                     {% for option in beacon_interval_options %}
                     <option value="{{ option.value }}" {% if station.beacon_interval_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
@@ -52,27 +52,27 @@
                 </select>
             </label>
             <label>
-                <span>Beacon Path</span>
+                <span>{{ t("Beacon Path") }}</span>
                 <input type="text" name="beacon_path" value="{{ station.beacon_path }}" placeholder="WIDE2-2">
             </label>
                 </div>
             </div>
             <div class="full station-settings-group stack-sm">
                 <div class="station-settings-group-header">
-                    <h2>APRS Status</h2>
-                    <p class="section-lead">Status is sent as a separate APRS frame with data type identifier <code>&gt;</code>, independent from the position beacon.</p>
+                    <h2>{{ t("APRS Status") }}</h2>
+                    <p class="section-lead">{{ t("Status is sent as a separate APRS frame with data type identifier <code>&gt;</code>, independent from the position beacon.")|safe }}</p>
                 </div>
                 <div class="form-grid station-settings-subgrid">
                     <label class="full checkbox-row">
                         <input type="checkbox" name="status_enabled" value="1" {% if station.status_enabled %}checked{% endif %}>
-                        <span>Enable periodic APRS Status transmission</span>
+                        <span>{{ t("Enable periodic APRS Status transmission") }}</span>
                     </label>
                     <label>
-                        <span>Status Text</span>
-                        <input type="text" name="status_text" value="{{ station.status_text or '' }}" placeholder="Station online">
+                        <span>{{ t("Status Text") }}</span>
+                        <input type="text" name="status_text" value="{{ station.status_text or '' }}" placeholder="{{ t('Station online') }}">
                     </label>
                     <label>
-                        <span>Status at every</span>
+                        <span>{{ t("APRS Status at every") }}</span>
                         <select name="status_interval_minutes">
                             {% for option in beacon_interval_options %}
                             <option value="{{ option.value }}" {% if station.status_interval_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
@@ -82,41 +82,41 @@
                 </div>
             </div>
             <label class="full">
-                <span>Get location</span>
+                <span>{{ t("Get location") }}</span>
                 <button type="button" class="button button-secondary location-picker-button" id="station-open-map-picker">
                     <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
-                    <span>Get location</span>
+                    <span>{{ t("Get location") }}</span>
                 </button>
             </label>
             <label>
-                <span>Latitude</span>
+                <span>{{ t("Latitude") }}</span>
                 <input type="text" name="latitude" value="{{ station.latitude }}">
             </label>
             <label>
-                <span>Longitude</span>
+                <span>{{ t("Longitude") }}</span>
                 <input type="text" name="longitude" value="{{ station.longitude }}">
             </label>
             <label>
-                <span>Symbol Table</span>
+                <span>{{ t("Symbol Table") }}</span>
                 <select name="symbol_table" id="station-symbol-table">
                     {% for option in symbol_table_options %}
-                    <option value="{{ option.value }}" {% if station.symbol_table == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    <option value="{{ option.value }}" {% if station.symbol_table == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
             </label>
             <label class="station-symbol-field">
-                <span>Symbol Code</span>
+                <span>{{ t("Symbol Code") }}</span>
                 <div class="station-symbol-picker">
                     <input type="hidden" name="symbol_code" id="station-symbol-code" value="{{ station.symbol_code or '>' }}">
                     <div class="station-symbol-dropdown" id="station-symbol-dropdown">
                         <button type="button" class="station-symbol-trigger" id="station-symbol-trigger" aria-haspopup="listbox" aria-expanded="false">
                             <span class="station-symbol-trigger-copy">
                                 <img id="station-symbol-trigger-image" src="{{ request.scope.root_path }}/static/icons/verG/x.gif" alt="">
-                                <span id="station-symbol-trigger-text">Select symbol</span>
+                                <span id="station-symbol-trigger-text">{{ t("Select symbol") }}</span>
                             </span>
                             <span class="station-symbol-trigger-caret">▾</span>
                         </button>
-                        <div class="station-symbol-menu" id="station-symbol-menu" role="listbox" tabindex="-1" aria-label="Symbol code">
+                        <div class="station-symbol-menu" id="station-symbol-menu" role="listbox" tabindex="-1" aria-label="{{ t('Symbol Code') }}">
                             {% for option in symbol_code_options %}
                             <button
                                 type="button"
@@ -137,19 +137,19 @@
                 </div>
             </label>
             <label>
-                <span>Jednostki</span>
+                <span>{{ t("Units") }}</span>
                 <select name="default_units">
-                    <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>Metryczne</option>
-                    <option value="imperial" {% if station.default_units == "imperial" %}selected{% endif %}>Imperialne</option>
+                    <option value="metric" {% if station.default_units != "imperial" %}selected{% endif %}>{{ t("Metric") }}</option>
+                    <option value="imperial" {% if station.default_units == "imperial" %}selected{% endif %}>{{ t("Imperial") }}</option>
                 </select>
             </label>
             <label class="checkbox-row">
                 <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
-                <span>Enable automatic beacon transmission every selected interval</span>
+                <span>{{ t("Enable automatic beacon transmission every selected interval") }}</span>
             </label>
             <div class="form-actions">
-                <button type="submit" class="button">Save Station Settings</button>
-                <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/station/send-beacon">Send beacon</button>
+                <button type="submit" class="button">{{ t("Save Station Settings") }}</button>
+                <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/station/send-beacon">{{ t("Send beacon") }}</button>
             </div>
         </form>
         <div class="location-picker-modal" id="station-location-picker" hidden>
@@ -166,8 +166,8 @@
                 data-default-zoom="{{ map_picker_config.default_zoom }}"
             >
                 <div class="location-picker-header">
-                    <h3 id="station-location-picker-title">Get location</h3>
-                    <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="Close location picker" title="Close location picker">
+                    <h3 id="station-location-picker-title">{{ t("Get location") }}</h3>
+                    <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="{{ t('Close location picker') }}" title="{{ t('Close location picker') }}">
                         <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
                     </button>
                 </div>
@@ -176,30 +176,30 @@
                     <div class="location-picker-crosshair" aria-hidden="true"></div>
                 </div>
                 <div class="location-picker-footer">
-                    <div class="muted small" id="station-location-picker-center">--</div>
-                    <div class="location-picker-actions">
-                        <button type="button" class="button button-secondary" data-close-location-picker>Cancel</button>
-                        <button type="button" class="button" id="station-apply-location-picker">Get coordinates</button>
+                        <div class="muted small" id="station-location-picker-center">--</div>
+                        <div class="location-picker-actions">
+                        <button type="button" class="button button-secondary" data-close-location-picker>{{ t("Cancel") }}</button>
+                        <button type="button" class="button" id="station-apply-location-picker">{{ t("Get coordinates") }}</button>
                     </div>
                 </div>
             </div>
         </div>
         {% else %}
         <dl class="details-grid">
-            <dt>Callsign</dt><dd>{{ station.callsign }}</dd>
-            <dt>SSID</dt><dd>{{ station.ssid }}</dd>
-            <dt>Interface</dt><dd>{% for option in interface_options %}{% if option.value == selected_beacon_interface_id %}{{ option.label }}{% endif %}{% endfor %}</dd>
-            <dt>Beacon Comment</dt><dd>{{ station.beacon_comment }}</dd>
-            <dt>Beacon at every</dt><dd>{{ station.beacon_interval_minutes }}m</dd>
-            <dt>Beacon path</dt><dd>{{ station.beacon_path }}</dd>
-            <dt>APRS Status enabled</dt><dd>{{ station.status_enabled }}</dd>
-            <dt>APRS Status text</dt><dd>{{ station.status_text }}</dd>
-            <dt>APRS Status at every</dt><dd>{{ station.status_interval_minutes }}m</dd>
-            <dt>Latitude</dt><dd>{{ station.latitude }}</dd>
-            <dt>Longitude</dt><dd>{{ station.longitude }}</dd>
-            <dt>Symbol</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
-            <dt>Jednostki</dt><dd>{{ "Imperialne" if station.default_units == "imperial" else "Metryczne" }}</dd>
-            <dt>TX Enabled</dt><dd>{{ station.tx_enabled }}</dd>
+            <dt>{{ t("Callsign") }}</dt><dd>{{ station.callsign }}</dd>
+            <dt>{{ t("SSID") }}</dt><dd>{{ station.ssid }}</dd>
+            <dt>{{ t("Interface") }}</dt><dd>{% for option in interface_options %}{% if option.value == selected_beacon_interface_id %}{{ t(option.label) }}{% endif %}{% endfor %}</dd>
+            <dt>{{ t("Beacon Comment") }}</dt><dd>{{ station.beacon_comment }}</dd>
+            <dt>{{ t("Beacon at every") }}</dt><dd>{{ station.beacon_interval_minutes }}m</dd>
+            <dt>{{ t("Beacon path") }}</dt><dd>{{ station.beacon_path }}</dd>
+            <dt>{{ t("APRS Status enabled") }}</dt><dd>{{ station.status_enabled }}</dd>
+            <dt>{{ t("APRS Status text") }}</dt><dd>{{ station.status_text }}</dd>
+            <dt>{{ t("APRS Status at every") }}</dt><dd>{{ station.status_interval_minutes }}m</dd>
+            <dt>{{ t("Latitude") }}</dt><dd>{{ station.latitude }}</dd>
+            <dt>{{ t("Longitude") }}</dt><dd>{{ station.longitude }}</dd>
+            <dt>{{ t("Symbol") }}</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
+            <dt>{{ t("Units") }}</dt><dd>{{ t("Imperial") if station.default_units == "imperial" else t("Metric") }}</dd>
+            <dt>{{ t("TX Enabled") }}</dt><dd>{{ station.tx_enabled }}</dd>
         </dl>
         {% endif %}
     </div>
@@ -209,31 +209,31 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>Station TX Log</h2>
-                <p class="section-lead">Recent beacon and APRS Status jobs with delivery state and transmitted frame preview.</p>
+                <h2>{{ t("Station TX Log") }}</h2>
+                <p class="section-lead">{{ t("Recent beacon and APRS Status jobs with delivery state and transmitted frame preview.") }}</p>
             </div>
         </div>
         <div class="table-wrap">
             <table class="data-table compact-table station-packets-table beacon-log-table">
                 <thead>
                     <tr>
-                        <th>Time</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Interface</th>
-                        <th>Attempts</th>
-                        <th>Error</th>
-                        <th>Frame</th>
+                        <th>{{ t("Time") }}</th>
+                        <th>{{ t("Type") }}</th>
+                        <th>{{ t("Status") }}</th>
+                        <th>{{ t("Interface") }}</th>
+                        <th>{{ t("Attempts") }}</th>
+                        <th>{{ t("Error") }}</th>
+                        <th>{{ t("Frame") }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in beacon_log_rows %}
                     <tr>
                         <td>{{ row.display_time.replace('T', ' ').replace('+00:00', ' UTC') if row.display_time else '-' }}</td>
-                        <td>{{ row.kind }}</td>
+                        <td>{{ t(row.kind) }}</td>
                         <td>
                             <span class="status-pill {% if row.status == 'sent' %}status-running{% elif row.status == 'failed' %}status-stopped{% else %}status-unknown{% endif %}">
-                                {{ row.status }}
+                                {{ t(row.status) }}
                             </span>
                         </td>
                         <td>{{ row.interface_name }}</td>
@@ -243,7 +243,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7">No station outbound jobs yet.</td>
+                        <td colspan="7">{{ t("No station outbound jobs yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import Request
 
 from app import get_version
+from app.i18n import get_app_language, get_supported_languages, get_translator
 
 
 PRIMARY_NAV = [
@@ -36,17 +37,26 @@ def build_template_context(
     active_nav: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
+    app_language = get_app_language()
+    translate = get_translator(app_language)
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
         if current_user and current_user.role in item["roles"]:
-            navigation.append(item)
+            translated_item = dict(item)
+            if not item.get("separator"):
+                translated_item["label"] = translate(item["label"])
+            navigation.append(translated_item)
 
     return {
         "request": request,
-        "page_title": page_title,
+        "page_title": translate(page_title),
+        "page_title_raw": page_title,
         "app_version": get_version(),
+        "app_language": app_language,
+        "app_languages": get_supported_languages(),
         "current_user": current_user,
         "active_nav": active_nav,
         "navigation": navigation,
+        "t": translate,
         **extra,
     }

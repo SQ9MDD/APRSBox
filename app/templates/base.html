@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app_language }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,7 +22,7 @@
             </div>
             <div>
                 <strong>APRSBox</strong>
-                <div class="muted">Native APRS console</div>
+                <div class="muted">{{ t("Native APRS console") }}</div>
             </div>
         </div>
         <div class="sidebar-user-panel">
@@ -43,8 +43,8 @@
                     type="button"
                     class="sidebar-action-button"
                     id="theme-toggle"
-                    aria-label="Switch theme"
-                    title="Switch theme"
+                    aria-label="{{ t('Switch theme') }}"
+                    title="{{ t('Switch theme') }}"
                 >
                     <img
                         id="theme-toggle-icon"
@@ -58,8 +58,8 @@
                     <button
                         type="submit"
                         class="sidebar-action-button sidebar-logout"
-                        aria-label="Logout"
-                        title="Logout"
+                        aria-label="{{ t('Logout') }}"
+                        title="{{ t('Logout') }}"
                     >
                         <img src="{{ request.scope.root_path }}/static/icons/logout-variant.svg" alt="">
                     </button>
@@ -79,8 +79,8 @@
             {% endfor %}
         </nav>
         <div class="sidebar-footer">
-            <div class="muted">Version {{ app_version }}</div>
-            <div class="muted">Copyright SQ9MDD</div>
+            <div class="muted">{{ t("Version") }} {{ app_version }}</div>
+            <div class="muted">{{ t("Copyright SQ9MDD") }}</div>
         </div>
     </aside>
     {% endif %}
@@ -92,15 +92,19 @@
     </div>
     <script>
         (() => {
+            const labels = {
+                switchToDay: {{ t("Switch to day mode")|tojson }},
+                switchToNight: {{ t("Switch to night mode")|tojson }}
+            };
             const root = document.documentElement;
             const button = document.getElementById("theme-toggle");
             const icon = document.getElementById("theme-toggle-icon");
             if (!button) return;
             const syncLabel = () => {
                 const isLight = root.getAttribute("data-theme") === "light";
-                const nextMode = isLight ? "night" : "day";
-                button.setAttribute("aria-label", `Switch to ${nextMode} mode`);
-                button.setAttribute("title", `Switch to ${nextMode} mode`);
+                const nextLabel = isLight ? labels.switchToNight : labels.switchToDay;
+                button.setAttribute("aria-label", nextLabel);
+                button.setAttribute("title", nextLabel);
                 if (icon) {
                     icon.src = isLight ? icon.dataset.nightIcon : icon.dataset.dayIcon;
                 }

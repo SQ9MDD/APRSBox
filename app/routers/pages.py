@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
+from app.db import set_app_setting
+from app.i18n import get_app_language, normalize_language, SUPPORTED_LANGUAGE_CODES
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
@@ -545,7 +547,10 @@ def settings_page(
         gui_update_branch=request.app.state.settings.gui_update_branch,
         latest_version_result=None,
         flash=None,
+        flash_success=True,
         can_manage_updates=current_user.role in {"admin", "operator"},
+        can_manage_language=current_user.role in {"admin", "operator"},
+        current_language=get_app_language(),
     )
     return templates.TemplateResponse("settings.html", context)
 
@@ -568,7 +573,10 @@ def settings_check_gui_version(
         gui_update_branch=request.app.state.settings.gui_update_branch,
         latest_version_result=result,
         flash=flash,
+        flash_success=False if flash else True,
         can_manage_updates=current_user.role in {"admin", "operator"},
+        can_manage_language=current_user.role in {"admin", "operator"},
+        current_language=get_app_language(),
     )
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if flash else 200)
 
@@ -595,9 +603,57 @@ def settings_update_gui(
         gui_update_branch=request.app.state.settings.gui_update_branch,
         latest_version_result=None,
         flash=flash,
+        flash_success=bool(result.get("ok")),
         can_manage_updates=True,
+        can_manage_language=True,
+        current_language=get_app_language(),
     )
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/language")
+def settings_update_language(
+    request: Request,
+    language: str = Form(...),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    selected_language = normalize_language(language)
+    if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != str(language or "").strip().lower():
+        context = build_template_context(
+            request,
+            page_title="Settings",
+            current_user=current_user,
+            active_nav="settings",
+            current_gui_version=current_gui_version(),
+            gui_update_url=request.app.state.settings.gui_update_url,
+            gui_update_branch=request.app.state.settings.gui_update_branch,
+            latest_version_result=None,
+            flash="Unsupported language selection.",
+            flash_success=False,
+            can_manage_updates=True,
+            can_manage_language=True,
+            current_language=get_app_language(),
+        )
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    set_app_setting("app_language", selected_language)
+    context = build_template_context(
+        request,
+        page_title="Settings",
+        current_user=current_user,
+        active_nav="settings",
+        current_gui_version=current_gui_version(),
+        gui_update_url=request.app.state.settings.gui_update_url,
+        gui_update_branch=request.app.state.settings.gui_update_branch,
+        latest_version_result=None,
+        flash="GUI language updated.",
+        flash_success=True,
+        can_manage_updates=True,
+        can_manage_language=True,
+        current_language=selected_language,
+    )
+    return templates.TemplateResponse("settings.html", context)
 
 
 @router.post("/settings/servers")

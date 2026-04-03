@@ -5,13 +5,45 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>GUI Update</h2>
-                <p class="section-lead">Check version and, when a newer release is available, update the installed GUI from GitHub.</p>
+                <h2>{{ t("Application Language") }}</h2>
+                <p class="section-lead">{{ t("Use the control below to switch the interface language. This setting applies globally to the installed GUI.") }}</p>
             </div>
         </div>
         {% if flash %}
-        <div class="alert">{{ flash }}</div>
+        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
+        {% if can_manage_language %}
+        <form method="post" action="{{ request.scope.root_path }}/settings/language" class="form-grid">
+            <label>
+                <span>{{ t("Language") }}</span>
+                <select name="language">
+                    {% for option in app_languages %}
+                    <option value="{{ option.code }}" {% if current_language == option.code %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button">{{ t("Save Language") }}</button>
+            </div>
+        </form>
+        {% else %}
+        <dl class="details-grid">
+            <dt>{{ t("Current language") }}</dt>
+            <dd><code>{{ current_language }}</code></dd>
+        </dl>
+        <p class="muted">{{ t("Your role can view the selected language but cannot change it.") }}</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("GUI Update") }}</h2>
+                <p class="section-lead">{{ t("Check version and, when a newer release is available, update the installed GUI from GitHub.") }}</p>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -20,19 +52,19 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Installed GUI</h2>
+                    <h2>{{ t("Installed GUI") }}</h2>
                 </div>
             </div>
             <dl class="details-grid">
-                <dt>Current version</dt>
+                <dt>{{ t("Current version") }}</dt>
                 <dd><code>{{ current_gui_version }}</code></dd>
-                <dt>Repository</dt>
+                <dt>{{ t("Repository") }}</dt>
                 <dd><code>{{ gui_update_url }}</code></dd>
-                <dt>Branch</dt>
+                <dt>{{ t("Branch") }}</dt>
                 <dd><code>{{ gui_update_branch }}</code></dd>
             </dl>
             <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack">
-                <button type="submit" class="button">Check version</button>
+                <button type="submit" class="button">{{ t("Check version") }}</button>
             </form>
         </div>
     </div>
@@ -41,16 +73,16 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Update GUI</h2>
+                    <h2>{{ t("Update GUI") }}</h2>
                 </div>
             </div>
             {% if can_manage_updates %}
-            <p class="muted">This action downloads all GUI files from GitHub, replaces installed files, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.</p>
-            <form method="post" action="{{ request.scope.root_path }}/settings/update-gui" class="form-stack" onsubmit="return confirm('Start GUI update now?');">
-                <button type="submit" class="button">Update</button>
+            <p class="muted">{{ t("This action downloads all GUI files from GitHub, replaces installed files, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
+            <form method="post" action="{{ request.scope.root_path }}/settings/update-gui" class="form-stack" onsubmit="return confirm({{ t('Start GUI update now?')|tojson }});">
+                <button type="submit" class="button">{{ t("Update") }}</button>
             </form>
             {% else %}
-            <p class="muted">Your role can view GUI version information but cannot start updates.</p>
+            <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
             {% endif %}
         </div>
     </div>
@@ -61,17 +93,17 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>Latest GUI Version</h2>
+                <h2>{{ t("Latest GUI Version") }}</h2>
             </div>
         </div>
         <dl class="details-grid">
-            <dt>Installed</dt>
+            <dt>{{ t("Installed") }}</dt>
             <dd><code>{{ latest_version_result.current_version }}</code></dd>
-            <dt>GitHub</dt>
+            <dt>{{ t("GitHub") }}</dt>
             <dd><code>{{ latest_version_result.latest_version }}</code></dd>
-            <dt>Status</dt>
-            <dd>{{ "Up to date" if latest_version_result.up_to_date else "Update available" }}</dd>
-            <dt>Source</dt>
+            <dt>{{ t("Status") }}</dt>
+            <dd>{{ t("Up to date") if latest_version_result.up_to_date else t("Update available") }}</dd>
+            <dt>{{ t("Source") }}</dt>
             <dd><code>{{ latest_version_result.source }}</code></dd>
         </dl>
     </div>
