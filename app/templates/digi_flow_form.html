@@ -5,13 +5,13 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ "Edit DIGI Flow" if flow_id else "New DIGI Flow" }}</h2>
-                <p class="section-lead">Define one source, zero or more filter steps and one target. Stage 2 executes active RF flows through a small runtime skeleton with per-flow debug logging.</p>
+                <h2>{{ t("Edit DIGI Flow") if flow_id else t("New DIGI Flow") }}</h2>
+                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. Stage 2 executes active RF flows through a small runtime skeleton with per-flow debug logging.") }}</p>
             </div>
         </div>
-        <div class="notice">Source must be the first step, target must be the last step, the source+target pair must be unique, and RF/APRS-IS TX targets require an enabled Path Rule step.</div>
+        <div class="notice">{{ t("Source must be the first step, target must be the last step, the source+target pair must be unique, and RF/APRS-IS TX targets require an enabled Path Rule step.") }}</div>
         {% if flash %}
-        <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
+        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
     </div>
 </section>
@@ -26,16 +26,16 @@
         >
             <div class="form-grid">
                 <label>
-                    <span>Name</span>
+                    <span>{{ t("Name") }}</span>
                     <input type="text" name="name" value="{{ form_data.name }}" required>
                 </label>
                 <label>
-                    <span>Description</span>
+                    <span>{{ t("Description") }}</span>
                     <input type="text" name="description" value="{{ form_data.description }}">
                 </label>
                 <label class="checkbox-row">
                     <input type="checkbox" name="enabled" value="1" {% if form_data.enabled %}checked{% endif %}>
-                    <span>Flow is enabled</span>
+                    <span>{{ t("Flow is enabled") }}</span>
                 </label>
             </div>
 
@@ -46,17 +46,17 @@
 
             <section class="digi-flow-endpoints">
                 <div class="digi-flow-endpoint-card">
-                    <h3>Source</h3>
+                    <h3>{{ t("Source") }}</h3>
                     <label>
-                        <span>Source Interface</span>
+                        <span>{{ t("Source Interface") }}</span>
                         <select name="source_selector" id="flow-source-selector" required></select>
                     </label>
                 </div>
 
                 <div class="digi-flow-endpoint-card">
-                    <h3>Target</h3>
+                    <h3>{{ t("Target") }}</h3>
                     <label>
-                        <span>Target Interface</span>
+                        <span>{{ t("Target Interface") }}</span>
                         <select name="target_selector" id="flow-target-selector" required></select>
                     </label>
                 </div>
@@ -66,8 +66,8 @@
                 <aside class="digi-flow-palette">
                     <div class="panel-header">
                         <div class="panel-header-copy">
-                            <h2>Available filter and rules</h2>
-                            <p class="section-lead">Click once to insert a step before the target.</p>
+                            <h2>{{ t("Available filter and rules") }}</h2>
+                            <p class="section-lead">{{ t("Click once to insert a step before the target.") }}</p>
                         </div>
                     </div>
                     <div class="digi-step-palette" id="digi-step-palette">
@@ -81,7 +81,7 @@
                             <img
                                 class="digi-runtime-icon"
                                 src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg"
-                                alt="Implemented in runtime"
+                                alt="{{ t('Implemented in runtime') }}"
                             >
                             {% endif %}
                             <span class="digi-step-badge">{{ type_meta[step_type].badge }}</span>
@@ -97,8 +97,8 @@
                 <div class="digi-flow-steps-section">
                     <div class="panel-header">
                         <div class="panel-header-copy">
-                            <h2>Current flow steps</h2>
-                            <p class="section-lead">Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.</p>
+                            <h2>{{ t("Current flow steps") }}</h2>
+                            <p class="section-lead">{{ t("Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.") }}</p>
                         </div>
                     </div>
                     <input type="hidden" name="steps_json" id="digi-steps-json">
@@ -107,9 +107,9 @@
             </section>
 
             <div class="form-actions">
-                <button type="submit" class="button">{{ "Save Changes" if flow_id else "Create Flow" }}</button>
+                <button type="submit" class="button">{{ t("Save Changes") if flow_id else t("Create Flow") }}</button>
                 {% if flow_id %}
-                <a href="{{ request.scope.root_path }}/digi-flows/new?duplicate={{ flow_id }}" class="button button-secondary">Duplicate into draft</a>
+                <a href="{{ request.scope.root_path }}/digi-flows/new?duplicate={{ flow_id }}" class="button button-secondary">{{ t("Duplicate into draft") }}</a>
                 {% endif %}
             </div>
         </form>
@@ -121,11 +121,11 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>Recent Packet Executions</h2>
-                <p class="section-lead">Each block below shows one packet running through this flow from source to final outcome. The list is limited to the latest 10 frames.</p>
+                <h2>{{ t("Recent Packet Executions") }}</h2>
+                <p class="section-lead">{{ t("Each block below shows one packet running through this flow from source to final outcome. The list is limited to the latest 10 frames.") }}</p>
             </div>
             <div class="form-actions">
-                <button type="button" class="button button-secondary" id="digi-flow-executions-toggle">Freeze</button>
+                <button type="button" class="button button-secondary" id="digi-flow-executions-toggle">{{ t("Freeze") }}</button>
             </div>
         </div>
         <div class="digi-execution-list" id="digi-flow-executions">
@@ -140,16 +140,16 @@
                 <div class="digi-execution-card-header">
                     <div class="digi-execution-card-copy">
                         <div class="digi-execution-card-topline">
-                            <span class="status-pill {{ execution_badge_class }}">{{ execution.final_result }}</span>
+                            <span class="status-pill {{ execution_badge_class }}">{{ t(execution.final_result) }}</span>
                             <span class="digi-execution-time">{{ execution.display_created_at or execution.created_at }}</span>
-                            <span class="muted">Flow {{ execution.step_count }} steps</span>
+                            <span class="muted">{{ tf("Flow {count} steps", {"count": execution.step_count}) }}</span>
                         </div>
                         <div class="digi-execution-packets">
                             <div class="digi-execution-packet-row">
                                 <img
                                     class="digi-execution-packet-icon"
                                     src="{{ request.scope.root_path }}/static/icons/login.svg"
-                                    alt="Input packet"
+                                    alt="{{ t('Input packet') }}"
                                 >
                                 <h3 class="digi-execution-packet">{{ execution.raw_packet or "-" }}</h3>
                             </div>
@@ -157,16 +157,16 @@
                                 <img
                                     class="digi-execution-packet-icon"
                                     src="{{ request.scope.root_path }}/static/icons/send-variant.svg"
-                                    alt="Output packet"
+                                    alt="{{ t('Output packet') }}"
                                 >
                                 <h3 class="digi-execution-packet">{{ execution.processed_packet or execution.raw_packet or "-" }}</h3>
                             </div>
                         </div>
                         <div class="digi-execution-meta">
-                            <span><strong>Source:</strong> <code>{{ execution.source_display or "-" }}</code></span>
+                            <span><strong>{{ t("Source:") }}</strong> <code>{{ execution.source_display or "-" }}</code></span>
                             <span><strong>UID:</strong> <code>{{ execution.frame_uid }}</code></span>
-                            <span><strong>Pipeline:</strong> <code>{{ execution.step_path }}</code></span>
-                            <span><strong>Finished:</strong> {% if execution.final_step_number %}step {{ execution.final_step_number }} {{ execution.final_step_title or "" }}{% else %}-{% endif %}</span>
+                            <span><strong>{{ t("Pipeline:") }}</strong> <code>{{ execution.step_path }}</code></span>
+                            <span><strong>{{ t("Finished:") }}</strong> {% if execution.final_step_number %}{{ t("step") }} {{ execution.final_step_number }} {{ execution.final_step_title or "" }}{% else %}-{% endif %}</span>
                         </div>
                         {% if execution.layout_changed %}
                         <div class="digi-execution-layout-note">{{ execution.layout_note or "" }}</div>
@@ -186,7 +186,7 @@
                         <div class="digi-execution-step-body">
                             <div class="digi-execution-step-heading">
                                 <strong>{{ step.title }}</strong>
-                                <span class="digi-execution-step-status {{ step_status_class }}">{{ step.status }}</span>
+                                <span class="digi-execution-step-status {{ step_status_class }}">{{ t(step.status) }}</span>
                             </div>
                             <div class="digi-execution-step-message">{{ step.description or "-" }}</div>
                         </div>
@@ -197,7 +197,7 @@
             {% endfor %}
         </div>
         <div class="empty-state muted" id="digi-flow-executions-empty" {% if flow_execution_summaries %}hidden{% endif %}>
-            No packet executions recorded for this flow yet.
+            {{ t("No packet executions recorded for this flow yet.") }}
         </div>
     </div>
 </section>
@@ -229,10 +229,85 @@
         const endpointOptions = {{ endpoint_options|tojson }};
         const filterTypes = {{ filter_step_types|tojson }};
         const rootPath = {{ request.scope.root_path|tojson }};
+        const i18n = Object.freeze({
+            notConfigured: {{ t("Not configured")|tojson }},
+            legacyMobilePosition: {{ t("legacy M (mobile position)")|tojson }},
+            legacyStationaryPosition: {{ t("legacy S (stationary position)")|tojson }},
+            legacyObject: {{ t("legacy O (object)")|tojson }},
+            legacyWeatherOnly: {{ t("legacy W (weather-only)")|tojson }},
+            rfPort: {{ t("RF port")|tojson }},
+            aprsisSource: {{ t("APRS-IS source")|tojson }},
+            window: {{ t("Window")|tojson }},
+            sec: {{ t("sec")|tojson }},
+            mode: {{ t("Mode")|tojson }},
+            paths: {{ t("paths")|tojson }},
+            callsigns: {{ t("callsigns")|tojson }},
+            packetGroups: {{ t("packet groups")|tojson }},
+            none: {{ t("none")|tojson }},
+            icons: {{ t("icons")|tojson }},
+            maxDistance: {{ t("Max distance")|tojson }},
+            rate: {{ t("Rate")|tojson }},
+            perCallsign: {{ t("Per callsign")|tojson }},
+            pktPerMin: {{ t("pkt/min")|tojson }},
+            rfTarget: {{ t("RF target")|tojson }},
+            aprsisTarget: {{ t("APRS-IS target")|tojson }},
+            dropPacket: {{ t("Drop packet")|tojson }},
+            tag: {{ t("Tag")|tojson }},
+            logPacket: {{ t("Log packet")|tojson }},
+            enabled: {{ t("Enabled")|tojson }},
+            collapseStep: {{ t("Collapse step")|tojson }},
+            expandStep: {{ t("Expand step")|tojson }},
+            moveStepUp: {{ t("Move step up")|tojson }},
+            moveStepDown: {{ t("Move step down")|tojson }},
+            deleteStep: {{ t("Delete step")|tojson }},
+            cardTitle: {{ t("Card Title")|tojson }},
+            minimumPathRuleRf: {{ t("Minimum Path Rule is required before an RF TX target.")|tojson }},
+            minimumPathRuleAprsis: {{ t("Minimum Path Rule is required before an APRS-IS TX target.")|tojson }},
+            flowSteps: {{ t("Flow {count} steps")|tojson }},
+            inputPacket: {{ t("Input packet")|tojson }},
+            outputPacket: {{ t("Output packet")|tojson }},
+            sourceLabel: {{ t("Source:")|tojson }},
+            pipelineLabel: {{ t("Pipeline:")|tojson }},
+            finishedLabel: {{ t("Finished:")|tojson }},
+            stepWord: {{ t("step")|tojson }},
+            failedRefreshExecutions: {{ t("Failed to refresh DIGI Flow execution summaries.")|tojson }},
+            freeze: {{ t("Freeze")|tojson }},
+            release: {{ t("Release")|tojson }},
+            rejectsTcpNogateRfonly: {{ t("Rejects TCP, NOGATE, RFONLY")|tojson }},
+            LOGGED: {{ t("LOGGED")|tojson }},
+            DROPPED: {{ t("DROPPED")|tojson }},
+            REJECTED: {{ t("REJECTED")|tojson }},
+            RUNNING: {{ t("RUNNING")|tojson }},
+            TX: {{ t("TX")|tojson }},
+            allow: {{ t("allow")|tojson }},
+            deny: {{ t("deny")|tojson }},
+            passed: {{ t("passed")|tojson }},
+            executed: {{ t("executed")|tojson }},
+            rejected: {{ t("rejected")|tojson }},
+        });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
+            receiver_rf: ["Receiver RF"],
+            receiver_aprsis: ["Receiver APRS-IS"],
+            filter_dupe: ["Duplicate Filter"],
             filter_path: ["Path Filter"],
+            filter_strict: ["Strict Filter"],
+            filter_digi: ["DIGI Filter"],
+            filter_callsign: ["Callsign Filter"],
+            filter_packet_type: ["Packet Type Filter"],
+            filter_icon: ["Icon Filter"],
+            filter_distance: ["Distance Filter"],
+            filter_rate_limit: ["Rate Limit Filter"],
+            filter_rate_limit_per_callsign: ["Rate Limit Per Callsign"],
+            tx_rf: ["TX RF"],
+            tx_aprsis: ["TX APRS-IS"],
+            action_drop: ["Action Drop"],
+            action_log: ["Log Only"],
         };
+
+        const formatText = (template, params = {}) => String(template || "").replace(/\{(\w+)\}/g, (match, key) => (
+            Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match
+        ));
 
         const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -269,40 +344,40 @@
                 return folded;
             }
             const upper = normalized.toUpperCase();
-            if (upper === "M") return "legacy M (mobile position)";
-            if (upper === "S") return "legacy S (stationary position)";
-            if (upper === "O") return "legacy O (object)";
-            if (upper === "W") return "legacy W (weather-only)";
+            if (upper === "M") return i18n.legacyMobilePosition;
+            if (upper === "S") return i18n.legacyStationaryPosition;
+            if (upper === "O") return i18n.legacyObject;
+            if (upper === "W") return i18n.legacyWeatherOnly;
             return normalized;
         };
 
         const stepSummary = (step) => {
             const config = step.config || {};
-            if (step.step_type === "receiver_rf") return `RF port: ${config.rf_port || "-"}`;
-            if (step.step_type === "receiver_aprsis") return `APRS-IS source: ${config.aprsis_source || "-"}`;
-            if (step.step_type === "filter_dupe") return `Window: ${config.window_sec || "-"} sec`;
+            if (step.step_type === "receiver_rf") return `${i18n.rfPort}: ${config.rf_port || "-"}`;
+            if (step.step_type === "receiver_aprsis") return `${i18n.aprsisSource}: ${config.aprsis_source || "-"}`;
+            if (step.step_type === "filter_dupe") return `${i18n.window}: ${config.window_sec || "-"} ${i18n.sec}`;
             if (step.step_type === "filter_path") {
                 const tracePaths = config.trace_paths || config.paths || [];
                 const noTracePaths = config.no_trace_paths || [];
-                return `Mode: ${config.mode || "allow"}, paths: ${tracePaths.length + noTracePaths.length}`;
+                return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.paths}: ${tracePaths.length + noTracePaths.length}`;
             }
-            if (step.step_type === "filter_strict") return "Rejects TCP, NOGATE, RFONLY";
-            if (step.step_type === "filter_callsign") return `Mode: ${config.mode || "allow"}, callsigns: ${(config.callsigns || []).length}`;
+            if (step.step_type === "filter_strict") return i18n.rejectsTcpNogateRfonly;
+            if (step.step_type === "filter_callsign") return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.callsigns}: ${(config.callsigns || []).length}`;
             if (step.step_type === "filter_packet_type") {
                 const labels = (config.packet_types || []).map(packetTypeValueLabel).filter(Boolean);
-                return `Mode: ${config.mode || "allow"}, packet groups: ${labels.join(", ") || "none"}`;
+                return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.packetGroups}: ${labels.join(", ") || i18n.none}`;
             }
-            if (step.step_type === "filter_icon") return `Mode: ${config.mode || "allow"}, icons: ${(config.icons || []).join(", ") || "none"}`;
-            if (step.step_type === "filter_distance") return `Max distance: ${config.max_km || "-"} km`;
-            if (step.step_type === "filter_rate_limit") return `Rate: ${config.packets_per_minute || "-"} pkt/min`;
-            if (step.step_type === "tx_rf") return `RF target: ${config.rf_target || "-"}`;
-            if (step.step_type === "tx_aprsis") return `APRS-IS target: ${config.aprsis_target || "-"}`;
-            if (step.step_type === "action_drop") return config.note || "Drop packet";
+            if (step.step_type === "filter_icon") return `${i18n.mode}: ${config.mode || i18n.allow}, ${i18n.icons}: ${(config.icons || []).join(", ") || i18n.none}`;
+            if (step.step_type === "filter_distance") return `${i18n.maxDistance}: ${config.max_km || "-"} km`;
+            if (step.step_type === "filter_rate_limit") return `${i18n.rate}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
+            if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
+            if (step.step_type === "tx_aprsis") return `${i18n.aprsisTarget}: ${config.aprsis_target || "-"}`;
+            if (step.step_type === "action_drop") return config.note || i18n.dropPacket;
             if (step.step_type === "action_log") {
                 const parts = [];
-                if (config.log_tag) parts.push(`Tag: ${config.log_tag}`);
+                if (config.log_tag) parts.push(`${i18n.tag}: ${config.log_tag}`);
                 if (config.note) parts.push(config.note);
-                return parts.join(" | ") || "Log packet";
+                return parts.join(" | ") || i18n.logPacket;
             }
             return "";
         };
@@ -348,7 +423,7 @@
             if (!options.length) {
                 const optionElement = document.createElement("option");
                 optionElement.value = "";
-                optionElement.textContent = "Not configured";
+                optionElement.textContent = i18n.notConfigured;
                 selectElement.appendChild(optionElement);
                 selectElement.value = "";
                 return;
@@ -408,7 +483,7 @@
             const wrapper = document.createElement("label");
             wrapper.className = field.type === "textarea" ? "full" : "";
             const title = document.createElement("span");
-            title.textContent = field.label;
+                title.textContent = field.label;
             wrapper.appendChild(title);
 
             const appendFieldHelp = () => {
@@ -438,7 +513,7 @@
                 for (const optionValue of field.options || []) {
                     const option = document.createElement("option");
                     option.value = optionValue;
-                    option.textContent = optionValue;
+                    option.textContent = optionValue === "allow" ? i18n.allow : (optionValue === "deny" ? i18n.deny : optionValue);
                     if (String(step.config[field.name] || "") === String(optionValue)) {
                         option.selected = true;
                     }
@@ -539,7 +614,7 @@
                     render();
                 });
                 const enabledLabel = document.createElement("span");
-                enabledLabel.textContent = "Enabled";
+                enabledLabel.textContent = i18n.enabled;
                 enabledRow.appendChild(enabledInput);
                 enabledRow.appendChild(enabledLabel);
                 actions.appendChild(enabledRow);
@@ -547,8 +622,8 @@
                 const toggleButton = document.createElement("button");
                 toggleButton.type = "button";
                 toggleButton.className = `table-icon-button digi-step-icon-button digi-step-toggle-button${step.__editing ? " is-open" : ""}`;
-                toggleButton.title = step.__editing ? "Collapse step" : "Expand step";
-                toggleButton.setAttribute("aria-label", step.__editing ? "Collapse step" : "Expand step");
+                toggleButton.title = step.__editing ? i18n.collapseStep : i18n.expandStep;
+                toggleButton.setAttribute("aria-label", step.__editing ? i18n.collapseStep : i18n.expandStep);
                 const toggleIcon = document.createElement("img");
                 toggleIcon.src = iconPath("chevron-down.svg");
                 toggleIcon.alt = "";
@@ -566,8 +641,8 @@
                 const moveUpButton = document.createElement("button");
                 moveUpButton.type = "button";
                 moveUpButton.className = "table-icon-button digi-step-icon-button";
-                moveUpButton.title = "Move step up";
-                moveUpButton.setAttribute("aria-label", "Move step up");
+                moveUpButton.title = i18n.moveStepUp;
+                moveUpButton.setAttribute("aria-label", i18n.moveStepUp);
                 moveUpButton.disabled = index <= 1;
                 const moveUpIcon = document.createElement("img");
                 moveUpIcon.src = iconPath("arrow-up.svg");
@@ -585,8 +660,8 @@
                 const moveDownButton = document.createElement("button");
                 moveDownButton.type = "button";
                 moveDownButton.className = "table-icon-button digi-step-icon-button";
-                moveDownButton.title = "Move step down";
-                moveDownButton.setAttribute("aria-label", "Move step down");
+                moveDownButton.title = i18n.moveStepDown;
+                moveDownButton.setAttribute("aria-label", i18n.moveStepDown);
                 moveDownButton.disabled = index >= steps.length - 2;
                 const moveDownIcon = document.createElement("img");
                 moveDownIcon.src = iconPath("arrow-down.svg");
@@ -604,8 +679,8 @@
                 const deleteButton = document.createElement("button");
                 deleteButton.type = "button";
                 deleteButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
-                deleteButton.title = "Delete step";
-                deleteButton.setAttribute("aria-label", "Delete step");
+                deleteButton.title = i18n.deleteStep;
+                deleteButton.setAttribute("aria-label", i18n.deleteStep);
                 deleteButton.disabled = stepCategory(step.step_type) !== "filter";
                 const deleteIcon = document.createElement("img");
                 deleteIcon.src = iconPath("delete-outline.svg");
@@ -628,7 +703,7 @@
 
                     const titleField = document.createElement("label");
                     const titleCaption = document.createElement("span");
-                    titleCaption.textContent = "Card Title";
+                    titleCaption.textContent = i18n.cardTitle;
                     const titleInput = document.createElement("input");
                     titleInput.type = "text";
                     titleInput.value = normalizedStepTitle(step);
@@ -665,8 +740,8 @@
                         const text = document.createElement("span");
                         text.className = "digi-step-warning-text";
                         text.textContent = steps[steps.length - 1]?.step_type === "tx_rf"
-                            ? "Minimum Path Rule is required before an RF TX target."
-                            : "Minimum Path Rule is required before an APRS-IS TX target.";
+                            ? i18n.minimumPathRuleRf
+                            : i18n.minimumPathRuleAprsis;
                         connector.appendChild(text);
                     } else {
                         connector.className = "digi-step-connector";
@@ -817,16 +892,16 @@
                     <div class="digi-execution-card-header">
                         <div class="digi-execution-card-copy">
                             <div class="digi-execution-card-topline">
-                                <span class="status-pill ${executionBadgeClass(execution.final_result)}">${escapeHtml(execution.final_result)}</span>
+                                <span class="status-pill ${executionBadgeClass(execution.final_result)}">${escapeHtml(i18n[execution.final_result] || execution.final_result)}</span>
                                 <span class="digi-execution-time">${formatTimestamp(execution.created_at)}</span>
-                                <span class="muted">Flow ${escapeHtml(execution.step_count)} steps</span>
+                                <span class="muted">${escapeHtml(formatText(i18n.flowSteps, { count: execution.step_count }))}</span>
                             </div>
                             <div class="digi-execution-packets">
                                 <div class="digi-execution-packet-row">
                                     <img
                                         class="digi-execution-packet-icon"
                                         src="${iconPath("login.svg")}"
-                                        alt="Input packet"
+                                        alt="${escapeHtml(i18n.inputPacket)}"
                                     >
                                     <h3 class="digi-execution-packet">${escapeHtml(execution.raw_packet || "-")}</h3>
                                 </div>
@@ -834,16 +909,16 @@
                                     <img
                                         class="digi-execution-packet-icon"
                                         src="${iconPath("send-variant.svg")}"
-                                        alt="Output packet"
+                                        alt="${escapeHtml(i18n.outputPacket)}"
                                     >
                                     <h3 class="digi-execution-packet">${escapeHtml(execution.processed_packet || execution.raw_packet || "-")}</h3>
                                 </div>
                             </div>
                             <div class="digi-execution-meta">
-                                <span><strong>Source:</strong> <code>${escapeHtml(execution.source_display || "-")}</code></span>
+                                <span><strong>${escapeHtml(i18n.sourceLabel)}</strong> <code>${escapeHtml(execution.source_display || "-")}</code></span>
                                 <span><strong>UID:</strong> <code>${escapeHtml(execution.frame_uid)}</code></span>
-                                <span><strong>Pipeline:</strong> <code>${escapeHtml(execution.step_path)}</code></span>
-                                <span><strong>Finished:</strong> ${execution.final_step_number ? `step ${escapeHtml(execution.final_step_number)} ${escapeHtml(execution.final_step_title || "")}` : "-"}</span>
+                                <span><strong>${escapeHtml(i18n.pipelineLabel)}</strong> <code>${escapeHtml(execution.step_path)}</code></span>
+                                <span><strong>${escapeHtml(i18n.finishedLabel)}</strong> ${execution.final_step_number ? `${escapeHtml(i18n.stepWord)} ${escapeHtml(execution.final_step_number)} ${escapeHtml(execution.final_step_title || "")}` : "-"}</span>
                             </div>
                             ${execution.layout_changed ? `<div class="digi-execution-layout-note">${escapeHtml(execution.layout_note || "")}</div>` : ""}
                         </div>
@@ -855,7 +930,7 @@
                                 <div class="digi-execution-step-body">
                                     <div class="digi-execution-step-heading">
                                         <strong>${escapeHtml(step.title)}</strong>
-                                        <span class="digi-execution-step-status ${stepStatusClass(step.status)}">${escapeHtml(step.status)}</span>
+                                        <span class="digi-execution-step-status ${stepStatusClass(step.status)}">${escapeHtml(i18n[step.status] || step.status)}</span>
                                     </div>
                                     <div class="digi-execution-step-message">${escapeHtml(step.description || "-")}</div>
                                 </div>
@@ -888,7 +963,7 @@
                 previousPayload = serialized;
                 renderExecutions(payload.executions || []);
             } catch (error) {
-                console.error("Failed to refresh DIGI Flow execution summaries.", error);
+                console.error(i18n.failedRefreshExecutions, error);
                 // Keep the last visible execution summaries if polling fails.
             } finally {
                 refreshInFlight = false;
@@ -903,7 +978,7 @@
 
         toggleButton.addEventListener("click", () => {
             frozen = !frozen;
-            toggleButton.textContent = frozen ? "Release" : "Freeze";
+            toggleButton.textContent = frozen ? i18n.release : i18n.freeze;
             if (!frozen) {
                 refreshExecutions();
             }

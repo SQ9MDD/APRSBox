@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.i18n import get_app_language, get_format_translator, get_translator
 
 SOURCE_STEP_TYPES = ("receiver_rf", "receiver_aprsis")
 FILTER_STEP_TYPES = (
@@ -245,6 +246,14 @@ STEP_TYPE_TO_REF_FIELD = {
 }
 
 
+def _t(message: object) -> str:
+    return get_translator(get_app_language())(message)
+
+
+def _tf(message: object, params: dict[str, object] | None = None) -> str:
+    return get_format_translator(get_app_language())(message, params)
+
+
 def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
 
@@ -260,16 +269,16 @@ def _runtime_status(step_type: str) -> str:
 def _runtime_status_label(step_type: str) -> str:
     status = _runtime_status(step_type)
     if status == "implemented":
-        return "Runtime"
+        return _t("Runtime")
     if status == "stub":
-        return "Stub"
-    return "Config only"
+        return _t("Stub")
+    return _t("Config only")
 
 
 def _step_category(step_type: str) -> str:
     meta = STEP_TYPE_META.get(step_type)
     if not meta:
-        raise ValueError(f"Unsupported flow step type: {step_type}.")
+        raise ValueError(_tf("Unsupported flow step type: {step_type}.", {"step_type": step_type}))
     return str(meta["category"])
 
 
@@ -280,13 +289,13 @@ def _normalize_enabled(value: Any) -> int:
 def _normalize_number(value: Any, *, label: str, minimum: int = 0) -> int:
     text = _normalize_text(value)
     if not text:
-        raise ValueError(f"{label} is required.")
+        raise ValueError(_tf("{label} is required.", {"label": _t(label)}))
     try:
         parsed = int(text)
     except ValueError as exc:
-        raise ValueError(f"{label} must be a whole number.") from exc
+        raise ValueError(_tf("{label} must be a whole number.", {"label": _t(label)})) from exc
     if parsed < minimum:
-        raise ValueError(f"{label} must be at least {minimum}.")
+        raise ValueError(_tf("{label} must be at least {minimum}.", {"label": _t(label), "minimum": minimum}))
     return parsed
 
 
@@ -348,13 +357,13 @@ def _packet_type_filter_value_label(value: Any) -> str:
         return "query"
     upper = normalized.upper()
     if upper == "M":
-        return "legacy M (mobile position)"
+        return _t("legacy M (mobile position)")
     if upper == "S":
-        return "legacy S (stationary position)"
+        return _t("legacy S (stationary position)")
     if upper == "O":
-        return "legacy O (object)"
+        return _t("legacy O (object)")
     if upper == "W":
-        return "legacy W (weather-only)"
+        return _t("legacy W (weather-only)")
     return normalized
 
 
@@ -417,7 +426,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
         return {"note": ""}
     if step_type == "action_log":
         return {"log_tag": "", "note": ""}
-    raise ValueError(f"Unsupported flow step type: {step_type}.")
+    raise ValueError(_tf("Unsupported flow step type: {step_type}.", {"step_type": step_type}))
 
 
 def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[str, Any]:
@@ -425,19 +434,19 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == "receiver_rf":
         value = _normalize_text(config.get("rf_port"))
         if not value:
-            raise ValueError("Receiver RF step requires an RF Port / Radio value.")
+            raise ValueError(_t("Receiver RF step requires an RF Port / Radio value."))
         return {"rf_port": value}
     if step_type == "receiver_aprsis":
         value = _normalize_text(config.get("aprsis_source"))
         if not value:
-            raise ValueError("Receiver APRS-IS step requires an APRS-IS Source value.")
+            raise ValueError(_t("Receiver APRS-IS step requires an APRS-IS Source value."))
         return {"aprsis_source": value}
     if step_type == "filter_dupe":
         return {"window_sec": _normalize_number(config.get("window_sec"), label="Duplicate window", minimum=1)}
     if step_type == "filter_path":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode != "allow":
-            raise ValueError("Path filter mode must be allow.")
+            raise ValueError(_t("Path filter mode must be allow."))
         legacy_paths = _normalize_multiline_list(config.get("paths"))
         trace_paths = _normalize_multiline_list(config.get("trace_paths")) or legacy_paths
         no_trace_paths = _normalize_multiline_list(config.get("no_trace_paths"))
@@ -447,17 +456,17 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == "filter_digi":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
-            raise ValueError("DIGI filter mode must be allow or deny.")
+            raise ValueError(_t("DIGI filter mode must be allow or deny."))
         return {"mode": mode, "digis": _normalize_multiline_list(config.get("digis"))}
     if step_type == "filter_callsign":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
-            raise ValueError("Callsign filter mode must be allow or deny.")
+            raise ValueError(_t("Callsign filter mode must be allow or deny."))
         return {"mode": mode, "callsigns": _normalize_multiline_list(config.get("callsigns"))}
     if step_type == "filter_packet_type":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
-            raise ValueError("Packet type filter mode must be allow or deny.")
+            raise ValueError(_t("Packet type filter mode must be allow or deny."))
         return {
             "mode": mode,
             "packet_types": [
@@ -472,7 +481,7 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == "filter_icon":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode not in {"allow", "deny"}:
-            raise ValueError("Icon filter mode must be allow or deny.")
+            raise ValueError(_t("Icon filter mode must be allow or deny."))
         return {"mode": mode, "icons": _normalize_multiline_list(config.get("icons"))}
     if step_type == "filter_distance":
         return {"max_km": _normalize_number(config.get("max_km"), label="Max distance", minimum=1)}
@@ -483,18 +492,18 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == "tx_rf":
         value = _normalize_text(config.get("rf_target"))
         if not value:
-            raise ValueError("TX RF step requires an RF Target value.")
+            raise ValueError(_t("TX RF step requires an RF Target value."))
         return {"rf_target": value}
     if step_type == "tx_aprsis":
         value = _normalize_text(config.get("aprsis_target"))
         if not value:
-            raise ValueError("TX APRS-IS step requires an APRS-IS Target value.")
+            raise ValueError(_t("TX APRS-IS step requires an APRS-IS Target value."))
         return {"aprsis_target": value}
     if step_type == "action_drop":
         return {"note": _normalize_text(config.get("note"))}
     if step_type == "action_log":
         return {"log_tag": _normalize_text(config.get("log_tag")), "note": _normalize_text(config.get("note"))}
-    raise ValueError(f"Unsupported flow step type: {step_type}.")
+    raise ValueError(_tf("Unsupported flow step type: {step_type}.", {"step_type": step_type}))
 
 
 def _step_ref_value(step_type: str, config: dict[str, Any]) -> str:
@@ -560,12 +569,21 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
     return {
         step_type: {
             "category": meta["category"],
-            "label": meta["label"],
-            "badge": meta["badge"],
-            "description": meta["description"],
+            "label": _t(meta["label"]),
+            "badge": _t(meta["badge"]),
+            "description": _t(meta["description"]),
             "runtime_status": _runtime_status(step_type),
             "runtime_label": _runtime_status_label(step_type),
-            "config_fields": [dict(field) for field in meta["config_fields"]],
+            "config_fields": [
+                {
+                    **dict(field),
+                    "label": _t(field["label"]),
+                    **({"placeholder": _t(field["placeholder"])} if field.get("placeholder") else {}),
+                    **({"help_text": _t(field["help_text"])} if field.get("help_text") else {}),
+                    **({"help_lines": [_t(line) for line in field["help_lines"]]} if field.get("help_lines") else {}),
+                }
+                for field in meta["config_fields"]
+            ],
         }
         for step_type, meta in STEP_TYPE_META.items()
     }
@@ -618,8 +636,8 @@ def get_digi_flow_endpoint_options(*, selected_target_selector: str | None = Non
         if row["name"]
     )
     if str(selected_target_selector or "").strip() == "action_drop::drop":
-        target_options.append({"value": "action_drop::drop", "label": "Drop", "kind": "action_drop", "ref": "drop"})
-    target_options.append({"value": "action_log::log-only", "label": "Log Only", "kind": "action_log", "ref": "log-only"})
+        target_options.append({"value": "action_drop::drop", "label": _t("Drop"), "kind": "action_drop", "ref": "drop"})
+    target_options.append({"value": "action_log::log-only", "label": _t("Log Only"), "kind": "action_log", "ref": "log-only"})
     return {"source": source_options, "target": target_options}
 
 
@@ -759,34 +777,34 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
 def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: int | None = None) -> dict[str, Any]:
     name = _normalize_text(payload.get("name"))
     if not name:
-        raise ValueError("Flow name is required.")
+        raise ValueError(_t("Flow name is required."))
     description = _normalize_text(payload.get("description"))
     source_kind = _normalize_text(payload.get("source_kind"))
     target_kind = _normalize_text(payload.get("target_kind"))
     if source_kind not in SOURCE_STEP_TYPES:
-        raise ValueError("Flow source must be one of the supported source step types.")
+        raise ValueError(_t("Flow source must be one of the supported source step types."))
     if target_kind not in TARGET_STEP_TYPES:
-        raise ValueError("Flow target must be one of the supported target step types.")
+        raise ValueError(_t("Flow target must be one of the supported target step types."))
     source_ref = _normalize_text(payload.get("source_ref"))
     target_ref = _normalize_text(payload.get("target_ref"))
     if not source_ref:
-        raise ValueError("Flow source reference is required.")
+        raise ValueError(_t("Flow source reference is required."))
     if target_kind in {"tx_rf", "tx_aprsis"} and not target_ref:
-        raise ValueError("Flow target reference is required.")
+        raise ValueError(_t("Flow target reference is required."))
 
     raw_steps = payload.get("steps") or []
     if not isinstance(raw_steps, list) or not raw_steps:
-        raise ValueError("Flow must contain at least one source step and one target step.")
+        raise ValueError(_t("Flow must contain at least one source step and one target step."))
 
     normalized_steps: list[dict[str, Any]] = []
     source_count = 0
     target_count = 0
     for index, raw_step in enumerate(raw_steps, start=1):
         if not isinstance(raw_step, dict):
-            raise ValueError("Invalid flow step payload.")
+            raise ValueError(_t("Invalid flow step payload."))
         step_type = _normalize_text(raw_step.get("step_type"))
         if step_type not in ALL_STEP_TYPES:
-            raise ValueError(f"Unsupported flow step type: {step_type}.")
+            raise ValueError(_tf("Unsupported flow step type: {step_type}.", {"step_type": step_type}))
         category = _step_category(step_type)
         if category == "source":
             source_count += 1
@@ -807,27 +825,27 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         )
 
     if source_count != 1:
-        raise ValueError("Flow must contain exactly one source step.")
+        raise ValueError(_t("Flow must contain exactly one source step."))
     if target_count != 1:
-        raise ValueError("Flow must contain exactly one target step.")
+        raise ValueError(_t("Flow must contain exactly one target step."))
 
     first_step = normalized_steps[0]
     last_step = normalized_steps[-1]
     if _step_category(first_step["step_type"]) != "source":
-        raise ValueError("First flow step must be a source step.")
+        raise ValueError(_t("First flow step must be a source step."))
     if _step_category(last_step["step_type"]) != "target":
-        raise ValueError("Last flow step must be a target step.")
+        raise ValueError(_t("Last flow step must be a target step."))
     for middle_step in normalized_steps[1:-1]:
         if _step_category(middle_step["step_type"]) != "filter":
-            raise ValueError("All middle flow steps must be filter steps.")
+            raise ValueError(_t("All middle flow steps must be filter steps."))
     first_ref = _step_ref_value(first_step["step_type"], first_step["config"])
     last_ref = _step_ref_value(last_step["step_type"], last_step["config"])
     if source_kind != first_step["step_type"] or source_ref != first_ref:
-        raise ValueError("Flow source must match the first step type and reference.")
+        raise ValueError(_t("Flow source must match the first step type and reference."))
     if target_kind != last_step["step_type"] or target_ref != last_ref:
-        raise ValueError("Flow target must match the last step type and reference.")
+        raise ValueError(_t("Flow target must match the last step type and reference."))
     if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
-        raise ValueError("Flow with an RF or APRS-IS TX target must include at least one enabled Path Rule step.")
+        raise ValueError(_t("Flow with an RF or APRS-IS TX target must include at least one enabled Path Rule step."))
 
     duplicate = fetch_one(
         """
@@ -843,7 +861,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         (source_kind, source_ref, target_kind, target_ref, existing_flow_id, existing_flow_id),
     )
     if duplicate is not None:
-        raise ValueError("A DIGI Flow with the same source and target already exists.")
+        raise ValueError(_t("A DIGI Flow with the same source and target already exists."))
 
     return {
         "name": name,
@@ -946,7 +964,7 @@ def create_digi_flow(payload: dict[str, Any]) -> int:
 
 def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
     if get_digi_flow(flow_id) is None:
-        raise ValueError("DIGI Flow not found.")
+        raise ValueError(_t("DIGI Flow not found."))
     normalized = normalize_digi_flow_payload(payload, existing_flow_id=flow_id)
     existing_steps = get_digi_flow_steps(flow_id)
     normalized["steps"] = _preserve_existing_step_ids(existing_steps, list(normalized["steps"]))
@@ -1055,9 +1073,9 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
     if enabled:
         flow = get_digi_flow(flow_id)
         if flow is None:
-            raise ValueError("DIGI Flow not found.")
+            raise ValueError(_t("DIGI Flow not found."))
         if _flow_requires_path_rule(str(flow.get("target_kind") or "")) and not _has_enabled_path_rule(list(flow.get("steps") or [])):
-            raise ValueError("DIGI Flow with an RF or APRS-IS TX target cannot be enabled without an enabled Path Rule step.")
+            raise ValueError(_t("DIGI Flow with an RF or APRS-IS TX target cannot be enabled without an enabled Path Rule step."))
     with get_connection() as connection:
         connection.execute(
             """
@@ -1079,8 +1097,8 @@ def safe_create_digi_flow(payload: dict[str, Any]) -> tuple[int | None, str | No
     except sqlite3.IntegrityError as exc:
         message = str(exc).strip()
         if "digi_flows.source_kind, digi_flows.source_ref, digi_flows.target_kind, digi_flows.target_ref" in message:
-            return None, "A DIGI Flow with the same source and target already exists."
-        return None, f"Failed to save DIGI Flow: {message or 'database integrity error'}."
+            return None, _t("A DIGI Flow with the same source and target already exists.")
+        return None, _tf("Failed to save DIGI Flow: {message}.", {"message": message or _t("database integrity error")})
 
 
 def safe_update_digi_flow(flow_id: int, payload: dict[str, Any]) -> str | None:
@@ -1091,8 +1109,8 @@ def safe_update_digi_flow(flow_id: int, payload: dict[str, Any]) -> str | None:
     except sqlite3.IntegrityError as exc:
         message = str(exc).strip()
         if "digi_flows.source_kind, digi_flows.source_ref, digi_flows.target_kind, digi_flows.target_ref" in message:
-            return "A DIGI Flow with the same source and target already exists."
-        return f"Failed to update DIGI Flow: {message or 'database integrity error'}."
+            return _t("A DIGI Flow with the same source and target already exists.")
+        return _tf("Failed to update DIGI Flow: {message}.", {"message": message or _t("database integrity error")})
     return None
 
 
@@ -1219,7 +1237,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
             "title": str(step.get("title") or step.get("step_label") or step.get("step_type") or f"Step {index}"),
             "step_type": str(step.get("step_type") or ""),
             "status": "not_reached",
-            "description": "Step not reached.",
+            "description": _t("Step not reached."),
         }
 
     raw_packet = ""
@@ -1247,7 +1265,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         if step_state is not None:
             if event_type == "source_step":
                 step_state["status"] = "passed"
-                step_state["description"] = "Source matched and packet entered the flow."
+                step_state["description"] = _t("Source matched and packet entered the flow.")
             elif event_type in {"filter_callsign", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
                 step_state["status"] = "rejected" if decision == "rejected" else "passed"
                 step_state["description"] = message
@@ -1260,7 +1278,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
                 step_state["description"] = message
             elif event_type == "step_skipped":
                 step_state["status"] = "not_reached"
-                step_state["description"] = "Step disabled."
+                step_state["description"] = _t("Step disabled.")
 
         if event_type == "pipeline_finished":
             final_decision = decision
@@ -1288,7 +1306,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
         "source_display": source_display or "-",
         "layout_changed": layout_changed,
         "layout_note": (
-            "This packet was processed before the current flow layout was saved. Historical step mapping may be partial."
+            _t("This packet was processed before the current flow layout was saved. Historical step mapping may be partial.")
             if layout_changed
             else ""
         ),

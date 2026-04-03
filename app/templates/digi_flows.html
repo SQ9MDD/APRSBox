@@ -5,18 +5,18 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>DIGI Flows</h2>
-                <p class="section-lead">Configure ordered DIGI pipelines as a vertical chain of source, filters and target. Stage 2 enables a small runtime skeleton for RF ingress, filter testing and debug logging.</p>
+                <h2>{{ t("DIGI Flows") }}</h2>
+                <p class="section-lead">{{ t("Configure ordered DIGI pipelines as a vertical chain of source, filters and target. Stage 2 enables a small runtime skeleton for RF ingress, filter testing and debug logging.") }}</p>
             </div>
             <div class="form-actions">
                 {% if can_edit %}
-                <a href="{{ request.scope.root_path }}/digi-flows/new" class="button">New flow</a>
+                <a href="{{ request.scope.root_path }}/digi-flows/new" class="button">{{ t("New flow") }}</a>
                 {% endif %}
             </div>
         </div>
-        <div class="notice">Runtime currently covers active RF flows, sequential step execution, LOG_ONLY, callsign filtering, Path Rule handling and TX stubs.</div>
+        <div class="notice">{{ t("Runtime currently covers active RF flows, sequential step execution, LOG_ONLY, callsign filtering, Path Rule handling and TX stubs.") }}</div>
         {% if flash %}
-        <div class="alert {% if flash_success %}success{% endif %}">{{ flash }}</div>
+        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
     </div>
 </section>
@@ -25,18 +25,18 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>Configured Flows</h2>
+                <h2>{{ t("Configured Flows") }}</h2>
             </div>
         </div>
         <div class="table-wrap">
             <table class="data-table digi-flows-table">
                 <thead>
                     <tr>
-                        <th class="digi-flows-col-name">Name</th>
-                        <th class="digi-flows-col-description">Description</th>
-                        <th class="digi-flows-col-status">Status</th>
+                        <th class="digi-flows-col-name">{{ t("Name") }}</th>
+                        <th class="digi-flows-col-description">{{ t("Description") }}</th>
+                        <th class="digi-flows-col-status">{{ t("Status") }}</th>
                         {% if can_edit %}
-                        <th class="digi-flows-col-actions">Actions</th>
+                        <th class="digi-flows-col-actions">{{ t("Actions") }}</th>
                         {% endif %}
                     </tr>
                 </thead>
@@ -48,7 +48,7 @@
                         <td class="digi-flows-col-status">
                             <span class="tnc-badge {{ 'tnc-badge-enabled' if flow.enabled else 'tnc-badge-disabled' }}">
                                 <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if flow.enabled else 'close-circle.svg' }}" alt="">
-                                <span>{{ 'Enabled' if flow.enabled else 'Disabled' }}</span>
+                                <span>{{ t('Enabled' if flow.enabled else 'Disabled') }}</span>
                             </span>
                         </td>
                         {% if can_edit %}
@@ -57,8 +57,8 @@
                             <a
                                 href="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}"
                                 class="table-icon-button"
-                                title="Edit flow"
-                                aria-label="Edit flow {{ flow.name }}"
+                                title="{{ t('Edit flow') }}"
+                                aria-label="{{ t('Edit flow') }} {{ flow.name }}"
                             >
                                 <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                             </a>
@@ -72,8 +72,8 @@
                                 <button
                                     type="submit"
                                     class="table-icon-button"
-                                    title="{{ 'Disable' if flow.enabled else 'Enable' }} flow"
-                                    aria-label="{{ 'Disable' if flow.enabled else 'Enable' }} flow {{ flow.name }}"
+                                    title="{{ t('Disable flow') if flow.enabled else t('Enable flow') }}"
+                                    aria-label="{{ (t('Disable flow') if flow.enabled else t('Enable flow')) }} {{ flow.name }}"
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'pause-circle-outline.svg' if flow.enabled else 'play-circle-outline.svg' }}" alt="">
                                 </button>
@@ -81,8 +81,8 @@
                             <a
                                 href="{{ request.scope.root_path }}/digi-flows/new?duplicate={{ flow.id }}"
                                 class="table-icon-button"
-                                title="Duplicate into new draft"
-                                aria-label="Duplicate flow {{ flow.name }}"
+                                title="{{ t('Duplicate into new draft') }}"
+                                aria-label="{{ t('Duplicate flow') }} {{ flow.name }}"
                             >
                                 <img src="{{ request.scope.root_path }}/static/icons/content-copy.svg" alt="">
                             </a>
@@ -90,13 +90,13 @@
                                 method="post"
                                 action="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}/delete"
                                 class="table-action-form"
-                                onsubmit="return confirm('Delete DIGI Flow {{ flow.name }}?');"
+                                onsubmit="return confirm({{ tf('Delete DIGI Flow {name}?', {'name': flow.name})|tojson }});"
                             >
                                 <button
                                     type="submit"
                                     class="table-icon-button"
-                                    title="Delete flow"
-                                    aria-label="Delete flow {{ flow.name }}"
+                                    title="{{ t('Delete flow') }}"
+                                    aria-label="{{ t('Delete flow') }} {{ flow.name }}"
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                 </button>
@@ -107,7 +107,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 4 if can_edit else 3 }}">No DIGI Flows configured yet.</td>
+                        <td colspan="{{ 4 if can_edit else 3 }}">{{ t("No DIGI Flows configured yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
