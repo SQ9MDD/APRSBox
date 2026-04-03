@@ -10,7 +10,9 @@ REPO_ROOT="$(pwd)"
 if [ -n "${0:-}" ] && [ -f "${0:-}" ]; then
     REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 fi
-DEPLOY_DIR="$REPO_ROOT/deploy/openrc"
+DEPLOY_ROOT="$REPO_ROOT/deploy"
+OPENRC_DEPLOY_DIR="$DEPLOY_ROOT/openrc"
+SYSTEMD_DEPLOY_DIR="$DEPLOY_ROOT/systemd"
 VENV_DIR="$INSTALL_ROOT/venv"
 TARGET_APP_DIR="$INSTALL_ROOT/app"
 DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
@@ -20,6 +22,7 @@ BOOTSTRAP_WORKDIR=""
 STAGING_APP_DIR=""
 PREVIOUS_VENV_DIR=""
 SERVICES_STARTED="0"
+SERVICE_MANAGER="unknown"
 CORE_PIDFILE="/run/aprsbox-core.pid"
 WEB_PIDFILE="/run/aprsbox-web.pid"
 
@@ -95,8 +98,11 @@ validate_source_tree() {
     if [ ! -f "$REPO_ROOT/requirements.txt" ]; then
         fail "Source tree is missing file: $REPO_ROOT/requirements.txt"
     fi
-    if [ ! -d "$REPO_ROOT/deploy/openrc" ]; then
-        fail "Source tree is missing directory: $REPO_ROOT/deploy/openrc"
+    if [ ! -d "$OPENRC_DEPLOY_DIR" ]; then
+        fail "Source tree is missing directory: $OPENRC_DEPLOY_DIR"
+    fi
+    if [ ! -d "$SYSTEMD_DEPLOY_DIR" ]; then
+        fail "Source tree is missing directory: $SYSTEMD_DEPLOY_DIR"
     fi
 }
 
@@ -113,8 +119,23 @@ obtain_source_tree() {
     BOOTSTRAP_WORKDIR="$(mktemp -d)"
     git clone --depth 1 --branch "$BOOTSTRAP_GIT_BRANCH" "$BOOTSTRAP_GIT_URL" "$BOOTSTRAP_WORKDIR/repo"
     REPO_ROOT="$BOOTSTRAP_WORKDIR/repo"
-    DEPLOY_DIR="$REPO_ROOT/deploy/openrc"
+    DEPLOY_ROOT="$REPO_ROOT/deploy"
+    OPENRC_DEPLOY_DIR="$DEPLOY_ROOT/openrc"
+    SYSTEMD_DEPLOY_DIR="$DEPLOY_ROOT/systemd"
     validate_source_tree
+}
+
+detect_service_manager() {
+    init_comm="$(cat /proc/1/comm 2>/dev/null || true)"
+    if command -v systemctl >/dev/null 2>&1 && { [ "$init_comm" = "systemd" ] || [ -d /run/systemd/system ]; }; then
+        SERVICE_MANAGER="systemd"
+        return
+    fi
+    if command -v rc-service >/dev/null 2>&1 && { [ -d /run/openrc ] || [ -x /sbin/openrc-run ]; }; then
+        SERVICE_MANAGER="openrc"
+        return
+    fi
+    SERVICE_MANAGER="unknown"
 }
 
 ensure_user() {
@@ -141,19 +162,21 @@ prepare_directories() {
 }
 
 stop_services() {
-    if ! command -v rc-service >/dev/null 2>&1; then
-        return
-    fi
-
-    if [ -x /etc/init.d/aprsbox-web ]; then
-        rc-service aprsbox-web stop || true
-    fi
-    if [ -x /etc/init.d/aprsbox-core ]; then
-        rc-service aprsbox-core stop || true
-    fi
-
-    cleanup_stale_pidfile "$WEB_PIDFILE"
-    cleanup_stale_pidfile "$CORE_PIDFILE"
+    case "$SERVICE_MANAGER" in
+        systemd)
+            systemctl stop aprsbox-web.service aprsbox-core.service >/dev/null 2>&1 || true
+            ;;
+        openrc)
+            if [ -x /etc/init.d/aprsbox-web ]; then
+                rc-service aprsbox-web stop || true
+            fi
+            if [ -x /etc/init.d/aprsbox-core ]; then
+                rc-service aprsbox-core stop || true
+            fi
+            cleanup_stale_pidfile "$WEB_PIDFILE"
+            cleanup_stale_pidfile "$CORE_PIDFILE"
+            ;;
+    esac
 }
 
 cleanup_stale_pidfile() {
@@ -303,26 +326,54 @@ create_admin_user() {
     chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 }
 
-install_openrc_services() {
-    install -m 0755 "$DEPLOY_DIR/aprsbox-web" /etc/init.d/aprsbox-web
-    install -m 0755 "$DEPLOY_DIR/aprsbox-core" /etc/init.d/aprsbox-core
+install_service_units() {
+    case "$SERVICE_MANAGER" in
+        systemd)
+            install -m 0644 "$SYSTEMD_DEPLOY_DIR/aprsbox-core.service" /etc/systemd/system/aprsbox-core.service
+            install -m 0644 "$SYSTEMD_DEPLOY_DIR/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
+            ;;
+        openrc)
+            install -m 0755 "$OPENRC_DEPLOY_DIR/aprsbox-web" /etc/init.d/aprsbox-web
+            install -m 0755 "$OPENRC_DEPLOY_DIR/aprsbox-core" /etc/init.d/aprsbox-core
+            ;;
+        *)
+            log "No supported service manager detected. Service files were not installed."
+            ;;
+    esac
 }
 
 enable_services() {
-    if command -v rc-update >/dev/null 2>&1; then
-        rc-update add aprsbox-core default || true
-        rc-update add aprsbox-web default || true
-        if rc-service aprsbox-core restart || rc-service aprsbox-core start; then
-            if rc-service aprsbox-web restart || rc-service aprsbox-web start; then
+    case "$SERVICE_MANAGER" in
+        systemd)
+            systemctl daemon-reload
+            systemctl enable aprsbox-core.service aprsbox-web.service >/dev/null 2>&1 || true
+            if systemctl restart aprsbox-core.service && systemctl restart aprsbox-web.service; then
                 SERVICES_STARTED="1"
                 return
             fi
-        fi
-        log "OpenRC commands are available, but services could not be started automatically."
-        log "Check 'rc-service aprsbox-core status' and 'rc-service aprsbox-web status' after install."
-    else
-        log "OpenRC not available on this host. Service files were installed but not enabled."
-    fi
+            log "systemd is available, but services could not be started automatically."
+            log "Check 'systemctl status aprsbox-core' and 'systemctl status aprsbox-web' after install."
+            ;;
+        openrc)
+            if command -v rc-update >/dev/null 2>&1; then
+                rc-update add aprsbox-core default || true
+                rc-update add aprsbox-web default || true
+                if rc-service aprsbox-core restart || rc-service aprsbox-core start; then
+                    if rc-service aprsbox-web restart || rc-service aprsbox-web start; then
+                        SERVICES_STARTED="1"
+                        return
+                    fi
+                fi
+                log "OpenRC commands are available, but services could not be started automatically."
+                log "Check 'rc-service aprsbox-core status' and 'rc-service aprsbox-web status' after install."
+            else
+                log "OpenRC detected, but required service commands are unavailable."
+            fi
+            ;;
+        *)
+            log "No supported service manager detected. Services were not enabled."
+            ;;
+    esac
 }
 
 verify_services() {
@@ -358,6 +409,7 @@ main() {
     require_root
     detect_os
     install_system_packages
+    detect_service_manager
     obtain_source_tree
     ensure_user
     prepare_directories
@@ -370,7 +422,7 @@ main() {
     initialize_database
     create_admin_user
     activate_staged_installation
-    install_openrc_services
+    install_service_units
     enable_services
     verify_services
     log "APRSBox installation finished."

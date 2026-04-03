@@ -1,0 +1,25 @@
+[Unit]
+Description=APRSBox Core
+After=local-fs.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aprsbox
+Group=aprsbox
+WorkingDirectory=/opt/aprsbox/app
+Environment=APRSBOX_ENV=production
+Environment=APRSBOX_INSTALL_ROOT=/opt/aprsbox
+Environment=APRSBOX_DB_PATH=/opt/aprsbox/data/aprsbox.db
+Environment=APRSBOX_LOG_DIR=/opt/aprsbox/logs
+Environment=PYTHONPATH=/opt/aprsbox/app
+Environment=APRSBOX_CORE_HOST=127.0.0.1
+Environment=APRSBOX_CORE_PORT=18081
+ExecStart=/opt/aprsbox/venv/bin/python -m gunicorn --reload --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - app.core_main:app
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/opt/aprsbox/logs/aprsbox-core.log
+StandardError=append:/opt/aprsbox/logs/aprsbox-core.error.log
+
+[Install]
+WantedBy=multi-user.target

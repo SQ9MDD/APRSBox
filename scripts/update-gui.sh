@@ -10,12 +10,26 @@ REPO_URL="${APRSBOX_GIT_URL:-https://github.com/SQ9MDD/APRSBox.git}"
 REPO_BRANCH="${APRSBOX_GIT_BRANCH:-main}"
 WORKDIR="$(mktemp -d)"
 CHECKOUT_DIR="$WORKDIR/repo"
+SERVICE_MANAGER="unknown"
 
 cleanup() {
     rm -rf "$WORKDIR"
 }
 
 trap cleanup EXIT INT TERM
+
+detect_service_manager() {
+    init_comm="$(cat /proc/1/comm 2>/dev/null || true)"
+    if command -v systemctl >/dev/null 2>&1 && { [ "$init_comm" = "systemd" ] || [ -d /run/systemd/system ]; }; then
+        SERVICE_MANAGER="systemd"
+        return
+    fi
+    if command -v rc-service >/dev/null 2>&1 && { [ -d /run/openrc ] || [ -x /sbin/openrc-run ]; }; then
+        SERVICE_MANAGER="openrc"
+        return
+    fi
+    SERVICE_MANAGER="unknown"
+}
 
 mkdir -p "$LOG_DIR"
 printf '%s Starting GUI update from %s (%s)\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$REPO_URL" "$REPO_BRANCH"
@@ -63,11 +77,23 @@ fi
 
 printf '%s All replacement files downloaded and synchronized successfully\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-if command -v rc-service >/dev/null 2>&1; then
-    rc-service aprsbox-core restart || rc-service aprsbox-core start
-    printf '%s aprsbox-core restarted\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    rc-service aprsbox-web restart || rc-service aprsbox-web start
-    printf '%s aprsbox-web restarted\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-else
-    printf '%s rc-service not available, service restart skipped\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-fi
+detect_service_manager
+
+case "$SERVICE_MANAGER" in
+    systemd)
+        systemctl daemon-reload
+        systemctl restart aprsbox-core.service
+        printf '%s aprsbox-core restarted via systemd\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        systemctl restart aprsbox-web.service
+        printf '%s aprsbox-web restarted via systemd\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        ;;
+    openrc)
+        rc-service aprsbox-core restart || rc-service aprsbox-core start
+        printf '%s aprsbox-core restarted via OpenRC\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        rc-service aprsbox-web restart || rc-service aprsbox-web start
+        printf '%s aprsbox-web restarted via OpenRC\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        ;;
+    *)
+        printf '%s no supported service manager detected, service restart skipped\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        ;;
+esac

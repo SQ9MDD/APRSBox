@@ -5,7 +5,7 @@ APRSBox is a lightweight APRS operations application for Raspberry Pi and Linux 
 - `app.main`: the web GUI
 - `app.core_main`: the APRS runtime process responsible for traffic monitoring, outbound queue processing, and periodic schedulers
 
-The project is no longer "GUI only". It already includes a working SQLite-backed configuration model, authenticated GUI, a TCP KISS traffic monitor, outbound APRS transmission for selected packet types, and OpenRC-oriented installation scripts.
+The project is no longer "GUI only". It already includes a working SQLite-backed configuration model, authenticated GUI, a TCP KISS traffic monitor, outbound APRS transmission for selected packet types, and native installation scripts for OpenRC and systemd hosts.
 
 ## Fast Install
 
@@ -55,7 +55,7 @@ Implemented now:
 - Roles: `admin`, `operator`, `viewer`
 - SQLite schema bootstrap with inline schema evolution in `init_db()`
 - Native install script for Alpine Linux and Debian-like Raspberry Pi OS targets
-- OpenRC services for `aprsbox-web` and `aprsbox-core`
+- native services for `aprsbox-web` and `aprsbox-core` on OpenRC and systemd hosts
 - Station settings with:
   - callsign and SSID
   - selected outbound interface
@@ -114,6 +114,7 @@ APRSBox/
     templates/
   deploy/
     openrc/
+    systemd/
   scripts/
     install.sh
     aprsbox-core-placeholder.sh
@@ -292,8 +293,8 @@ If you do not provide admin credentials, the installer uses the default initial 
 - copies the repository into `/opt/aprsbox/app`
 - initializes the SQLite database if needed
 - creates the initial admin user if an active admin does not already exist
-- installs OpenRC service scripts for `aprsbox-web` and `aprsbox-core`
-- enables and starts `aprsbox-core` and `aprsbox-web` when OpenRC tooling is available
+- installs OpenRC service scripts or systemd units for `aprsbox-web` and `aprsbox-core`
+- enables and starts `aprsbox-core` and `aprsbox-web` when a supported service manager is available
 - runs local health checks for both services when `curl` is available
 
 The installer is designed to be idempotent where practical. It does not intentionally wipe existing database, logs, config, or backups on reinstall.
@@ -307,18 +308,27 @@ Current reinstall behavior:
 
 ## Running The Installed Services
 
-OpenRC service names:
+Service names:
 
 - `aprsbox-web`
 - `aprsbox-core`
 
-Manual service commands:
+Manual service commands on OpenRC:
 
 ```bash
 rc-service aprsbox-web status
 rc-service aprsbox-web restart
 rc-service aprsbox-core status
 rc-service aprsbox-core restart
+```
+
+Manual service commands on systemd:
+
+```bash
+systemctl status aprsbox-web
+systemctl restart aprsbox-web
+systemctl status aprsbox-core
+systemctl restart aprsbox-core
 ```
 
 Default ports:
@@ -504,7 +514,7 @@ Już działa:
 - web GUI na FastAPI + Jinja2
 - logowanie i role `admin`, `operator`, `viewer`
 - SQLite z automatyczną inicjalizacją i aktualizacją schematu przy starcie
-- natywna instalacja i OpenRC
+- natywna instalacja i usługi OpenRC lub systemd
 - ustawienia stacji:
   - callsign i SSID
   - wybór interfejsu nadawczego
@@ -583,18 +593,27 @@ Ważne ograniczenia:
 
 ## Serwisy po instalacji
 
-Nazwy serwisów OpenRC:
+Nazwy serwisów:
 
 - `aprsbox-web`
 - `aprsbox-core`
 
-Przydatne komendy:
+Przydatne komendy w OpenRC:
 
 ```bash
 rc-service aprsbox-web status
 rc-service aprsbox-web restart
 rc-service aprsbox-core status
 rc-service aprsbox-core restart
+```
+
+Przydatne komendy w systemd:
+
+```bash
+systemctl status aprsbox-web
+systemctl restart aprsbox-web
+systemctl status aprsbox-core
+systemctl restart aprsbox-core
 ```
 
 Domyślne porty:
