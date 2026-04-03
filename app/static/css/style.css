@@ -2400,6 +2400,16 @@ select:focus-visible,
     border-bottom: 0;
 }
 
+.traffic-log-row-tx {
+    background: rgba(210, 75, 75, 0.08);
+}
+
+.traffic-log-row-tx .traffic-log-time,
+.traffic-log-row-tx .traffic-log-source,
+.traffic-log-row-tx .traffic-log-line {
+    color: #d24b4b;
+}
+
 .traffic-log-time,
 .traffic-log-source {
     color: var(--muted);
