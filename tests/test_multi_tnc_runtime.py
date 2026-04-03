@@ -62,6 +62,35 @@ async def wait_until(predicate, *, timeout: float = 3.0) -> None:
 
 
 class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_traffic_snapshot_marks_local_generated_and_repeated_tx_rows(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'SQ9MDD',
+                    ssid = '4'
+                WHERE id = 1
+                """
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APRS:=5218.37N/02104.87E-Test beacon', '0', 'TX', 41, '', '2026-01-01T00:00:02+00:00'),
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APRS::BLN1     :System bulletin', '0', 'TX', 43, '', '2026-01-01T00:00:01+00:00'),
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SP8XYZ-9>APRS,WIDE1-1:>Relayed packet', '0', 'TX', 38, '', '2026-01-01T00:00:00+00:00')
+                """
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            row_classes = {frame["line"]: frame["row_class"] for frame in snapshot["frames"]}
+
+            self.assertEqual(row_classes["SQ9MDD-4>APRS:=5218.37N/02104.87E-Test beacon"], "traffic-log-row-local")
+            self.assertEqual(row_classes["SQ9MDD-4>APRS::BLN1     :System bulletin"], "traffic-log-row-local")
+            self.assertEqual(row_classes["SP8XYZ-9>APRS,WIDE1-1:>Relayed packet"], "traffic-log-row-repeated")
+
     async def test_monitor_tracks_multiple_enabled_tncs_and_persists_shared_traffic_log(self) -> None:
         with temporary_database():
             port_2m = free_tcp_port()

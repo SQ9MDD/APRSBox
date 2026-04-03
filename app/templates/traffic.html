@@ -34,7 +34,7 @@
         <div class="traffic-stream" id="traffic-stream">
             {% if traffic_snapshot.frames %}
             {% for frame in traffic_snapshot.frames %}
-            <div class="traffic-log-row{% if frame.direction == 'tx' %} traffic-log-row-tx{% endif %}">
+            <div class="traffic-log-row{% if frame.row_class %} {{ frame.row_class }}{% endif %}">
                 <span class="traffic-log-time">{{ frame.timestamp }}</span>
                 <span class="traffic-log-source">{{ frame.source }}{% if frame.band %} · {{ frame.band }}{% endif %} · {{ frame.direction }}</span>
                 <span class="traffic-log-line">{{ frame.line }}</span>
@@ -99,7 +99,7 @@
             }
 
             streamContainer.innerHTML = frames.map((frame) => `
-                <div class="traffic-log-row${frame.direction === "tx" ? " traffic-log-row-tx" : ""}">
+                <div class="traffic-log-row${frame.row_class ? " " + frame.row_class : ""}">
                     <span class="traffic-log-time"></span>
                     <span class="traffic-log-source"></span>
                     <span class="traffic-log-line"></span>

@@ -2400,13 +2400,23 @@ select:focus-visible,
     border-bottom: 0;
 }
 
-.traffic-log-row-tx {
+.traffic-log-row-local {
+    background: rgba(68, 123, 224, 0.1);
+}
+
+.traffic-log-row-local .traffic-log-time,
+.traffic-log-row-local .traffic-log-source,
+.traffic-log-row-local .traffic-log-line {
+    color: #4f8dff;
+}
+
+.traffic-log-row-repeated {
     background: rgba(210, 75, 75, 0.08);
 }
 
-.traffic-log-row-tx .traffic-log-time,
-.traffic-log-row-tx .traffic-log-source,
-.traffic-log-row-tx .traffic-log-line {
+.traffic-log-row-repeated .traffic-log-time,
+.traffic-log-row-repeated .traffic-log-source,
+.traffic-log-row-repeated .traffic-log-line {
     color: #d24b4b;
 }
 

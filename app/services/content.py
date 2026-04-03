@@ -289,6 +289,8 @@ def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
+    station_settings = get_station_settings()
+    station_source_key = _station_source_key(station_settings)
     interface_rows = fetch_all(
         """
         SELECT
@@ -407,6 +409,30 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     last_error = next((item["last_error"] for item in interfaces if item["last_error"]), None)
     if last_error is None and state_row:
         last_error = state_row["last_error"]
+    frames: list[dict[str, Any]] = []
+    for row in frame_rows:
+        direction = str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX")
+        row_class = _traffic_frame_row_class(
+            direction=direction,
+            line=str(row["line"] or ""),
+            station_source_key=station_source_key,
+        )
+        frames.append(
+            {
+                "timestamp": _format_monitor_timestamp(row["created_at"]),
+                "source": row["source"],
+                "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
+                "direction": direction,
+                "band": row["band"] or "",
+                "format": row["format"],
+                "line": row["line"],
+                "port": row["port"] or "",
+                "command": row["command"] or "",
+                "length": str(row["length"]),
+                "hex": row["hex"] or "",
+                "row_class": row_class,
+            }
+        )
     return {
         "status": status,
         "status_detail": status_detail,
@@ -415,23 +441,39 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         "interfaces": interfaces,
         "last_error": last_error,
         "updated_at": updated_at,
-        "frames": [
-            {
-                "timestamp": _format_monitor_timestamp(row["created_at"]),
-                "source": row["source"],
-                "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
-                "direction": str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX"),
-                "band": row["band"] or "",
-                "format": row["format"],
-                "line": row["line"],
-                "port": row["port"] or "",
-                "command": row["command"] or "",
-                "length": str(row["length"]),
-                "hex": row["hex"] or "",
-            }
-            for row in frame_rows
-        ],
+        "frames": frames,
     }
+
+
+def _station_source_key(station_settings: dict[str, Any]) -> str:
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    ssid = str(station_settings.get("ssid") or "").strip()
+    if not callsign:
+        return ""
+    return f"{callsign}-{ssid}" if ssid else callsign
+
+
+def _traffic_frame_row_class(*, direction: str, line: str, station_source_key: str) -> str:
+    if direction != "TX":
+        return ""
+    parsed = parse_tnc2_frame(line)
+    if parsed is None:
+        return ""
+    source_key = str(parsed.get("source_key") or "").strip().upper()
+    if not source_key:
+        return ""
+    if station_source_key and source_key == station_source_key:
+        aprs_data = parsed.get("aprs_data") or {}
+        packet_group = str(aprs_data.get("packet_group") or "").strip()
+        packet_type_code = str(aprs_data.get("packet_type_code") or "").strip()
+        if packet_group == "position":
+            return "traffic-log-row-local"
+        if packet_type_code == "object":
+            return "traffic-log-row-local"
+        if packet_type_code in {"bulletin", "announcement", "group_bulletin"}:
+            return "traffic-log-row-local"
+        return ""
+    return "traffic-log-row-repeated"
 
 
 def _format_monitor_timestamp(timestamp: str | None) -> str:
