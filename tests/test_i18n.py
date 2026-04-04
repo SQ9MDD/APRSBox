@@ -54,7 +54,7 @@ class I18nTests(unittest.TestCase):
             [
                 {"code": "en", "label": "English"},
                 {"code": "pl", "label": "Polski"},
-                {"code": "tlh", "label": "Klingoński"},
+                {"code": "tlh", "label": "tlhIngan Hol"},
             ],
         )
 
