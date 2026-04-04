@@ -263,6 +263,7 @@
             expandStep: {{ t("Expand step")|tojson }},
             moveStepUp: {{ t("Move step up")|tojson }},
             moveStepDown: {{ t("Move step down")|tojson }},
+            delete: {{ t("Delete")|tojson }},
             deleteStep: {{ t("Delete step")|tojson }},
             primarySymbolTable: {{ t("Primary (/)")|tojson }},
             cardTitle: {{ t("Card Title")|tojson }},
@@ -456,6 +457,20 @@
                 pickerState.symbolCode = ">";
             }
             return pickerState;
+        };
+        const iconFilterDisplayData = (value) => {
+            const normalized = String(value || "").trim();
+            const table = normalized.startsWith("\\") ? "\\" : "/";
+            const code = normalized.length >= 2 ? normalized.charAt(1) : "";
+            const selected = symbolCodeOptions.find((option) => option.value === code) || null;
+            const iconPathValue = selected
+                ? `${rootPath}/static/${table === "\\" ? selected.alternate_icon : selected.primary_icon}`
+                : `${rootPath}/static/icons/verG/x.gif`;
+            return {
+                value: normalized,
+                label: selected ? selected.label : normalized || i18n.none,
+                icon: iconPathValue,
+            };
         };
 
         const setExpandedStep = (targetIndex) => {
@@ -686,34 +701,68 @@
                 addButton.className = "button button-secondary digi-icon-filter-add-button";
                 addButton.textContent = i18n.add;
                 controls.appendChild(addButton);
-
-                const textarea = document.createElement("textarea");
                 step.config[field.name] = uniqueLines(step.config[field.name] || []);
-                const syncTextareaFromConfig = () => {
+
+                const selectedIcons = document.createElement("div");
+                selectedIcons.className = "digi-icon-filter-selected";
+
+                const renderSelectedIcons = () => {
+                    selectedIcons.innerHTML = "";
                     const icons = uniqueLines(step.config[field.name] || []);
                     step.config[field.name] = icons;
-                    textarea.value = configLinesToText(icons);
-                };
+                    if (!icons.length) {
+                        const empty = document.createElement("div");
+                        empty.className = "digi-icon-filter-empty muted";
+                        empty.textContent = i18n.none;
+                        selectedIcons.appendChild(empty);
+                        return;
+                    }
+                    for (const iconValue of icons) {
+                        const item = iconFilterDisplayData(iconValue);
+                        const chip = document.createElement("div");
+                        chip.className = "digi-icon-filter-chip";
 
-                textarea.value = configLinesToText(step.config[field.name]);
-                if (field.placeholder) {
-                    textarea.placeholder = field.placeholder;
-                }
-                textarea.addEventListener("input", () => {
-                    step.config[field.name] = uniqueLines(textToLines(textarea.value));
-                });
+                        const preview = document.createElement("span");
+                        preview.className = "digi-icon-filter-chip-preview";
+                        const image = document.createElement("img");
+                        image.src = item.icon;
+                        image.alt = "";
+                        const label = document.createElement("span");
+                        label.className = "digi-icon-filter-chip-label";
+                        label.textContent = item.value;
+                        preview.appendChild(image);
+                        preview.appendChild(label);
+                        chip.appendChild(preview);
+
+                        const removeButton = document.createElement("button");
+                        removeButton.type = "button";
+                        removeButton.className = "table-icon-button digi-icon-filter-chip-remove";
+                        removeButton.title = i18n.delete;
+                        removeButton.setAttribute("aria-label", `${i18n.delete}: ${item.value}`);
+                        const removeIcon = document.createElement("img");
+                        removeIcon.src = iconPath("close-circle-outline.svg");
+                        removeIcon.alt = "";
+                        removeButton.appendChild(removeIcon);
+                        removeButton.addEventListener("click", () => {
+                            step.config[field.name] = icons.filter((current) => current !== iconValue);
+                            render();
+                        });
+                        chip.appendChild(removeButton);
+
+                        selectedIcons.appendChild(chip);
+                    }
+                };
 
                 addButton.addEventListener("click", () => {
                     const symbolValue = `${pickerState.symbolTable || "/"}${pickerState.symbolCode || ">"}`;
-                    const icons = uniqueLines([...(step.config[field.name] || []), symbolValue]);
-                    step.config[field.name] = icons;
-                    syncTextareaFromConfig();
+                    step.config[field.name] = uniqueLines([...(step.config[field.name] || []), symbolValue]);
                     render();
                 });
 
                 syncIconPickerPreview();
                 wrapper.appendChild(controls);
-                wrapper.appendChild(textarea);
+                renderSelectedIcons();
+                wrapper.appendChild(selectedIcons);
                 appendFieldHelp();
                 return wrapper;
             }

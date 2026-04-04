@@ -1335,6 +1335,56 @@ select:focus-visible,
     white-space: nowrap;
 }
 
+.digi-icon-filter-selected {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.digi-icon-filter-empty {
+    padding: 0.7rem 0.85rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-soft);
+}
+
+.digi-icon-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.2rem;
+    padding: 0.28rem 0.32rem 0.28rem 0.62rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel));
+    box-shadow: var(--shadow-soft);
+}
+
+.digi-icon-filter-chip-preview {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.48rem;
+    min-width: 0;
+}
+
+.digi-icon-filter-chip-preview img {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+}
+
+.digi-icon-filter-chip-label {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+}
+
+.digi-icon-filter-chip-remove {
+    width: 1.9rem;
+    min-width: 1.9rem;
+    min-height: 1.9rem;
+    padding: 0;
+}
+
 @media (max-width: 780px) {
     .digi-icon-filter-controls {
         grid-template-columns: 1fr;
