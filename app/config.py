@@ -59,6 +59,10 @@ class Settings:
         return self.database_path.parent
 
     @property
+    def cache_dir(self) -> Path:
+        return self.data_dir / "cache"
+
+    @property
     def config_dir(self) -> Path:
         return Path(os.getenv("APRSBOX_CONFIG_DIR", self.runtime_root / "config"))
 
@@ -69,6 +73,21 @@ class Settings:
     @property
     def version_file(self) -> Path:
         return self.repo_root / "VERSION"
+
+    @property
+    def aprs_device_identification_bundle_path(self) -> Path:
+        return self.repo_root / "app" / "bundled" / "aprs-deviceid-tocalls.pretty.json"
+
+    @property
+    def aprs_device_identification_cache_path(self) -> Path:
+        return self.cache_dir / "aprs-deviceid-tocalls.pretty.json"
+
+    @property
+    def aprs_device_identification_update_url(self) -> str:
+        return os.getenv(
+            "APRSBOX_APRS_DEVICE_ID_URL",
+            "https://aprs-deviceid.aprsfoundation.org/tocalls.pretty.json",
+        )
 
     @property
     def core_base_url(self) -> str:

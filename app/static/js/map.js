@@ -204,6 +204,9 @@
         const heardAt = formatTimestamp(station.last_heard_at);
         const heardAge = formatAge(station.last_heard_age_s);
         lines.push(title);
+        if (station.aprs_device_short) {
+            lines.push(`<span><strong>APRS client:</strong> ${escapeHtml(station.aprs_device_short)}</span>`);
+        }
         if (heardAt) {
             lines.push(`<span><strong>Słyszana:</strong> ${escapeHtml(heardAt)}</span>`);
         }

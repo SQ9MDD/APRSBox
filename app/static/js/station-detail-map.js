@@ -6,6 +6,8 @@
     const title = document.getElementById("station-detail-title");
     const meta = document.getElementById("station-detail-meta");
     const fields = document.getElementById("station-detail-fields");
+    const devicePanel = document.getElementById("station-device-identification-panel");
+    const deviceRoot = document.getElementById("station-device-identification");
     const recentPackets = document.getElementById("station-recent-packets");
     const relatedSsids = document.getElementById("station-related-ssids");
 
@@ -66,6 +68,48 @@
             <dt>${escapeHtml(field.label)}</dt>
             <dd>${field.label === "Latest raw packet" ? `<code>${escapeHtml(field.value)}</code>` : escapeHtml(field.value)}</dd>
         `).join("");
+    }
+
+    function renderAprsDevice(device) {
+        if (!devicePanel || !deviceRoot) return;
+        if (!device) {
+            devicePanel.hidden = true;
+            deviceRoot.innerHTML = "";
+            return;
+        }
+
+        const identifierLabel = device.identifier_kind === "tocall" ? "TOCALL" : "Mic-E";
+        const capabilityBlock = Array.isArray(device.features) && device.features.length
+            ? `
+                <div class="station-device-capabilities">
+                    <span class="muted">Capabilities</span>
+                    <div class="station-device-capability-list">
+                        ${device.features.map((feature) => `<span class="station-device-capability-chip">${escapeHtml(feature)}</span>`).join("")}
+                    </div>
+                </div>
+            `
+            : "";
+
+        deviceRoot.innerHTML = `
+            <div class="station-device-block">
+                <p class="station-device-summary">
+                    <strong>${escapeHtml(device.identified_as || device.short_name || "")}</strong>
+                    ${device.vendor && device.vendor !== device.identified_as ? `<span class="muted">• ${escapeHtml(device.vendor)}</span>` : ""}
+                </p>
+                <dl class="details-grid station-device-grid">
+                    ${device.actual_identifier ? `<dt>${identifierLabel}</dt><dd><code>${escapeHtml(device.actual_identifier)}</code></dd>` : ""}
+                    <dt>Identified software/device</dt>
+                    <dd>${escapeHtml(device.identified_as || device.short_name || "")}</dd>
+                    ${device.vendor ? `<dt>Vendor</dt><dd>${escapeHtml(device.vendor)}</dd>` : ""}
+                    ${device.model ? `<dt>Model</dt><dd>${escapeHtml(device.model)}</dd>` : ""}
+                    ${device.class_label ? `<dt>Class</dt><dd>${escapeHtml(device.class_label)}</dd>` : ""}
+                    ${device.class_description ? `<dt>Class description</dt><dd>${escapeHtml(device.class_description)}</dd>` : ""}
+                    ${device.os ? `<dt>OS</dt><dd>${escapeHtml(device.os)}</dd>` : ""}
+                </dl>
+                ${capabilityBlock}
+            </div>
+        `;
+        devicePanel.hidden = false;
     }
 
     function renderRecentPackets(packets) {
@@ -226,6 +270,7 @@
             }
             renderMeta(station);
             renderFields(station);
+            renderAprsDevice(station.aprs_device || null);
             renderRecentPackets(payload.recent_packets || []);
             renderRelatedSsids(station, payload.related_ssids || []);
             ensureMap(station, mapConfig);

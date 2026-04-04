@@ -73,7 +73,12 @@
                 <tbody id="stations-table-body">
                     {% for row in stations %}
                     <tr class="clickable-row" data-href="{{ root_path }}{{ row.detail_href }}">
-                        <td class="callsign-cell"><strong><a class="station-link" href="{{ root_path }}{{ row.detail_href }}">{{ row.display_callsign or row.callsign }}</a></strong></td>
+                        <td class="callsign-cell">
+                            <strong><a class="station-link" href="{{ root_path }}{{ row.detail_href }}">{{ row.display_callsign or row.callsign }}</a></strong>
+                            {% if row.aprs_device_short %}
+                            <div class="station-secondary-text" title="{{ t('APRS client') }}: {{ row.aprs_device_short }}">{{ row.aprs_device_short }}</div>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if row.frame_type %}
                             <span class="frame-type-badge" title="{{ row.frame_type_label or row.frame_type }}">{{ row.frame_type }}</span>
@@ -138,6 +143,7 @@
     const refreshSelect = document.getElementById("stations-refresh-rate");
     const refreshStorageKey = "aprsbox-stations-refresh-ms";
     const noStationsText = {{ t("No decoded APRS stations heard yet.")|tojson }};
+    const aprsClientLabel = {{ t("APRS client")|tojson }};
     let refreshTimer = null;
 
     function escapeHtml(value) {
@@ -173,7 +179,10 @@
         const resolvePath = (value) => value && value.startsWith("/") ? `${rootPath}${value}` : (value || "");
         tbody.innerHTML = stations.map((row) => `
             <tr class="clickable-row" data-href="${escapeHtml(resolvePath(row.detail_href))}">
-                <td class="callsign-cell"><strong><a class="station-link" href="${escapeHtml(resolvePath(row.detail_href) || "#")}">${escapeHtml(row.display_callsign || row.callsign || "-")}</a></strong></td>
+                <td class="callsign-cell">
+                    <strong><a class="station-link" href="${escapeHtml(resolvePath(row.detail_href) || "#")}">${escapeHtml(row.display_callsign || row.callsign || "-")}</a></strong>
+                    ${row.aprs_device_short ? `<div class="station-secondary-text" title="${escapeHtml(`${aprsClientLabel}: ${row.aprs_device_short}`)}">${escapeHtml(row.aprs_device_short)}</div>` : ""}
+                </td>
                 <td>${row.frame_type ? `<span class="frame-type-badge" title="${escapeHtml(row.frame_type_label || row.frame_type)}">${escapeHtml(row.frame_type)}</span>` : '<span class="muted">-</span>'}</td>
                 <td>
                     <div class="last-heard-cell">

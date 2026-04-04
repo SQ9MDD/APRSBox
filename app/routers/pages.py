@@ -68,6 +68,10 @@ from app.services.band_condition import (
     save_reference_station,
     split_station_key,
 )
+from app.services.aprs_device_identification import (
+    get_aprs_device_identification_status,
+    refresh_aprs_device_identification_cache,
+)
 from app.services.map_service import get_map_page_config, get_map_station_payload, get_station_detail_map_config
 from app.services.outbound import enqueue_beacon_job
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
@@ -283,6 +287,7 @@ def _settings_page_context(
         can_manage_global_settings=current_user.role in {"admin", "operator"},
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
+        aprs_device_identification_status=get_aprs_device_identification_status(),
     )
 
 
@@ -604,6 +609,21 @@ def settings_update_gui(
         flash = result.get("error")
     else:
         flash = f"GUI update started in background. Log: {result['log_file']}"
+    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/update-aprs-device-identification")
+def settings_update_aprs_device_identification(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = refresh_aprs_device_identification_cache()
+    if result.get("ok"):
+        flash = "APRS device identification database updated."
+    else:
+        flash = result.get("error") or "APRS device identification database update failed."
     context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
 

@@ -12,6 +12,10 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.services.aprs_device_identification import (
+    get_aprs_device_identification_database,
+    lookup_aprs_device_identification,
+)
 from app.services.messages import get_messages_page_data
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_object_tnc2, build_status_tnc2, resolve_message_addressee
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
@@ -694,6 +698,7 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
                 "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
                 "latitude": snapshot["latitude"],
                 "longitude": snapshot["longitude"],
+                "aprs_device_short": snapshot["aprs_device_short"],
                 "detail_href": build_station_detail_href(snapshot["display_callsign"]),
             }
         )
@@ -739,6 +744,7 @@ def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, 
         "latitude_float": latitude,
         "longitude_float": longitude,
         "messaging_capable": _messaging_capable(snapshot),
+        "aprs_device": dict(snapshot["aprs_device"]) if snapshot.get("aprs_device") else None,
         "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
         "fields": _station_detail_fields(snapshot, unit_system),
     }
@@ -847,6 +853,7 @@ def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
         """
     )
     stations: dict[str, dict[str, Any]] = {}
+    device_database = get_aprs_device_identification_database()
 
     for row in rows:
         parsed = _parse_tnc2_line(row["line"])
@@ -875,6 +882,15 @@ def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
             )
 
         station = stations[station_key]
+        if not station["aprs_device"] and station_key.casefold() == callsign.casefold():
+            device_identification = lookup_aprs_device_identification(
+                destination=parsed["destination"],
+                info=parsed["info"],
+                database=device_database,
+            )
+            if device_identification is not None:
+                station["aprs_device"] = dict(device_identification)
+                station["aprs_device_short"] = str(device_identification.get("short_name") or "")
         if not station["entity_class"] and aprs_data.get("entity_class"):
             station["entity_class"] = aprs_data["entity_class"]
         if not station["frame_type"] and aprs_data.get("frame_type"):
@@ -932,6 +948,8 @@ def _new_station_snapshot(
         "data_raw": {},
         "latitude": "",
         "longitude": "",
+        "aprs_device": None,
+        "aprs_device_short": "",
     }
 
 

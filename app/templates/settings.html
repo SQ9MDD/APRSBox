@@ -97,6 +97,44 @@
     </div>
 </section>
 
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("APRS device identification") }}</h2>
+                <p class="section-lead">{{ t("Use a local cached APRS device identification database for TOCALL decoding during normal offline operation.") }}</p>
+            </div>
+        </div>
+        <dl class="details-grid">
+            <dt>{{ t("Status") }}</dt>
+            <dd>{{ t(aprs_device_identification_status.status_label) }}</dd>
+            <dt>{{ t("Active source") }}</dt>
+            <dd>{{ t(aprs_device_identification_status.active_source_label) }}</dd>
+            <dt>{{ t("Generation time") }}</dt>
+            <dd><code>{{ aprs_device_identification_status.generation_time or t("Unknown") }}</code></dd>
+            <dt>{{ t("Last successful update") }}</dt>
+            <dd><code>{{ aprs_device_identification_status.last_success_at or t("Never") }}</code></dd>
+            <dt>{{ t("Local cache") }}</dt>
+            <dd>{{ t("Available") if aprs_device_identification_status.cache_exists else t("Missing") }}</dd>
+            {% if aprs_device_identification_status.cache_updated_at %}
+            <dt>{{ t("Local cache updated") }}</dt>
+            <dd><code>{{ aprs_device_identification_status.cache_updated_at }}</code></dd>
+            {% endif %}
+            {% if aprs_device_identification_status.last_error %}
+            <dt>{{ t("Last update error") }}</dt>
+            <dd>{{ aprs_device_identification_status.last_error }}</dd>
+            {% endif %}
+        </dl>
+        {% if can_manage_updates %}
+        <form method="post" action="{{ request.scope.root_path }}/settings/update-aprs-device-identification" class="form-stack">
+            <button type="submit" class="button">{{ t("Update now") }}</button>
+        </form>
+        {% else %}
+        <p class="muted">{{ t("Your role can view APRS device identification status but cannot start updates.") }}</p>
+        {% endif %}
+    </div>
+</section>
+
 {% if latest_version_result and latest_version_result.ok %}
 <section class="panel">
     <div class="panel-body">
