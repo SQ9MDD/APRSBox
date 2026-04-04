@@ -9,26 +9,31 @@ The project is no longer "GUI only". It already includes a working SQLite-backed
 
 ## Fast Install
 
-If you want to install APRSBox on a target Linux machine, the simplest message is:
+If you want to install APRSBox on a target Linux machine, the fastest path is a single installer command.
 
 - run one command
 - the script installs packages, creates the Python environment, initializes the database, installs services, and starts the app
 
-Alpine Linux:
+**Installer-supported targets**
+
+- Alpine Linux
+- Debian, Raspberry Pi OS / Raspbian, and Debian-like systems exposing `ID_LIKE=debian`
+
+**Alpine Linux** (run as root):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
   env APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git APRSBOX_GIT_BRANCH=main sh
 ```
 
-Raspberry Pi OS / Debian:
+**Raspberry Pi OS / Debian / Debian-like** (use `sudo`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
   sudo env APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git APRSBOX_GIT_BRANCH=main sh
 ```
 
-After installation:
+**After installation**
 
 - web GUI: `http://<host>:8000/login`
 - default login: `admin`
@@ -67,17 +72,22 @@ Implemented now:
 - Scheduled outbound station position beacons
 - Scheduled outbound APRS Status frames
 - Scheduled outbound APRS object frames
+- Scheduled outbound APRS bulletin / announcement frames
 - Outbound queue persisted in SQLite
 - KISS/TNC2 frame generation for:
   - station beacon
   - APRS Status
   - APRS object
+  - APRS messages
+  - APRS bulletins / announcements
 - TCP TNC outbound delivery through the core worker
+- APRS message send / receive with ACK handling and APRS query handling
 - TCP TNC traffic monitor with KISS frame ingestion and TNC2 decoding
 - Traffic persistence to `traffic_frames`
 - Heard-station views and station detail pages
 - Leaflet-based map page backed by heard-station data
 - Band condition processing based on received traffic history
+- DIGI Flow editor and runtime for RF frame processing and queued RF retransmission
 - Logs and recent outbound job history in the GUI
 - User management from the admin area
 
@@ -85,10 +95,7 @@ Not implemented yet:
 
 - APRS-IS client connectivity
 - iGate runtime logic
-- digipeater runtime logic
 - outbound APRS item scheduling/transmission
-- outbound bulletin scheduling/transmission
-- APRS message transmit
 - runtime support for serial TNC links; current runtime code works with TCP TNC endpoints
 - advanced migration framework; schema updates are handled directly in `app.db.init_db()`
 
@@ -237,17 +244,18 @@ Current APRS runtime behavior:
 - TX:
   - queues outbound jobs in SQLite
   - processes jobs from the core worker
-  - currently supports `beacon`, `status`, and `object`
+  - currently supports `beacon`, `status`, `object`, APRS messages, and bulletin / announcement frames
   - builds TNC2 lines and wraps them into KISS frames
   - sends them to the configured TCP TNC endpoint
 - Scheduling:
   - station beacon scheduler
   - station APRS Status scheduler
   - object scheduler with jitter spacing between object transmissions
+  - bulletin / announcement scheduler with jitter spacing between message transmissions
 
 Important current limitation:
 
-- The runtime path uses the interface selected in station settings for station beacon/status/object TX.
+- The runtime path uses the interface selected in station settings for station beacon/status/object/message/bulletin TX.
 - Runtime transport currently expects `TCP` modem definitions with `host:port`.
 - `SERIALL` may appear in configuration, but runtime RX/TX code does not use it yet.
 
@@ -439,11 +447,10 @@ SQLite pragmas currently enabled on connection:
 
 ## Notes And Limitations
 
-- Station beacon, APRS Status and object TX currently depend on the core process being up
+- Station beacon, APRS Status, object, bulletin, and APRS message TX currently depend on the core process being up
 - Runtime RX/TX currently supports TCP TNC endpoints, not serial runtime links
-- APRS-IS, iGate and DIGI sections are configuration storage only at this stage
-- Items and bulletins are stored in SQLite but not transmitted yet
-- APRS message transmit UI exists, but message sending is not implemented
+- APRS-IS and iGate sections are still primarily configuration storage at this stage
+- Items are stored in SQLite but not transmitted yet
 - Schema evolution is handled directly in code during startup; there is no separate migration framework yet
 - No Docker deployment is provided or recommended for this project
 
@@ -544,10 +551,7 @@ Jeszcze nie działa:
 
 - APRS-IS runtime
 - runtime iGate
-- runtime digipeatera
 - nadawanie APRS item
-- nadawanie bulletinów
-- nadawanie wiadomości APRS
 - runtime dla połączeń szeregowych TNC; obecny kod działa dla endpointów TCP
 
 ## Development local
@@ -581,15 +585,15 @@ Obecnie runtime:
 - zapisuje ruch do SQLite
 - aktualizuje widoki stacji i band condition
 - pobiera zadania outbound z kolejki SQLite
-- wysyła `beacon`, `status` i `object`
+- wysyła `beacon`, `status`, `object`, wiadomości APRS oraz bulletiny / ogłoszenia
 - używa aktualnie wybranego interfejsu stacji dla TX
 
 Ważne ograniczenia:
 
-- TX beacon/status/object działa tylko wtedy, gdy działa `aprsbox-core`
+- TX beacon/status/object/message/bulletin działa tylko wtedy, gdy działa `aprsbox-core`
 - runtime oczekuje modemów typu `TCP` w formacie `host:port`
 - wpis typu `SERIALL` może istnieć w konfiguracji, ale runtime go jeszcze nie obsługuje
-- sekcje APRS-IS, iGate i DIGI są obecnie głównie konfiguracją do przyszłego runtime
+- sekcje APRS-IS i iGate są obecnie głównie konfiguracją do przyszłego runtime
 
 ## Serwisy po instalacji
 
@@ -623,8 +627,7 @@ Domyślne porty:
 
 ## Najważniejsze ograniczenia
 
-- APRS-IS, iGate i DIGI nie mają jeszcze runtime
-- itemy i bulletiny są przechowywane, ale nie są nadawane
-- formularz APRS message istnieje, ale nie wysyła wiadomości
+- itemy są przechowywane, ale nie są jeszcze nadawane
+- APRS-IS i iGate nie mają jeszcze pełnego runtime; `DIGI Flow runtime` jest osobnym mechanizmem RF
 - ewolucja schematu bazy jest robiona w kodzie przy starcie, bez osobnego frameworka migracji
 - projekt nie ma i nie promuje deploymentu przez Docker
