@@ -279,29 +279,47 @@ class DigiFlowRuntimeService:
 
         if not callsign:
             decision = "drop"
-            message = "Callsign filter rejected frame because source callsign could not be parsed."
+            message = _t("Callsign filter rejected frame because source callsign could not be parsed.")
         elif mode == "allow":
             passed = matched_pattern is not None
             decision = "continue" if passed else "drop"
             if configured:
                 message = (
-                    f"Callsign filter ({mode}) inspected {callsign}: "
-                    f"{'passed' if passed else 'rejected'} because it "
-                    f"{'matched pattern ' + matched_pattern if passed else 'did not match any allow pattern'}."
+                    _tf(
+                        "Callsign filter ({mode}) inspected {callsign}: passed because it matched pattern {pattern}.",
+                        {"mode": mode, "callsign": callsign, "pattern": matched_pattern or ""},
+                    )
+                    if passed
+                    else _tf(
+                        "Callsign filter ({mode}) inspected {callsign}: rejected because it did not match any allow pattern.",
+                        {"mode": mode, "callsign": callsign},
+                    )
                 )
             else:
-                message = f"Callsign filter ({mode}) inspected {callsign}: rejected because the allow list is empty."
+                message = _tf(
+                    "Callsign filter ({mode}) inspected {callsign}: rejected because the allow list is empty.",
+                    {"mode": mode, "callsign": callsign},
+                )
         else:
             blocked = matched_pattern is not None
             decision = "drop" if blocked else "continue"
             if configured:
                 message = (
-                    f"Callsign filter ({mode}) inspected {callsign}: "
-                    f"{'rejected' if blocked else 'passed'} because it "
-                    f"{'matched pattern ' + matched_pattern if blocked else 'did not match any deny pattern'}."
+                    _tf(
+                        "Callsign filter ({mode}) inspected {callsign}: rejected because it matched pattern {pattern}.",
+                        {"mode": mode, "callsign": callsign, "pattern": matched_pattern or ""},
+                    )
+                    if blocked
+                    else _tf(
+                        "Callsign filter ({mode}) inspected {callsign}: passed because it did not match any deny pattern.",
+                        {"mode": mode, "callsign": callsign},
+                    )
                 )
             else:
-                message = f"Callsign filter ({mode}) inspected {callsign}: passed because the deny list is empty."
+                message = _tf(
+                    "Callsign filter ({mode}) inspected {callsign}: passed because the deny list is empty.",
+                    {"mode": mode, "callsign": callsign},
+                )
 
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
@@ -324,7 +342,7 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="path_rule",
                 decision="rejected",
-                message="Path rule rejected frame because TNC2 parsing failed.",
+                message=_t("Path rule rejected frame because TNC2 parsing failed."),
             )
             return {"decision": "drop"}
 
@@ -337,7 +355,7 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="path_rule",
                 decision="rejected",
-                message="Path rule rejected frame because the packet has no remaining path.",
+                message=_t("Path rule rejected frame because the packet has no remaining path."),
             )
             return {"decision": "drop"}
 
@@ -349,7 +367,10 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="path_rule",
                 decision="rejected",
-                message=f"Path rule rejected frame because the input path {input_path or '-'} is already fully consumed.",
+                message=_tf(
+                    "Path rule rejected frame because the input path {path} is already fully consumed.",
+                    {"path": input_path or "-"},
+                ),
             )
             return {"decision": "drop"}
 
@@ -361,9 +382,9 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="path_rule",
                 decision="rejected",
-                message=(
-                    "Path rule rejected frame because local DIGI "
-                    f"{local_identity} already appears as a consumed hop in path {input_path or '-'}."
+                message=_tf(
+                    "Path rule rejected frame because local DIGI {local_identity} already appears as a consumed hop in path {path}.",
+                    {"local_identity": local_identity, "path": input_path or "-"},
                 ),
             )
             return {"decision": "drop"}
@@ -383,7 +404,10 @@ class DigiFlowRuntimeService:
                     step_id=step_id,
                     event_type="path_rule",
                     decision="rejected",
-                    message=f"Path rule matched TRACE {matched_trace} but local station callsign is not configured.",
+                    message=_tf(
+                        "Path rule matched TRACE {matched_trace} but local station callsign is not configured.",
+                        {"matched_trace": matched_trace},
+                    ),
                 )
                 return {"decision": "drop"}
             updated_tokens = _rewrite_trace_path(path_tokens, first_unconsumed_index, local_identity)
@@ -395,7 +419,10 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="path_rule",
                 decision="trace",
-                message=f"TRACE matched {matched_trace}. Path {input_path or '-'} -> {updated_path or '-'}.",
+                message=_tf(
+                    "TRACE matched {matched_trace}. Path {input_path} -> {updated_path}.",
+                    {"matched_trace": matched_trace, "input_path": input_path or "-", "updated_path": updated_path or "-"},
+                ),
             )
             return {"decision": "continue"}
 
@@ -409,7 +436,10 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="path_rule",
                 decision="no_trace",
-                message=f"NO_TRACE matched {matched_no_trace}. Path {input_path or '-'} -> {updated_path or '-'}.",
+                message=_tf(
+                    "NO_TRACE matched {matched_no_trace}. Path {input_path} -> {updated_path}.",
+                    {"matched_no_trace": matched_no_trace, "input_path": input_path or "-", "updated_path": updated_path or "-"},
+                ),
             )
             return {"decision": "continue"}
 
@@ -419,7 +449,10 @@ class DigiFlowRuntimeService:
             step_id=step_id,
             event_type="path_rule",
             decision="rejected",
-            message=f"Path rule rejected frame because first remaining path {candidate} matched neither TRACE nor NO_TRACE. Input path: {input_path or '-'}",
+            message=_tf(
+                "Path rule rejected frame because first remaining path {candidate} matched neither TRACE nor NO_TRACE. Input path: {input_path}",
+                {"candidate": candidate, "input_path": input_path or "-"},
+            ),
         )
         return {"decision": "drop"}
 
@@ -434,7 +467,7 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="strict_filter",
                 decision="rejected",
-                message="Strict filter rejected frame because TNC2 parsing failed.",
+                message=_t("Strict filter rejected frame because TNC2 parsing failed."),
             )
             return {"decision": "drop"}
 
@@ -447,7 +480,7 @@ class DigiFlowRuntimeService:
                 step_id=step_id,
                 event_type="strict_filter",
                 decision="passed",
-                message=f"Strict filter passed. Input path: {input_path or '-'}",
+                message=_tf("Strict filter passed. Input path: {input_path}", {"input_path": input_path or "-"}),
             )
             return {"decision": "continue"}
 
@@ -457,7 +490,10 @@ class DigiFlowRuntimeService:
             step_id=step_id,
             event_type="strict_filter",
             decision="rejected",
-            message=f"Strict filter rejected frame because path contains blocked token {blocked_token}. Input path: {input_path or '-'}",
+            message=_tf(
+                "Strict filter rejected frame because path contains blocked token {blocked_token}. Input path: {input_path}",
+                {"blocked_token": blocked_token, "input_path": input_path or "-"},
+            ),
         )
         return {"decision": "drop"}
 
@@ -587,9 +623,9 @@ class DigiFlowRuntimeService:
         if not packet_group and not packet_type_code:
             decision = "drop" if mode == "allow" else "continue"
             message = (
-                "Packet type filter rejected frame because APRS packet group could not be decoded."
+                _t("Packet type filter rejected frame because APRS packet group could not be decoded.")
                 if decision == "drop"
-                else "Packet type filter passed because APRS packet group could not be decoded and deny list applies only to decoded groups."
+                else _t("Packet type filter passed because APRS packet group could not be decoded and deny list applies only to decoded groups.")
             )
         elif mode == "allow":
             matched = matched_selector is not None
@@ -597,24 +633,42 @@ class DigiFlowRuntimeService:
             inspected = _packet_type_filter_inspected_label(packet_group=packet_group, packet_type_code=packet_type_code)
             if configured:
                 message = (
-                    f"Packet type filter ({mode}) inspected {inspected}: "
-                    f"{'passed' if matched else 'rejected'} because it "
-                    f"{'matched configured group ' + str(matched_selector) if matched else 'did not match any allow group'}."
+                    _tf(
+                        "Packet type filter ({mode}) inspected {inspected}: passed because it matched configured group {matched_selector}.",
+                        {"mode": mode, "inspected": inspected, "matched_selector": str(matched_selector or "")},
+                    )
+                    if matched
+                    else _tf(
+                        "Packet type filter ({mode}) inspected {inspected}: rejected because it did not match any allow group.",
+                        {"mode": mode, "inspected": inspected},
+                    )
                 )
             else:
-                message = f"Packet type filter ({mode}) inspected {inspected}: rejected because the allow list is empty."
+                message = _tf(
+                    "Packet type filter ({mode}) inspected {inspected}: rejected because the allow list is empty.",
+                    {"mode": mode, "inspected": inspected},
+                )
         else:
             blocked = matched_selector is not None
             decision = "drop" if blocked else "continue"
             inspected = _packet_type_filter_inspected_label(packet_group=packet_group, packet_type_code=packet_type_code)
             if configured:
                 message = (
-                    f"Packet type filter ({mode}) inspected {inspected}: "
-                    f"{'rejected' if blocked else 'passed'} because it "
-                    f"{'matched configured group ' + str(matched_selector) if blocked else 'did not match any deny group'}."
+                    _tf(
+                        "Packet type filter ({mode}) inspected {inspected}: rejected because it matched configured group {matched_selector}.",
+                        {"mode": mode, "inspected": inspected, "matched_selector": str(matched_selector or "")},
+                    )
+                    if blocked
+                    else _tf(
+                        "Packet type filter ({mode}) inspected {inspected}: passed because it did not match any deny group.",
+                        {"mode": mode, "inspected": inspected},
+                    )
                 )
             else:
-                message = f"Packet type filter ({mode}) inspected {inspected}: passed because the deny list is empty."
+                message = _tf(
+                    "Packet type filter ({mode}) inspected {inspected}: passed because the deny list is empty.",
+                    {"mode": mode, "inspected": inspected},
+                )
 
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
@@ -638,32 +692,50 @@ class DigiFlowRuntimeService:
         if not symbol:
             decision = "drop" if mode == "allow" else "continue"
             message = (
-                "Icon filter rejected frame because APRS symbol could not be decoded."
+                _t("Icon filter rejected frame because APRS symbol could not be decoded.")
                 if decision == "drop"
-                else "Icon filter passed because APRS symbol could not be decoded and deny list applies only to decoded symbols."
+                else _t("Icon filter passed because APRS symbol could not be decoded and deny list applies only to decoded symbols.")
             )
         elif mode == "allow":
             matched = symbol in configured
             decision = "continue" if matched else "drop"
             if configured:
                 message = (
-                    f"Icon filter ({mode}) inspected {symbol}: "
-                    f"{'passed' if matched else 'rejected'} because it "
-                    f"{'matched configured symbol ' + symbol if matched else 'did not match any allow symbol'}."
+                    _tf(
+                        "Icon filter ({mode}) inspected {symbol}: passed because it matched configured symbol {matched_symbol}.",
+                        {"mode": mode, "symbol": symbol, "matched_symbol": symbol},
+                    )
+                    if matched
+                    else _tf(
+                        "Icon filter ({mode}) inspected {symbol}: rejected because it did not match any allow symbol.",
+                        {"mode": mode, "symbol": symbol},
+                    )
                 )
             else:
-                message = f"Icon filter ({mode}) inspected {symbol}: rejected because the allow list is empty."
+                message = _tf(
+                    "Icon filter ({mode}) inspected {symbol}: rejected because the allow list is empty.",
+                    {"mode": mode, "symbol": symbol},
+                )
         else:
             blocked = symbol in configured
             decision = "drop" if blocked else "continue"
             if configured:
                 message = (
-                    f"Icon filter ({mode}) inspected {symbol}: "
-                    f"{'rejected' if blocked else 'passed'} because it "
-                    f"{'matched configured symbol ' + symbol if blocked else 'did not match any deny symbol'}."
+                    _tf(
+                        "Icon filter ({mode}) inspected {symbol}: rejected because it matched configured symbol {matched_symbol}.",
+                        {"mode": mode, "symbol": symbol, "matched_symbol": symbol},
+                    )
+                    if blocked
+                    else _tf(
+                        "Icon filter ({mode}) inspected {symbol}: passed because it did not match any deny symbol.",
+                        {"mode": mode, "symbol": symbol},
+                    )
                 )
             else:
-                message = f"Icon filter ({mode}) inspected {symbol}: passed because the deny list is empty."
+                message = _tf(
+                    "Icon filter ({mode}) inspected {symbol}: passed because the deny list is empty.",
+                    {"mode": mode, "symbol": symbol},
+                )
 
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
