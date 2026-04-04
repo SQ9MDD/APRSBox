@@ -132,9 +132,8 @@
 
     let state = buildInitialState(initialData);
     let refreshTimer = null;
-    let pathSaveTimer = null;
-    const pathDrafts = new Map();
     const messageDrafts = new Map();
+    const pathStorageKeyPrefix = "aprsbox.messages.path.";
 
     function conversationMessageSignature(conversation) {
         if (!conversation || !Array.isArray(conversation.messages) || !conversation.messages.length) {
@@ -217,6 +216,48 @@
             .slice(0, composerLimit);
     }
 
+    function normalizeFuturePath(value) {
+        return String(value || "")
+            .trim()
+            .toUpperCase()
+            .replace(/[\x00-\x1F\x7F]/g, "")
+            .replace(/[^\x20-\x7E]/g, "")
+            .slice(0, 64);
+    }
+
+    function conversationPathStorageKey(callsign) {
+        return `${pathStorageKeyPrefix}${normalizeCallsign(callsign)}`;
+    }
+
+    function loadStoredConversationPath(callsign) {
+        try {
+            return normalizeFuturePath(window.localStorage.getItem(conversationPathStorageKey(callsign)) || "");
+        } catch (_) {
+            return "";
+        }
+    }
+
+    function storeConversationPath(callsign, path) {
+        const normalizedCallsign = normalizeCallsign(callsign);
+        if (!normalizedCallsign) {
+            return;
+        }
+        const normalizedPath = normalizeFuturePath(path);
+        try {
+            if (normalizedPath) {
+                window.localStorage.setItem(conversationPathStorageKey(normalizedCallsign), normalizedPath);
+            } else {
+                window.localStorage.removeItem(conversationPathStorageKey(normalizedCallsign));
+            }
+        } catch (_) {
+            return;
+        }
+    }
+
+    function resolveConversationPath(conversation) {
+        return loadStoredConversationPath(conversation.callsign) || defaultPath;
+    }
+
     function cloneConversation(conversation) {
         return {
             id: String(conversation.id || ""),
@@ -228,7 +269,7 @@
             recently_heard: Boolean(conversation.recently_heard),
             heard_recently_state: String(conversation.heard_recently_state || "none"),
             heard_recently_label: String(conversation.heard_recently_label || ""),
-            path: String(conversation.path || defaultPath).trim().toUpperCase(),
+            path: "",
             messages: Array.isArray(conversation.messages) ? conversation.messages.map((message) => ({
                 id: String(message.id || ""),
                 direction: message.direction === "rx" ? "rx" : "tx",
@@ -263,7 +304,7 @@
         conversation.last_activity_at = String(
             (lastMessage && lastMessage.timestamp) || conversation.created_at || new Date().toISOString()
         );
-        conversation.path = String(conversation.path || defaultPath).trim().toUpperCase();
+        conversation.path = resolveConversationPath(conversation);
         return conversation;
     }
 
@@ -289,19 +330,6 @@
 
     function getActiveConversation() {
         return state.conversations.find((conversation) => conversation.id === state.activeConversationId) || null;
-    }
-
-    function mergePathDrafts(nextState) {
-        if (!nextState || !Array.isArray(nextState.conversations)) {
-            return nextState;
-        }
-        nextState.conversations.forEach((conversation) => {
-            const draftPath = pathDrafts.get(conversation.id);
-            if (draftPath !== undefined) {
-                conversation.path = draftPath;
-            }
-        });
-        return nextState;
     }
 
     async function apiRequest(path, options = {}) {
@@ -489,7 +517,7 @@
         composerInput.disabled = !conversation;
         composerPathInput.disabled = !conversation;
         const desiredPathValue = conversation
-            ? String(pathDrafts.get(conversation.id) ?? conversation.path ?? defaultPath)
+            ? String(conversation.path || defaultPath)
             : defaultPath;
         if (composerPathInput.value !== desiredPathValue) {
             composerPathInput.value = desiredPathValue;
@@ -512,7 +540,7 @@
         const previousActiveConversationId = previousActiveConversation ? previousActiveConversation.id : null;
         const previousMessageSignature = conversationMessageSignature(previousActiveConversation);
         const shouldStickToBottom = isHistoryNearBottom();
-        const nextState = mergePathDrafts(buildInitialState(serverData || {}));
+        const nextState = buildInitialState(serverData || {});
         if (preferredConversationId !== undefined && preferredConversationId !== null) {
             nextState.activeConversationId = String(preferredConversationId);
         } else if (state.activeConversationId && nextState.conversations.some((conversation) => conversation.id === state.activeConversationId)) {
@@ -621,7 +649,7 @@
                 callsign: conversation.callsign,
                 conversation_id: conversation.id,
                 message_text: text.trim(),
-                path: composerPathInput.value || defaultPath,
+                path: normalizeFuturePath(composerPathInput.value) || defaultPath,
             }),
         }).then(async (payload) => {
             messageDrafts.delete(conversation.id);
@@ -680,27 +708,12 @@
         if (!conversation) {
             return;
         }
-        const draftPath = String(composerPathInput.value || "");
-        conversation.path = draftPath;
-        pathDrafts.set(conversation.id, draftPath);
-        if (pathSaveTimer !== null) {
-            window.clearTimeout(pathSaveTimer);
+        const normalizedPath = normalizeFuturePath(composerPathInput.value);
+        if (composerPathInput.value !== normalizedPath) {
+            composerPathInput.value = normalizedPath;
         }
-        pathSaveTimer = window.setTimeout(() => {
-            const pendingPath = pathDrafts.get(conversation.id) ?? draftPath;
-            void apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversation.id)}/path`, {
-                method: "POST",
-                body: JSON.stringify({ path: pendingPath }),
-            }).then(async (payload) => {
-                if (pathDrafts.get(conversation.id) === pendingPath) {
-                    pathDrafts.delete(conversation.id);
-                }
-                await applyServerState(payload.messages_view, conversation.id);
-            }).catch((error) => {
-                composerError.hidden = false;
-                composerError.textContent = error.message;
-            });
-        }, 250);
+        conversation.path = normalizedPath || defaultPath;
+        storeConversationPath(conversation.callsign, normalizedPath);
     });
 
     render({ autoScroll: true });
@@ -717,9 +730,6 @@
     window.addEventListener("beforeunload", () => {
         if (refreshTimer !== null) {
             window.clearInterval(refreshTimer);
-        }
-        if (pathSaveTimer !== null) {
-            window.clearTimeout(pathSaveTimer);
         }
     });
 })();

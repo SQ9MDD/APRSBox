@@ -36,6 +36,8 @@ def get_section_rows(slug: str) -> list[dict[str, Any]]:
     definition = SECTION_DEFINITIONS[slug]
     rows = fetch_all(f"SELECT * FROM {definition.table_name} ORDER BY id DESC")
     result = [dict(row) for row in rows]
+    if slug == "modems":
+        return _decorate_modem_rows(result)
     if slug in {"objects", "items"}:
         return [_decorate_aprs_entity_row(slug, row) for row in result]
     if slug == "bulletins":
@@ -49,10 +51,58 @@ def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
     if not row:
         return None
     result = dict(row)
+    if slug == "modems":
+        decorated = _decorate_modem_rows([result])
+        return decorated[0] if decorated else result
     if slug in {"objects", "items"}:
         return _decorate_aprs_entity_row(slug, result)
     if slug == "bulletins":
         return _decorate_aprs_message_row(result)
+    return result
+
+
+def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+    runtime_rows = fetch_all(
+        """
+        SELECT modem_id, status, status_detail, last_error
+        FROM traffic_runtime_interfaces
+        """
+    )
+    runtime_by_modem_id = {int(row["modem_id"]): dict(row) for row in runtime_rows if row["modem_id"] is not None}
+    return [_decorate_modem_row(row, runtime_by_modem_id.get(int(row["id"]))) for row in rows]
+
+
+def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None) -> dict[str, Any]:
+    result = dict(row)
+    if not bool(result.get("enabled")):
+        result["modem_runtime_status"] = "disabled"
+        result["modem_runtime_label"] = "Disabled"
+        result["modem_runtime_icon"] = "close-circle-outline.svg"
+        result["modem_runtime_title"] = "Disabled in configuration."
+        return result
+
+    runtime_status = str((runtime_row or {}).get("status") or "").strip().lower()
+    runtime_detail = str((runtime_row or {}).get("status_detail") or "").strip()
+    runtime_error = str((runtime_row or {}).get("last_error") or "").strip()
+    if runtime_error or runtime_status == "error":
+        result["modem_runtime_status"] = "error"
+        result["modem_runtime_label"] = "Error"
+        result["modem_runtime_icon"] = "alert-circle-outline.svg"
+        result["modem_runtime_title"] = runtime_error or runtime_detail or "TNC connection error."
+        return result
+    if runtime_status == "connecting":
+        result["modem_runtime_status"] = "connecting"
+        result["modem_runtime_label"] = "Connecting"
+        result["modem_runtime_icon"] = "progress-clock.svg"
+        result["modem_runtime_title"] = runtime_detail or "Connecting to TNC."
+        return result
+
+    result["modem_runtime_status"] = "enabled"
+    result["modem_runtime_label"] = "Enabled"
+    result["modem_runtime_icon"] = "check-circle-outline.svg"
+    result["modem_runtime_title"] = runtime_detail or "Enabled in configuration."
     return result
 
 

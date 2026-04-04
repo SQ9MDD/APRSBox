@@ -131,9 +131,15 @@
                             {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <td>
-                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row[field.name] else 'tnc-badge-disabled' }}">
-                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row[field.name] else 'close-circle.svg' }}" alt="">
-                                    <span>{{ t('Enabled' if row[field.name] else 'Disabled') }}</span>
+                                <span
+                                    class="tnc-status-icon tnc-status-icon-{{ row.modem_runtime_status or ('enabled' if row[field.name] else 'disabled') }}"
+                                    title="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}{% if row.modem_runtime_title %} · {{ row.modem_runtime_title }}{% endif %}"
+                                    aria-label="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}"
+                                >
+                                    <img
+                                        src="{{ request.scope.root_path }}/static/icons/{{ row.modem_runtime_icon or ('check-circle-outline.svg' if row[field.name] else 'close-circle-outline.svg') }}"
+                                        alt="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}"
+                                    >
                                 </span>
                             </td>
                             {% else %}
