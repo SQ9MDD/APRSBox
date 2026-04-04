@@ -179,6 +179,7 @@ def _digi_flow_editor_context(
     flash: str | None = None,
     flash_success: bool = False,
 ) -> dict[str, object]:
+    station_form_options = _station_form_options()
     return build_template_context(
         request,
         page_title="DIGI Flow Editor" if flow_id else "New DIGI Flow",
@@ -196,6 +197,8 @@ def _digi_flow_editor_context(
         filter_step_types=FILTER_STEP_TYPES,
         target_step_types=TARGET_STEP_TYPES,
         flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=10) if flow_id is not None else [],
+        symbol_table_options=station_form_options["symbol_table_options"],
+        symbol_code_options=station_form_options["symbol_code_options"],
         flash=flash,
         flash_success=flash_success,
     )

@@ -1308,6 +1308,43 @@ select:focus-visible,
     border-top: 1px solid var(--border);
 }
 
+.digi-icon-filter-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    align-items: end;
+    margin-bottom: var(--space-3);
+}
+
+.digi-icon-filter-table-field,
+.digi-icon-filter-symbol-field {
+    display: grid;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.digi-icon-filter-symbol-field .station-symbol-picker {
+    width: 100%;
+}
+
+.digi-icon-symbol-dropdown {
+    width: 100%;
+}
+
+.digi-icon-filter-add-button {
+    white-space: nowrap;
+}
+
+@media (max-width: 780px) {
+    .digi-icon-filter-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .digi-icon-filter-add-button {
+        width: 100%;
+    }
+}
+
 .digi-step-connector {
     display: flex;
     align-items: center;

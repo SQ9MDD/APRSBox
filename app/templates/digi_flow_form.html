@@ -228,8 +228,12 @@
         const typeMeta = {{ type_meta|tojson }};
         const endpointOptions = {{ endpoint_options|tojson }};
         const filterTypes = {{ filter_step_types|tojson }};
+        const symbolTableOptions = {{ symbol_table_options|tojson }};
+        const symbolCodeOptions = {{ symbol_code_options|tojson }};
         const rootPath = {{ request.scope.root_path|tojson }};
         const i18n = Object.freeze({
+            add: {{ t("Add")|tojson }},
+            alternateSymbolTable: {{ t("Alternate (\\)")|tojson }},
             notConfigured: {{ t("Not configured")|tojson }},
             legacyMobilePosition: {{ t("legacy M (mobile position)")|tojson }},
             legacyStationaryPosition: {{ t("legacy S (stationary position)")|tojson }},
@@ -260,6 +264,7 @@
             moveStepUp: {{ t("Move step up")|tojson }},
             moveStepDown: {{ t("Move step down")|tojson }},
             deleteStep: {{ t("Delete step")|tojson }},
+            primarySymbolTable: {{ t("Primary (/)")|tojson }},
             cardTitle: {{ t("Card Title")|tojson }},
             minimumPathRuleRf: {{ t("Minimum Path Rule is required before an RF TX target.")|tojson }},
             minimumPathRuleAprsis: {{ t("Minimum Path Rule is required before an APRS-IS TX target.")|tojson }},
@@ -285,6 +290,9 @@
             passed: {{ t("passed")|tojson }},
             executed: {{ t("executed")|tojson }},
             rejected: {{ t("rejected")|tojson }},
+            selectSymbol: {{ t("Select symbol")|tojson }},
+            symbolCode: {{ t("Symbol Code")|tojson }},
+            symbolTable: {{ t("Symbol Table")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
@@ -312,6 +320,19 @@
         ));
 
         const clone = (value) => JSON.parse(JSON.stringify(value));
+        const uniqueLines = (items) => {
+            const seen = new Set();
+            const normalized = [];
+            for (const item of items || []) {
+                const value = String(item || "").trim();
+                if (!value || seen.has(value)) {
+                    continue;
+                }
+                seen.add(value);
+                normalized.push(value);
+            }
+            return normalized;
+        };
 
         const defaultConfig = (stepType, refValue = "") => {
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
@@ -338,6 +359,18 @@
             .split(/\r?\n/)
             .map((item) => item.trim())
             .filter(Boolean);
+
+        document.addEventListener("click", (event) => {
+            for (const dropdown of document.querySelectorAll(".digi-icon-symbol-dropdown.open")) {
+                if (!dropdown.contains(event.target)) {
+                    dropdown.classList.remove("open");
+                    const trigger = dropdown.querySelector(".station-symbol-trigger");
+                    if (trigger) {
+                        trigger.setAttribute("aria-expanded", "false");
+                    }
+                }
+            }
+        });
 
         const packetTypeValueLabel = (value) => {
             const normalized = String(value || "").trim();
@@ -410,6 +443,20 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const iconPath = (name) => `${rootPath}/static/icons/${name}`;
+
+        const ensureIconPickerState = (step) => {
+            if (!step.__iconPicker || typeof step.__iconPicker !== "object") {
+                step.__iconPicker = {};
+            }
+            const pickerState = step.__iconPicker;
+            if (!symbolTableOptions.some((option) => option.value === pickerState.symbolTable)) {
+                pickerState.symbolTable = "/";
+            }
+            if (!symbolCodeOptions.some((option) => option.value === pickerState.symbolCode)) {
+                pickerState.symbolCode = ">";
+            }
+            return pickerState;
+        };
 
         const setExpandedStep = (targetIndex) => {
             steps.forEach((step, index) => {
@@ -513,6 +560,163 @@
                     wrapper.appendChild(hint);
                 }
             };
+
+            if (step.step_type === "filter_icon" && field.name === "icons" && field.type === "textarea") {
+                const pickerState = ensureIconPickerState(step);
+                const controls = document.createElement("div");
+                controls.className = "digi-icon-filter-controls";
+
+                const tableField = document.createElement("div");
+                tableField.className = "digi-icon-filter-table-field";
+                const tableCaption = document.createElement("span");
+                tableCaption.textContent = i18n.symbolTable;
+                const tableSelect = document.createElement("select");
+                for (const optionValue of symbolTableOptions) {
+                    const option = document.createElement("option");
+                    option.value = optionValue.value;
+                    option.textContent = optionValue.value === "\\" ? i18n.alternateSymbolTable : i18n.primarySymbolTable;
+                    if (optionValue.value === pickerState.symbolTable) {
+                        option.selected = true;
+                    }
+                    tableSelect.appendChild(option);
+                }
+                tableField.appendChild(tableCaption);
+                tableField.appendChild(tableSelect);
+                controls.appendChild(tableField);
+
+                const symbolField = document.createElement("div");
+                symbolField.className = "digi-icon-filter-symbol-field";
+                const symbolCaption = document.createElement("span");
+                symbolCaption.textContent = i18n.symbolCode;
+                symbolField.appendChild(symbolCaption);
+
+                const symbolPicker = document.createElement("div");
+                symbolPicker.className = "station-symbol-picker";
+                const symbolDropdown = document.createElement("div");
+                symbolDropdown.className = "station-symbol-dropdown digi-icon-symbol-dropdown";
+                const symbolTrigger = document.createElement("button");
+                symbolTrigger.type = "button";
+                symbolTrigger.className = "station-symbol-trigger";
+                symbolTrigger.setAttribute("aria-haspopup", "listbox");
+                symbolTrigger.setAttribute("aria-expanded", "false");
+                const triggerCopy = document.createElement("span");
+                triggerCopy.className = "station-symbol-trigger-copy";
+                const triggerImage = document.createElement("img");
+                triggerImage.alt = "";
+                const triggerText = document.createElement("span");
+                triggerText.className = "station-symbol-trigger-text";
+                triggerCopy.appendChild(triggerImage);
+                triggerCopy.appendChild(triggerText);
+                const triggerCaret = document.createElement("span");
+                triggerCaret.className = "station-symbol-trigger-caret";
+                triggerCaret.textContent = "▾";
+                symbolTrigger.appendChild(triggerCopy);
+                symbolTrigger.appendChild(triggerCaret);
+                symbolDropdown.appendChild(symbolTrigger);
+
+                const symbolMenu = document.createElement("div");
+                symbolMenu.className = "station-symbol-menu";
+                symbolMenu.setAttribute("role", "listbox");
+                symbolMenu.tabIndex = -1;
+                symbolMenu.setAttribute("aria-label", i18n.symbolCode);
+
+                const syncIconPickerPreview = () => {
+                    const selected = symbolCodeOptions.find((option) => option.value === pickerState.symbolCode) || symbolCodeOptions[0];
+                    const useAlternate = pickerState.symbolTable === "\\";
+                    const icon = useAlternate ? selected.alternate_icon : selected.primary_icon;
+                    triggerImage.src = `${rootPath}/static/${icon || "icons/verG/x.gif"}`;
+                    triggerText.textContent = selected.label || i18n.selectSymbol;
+                    for (const optionButton of symbolMenu.querySelectorAll(".station-symbol-option")) {
+                        const useAlt = pickerState.symbolTable === "\\";
+                        const image = optionButton.querySelector(".station-symbol-option-image");
+                        const optionIcon = useAlt ? optionButton.dataset.alternateIcon : optionButton.dataset.primaryIcon;
+                        if (image) {
+                            image.src = optionIcon || `${rootPath}/static/icons/verG/x.gif`;
+                        }
+                        const isActive = optionButton.dataset.value === selected.value;
+                        optionButton.classList.toggle("active", isActive);
+                        optionButton.setAttribute("aria-selected", isActive ? "true" : "false");
+                    }
+                };
+
+                for (const optionValue of symbolCodeOptions) {
+                    const optionButton = document.createElement("button");
+                    optionButton.type = "button";
+                    optionButton.className = "station-symbol-option";
+                    optionButton.dataset.value = optionValue.value;
+                    optionButton.dataset.primaryIcon = `${rootPath}/static/${optionValue.primary_icon}`;
+                    optionButton.dataset.alternateIcon = `${rootPath}/static/${optionValue.alternate_icon}`;
+                    optionButton.setAttribute("role", "option");
+                    optionButton.setAttribute("aria-selected", "false");
+
+                    const optionImage = document.createElement("img");
+                    optionImage.className = "station-symbol-option-image";
+                    optionImage.src = `${rootPath}/static/${optionValue.primary_icon}`;
+                    optionImage.alt = "";
+                    const optionLabel = document.createElement("span");
+                    optionLabel.className = "station-symbol-option-label";
+                    optionLabel.textContent = optionValue.label;
+                    optionButton.appendChild(optionImage);
+                    optionButton.appendChild(optionLabel);
+                    optionButton.addEventListener("click", () => {
+                        pickerState.symbolCode = optionValue.value || ">";
+                        syncIconPickerPreview();
+                        symbolDropdown.classList.remove("open");
+                        symbolTrigger.setAttribute("aria-expanded", "false");
+                    });
+                    symbolMenu.appendChild(optionButton);
+                }
+
+                symbolTrigger.addEventListener("click", () => {
+                    const open = symbolDropdown.classList.toggle("open");
+                    symbolTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+                });
+                tableSelect.addEventListener("change", () => {
+                    pickerState.symbolTable = tableSelect.value || "/";
+                    syncIconPickerPreview();
+                });
+
+                symbolDropdown.appendChild(symbolMenu);
+                symbolPicker.appendChild(symbolDropdown);
+                symbolField.appendChild(symbolPicker);
+                controls.appendChild(symbolField);
+
+                const addButton = document.createElement("button");
+                addButton.type = "button";
+                addButton.className = "button button-secondary digi-icon-filter-add-button";
+                addButton.textContent = i18n.add;
+                controls.appendChild(addButton);
+
+                const textarea = document.createElement("textarea");
+                step.config[field.name] = uniqueLines(step.config[field.name] || []);
+                const syncTextareaFromConfig = () => {
+                    const icons = uniqueLines(step.config[field.name] || []);
+                    step.config[field.name] = icons;
+                    textarea.value = configLinesToText(icons);
+                };
+
+                textarea.value = configLinesToText(step.config[field.name]);
+                if (field.placeholder) {
+                    textarea.placeholder = field.placeholder;
+                }
+                textarea.addEventListener("input", () => {
+                    step.config[field.name] = uniqueLines(textToLines(textarea.value));
+                });
+
+                addButton.addEventListener("click", () => {
+                    const symbolValue = `${pickerState.symbolTable || "/"}${pickerState.symbolCode || ">"}`;
+                    const icons = uniqueLines([...(step.config[field.name] || []), symbolValue]);
+                    step.config[field.name] = icons;
+                    syncTextareaFromConfig();
+                    render();
+                });
+
+                syncIconPickerPreview();
+                wrapper.appendChild(controls);
+                wrapper.appendChild(textarea);
+                appendFieldHelp();
+                return wrapper;
+            }
 
             if (field.type === "select") {
                 const select = document.createElement("select");
