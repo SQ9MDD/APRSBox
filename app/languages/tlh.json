@@ -474,6 +474,8 @@
   "Available filter and rules": "filtermey rulemey je tu'lu'bogh",
   "Click once to insert a step before the target.": "target retlhDaq step chelmeH wa'logh yI'uy.",
   "Implemented in runtime": "runtimeDaq chenmoHlu'ta'",
+  "Ready for use": "lo'laH",
+  "Planned / not ready yet": "wa'leS chenmoHlu' / DaH rInbe'",
   "Current flow steps": "DaH flow stepmey",
   "Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.": "pipeline tIngDaq botlh botlh. Source target cardmey je selector DungDaq rapqa'lu'.",
   "Save Changes": "choHmey yIpol",

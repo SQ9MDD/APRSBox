@@ -79,9 +79,17 @@
                         >
                             {% if type_meta[step_type].runtime_status == 'implemented' %}
                             <img
-                                class="digi-runtime-icon"
+                                class="digi-runtime-icon digi-runtime-icon-ready"
                                 src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg"
-                                alt="{{ t('Implemented in runtime') }}"
+                                alt="{{ t('Ready for use') }}"
+                                title="{{ t('Ready for use') }}"
+                            >
+                            {% else %}
+                            <img
+                                class="digi-runtime-icon digi-runtime-icon-planned"
+                                src="{{ request.scope.root_path }}/static/icons/clock-fast.svg"
+                                alt="{{ t('Planned / not ready yet') }}"
+                                title="{{ t('Planned / not ready yet') }}"
                             >
                             {% endif %}
                             <span class="digi-step-badge">{{ type_meta[step_type].badge }}</span>

@@ -493,6 +493,8 @@
   "Available filter and rules": "Available filter and rules",
   "Click once to insert a step before the target.": "Click once to insert a step before the target.",
   "Implemented in runtime": "Implemented in runtime",
+  "Ready for use": "Ready for use",
+  "Planned / not ready yet": "Planned / not ready yet",
   "Current flow steps": "Current flow steps",
   "Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.": "Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.",
   "Save Changes": "Save Changes",
