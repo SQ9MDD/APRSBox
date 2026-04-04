@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.i18n import get_app_language, get_translator
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
     lookup_aprs_device_identification,
@@ -34,6 +35,10 @@ WORKER_DEFINITIONS = (
         "process_patterns": ("aprsbox-web", "aprs-web", "app.main:app"),
     },
 )
+
+
+def _t(message: object) -> str:
+    return get_translator(get_app_language())(message)
 
 
 def get_section_rows(slug: str) -> list[dict[str, Any]]:
@@ -677,14 +682,17 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     }
 
 
-def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
-    snapshots = get_heard_station_snapshots(limit=limit)
+def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
+    snapshots = get_visible_station_snapshots(limit=limit)
     stations: list[dict[str, Any]] = []
     for snapshot in snapshots:
         stations.append(
             {
                 "callsign": snapshot["callsign"],
                 "display_callsign": snapshot["display_callsign"],
+                "origin": snapshot.get("origin", "heard"),
+                "activity_label": snapshot.get("activity_label", _t("Last heard")),
+                "activity_age_label": snapshot.get("activity_age_label", _t("Last heard age")),
                 "last_heard_at": snapshot["last_heard_at"],
                 "last_heard_label": snapshot["last_heard_label"],
                 "last_heard_date": snapshot["last_heard_date"],
@@ -705,6 +713,10 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
     return stations
 
 
+def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
+    return visible_stations(limit=limit, unit_system=unit_system)
+
+
 def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, Any] | None:
     normalized_callsign = callsign.strip()
     if not normalized_callsign:
@@ -722,6 +734,9 @@ def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, 
         "display_callsign": snapshot["display_callsign"],
         "detail_href": build_station_detail_href(snapshot["display_callsign"]),
         "base_callsign": snapshot["callsign"],
+        "origin": snapshot.get("origin", "heard"),
+        "activity_label": snapshot.get("activity_label", _t("Last heard")),
+        "activity_age_label": snapshot.get("activity_age_label", _t("Last heard age")),
         "source": snapshot["source"],
         "destination": snapshot["destination"],
         "path": snapshot["path"],
@@ -760,7 +775,7 @@ def get_recent_station_packets(callsign: str, limit: int = 10) -> list[dict[str,
         """
         SELECT source, line, created_at
         FROM traffic_frames
-        WHERE format = 'TNC2'
+        WHERE format IN ('TNC2', 'TNC2-TX')
         ORDER BY created_at DESC, id DESC
         LIMIT 500
         """
@@ -810,7 +825,7 @@ def get_related_ssids(base_callsign: str) -> list[dict[str, Any]]:
 
     related: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for snapshot in get_heard_station_snapshots():
+    for snapshot in get_visible_station_snapshots():
         if snapshot["callsign"].casefold() != normalized_base.casefold():
             continue
         display_callsign = snapshot["display_callsign"]
@@ -833,7 +848,7 @@ def _find_station_snapshot(callsign: str) -> dict[str, Any] | None:
     normalized = callsign.strip().casefold()
     if not normalized:
         return None
-    snapshots = get_heard_station_snapshots()
+    snapshots = get_visible_station_snapshots()
     for snapshot in snapshots:
         if snapshot["display_callsign"].casefold() == normalized:
             return snapshot
@@ -844,14 +859,54 @@ def _find_station_snapshot(callsign: str) -> dict[str, Any] | None:
 
 
 def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
+    rows = _station_snapshot_rows(("TNC2",))
+    return _build_station_snapshots_from_rows(rows, origin="heard", limit=limit)
+
+
+def get_local_tx_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
+    rows = _station_snapshot_rows(("TNC2-TX",))
+    return _build_station_snapshots_from_rows(rows, origin="local_tx", limit=limit)
+
+
+def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
+    snapshots_by_key: dict[str, dict[str, Any]] = {}
+
+    for snapshot in get_heard_station_snapshots(limit=max(limit, 500)):
+        snapshots_by_key[snapshot["display_callsign"].casefold()] = dict(snapshot)
+
+    for snapshot in get_local_tx_station_snapshots(limit=max(limit, 500)):
+        key = snapshot["display_callsign"].casefold()
+        existing = snapshots_by_key.get(key)
+        if existing is None:
+            snapshots_by_key[key] = dict(snapshot)
+            continue
+        snapshots_by_key[key] = _merge_station_snapshots(existing, snapshot)
+
+    snapshots = list(snapshots_by_key.values())
+    snapshots.sort(key=lambda item: (str(item.get("last_heard_at") or ""), str(item.get("display_callsign") or "")), reverse=True)
+    return snapshots[:limit]
+
+
+def _station_snapshot_rows(formats: tuple[str, ...]) -> list[dict[str, Any]]:
+    placeholders = ", ".join("?" for _ in formats)
     rows = fetch_all(
-        """
+        f"""
         SELECT source, line, created_at
         FROM traffic_frames
-        WHERE format = 'TNC2'
+        WHERE format IN ({placeholders})
         ORDER BY created_at DESC, id DESC
-        """
+        """,
+        formats,
     )
+    return [dict(row) for row in rows]
+
+
+def _build_station_snapshots_from_rows(
+    rows: list[dict[str, Any]],
+    *,
+    origin: str,
+    limit: int,
+) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
     device_database = get_aprs_device_identification_database()
 
@@ -879,6 +934,7 @@ def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
                 parsed["destination"],
                 parsed["path"],
                 row["line"],
+                origin=origin,
             )
 
         station = stations[station_key]
@@ -914,6 +970,46 @@ def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     return list(stations.values())[:limit]
 
 
+def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(primary)
+    latest = secondary if str(secondary.get("last_heard_at") or "") > str(primary.get("last_heard_at") or "") else primary
+    for field in (
+        "entity_class",
+        "frame_type",
+        "frame_type_label",
+        "symbol",
+        "symbol_table",
+        "symbol_code",
+        "symbol_icon",
+        "comment",
+        "latitude",
+        "longitude",
+        "aprs_device",
+        "aprs_device_short",
+    ):
+        if not merged.get(field) and secondary.get(field):
+            merged[field] = secondary[field]
+    if (not merged.get("data_raw")) and secondary.get("data_raw"):
+        merged["data_raw"] = dict(secondary["data_raw"])
+    if latest is secondary:
+        for field in (
+            "origin",
+            "activity_label",
+            "activity_age_label",
+            "last_heard_at",
+            "last_heard_age_s",
+            "last_heard_label",
+            "last_heard_date",
+            "last_heard_relative",
+            "source",
+            "destination",
+            "path",
+            "raw_text",
+        ):
+            merged[field] = secondary.get(field)
+    return merged
+
+
 def _new_station_snapshot(
     name: str,
     created_at: str,
@@ -921,13 +1017,19 @@ def _new_station_snapshot(
     destination: str,
     path: str,
     raw_text: str,
+    *,
+    origin: str,
 ) -> dict[str, Any]:
     heard_date, heard_relative = _format_last_heard_parts(created_at)
     base_callsign, ssid = _split_ssid(name)
+    activity_label, activity_age_label = _station_snapshot_activity_labels(origin)
     return {
         "callsign": base_callsign,
         "ssid": ssid,
         "display_callsign": name,
+        "origin": origin,
+        "activity_label": activity_label,
+        "activity_age_label": activity_age_label,
         "last_heard_at": created_at,
         "last_heard_age_s": _last_heard_age_seconds(created_at),
         "last_heard_label": _format_last_heard(created_at),
@@ -951,6 +1053,12 @@ def _new_station_snapshot(
         "aprs_device": None,
         "aprs_device_short": "",
     }
+
+
+def _station_snapshot_activity_labels(origin: str) -> tuple[str, str]:
+    if origin == "local_tx":
+        return _t("Last local TX"), _t("Last local TX age")
+    return _t("Last heard"), _t("Last heard age")
 
 
 def _aprs_data_has_station_snapshot_fields(aprs_data: dict[str, Any]) -> bool:
@@ -1116,9 +1224,9 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
     if snapshot.get("destination"):
         fields.append({"label": "Destination", "value": str(snapshot["destination"])})
     if snapshot.get("last_heard_date"):
-        fields.append({"label": "Last heard", "value": str(snapshot["last_heard_date"])})
+        fields.append({"label": str(snapshot.get("activity_label") or _t("Last heard")), "value": str(snapshot["last_heard_date"])})
     if snapshot.get("last_heard_relative"):
-        fields.append({"label": "Last heard age", "value": str(snapshot["last_heard_relative"])})
+        fields.append({"label": str(snapshot.get("activity_age_label") or _t("Last heard age")), "value": str(snapshot["last_heard_relative"])})
     if snapshot.get("latitude"):
         fields.append({"label": "Latitude", "value": str(snapshot["latitude"])})
     if snapshot.get("longitude"):

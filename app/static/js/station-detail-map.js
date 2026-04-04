@@ -58,7 +58,7 @@
         if (!meta) return;
         const parts = [];
         if (station.last_heard_date) {
-            let heard = `Last heard ${escapeHtml(station.last_heard_date)}`;
+            let heard = `${escapeHtml(station.activity_label || "Last heard")} ${escapeHtml(station.last_heard_date)}`;
             if (station.last_heard_relative) {
                 heard += ` <span class="muted">(${escapeHtml(station.last_heard_relative)})</span>`;
             }

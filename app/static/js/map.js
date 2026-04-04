@@ -208,10 +208,10 @@
             lines.push(`<span><strong>APRS client:</strong> ${escapeHtml(station.aprs_device_short)}</span>`);
         }
         if (heardAt) {
-            lines.push(`<span><strong>Słyszana:</strong> ${escapeHtml(heardAt)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(station.activity_label || "Last activity")}:</strong> ${escapeHtml(heardAt)}</span>`);
         }
         if (heardAge) {
-            lines.push(`<span><strong>Jak dawno:</strong> ${escapeHtml(heardAge)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(station.activity_age_label || "Age")}:</strong> ${escapeHtml(heardAge)}</span>`);
         }
         if (station.source) {
             lines.push(`<span><strong>Źródło:</strong> ${escapeHtml(station.source)}</span>`);

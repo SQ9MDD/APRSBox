@@ -8,7 +8,7 @@
     <div class="panel-body">
         <div class="stations-summary-header">
             <div class="panel-header-copy">
-                <h2>{{ t("Heard Stations") }}</h2>
+                <h2>{{ t("Stations") }}</h2>
             </div>
             <div class="stations-summary-toolbar">
                 <div class="stations-summary" id="stations-summary">
@@ -62,7 +62,7 @@
                     <tr>
                         <th>{{ t("Callsign") }}</th>
                         <th>{{ t("Type") }}</th>
-                        <th>{{ t("Last Heard") }}</th>
+                        <th>{{ t("Last activity") }}</th>
                         <th>{{ t("APRS Icon") }}</th>
                         <th title="{{ t('Latitude') }}">{{ t("Lat.") }}</th>
                         <th title="{{ t('Longitude') }}">{{ t("Lon.") }}</th>
@@ -119,7 +119,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="muted">{{ t("No decoded APRS stations heard yet.") }}</td>
+                        <td colspan="8" class="muted">{{ t("No decoded APRS stations available yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -142,7 +142,7 @@
     const summaryObjects = document.getElementById("summary-objects");
     const refreshSelect = document.getElementById("stations-refresh-rate");
     const refreshStorageKey = "aprsbox-stations-refresh-ms";
-    const noStationsText = {{ t("No decoded APRS stations heard yet.")|tojson }};
+    const noStationsText = {{ t("No decoded APRS stations available yet.")|tojson }};
     const aprsClientLabel = {{ t("APRS client")|tojson }};
     let refreshTimer = null;
 

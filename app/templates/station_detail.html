@@ -29,7 +29,7 @@
             <div class="panel-header-copy">
                 <h2 id="station-detail-title">{{ station.display_callsign }}</h2>
                 <p class="section-lead" id="station-detail-meta">
-                    Last heard {{ station.last_heard_date }}
+                    {{ station.activity_label }} {{ station.last_heard_date }}
                     {% if station.last_heard_relative %}<span class="muted">({{ station.last_heard_relative }})</span>{% endif %}
                     {% if station.source %}<span class="muted"> • Source {{ station.source }}</span>{% endif %}
                     {% if station.path %}<span class="muted"> • Path {{ station.path }}</span>{% endif %}

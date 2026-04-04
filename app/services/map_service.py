@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import settings
-from app.services.content import build_station_detail_href, get_heard_station_snapshots, get_station_settings
+from app.services.content import build_station_detail_href, get_station_settings, get_visible_station_snapshots
 
 DEFAULT_STATION_ZOOM = 10
 DETAIL_STATION_ZOOM = 14
@@ -29,7 +29,7 @@ def get_map_page_config() -> dict[str, Any]:
 
 def get_map_station_payload() -> dict[str, Any]:
     stations: list[dict[str, Any]] = []
-    for station in get_heard_station_snapshots():
+    for station in get_visible_station_snapshots():
         latitude = _parse_coordinate(station.get("latitude"))
         longitude = _parse_coordinate(station.get("longitude"))
         if latitude is None or longitude is None:
@@ -39,6 +39,9 @@ def get_map_station_payload() -> dict[str, Any]:
                 "callsign": station["callsign"],
                 "ssid": station["ssid"],
                 "display_callsign": station["display_callsign"],
+                "origin": station.get("origin", "heard"),
+                "activity_label": station.get("activity_label", "Last heard"),
+                "activity_age_label": station.get("activity_age_label", "Last heard age"),
                 "latitude": latitude,
                 "longitude": longitude,
                 "symbol_icon": station["symbol_icon"],
