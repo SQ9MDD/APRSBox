@@ -28,6 +28,7 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(normalize_language("de"), "en")
         self.assertEqual(normalize_language(None), "en")
         self.assertEqual(normalize_language("PL"), "pl")
+        self.assertEqual(normalize_language("tlh"), "tlh")
 
     def test_translator_uses_catalog_and_falls_back_to_source_text(self) -> None:
         translator = get_translator("pl")
@@ -46,8 +47,15 @@ class I18nTests(unittest.TestCase):
 
             self.assertEqual(get_app_language(), "pl")
 
-    def test_supported_languages_include_english_and_polish(self) -> None:
-        self.assertEqual(get_supported_languages(), [{"code": "en", "label": "English"}, {"code": "pl", "label": "Polski"}])
+    def test_supported_languages_include_registered_gui_options(self) -> None:
+        self.assertEqual(
+            get_supported_languages(),
+            [
+                {"code": "en", "label": "English"},
+                {"code": "pl", "label": "Polski"},
+                {"code": "tlh", "label": "Klingoński"},
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ DEFAULT_LANGUAGE = "en"
 SUPPORTED_LANGUAGES: tuple[dict[str, str], ...] = (
     {"code": "en", "label": "English"},
     {"code": "pl", "label": "Polski"},
+    {"code": "tlh", "label": "Klingoński"},
 )
 SUPPORTED_LANGUAGE_CODES = frozenset(item["code"] for item in SUPPORTED_LANGUAGES)
 LANGUAGES_DIR = Path(__file__).resolve().parent / "languages"
