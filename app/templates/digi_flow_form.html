@@ -313,7 +313,7 @@
             tx_rf: ["TX RF"],
             tx_aprsis: ["TX APRS-IS"],
             action_drop: ["Action Drop"],
-            action_log: ["Log Only"],
+            action_log: ["Black Hole", "Log Only"],
         };
 
         const formatText = (template, params = {}) => String(template || "").replace(/\{(\w+)\}/g, (match, key) => (

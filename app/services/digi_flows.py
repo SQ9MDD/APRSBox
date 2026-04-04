@@ -285,7 +285,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "action_log": {
         "category": "target",
-        "label": "Log Only",
+        "label": "Black Hole",
         "badge": "Target",
         "description": "Logs the packet at the end of the flow.",
         "config_fields": (
@@ -711,7 +711,7 @@ def get_digi_flow_endpoint_options(
     )
     if str(selected_target_selector or "").strip() == "action_drop::drop":
         target_options.append({"value": "action_drop::drop", "label": _t("Drop"), "kind": "action_drop", "ref": "drop"})
-    target_options.append({"value": "action_log::log-only", "label": _t("Log Only"), "kind": "action_log", "ref": "log-only"})
+    target_options.append({"value": "action_log::log-only", "label": _t("Black Hole"), "kind": "action_log", "ref": "log-only"})
     _ = current_flow_id
     return {"source": source_options, "target": target_options}
 
