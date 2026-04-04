@@ -6,7 +6,23 @@
 {% endblock %}
 
 {% block content %}
-<div id="station-detail-page" class="station-detail-page" data-station-endpoint="{{ station_api_endpoint }}" data-static-root="{{ request.scope.root_path }}/static/" data-root-path="{{ request.scope.root_path }}" data-refresh-ms="30000">
+<div
+    id="station-detail-page"
+    class="station-detail-page"
+    data-station-endpoint="{{ station_api_endpoint }}"
+    data-static-root="{{ request.scope.root_path }}/static/"
+    data-root-path="{{ request.scope.root_path }}"
+    data-refresh-ms="30000"
+    data-i18n-tocall="{{ t('TOCALL') }}"
+    data-i18n-mic-e="{{ t('Mic-E') }}"
+    data-i18n-identified-software-device="{{ t('Identified software/device') }}"
+    data-i18n-vendor="{{ t('Vendor') }}"
+    data-i18n-model="{{ t('Model') }}"
+    data-i18n-class="{{ t('Class') }}"
+    data-i18n-class-description="{{ t('Class description') }}"
+    data-i18n-os="{{ t('OS') }}"
+    data-i18n-capabilities="{{ t('Capabilities') }}"
+>
 <section class="panel">
     <div class="panel-body">
         <div class="station-detail-header">
@@ -87,7 +103,7 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>APRS device identification</h2>
+                <h2>{{ t("APRS device identification") }}</h2>
             </div>
         </div>
         <div id="station-device-identification">
@@ -101,38 +117,38 @@
                 </p>
                 <dl class="details-grid station-device-grid">
                     {% if station.aprs_device.identifier_kind == "tocall" and station.aprs_device.actual_identifier %}
-                    <dt>TOCALL</dt>
+                    <dt>{{ t("TOCALL") }}</dt>
                     <dd><code>{{ station.aprs_device.actual_identifier }}</code></dd>
                     {% elif station.aprs_device.actual_identifier %}
-                    <dt>Mic-E</dt>
+                    <dt>{{ t("Mic-E") }}</dt>
                     <dd><code>{{ station.aprs_device.actual_identifier }}</code></dd>
                     {% endif %}
-                    <dt>Identified software/device</dt>
+                    <dt>{{ t("Identified software/device") }}</dt>
                     <dd>{{ station.aprs_device.identified_as }}</dd>
                     {% if station.aprs_device.vendor %}
-                    <dt>Vendor</dt>
+                    <dt>{{ t("Vendor") }}</dt>
                     <dd>{{ station.aprs_device.vendor }}</dd>
                     {% endif %}
                     {% if station.aprs_device.model %}
-                    <dt>Model</dt>
+                    <dt>{{ t("Model") }}</dt>
                     <dd>{{ station.aprs_device.model }}</dd>
                     {% endif %}
                     {% if station.aprs_device.class_label %}
-                    <dt>Class</dt>
+                    <dt>{{ t("Class") }}</dt>
                     <dd>{{ station.aprs_device.class_label }}</dd>
                     {% endif %}
                     {% if station.aprs_device.class_description %}
-                    <dt>Class description</dt>
+                    <dt>{{ t("Class description") }}</dt>
                     <dd>{{ station.aprs_device.class_description }}</dd>
                     {% endif %}
                     {% if station.aprs_device.os %}
-                    <dt>OS</dt>
+                    <dt>{{ t("OS") }}</dt>
                     <dd>{{ station.aprs_device.os }}</dd>
                     {% endif %}
                 </dl>
                 {% if station.aprs_device.features %}
                 <div class="station-device-capabilities">
-                    <span class="muted">Capabilities</span>
+                    <span class="muted">{{ t("Capabilities") }}</span>
                     <div class="station-device-capability-list">
                         {% for capability in station.aprs_device.features %}
                         <span class="station-device-capability-chip">{{ capability }}</span>

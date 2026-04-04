@@ -22,6 +22,17 @@
     const legacyMaskOpacityStorageKey = "aprsbox-map-mask-opacity";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
+    const i18n = Object.freeze({
+        tocall: pageRoot.dataset.i18nTocall || "TOCALL",
+        micE: pageRoot.dataset.i18nMicE || "Mic-E",
+        identifiedSoftwareDevice: pageRoot.dataset.i18nIdentifiedSoftwareDevice || "Identified software/device",
+        vendor: pageRoot.dataset.i18nVendor || "Vendor",
+        model: pageRoot.dataset.i18nModel || "Model",
+        classLabel: pageRoot.dataset.i18nClass || "Class",
+        classDescription: pageRoot.dataset.i18nClassDescription || "Class description",
+        os: pageRoot.dataset.i18nOs || "OS",
+        capabilities: pageRoot.dataset.i18nCapabilities || "Capabilities",
+    });
     let map = null;
     let marker = null;
     let tileLayer = null;
@@ -78,11 +89,11 @@
             return;
         }
 
-        const identifierLabel = device.identifier_kind === "tocall" ? "TOCALL" : "Mic-E";
+        const identifierLabel = device.identifier_kind === "tocall" ? i18n.tocall : i18n.micE;
         const capabilityBlock = Array.isArray(device.features) && device.features.length
             ? `
                 <div class="station-device-capabilities">
-                    <span class="muted">Capabilities</span>
+                    <span class="muted">${escapeHtml(i18n.capabilities)}</span>
                     <div class="station-device-capability-list">
                         ${device.features.map((feature) => `<span class="station-device-capability-chip">${escapeHtml(feature)}</span>`).join("")}
                     </div>
@@ -98,13 +109,13 @@
                 </p>
                 <dl class="details-grid station-device-grid">
                     ${device.actual_identifier ? `<dt>${identifierLabel}</dt><dd><code>${escapeHtml(device.actual_identifier)}</code></dd>` : ""}
-                    <dt>Identified software/device</dt>
+                    <dt>${escapeHtml(i18n.identifiedSoftwareDevice)}</dt>
                     <dd>${escapeHtml(device.identified_as || device.short_name || "")}</dd>
-                    ${device.vendor ? `<dt>Vendor</dt><dd>${escapeHtml(device.vendor)}</dd>` : ""}
-                    ${device.model ? `<dt>Model</dt><dd>${escapeHtml(device.model)}</dd>` : ""}
-                    ${device.class_label ? `<dt>Class</dt><dd>${escapeHtml(device.class_label)}</dd>` : ""}
-                    ${device.class_description ? `<dt>Class description</dt><dd>${escapeHtml(device.class_description)}</dd>` : ""}
-                    ${device.os ? `<dt>OS</dt><dd>${escapeHtml(device.os)}</dd>` : ""}
+                    ${device.vendor ? `<dt>${escapeHtml(i18n.vendor)}</dt><dd>${escapeHtml(device.vendor)}</dd>` : ""}
+                    ${device.model ? `<dt>${escapeHtml(i18n.model)}</dt><dd>${escapeHtml(device.model)}</dd>` : ""}
+                    ${device.class_label ? `<dt>${escapeHtml(i18n.classLabel)}</dt><dd>${escapeHtml(device.class_label)}</dd>` : ""}
+                    ${device.class_description ? `<dt>${escapeHtml(i18n.classDescription)}</dt><dd>${escapeHtml(device.class_description)}</dd>` : ""}
+                    ${device.os ? `<dt>${escapeHtml(i18n.os)}</dt><dd>${escapeHtml(device.os)}</dd>` : ""}
                 </dl>
                 ${capabilityBlock}
             </div>
