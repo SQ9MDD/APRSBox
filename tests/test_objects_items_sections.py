@@ -147,6 +147,10 @@ class ObjectAndItemFormTests(unittest.TestCase):
         self.assertIn('id="objects-comment-count"', template_source)
         self.assertIn('id="objects-comment-error"', template_source)
         self.assertIn("National characters are blocked.", template_source)
+        self.assertIn(
+            "Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.",
+            template_source,
+        )
 
     def test_item_name_must_be_between_three_and_nine_characters(self) -> None:
         with temporary_database():

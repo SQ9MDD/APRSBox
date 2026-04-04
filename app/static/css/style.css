@@ -2399,6 +2399,19 @@ select:focus-visible,
     background: var(--panel-alt);
 }
 
+.traffic-summary-stream {
+    max-height: none;
+    margin-bottom: var(--space-4);
+}
+
+.traffic-summary-stream .traffic-log-row {
+    grid-template-columns: 5rem minmax(10rem, 14rem) minmax(0, 1fr);
+}
+
+.traffic-summary-stream .traffic-log-source {
+    white-space: normal;
+}
+
 .traffic-log-row {
     display: grid;
     grid-template-columns: 11rem fit-content(14rem) minmax(0, 1fr);

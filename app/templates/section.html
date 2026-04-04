@@ -296,7 +296,7 @@
                     {% elif section.slug == 'modems' and field.name == 'expose_whitelist' %}
                     <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
-                    <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
+                    <small class="muted">{{ t("Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
                     <div class="field-counter-row">
                         <small class="muted" id="objects-comment-count">0 / 43</small>
                         <small class="field-validation-error" id="objects-comment-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>

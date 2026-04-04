@@ -33,6 +33,10 @@ class I18nTests(unittest.TestCase):
         translator = get_translator("pl")
         self.assertEqual(translator("Settings"), "Ustawienia")
         self.assertEqual(translator("Direct Only"), "Tylko direct")
+        self.assertEqual(
+            translator("Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions."),
+            "Pole wymagane. Użyj maksymalnie 43 drukowalnych znaków ASCII, jeśli chcesz zwykły raport obiektu bez dodatkowych rozszerzeń danych.",
+        )
         self.assertEqual(translator("Unmapped text"), "Unmapped text")
 
     def test_get_app_language_reads_saved_setting(self) -> None:

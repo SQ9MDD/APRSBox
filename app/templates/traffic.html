@@ -8,29 +8,7 @@
             <h2>{{ t("Traffic Log") }}</h2>
             <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
         </div>
-        <div class="muted small" id="traffic-expose-summary">
-            {{ t("Expose port") }}:
-            {{ t("Enabled" if traffic_snapshot.expose.enabled else "Disabled") }}
-            {% if traffic_snapshot.expose.listen_endpoint %}
-            · {{ t("Listening") }} {{ traffic_snapshot.expose.listen_endpoint }}
-            {% endif %}
-            · {{ t("Clients") }}: {{ traffic_snapshot.expose.active_clients }}
-        </div>
-        <div class="traffic-stream" id="traffic-interface-summary">
-            {% for interface in traffic_snapshot.interfaces %}
-            <div class="traffic-log-row">
-                <span class="traffic-log-time">{{ interface.band or '-' }}</span>
-                <span class="traffic-log-source">{{ interface.name }}</span>
-                <span class="traffic-log-line">
-                    {{ interface.status }} · {{ interface.status_detail }}
-                    {% if interface.expose.listen_endpoint %}
-                    · {{ t("Listening") }} {{ interface.expose.listen_endpoint }}
-                    · {{ t("Clients") }}: {{ interface.expose.active_clients }}
-                    {% endif %}
-                </span>
-            </div>
-            {% endfor %}
-        </div>
+        <div class="traffic-stream traffic-summary-stream" id="traffic-interface-summary"></div>
         <div class="traffic-stream" id="traffic-stream">
             {% if traffic_snapshot.frames %}
             {% for frame in traffic_snapshot.frames %}
@@ -47,20 +25,19 @@
     </div>
 </section>
 
+<script type="application/json" id="traffic-initial-data">{{ traffic_snapshot|tojson }}</script>
 <script>
     (() => {
         const streamContainer = document.getElementById("traffic-stream");
         const count = document.getElementById("traffic-frame-count");
-        const exposeSummary = document.getElementById("traffic-expose-summary");
         const interfaceSummary = document.getElementById("traffic-interface-summary");
+        const initialDataNode = document.getElementById("traffic-initial-data");
         const noFramesText = {{ t("No frames received yet.")|tojson }};
         const entriesText = {{ t("entries")|tojson }};
-        const exposePortText = {{ t("Expose port")|tojson }};
-        const enabledText = {{ t("Enabled")|tojson }};
-        const disabledText = {{ t("Disabled")|tojson }};
         const listeningText = {{ t("Listening")|tojson }};
         const clientsText = {{ t("Clients")|tojson }};
         const noInterfacesText = {{ t("No enabled TNC is configured.")|tojson }};
+        const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
 
         const renderInterfaces = (interfaces) => {
             if (!interfaceSummary) {
@@ -119,26 +96,13 @@
             });
         };
 
-        const renderExpose = (expose) => {
-            if (!exposeSummary || !expose) {
-                return;
-            }
-            const parts = [
-                `${exposePortText}: ${expose.enabled ? enabledText : disabledText}`,
-                `${clientsText}: ${expose.active_clients || 0}`,
-            ];
-            if (expose.listen_endpoint) {
-                parts.splice(1, 0, `${listeningText} ${expose.listen_endpoint}`);
-            }
-            exposeSummary.textContent = parts.join(" · ");
-        };
-
         const applySnapshot = (snapshot) => {
             count.textContent = `${snapshot.frames.length} ${entriesText}`;
-            renderExpose(snapshot.expose);
             renderInterfaces(snapshot.interfaces || []);
             renderFrames(snapshot.frames);
         };
+
+        applySnapshot(initialSnapshot);
 
         const eventSource = new EventSource({{ traffic_stream_url|tojson }});
         eventSource.onmessage = (event) => {

@@ -367,6 +367,7 @@
   "Items": "Items",
   "Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.": "Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.",
   "Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.": "Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.",
+  "Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.": "Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.",
   "Live (!)": "Live (!)",
   "Live (*)": "Live (*)",
   "Local station callsign is required.": "Local station callsign is required.",

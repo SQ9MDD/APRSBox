@@ -367,6 +367,7 @@
   "Items": "Itemy",
   "Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.": "Jeśli chcesz zwykły raport itemu bez dodatkowych rozszerzeń danych, utrzymaj komentarz w limicie 43 drukowalnych znaków ASCII.",
   "Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.": "Jeśli chcesz zwykły raport obiektu bez dodatkowych rozszerzeń danych, utrzymaj komentarz w limicie 43 drukowalnych znaków ASCII.",
+  "Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.": "Pole wymagane. Użyj maksymalnie 43 drukowalnych znaków ASCII, jeśli chcesz zwykły raport obiektu bez dodatkowych rozszerzeń danych.",
   "Live (!)": "Aktywny (!)",
   "Live (*)": "Aktywny (*)",
   "Local station callsign is required.": "Wymagany jest znak wywoławczy lokalnej stacji.",
