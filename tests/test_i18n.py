@@ -1,11 +1,12 @@
 import contextlib
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.db import init_db, set_app_setting
-from app.i18n import get_app_language, get_supported_languages, get_translator, normalize_language
+from app.i18n import LANGUAGES_DIR, get_app_language, get_supported_languages, get_translator, normalize_language
 
 
 @contextlib.contextmanager
@@ -56,6 +57,11 @@ class I18nTests(unittest.TestCase):
                 {"code": "tlh", "label": "Klingoński"},
             ],
         )
+
+    def test_klingon_catalog_matches_english_keys(self) -> None:
+        english_catalog = json.loads((LANGUAGES_DIR / "en.json").read_text(encoding="utf-8"))
+        klingon_catalog = json.loads((LANGUAGES_DIR / "tlh.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(klingon_catalog), set(english_catalog))
 
 
 if __name__ == "__main__":
