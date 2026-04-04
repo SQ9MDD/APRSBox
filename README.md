@@ -5,7 +5,7 @@ APRSBox is a lightweight APRS operations application for Raspberry Pi and Linux 
 - `app.main`: the web GUI
 - `app.core_main`: the APRS runtime process responsible for traffic monitoring, outbound queue processing, and periodic schedulers
 
-The project is no longer "GUI only". It already includes a working SQLite-backed configuration model, authenticated GUI, a TCP KISS traffic monitor, outbound APRS transmission for selected packet types, and native installation scripts for OpenRC and systemd hosts.
+The project is no longer "GUI only". It already includes a working SQLite-backed configuration model, authenticated GUI, TCP KISS and serial KISS traffic monitoring, outbound APRS transmission for selected packet types, and native installation scripts for OpenRC and systemd hosts.
 
 ## Fast Install
 
@@ -80,9 +80,9 @@ Implemented now:
   - APRS object
   - APRS messages
   - APRS bulletins / announcements
-- TCP TNC outbound delivery through the core worker
+- TCP and serial TNC outbound delivery through the core worker
 - APRS message send / receive with ACK handling and APRS query handling
-- TCP TNC traffic monitor with KISS frame ingestion and TNC2 decoding
+- TCP KISS and serial KISS traffic monitor with frame ingestion and TNC2 decoding
 - Traffic persistence to `traffic_frames`
 - Heard-station views and station detail pages
 - Leaflet-based map page backed by heard-station data
@@ -96,7 +96,6 @@ Not implemented yet:
 - APRS-IS client connectivity
 - iGate runtime logic
 - outbound APRS item scheduling/transmission
-- runtime support for serial TNC links; current runtime code works with TCP TNC endpoints
 - advanced migration framework; schema updates are handled directly in `app.db.init_db()`
 
 ## Repository Layout
@@ -236,7 +235,7 @@ sudo -u aprsbox /opt/aprsbox/venv/bin/python -m app.cli set-password --username 
 Current APRS runtime behavior:
 
 - RX:
-  - connects to an enabled TCP TNC
+  - connects to an enabled TCP or serial KISS TNC
   - reads KISS frames
   - decodes AX.25 UI frames to TNC2 when possible
   - stores frames in SQLite
@@ -246,7 +245,7 @@ Current APRS runtime behavior:
   - processes jobs from the core worker
   - currently supports `beacon`, `status`, `object`, APRS messages, and bulletin / announcement frames
   - builds TNC2 lines and wraps them into KISS frames
-  - sends them to the configured TCP TNC endpoint
+  - sends them to the configured TCP or serial KISS TNC
 - Scheduling:
   - station beacon scheduler
   - station APRS Status scheduler
@@ -256,8 +255,7 @@ Current APRS runtime behavior:
 Important current limitation:
 
 - The runtime path uses the interface selected in station settings for station beacon/status/object/message/bulletin TX.
-- Runtime transport currently expects `TCP` modem definitions with `host:port`.
-- `SERIALL` may appear in configuration, but runtime RX/TX code does not use it yet.
+- Runtime transport supports `TCP` modem definitions with `host:port` and `SERIALL` modem definitions with `device_path` plus `baud_rate`.
 
 ## Native Installation On Raspberry Pi
 
@@ -448,11 +446,10 @@ SQLite pragmas currently enabled on connection:
 ## Notes And Limitations
 
 - Station beacon, APRS Status, object, bulletin, and APRS message TX currently depend on the core process being up
-- Runtime RX/TX currently supports TCP TNC endpoints, not serial runtime links
 - APRS-IS and iGate sections are still primarily configuration storage at this stage
 - Items are stored in SQLite but not transmitted yet
 - Schema evolution is handled directly in code during startup; there is no separate migration framework yet
-- No Docker deployment is provided or recommended for this project
+- Docker deployment is not provided or recommended yet, but it is planned
 
 ---
 
@@ -552,7 +549,6 @@ Jeszcze nie działa:
 - APRS-IS runtime
 - runtime iGate
 - nadawanie APRS item
-- runtime dla połączeń szeregowych TNC; obecny kod działa dla endpointów TCP
 
 ## Development local
 
@@ -579,7 +575,7 @@ uvicorn app.core_main:app --reload --port 18081
 
 Obecnie runtime:
 
-- odbiera dane z włączonego TCP TNC
+- odbiera dane z włączonego TCP TNC albo szeregowego KISS TNC
 - czyta ramki KISS
 - dekoduje AX.25 UI do TNC2, jeśli to możliwe
 - zapisuje ruch do SQLite
@@ -591,8 +587,7 @@ Obecnie runtime:
 Ważne ograniczenia:
 
 - TX beacon/status/object/message/bulletin działa tylko wtedy, gdy działa `aprsbox-core`
-- runtime oczekuje modemów typu `TCP` w formacie `host:port`
-- wpis typu `SERIALL` może istnieć w konfiguracji, ale runtime go jeszcze nie obsługuje
+- runtime obsługuje modemy typu `TCP` w formacie `host:port` oraz `SERIALL` z `device_path` i `baud_rate`
 - sekcje APRS-IS i iGate są obecnie głównie konfiguracją do przyszłego runtime
 
 ## Serwisy po instalacji
@@ -630,4 +625,4 @@ Domyślne porty:
 - itemy są przechowywane, ale nie są jeszcze nadawane
 - APRS-IS i iGate nie mają jeszcze pełnego runtime; `DIGI Flow runtime` jest osobnym mechanizmem RF
 - ewolucja schematu bazy jest robiona w kodzie przy starcie, bez osobnego frameworka migracji
-- projekt nie ma i nie promuje deploymentu przez Docker
+- projekt nie ma jeszcze i nie promuje jeszcze deploymentu przez Docker, ale jest to w planach
