@@ -141,6 +141,13 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertEqual(error, "Object comment is required.")
 
+    def test_objects_template_includes_comment_counter_and_ascii_validation_message(self) -> None:
+        template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
+        self.assertIn('id="objects-comment-text"', template_source)
+        self.assertIn('id="objects-comment-count"', template_source)
+        self.assertIn('id="objects-comment-error"', template_source)
+        self.assertIn("National characters are blocked.", template_source)
+
     def test_item_name_must_be_between_three_and_nine_characters(self) -> None:
         with temporary_database():
             success, error = safe_create_section_row(

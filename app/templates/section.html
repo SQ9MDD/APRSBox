@@ -210,7 +210,7 @@
                 >
                     {% if field.type == 'textarea' %}
                     <span>{{ t(field.label) }}</span>
-                    <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else (field.default if field.default is defined else '') }}</textarea>
+                    <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if section.slug == 'objects' and field.name == 'comment' %}id="objects-comment-text"{% endif %}{% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else (field.default if field.default is defined else '') }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-enabled"{% endif %} {% if edit_row and edit_row[field.name] %}checked{% endif %}>
                     <span>{{ t(field.label) }}</span>
@@ -297,6 +297,10 @@
                     <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
                     <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
+                    <div class="field-counter-row">
+                        <small class="muted" id="objects-comment-count">0 / 43</small>
+                        <small class="field-validation-error" id="objects-comment-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
+                    </div>
                     {% elif section.slug == 'items' and field.name == 'comment' %}
                     <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.") }}</small>
                     {% endif %}
@@ -466,6 +470,65 @@
             syncPreview();
         }
 
+        const allowedTextPattern = /^[\x20-\x7E]*$/;
+        const isAllowedText = (value) => allowedTextPattern.test(value);
+        const filterAllowedText = (value) => Array.from(value).filter((char) => isAllowedText(char)).join("");
+
+        const bindAsciiCounter = ({ input, countNode, errorNode, maxLength }) => {
+            if (!input) {
+                return;
+            }
+
+            const setTextError = (visible) => {
+                if (errorNode) {
+                    errorNode.hidden = !visible;
+                }
+            };
+
+            const updateCounter = () => {
+                if (countNode) {
+                    countNode.textContent = `${input.value.length} / ${maxLength}`;
+                }
+            };
+
+            input.addEventListener("beforeinput", (event) => {
+                if (event.data === null) {
+                    return;
+                }
+                const start = input.selectionStart ?? 0;
+                const end = input.selectionEnd ?? 0;
+                const nextValue = input.value.slice(0, start) + event.data + input.value.slice(end);
+                if (nextValue.length > maxLength || !isAllowedText(event.data) || !isAllowedText(nextValue)) {
+                    event.preventDefault();
+                    setTextError(true);
+                }
+            });
+            input.addEventListener("paste", (event) => {
+                const pasted = event.clipboardData ? event.clipboardData.getData("text") : "";
+                if (!pasted) {
+                    return;
+                }
+                event.preventDefault();
+                const filtered = filterAllowedText(pasted);
+                const start = input.selectionStart ?? 0;
+                const end = input.selectionEnd ?? 0;
+                const available = maxLength - input.value.length + (end - start);
+                input.setRangeText(filtered.slice(0, Math.max(available, 0)), start, end, "end");
+                setTextError(filtered !== pasted || filtered.length > available);
+                updateCounter();
+            });
+            input.addEventListener("input", () => {
+                const filtered = filterAllowedText(input.value).slice(0, maxLength);
+                const hadInvalid = filtered !== input.value;
+                if (hadInvalid) {
+                    input.value = filtered;
+                }
+                setTextError(hadInvalid);
+                updateCounter();
+            });
+            updateCounter();
+        };
+
         const bulletinForm = document.getElementById("bulletins-form");
         if (bulletinForm) {
             const kindSelect = document.getElementById("bulletins-message-kind");
@@ -476,23 +539,6 @@
             const textInput = document.getElementById("bulletins-message-text");
             const countNode = document.getElementById("bulletins-message-count");
             const errorNode = document.getElementById("bulletins-message-error");
-            const allowedTextPattern = /^[\x20-\x7E]*$/;
-
-            const setTextError = (visible) => {
-                if (errorNode) {
-                    errorNode.hidden = !visible;
-                }
-            };
-
-            const isAllowedText = (value) => allowedTextPattern.test(value);
-
-            const filterAllowedText = (value) => Array.from(value).filter((char) => isAllowedText(char)).join("");
-
-            const updateCounter = () => {
-                if (textInput && countNode) {
-                    countNode.textContent = `${textInput.value.length} / 67`;
-                }
-            };
 
             const syncBulletinFields = () => {
                 if (!kindSelect) {
@@ -538,40 +584,17 @@
                 });
             }
 
-            if (textInput) {
-                textInput.addEventListener("beforeinput", (event) => {
-                    if (event.data === null) {
-                        return;
-                    }
-                    const nextValue = textInput.value.slice(0, textInput.selectionStart) + event.data + textInput.value.slice(textInput.selectionEnd);
-                    if (nextValue.length > 67 || !isAllowedText(event.data) || !isAllowedText(nextValue)) {
-                        event.preventDefault();
-                        setTextError(true);
-                    }
-                });
-                textInput.addEventListener("paste", (event) => {
-                    const pasted = event.clipboardData ? event.clipboardData.getData("text") : "";
-                    if (!pasted) {
-                        return;
-                    }
-                    event.preventDefault();
-                    const filtered = filterAllowedText(pasted);
-                    const available = 67 - textInput.value.length + (textInput.selectionEnd - textInput.selectionStart);
-                    textInput.setRangeText(filtered.slice(0, Math.max(available, 0)), textInput.selectionStart, textInput.selectionEnd, "end");
-                    setTextError(filtered !== pasted || filtered.length > available);
-                    updateCounter();
-                });
-                textInput.addEventListener("input", () => {
-                    const filtered = filterAllowedText(textInput.value).slice(0, 67);
-                    const hadInvalid = filtered !== textInput.value;
-                    if (hadInvalid) {
-                        textInput.value = filtered;
-                    }
-                    setTextError(hadInvalid);
-                    updateCounter();
-                });
-                updateCounter();
-            }
+            bindAsciiCounter({ input: textInput, countNode, errorNode, maxLength: 67 });
+        }
+
+        const objectsForm = document.getElementById("objects-form");
+        if (objectsForm) {
+            bindAsciiCounter({
+                input: document.getElementById("objects-comment-text"),
+                countNode: document.getElementById("objects-comment-count"),
+                errorNode: document.getElementById("objects-comment-error"),
+                maxLength: 43,
+            });
         }
 
         for (const slug of ["objects", "items"]) {
