@@ -8,6 +8,7 @@
 {% endblock %}
 
 {% block content %}
+{% set delete_confirm_message = 'Delete this object?' if section.slug == 'objects' else ('Delete this item?' if section.slug == 'items' else ('Delete this bulletin?' if section.slug == 'bulletins' else 'Delete this record?')) %}
 {% if section.slug not in ['objects', 'items', 'modems', 'bulletins'] %}
 <section class="panel">
     <div class="panel-body">
@@ -150,7 +151,7 @@
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
                             <td>
-                                <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm({{ t('Delete this record?')|tojson }});">
+                                <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm({{ t(delete_confirm_message)|tojson }});">
                                     <button
                                         type="submit"
                                         class="table-icon-button"
@@ -306,7 +307,7 @@
                     {% if section.supports_editing and edit_row %}
                     <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% if section.supports_delete %}
-                    <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post" onclick="return confirm({{ t('Delete this record?')|tojson }});">{{ t("Delete") }}</button>
+                    <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post" onclick="return confirm({{ t(delete_confirm_message)|tojson }});">{{ t("Delete") }}</button>
                     {% endif %}
                     {% endif %}
                 </div>

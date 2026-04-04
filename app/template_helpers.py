@@ -6,6 +6,7 @@ from fastapi import Request
 
 from app import get_version
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
+from app.services.messages import get_unread_inbox_count
 
 
 PRIMARY_NAV = [
@@ -40,12 +41,15 @@ def build_template_context(
     app_language = get_app_language()
     translate = get_translator(app_language)
     translate_format = get_format_translator(app_language)
+    unread_inbox_count = get_unread_inbox_count() if current_user else 0
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
         if current_user and current_user.role in item["roles"]:
             translated_item = dict(item)
             if not item.get("separator"):
                 translated_item["label"] = translate(item["label"])
+                if item["key"] == "messages" and unread_inbox_count > 0:
+                    translated_item["icon"] = "message-alert-outline.svg"
             navigation.append(translated_item)
 
     return {

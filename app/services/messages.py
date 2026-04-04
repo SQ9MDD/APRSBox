@@ -294,6 +294,20 @@ def get_messages_page_data() -> dict[str, Any]:
     }
 
 
+def get_unread_inbox_count() -> int:
+    row = fetch_one(
+        """
+        SELECT COUNT(*) AS total
+        FROM aprs_messages
+        WHERE direction = ? AND is_unread = 1
+        """,
+        (MESSAGE_DIRECTION_RX,),
+    )
+    if row is None:
+        return 0
+    return int(row["total"] or 0)
+
+
 def mark_conversation_read(conversation_id: int) -> None:
     with get_connection() as connection:
         connection.execute(

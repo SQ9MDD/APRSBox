@@ -1,8 +1,10 @@
 import contextlib
+import importlib.util
 import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app import get_version
@@ -18,7 +20,9 @@ from app.services.messages import (
     QUERY_MESSAGE_KIND,
     _format_heard_parts,
     _heard_recently_state,
+    get_unread_inbox_count,
     get_messages_page_data,
+    mark_conversation_read,
     normalize_aprs_message_text,
     process_incoming_tnc2_message,
     queue_outgoing_message,
@@ -26,6 +30,11 @@ from app.services.messages import (
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
+
+FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
+if FASTAPI_AVAILABLE:
+    from app.template_helpers import build_template_context
+    from starlette.requests import Request
 
 
 @contextlib.contextmanager
@@ -621,6 +630,55 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(conversation["callsign"], "DL1XYZ-9")
             self.assertEqual(conversation["messages"][0]["text"], "QSL")
             self.assertEqual(conversation["messages"][0]["delivery_state"], "queued")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is required for template helper rendering tests")
+    def test_sidebar_messages_icon_switches_when_inbox_has_unread_messages(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "direct_message",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "Unread test",
+                    "message_number": "AA",
+                }
+            )
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            self.assertEqual(get_unread_inbox_count(), 1)
+
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "path": "/dashboard",
+                    "root_path": "",
+                    "headers": [],
+                    "query_string": b"",
+                    "client": ("127.0.0.1", 12345),
+                    "server": ("testserver", 80),
+                    "scheme": "http",
+                }
+            )
+            current_user = SimpleNamespace(role="admin", username="admin")
+
+            context = build_template_context(request, page_title="Dashboard", current_user=current_user, active_nav="dashboard")
+            messages_item = next(item for item in context["navigation"] if item.get("key") == "messages")
+            self.assertEqual(messages_item["icon"], "message-alert-outline.svg")
+
+            conversation = fetch_one("SELECT id FROM aprs_message_conversations ORDER BY id ASC LIMIT 1")
+            assert conversation is not None
+            mark_conversation_read(int(conversation["id"]))
+
+            self.assertEqual(get_unread_inbox_count(), 0)
+
+            context = build_template_context(request, page_title="Dashboard", current_user=current_user, active_nav="dashboard")
+            messages_item = next(item for item in context["navigation"] if item.get("key") == "messages")
+            self.assertEqual(messages_item["icon"], "message-reply-text-outline.svg")
 
     def test_messages_page_data_exposes_heard_recently_state(self) -> None:
         with temporary_database():
