@@ -45,6 +45,7 @@
     --danger: #c97a7a;
     --success: #8bcf9b;
     --warning: #d9b565;
+    --alert-icon-filter: invert(73%) sepia(30%) saturate(669%) hue-rotate(355deg) brightness(99%) contrast(89%);
     --code: rgba(255, 255, 255, 0.05);
     --icon-filter: invert(85%) sepia(7%) saturate(133%) hue-rotate(79deg) brightness(92%) contrast(87%);
 }
@@ -69,6 +70,7 @@
     --danger: #a95d5d;
     --success: #3b7a4d;
     --warning: #8f6b1d;
+    --alert-icon-filter: invert(39%) sepia(54%) saturate(656%) hue-rotate(8deg) brightness(97%) contrast(90%);
     --code: rgba(16, 26, 19, 0.07);
     --shadow: 0 10px 24px rgba(50, 68, 54, 0.08);
     --icon-filter: invert(18%) sepia(11%) saturate(555%) hue-rotate(83deg) brightness(94%) contrast(84%);
@@ -203,6 +205,20 @@ body {
 .nav-link-struck span {
     text-decoration: line-through;
     text-decoration-thickness: 1.5px;
+}
+
+.nav-link-unread {
+    color: var(--warning);
+}
+
+.nav-link-unread .nav-icon {
+    filter: var(--alert-icon-filter);
+    opacity: 1;
+}
+
+.nav-link-unread:hover,
+.nav-link-unread.active {
+    color: var(--warning);
 }
 
 .sidebar-footer {

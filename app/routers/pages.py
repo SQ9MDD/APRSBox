@@ -54,6 +54,7 @@ from app.services.messages import (
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
     get_messages_page_data as get_live_messages_page_data,
+    get_unread_inbox_count,
     mark_conversation_read,
     queue_outgoing_message,
     retry_failed_message,
@@ -1326,6 +1327,14 @@ def messages_snapshot(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_live_messages_page_data())
+
+
+@router.get("/api/messages/unread-status")
+def messages_unread_status(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    unread_count = get_unread_inbox_count()
+    return JSONResponse({"unread_count": unread_count, "has_unread": unread_count > 0})
 
 
 @router.post("/api/messages/conversations")

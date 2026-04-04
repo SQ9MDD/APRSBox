@@ -48,8 +48,11 @@ def build_template_context(
             translated_item = dict(item)
             if not item.get("separator"):
                 translated_item["label"] = translate(item["label"])
-                if item["key"] == "messages" and unread_inbox_count > 0:
-                    translated_item["icon"] = "message-alert-outline.svg"
+                if item["key"] == "messages":
+                    translated_item["has_unread"] = unread_inbox_count > 0
+                    translated_item["unread_count"] = unread_inbox_count
+                    if unread_inbox_count > 0:
+                        translated_item["icon"] = "message-alert-outline.svg"
             navigation.append(translated_item)
 
     return {

@@ -71,7 +71,16 @@
             {% if item.separator %}
             <div class="nav-separator" aria-hidden="true"></div>
             {% else %}
-            <a href="{{ request.scope.root_path }}{{ item.href }}" class="nav-link {% if active_nav == item.key %}active{% endif %}{% if item.key in ['igate'] %} nav-link-struck{% endif %}">
+            <a
+                href="{{ request.scope.root_path }}{{ item.href }}"
+                class="nav-link {% if active_nav == item.key %}active{% endif %}{% if item.key in ['igate'] %} nav-link-struck{% endif %}{% if item.key == 'messages' and item.has_unread %} nav-link-unread{% endif %}"
+                data-nav-key="{{ item.key }}"
+                {% if item.key == 'messages' %}
+                data-icon-normal="message-reply-text-outline.svg"
+                data-icon-alert="message-alert-outline.svg"
+                data-unread-count="{{ item.unread_count or 0 }}"
+                {% endif %}
+            >
                 <img class="nav-icon" src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="">
                 <span>{{ item.label }}</span>
             </a>
@@ -115,6 +124,54 @@
                 root.setAttribute("data-theme", nextTheme);
                 localStorage.setItem("aprsbox-theme", nextTheme);
                 syncLabel();
+            });
+        })();
+        (() => {
+            const messagesNavLink = document.querySelector('[data-nav-key="messages"]');
+            if (!(messagesNavLink instanceof HTMLElement)) return;
+            const messagesNavIcon = messagesNavLink.querySelector(".nav-icon");
+            const rootPath = {{ request.scope.root_path|tojson }};
+            const unreadStatusUrl = `${rootPath}/api/messages/unread-status`.replace(/\/\//g, "/");
+            const normalIcon = String(messagesNavLink.dataset.iconNormal || "message-reply-text-outline.svg");
+            const alertIcon = String(messagesNavLink.dataset.iconAlert || "message-alert-outline.svg");
+            let refreshTimer = null;
+
+            const applyUnreadState = (hasUnread, unreadCount) => {
+                messagesNavLink.classList.toggle("nav-link-unread", !!hasUnread);
+                messagesNavLink.dataset.unreadCount = String(Math.max(Number(unreadCount) || 0, 0));
+                if (messagesNavIcon instanceof HTMLImageElement) {
+                    messagesNavIcon.src = `${rootPath}/static/icons/${hasUnread ? alertIcon : normalIcon}`;
+                }
+            };
+
+            const refreshUnreadState = async () => {
+                try {
+                    const response = await fetch(unreadStatusUrl, {
+                        method: "GET",
+                        headers: { "Accept": "application/json" },
+                    });
+                    if (!response.ok) {
+                        return;
+                    }
+                    const payload = await response.json();
+                    applyUnreadState(Boolean(payload.has_unread), Number(payload.unread_count || 0));
+                } catch (_) {
+                    return;
+                }
+            };
+
+            window.addEventListener("aprsbox:messages-unread-state", (event) => {
+                const detail = event.detail || {};
+                applyUnreadState(Boolean(detail.hasUnread), Number(detail.unreadCount || 0));
+            });
+
+            refreshTimer = window.setInterval(() => {
+                void refreshUnreadState();
+            }, 5000);
+            window.addEventListener("beforeunload", () => {
+                if (refreshTimer !== null) {
+                    window.clearInterval(refreshTimer);
+                }
             });
         })();
     </script>
