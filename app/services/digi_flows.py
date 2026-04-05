@@ -738,9 +738,21 @@ def _serialize_flow_row(row: sqlite3.Row | dict[str, Any], steps: list[dict[str,
         steps = get_digi_flow_steps(int(flow["id"]))
     flow["steps"] = steps
     flow["step_count"] = len(steps)
-    flow["source_display"] = f"{flow.get('source_kind')}: {flow.get('source_ref')}"
-    flow["target_display"] = f"{flow.get('target_kind')}: {flow.get('target_ref')}"
+    flow["source_display"] = _flow_endpoint_display(flow.get("source_kind"), flow.get("source_ref"))
+    flow["target_display"] = _flow_endpoint_display(flow.get("target_kind"), flow.get("target_ref"))
     return flow
+
+
+def _flow_endpoint_display(kind: Any, ref: Any) -> str:
+    normalized_kind = _normalize_text(kind)
+    normalized_ref = _normalize_text(ref)
+    if normalized_kind == "action_log" and normalized_ref == "log-only":
+        return _t("Black Hole")
+    if normalized_kind == "action_drop" and normalized_ref == "drop":
+        return _t("Drop")
+    if normalized_kind and normalized_ref:
+        return f"{normalized_kind}: {normalized_ref}"
+    return normalized_kind or normalized_ref or "-"
 
 
 def list_digi_flows() -> list[dict[str, Any]]:

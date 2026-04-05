@@ -215,6 +215,24 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(flow["steps"][1]["step_type"], "filter_path")
             self.assertEqual(flow["steps"][2]["step_type"], "tx_aprsis")
 
+    def test_get_digi_flow_uses_black_hole_label_for_action_log_target_display(self) -> None:
+        with temporary_database():
+            payload = sample_flow_payload()
+            payload["target_kind"] = "action_log"
+            payload["target_ref"] = "log-only"
+            payload["steps"][-1] = {
+                "step_type": "action_log",
+                "title": "Black Hole",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            }
+
+            flow_id = create_digi_flow(payload)
+            flow = get_digi_flow(flow_id)
+
+            assert flow is not None
+            self.assertEqual(flow["target_display"], "Black Hole")
+
     def test_endpoint_options_hide_drop_target_unless_current_flow_uses_it(self) -> None:
         with temporary_database():
             default_targets = get_digi_flow_endpoint_options()["target"]
