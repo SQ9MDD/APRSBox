@@ -296,6 +296,8 @@ def _wx_page_context(
         flash=flash,
         flash_success=flash_success,
         can_edit=current_user.role in {"admin", "operator"},
+        map_picker_config=get_map_page_config(),
+        interface_options=_station_form_options()["interface_options"],
         **get_wx_page_data(edit_source_id=edit_source_id, source_discovery=source_discovery),
     )
 
@@ -1282,6 +1284,10 @@ def wx_config_update(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     enabled: str | None = Form(None),
     ssid: str = Form(""),
+    beacon_interface_id: str = Form(""),
+    path: str = Form(""),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
     refresh_interval_s: str = Form("300"),
     allow_cache_fallback: str | None = Form(None),
     default_cache_max_age_s: str = Form("900"),
@@ -1291,6 +1297,10 @@ def wx_config_update(
         {
             "enabled": enabled,
             "ssid": ssid.strip(),
+            "beacon_interface_id": beacon_interface_id.strip(),
+            "path": path.strip(),
+            "latitude": latitude.strip(),
+            "longitude": longitude.strip(),
             "refresh_interval_s": refresh_interval_s.strip(),
             "allow_cache_fallback": allow_cache_fallback,
             "default_cache_max_age_s": default_cache_max_age_s.strip(),

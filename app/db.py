@@ -119,11 +119,16 @@ CREATE TABLE IF NOT EXISTS wx_config (
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
     callsign TEXT NOT NULL DEFAULT '',
     ssid TEXT NOT NULL DEFAULT '',
+    beacon_interface_id INTEGER,
+    path TEXT NOT NULL DEFAULT '',
+    latitude TEXT NOT NULL DEFAULT '',
+    longitude TEXT NOT NULL DEFAULT '',
     refresh_interval_s INTEGER NOT NULL DEFAULT 300 CHECK (refresh_interval_s BETWEEN 15 AND 3600),
     allow_cache_fallback INTEGER NOT NULL DEFAULT 1 CHECK (allow_cache_fallback IN (0, 1)),
     default_cache_max_age_s INTEGER NOT NULL DEFAULT 900 CHECK (default_cache_max_age_s BETWEEN 1 AND 86400),
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (beacon_interface_id) REFERENCES modems(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS wx_sources (
@@ -513,6 +518,7 @@ def init_db() -> None:
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
+        wx_columns = {row["name"] for row in connection.execute("PRAGMA table_info(wx_config)").fetchall()}
         object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
@@ -576,6 +582,34 @@ def init_db() -> None:
                 """
                 ALTER TABLE station_settings
                 ADD COLUMN beacon_interface_id INTEGER
+                """
+            )
+        if "beacon_interface_id" not in wx_columns:
+            connection.execute(
+                """
+                ALTER TABLE wx_config
+                ADD COLUMN beacon_interface_id INTEGER
+                """
+            )
+        if "path" not in wx_columns:
+            connection.execute(
+                """
+                ALTER TABLE wx_config
+                ADD COLUMN path TEXT NOT NULL DEFAULT ''
+                """
+            )
+        if "latitude" not in wx_columns:
+            connection.execute(
+                """
+                ALTER TABLE wx_config
+                ADD COLUMN latitude TEXT NOT NULL DEFAULT ''
+                """
+            )
+        if "longitude" not in wx_columns:
+            connection.execute(
+                """
+                ALTER TABLE wx_config
+                ADD COLUMN longitude TEXT NOT NULL DEFAULT ''
                 """
             )
         if "band" not in modem_columns:
@@ -771,10 +805,10 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
         connection.execute(
             """
             INSERT INTO wx_config (
-                id, enabled, callsign, ssid, refresh_interval_s,
+                id, enabled, callsign, ssid, beacon_interface_id, path, latitude, longitude, refresh_interval_s,
                 allow_cache_fallback, default_cache_max_age_s, created_at, updated_at
             )
-            VALUES (1, 0, '', '', 300, 1, 900, ?, ?)
+            VALUES (1, 0, '', '', NULL, '', '', '', 300, 1, 900, ?, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(), utc_now()),

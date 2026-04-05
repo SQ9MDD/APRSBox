@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 {% if flash %}
 <section class="panel">
@@ -17,6 +21,7 @@
                 <p class="section-lead">{{ t("Prepare one WX identity for this APRSBox instance. Callsign is read from My Settings and only the WX SSID is selected here.") }}</p>
             </div>
         </div>
+        {% set selected_wx_interface_id = wx_config.beacon_interface_id|string if wx_config.beacon_interface_id is not none else '' %}
         {% if can_edit %}
         <form method="post" action="{{ request.scope.root_path }}/wx/config" class="form-grid">
             <label class="full checkbox-row">
@@ -42,6 +47,33 @@
                 <input type="text" value="{{ wx_config.full_callsign or wx_config.callsign or '' }}" readonly>
             </label>
             <label>
+                <span>{{ t("Interface") }}</span>
+                <select name="beacon_interface_id">
+                    {% for option in interface_options %}
+                    <option value="{{ option.value }}" {% if selected_wx_interface_id == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                <span>{{ t("Path") }}</span>
+                <input type="text" name="path" value="{{ wx_config.path or '' }}" placeholder="WIDE2-2">
+            </label>
+            <label class="full">
+                <span>{{ t("Get location") }}</span>
+                <button type="button" class="button button-secondary location-picker-button" id="wx-open-map-picker">
+                    <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
+                    <span>{{ t("Get location") }}</span>
+                </button>
+            </label>
+            <label>
+                <span>{{ t("Latitude") }}</span>
+                <input type="text" name="latitude" value="{{ wx_config.latitude or '' }}">
+            </label>
+            <label>
+                <span>{{ t("Longitude") }}</span>
+                <input type="text" name="longitude" value="{{ wx_config.longitude or '' }}">
+            </label>
+            <label>
                 <span>{{ t("Refresh interval (s)") }}</span>
                 <input type="number" min="15" max="3600" name="refresh_interval_s" value="{{ wx_config.refresh_interval_s }}">
             </label>
@@ -64,11 +96,47 @@
             <dt>{{ t("Callsign") }}</dt><dd>{{ wx_config.callsign or "-" }}</dd>
             <dt>{{ t("WX SSID") }}</dt><dd>{{ wx_config.ssid or "-" }}</dd>
             <dt>{{ t("Resulting callsign") }}</dt><dd>{{ wx_config.full_callsign or "-" }}</dd>
+            <dt>{{ t("Interface") }}</dt><dd>{% for option in interface_options %}{% if option.value == selected_wx_interface_id %}{{ t(option.label) }}{% endif %}{% endfor %}</dd>
+            <dt>{{ t("Path") }}</dt><dd>{{ wx_config.path or "-" }}</dd>
+            <dt>{{ t("Latitude") }}</dt><dd>{{ wx_config.latitude or "-" }}</dd>
+            <dt>{{ t("Longitude") }}</dt><dd>{{ wx_config.longitude or "-" }}</dd>
             <dt>{{ t("Refresh interval") }}</dt><dd>{{ wx_config.refresh_interval_s }}s</dd>
             <dt>{{ t("Allow cache fallback") }}</dt><dd>{{ t("Yes") if wx_config.allow_cache_fallback else t("No") }}</dd>
             <dt>{{ t("Default max cache age") }}</dt><dd>{{ wx_config.default_cache_max_age_s }}s</dd>
         </dl>
         {% endif %}
+        <div class="location-picker-modal" id="wx-location-picker" hidden>
+            <div class="location-picker-backdrop" data-close-location-picker></div>
+            <div
+                class="location-picker-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="wx-location-picker-title"
+                data-tile-url="{{ map_picker_config.tile_url }}"
+                data-tile-attribution="{{ map_picker_config.tile_attribution }}"
+                data-default-latitude="{{ map_picker_config.station_latitude }}"
+                data-default-longitude="{{ map_picker_config.station_longitude }}"
+                data-default-zoom="{{ map_picker_config.default_zoom }}"
+            >
+                <div class="location-picker-header">
+                    <h3 id="wx-location-picker-title">{{ t("Get location") }}</h3>
+                    <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="{{ t('Close location picker') }}" title="{{ t('Close location picker') }}">
+                        <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+                    </button>
+                </div>
+                <div class="location-picker-map-wrap">
+                    <div class="location-picker-map" id="wx-location-picker-map"></div>
+                    <div class="location-picker-crosshair" aria-hidden="true"></div>
+                </div>
+                <div class="location-picker-footer">
+                    <div class="muted small" id="wx-location-picker-center">--</div>
+                    <div class="location-picker-actions">
+                        <button type="button" class="button button-secondary" data-close-location-picker>{{ t("Cancel") }}</button>
+                        <button type="button" class="button" id="wx-apply-location-picker">{{ t("Get coordinates") }}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -463,6 +531,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
         const sourceType = document.getElementById("wx-source-type");
@@ -494,6 +563,102 @@
         sourceType.addEventListener("change", syncAuthFields);
         authType.addEventListener("change", syncAuthFields);
         syncAuthFields();
+    })();
+    (() => {
+        const modal = document.getElementById("wx-location-picker");
+        const openButton = document.getElementById("wx-open-map-picker");
+        const form = document.querySelector('form[action$="/wx/config"]');
+        if (!modal || !openButton || !form || typeof window.L === "undefined") {
+            return;
+        }
+
+        const latitudeInput = form.querySelector('input[name="latitude"]');
+        const longitudeInput = form.querySelector('input[name="longitude"]');
+        const dialog = modal.querySelector(".location-picker-dialog");
+        const mapNode = document.getElementById("wx-location-picker-map");
+        const centerOutput = document.getElementById("wx-location-picker-center");
+        const applyButton = document.getElementById("wx-apply-location-picker");
+        const closeButtons = modal.querySelectorAll("[data-close-location-picker]");
+        if (!latitudeInput || !longitudeInput || !dialog || !mapNode || !centerOutput || !applyButton) {
+            return;
+        }
+
+        let map = null;
+
+        const formatCoordinate = (value) => Number.isFinite(value) ? value.toFixed(5) : "--";
+
+        const resolveInitialView = () => {
+            const latitude = Number.parseFloat(latitudeInput.value || "");
+            const longitude = Number.parseFloat(longitudeInput.value || "");
+            const fallbackLatitude = Number.parseFloat(dialog.dataset.defaultLatitude || "");
+            const fallbackLongitude = Number.parseFloat(dialog.dataset.defaultLongitude || "");
+            const fallbackZoom = Number.parseInt(dialog.dataset.defaultZoom || "10", 10);
+            return {
+                latitude: Number.isFinite(latitude) ? latitude : fallbackLatitude,
+                longitude: Number.isFinite(longitude) ? longitude : fallbackLongitude,
+                zoom: Number.isInteger(fallbackZoom) ? fallbackZoom : 10,
+            };
+        };
+
+        const syncCenter = () => {
+            if (!map) {
+                return;
+            }
+            const center = map.getCenter();
+            centerOutput.textContent = `${formatCoordinate(center.lat)}, ${formatCoordinate(center.lng)}`;
+        };
+
+        const ensureMap = () => {
+            if (map) {
+                return;
+            }
+            const initialView = resolveInitialView();
+            map = window.L.map(mapNode, {
+                center: [initialView.latitude, initialView.longitude],
+                zoom: initialView.zoom,
+                zoomControl: true,
+            });
+            window.L.tileLayer(dialog.dataset.tileUrl || "", {
+                attribution: dialog.dataset.tileAttribution || "",
+                maxZoom: 19,
+            }).addTo(map);
+            map.on("move zoom", syncCenter);
+            syncCenter();
+        };
+
+        const openModal = () => {
+            modal.hidden = false;
+            document.body.classList.add("modal-open");
+            ensureMap();
+            const initialView = resolveInitialView();
+            map.setView([initialView.latitude, initialView.longitude], map.getZoom() || initialView.zoom);
+            window.setTimeout(() => {
+                map.invalidateSize();
+                syncCenter();
+            }, 0);
+        };
+
+        const closeModal = () => {
+            modal.hidden = true;
+            document.body.classList.remove("modal-open");
+        };
+
+        openButton.addEventListener("click", openModal);
+        applyButton.addEventListener("click", () => {
+            if (!map) {
+                return;
+            }
+            const center = map.getCenter();
+            latitudeInput.value = formatCoordinate(center.lat);
+            longitudeInput.value = formatCoordinate(center.lng);
+            closeModal();
+        });
+        closeButtons.forEach((button) => button.addEventListener("click", closeModal));
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !modal.hidden) {
+                closeModal();
+            }
+        });
     })();
 </script>
 {% endblock %}

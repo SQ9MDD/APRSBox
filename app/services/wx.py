@@ -102,6 +102,10 @@ def get_wx_config() -> dict[str, Any]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     result["callsign"] = callsign
     result.setdefault("ssid", "")
+    result.setdefault("beacon_interface_id", None)
+    result.setdefault("path", "")
+    result.setdefault("latitude", "")
+    result.setdefault("longitude", "")
     result.setdefault("enabled", 0)
     result.setdefault("refresh_interval_s", 300)
     result.setdefault("allow_cache_fallback", 1)
@@ -148,6 +152,10 @@ def save_wx_config(payload: dict[str, Any]) -> None:
             SET enabled = :enabled,
                 callsign = :callsign,
                 ssid = :ssid,
+                beacon_interface_id = :beacon_interface_id,
+                path = :path,
+                latitude = :latitude,
+                longitude = :longitude,
                 refresh_interval_s = :refresh_interval_s,
                 allow_cache_fallback = :allow_cache_fallback,
                 default_cache_max_age_s = :default_cache_max_age_s,
@@ -524,6 +532,24 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     enabled = int(bool(payload.get("enabled")))
     ssid = str(payload.get("ssid") or "").strip()
+    try:
+        beacon_interface_id = int(payload.get("beacon_interface_id")) if payload.get("beacon_interface_id") not in {None, ""} else None
+    except (TypeError, ValueError):
+        beacon_interface_id = None
+    if beacon_interface_id is not None:
+        interface_exists = fetch_one("SELECT id FROM modems WHERE id = ?", (beacon_interface_id,))
+        if interface_exists is None:
+            beacon_interface_id = None
+    path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
+    if len(path) > 64:
+        raise WxValidationError("WX path must be 64 printable ASCII characters or fewer.")
+    latitude = str(payload.get("latitude") or "").strip()
+    longitude = str(payload.get("longitude") or "").strip()
+    if bool(latitude) != bool(longitude):
+        raise WxValidationError("WX location requires both latitude and longitude, or neither.")
+    if latitude:
+        _validate_coordinate(latitude, minimum=-90.0, maximum=90.0, label="WX latitude")
+        _validate_coordinate(longitude, minimum=-180.0, maximum=180.0, label="WX longitude")
     refresh_interval_s = _normalize_positive_int(payload.get("refresh_interval_s"), default=300, minimum=15, maximum=3600, label="Refresh interval")
     default_cache_max_age_s = _normalize_positive_int(
         payload.get("default_cache_max_age_s"),
@@ -548,6 +574,10 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "enabled": enabled,
         "callsign": callsign,
         "ssid": ssid,
+        "beacon_interface_id": beacon_interface_id,
+        "path": path,
+        "latitude": latitude,
+        "longitude": longitude,
         "refresh_interval_s": refresh_interval_s,
         "allow_cache_fallback": allow_cache_fallback,
         "default_cache_max_age_s": default_cache_max_age_s,
@@ -1135,6 +1165,21 @@ def _normalize_positive_int(value: Any, *, default: int, minimum: int, maximum: 
     if normalized < minimum or normalized > maximum:
         raise WxValidationError(f"{label} must be between {minimum} and {maximum}.")
     return normalized
+
+
+def _normalize_printable_ascii(value: str) -> str:
+    if any(ord(char) < 32 or ord(char) > 126 for char in value):
+        raise WxValidationError("Only printable ASCII characters are allowed in WX path fields.")
+    return value
+
+
+def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: str) -> None:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise WxValidationError(f"{label} must be a valid decimal coordinate.") from exc
+    if parsed < minimum or parsed > maximum:
+        raise WxValidationError(f"{label} is out of range.")
 
 
 def _cache_age_seconds(last_success_at: Any, attempted_at: str) -> int | None:

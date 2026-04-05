@@ -101,6 +101,57 @@ class WxServiceTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertIn("not available", error or "")
 
+    def test_wx_config_accepts_interface_path_and_coordinates(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            with get_connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
+                    VALUES ('WX TNC', 'TCP', '2m', '127.0.0.1:8001', 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """
+                )
+            modem_row = fetch_one("SELECT id FROM modems WHERE name = ?", ("WX TNC",))
+            assert modem_row is not None
+            success, error = safe_save_wx_config(
+                {
+                    "enabled": "",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_row["id"]),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "300",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success, error)
+            row = fetch_one("SELECT beacon_interface_id, path, latitude, longitude FROM wx_config WHERE id = 1")
+            assert row is not None
+            self.assertEqual(int(row["beacon_interface_id"]), int(modem_row["id"]))
+            self.assertEqual(row["path"], "WIDE2-2")
+            self.assertEqual(row["latitude"], "52.2297")
+            self.assertEqual(row["longitude"], "21.0122")
+
     def test_wx_refresh_updates_live_cache_and_uses_cached_fallback(self) -> None:
         with temporary_database():
             success, error, source_id = safe_save_wx_source(
