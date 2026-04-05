@@ -958,6 +958,10 @@ class TrafficMonitorService:
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run(), name="aprsbox-traffic-monitor-manager")
 
+    async def restart(self) -> None:
+        await self.stop()
+        await self.start()
+
     async def stop(self) -> None:
         self._stop_event.set()
         if self._task is not None:

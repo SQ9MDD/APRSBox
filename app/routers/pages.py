@@ -74,6 +74,7 @@ from app.services.aprs_device_identification import (
     get_aprs_device_identification_status,
     refresh_aprs_device_identification_cache,
 )
+from app.services.core_client import restart_core_traffic_monitor
 from app.services.map_service import get_map_page_config, get_map_station_payload, get_station_detail_map_config
 from app.services.outbound import enqueue_beacon_job
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
@@ -1348,6 +1349,8 @@ def logs_page(
 def traffic_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    flash: str | None = None,
+    flash_success: bool = True,
 ) -> object:
     templates = request.app.state.templates
     traffic_snapshot = get_traffic_snapshot()
@@ -1357,6 +1360,9 @@ def traffic_page(
         current_user=current_user,
         active_nav="traffic",
         traffic_snapshot=traffic_snapshot,
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_traffic_runtime=current_user.role in {"admin", "operator"},
     )
     return templates.TemplateResponse("traffic.html", context)
 
@@ -1474,6 +1480,27 @@ async def traffic_snapshot(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_traffic_snapshot())
+
+
+@router.post("/traffic/reconnect")
+def traffic_reconnect(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = restart_core_traffic_monitor()
+    flash = "Traffic monitor runtime restarted." if result.get("ok") else str(result.get("error") or "Traffic monitor restart failed.")
+    context = build_template_context(
+        request,
+        page_title="Traffic Monitor",
+        current_user=current_user,
+        active_nav="traffic",
+        traffic_snapshot=get_traffic_snapshot(),
+        flash=flash,
+        flash_success=bool(result.get("ok")),
+        can_manage_traffic_runtime=True,
+    )
+    return templates.TemplateResponse("traffic.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
 
 
 @router.get("/api/traffic/stream")

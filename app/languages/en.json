@@ -738,5 +738,9 @@
   "Run VACUUM": "Run VACUUM",
   "Your role can view database maintenance status but cannot start maintenance actions.": "Your role can view database maintenance status but cannot start maintenance actions.",
   "Disable all TNC interfaces before running database vacuum.": "Disable all TNC interfaces before running database vacuum.",
-  "Database vacuum completed.": "Database vacuum completed."
+  "Database vacuum completed.": "Database vacuum completed.",
+  "Restart traffic monitor runtime now?": "Restart traffic monitor runtime now?",
+  "Reconnect TNC": "Reconnect TNC",
+  "Traffic monitor runtime restarted.": "Traffic monitor runtime restarted.",
+  "Traffic monitor restart failed.": "Traffic monitor restart failed."
 }

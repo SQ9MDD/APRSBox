@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from app.config import settings
 
@@ -42,3 +42,24 @@ def get_core_traffic_snapshot() -> dict[str, Any]:
         return json.loads(payload)
     except json.JSONDecodeError:
         return unavailable_traffic_snapshot("aprs-core returned invalid JSON.")
+
+
+def restart_core_traffic_monitor() -> dict[str, Any]:
+    request = Request(f"{settings.core_base_url}/api/traffic/restart", method="POST")
+    try:
+        with urlopen(request, timeout=5) as response:
+            payload = response.read().decode("utf-8")
+    except HTTPError as exc:
+        return {"ok": False, "error": f"aprs-core HTTP error: {exc.code}"}
+    except URLError as exc:
+        return {"ok": False, "error": f"aprs-core unavailable: {exc.reason}"}
+    except OSError as exc:
+        return {"ok": False, "error": f"aprs-core connection failed: {exc}"}
+
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "aprs-core returned invalid JSON."}
+    if not bool(parsed.get("ok")):
+        return {"ok": False, "error": str(parsed.get("error") or "aprs-core restart failed")}
+    return {"ok": True}

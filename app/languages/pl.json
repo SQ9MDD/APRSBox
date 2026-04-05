@@ -738,5 +738,9 @@
   "Run VACUUM": "Uruchom VACUUM",
   "Your role can view database maintenance status but cannot start maintenance actions.": "Twoja rola może przeglądać stan konserwacji bazy, ale nie może uruchamiać takich akcji.",
   "Disable all TNC interfaces before running database vacuum.": "Wyłącz wszystkie interfejsy TNC przed uruchomieniem vacuum bazy danych.",
-  "Database vacuum completed.": "Vacuum bazy danych zakończony."
+  "Database vacuum completed.": "Vacuum bazy danych zakończony.",
+  "Restart traffic monitor runtime now?": "Zrestartować teraz runtime monitora ruchu?",
+  "Reconnect TNC": "Połącz ponownie TNC",
+  "Traffic monitor runtime restarted.": "Runtime monitora ruchu został zrestartowany.",
+  "Traffic monitor restart failed.": "Restart monitora ruchu nie powiódł się."
 }

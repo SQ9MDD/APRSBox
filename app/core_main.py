@@ -71,6 +71,13 @@ def traffic_snapshot() -> JSONResponse:
     return JSONResponse(app.state.traffic_monitor.snapshot())
 
 
+@app.post("/api/traffic/restart")
+async def restart_traffic_monitor() -> JSONResponse:
+    await app.state.traffic_monitor.restart()
+    log_event("INFO", "traffic", "Traffic monitor runtime restarted by request")
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/digi-flows/test-inject")
 async def digi_flows_test_inject(payload: dict[str, object]) -> JSONResponse:
     source_kind = str(payload.get("source_kind") or "receiver_rf").strip()
