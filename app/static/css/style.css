@@ -1704,13 +1704,21 @@ select:focus-visible,
 
 .stations-table th:nth-child(7),
 .stations-table td:nth-child(7) {
-    width: 28rem;
-    min-width: 28rem;
+    width: 4rem;
+    min-width: 4rem;
+    white-space: nowrap;
 }
 
 .stations-table th:nth-child(8),
 .stations-table td:nth-child(8) {
-    min-width: 18rem;
+    width: 24rem;
+    min-width: 24rem;
+}
+
+.stations-table th:nth-child(9),
+.stations-table td:nth-child(9) {
+    min-width: 12rem;
+    overflow-wrap: anywhere;
 }
 
 .callsign-cell {
