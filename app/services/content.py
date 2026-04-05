@@ -39,6 +39,7 @@ WORKER_DEFINITIONS = (
 
 STATION_SNAPSHOT_ROW_LIMIT_FACTOR = 40
 STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
+_STATION_SNAPSHOT_CACHE: dict[tuple[int, int | None, str, str], list[dict[str, Any]]] = {}
 
 
 def _t(message: object) -> str:
@@ -210,6 +211,18 @@ def get_configured_modem_interfaces() -> list[dict[str, Any]]:
         """
     )
     return [dict(row) for row in rows]
+
+
+def has_enabled_modem_interface() -> bool:
+    row = fetch_one(
+        """
+        SELECT 1
+        FROM modems
+        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+        LIMIT 1
+        """
+    )
+    return row is not None
 
 
 def update_station_settings(payload: dict[str, Any]) -> None:
@@ -893,12 +906,24 @@ def get_local_tx_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
 
 
 def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
+    normalized_limit = max(1, int(limit or 0))
+    station_settings = get_station_settings()
+    cache_key = (
+        normalized_limit,
+        _latest_station_snapshot_frame_id(),
+        str(station_settings.get("latitude") or ""),
+        str(station_settings.get("longitude") or ""),
+    )
+    cached = _STATION_SNAPSHOT_CACHE.get(cache_key)
+    if cached is not None:
+        return [dict(item) for item in cached]
+
     snapshots_by_key: dict[str, dict[str, Any]] = {}
 
-    for snapshot in get_heard_station_snapshots(limit=max(limit, 500)):
+    for snapshot in get_heard_station_snapshots(limit=max(normalized_limit, 500)):
         snapshots_by_key[snapshot["display_callsign"].casefold()] = dict(snapshot)
 
-    for snapshot in get_local_tx_station_snapshots(limit=max(limit, 500)):
+    for snapshot in get_local_tx_station_snapshots(limit=max(normalized_limit, 500)):
         key = snapshot["display_callsign"].casefold()
         existing = snapshots_by_key.get(key)
         if existing is None:
@@ -909,12 +934,28 @@ def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     snapshots = list(snapshots_by_key.values())
     _apply_station_reference_distances(snapshots)
     snapshots.sort(key=lambda item: (str(item.get("last_heard_at") or ""), str(item.get("display_callsign") or "")), reverse=True)
-    return snapshots[:limit]
+    result = snapshots[:normalized_limit]
+    _STATION_SNAPSHOT_CACHE.clear()
+    _STATION_SNAPSHOT_CACHE[cache_key] = [dict(item) for item in result]
+    return [dict(item) for item in result]
 
 
 def _station_snapshot_row_limit(limit: int) -> int:
     normalized_limit = max(1, int(limit or 0))
     return max(STATION_SNAPSHOT_ROW_LIMIT_MIN, normalized_limit * STATION_SNAPSHOT_ROW_LIMIT_FACTOR)
+
+
+def _latest_station_snapshot_frame_id() -> int | None:
+    row = fetch_one(
+        """
+        SELECT MAX(id) AS max_id
+        FROM traffic_frames
+        WHERE format IN ('TNC2', 'TNC2-TX')
+        """
+    )
+    if row is None or row["max_id"] is None:
+        return None
+    return int(row["max_id"])
 
 
 def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[dict[str, Any]]:

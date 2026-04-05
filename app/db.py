@@ -8,6 +8,8 @@ from typing import Any, Iterator
 
 from app.config import settings
 
+DEFAULT_EVENT_LOG_KEEP_ROWS = 5000
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -1046,6 +1048,40 @@ def set_app_setting(key: str, value: str) -> None:
         """,
         (key, value, utc_now()),
     )
+
+
+def prune_event_logs(*, keep_rows: int) -> int:
+    normalized_keep_rows = max(0, int(keep_rows))
+    with get_connection() as connection:
+        before_row = connection.execute("SELECT COUNT(*) AS total FROM event_logs").fetchone()
+        before_total = int(before_row["total"]) if before_row is not None else 0
+        if normalized_keep_rows == 0:
+            connection.execute("DELETE FROM event_logs")
+        else:
+            connection.execute(
+                """
+                DELETE FROM event_logs
+                WHERE id NOT IN (
+                    SELECT id
+                    FROM event_logs
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
+                )
+                """,
+                (normalized_keep_rows,),
+            )
+        after_row = connection.execute("SELECT COUNT(*) AS total FROM event_logs").fetchone()
+        after_total = int(after_row["total"]) if after_row is not None else 0
+    return before_total - after_total
+
+
+def vacuum_database() -> None:
+    connection = connect()
+    try:
+        connection.isolation_level = None
+        connection.execute("VACUUM")
+    finally:
+        connection.close()
 
 
 def log_event(level: str, category: str, message: str) -> None:

@@ -725,5 +725,18 @@
   "Digi Queue Log": "Digi Queue Log",
   "Invalid flow steps payload.": "Invalid flow steps payload.",
   "Unsupported flow step type: {step_type}.": "Unsupported flow step type: {step_type}.",
-  "APRS-IS source": "APRS-IS source"
+  "APRS-IS source": "APRS-IS source",
+  "Database maintenance": "Database maintenance",
+  "Event logs are pruned automatically after midnight. Database vacuum remains a manual action.": "Event logs are pruned automatically after midnight. Database vacuum remains a manual action.",
+  "Automatic pruning": "Automatic pruning",
+  "Policy": "Policy",
+  "Keep newest {count} rows in event logs after midnight.": "Keep newest {count} rows in event logs after midnight.",
+  "VACUUM availability": "VACUUM availability",
+  "Disabled while any TNC is enabled.": "Disabled while any TNC is enabled.",
+  "Available when all TNC interfaces are disabled.": "Available when all TNC interfaces are disabled.",
+  "Run database vacuum now?": "Run database vacuum now?",
+  "Run VACUUM": "Run VACUUM",
+  "Your role can view database maintenance status but cannot start maintenance actions.": "Your role can view database maintenance status but cannot start maintenance actions.",
+  "Disable all TNC interfaces before running database vacuum.": "Disable all TNC interfaces before running database vacuum.",
+  "Database vacuum completed.": "Database vacuum completed."
 }

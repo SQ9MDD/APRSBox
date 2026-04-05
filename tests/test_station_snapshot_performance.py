@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.db import init_db
-from app.services.content import get_heard_station_snapshots, get_related_ssids, get_station_detail
+from app.services.content import get_heard_station_snapshots, get_related_ssids, get_station_detail, get_visible_station_snapshots
 
 
 @contextlib.contextmanager
@@ -79,6 +79,26 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
         self.assertEqual(detail["display_callsign"], "SP8ABC-9")
         self.assertEqual(len(related), 1)
         self.assertEqual(related[0]["display_callsign"], "SP8ABC-9")
+
+    def test_visible_station_snapshots_uses_cache_when_source_data_is_unchanged(self) -> None:
+        snapshots = [sample_snapshot()]
+        with patch("app.services.content.get_heard_station_snapshots", return_value=snapshots) as heard_mock, patch(
+            "app.services.content.get_local_tx_station_snapshots",
+            return_value=[],
+        ) as local_mock, patch(
+            "app.services.content.get_station_settings",
+            return_value={"latitude": "52.2297", "longitude": "21.0122"},
+        ), patch(
+            "app.services.content._latest_station_snapshot_frame_id",
+            return_value=123,
+        ):
+            first = get_visible_station_snapshots(limit=500)
+            second = get_visible_station_snapshots(limit=500)
+
+        self.assertEqual(len(first), 1)
+        self.assertEqual(len(second), 1)
+        self.assertEqual(heard_mock.call_count, 1)
+        self.assertEqual(local_mock.call_count, 1)
 
 
 if __name__ == "__main__":

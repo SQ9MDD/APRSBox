@@ -5,7 +5,7 @@ import getpass
 import sys
 
 from app.auth import create_user, ensure_admin_user, update_user_password
-from app.db import fetch_one, init_db
+from app.db import DEFAULT_EVENT_LOG_KEEP_ROWS, fetch_one, init_db, prune_event_logs, vacuum_database
 
 
 def init_db_command(_: argparse.Namespace) -> int:
@@ -45,6 +45,20 @@ def admin_exists_command(_: argparse.Namespace) -> int:
     return 0 if row and row["total"] > 0 else 1
 
 
+def prune_event_logs_command(args: argparse.Namespace) -> int:
+    init_db()
+    deleted = prune_event_logs(keep_rows=args.keep)
+    print(f"Deleted {deleted} event log rows.")
+    return 0
+
+
+def vacuum_db_command(_: argparse.Namespace) -> int:
+    init_db()
+    vacuum_database()
+    print("Database vacuum completed.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="APRSBox administration helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -71,6 +85,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     exists_parser = subparsers.add_parser("admin-exists", help="Exit 0 when an active admin user exists")
     exists_parser.set_defaults(func=admin_exists_command)
+
+    prune_logs_parser = subparsers.add_parser("prune-event-logs", help="Keep only the newest N rows in event_logs")
+    prune_logs_parser.add_argument("--keep", type=int, default=DEFAULT_EVENT_LOG_KEEP_ROWS)
+    prune_logs_parser.set_defaults(func=prune_event_logs_command)
+
+    vacuum_parser = subparsers.add_parser("vacuum-db", help="Run SQLite VACUUM on the configured database")
+    vacuum_parser.set_defaults(func=vacuum_db_command)
 
     return parser
 

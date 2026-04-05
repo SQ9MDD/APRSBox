@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
-from app.db import set_app_setting
+from app.db import DEFAULT_EVENT_LOG_KEEP_ROWS, set_app_setting, vacuum_database
 from app.i18n import get_app_language, normalize_language, SUPPORTED_LANGUAGE_CODES
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
@@ -20,6 +20,7 @@ from app.services.content import (
     get_aprs_symbol_icon_path,
     get_recent_station_packets,
     heard_stations,
+    has_enabled_modem_interface,
     get_section_row,
     get_section_rows,
     get_related_ssids,
@@ -277,6 +278,7 @@ def _settings_page_context(
     current_default_units: str | None = None,
 ) -> dict:
     station_settings = get_station_settings()
+    database_vacuum_blocked = has_enabled_modem_interface()
     return build_template_context(
         request,
         page_title="Settings",
@@ -290,9 +292,12 @@ def _settings_page_context(
         flash_success=flash_success,
         can_manage_updates=current_user.role in {"admin", "operator"},
         can_manage_global_settings=current_user.role in {"admin", "operator"},
+        can_manage_database_maintenance=current_user.role in {"admin", "operator"},
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
         aprs_device_identification_status=get_aprs_device_identification_status(),
+        event_log_keep_rows=DEFAULT_EVENT_LOG_KEEP_ROWS,
+        database_vacuum_blocked=database_vacuum_blocked,
     )
 
 
@@ -631,6 +636,31 @@ def settings_update_aprs_device_identification(
         flash = result.get("error") or "APRS device identification database update failed."
     context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/vacuum-db")
+def settings_vacuum_db(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    if has_enabled_modem_interface():
+        context = _settings_page_context(
+            request,
+            current_user,
+            flash="Disable all TNC interfaces before running database vacuum.",
+            flash_success=False,
+        )
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    vacuum_database()
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Database vacuum completed.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("settings.html", context)
 
 
 @router.post("/settings/global")

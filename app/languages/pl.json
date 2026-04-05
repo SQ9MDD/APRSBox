@@ -725,5 +725,18 @@
   "Digi Queue Log": "Log kolejki Digi",
   "Invalid flow steps payload.": "Nieprawidłowy payload kroków reguły.",
   "Unsupported flow step type: {step_type}.": "Nieobsługiwany typ kroku reguły: {step_type}.",
-  "APRS-IS source": "Źródło APRS-IS"
+  "APRS-IS source": "Źródło APRS-IS",
+  "Database maintenance": "Konserwacja bazy",
+  "Event logs are pruned automatically after midnight. Database vacuum remains a manual action.": "Logi zdarzeń są automatycznie przycinane po północy. Vacuum bazy pozostaje akcją ręczną.",
+  "Automatic pruning": "Automatyczne przycinanie",
+  "Policy": "Polityka",
+  "Keep newest {count} rows in event logs after midnight.": "Po północy zachowuj najnowsze {count} wierszy w logach zdarzeń.",
+  "VACUUM availability": "Dostępność VACUUM",
+  "Disabled while any TNC is enabled.": "Wyłączone, gdy jakikolwiek TNC jest włączony.",
+  "Available when all TNC interfaces are disabled.": "Dostępne, gdy wszystkie interfejsy TNC są wyłączone.",
+  "Run database vacuum now?": "Uruchomić teraz vacuum bazy danych?",
+  "Run VACUUM": "Uruchom VACUUM",
+  "Your role can view database maintenance status but cannot start maintenance actions.": "Twoja rola może przeglądać stan konserwacji bazy, ale nie może uruchamiać takich akcji.",
+  "Disable all TNC interfaces before running database vacuum.": "Wyłącz wszystkie interfejsy TNC przed uruchomieniem vacuum bazy danych.",
+  "Database vacuum completed.": "Vacuum bazy danych zakończony."
 }
