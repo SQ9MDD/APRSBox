@@ -1065,7 +1065,14 @@ select:focus-visible,
 }
 
 .digi-flows-col-description {
-    width: auto;
+    width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.digi-flows-col-source,
+.digi-flows-col-target {
+    width: 14rem;
     white-space: normal;
     overflow-wrap: anywhere;
 }

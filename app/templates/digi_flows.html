@@ -22,6 +22,8 @@
                     <tr>
                         <th class="digi-flows-col-name">{{ t("Name") }}</th>
                         <th class="digi-flows-col-description">{{ t("Description") }}</th>
+                        <th class="digi-flows-col-source">{{ t("Source") }}</th>
+                        <th class="digi-flows-col-target">{{ t("Target") }}</th>
                         <th class="digi-flows-col-status">{{ t("Status") }}</th>
                         {% if can_edit %}
                         <th class="digi-flows-col-actions">{{ t("Actions") }}</th>
@@ -33,6 +35,8 @@
                         <tr>
                         <td class="digi-flows-col-name"><strong>{{ flow.name }}</strong></td>
                         <td class="digi-flows-col-description">{{ flow.description or "-" }}</td>
+                        <td class="digi-flows-col-source">{{ flow.source_display or "-" }}</td>
+                        <td class="digi-flows-col-target">{{ flow.target_display or "-" }}</td>
                         <td class="digi-flows-col-status">
                             <span class="tnc-badge {{ 'tnc-badge-enabled' if flow.enabled else 'tnc-badge-disabled' }}">
                                 <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if flow.enabled else 'close-circle.svg' }}" alt="">
@@ -95,7 +99,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 4 if can_edit else 3 }}">{{ t("No DIGI Flows configured yet.") }}</td>
+                        <td colspan="{{ 6 if can_edit else 5 }}">{{ t("No DIGI Flows configured yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
