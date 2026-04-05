@@ -10,6 +10,7 @@ from urllib.error import URLError
 
 from app.db import fetch_one, get_connection, init_db
 from app.services.content import update_station_settings
+from app.services.wx_scheduler import WxSchedulerService
 from app.services.wx import (
     ensure_wx_defaults,
     refresh_single_wx_mapping,
@@ -239,6 +240,104 @@ class WxServiceTests(unittest.TestCase):
             self.assertEqual(row["status"], "STALE")
             self.assertEqual(row["value_origin"], "cache")
             self.assertEqual(row["normalized_value"], "68")
+
+    def test_wx_scheduler_tick_refreshes_cache_when_due(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success, error, source_id = safe_save_wx_source(
+                {
+                    "name": "Home Assistant",
+                    "source_type": "home_assistant",
+                    "base_url": "http://ha.local:8123",
+                    "auth_type": "bearer",
+                    "token": "test-token",
+                    "username": "",
+                    "password": "",
+                    "timeout_s": "5",
+                    "verify_tls": "",
+                    "enabled": "1",
+                }
+            )
+            self.assertTrue(success, error)
+            assert source_id is not None
+            save_wx_mappings(
+                {
+                    "wind_direction_deg": {
+                        "source_id": str(source_id),
+                        "identifier": "sensor.wind_direction",
+                        "selector_kind": "state",
+                        "selector_name": "",
+                        "unit_override": "deg",
+                        "cache_max_age_s": "600",
+                    },
+                    "wind_speed_mph": {
+                        "source_id": str(source_id),
+                        "identifier": "sensor.wind_speed",
+                        "selector_kind": "state",
+                        "selector_name": "",
+                        "unit_override": "mph",
+                        "cache_max_age_s": "600",
+                    },
+                    "temperature_f": {
+                        "source_id": str(source_id),
+                        "identifier": "sensor.temperature",
+                        "selector_kind": "state",
+                        "selector_name": "",
+                        "unit_override": "F",
+                        "cache_max_age_s": "600",
+                    },
+                }
+            )
+            success, error = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "refresh_interval_s": "300",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success, error)
+
+            def scheduler_response(request, timeout=0, context=None):  # type: ignore[no-untyped-def]
+                if request.full_url.endswith("/api/states/sensor.wind_direction"):
+                    return FakeResponse({"entity_id": "sensor.wind_direction", "state": "270", "attributes": {"unit_of_measurement": "deg"}})
+                if request.full_url.endswith("/api/states/sensor.wind_speed"):
+                    return FakeResponse({"entity_id": "sensor.wind_speed", "state": "12", "attributes": {"unit_of_measurement": "mph"}})
+                if request.full_url.endswith("/api/states/sensor.temperature"):
+                    return FakeResponse({"entity_id": "sensor.temperature", "state": "68", "attributes": {"unit_of_measurement": "F"}})
+                raise AssertionError(request.full_url)
+
+            scheduler = WxSchedulerService()
+            with patch("app.services.wx_sources.urlopen", side_effect=scheduler_response):
+                scheduler._tick()
+
+            row = fetch_one(
+                "SELECT status, normalized_value, value_origin FROM wx_runtime_cache WHERE parameter_name = ?",
+                ("temperature_f",),
+            )
+            assert row is not None
+            self.assertEqual(row["status"], "LIVE")
+            self.assertEqual(row["normalized_value"], "68")
+            self.assertEqual(row["value_origin"], "live")
 
 
 if __name__ == "__main__":

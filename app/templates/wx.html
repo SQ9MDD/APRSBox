@@ -407,7 +407,7 @@
         </div>
         <div class="wx-diagnostics-grid">
             <dl class="details-grid">
-                <dt>{{ t("Last refresh") }}</dt><dd>{{ wx_diagnostics.last_refresh_at or "-" }}</dd>
+                <dt>{{ t("Last refresh") }}</dt><dd>{{ wx_diagnostics.last_refresh_at_label or "-" }}</dd>
                 <dt>{{ t("Live fields") }}</dt><dd>{{ wx_diagnostics.live_count }}</dd>
                 <dt>{{ t("Cached fields") }}</dt><dd>{{ wx_diagnostics.cached_count }}</dd>
                 <dt>{{ t("Invalid / missing fields") }}</dt><dd>{{ wx_diagnostics.invalid_count }}</dd>

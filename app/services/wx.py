@@ -400,6 +400,8 @@ def get_wx_mapping_rows() -> list[dict[str, Any]]:
                 "cache_origin_label": str((cache_row or {}).get("value_origin") or "").upper() or "-",
                 "cache_last_success_at": (cache_row or {}).get("last_success_at"),
                 "cache_last_attempt_at": (cache_row or {}).get("last_attempt_at"),
+                "cache_last_success_at_label": _format_human_timestamp((cache_row or {}).get("last_success_at")),
+                "cache_last_attempt_at_label": _format_human_timestamp((cache_row or {}).get("last_attempt_at")),
                 "cache_info": _format_cache_info(cache_row),
                 "cache_last_error": (cache_row or {}).get("last_error") or "",
             }
@@ -474,6 +476,7 @@ def build_wx_diagnostics(*, mapping_rows: list[dict[str, Any]] | None = None, co
         last_refresh_at = max((str(row.get("cache_last_attempt_at") or "") for row in resolved_rows), default="") or None
     return {
         "last_refresh_at": last_refresh_at,
+        "last_refresh_at_label": _format_human_timestamp(last_refresh_at),
         "live_count": live_count,
         "cached_count": cached_count,
         "invalid_count": invalid_count,
@@ -1073,10 +1076,13 @@ def _normalize_angle(value: float) -> float:
 def _format_cache_info(cache_row: dict[str, Any] | None) -> str:
     if not cache_row:
         return "-"
-    last_success_at = str(cache_row.get("last_success_at") or "").strip()
-    if not last_success_at:
+    last_success_at_label = _format_human_timestamp(cache_row.get("last_success_at"))
+    last_attempt_at_label = _format_human_timestamp(cache_row.get("last_attempt_at"))
+    if not last_success_at_label:
         return "No successful read yet"
-    return last_success_at
+    if last_attempt_at_label and last_attempt_at_label != last_success_at_label:
+        return f"Last good: {last_success_at_label} | Last try: {last_attempt_at_label}"
+    return f"Last good: {last_success_at_label}"
 
 
 def _format_normalized_preview(cache_row: dict[str, Any] | None) -> str:
@@ -1150,6 +1156,13 @@ def _parse_timestamp(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _format_human_timestamp(value: Any) -> str:
+    parsed = _parse_timestamp(value)
+    if parsed is None:
+        return ""
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _format_callsign(callsign: str, ssid: str) -> str:
