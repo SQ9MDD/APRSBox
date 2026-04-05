@@ -3,8 +3,12 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from app.db import get_app_setting, log_event
-from app.services.wx import WX_REFRESH_LAST_AT_KEY, get_wx_config, refresh_wx_runtime
+from app.db import get_app_setting, log_event, set_app_setting
+from app.services.outbound import pending_wx_job_count
+from app.services.wx import WX_REFRESH_LAST_AT_KEY, get_wx_config, refresh_wx_runtime, safe_enqueue_wx_outbound
+
+
+LAST_SCHEDULED_WX_AT_KEY = "scheduler.wx.last_enqueued_at"
 
 
 class WxSchedulerService:
@@ -40,14 +44,26 @@ class WxSchedulerService:
         if not bool(config.get("enabled")):
             return
         interval_seconds = int(config.get("refresh_interval_s") or 300)
-        last_refresh_at = _parse_timestamp(get_app_setting(WX_REFRESH_LAST_AT_KEY))
         now = datetime.now(timezone.utc)
-        if last_refresh_at is not None and int((now - last_refresh_at).total_seconds()) < interval_seconds:
+        last_refresh_at = _parse_timestamp(get_app_setting(WX_REFRESH_LAST_AT_KEY))
+        if last_refresh_at is None or int((now - last_refresh_at).total_seconds()) >= interval_seconds:
+            try:
+                refresh_wx_runtime(trigger="scheduled")
+            except Exception as exc:
+                log_event("WARNING", "wx", f"WX scheduler refresh failed: {exc}")
+                return
+        if pending_wx_job_count() > 0:
+            log_event("INFO", "wx", "WX scheduler skipped enqueue because a WX job is already pending")
             return
-        try:
-            refresh_wx_runtime(trigger="scheduled")
-        except Exception as exc:
-            log_event("WARNING", "wx", f"WX scheduler refresh failed: {exc}")
+        last_enqueued_at = _parse_timestamp(get_app_setting(LAST_SCHEDULED_WX_AT_KEY))
+        if last_enqueued_at is not None and int((now - last_enqueued_at).total_seconds()) < interval_seconds:
+            return
+        success, message = safe_enqueue_wx_outbound(trigger="scheduled")
+        if success:
+            set_app_setting(LAST_SCHEDULED_WX_AT_KEY, now.replace(microsecond=0).isoformat())
+            log_event("INFO", "wx", "WX scheduler enqueued scheduled WX frame")
+        else:
+            log_event("WARNING", "wx", f"WX scheduler failed to enqueue WX frame: {message}")
 
     async def _sleep(self, delay: float) -> None:
         try:

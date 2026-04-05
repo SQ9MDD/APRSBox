@@ -16,6 +16,7 @@ OUTBOUND_KIND_BEACON = "beacon"
 OUTBOUND_KIND_STATUS = "status"
 OUTBOUND_KIND_OBJECT = "object"
 OUTBOUND_KIND_MESSAGE = "message"
+OUTBOUND_KIND_WX = "wx"
 OUTBOUND_KIND_DIGI_TX = "digi_tx"
 OUTBOUND_STATUS_QUEUED = "queued"
 OUTBOUND_STATUS_PROCESSING = "processing"
@@ -166,6 +167,10 @@ def pending_beacon_job_count() -> int:
 
 def pending_status_job_count() -> int:
     return pending_outbound_job_count(OUTBOUND_KIND_STATUS)
+
+
+def pending_wx_job_count() -> int:
+    return pending_outbound_job_count(OUTBOUND_KIND_WX)
 
 
 def pending_outbound_job_count(kind: str) -> int:
@@ -321,6 +326,72 @@ def enqueue_message_job(
         job_id = cursor.lastrowid
     log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_id} for interface {modem['name']}")
     return True, f"Message queued as job #{job_id}."
+
+
+def enqueue_wx_job(payload: dict[str, Any]) -> tuple[bool, str]:
+    callsign = str(payload.get("callsign") or "").strip().upper()
+    interface_id = payload.get("interface_id")
+    if not callsign:
+        return False, "WX callsign is required."
+    if interface_id in {None, ""}:
+        return False, "WX interface is required."
+    try:
+        normalized_interface_id = int(interface_id)
+    except (TypeError, ValueError):
+        return False, "Selected WX interface is invalid."
+    modem = fetch_one(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE id = ?
+        """,
+        (normalized_interface_id,),
+    )
+    if modem is None:
+        return False, "Selected WX interface does not exist."
+    latitude = _parse_coordinate(payload.get("latitude"))
+    longitude = _parse_coordinate(payload.get("longitude"))
+    if latitude is None or longitude is None:
+        return False, "WX latitude and longitude must be valid decimal coordinates."
+
+    weather = payload.get("weather") or {}
+    if not isinstance(weather, dict):
+        return False, "WX weather payload is invalid."
+
+    stored_payload = {
+        "callsign": callsign,
+        "ssid": str(payload.get("ssid") or "").strip(),
+        "interface_id": int(modem["id"]),
+        "latitude": latitude,
+        "longitude": longitude,
+        "path": str(payload.get("path") or "").strip(),
+        "weather": weather,
+        "trigger": str(payload.get("trigger") or "scheduled").strip() or "scheduled",
+        "generated_at": str(payload.get("generated_at") or utc_now()).strip(),
+    }
+    now_text = utc_now()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO outbound_jobs(
+                kind, interface_id, payload_json, status, scheduled_at,
+                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+            """,
+            (
+                OUTBOUND_KIND_WX,
+                int(modem["id"]),
+                json.dumps(stored_payload, ensure_ascii=True, separators=(",", ":")),
+                OUTBOUND_STATUS_QUEUED,
+                now_text,
+                now_text,
+                now_text,
+            ),
+        )
+        job_id = int(cursor.lastrowid)
+    log_event("INFO", "outbound", f"Queued {stored_payload['trigger']} WX job #{job_id} for interface {modem['name']}")
+    return True, f"WX queued as job #{job_id}."
 
 
 def enqueue_digi_tx_job(
@@ -631,6 +702,16 @@ def build_message_tnc2(payload: dict[str, Any]) -> str:
     return f"{header}:{info}"
 
 
+def build_wx_tnc2(payload: dict[str, Any]) -> str:
+    source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
+    path = str(payload.get("path") or "").strip()
+    info = _build_wx_info(payload)
+    header = f"{source}>APRS"
+    if path:
+        header = f"{header},{path}"
+    return f"{header}:{info}"
+
+
 def latest_object_dispatch_at() -> datetime | None:
     row = fetch_one(
         """
@@ -752,6 +833,42 @@ def _build_message_info(payload: dict[str, Any]) -> str:
     if str(payload.get("message_kind") or "").strip() == "direct_message" and message_number:
         message_text = f"{message_text}{{{message_number}"
     return f":{addressee}:{message_text}"
+
+
+def _build_wx_info(payload: dict[str, Any]) -> str:
+    latitude = _format_aprs_latitude(float(payload["latitude"]))
+    longitude = _format_aprs_longitude(float(payload["longitude"]))
+    weather = payload.get("weather") or {}
+    if not isinstance(weather, dict):
+        raise ValueError("WX payload weather data is invalid.")
+    wind_direction = _format_wx_required_three_digits(weather.get("wind_direction_deg"), label="Wind direction")
+    wind_speed = _format_wx_required_three_digits(weather.get("wind_speed_mph"), label="Wind speed")
+    temperature = _format_wx_temperature(weather.get("temperature_f"))
+
+    parts = [f"={latitude}/{longitude}_{wind_direction}/{wind_speed}"]
+    gust = _format_wx_optional_three_digits("g", weather.get("wind_gust_mph"))
+    if gust:
+        parts.append(gust)
+    parts.append(temperature)
+
+    optional_fields = (
+        _format_wx_hundredths_inches("r", weather.get("rain_last_hour_in")),
+        _format_wx_hundredths_inches("p", weather.get("rain_last_24h_in")),
+        _format_wx_hundredths_inches("P", weather.get("rain_since_midnight_in")),
+        _format_wx_humidity(weather.get("humidity_pct")),
+        _format_wx_pressure(weather.get("pressure_hpa")),
+        _format_wx_snow(weather.get("snow_last_24h_in")),
+        _format_wx_luminosity(weather.get("luminosity_w_m2")),
+        _format_wx_counter(weather.get("raw_rain_counter")),
+        _format_wx_water_height("F", weather.get("water_height_ft")),
+        _format_wx_water_height("f", weather.get("water_height_m")),
+        _format_wx_voltage(weather.get("battery_volts")),
+        _format_wx_radiation(weather.get("radiation_nsv_h")),
+    )
+    for field in optional_fields:
+        if field:
+            parts.append(field)
+    return "".join(parts)
 
 
 def resolve_message_addressee(payload: dict[str, Any]) -> str:
@@ -891,3 +1008,145 @@ def _enqueue_generic_message_payload(
         job_id = int(cursor.lastrowid)
     log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_id} for interface {modem['name']}")
     return True, f"Message queued as job #{job_id}."
+
+
+def _coerce_wx_number(value: Any, *, label: str) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} is required for WX frame generation.") from exc
+    if result != result:
+        raise ValueError(f"{label} is required for WX frame generation.")
+    return result
+
+
+def _format_wx_required_three_digits(value: Any, *, label: str) -> str:
+    number = int(round(_coerce_wx_number(value, label=label)))
+    if number < 0:
+        raise ValueError(f"{label} cannot be negative for WX frame generation.")
+    return f"{min(number, 999):03d}"
+
+
+def _format_wx_optional_three_digits(prefix: str, value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = int(round(float(value)))
+    if number < 0:
+        return ""
+    return f"{prefix}{min(number, 999):03d}"
+
+
+def _format_wx_temperature(value: Any) -> str:
+    number = int(round(_coerce_wx_number(value, label="Temperature")))
+    if number < -99:
+        number = -99
+    if number > 999:
+        number = 999
+    if number < 0:
+        return f"t-{abs(number):02d}"
+    return f"t{number:03d}"
+
+
+def _format_wx_hundredths_inches(prefix: str, value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = int(round(float(value) * 100.0))
+    if number < 0:
+        return ""
+    return f"{prefix}{min(number, 999):03d}"
+
+
+def _format_wx_humidity(value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = int(round(float(value)))
+    if number <= 0:
+        return ""
+    if number >= 100:
+        return "h00"
+    return f"h{number:02d}"
+
+
+def _format_wx_pressure(value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = int(round(float(value) * 10.0))
+    if number < 0:
+        return ""
+    return f"b{min(number, 99999):05d}"
+
+
+def _format_wx_snow(value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = float(value)
+    if number < 0:
+        return ""
+    if number < 10:
+        return f"s{number:03.1f}"
+    return f"s{min(int(round(number)), 999):03d}"
+
+
+def _format_wx_luminosity(value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = int(round(float(value)))
+    if number < 0:
+        return ""
+    if number <= 999:
+        return f"L{number:03d}"
+    return f"l{min(number - 1000, 999):03d}"
+
+
+def _format_wx_counter(value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = int(round(float(value)))
+    if number < 0:
+        return ""
+    return f"#{number % 1000:03d}"
+
+
+def _format_wx_water_height(prefix: str, value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    tenths = int(round(float(value) * 10.0))
+    if tenths < -999:
+        tenths = -999
+    if tenths > 9999:
+        tenths = 9999
+    if tenths < 0:
+        return f"{prefix}{tenths:04d}"
+    return f"{prefix}{tenths:04d}"
+
+
+def _format_wx_voltage(value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = int(round(float(value) * 10.0))
+    if number < 0:
+        return ""
+    return f"V{min(number, 999):03d}"
+
+
+def _format_wx_radiation(value: Any) -> str:
+    if value in {None, ""}:
+        return ""
+    number = float(value)
+    if number <= 0:
+        return ""
+    exponent = 0
+    mantissa = number
+    while mantissa >= 100 and exponent < 9:
+        mantissa /= 10.0
+        exponent += 1
+    while mantissa < 10 and exponent > 0:
+        mantissa *= 10.0
+        exponent -= 1
+    rounded_mantissa = int(round(mantissa))
+    if rounded_mantissa >= 100 and exponent < 9:
+        rounded_mantissa //= 10
+        exponent += 1
+    if rounded_mantissa < 10:
+        rounded_mantissa = 10
+    return f"X{rounded_mantissa:02d}{exponent}"

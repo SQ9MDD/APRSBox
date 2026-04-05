@@ -17,6 +17,7 @@ from app.services.outbound import (
     build_message_tnc2,
     build_object_tnc2,
     build_status_tnc2,
+    build_wx_tnc2,
     build_tnc2_kiss_frame,
     claim_next_outbound_job,
     mark_outbound_job_failed,
@@ -87,6 +88,8 @@ class OutboundService:
                 tnc2_line = build_object_tnc2(job.get("payload") or {})
             elif kind == "message":
                 tnc2_line = build_message_tnc2(job.get("payload") or {})
+            elif kind == "wx":
+                tnc2_line = build_wx_tnc2(job.get("payload") or {})
             elif kind == OUTBOUND_KIND_DIGI_TX:
                 tnc2_line = str((job.get("payload") or {}).get("line") or "").strip()
                 if not tnc2_line:

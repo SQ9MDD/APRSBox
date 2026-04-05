@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.services.content import get_station_settings
+from app.services.outbound import build_wx_tnc2, enqueue_wx_job
 from app.services.wx_definitions import (
     WX_AUTH_TYPES,
     WX_PARAMETER_DEFINITIONS,
@@ -64,7 +65,6 @@ def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dic
     ensure_wx_defaults()
     config = get_wx_config()
     mappings = get_wx_mapping_rows()
-    diagnostics = build_wx_diagnostics(mapping_rows=mappings, config=config)
     sources = list_wx_sources()
     source_form = _build_source_form(get_wx_source(edit_source_id) if edit_source_id is not None else None)
     return {
@@ -73,6 +73,7 @@ def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dic
         "wx_optional_mappings": [row for row in mappings if not row["required_flag"]],
         "wx_sources": sources,
         "wx_source_form": source_form,
+        "wx_tx_log_rows": list_recent_sent_wx_frames(limit=10),
         "wx_source_type_options": [
             {"value": "home_assistant", "label": "Home Assistant"},
             {"value": "domoticz", "label": "Domoticz"},
@@ -88,7 +89,6 @@ def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dic
             {"value": "field", "label": "field"},
             {"value": "key", "label": "key"},
         ],
-        "wx_diagnostics": diagnostics,
         "wx_source_discovery": source_discovery,
         "wx_has_sources": bool(sources),
     }
@@ -472,6 +472,91 @@ def refresh_single_wx_mapping(parameter_name: str, *, trigger: str = "manual-tes
     return refresh_wx_runtime(trigger=trigger, only_parameters={normalized})
 
 
+def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = None, config: dict[str, Any] | None = None, trigger: str = "scheduled") -> dict[str, Any]:
+    resolved_config = config or get_wx_config()
+    rows = mapping_rows or get_wx_mapping_rows()
+    encoder_input = build_wx_encoder_input(mapping_rows=rows, config=resolved_config)
+    if not bool(resolved_config.get("enabled")):
+        raise WxValidationError("WX is disabled.")
+    if not str(resolved_config.get("callsign") or "").strip():
+        raise WxValidationError("My Settings callsign is required before sending WX.")
+    if not str(resolved_config.get("ssid") or "").strip():
+        raise WxValidationError("WX SSID is required before sending WX.")
+    beacon_interface_id = resolved_config.get("beacon_interface_id")
+    if beacon_interface_id in {None, ""}:
+        raise WxValidationError("WX interface is required before sending WX.")
+    latitude = str(resolved_config.get("latitude") or "").strip()
+    longitude = str(resolved_config.get("longitude") or "").strip()
+    if not latitude or not longitude:
+        raise WxValidationError("WX latitude and longitude are required before sending WX.")
+    if encoder_input["missing_required"]:
+        raise WxValidationError(
+            f"WX required fields are not ready: {', '.join(str(name) for name in encoder_input['missing_required'])}."
+        )
+
+    weather: dict[str, float] = {}
+    for field in encoder_input["fields"]:
+        if field["status"] not in {"LIVE", "CACHED"} or field["value"] is None:
+            continue
+        weather[str(field["name"])] = float(field["value"])
+    for required_name in ("wind_direction_deg", "wind_speed_mph", "temperature_f"):
+        if required_name not in weather:
+            raise WxValidationError(f"WX field {required_name} is missing from the normalized payload.")
+
+    return {
+        "callsign": str(resolved_config.get("callsign") or "").strip().upper(),
+        "ssid": str(resolved_config.get("ssid") or "").strip(),
+        "interface_id": int(beacon_interface_id),
+        "path": str(resolved_config.get("path") or "").strip(),
+        "latitude": latitude,
+        "longitude": longitude,
+        "weather": weather,
+        "trigger": str(trigger or "scheduled").strip() or "scheduled",
+        "generated_at": utc_now(),
+    }
+
+
+def safe_enqueue_wx_outbound(*, trigger: str = "scheduled") -> tuple[bool, str]:
+    try:
+        payload = build_wx_outbound_payload(trigger=trigger)
+    except WxValidationError as exc:
+        return False, str(exc)
+    return enqueue_wx_job(payload)
+
+
+def list_recent_sent_wx_frames(limit: int = 10) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
+               m.name AS interface_name, j.payload_json
+        FROM outbound_jobs j
+        LEFT JOIN modems m ON m.id = j.interface_id
+        WHERE j.kind = 'wx'
+          AND j.status = 'sent'
+        ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload = _parse_json_object(item.pop("payload_json", "") or "{}")
+        if payload:
+            try:
+                item["line"] = build_wx_tnc2(payload)
+            except Exception:
+                item["line"] = ""
+        else:
+            item["line"] = ""
+        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        display_time = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
+        item["display_time"] = display_time
+        item["display_time_label"] = _format_human_timestamp(display_time)
+        result.append(item)
+    return result
+
+
 def build_wx_diagnostics(*, mapping_rows: list[dict[str, Any]] | None = None, config: dict[str, Any] | None = None) -> dict[str, Any]:
     resolved_config = config or get_wx_config()
     resolved_rows = mapping_rows or get_wx_mapping_rows()
@@ -563,6 +648,10 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise WxValidationError("My Settings callsign is required before enabling WX.")
     if enabled and not ssid:
         raise WxValidationError("WX SSID is required when WX is enabled.")
+    if enabled and beacon_interface_id is None:
+        raise WxValidationError("WX interface is required when WX is enabled.")
+    if enabled and (not latitude or not longitude):
+        raise WxValidationError("WX latitude and longitude are required when WX is enabled.")
     if ssid and (not ssid.isdigit() or int(ssid) < 0 or int(ssid) > 15):
         raise WxValidationError("WX SSID must be between 0 and 15.")
     occupied_reason = get_wx_occupied_ssids().get(ssid)
