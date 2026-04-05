@@ -23,6 +23,7 @@ from app.services.content import (
     get_section_row,
     get_section_rows,
     get_related_ssids,
+    get_visible_station_snapshots,
     recent_station_outbound_jobs,
     get_station_detail,
     get_station_settings,
@@ -122,16 +123,17 @@ def _section_template_context(
 
 
 def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
-    detail = get_station_detail(callsign, unit_system=unit_system)
+    snapshots = get_visible_station_snapshots()
+    detail = get_station_detail(callsign, unit_system=unit_system, snapshots=snapshots)
     if detail is None:
         return None
-    related_ssids = get_related_ssids(detail["base_callsign"])
+    related_ssids = get_related_ssids(detail["base_callsign"], snapshots=snapshots)
     for item in related_ssids:
         item["is_current"] = item["display_callsign"].casefold() == detail["display_callsign"].casefold()
     return {
         "station": detail,
         "station_map_config": get_station_detail_map_config(detail),
-        "recent_packets": get_recent_station_packets(detail["display_callsign"]),
+        "recent_packets": get_recent_station_packets(detail["display_callsign"], snapshot=detail),
         "related_ssids": related_ssids,
     }
 

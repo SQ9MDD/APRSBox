@@ -37,6 +37,9 @@ WORKER_DEFINITIONS = (
     },
 )
 
+STATION_SNAPSHOT_ROW_LIMIT_FACTOR = 40
+STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
+
 
 def _t(message: object) -> str:
     return get_translator(get_app_language())(message)
@@ -719,12 +722,17 @@ def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[s
     return visible_stations(limit=limit, unit_system=unit_system)
 
 
-def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, Any] | None:
+def get_station_detail(
+    callsign: str,
+    unit_system: str = "metric",
+    *,
+    snapshots: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     normalized_callsign = callsign.strip()
     if not normalized_callsign:
         return None
 
-    snapshot = _find_station_snapshot(normalized_callsign)
+    snapshot = _find_station_snapshot(normalized_callsign, snapshots=snapshots)
     if snapshot is None:
         return None
 
@@ -768,8 +776,13 @@ def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, 
     }
 
 
-def get_recent_station_packets(callsign: str, limit: int = 10) -> list[dict[str, Any]]:
-    snapshot = _find_station_snapshot(callsign.strip())
+def get_recent_station_packets(
+    callsign: str,
+    limit: int = 10,
+    *,
+    snapshot: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    snapshot = snapshot or _find_station_snapshot(callsign.strip())
     if snapshot is None:
         return []
 
@@ -821,14 +834,18 @@ def get_recent_station_packets(callsign: str, limit: int = 10) -> list[dict[str,
     return packets
 
 
-def get_related_ssids(base_callsign: str) -> list[dict[str, Any]]:
+def get_related_ssids(
+    base_callsign: str,
+    *,
+    snapshots: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     normalized_base = base_callsign.strip()
     if not normalized_base:
         return []
 
     related: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for snapshot in get_visible_station_snapshots():
+    for snapshot in snapshots or get_visible_station_snapshots():
         if snapshot["callsign"].casefold() != normalized_base.casefold():
             continue
         display_callsign = snapshot["display_callsign"]
@@ -847,27 +864,31 @@ def get_related_ssids(base_callsign: str) -> list[dict[str, Any]]:
     return related
 
 
-def _find_station_snapshot(callsign: str) -> dict[str, Any] | None:
+def _find_station_snapshot(
+    callsign: str,
+    *,
+    snapshots: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     normalized = callsign.strip().casefold()
     if not normalized:
         return None
-    snapshots = get_visible_station_snapshots()
-    for snapshot in snapshots:
+    available_snapshots = snapshots or get_visible_station_snapshots()
+    for snapshot in available_snapshots:
         if snapshot["display_callsign"].casefold() == normalized:
             return snapshot
-    for snapshot in snapshots:
+    for snapshot in available_snapshots:
         if snapshot["callsign"].casefold() == normalized:
             return snapshot
     return None
 
 
 def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
-    rows = _station_snapshot_rows(("TNC2",))
+    rows = _station_snapshot_rows(("TNC2",), row_limit=_station_snapshot_row_limit(limit))
     return _build_station_snapshots_from_rows(rows, origin="heard", limit=limit)
 
 
 def get_local_tx_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
-    rows = _station_snapshot_rows(("TNC2-TX",))
+    rows = _station_snapshot_rows(("TNC2-TX",), row_limit=_station_snapshot_row_limit(limit))
     return _build_station_snapshots_from_rows(rows, origin="local_tx", limit=limit)
 
 
@@ -891,7 +912,12 @@ def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     return snapshots[:limit]
 
 
-def _station_snapshot_rows(formats: tuple[str, ...]) -> list[dict[str, Any]]:
+def _station_snapshot_row_limit(limit: int) -> int:
+    normalized_limit = max(1, int(limit or 0))
+    return max(STATION_SNAPSHOT_ROW_LIMIT_MIN, normalized_limit * STATION_SNAPSHOT_ROW_LIMIT_FACTOR)
+
+
+def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[dict[str, Any]]:
     placeholders = ", ".join("?" for _ in formats)
     rows = fetch_all(
         f"""
@@ -899,8 +925,9 @@ def _station_snapshot_rows(formats: tuple[str, ...]) -> list[dict[str, Any]]:
         FROM traffic_frames
         WHERE format IN ({placeholders})
         ORDER BY created_at DESC, id DESC
+        LIMIT ?
         """,
-        formats,
+        formats + (row_limit,),
     )
     return [dict(row) for row in rows]
 
