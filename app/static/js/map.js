@@ -148,6 +148,13 @@
         return `${Math.floor(seconds / 86400)} d temu`;
     }
 
+    function formatDistance(distanceKm) {
+        if (!Number.isFinite(distanceKm)) {
+            return "";
+        }
+        return `${distanceKm} km`;
+    }
+
     function syncStatus() {
         const center = map.getCenter();
         if (centerOutput) {
@@ -221,6 +228,9 @@
         }
         if (station.destination) {
             lines.push(`<span><strong>Cel:</strong> ${escapeHtml(station.destination)}</span>`);
+        }
+        if (Number.isFinite(station.distance_km)) {
+            lines.push(`<span><strong>Odległość:</strong> ${escapeHtml(formatDistance(station.distance_km))}</span>`);
         }
         if (station.comment) {
             lines.push(`<span><strong>Komentarz:</strong> ${escapeHtml(station.comment)}</span>`);

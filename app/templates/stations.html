@@ -55,6 +55,7 @@
                     <col style="width: 4.5rem">
                     <col style="width: 5rem">
                     <col style="width: 5rem">
+                    <col style="width: 5.5rem">
                     <col style="width: 28rem">
                     <col>
                 </colgroup>
@@ -66,6 +67,7 @@
                         <th>{{ t("APRS Icon") }}</th>
                         <th title="{{ t('Latitude') }}">{{ t("Lat.") }}</th>
                         <th title="{{ t('Longitude') }}">{{ t("Lon.") }}</th>
+                        <th>{{ t("Distance") }}</th>
                         <th>{{ t("Data") }}</th>
                         <th>{{ t("Comment") }}</th>
                     </tr>
@@ -101,6 +103,7 @@
                         </td>
                         <td>{{ row.latitude or "-" }}</td>
                         <td>{{ row.longitude or "-" }}</td>
+                        <td>{% if row.distance_km is not none %}{{ row.distance_km }} km{% else %}-{% endif %}</td>
                         <td>
                             {% if row.data %}
                             <div class="weather-inline">
@@ -119,7 +122,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="muted">{{ t("No decoded APRS stations available yet.") }}</td>
+                        <td colspan="9" class="muted">{{ t("No decoded APRS stations available yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -144,6 +147,7 @@
     const refreshStorageKey = "aprsbox-stations-refresh-ms";
     const noStationsText = {{ t("No decoded APRS stations available yet.")|tojson }};
     const aprsClientLabel = {{ t("APRS client")|tojson }};
+    const distanceLabel = {{ t("Distance")|tojson }};
     let refreshTimer = null;
 
     function escapeHtml(value) {
@@ -171,9 +175,13 @@
         `;
     }
 
+    function renderDistance(value) {
+        return Number.isFinite(value) ? `${escapeHtml(value)} km` : "-";
+    }
+
     function renderRows(stations) {
         if (!stations.length) {
-            tbody.innerHTML = `<tr><td colspan="8" class="muted">${noStationsText}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" class="muted">${noStationsText}</td></tr>`;
             return;
         }
         const resolvePath = (value) => value && value.startsWith("/") ? `${rootPath}${value}` : (value || "");
@@ -193,6 +201,7 @@
                 <td>${row.symbol ? `<img class="aprs-symbol-icon" src="${staticRoot}${escapeHtml(row.symbol_icon)}" alt="${escapeHtml(row.symbol)}">` : '<span class="muted">-</span>'}</td>
                 <td>${escapeHtml(row.latitude || "-")}</td>
                 <td>${escapeHtml(row.longitude || "-")}</td>
+                <td title="${escapeHtml(distanceLabel)}">${renderDistance(row.distance_km)}</td>
                 <td>${renderWeather(row.data || [])}</td>
                 <td>${escapeHtml(row.comment || "-")}</td>
             </tr>

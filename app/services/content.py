@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import ipaddress
 import json
+import math
 import re
 import sqlite3
 import subprocess
@@ -706,6 +707,7 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
                 "latitude": snapshot["latitude"],
                 "longitude": snapshot["longitude"],
+                "distance_km": snapshot.get("distance_km"),
                 "aprs_device_short": snapshot["aprs_device_short"],
                 "detail_href": build_station_detail_href(snapshot["display_callsign"]),
             }
@@ -758,6 +760,7 @@ def get_station_detail(callsign: str, unit_system: str = "metric") -> dict[str, 
         "longitude": snapshot["longitude"],
         "latitude_float": latitude,
         "longitude_float": longitude,
+        "distance_km": snapshot.get("distance_km"),
         "messaging_capable": _messaging_capable(snapshot),
         "aprs_device": dict(snapshot["aprs_device"]) if snapshot.get("aprs_device") else None,
         "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
@@ -883,6 +886,7 @@ def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
         snapshots_by_key[key] = _merge_station_snapshots(existing, snapshot)
 
     snapshots = list(snapshots_by_key.values())
+    _apply_station_reference_distances(snapshots)
     snapshots.sort(key=lambda item: (str(item.get("last_heard_at") or ""), str(item.get("display_callsign") or "")), reverse=True)
     return snapshots[:limit]
 
@@ -1050,6 +1054,7 @@ def _new_station_snapshot(
         "data_raw": {},
         "latitude": "",
         "longitude": "",
+        "distance_km": None,
         "aprs_device": None,
         "aprs_device_short": "",
     }
@@ -1201,6 +1206,43 @@ def _parse_coordinate(value: Any) -> float | None:
         return float(str(value).strip())
     except (TypeError, ValueError):
         return None
+
+
+def _apply_station_reference_distances(snapshots: list[dict[str, Any]]) -> None:
+    station_settings = get_station_settings()
+    reference_latitude = _parse_coordinate(station_settings.get("latitude"))
+    reference_longitude = _parse_coordinate(station_settings.get("longitude"))
+    for snapshot in snapshots:
+        latitude = _parse_coordinate(snapshot.get("latitude"))
+        longitude = _parse_coordinate(snapshot.get("longitude"))
+        snapshot["distance_km"] = _distance_km_between_points(
+            reference_latitude,
+            reference_longitude,
+            latitude,
+            longitude,
+        )
+
+
+def _distance_km_between_points(
+    latitude_a: float | None,
+    longitude_a: float | None,
+    latitude_b: float | None,
+    longitude_b: float | None,
+) -> float | None:
+    if None in {latitude_a, longitude_a, latitude_b, longitude_b}:
+        return None
+
+    earth_radius_km = 6371.0
+    phi_1 = math.radians(float(latitude_a))
+    phi_2 = math.radians(float(latitude_b))
+    delta_phi = math.radians(float(latitude_b) - float(latitude_a))
+    delta_lambda = math.radians(float(longitude_b) - float(longitude_a))
+    haversine = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi_1) * math.cos(phi_2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    arc = 2.0 * math.atan2(math.sqrt(haversine), math.sqrt(1.0 - haversine))
+    return round(earth_radius_km * arc, 1)
 
 
 def _messaging_capable(snapshot: dict[str, Any]) -> bool | None:

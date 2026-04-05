@@ -52,6 +52,7 @@ def get_map_station_payload() -> dict[str, Any]:
                 "source": station["source"],
                 "last_heard_at": station["last_heard_at"],
                 "last_heard_age_s": station["last_heard_age_s"],
+                "distance_km": station.get("distance_km"),
                 "aprs_device_short": station.get("aprs_device_short", ""),
                 "speed": _speed_kmh(station["data_raw"]),
                 "course": _integer_value(station["data_raw"].get("course_deg")),
