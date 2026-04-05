@@ -88,6 +88,7 @@
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save WX configuration") }}</button>
                 <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/wx/refresh">{{ t("Refresh now") }}</button>
+                <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/wx/send">{{ t("Send now") }}</button>
             </div>
         </form>
         {% else %}

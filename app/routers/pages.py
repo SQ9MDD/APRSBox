@@ -84,6 +84,7 @@ from app.services.wx import (
     discover_wx_source_items,
     get_wx_page_data,
     refresh_single_wx_mapping,
+    safe_enqueue_wx_outbound,
     safe_refresh_wx_runtime,
     safe_save_wx_config,
     safe_save_wx_mappings,
@@ -1359,6 +1360,48 @@ def wx_refresh_now(
         flash_success=success,
     )
     return templates.TemplateResponse("wx.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/wx/send")
+def wx_send_now(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    enabled: str | None = Form(None),
+    ssid: str = Form(""),
+    beacon_interface_id: str = Form(""),
+    path: str = Form(""),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
+    refresh_interval_s: str = Form("300"),
+    allow_cache_fallback: str | None = Form(None),
+    default_cache_max_age_s: str = Form("900"),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_save_wx_config(
+        {
+            "enabled": enabled,
+            "ssid": ssid.strip(),
+            "beacon_interface_id": beacon_interface_id.strip(),
+            "path": path.strip(),
+            "latitude": latitude.strip(),
+            "longitude": longitude.strip(),
+            "refresh_interval_s": refresh_interval_s.strip(),
+            "allow_cache_fallback": allow_cache_fallback,
+            "default_cache_max_age_s": default_cache_max_age_s.strip(),
+        }
+    )
+    if not success:
+        context = _wx_page_context(request, current_user, flash=error, flash_success=False)
+        return templates.TemplateResponse("wx.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    refreshed, _, refresh_error = safe_refresh_wx_runtime(trigger="manual-send")
+    if not refreshed:
+        context = _wx_page_context(request, current_user, flash=refresh_error, flash_success=False)
+        return templates.TemplateResponse("wx.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    queued, queue_message = safe_enqueue_wx_outbound(trigger="manual")
+    context = _wx_page_context(request, current_user, flash=queue_message, flash_success=queued)
+    return templates.TemplateResponse("wx.html", context, status_code=200 if queued else status.HTTP_400_BAD_REQUEST)
 
 
 @router.post("/wx/mappings/{parameter_name}/test")
