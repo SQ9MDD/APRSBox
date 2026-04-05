@@ -163,6 +163,43 @@ class WxServiceTests(unittest.TestCase):
             self.assertEqual(row["latitude"], "52.2297")
             self.assertEqual(row["longitude"], "21.0122")
 
+    def test_wx_config_can_enable_without_required_mappings(self) -> None:
+        with temporary_database():
+            modem_id = insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success, error = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "300",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success, error)
+
     def test_wx_refresh_updates_live_cache_and_uses_cached_fallback(self) -> None:
         with temporary_database():
             success, error, source_id = safe_save_wx_source(
@@ -413,6 +450,114 @@ class WxServiceTests(unittest.TestCase):
 
 
 class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_wx_runtime_uses_placeholders_for_missing_required_fields(self) -> None:
+        with temporary_database():
+            modem_id = insert_modem(device_path="127.0.0.1:9010")
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success, error, source_id = safe_save_wx_source(
+                {
+                    "name": "Home Assistant",
+                    "source_type": "home_assistant",
+                    "base_url": "http://ha.local:8123",
+                    "auth_type": "bearer",
+                    "token": "test-token",
+                    "username": "",
+                    "password": "",
+                    "timeout_s": "5",
+                    "verify_tls": "",
+                    "enabled": "1",
+                }
+            )
+            self.assertTrue(success, error)
+            assert source_id is not None
+            save_wx_mappings(
+                {
+                    "temperature_f": {
+                        "source_id": str(source_id),
+                        "identifier": "sensor.temperature",
+                        "selector_kind": "state",
+                        "selector_name": "",
+                        "unit_override": "F",
+                        "cache_max_age_s": "600",
+                    }
+                }
+            )
+            success, error = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "300",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success, error)
+
+            def temperature_only_response(request, timeout=0, context=None):  # type: ignore[no-untyped-def]
+                if request.full_url.endswith("/api/states/sensor.temperature"):
+                    return FakeResponse({"entity_id": "sensor.temperature", "state": "68", "attributes": {"unit_of_measurement": "F"}})
+                raise AssertionError(request.full_url)
+
+            scheduler = WxSchedulerService()
+            with patch("app.services.wx_sources.urlopen", side_effect=temperature_only_response):
+                scheduler._tick()
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "wx")
+
+            written_frames: list[bytes] = []
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    written_frames.append(data)
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9010)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await outbound_service._process_job(job)
+
+            runtime_job = get_outbound_job(int(job["id"]))
+            assert runtime_job is not None
+            expected_line = build_wx_tnc2(runtime_job["payload"])
+            self.assertEqual(expected_line, "SQ9XYZ-13>APRS,WIDE2-2:=5213.78N/02100.73E_.../...t068")
+            self.assertTrue(written_frames)
+
     async def test_scheduled_wx_flows_from_scheduler_to_runtime_send(self) -> None:
         with temporary_database():
             modem_id = insert_modem(device_path="127.0.0.1:9011")

@@ -335,9 +335,6 @@ def save_wx_mappings(payload_by_parameter: dict[str, dict[str, Any]]) -> None:
                 """,
                 {**row, "updated_at": timestamp},
             )
-    current_config = get_wx_config()
-    if bool(current_config.get("enabled")):
-        _assert_required_wx_mappings_complete()
     log_event("INFO", "wx", "Updated WX mapping rows")
 
 
@@ -489,19 +486,12 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
     longitude = str(resolved_config.get("longitude") or "").strip()
     if not latitude or not longitude:
         raise WxValidationError("WX latitude and longitude are required before sending WX.")
-    if encoder_input["missing_required"]:
-        raise WxValidationError(
-            f"WX required fields are not ready: {', '.join(str(name) for name in encoder_input['missing_required'])}."
-        )
 
     weather: dict[str, float] = {}
     for field in encoder_input["fields"]:
         if field["status"] not in {"LIVE", "CACHED"} or field["value"] is None:
             continue
         weather[str(field["name"])] = float(field["value"])
-    for required_name in ("wind_direction_deg", "wind_speed_mph", "temperature_f"):
-        if required_name not in weather:
-            raise WxValidationError(f"WX field {required_name} is missing from the normalized payload.")
 
     return {
         "callsign": str(resolved_config.get("callsign") or "").strip().upper(),
@@ -602,7 +592,7 @@ def build_wx_encoder_input(*, mapping_rows: list[dict[str, Any]] | None = None, 
             }
         )
     return {
-        "ready_for_encode": bool(resolved_config.get("enabled")) and not missing_required and bool(resolved_config.get("callsign")) and bool(resolved_config.get("ssid")),
+        "ready_for_encode": bool(resolved_config.get("enabled")) and bool(resolved_config.get("callsign")) and bool(resolved_config.get("ssid")),
         "enabled": bool(resolved_config.get("enabled")),
         "callsign": resolved_config.get("callsign") or "",
         "ssid": resolved_config.get("ssid") or "",
@@ -657,8 +647,6 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     occupied_reason = get_wx_occupied_ssids().get(ssid)
     if enabled and occupied_reason:
         raise WxValidationError(f"WX SSID {ssid} is not available: {occupied_reason}.")
-    if enabled:
-        _assert_required_wx_mappings_complete()
     return {
         "enabled": enabled,
         "callsign": callsign,

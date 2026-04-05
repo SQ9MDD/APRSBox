@@ -841,8 +841,8 @@ def _build_wx_info(payload: dict[str, Any]) -> str:
     weather = payload.get("weather") or {}
     if not isinstance(weather, dict):
         raise ValueError("WX payload weather data is invalid.")
-    wind_direction = _format_wx_required_three_digits(weather.get("wind_direction_deg"), label="Wind direction")
-    wind_speed = _format_wx_required_three_digits(weather.get("wind_speed_mph"), label="Wind speed")
+    wind_direction = _format_wx_required_three_digits(weather.get("wind_direction_deg"))
+    wind_speed = _format_wx_required_three_digits(weather.get("wind_speed_mph"))
     temperature = _format_wx_temperature(weather.get("temperature_f"))
 
     parts = [f"={latitude}/{longitude}_{wind_direction}/{wind_speed}"]
@@ -1020,10 +1020,12 @@ def _coerce_wx_number(value: Any, *, label: str) -> float:
     return result
 
 
-def _format_wx_required_three_digits(value: Any, *, label: str) -> str:
-    number = int(round(_coerce_wx_number(value, label=label)))
+def _format_wx_required_three_digits(value: Any) -> str:
+    if value in {None, ""}:
+        return "..."
+    number = int(round(float(value)))
     if number < 0:
-        raise ValueError(f"{label} cannot be negative for WX frame generation.")
+        return "..."
     return f"{min(number, 999):03d}"
 
 
@@ -1037,6 +1039,8 @@ def _format_wx_optional_three_digits(prefix: str, value: Any) -> str:
 
 
 def _format_wx_temperature(value: Any) -> str:
+    if value in {None, ""}:
+        return "t..."
     number = int(round(_coerce_wx_number(value, label="Temperature")))
     if number < -99:
         number = -99
