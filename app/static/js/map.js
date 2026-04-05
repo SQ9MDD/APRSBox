@@ -27,6 +27,7 @@
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
+    let lastStationsSignature = "";
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -266,6 +267,19 @@
         });
     }
 
+    function stationsSignature(stations) {
+        return JSON.stringify((stations || []).map((station) => ([
+            station.display_callsign || station.callsign || "",
+            station.last_heard_at || "",
+            station.latitude,
+            station.longitude,
+            station.symbol_icon || "",
+            station.comment || "",
+            station.distance_km,
+            station.stale,
+        ])));
+    }
+
     function renderStations(stations) {
         stationLayer.clearLayers();
         for (const station of stations || []) {
@@ -300,7 +314,13 @@
                 return;
             }
             const payload = await response.json();
-            renderStations(payload.stations || []);
+            const stations = payload.stations || [];
+            const nextSignature = stationsSignature(stations);
+            if (nextSignature === lastStationsSignature) {
+                return;
+            }
+            lastStationsSignature = nextSignature;
+            renderStations(stations);
         } catch (_error) {
         }
     }

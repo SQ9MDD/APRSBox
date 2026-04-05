@@ -417,6 +417,7 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
 
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
@@ -579,6 +580,12 @@ def init_db() -> None:
             """
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_interface_created_at
     ON traffic_frames(interface_id, created_at DESC, id DESC)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
+    ON traffic_frames(format, created_at DESC, id DESC)
 """
         )
         if "expose_port_enabled" not in traffic_runtime_columns:
