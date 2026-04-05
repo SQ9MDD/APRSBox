@@ -536,9 +536,16 @@ def _traffic_frame_row_class(*, direction: str, line: str, station_source_key: s
     if parsed is None:
         return ""
     source_key = str(parsed.get("source_key") or "").strip().upper()
+    source_callsign = str(parsed.get("source_callsign") or "").strip().upper()
     if not source_key:
         return ""
+    station_callsign, _ = _split_ssid(station_source_key)
+    is_local_source = False
     if station_source_key and source_key == station_source_key:
+        is_local_source = True
+    elif station_callsign and source_callsign == station_callsign.upper():
+        is_local_source = True
+    if is_local_source:
         aprs_data = parsed.get("aprs_data") or {}
         packet_group = str(aprs_data.get("packet_group") or "").strip()
         packet_type_code = str(aprs_data.get("packet_type_code") or "").strip()

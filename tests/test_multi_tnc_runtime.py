@@ -91,6 +91,34 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(row_classes["SQ9MDD-4>APBOX0::BLN1     :System bulletin"], "traffic-log-row-local")
             self.assertEqual(row_classes["SP8XYZ-9>APRS,WIDE1-1:>Relayed packet"], "traffic-log-row-repeated")
 
+    async def test_traffic_snapshot_marks_wx_from_local_callsign_with_other_ssid_as_weather(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'SQ9MDD',
+                    ssid = '4'
+                WHERE id = 1
+                """
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-3>APBOX0,RFONLY:=5215.03N/02055.60E_.../...t...X121', '0', 'TX', 62, '', '2026-01-01T00:00:02+00:00')
+                """
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            row_classes = {frame["line"]: frame["row_class"] for frame in snapshot["frames"]}
+
+            self.assertEqual(
+                row_classes["SQ9MDD-3>APBOX0,RFONLY:=5215.03N/02055.60E_.../...t...X121"],
+                "traffic-log-row-weather",
+            )
+
     async def test_monitor_tracks_multiple_enabled_tncs_and_persists_shared_traffic_log(self) -> None:
         with temporary_database():
             port_2m = free_tcp_port()
