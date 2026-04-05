@@ -78,8 +78,8 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     source, interface_id, direction, band, format, line, port, command, length, hex, created_at
                 )
                 VALUES
-                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APRS:=5218.37N/02104.87E-Test beacon', '0', 'TX', 41, '', '2026-01-01T00:00:02+00:00'),
-                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APRS::BLN1     :System bulletin', '0', 'TX', 43, '', '2026-01-01T00:00:01+00:00'),
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APBOX0:=5218.37N/02104.87E-Test beacon', '0', 'TX', 43, '', '2026-01-01T00:00:02+00:00'),
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APBOX0::BLN1     :System bulletin', '0', 'TX', 45, '', '2026-01-01T00:00:01+00:00'),
                     ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SP8XYZ-9>APRS,WIDE1-1:>Relayed packet', '0', 'TX', 38, '', '2026-01-01T00:00:00+00:00')
                 """
             )
@@ -87,8 +87,8 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             snapshot = build_traffic_snapshot(limit=10)
             row_classes = {frame["line"]: frame["row_class"] for frame in snapshot["frames"]}
 
-            self.assertEqual(row_classes["SQ9MDD-4>APRS:=5218.37N/02104.87E-Test beacon"], "traffic-log-row-local")
-            self.assertEqual(row_classes["SQ9MDD-4>APRS::BLN1     :System bulletin"], "traffic-log-row-local")
+            self.assertEqual(row_classes["SQ9MDD-4>APBOX0:=5218.37N/02104.87E-Test beacon"], "traffic-log-row-local")
+            self.assertEqual(row_classes["SQ9MDD-4>APBOX0::BLN1     :System bulletin"], "traffic-log-row-local")
             self.assertEqual(row_classes["SP8XYZ-9>APRS,WIDE1-1:>Relayed packet"], "traffic-log-row-repeated")
 
     async def test_monitor_tracks_multiple_enabled_tncs_and_persists_shared_traffic_log(self) -> None:

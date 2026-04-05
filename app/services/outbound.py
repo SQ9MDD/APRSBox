@@ -12,6 +12,7 @@ KISS_TFEND = 0xDC
 KISS_TFESC = 0xDD
 AX25_CONTROL_UI = 0x03
 AX25_PID_NO_LAYER3 = 0xF0
+APRSBOX_DESTINATION = "APBOX0"
 OUTBOUND_KIND_BEACON = "beacon"
 OUTBOUND_KIND_STATUS = "status"
 OUTBOUND_KIND_OBJECT = "object"
@@ -670,7 +671,7 @@ def build_beacon_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
     path = str(payload.get("beacon_path") or "").strip()
     info = _build_beacon_info(payload)
-    header = f"{source}>APRS"
+    header = f"{source}>{APRSBOX_DESTINATION}"
     if path:
         header = f"{header},{path}"
     return f"{header}:{info}"
@@ -680,7 +681,7 @@ def build_object_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
     path = str(payload.get("path") or "").strip()
     info = _build_object_info(payload)
-    header = f"{source}>APRS"
+    header = f"{source}>{APRSBOX_DESTINATION}"
     if path:
         header = f"{header},{path}"
     return f"{header}:{info}"
@@ -689,14 +690,14 @@ def build_object_tnc2(payload: dict[str, Any]) -> str:
 def build_status_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
     info = _build_status_info(payload)
-    return f"{source}>APRS:{info}"
+    return f"{source}>{APRSBOX_DESTINATION}:{info}"
 
 
 def build_message_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
     path = str(payload.get("path") or "").strip()
     info = _build_message_info(payload)
-    header = f"{source}>APRS"
+    header = f"{source}>{APRSBOX_DESTINATION}"
     if path:
         header = f"{header},{path}"
     return f"{header}:{info}"
@@ -706,7 +707,7 @@ def build_wx_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
     path = str(payload.get("path") or "").strip()
     info = _build_wx_info(payload)
-    header = f"{source}>APRS"
+    header = f"{source}>{APRSBOX_DESTINATION}"
     if path:
         header = f"{header},{path}"
     return f"{header}:{info}"

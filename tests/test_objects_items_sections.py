@@ -69,7 +69,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertEqual(decorated["symbol_icon"], "icons/verG/81.gif")
             self.assertRegex(
                 decorated["raw_frame_preview"],
-                r"^SQ9XYZ-9>APRS,WIDE2-2:;VOICE {4}\*[0-9]{6}z5213\.78N/02100\.73ErLocal voice repeater$",
+                r"^SQ9XYZ-9>APBOX0,WIDE2-2:;VOICE {4}\*[0-9]{6}z5213\.78N/02100\.73ErLocal voice repeater$",
             )
 
     def test_object_record_accepts_valid_aprs_fields(self) -> None:
@@ -318,7 +318,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             assert decorated is not None
             self.assertRegex(
                 decorated["raw_frame_preview"],
-                r"^SQ9MDD-4>APRS:;T2WARSPL \*111111z5215\.01N/02055\.61EIhttp://hamspirit\.pl:14501 Server T2$",
+                r"^SQ9MDD-4>APBOX0:;T2WARSPL \*111111z5215\.01N/02055\.61EIhttp://hamspirit\.pl:14501 Server T2$",
             )
 
 
@@ -363,7 +363,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             self.assertEqual(decorated["target_display"], "BLNA")
             self.assertEqual(
                 decorated["raw_frame_preview"],
-                "SQ9XYZ-9>APRS,WIDE2-1::BLNA     :Net starts at 19:30 UTC",
+            "SQ9XYZ-9>APBOX0,WIDE2-1::BLNA     :Net starts at 19:30 UTC",
             )
 
     def test_group_bulletin_preview_uses_bln_addressee(self) -> None:
@@ -405,7 +405,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             self.assertEqual(decorated["target_display"], "BLN1WX")
             self.assertEqual(
                 decorated["raw_frame_preview"],
-                "SQ9XYZ>APRS::BLN1WX   :Wind 15 km/h",
+            "SQ9XYZ>APBOX0::BLN1WX   :Wind 15 km/h",
             )
 
     def test_bulletin_text_longer_than_sixty_seven_characters_is_rejected(self) -> None:
@@ -459,10 +459,10 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertIn('id="bulletins-message-error"', template_source)
 
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("['digi-flows', 'igate']", base_source)
+        self.assertIn("['igate', 'wx']", base_source)
         self.assertNotIn("['digi-flows', 'igate', 'bulletins']", base_source)
         helpers_source = Path("app/template_helpers.py").read_text(encoding="utf-8")
-        self.assertIn("BLN / Ann.", helpers_source)
+        self.assertIn('"label": "Bulletins"', helpers_source)
         self.assertIn("DIGI Flows", helpers_source)
         self.assertNotIn("Digi Settings", helpers_source)
 

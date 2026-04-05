@@ -555,7 +555,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
             runtime_job = get_outbound_job(int(job["id"]))
             assert runtime_job is not None
             expected_line = build_wx_tnc2(runtime_job["payload"])
-            self.assertEqual(expected_line, "SQ9XYZ-13>APRS,WIDE2-2:=5213.78N/02100.73E_.../...t068")
+            self.assertEqual(expected_line, "SQ9XYZ-13>APBOX0,WIDE2-2:=5213.78N/02100.73E_.../...t068")
             self.assertTrue(written_frames)
 
     async def test_scheduled_wx_flows_from_scheduler_to_runtime_send(self) -> None:
@@ -697,7 +697,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
             runtime_job = get_outbound_job(int(job_row["id"]))
             assert runtime_job is not None
             expected_line = build_wx_tnc2(runtime_job["payload"])
-            self.assertEqual(expected_line, "SQ9XYZ-13>APRS,WIDE2-2:=5213.78N/02100.73E_270/012t068h45")
+            self.assertEqual(expected_line, "SQ9XYZ-13>APBOX0,WIDE2-2:=5213.78N/02100.73E_270/012t068h45")
             self.assertTrue(written_frames)
             traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
             assert traffic_row is not None

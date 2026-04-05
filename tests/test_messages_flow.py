@@ -302,7 +302,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(written_frames)
 
             self.assertEqual(str(job["payload"].get("message_kind")), QUERY_MESSAGE_KIND)
-            self.assertEqual(build_message_tnc2(job["payload"]), "SQ9MDD-4>APRS,WIDE1-1::SP8ABC   :?APRSP")
+            self.assertEqual(build_message_tnc2(job["payload"]), "SQ9MDD-4>APBOX0,WIDE1-1::SP8ABC   :?APRSP")
 
             retry_job = fetch_one(
                 """
@@ -465,7 +465,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(job["payload"].get("message_kind")), QUERY_MESSAGE_KIND)
             self.assertEqual(
                 build_message_tnc2(job["payload"]),
-                "SQ9MDD-4>APRS,WIDE2-1::SP8ABC   :Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER",
+                "SQ9MDD-4>APBOX0,WIDE2-1::SP8ABC   :Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER",
             )
 
             rows = fetch_all(
@@ -547,7 +547,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(job["kind"], "beacon")
             self.assertEqual(
                 build_beacon_tnc2(job["payload"]),
-                "SQ9MDD-4>APRS,WIDE2-1:=5213.78N/02100.73E>",
+                "SQ9MDD-4>APBOX0,WIDE2-1:=5213.78N/02100.73E>",
             )
             rows = fetch_all("SELECT direction, message_text, status FROM aprs_messages ORDER BY id ASC")
             self.assertEqual(len(rows), 2)
@@ -575,7 +575,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             job = claim_next_outbound_job()
             assert job is not None
             self.assertEqual(job["kind"], "status")
-            self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APRS:>Station online")
+            self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APBOX0:>Station online")
             rows = fetch_all("SELECT direction, message_text, status FROM aprs_messages ORDER BY id ASC")
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["message_text"], "?APRSS")
@@ -612,7 +612,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             second_job = claim_next_outbound_job()
             assert first_job is not None
             assert second_job is not None
-            expected_line = f"SQ9MDD-4>APRS,WIDE2-1::SP8ABC   :APRSBox {get_version()}"
+            expected_line = f"SQ9MDD-4>APBOX0,WIDE2-1::SP8ABC   :APRSBox {get_version()}"
             self.assertEqual(build_message_tnc2(first_job["payload"]), expected_line)
             self.assertEqual(build_message_tnc2(second_job["payload"]), expected_line)
             rows = fetch_all("SELECT direction, message_text FROM aprs_messages ORDER BY id ASC")

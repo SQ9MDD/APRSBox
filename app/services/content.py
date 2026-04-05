@@ -542,6 +542,9 @@ def _traffic_frame_row_class(*, direction: str, line: str, station_source_key: s
         aprs_data = parsed.get("aprs_data") or {}
         packet_group = str(aprs_data.get("packet_group") or "").strip()
         packet_type_code = str(aprs_data.get("packet_type_code") or "").strip()
+        symbol = str(aprs_data.get("symbol") or "").strip()
+        if packet_group == "weather" or symbol.endswith("_"):
+            return "traffic-log-row-weather"
         if packet_group == "position":
             return "traffic-log-row-local"
         if packet_type_code == "object":

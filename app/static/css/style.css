@@ -2659,6 +2659,16 @@ select:focus-visible,
     color: #4f8dff;
 }
 
+.traffic-log-row-weather {
+    background: rgba(70, 168, 95, 0.08);
+}
+
+.traffic-log-row-weather .traffic-log-time,
+.traffic-log-row-weather .traffic-log-source,
+.traffic-log-row-weather .traffic-log-line {
+    color: #46a85f;
+}
+
 .traffic-log-row-repeated {
     background: rgba(210, 75, 75, 0.08);
 }
