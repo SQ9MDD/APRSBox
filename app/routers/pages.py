@@ -79,6 +79,17 @@ from app.services.map_service import get_map_page_config, get_map_station_payloa
 from app.services.outbound import enqueue_beacon_job
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
 from app.template_helpers import build_template_context
+from app.services.wx import (
+    delete_wx_source,
+    discover_wx_source_items,
+    get_wx_page_data,
+    refresh_single_wx_mapping,
+    safe_refresh_wx_runtime,
+    safe_save_wx_config,
+    safe_save_wx_mappings,
+    safe_save_wx_source,
+    test_wx_source_connection,
+)
 
 router = APIRouter()
 
@@ -265,6 +276,27 @@ def _station_page_context(
         beacon_log_rows=recent_station_outbound_jobs(limit=20),
         map_picker_config=get_map_page_config(),
         **_station_form_options(),
+    )
+
+
+def _wx_page_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    flash: str | None = None,
+    flash_success: bool = True,
+    edit_source_id: int | None = None,
+    source_discovery: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return build_template_context(
+        request,
+        page_title="WX",
+        current_user=current_user,
+        active_nav="wx",
+        flash=flash,
+        flash_success=flash_success,
+        can_edit=current_user.role in {"admin", "operator"},
+        **get_wx_page_data(edit_source_id=edit_source_id, source_discovery=source_discovery),
     )
 
 
@@ -1231,6 +1263,207 @@ def map_stations(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_map_station_payload())
+
+
+@router.get("/wx")
+def wx_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+    edit_source: int | None = None,
+) -> object:
+    templates = request.app.state.templates
+    context = _wx_page_context(request, current_user, edit_source_id=edit_source)
+    return templates.TemplateResponse("wx.html", context)
+
+
+@router.post("/wx/config")
+def wx_config_update(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    enabled: str | None = Form(None),
+    ssid: str = Form(""),
+    refresh_interval_s: str = Form("300"),
+    allow_cache_fallback: str | None = Form(None),
+    default_cache_max_age_s: str = Form("900"),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_save_wx_config(
+        {
+            "enabled": enabled,
+            "ssid": ssid.strip(),
+            "refresh_interval_s": refresh_interval_s.strip(),
+            "allow_cache_fallback": allow_cache_fallback,
+            "default_cache_max_age_s": default_cache_max_age_s.strip(),
+        }
+    )
+    context = _wx_page_context(
+        request,
+        current_user,
+        flash="WX configuration saved." if success else error,
+        flash_success=success,
+    )
+    return templates.TemplateResponse("wx.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/wx/mappings")
+async def wx_mappings_update(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    form = await request.form()
+    payload_by_parameter: dict[str, dict[str, Any]] = {}
+    for parameter_name in form.getlist("parameter_name"):
+        normalized = str(parameter_name or "").strip()
+        if not normalized:
+            continue
+        payload_by_parameter[normalized] = {
+            "source_id": str(form.get(f"source_id__{normalized}") or "").strip(),
+            "identifier": str(form.get(f"identifier__{normalized}") or "").strip(),
+            "selector_kind": str(form.get(f"selector_kind__{normalized}") or "state").strip(),
+            "selector_name": str(form.get(f"selector_name__{normalized}") or "").strip(),
+            "unit_override": str(form.get(f"unit_override__{normalized}") or "").strip(),
+            "cache_max_age_s": str(form.get(f"cache_max_age_s__{normalized}") or "").strip(),
+        }
+    success, error = safe_save_wx_mappings(payload_by_parameter)
+    context = _wx_page_context(
+        request,
+        current_user,
+        flash="WX mappings saved." if success else error,
+        flash_success=success,
+    )
+    return templates.TemplateResponse("wx.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/wx/refresh")
+def wx_refresh_now(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    success, _, error = safe_refresh_wx_runtime(trigger="manual")
+    context = _wx_page_context(
+        request,
+        current_user,
+        flash="WX refresh completed." if success else error,
+        flash_success=success,
+    )
+    return templates.TemplateResponse("wx.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/wx/mappings/{parameter_name}/test")
+def wx_mapping_test_read(
+    parameter_name: str,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    try:
+        result = refresh_single_wx_mapping(parameter_name, trigger="manual-test")
+        refreshed_row = (result.get("rows") or [{}])[0]
+        refreshed_status = str(refreshed_row.get("status") or "").upper()
+        if refreshed_status in {"LIVE", "CACHED"}:
+            flash = f"WX mapping {parameter_name} refreshed with status {refreshed_status}."
+            flash_success = True
+            status_code = 200
+        else:
+            flash = str(refreshed_row.get("last_error") or f"WX mapping {parameter_name} refresh finished with status {refreshed_status or 'UNKNOWN'}.")
+            flash_success = False
+            status_code = status.HTTP_400_BAD_REQUEST
+    except ValueError as exc:
+        flash = str(exc)
+        flash_success = False
+        status_code = status.HTTP_400_BAD_REQUEST
+    context = _wx_page_context(request, current_user, flash=flash, flash_success=flash_success)
+    return templates.TemplateResponse("wx.html", context, status_code=status_code)
+
+
+@router.post("/wx/sources")
+def wx_source_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    source_id: str = Form(""),
+    name: str = Form(""),
+    source_type: str = Form("home_assistant"),
+    base_url: str = Form(""),
+    auth_type: str = Form("none"),
+    token: str = Form(""),
+    username: str = Form(""),
+    password: str = Form(""),
+    timeout_s: str = Form("5"),
+    verify_tls: str | None = Form(None),
+    enabled: str | None = Form(None),
+) -> object:
+    templates = request.app.state.templates
+    normalized_source_id = int(source_id) if str(source_id or "").strip() else None
+    success, error, _ = safe_save_wx_source(
+        {
+            "name": name.strip(),
+            "source_type": source_type.strip(),
+            "base_url": base_url.strip(),
+            "auth_type": auth_type.strip(),
+            "token": token.strip(),
+            "username": username,
+            "password": password,
+            "timeout_s": timeout_s.strip(),
+            "verify_tls": verify_tls,
+            "enabled": enabled,
+        },
+        source_id=normalized_source_id,
+    )
+    context = _wx_page_context(
+        request,
+        current_user,
+        flash="WX source saved." if success else error,
+        flash_success=success,
+        edit_source_id=None if success else normalized_source_id,
+    )
+    return templates.TemplateResponse("wx.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/wx/sources/{source_id}/delete")
+def wx_source_delete(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    delete_wx_source(source_id)
+    return RedirectResponse(url=_path(request, "/wx"), status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/wx/sources/{source_id}/test")
+def wx_source_test(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = test_wx_source_connection(source_id)
+    context = _wx_page_context(
+        request,
+        current_user,
+        flash="WX source connection succeeded." if result.get("ok") else result.get("error"),
+        flash_success=bool(result.get("ok")),
+    )
+    return templates.TemplateResponse("wx.html", context, status_code=200 if result.get("ok") else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/wx/sources/{source_id}/discover")
+def wx_source_discover(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = discover_wx_source_items(source_id)
+    context = _wx_page_context(
+        request,
+        current_user,
+        flash="WX source discovery completed." if result.get("ok") else result.get("error"),
+        flash_success=bool(result.get("ok")),
+        source_discovery=result if result.get("ok") else None,
+    )
+    return templates.TemplateResponse("wx.html", context, status_code=200 if result.get("ok") else status.HTTP_400_BAD_REQUEST)
 
 
 @router.post("/station")

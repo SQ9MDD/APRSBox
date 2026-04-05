@@ -114,6 +114,68 @@ CREATE TABLE IF NOT EXISTS station_settings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS wx_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    callsign TEXT NOT NULL DEFAULT '',
+    ssid TEXT NOT NULL DEFAULT '',
+    refresh_interval_s INTEGER NOT NULL DEFAULT 300 CHECK (refresh_interval_s BETWEEN 15 AND 3600),
+    allow_cache_fallback INTEGER NOT NULL DEFAULT 1 CHECK (allow_cache_fallback IN (0, 1)),
+    default_cache_max_age_s INTEGER NOT NULL DEFAULT 900 CHECK (default_cache_max_age_s BETWEEN 1 AND 86400),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS wx_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    source_type TEXT NOT NULL CHECK (source_type IN ('home_assistant', 'domoticz')),
+    base_url TEXT NOT NULL,
+    auth_type TEXT NOT NULL CHECK (auth_type IN ('none', 'bearer', 'basic')),
+    auth_payload TEXT NOT NULL DEFAULT '{}',
+    timeout_s INTEGER NOT NULL DEFAULT 5 CHECK (timeout_s BETWEEN 1 AND 60),
+    verify_tls INTEGER NOT NULL DEFAULT 1 CHECK (verify_tls IN (0, 1)),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    last_test_status TEXT NOT NULL DEFAULT '' CHECK (last_test_status IN ('', 'ok', 'error')),
+    last_test_error TEXT NOT NULL DEFAULT '',
+    last_test_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS wx_mappings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parameter_name TEXT NOT NULL UNIQUE,
+    required_flag INTEGER NOT NULL DEFAULT 0 CHECK (required_flag IN (0, 1)),
+    source_id INTEGER,
+    identifier TEXT NOT NULL DEFAULT '',
+    value_selector TEXT NOT NULL DEFAULT '',
+    transform_config_json TEXT NOT NULL DEFAULT '{}',
+    cache_max_age_s INTEGER CHECK (cache_max_age_s IS NULL OR cache_max_age_s BETWEEN 1 AND 86400),
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (source_id) REFERENCES wx_sources(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS wx_runtime_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parameter_name TEXT NOT NULL UNIQUE,
+    source_id INTEGER,
+    identifier TEXT NOT NULL DEFAULT '',
+    raw_value TEXT,
+    raw_unit TEXT,
+    normalized_value TEXT,
+    normalized_unit TEXT,
+    value_origin TEXT NOT NULL DEFAULT 'missing',
+    status TEXT NOT NULL DEFAULT 'MISSING' CHECK (status IN ('LIVE', 'CACHED', 'STALE', 'MISSING', 'ERROR')),
+    last_success_at TEXT,
+    last_attempt_at TEXT,
+    last_error TEXT,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (source_id) REFERENCES wx_sources(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS outbound_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,
@@ -427,6 +489,9 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_job
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
+CREATE INDEX IF NOT EXISTS idx_wx_sources_type_enabled ON wx_sources(source_type, enabled, name);
+CREATE INDEX IF NOT EXISTS idx_wx_mappings_source_enabled ON wx_mappings(source_id, enabled, parameter_name);
+CREATE INDEX IF NOT EXISTS idx_wx_runtime_cache_status_updated ON wx_runtime_cache(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_band_condition_refs_band_enabled
     ON band_condition_reference_stations(band, enabled);
 CREATE INDEX IF NOT EXISTS idx_band_condition_audibility_processed
@@ -702,6 +767,17 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),
+        )
+        connection.execute(
+            """
+            INSERT INTO wx_config (
+                id, enabled, callsign, ssid, refresh_interval_s,
+                allow_cache_fallback, default_cache_max_age_s, created_at, updated_at
+            )
+            VALUES (1, 0, '', '', 300, 1, 900, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+            """,
+            (utc_now(), utc_now()),
         )
 
 

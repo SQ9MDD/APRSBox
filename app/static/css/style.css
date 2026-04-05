@@ -2741,6 +2741,74 @@ code {
     word-break: break-word;
 }
 
+.wx-mapping-groups,
+.wx-diagnostics-grid {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.wx-mapping-group h3,
+.wx-preview-box h3 {
+    margin: 0 0 var(--space-2);
+}
+
+.wx-mapping-table {
+    table-layout: auto;
+}
+
+.wx-mapping-table td code,
+.wx-discovery-table td code,
+.wx-source-table td code {
+    display: inline-block;
+    max-width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.wx-selector-stack {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 10rem;
+}
+
+.wx-cache-cell {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.wx-inline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.wx-inline-actions .button {
+    min-width: auto;
+}
+
+.wx-source-form {
+    margin-top: var(--space-4);
+}
+
+.wx-preview-box {
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+    box-shadow: var(--shadow-soft);
+}
+
+.wx-preview-box pre {
+    margin: 0;
+    padding: 0.85rem;
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    overflow: auto;
+    font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .message-entry-col-type {
     width: 8.5rem;
 }

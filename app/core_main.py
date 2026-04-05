@@ -14,6 +14,7 @@ from app.services.maintenance_scheduler import MaintenanceSchedulerService
 from app.services.object_scheduler import ObjectSchedulerService
 from app.services.outbound_runtime import OutboundService
 from app.services.traffic import TrafficMonitorService
+from app.services.wx_scheduler import WxSchedulerService
 
 
 @asynccontextmanager
@@ -26,6 +27,7 @@ async def lifespan(app_instance: FastAPI):
     bulletin_scheduler = BulletinSchedulerService()
     maintenance_scheduler = MaintenanceSchedulerService()
     object_scheduler = ObjectSchedulerService()
+    wx_scheduler = WxSchedulerService()
     app_instance.state.digi_flow_runtime = digi_flow_runtime
     app_instance.state.traffic_monitor = traffic_monitor
     app_instance.state.outbound_service = outbound_service
@@ -33,6 +35,7 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.bulletin_scheduler = bulletin_scheduler
     app_instance.state.maintenance_scheduler = maintenance_scheduler
     app_instance.state.object_scheduler = object_scheduler
+    app_instance.state.wx_scheduler = wx_scheduler
     await digi_flow_runtime.start()
     await traffic_monitor.start()
     await outbound_service.start()
@@ -40,10 +43,12 @@ async def lifespan(app_instance: FastAPI):
     await bulletin_scheduler.start()
     await maintenance_scheduler.start()
     await object_scheduler.start()
+    await wx_scheduler.start()
     log_event("INFO", "system", "APRSBox core started")
     try:
         yield
     finally:
+        await wx_scheduler.stop()
         await object_scheduler.stop()
         await maintenance_scheduler.stop()
         await bulletin_scheduler.stop()
