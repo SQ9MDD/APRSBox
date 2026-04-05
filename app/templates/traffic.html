@@ -8,11 +8,6 @@
             <h2>{{ t("Traffic Log") }}</h2>
             <div class="traffic-toolbar-actions">
                 <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
-                {% if can_manage_traffic_runtime %}
-                <form method="post" action="{{ request.scope.root_path }}/traffic/reconnect" class="inline-form" onsubmit="return confirm({{ t('Restart traffic monitor runtime now?')|tojson }});">
-                    <button type="submit" class="button button-secondary">{{ t("Reconnect TNC") }}</button>
-                </form>
-                {% endif %}
             </div>
         </div>
         {% if flash %}
