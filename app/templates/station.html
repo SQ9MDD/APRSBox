@@ -3,12 +3,12 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <style>
-    .field-counter {
-        display: block;
-        margin-top: 0.35rem;
+    .field-counter-inline {
+        display: inline;
+        margin-left: 0.35rem;
     }
 
-    .field-counter.limit-reached {
+    .field-counter-inline.limit-reached {
         color: var(--danger, #c62828);
         font-weight: 600;
     }
@@ -53,7 +53,10 @@
                         </select>
                     </label>
                     <label>
-                        <span>{{ t("Beacon Comment") }}</span>
+                        <span>
+                            {{ t("Beacon Comment") }}
+                            <small class="muted field-counter-inline" id="beacon-comment-counter" aria-live="polite">(0 / {{ beacon_comment_max }})</small>
+                        </span>
                         <input
                             type="text"
                             name="beacon_comment"
@@ -61,7 +64,6 @@
                             maxlength="{{ beacon_comment_max }}"
                             data-maxlength-counter="beacon-comment-counter"
                         >
-                        <small class="muted field-counter" id="beacon-comment-counter" aria-live="polite">0 / {{ beacon_comment_max }}</small>
                     </label>
                     <label>
                         <span>{{ t("Beacon at every") }}</span>
@@ -88,7 +90,10 @@
                         <span>{{ t("Enable periodic APRS Status transmission") }}</span>
                     </label>
                     <label>
-                        <span>{{ t("Status Text") }}</span>
+                        <span>
+                            {{ t("Status Text") }}
+                            <small class="muted field-counter-inline" id="status-text-counter" aria-live="polite">(0 / {{ status_text_max }})</small>
+                        </span>
                         <input
                             type="text"
                             name="status_text"
@@ -97,7 +102,6 @@
                             maxlength="{{ status_text_max }}"
                             data-maxlength-counter="status-text-counter"
                         >
-                        <small class="muted field-counter" id="status-text-counter" aria-live="polite">0 / {{ status_text_max }}</small>
                     </label>
                     <label>
                         <span>{{ t("APRS Status at every") }}</span>
@@ -376,7 +380,7 @@
 
                 const sync = () => {
                     const current = input.value.length;
-                    counter.textContent = `${current} / ${max}`;
+                    counter.textContent = `(${current} / ${max})`;
                     counter.classList.toggle("limit-reached", current >= max);
                 };
 
