@@ -366,7 +366,15 @@ def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     station_settings = get_station_settings()
+
+    from app.services.wx import get_wx_config
+
+    wx_config = get_wx_config()
     station_source_key = _station_source_key(station_settings)
+    wx_source_key = _build_source_key(
+        station_settings.get("callsign"),
+        wx_config.get("ssid"),
+    )
     interface_rows = fetch_all(
         """
         SELECT
@@ -492,6 +500,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             direction=direction,
             line=str(row["line"] or ""),
             station_source_key=station_source_key,
+            wx_source_key=wx_source_key,
         )
         frames.append(
             {
@@ -521,35 +530,51 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     }
 
 
-def _station_source_key(station_settings: dict[str, Any]) -> str:
-    callsign = str(station_settings.get("callsign") or "").strip().upper()
-    ssid = str(station_settings.get("ssid") or "").strip()
-    if not callsign:
+def _build_source_key(callsign: Any, ssid: Any) -> str:
+    callsign_text = str(callsign or "").strip().upper()
+    ssid_text = str(ssid or "").strip()
+    if not callsign_text:
         return ""
-    return f"{callsign}-{ssid}" if ssid else callsign
+    return f"{callsign_text}-{ssid_text}" if ssid_text else callsign_text
 
 
-def _traffic_frame_row_class(*, direction: str, line: str, station_source_key: str) -> str:
+def _station_source_key(station_settings: dict[str, Any]) -> str:
+    return _build_source_key(
+        station_settings.get("callsign"),
+        station_settings.get("ssid"),
+    )
+
+
+def _traffic_frame_row_class(
+    *,
+    direction: str,
+    line: str,
+    station_source_key: str,
+    wx_source_key: str = "",
+) -> str:
     if direction != "TX":
         return ""
+
     parsed = parse_tnc2_frame(line)
     if parsed is None:
         return ""
+
     source_key = str(parsed.get("source_key") or "").strip().upper()
-    source_callsign = str(parsed.get("source_callsign") or "").strip().upper()
     if not source_key:
         return ""
-    station_callsign, _ = _split_ssid(station_source_key)
-    is_local_source = False
+
+    station_source_key = str(station_source_key or "").strip().upper()
+    wx_source_key = str(wx_source_key or "").strip().upper()
+
+    aprs_data = parsed.get("aprs_data") or {}
+    packet_group = str(aprs_data.get("packet_group") or "").strip()
+    packet_type_code = str(aprs_data.get("packet_type_code") or "").strip()
+    symbol = str(aprs_data.get("symbol") or "").strip()
+
+    if wx_source_key and source_key == wx_source_key:
+        return "traffic-log-row-weather"
+
     if station_source_key and source_key == station_source_key:
-        is_local_source = True
-    elif station_callsign and source_callsign == station_callsign.upper():
-        is_local_source = True
-    if is_local_source:
-        aprs_data = parsed.get("aprs_data") or {}
-        packet_group = str(aprs_data.get("packet_group") or "").strip()
-        packet_type_code = str(aprs_data.get("packet_type_code") or "").strip()
-        symbol = str(aprs_data.get("symbol") or "").strip()
         if packet_group == "weather" or symbol.endswith("_"):
             return "traffic-log-row-weather"
         if packet_group == "position":
@@ -559,6 +584,7 @@ def _traffic_frame_row_class(*, direction: str, line: str, station_source_key: s
         if packet_type_code in {"bulletin", "announcement", "group_bulletin"}:
             return "traffic-log-row-local"
         return ""
+
     return "traffic-log-row-repeated"
 
 
