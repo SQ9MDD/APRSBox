@@ -2,12 +2,25 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+<style>
+    .field-counter {
+        display: block;
+        margin-top: 0.35rem;
+    }
+
+    .field-counter.limit-reached {
+        color: var(--danger, #c62828);
+        font-weight: 600;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
 <section class="panel">
     <div class="panel-body">
         {% set selected_beacon_interface_id = station.beacon_interface_id|string if station.beacon_interface_id is not none else '' %}
+        {% set beacon_comment_max = beacon_comment_max|default(43) %}
+        {% set status_text_max = status_text_max|default(62) %}
         {% if flash %}
         <div class="alert {% if flash_success is not defined or flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -19,42 +32,49 @@
                     <p class="section-lead">{{ t("Configure the APRS position beacon. Beacon comment stays part of the position frame.") }}</p>
                 </div>
                 <div class="form-grid station-settings-subgrid">
-            <label>
-                <span>{{ t("Callsign") }}</span>
-                <input type="text" name="callsign" value="{{ station.callsign }}">
-            </label>
-            <label>
-                <span>{{ t("SSID") }}</span>
-                <select name="ssid">
-                    {% for option in ssid_options %}
-                    <option value="{{ option.value }}" {% if station.ssid == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                <span>{{ t("Interface") }}</span>
-                <select name="beacon_interface_id">
-                    {% for option in interface_options %}
-                    <option value="{{ option.value }}" {% if selected_beacon_interface_id == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                <span>{{ t("Beacon Comment") }}</span>
-                <input type="text" name="beacon_comment" value="{{ station.beacon_comment }}">
-            </label>
-            <label>
-                <span>{{ t("Beacon at every") }}</span>
-                <select name="beacon_interval_minutes">
-                    {% for option in beacon_interval_options %}
-                    <option value="{{ option.value }}" {% if station.beacon_interval_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                <span>{{ t("Beacon Path") }}</span>
-                <input type="text" name="beacon_path" value="{{ station.beacon_path }}" placeholder="WIDE2-2">
-            </label>
+                    <label>
+                        <span>{{ t("Callsign") }}</span>
+                        <input type="text" name="callsign" value="{{ station.callsign }}">
+                    </label>
+                    <label>
+                        <span>{{ t("SSID") }}</span>
+                        <select name="ssid">
+                            {% for option in ssid_options %}
+                            <option value="{{ option.value }}" {% if station.ssid == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>{{ t("Interface") }}</span>
+                        <select name="beacon_interface_id">
+                            {% for option in interface_options %}
+                            <option value="{{ option.value }}" {% if selected_beacon_interface_id == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>{{ t("Beacon Comment") }}</span>
+                        <input
+                            type="text"
+                            name="beacon_comment"
+                            value="{{ station.beacon_comment }}"
+                            maxlength="{{ beacon_comment_max }}"
+                            data-maxlength-counter="beacon-comment-counter"
+                        >
+                        <small class="muted field-counter" id="beacon-comment-counter" aria-live="polite">0 / {{ beacon_comment_max }}</small>
+                    </label>
+                    <label>
+                        <span>{{ t("Beacon at every") }}</span>
+                        <select name="beacon_interval_minutes">
+                            {% for option in beacon_interval_options %}
+                            <option value="{{ option.value }}" {% if station.beacon_interval_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>{{ t("Beacon Path") }}</span>
+                        <input type="text" name="beacon_path" value="{{ station.beacon_path }}" placeholder="WIDE2-2">
+                    </label>
                 </div>
             </div>
             <div class="full station-settings-group stack-sm">
@@ -69,7 +89,15 @@
                     </label>
                     <label>
                         <span>{{ t("Status Text") }}</span>
-                        <input type="text" name="status_text" value="{{ station.status_text or '' }}" placeholder="{{ t('Station online') }}">
+                        <input
+                            type="text"
+                            name="status_text"
+                            value="{{ station.status_text or '' }}"
+                            placeholder="{{ t('Station online') }}"
+                            maxlength="{{ status_text_max }}"
+                            data-maxlength-counter="status-text-counter"
+                        >
+                        <small class="muted field-counter" id="status-text-counter" aria-live="polite">0 / {{ status_text_max }}</small>
                     </label>
                     <label>
                         <span>{{ t("APRS Status at every") }}</span>
@@ -169,8 +197,8 @@
                     <div class="location-picker-crosshair" aria-hidden="true"></div>
                 </div>
                 <div class="location-picker-footer">
-                        <div class="muted small" id="station-location-picker-center">--</div>
-                        <div class="location-picker-actions">
+                    <div class="muted small" id="station-location-picker-center">--</div>
+                    <div class="location-picker-actions">
                         <button type="button" class="button button-secondary" data-close-location-picker>{{ t("Cancel") }}</button>
                         <button type="button" class="button" id="station-apply-location-picker">{{ t("Get coordinates") }}</button>
                     </div>
@@ -249,178 +277,227 @@
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
-        const symbolTable = document.getElementById("station-symbol-table");
-        const symbolCode = document.getElementById("station-symbol-code");
-        const symbolDropdown = document.getElementById("station-symbol-dropdown");
-        const symbolTrigger = document.getElementById("station-symbol-trigger");
-        const symbolTriggerImage = document.getElementById("station-symbol-trigger-image");
-        const symbolTriggerText = document.getElementById("station-symbol-trigger-text");
-        const symbolMenu = document.getElementById("station-symbol-menu");
-        const symbolOptions = Array.from(document.querySelectorAll(".station-symbol-option"));
-        if (!symbolTable || !symbolCode || !symbolDropdown || !symbolTrigger || !symbolTriggerImage || !symbolTriggerText || !symbolMenu || !symbolOptions.length) {
-            return;
-        }
+        const initSymbolPicker = () => {
+            const symbolTable = document.getElementById("station-symbol-table");
+            const symbolCode = document.getElementById("station-symbol-code");
+            const symbolDropdown = document.getElementById("station-symbol-dropdown");
+            const symbolTrigger = document.getElementById("station-symbol-trigger");
+            const symbolTriggerImage = document.getElementById("station-symbol-trigger-image");
+            const symbolTriggerText = document.getElementById("station-symbol-trigger-text");
+            const symbolMenu = document.getElementById("station-symbol-menu");
+            const symbolOptions = Array.from(document.querySelectorAll(".station-symbol-option"));
 
-        const closeMenu = () => {
-            symbolDropdown.classList.remove("open");
-            symbolTrigger.setAttribute("aria-expanded", "false");
-        };
-
-        const openMenu = () => {
-            symbolDropdown.classList.add("open");
-            symbolTrigger.setAttribute("aria-expanded", "true");
-        };
-
-        const selectedOption = () => symbolOptions.find((option) => option.dataset.value === symbolCode.value) || symbolOptions[0];
-
-        const syncPreview = () => {
-            const selected = selectedOption();
-            const icon = symbolTable.value === "\\"
-                ? selected.dataset.alternateIcon
-                : selected.dataset.primaryIcon;
-            symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
-            symbolTriggerText.textContent = selected.dataset.label || selected.value;
-
-            for (const option of symbolOptions) {
-                const optionIcon = symbolTable.value === "\\"
-                    ? option.dataset.alternateIcon
-                    : option.dataset.primaryIcon;
-                const image = option.querySelector(".station-symbol-option-image");
-                if (image) {
-                    image.src = optionIcon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
-                }
-                const isActive = option.dataset.value === selected.dataset.value;
-                option.classList.toggle("active", isActive);
-                option.setAttribute("aria-selected", isActive ? "true" : "false");
-            }
-        };
-
-        symbolTrigger.addEventListener("click", () => {
-            if (symbolDropdown.classList.contains("open")) {
-                closeMenu();
+            if (!symbolTable || !symbolCode || !symbolDropdown || !symbolTrigger || !symbolTriggerImage || !symbolTriggerText || !symbolMenu || !symbolOptions.length) {
                 return;
             }
-            openMenu();
-        });
 
-        symbolOptions.forEach((option) => {
-            option.addEventListener("click", () => {
-                symbolCode.value = option.dataset.value || ">";
-                syncPreview();
-                closeMenu();
-            });
-        });
-
-        symbolTable.addEventListener("change", syncPreview);
-
-        document.addEventListener("click", (event) => {
-            if (!symbolDropdown.contains(event.target)) {
-                closeMenu();
-            }
-        });
-
-        document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape") {
-                closeMenu();
-            }
-        });
-
-        syncPreview();
-
-        const modal = document.getElementById("station-location-picker");
-        const openButton = document.getElementById("station-open-map-picker");
-        const form = document.getElementById("station-form");
-        if (!modal || !openButton || !form || typeof window.L === "undefined") {
-            return;
-        }
-
-        const latitudeInput = form.querySelector('input[name="latitude"]');
-        const longitudeInput = form.querySelector('input[name="longitude"]');
-        const dialog = modal.querySelector(".location-picker-dialog");
-        const mapNode = document.getElementById("station-location-picker-map");
-        const centerOutput = document.getElementById("station-location-picker-center");
-        const applyButton = document.getElementById("station-apply-location-picker");
-        const closeButtons = modal.querySelectorAll("[data-close-location-picker]");
-        if (!latitudeInput || !longitudeInput || !dialog || !mapNode || !centerOutput || !applyButton) {
-            return;
-        }
-
-        let map = null;
-
-        const formatCoordinate = (value) => Number.isFinite(value) ? value.toFixed(5) : "--";
-
-        const resolveInitialView = () => {
-            const latitude = Number.parseFloat(latitudeInput.value || "");
-            const longitude = Number.parseFloat(longitudeInput.value || "");
-            const fallbackLatitude = Number.parseFloat(dialog.dataset.defaultLatitude || "");
-            const fallbackLongitude = Number.parseFloat(dialog.dataset.defaultLongitude || "");
-            const fallbackZoom = Number.parseInt(dialog.dataset.defaultZoom || "10", 10);
-            return {
-                latitude: Number.isFinite(latitude) ? latitude : fallbackLatitude,
-                longitude: Number.isFinite(longitude) ? longitude : fallbackLongitude,
-                zoom: Number.isInteger(fallbackZoom) ? fallbackZoom : 10,
+            const closeMenu = () => {
+                symbolDropdown.classList.remove("open");
+                symbolTrigger.setAttribute("aria-expanded", "false");
             };
-        };
 
-        const syncCenter = () => {
-            if (!map) {
-                return;
-            }
-            const center = map.getCenter();
-            centerOutput.textContent = `${formatCoordinate(center.lat)}, ${formatCoordinate(center.lng)}`;
-        };
+            const openMenu = () => {
+                symbolDropdown.classList.add("open");
+                symbolTrigger.setAttribute("aria-expanded", "true");
+            };
 
-        const ensureMap = () => {
-            if (map) {
-                return;
-            }
-            const initialView = resolveInitialView();
-            map = window.L.map(mapNode, {
-                center: [initialView.latitude, initialView.longitude],
-                zoom: initialView.zoom,
-                zoomControl: true,
+            const selectedOption = () => symbolOptions.find((option) => option.dataset.value === symbolCode.value) || symbolOptions[0];
+
+            const syncPreview = () => {
+                const selected = selectedOption();
+                const icon = symbolTable.value === "\\"
+                    ? selected.dataset.alternateIcon
+                    : selected.dataset.primaryIcon;
+
+                symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+                symbolTriggerText.textContent = selected.dataset.label || selected.value;
+
+                for (const option of symbolOptions) {
+                    const optionIcon = symbolTable.value === "\\"
+                        ? option.dataset.alternateIcon
+                        : option.dataset.primaryIcon;
+                    const image = option.querySelector(".station-symbol-option-image");
+                    if (image) {
+                        image.src = optionIcon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+                    }
+                    const isActive = option.dataset.value === selected.dataset.value;
+                    option.classList.toggle("active", isActive);
+                    option.setAttribute("aria-selected", isActive ? "true" : "false");
+                }
+            };
+
+            symbolTrigger.addEventListener("click", () => {
+                if (symbolDropdown.classList.contains("open")) {
+                    closeMenu();
+                    return;
+                }
+                openMenu();
             });
-            window.L.tileLayer(dialog.dataset.tileUrl || "", {
-                attribution: dialog.dataset.tileAttribution || "",
-                maxZoom: 19,
-            }).addTo(map);
-            map.on("move zoom", syncCenter);
-            syncCenter();
+
+            symbolOptions.forEach((option) => {
+                option.addEventListener("click", () => {
+                    symbolCode.value = option.dataset.value || ">";
+                    syncPreview();
+                    closeMenu();
+                });
+            });
+
+            symbolTable.addEventListener("change", syncPreview);
+
+            document.addEventListener("click", (event) => {
+                if (!symbolDropdown.contains(event.target)) {
+                    closeMenu();
+                }
+            });
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") {
+                    closeMenu();
+                }
+            });
+
+            syncPreview();
         };
 
-        const openModal = () => {
-            modal.hidden = false;
-            document.body.classList.add("modal-open");
-            ensureMap();
-            const initialView = resolveInitialView();
-            map.setView([initialView.latitude, initialView.longitude], map.getZoom() || initialView.zoom);
-            window.setTimeout(() => {
-                map.invalidateSize();
-                syncCenter();
-            }, 0);
-        };
-
-        const closeModal = () => {
-            modal.hidden = true;
-            document.body.classList.remove("modal-open");
-        };
-
-        openButton.addEventListener("click", openModal);
-        applyButton.addEventListener("click", () => {
-            if (!map) {
+        const initLengthCounters = () => {
+            const inputs = document.querySelectorAll('input[data-maxlength-counter][maxlength]');
+            if (!inputs.length) {
                 return;
             }
-            const center = map.getCenter();
-            latitudeInput.value = formatCoordinate(center.lat);
-            longitudeInput.value = formatCoordinate(center.lng);
-            closeModal();
-        });
-        closeButtons.forEach((button) => button.addEventListener("click", closeModal));
-        document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape" && !modal.hidden) {
-                closeModal();
+
+            const bindLengthCounter = (input) => {
+                const counterId = input.dataset.maxlengthCounter;
+                const counter = counterId ? document.getElementById(counterId) : null;
+                if (!counter) {
+                    return;
+                }
+
+                const max = Number.parseInt(input.getAttribute("maxlength") || "0", 10);
+
+                const sync = () => {
+                    const current = input.value.length;
+                    counter.textContent = `${current} / ${max}`;
+                    counter.classList.toggle("limit-reached", current >= max);
+                };
+
+                input.addEventListener("input", sync);
+                sync();
+            };
+
+            inputs.forEach(bindLengthCounter);
+        };
+
+        const initLocationPicker = () => {
+            const modal = document.getElementById("station-location-picker");
+            const openButton = document.getElementById("station-open-map-picker");
+            const form = document.getElementById("station-form");
+
+            if (!modal || !openButton || !form || typeof window.L === "undefined") {
+                return;
             }
-        });
+
+            const latitudeInput = form.querySelector('input[name="latitude"]');
+            const longitudeInput = form.querySelector('input[name="longitude"]');
+            const dialog = modal.querySelector(".location-picker-dialog");
+            const mapNode = document.getElementById("station-location-picker-map");
+            const centerOutput = document.getElementById("station-location-picker-center");
+            const applyButton = document.getElementById("station-apply-location-picker");
+            const closeButtons = modal.querySelectorAll("[data-close-location-picker]");
+
+            if (!latitudeInput || !longitudeInput || !dialog || !mapNode || !centerOutput || !applyButton) {
+                return;
+            }
+
+            let map = null;
+
+            const formatCoordinate = (value) => Number.isFinite(value) ? value.toFixed(5) : "--";
+
+            const resolveInitialView = () => {
+                const latitude = Number.parseFloat(latitudeInput.value || "");
+                const longitude = Number.parseFloat(longitudeInput.value || "");
+                const fallbackLatitude = Number.parseFloat(dialog.dataset.defaultLatitude || "");
+                const fallbackLongitude = Number.parseFloat(dialog.dataset.defaultLongitude || "");
+                const fallbackZoom = Number.parseInt(dialog.dataset.defaultZoom || "10", 10);
+
+                return {
+                    latitude: Number.isFinite(latitude) ? latitude : fallbackLatitude,
+                    longitude: Number.isFinite(longitude) ? longitude : fallbackLongitude,
+                    zoom: Number.isInteger(fallbackZoom) ? fallbackZoom : 10,
+                };
+            };
+
+            const syncCenter = () => {
+                if (!map) {
+                    return;
+                }
+                const center = map.getCenter();
+                centerOutput.textContent = `${formatCoordinate(center.lat)}, ${formatCoordinate(center.lng)}`;
+            };
+
+            const ensureMap = () => {
+                if (map) {
+                    return;
+                }
+
+                const initialView = resolveInitialView();
+                map = window.L.map(mapNode, {
+                    center: [initialView.latitude, initialView.longitude],
+                    zoom: initialView.zoom,
+                    zoomControl: true,
+                });
+
+                window.L.tileLayer(dialog.dataset.tileUrl || "", {
+                    attribution: dialog.dataset.tileAttribution || "",
+                    maxZoom: 19,
+                }).addTo(map);
+
+                map.on("move zoom", syncCenter);
+                syncCenter();
+            };
+
+            const openModal = () => {
+                modal.hidden = false;
+                document.body.classList.add("modal-open");
+                ensureMap();
+
+                const initialView = resolveInitialView();
+                map.setView([initialView.latitude, initialView.longitude], map.getZoom() || initialView.zoom);
+
+                window.setTimeout(() => {
+                    map.invalidateSize();
+                    syncCenter();
+                }, 0);
+            };
+
+            const closeModal = () => {
+                modal.hidden = true;
+                document.body.classList.remove("modal-open");
+            };
+
+            openButton.addEventListener("click", openModal);
+
+            applyButton.addEventListener("click", () => {
+                if (!map) {
+                    return;
+                }
+                const center = map.getCenter();
+                latitudeInput.value = formatCoordinate(center.lat);
+                longitudeInput.value = formatCoordinate(center.lng);
+                closeModal();
+            });
+
+            closeButtons.forEach((button) => button.addEventListener("click", closeModal));
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && !modal.hidden) {
+                    closeModal();
+                }
+            });
+        };
+
+        initSymbolPicker();
+        initLengthCounters();
+        initLocationPicker();
     })();
 </script>
 {% endblock %}
