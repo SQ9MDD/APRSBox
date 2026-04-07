@@ -3582,3 +3582,10 @@ button.message-delivery-badge {
         flex-direction: column;
     }
 }
+
+.copyright {
+    text-align: center;
+    opacity: 0.6;
+    margin-top: 2rem;
+    font-size: 0.875rem;
+}

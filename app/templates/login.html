@@ -33,6 +33,67 @@
                 </label>
                 <button type="submit" class="button">{{ t("Sign In") }}</button>
             </form>
+        </div>
+    </main>
+    <div class="copyright">© SQ9MDD 2026</div>
+    <script>
+        (() => {
+            const labels = {
+                switchToDay: {{ t("Switch to day mode")|tojson }},
+                switchToNight: {{ t("Switch to night mode")|tojson }}
+            };
+            const root = document.documentElement;
+            const button = document.getElementById("theme-toggle");
+            if (!button) return;
+            const syncLabel = () => {
+                const isLight = root.getAttribute("data-theme") === "light";
+                button.textContent = isLight ? labels.switchToNight : labels.switchToDay;
+            };
+            syncLabel();
+            button.addEventListener("click", () => {
+                const nextTheme = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+                root.setAttribute("data-theme", nextTheme);
+                localStorage.setItem("aprsbox-theme", nextTheme);
+                syncLabel();
+            });
+        })();
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="{{ app_language }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }} | APRSBox</title>
+    <script>
+        (() => {
+            const storedTheme = localStorage.getItem("aprsbox-theme");
+            document.documentElement.setAttribute("data-theme", storedTheme || "dark");
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}">
+</head>
+<body class="login-shell">
+    <main class="login-card">
+        <div class="panel-body">
+            <div class="login-topbar">
+                <h1>APRSBox</h1>
+                <button type="button" class="theme-toggle" id="theme-toggle">{{ t("Switch to night mode") }}</button>
+            </div>
+            {% if login_error %}
+            <div class="alert">{{ t(login_error) }}</div>
+            {% endif %}
+            <form action="{{ request.scope.root_path }}/login" method="post" class="form-stack">
+                <label class="full">
+                    <span>{{ t("Username") }}</span>
+                    <input type="text" name="username" autocomplete="username" required>
+                </label>
+                <label class="full">
+                    <span>{{ t("Password") }}</span>
+                    <input type="password" name="password" autocomplete="current-password" required>
+                </label>
+                <button type="submit" class="button">{{ t("Sign In") }}</button>
+            </form>
             <div class="copyright">© SQ9MDD 2026</div>
         </div>
     </main>
