@@ -11,6 +11,7 @@ from pathlib import Path
 from app.db import execute, fetch_one, init_db
 from app.services.outbound import build_tnc2_kiss_frame
 from app.services.content import get_section_row, safe_create_section_row
+from app.services.map_service import get_map_station_payload
 from app.services.traffic import TrafficMonitorService
 
 
@@ -248,6 +249,107 @@ class TrafficProxyRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     client_writer_2.close()
                     try:
                         await client_writer_2.wait_closed()
+                    except OSError:
+                        pass
+                if tnc_writer is not None:
+                    tnc_writer.close()
+                    try:
+                        await tnc_writer.wait_closed()
+                    except OSError:
+                        pass
+                await service.stop()
+                tnc_server.close()
+                await tnc_server.wait_closed()
+
+    async def test_proxy_client_tx_is_persisted_for_rf_log_and_map(self) -> None:
+        with temporary_database():
+            tnc_port = free_tcp_port()
+            expose_port = free_tcp_port()
+            interface_id = insert_modem(
+                device_path=f"127.0.0.1:{tnc_port}",
+                expose_port_enabled=1,
+                expose_bind_address="127.0.0.1",
+                expose_port=expose_port,
+            )
+
+            tnc_reader_queue: asyncio.Queue[bytes] = asyncio.Queue()
+            connection_ready: asyncio.Future[asyncio.StreamWriter] = asyncio.get_running_loop().create_future()
+
+            async def handle_tnc_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+                if not connection_ready.done():
+                    connection_ready.set_result(writer)
+                try:
+                    while True:
+                        chunk = await reader.read(1024)
+                        if not chunk:
+                            break
+                        await tnc_reader_queue.put(chunk)
+                finally:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
+
+            tnc_server = await asyncio.start_server(handle_tnc_client, host="127.0.0.1", port=tnc_port)
+            service = TrafficMonitorService(reconnect_delay=0.1)
+            client_writer: asyncio.StreamWriter | None = None
+            tnc_writer: asyncio.StreamWriter | None = None
+            try:
+                await service.start()
+                await wait_until(
+                    lambda: service.snapshot()["status"] == "connected" and service.snapshot()["expose"]["enabled"],
+                    timeout=3.0,
+                )
+                tnc_writer = await asyncio.wait_for(connection_ready, timeout=1.0)
+                _client_reader, client_writer = await asyncio.open_connection("127.0.0.1", expose_port)
+
+                tnc2_line = "SP8XYZ-9>APRS:=5218.37N/02104.87E-Proxy uplink"
+                client_payload = build_tnc2_kiss_frame(tnc2_line)
+                client_writer.write(client_payload)
+                await client_writer.drain()
+                self.assertEqual(await asyncio.wait_for(tnc_reader_queue.get(), timeout=1.0), client_payload)
+
+                await wait_until(
+                    lambda: fetch_one(
+                        """
+                        SELECT id
+                        FROM traffic_frames
+                        WHERE interface_id = ? AND direction = 'tx' AND format = 'TNC2-TX'
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (interface_id,),
+                    )
+                    is not None,
+                    timeout=2.0,
+                )
+
+                tx_row = fetch_one(
+                    """
+                    SELECT interface_id, line, command
+                    FROM traffic_frames
+                    WHERE interface_id = ? AND direction = 'tx' AND format = 'TNC2-TX'
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (interface_id,),
+                )
+                assert tx_row is not None
+                self.assertEqual(int(tx_row["interface_id"]), interface_id)
+                self.assertIn("SP8XYZ-9", str(tx_row["line"]))
+                self.assertEqual(str(tx_row["command"] or "").upper(), "TX")
+
+                stations = get_map_station_payload()["stations"]
+                station = next((item for item in stations if item["display_callsign"] == "SP8XYZ-9"), None)
+                self.assertIsNotNone(station)
+                assert station is not None
+                self.assertEqual(station["origin"], "local_tx")
+            finally:
+                if client_writer is not None:
+                    client_writer.close()
+                    try:
+                        await client_writer.wait_closed()
                     except OSError:
                         pass
                 if tnc_writer is not None:
