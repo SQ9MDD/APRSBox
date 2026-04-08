@@ -507,7 +507,7 @@ main() {
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"
     log ""
-    log "Application URL: http://127.0.0.1:8000"
+    log "Application URL: http://<your ip address>:8000"
     log "Login: $ADMIN_USER"
     log "Password: $ADMIN_PASSWORD"
     log ""
