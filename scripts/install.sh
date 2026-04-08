@@ -377,17 +377,8 @@ initialize_database() {
 }
 
 prompt_admin() {
-    if [ -z "$ADMIN_USER" ]; then
-        if [ -r /dev/tty ]; then
-            printf 'Initial admin username [admin]: ' >/dev/tty
-            read -r ADMIN_USER </dev/tty
-        fi
-        ADMIN_USER="${ADMIN_USER:-admin}"
-    fi
-    if [ -z "$ADMIN_PASSWORD" ]; then
-        ADMIN_PASSWORD="aprs"
-        log "Initial admin password not provided. Using default password: aprs"
-    fi
+    ADMIN_USER="${ADMIN_USER:-admin}"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-aprs}"
 }
 
 create_admin_user() {
@@ -488,6 +479,41 @@ wait_for_http() {
     fail "Health check failed for $service_name ($url)"
 }
 
+get_network_ip() {
+    # Try hostname -I (Linux)
+    if command -v hostname >/dev/null 2>&1; then
+        local ips
+        ips="$(hostname -I 2>/dev/null || true)"
+        if [ -n "$ips" ]; then
+            printf '%s\n' "$ips" | awk '{print $1}'
+            return 0
+        fi
+    fi
+
+    # Try ip addr (Linux)
+    if command -v ip >/dev/null 2>&1; then
+        local ip
+        ip="$(ip addr show 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | head -1 || true)"
+        if [ -n "$ip" ]; then
+            printf '%s\n' "$ip"
+            return 0
+        fi
+    fi
+
+    # Try ifconfig (BSD/Darwin)
+    if command -v ifconfig >/dev/null 2>&1; then
+        local ip
+        ip="$(ifconfig 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | head -1 || true)"
+        if [ -n "$ip" ]; then
+            printf '%s\n' "$ip"
+            return 0
+        fi
+    fi
+
+    # Fallback to localhost
+    printf '%s\n' "127.0.0.1"
+}
+
 main() {
     require_root
     detect_os
@@ -509,9 +535,19 @@ main() {
     install_service_units
     enable_services
     verify_services
+    log ""
+    log "========================================"
     log "APRSBox installation finished."
+    log "========================================"
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"
+    log ""
+    local app_ip
+    app_ip="$(get_network_ip)"
+    log "Application URL: http://${app_ip}:8000"
+    log "Login: $ADMIN_USER"
+    log "Password: $ADMIN_PASSWORD"
+    log ""
 }
 
 main "$@"
