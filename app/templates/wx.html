@@ -24,10 +24,6 @@
         {% set selected_wx_interface_id = wx_config.beacon_interface_id|string if wx_config.beacon_interface_id is not none else '' %}
         {% if can_edit %}
         <form method="post" action="{{ request.scope.root_path }}/wx/config" class="form-grid">
-            <label class="full checkbox-row">
-                <input type="checkbox" name="enabled" value="1" {% if wx_config.enabled %}checked{% endif %}>
-                <span>{{ t("Enable WX") }}</span>
-            </label>
             <label>
                 <span>{{ t("Callsign") }}</span>
                 <input type="text" value="{{ wx_config.callsign or '' }}" readonly>
@@ -84,6 +80,10 @@
             <label>
                 <span>{{ t("Default max cache age (s)") }}</span>
                 <input type="number" min="1" max="86400" name="default_cache_max_age_s" value="{{ wx_config.default_cache_max_age_s }}">
+            </label>
+            <label class="full checkbox-row">
+                <input type="checkbox" name="enabled" value="1" {% if wx_config.enabled %}checked{% endif %}>
+                <span>{{ t("Enable WX") }}</span>
             </label>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save WX configuration") }}</button>

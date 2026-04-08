@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 
 from app.auth import authenticate_user, mark_user_login
 from app.db import log_event
+from app.services.content import get_station_settings
 from app.template_helpers import build_template_context
 
 router = APIRouter()
@@ -19,7 +20,18 @@ def login_page(request: Request) -> object:
     templates = request.app.state.templates
     if request.session.get("user_id"):
         return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
-    context = build_template_context(request, page_title="Login", login_error=None)
+    station = get_station_settings()
+    station_callsign = str(station.get("callsign") or "").strip()
+    station_ssid = str(station.get("ssid") or "").strip()
+    station_identity = None
+    if station_callsign:
+        station_identity = f"{station_callsign}-{station_ssid}" if station_ssid else station_callsign
+    context = build_template_context(
+        request,
+        page_title="Login",
+        login_error=None,
+        station_identity=station_identity,
+    )
     return templates.TemplateResponse("login.html", context)
 
 

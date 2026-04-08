@@ -430,6 +430,33 @@ body {
     margin-bottom: var(--space-2);
 }
 
+.login-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.login-station-identity {
+    font-size: 0.78rem;
+    line-height: 1.2;
+    color: #ff7a18;
+    letter-spacing: 0.02em;
+}
+
+.login-meta {
+    margin-top: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    align-items: center;
+    font-size: 0.74rem;
+}
+
+.login-meta span {
+    opacity: 0.3;
+}
+
 .page-header,
 .panel-header {
     display: flex;
