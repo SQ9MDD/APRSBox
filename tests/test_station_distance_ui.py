@@ -22,6 +22,11 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function stationsSignature(stations)", script_source)
         self.assertIn("if (nextSignature === lastStationsSignature)", script_source)
 
+    def test_map_script_renders_track_dots_for_older_positions(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("window.L.circleMarker", script_source)
+        self.assertIn("points.slice(0, -1)", script_source)
+
     def test_stations_page_script_skips_table_rerender_when_payload_is_unchanged(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
         self.assertIn("let lastStationsSignature = \"\";", template_source)

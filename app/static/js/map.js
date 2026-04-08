@@ -335,10 +335,11 @@
             if (points.length < 2) {
                 continue;
             }
+            const trackColor = colorForCallsign(track.display_callsign || "");
             const polyline = window.L.polyline(
                 points.map((point) => ([point.latitude, point.longitude])),
                 {
-                    color: colorForCallsign(track.display_callsign || ""),
+                    color: trackColor,
                     weight: 3,
                     opacity: 0.85,
                     lineJoin: "round",
@@ -347,6 +348,18 @@
                 }
             );
             stationLayer.addLayer(polyline);
+            for (const point of points.slice(0, -1)) {
+                const dot = window.L.circleMarker([point.latitude, point.longitude], {
+                    radius: 3,
+                    color: trackColor,
+                    fillColor: trackColor,
+                    fillOpacity: 0.65,
+                    opacity: 0.95,
+                    weight: 1,
+                    interactive: false,
+                });
+                stationLayer.addLayer(dot);
+            }
         }
         for (const station of stations || []) {
             if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
