@@ -173,7 +173,7 @@
                                     <th>{{ t("Normalized") }}</th>
                                     <th>{{ t("Status") }}</th>
                                     <th>{{ t("Cache") }}</th>
-                                    <th>{{ t("Action") }}</th>
+                                    <th>{{ t("Actions") }}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -218,7 +218,15 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/wx/mappings/{{ row.parameter_name }}/test">{{ t("Test read") }}</button>
+                                        <button
+                                            type="submit"
+                                            class="table-icon-button"
+                                            formaction="{{ request.scope.root_path }}/wx/mappings/{{ row.parameter_name }}/test"
+                                            title="{{ t('Run test read') }}"
+                                            aria-label="{{ t('Run test read') }} {{ t(row.label) }}"
+                                        >
+                                            <img src="{{ request.scope.root_path }}/static/icons/test-tube-empty.svg" alt="">
+                                        </button>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -241,7 +249,7 @@
                                     <th>{{ t("Normalized") }}</th>
                                     <th>{{ t("Status") }}</th>
                                     <th>{{ t("Cache") }}</th>
-                                    <th>{{ t("Action") }}</th>
+                                    <th>{{ t("Actions") }}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -286,7 +294,15 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/wx/mappings/{{ row.parameter_name }}/test">{{ t("Test read") }}</button>
+                                        <button
+                                            type="submit"
+                                            class="table-icon-button"
+                                            formaction="{{ request.scope.root_path }}/wx/mappings/{{ row.parameter_name }}/test"
+                                            title="{{ t('Run test read') }}"
+                                            aria-label="{{ t('Run test read') }} {{ t(row.label) }}"
+                                        >
+                                            <img src="{{ request.scope.root_path }}/static/icons/test-tube-empty.svg" alt="">
+                                        </button>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -355,7 +371,7 @@
                         <th>{{ t("Timeout") }}</th>
                         <th>{{ t("TLS") }}</th>
                         <th>{{ t("Last test") }}</th>
-                        <th>{{ t("Action") }}</th>
+                        <th>{{ t("Actions") }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -377,20 +393,34 @@
                             {% endif %}
                         </td>
                         <td>
-                            <div class="wx-inline-actions">
+                            <div class="wx-inline-actions table-actions table-actions-start">
                                 {% if can_edit %}
                                 <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/test" class="inline-form">
-                                    <button type="submit" class="button button-secondary">{{ t("Test") }}</button>
+                                    <button type="submit" class="table-icon-button" title="{{ t('Run test read') }}" aria-label="{{ t('Run test read') }} {{ source.name }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/test-tube.svg" alt="">
+                                    </button>
                                 </form>
                                 <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/discover" class="inline-form">
-                                    <button type="submit" class="button button-secondary">{{ t("Discover") }}</button>
+                                    <button type="submit" class="table-icon-button" title="{{ t('Discover source') }}" aria-label="{{ t('Discover source') }} {{ source.name }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/magnify.svg" alt="">
+                                    </button>
                                 </form>
                                 <form method="get" action="{{ request.scope.root_path }}/wx" class="inline-form">
                                     <input type="hidden" name="edit_source" value="{{ source.id }}">
-                                    <button type="submit" class="button button-secondary">{{ t("Edit") }}</button>
+                                    <button type="submit" class="table-icon-button" title="{{ t('Edit source') }}" aria-label="{{ t('Edit source') }} {{ source.name }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
+                                    </button>
                                 </form>
                                 <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/delete" class="inline-form">
-                                    <button type="submit" class="button button-secondary button-danger" onclick="return confirm({{ t('Delete this WX source?')|tojson }});">{{ t("Delete") }}</button>
+                                    <button
+                                        type="submit"
+                                        class="table-icon-button table-icon-button-danger"
+                                        title="{{ t('Delete source') }}"
+                                        aria-label="{{ t('Delete source') }} {{ source.name }}"
+                                        onclick="return confirm({{ t('Delete this WX source?')|tojson }});"
+                                    >
+                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                    </button>
                                 </form>
                                 {% else %}
                                 <span class="muted">{{ t("Read only") }}</span>
