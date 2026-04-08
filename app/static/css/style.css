@@ -647,6 +647,11 @@ body {
     border-color: rgba(201, 122, 122, 0.28);
 }
 
+.dashboard-check-error {
+    border-color: rgba(201, 122, 122, 0.5);
+    background: rgba(201, 122, 122, 0.09);
+}
+
 .dashboard-next-steps {
     display: grid;
     gap: 0.55rem;
@@ -662,6 +667,14 @@ body {
 .dashboard-next-step p {
     margin: 0.24rem 0 0;
     color: var(--muted);
+}
+
+.dashboard-check-note {
+    margin-top: 0.18rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
 .metric-value {

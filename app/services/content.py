@@ -680,8 +680,108 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     traffic = dashboard_traffic_summary()
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
-    selected_interface_id = station_settings.get("beacon_interface_id")
+    selected_interface_id_raw = station_settings.get("beacon_interface_id")
+    try:
+        selected_interface_id = int(selected_interface_id_raw) if selected_interface_id_raw not in {None, ""} else None
+    except (TypeError, ValueError):
+        selected_interface_id = None
     selected_interface = next((item for item in interfaces if item.get("id") == selected_interface_id), None)
+    selected_interface_row = (
+        fetch_one(
+            """
+            SELECT id, name, enabled, tx_blocked
+            FROM modems
+            WHERE id = ?
+            """,
+            (selected_interface_id,),
+        )
+        if selected_interface_id is not None
+        else None
+    )
+    selected_interface_enabled = bool(int(selected_interface_row["enabled"])) if selected_interface_row else False
+    selected_interface_tx_blocked = bool(int(selected_interface_row["tx_blocked"])) if selected_interface_row else False
+
+    runtime_rows = fetch_all(
+        """
+        SELECT modem_id, status, status_detail, last_error
+        FROM traffic_runtime_interfaces
+        """
+    )
+    runtime_by_modem_id: dict[int, dict[str, Any]] = {}
+    for row in runtime_rows:
+        if row["modem_id"] is None:
+            continue
+        try:
+            runtime_by_modem_id[int(row["modem_id"])] = dict(row)
+        except (TypeError, ValueError):
+            continue
+    selected_runtime = runtime_by_modem_id.get(selected_interface_id) if selected_interface_id is not None else None
+    runtime_state_row = fetch_one(
+        """
+        SELECT status, status_detail, last_error
+        FROM traffic_runtime_state
+        WHERE id = 1
+        """
+    )
+
+    monitor_status = str((selected_runtime or {}).get("status") or "").strip().lower()
+    monitor_detail = str((selected_runtime or {}).get("status_detail") or "").strip()
+    monitor_error = str((selected_runtime or {}).get("last_error") or "").strip()
+    if not monitor_status and runtime_state_row:
+        monitor_status = str(runtime_state_row["status"] or "").strip().lower()
+        monitor_detail = str(runtime_state_row["status_detail"] or "").strip()
+        monitor_error = str(runtime_state_row["last_error"] or "").strip()
+
+    if not enabled_interfaces:
+        monitor_check_state = "warn"
+        monitor_check_value = "Disabled"
+    elif monitor_error or monitor_status == "error":
+        monitor_check_state = "error"
+        monitor_check_value = "Error"
+    elif monitor_status in {"connected", "running", "idle"}:
+        monitor_check_state = "ok"
+        monitor_check_value = "Enabled"
+    elif monitor_status == "connecting":
+        monitor_check_state = "warn"
+        monitor_check_value = "Enabled"
+    elif monitor_status in {"disabled", "stopped"}:
+        monitor_check_state = "warn"
+        monitor_check_value = "Disabled"
+    elif monitor_status:
+        monitor_check_state = "warn"
+        monitor_check_value = "Unknown"
+    else:
+        monitor_check_state = "warn"
+        monitor_check_value = "Unknown"
+
+    recent_tx_jobs = recent_station_outbound_jobs(limit=1)
+    latest_station_tx_display = "Never"
+    latest_station_tx_state = "warn"
+    latest_station_tx_value = "Never"
+    latest_station_tx_note = ""
+    if recent_tx_jobs:
+        latest_tx = recent_tx_jobs[0]
+        latest_tx_time = _format_monitor_timestamp(str(latest_tx.get("display_time") or ""))
+        if latest_tx_time and latest_tx_time != "-":
+            latest_station_tx_display = latest_tx_time
+        tx_status = str(latest_tx.get("status") or "").strip().lower()
+        if latest_tx.get("is_tx_skipped"):
+            latest_station_tx_state = "warn"
+            latest_station_tx_value = "Skipped"
+            latest_station_tx_note = str(latest_tx.get("last_error") or "").strip()
+        elif tx_status == "failed":
+            latest_station_tx_state = "error"
+            latest_station_tx_value = "Failed"
+            latest_station_tx_note = str(latest_tx.get("last_error") or "").strip() or latest_station_tx_display
+        elif tx_status in {"queued", "processing"}:
+            latest_station_tx_state = "warn"
+            latest_station_tx_value = "Queued"
+            latest_station_tx_note = latest_station_tx_display
+        else:
+            latest_station_tx_state = "ok"
+            latest_station_tx_value = "Sent"
+            latest_station_tx_note = latest_station_tx_display
+
     latest_frame_row = fetch_one(
         """
         SELECT created_at
@@ -691,32 +791,75 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         """
     )
     latest_activity = _format_monitor_timestamp(latest_frame_row["created_at"]) if latest_frame_row else "No traffic yet"
+    callsign = str(station_settings.get("callsign") or "").strip()
+    location_configured = bool(station_settings.get("latitude")) and bool(station_settings.get("longitude"))
+    selected_interface_name = (
+        str(selected_interface_row["name"]).strip()
+        if selected_interface_row and str(selected_interface_row["name"] or "").strip()
+        else (selected_interface["name"] if selected_interface else "Not selected")
+    )
 
     checks = [
         {
             "label": "Callsign",
-            "state": "ok" if station_settings.get("callsign") else "warn",
-            "value": station_settings.get("callsign") or "Not set",
+            "state": "ok" if callsign else "warn",
+            "value": callsign or "Not set",
+            "blocks": not callsign,
         },
         {
             "label": "Location",
-            "state": "ok" if station_settings.get("latitude") and station_settings.get("longitude") else "warn",
-            "value": "Configured" if station_settings.get("latitude") and station_settings.get("longitude") else "Missing coordinates",
+            "state": "ok" if location_configured else "warn",
+            "value": "Configured" if location_configured else "Missing coordinates",
+            "blocks": not location_configured,
         },
         {
             "label": "Beacon interface",
-            "state": "ok" if selected_interface else "warn",
-            "value": selected_interface["name"] if selected_interface else "Not selected",
+            "state": "warn" if not selected_interface_row else ("error" if not selected_interface_enabled else "ok"),
+            "value": selected_interface_name,
+            "note": "Disabled" if selected_interface_row and not selected_interface_enabled else "",
+            "blocks": not selected_interface_row or (selected_interface_row is not None and not selected_interface_enabled),
         },
         {
             "label": "Active interfaces",
             "state": "ok" if enabled_interfaces else "warn",
             "value": str(len(enabled_interfaces)),
+            "blocks": not enabled_interfaces,
+        },
+        {
+            "label": "Traffic Monitor",
+            "state": monitor_check_state,
+            "value": monitor_check_value,
+            "note": monitor_error or monitor_detail,
+            "blocks": monitor_check_state == "error",
+        },
+        {
+            "label": "TX Block",
+            "state": "warn" if not selected_interface_row else ("warn" if selected_interface_tx_blocked else "ok"),
+            "value": "Not selected" if not selected_interface_row else ("On" if selected_interface_tx_blocked else "Off"),
+            "blocks": bool(selected_interface_row) and selected_interface_tx_blocked,
+        },
+        {
+            "label": "TX Enabled",
+            "state": "ok" if bool(station_settings.get("tx_enabled")) else "warn",
+            "value": "On" if bool(station_settings.get("tx_enabled")) else "Off",
+            "blocks": False,
+        },
+        {
+            "label": "APRS Status enabled",
+            "state": "ok" if bool(station_settings.get("status_enabled")) else "warn",
+            "value": "On" if bool(station_settings.get("status_enabled")) else "Off",
+            "blocks": False,
+        },
+        {
+            "label": "Last station TX",
+            "state": latest_station_tx_state,
+            "value": latest_station_tx_value,
+            "note": latest_station_tx_note,
+            "blocks": False,
         },
     ]
-    next_steps = [item for item in checks if item["state"] != "ok"]
-    ready_count = sum(1 for item in checks if item["state"] == "ok")
-    beacon_ready = ready_count == len(checks)
+    next_steps = [item for item in checks if item["blocks"] and item["state"] != "ok"]
+    beacon_ready = len(next_steps) == 0
 
     if traffic["heard_stations"] > 0 and traffic["decoded_aprs"] > 0:
         hero = {
@@ -757,13 +900,13 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             {"label": "Heard stations", "value": str(traffic["heard_stations"]), "suffix": "in last h"},
             {"label": "APRS frames", "value": str(traffic["decoded_aprs"]), "suffix": "/ h"},
             {"label": "Active interfaces", "value": str(len(enabled_interfaces)), "suffix": ""},
-            {"label": "Last traffic", "value": latest_activity, "suffix": ""},
+            {"label": "Last station TX", "value": latest_station_tx_display, "suffix": ""},
         ],
         "checks": checks,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,
-        "station_callsign": station_settings.get("callsign") or "Not set",
-        "selected_interface_name": selected_interface["name"] if selected_interface else "Not selected",
+        "station_callsign": callsign or "Not set",
+        "selected_interface_name": selected_interface_name,
         "latest_activity": latest_activity,
         "band_summary": band_summary,
     }
