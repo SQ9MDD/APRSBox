@@ -286,7 +286,12 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
     beacon_interval_minutes = _normalize_station_interval(payload.get("beacon_interval_minutes"), label="Beacon interval")
     status_interval_minutes = _normalize_station_interval(payload.get("status_interval_minutes"), label="Status interval")
     status_enabled = int(bool(payload.get("status_enabled")))
-    status_text = str(payload.get("status_text") or "").strip()
+    beacon_comment = _normalize_station_text_field(
+        payload.get("beacon_comment", ""), max_length=43, label="Beacon comment"
+    )
+    status_text = _normalize_station_text_field(
+        payload.get("status_text", ""), max_length=62, label="Status text"
+    )
     if status_enabled and not status_text:
         raise ValueError("Status text is required when APRS Status is enabled.")
     symbol_table = str(payload.get("symbol_table", "/") or "/").strip()
@@ -299,7 +304,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
         "beacon_interface_id": beacon_interface_id,
-        "beacon_comment": payload.get("beacon_comment", ""),
+        "beacon_comment": beacon_comment,
         "beacon_interval_minutes": beacon_interval_minutes,
         "beacon_path": payload.get("beacon_path", ""),
         "status_enabled": status_enabled,
@@ -2584,6 +2589,23 @@ def _normalize_printable_ascii(value: str) -> str:
     if any(ord(char) < 32 or ord(char) > 126 for char in value):
         raise ValueError("Only printable ASCII characters are allowed in APRS object/item fields.")
     return value
+
+
+def _ensure_printable_station_ascii(value: str, *, label: str) -> str:
+    try:
+        return _normalize_printable_ascii(value)
+    except ValueError as exc:
+        raise ValueError(f"{label} may contain only printable ASCII characters.") from exc
+
+
+def _normalize_station_text_field(value: Any, *, max_length: int, label: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    normalized = _ensure_printable_station_ascii(text, label=label)
+    if len(normalized) > max_length:
+        raise ValueError(f"{label} must be {max_length} printable ASCII characters or fewer.")
+    return normalized
 
 
 def _normalize_aprs_message_text(value: str) -> str:

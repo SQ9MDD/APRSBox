@@ -98,6 +98,44 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertEqual(error, "Status text is required when APRS Status is enabled.")
 
+    def test_beacon_comment_length_is_enforced(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["beacon_comment"] = "A" * 44
+            success, error = safe_update_station_settings(payload)
+            self.assertFalse(success)
+            self.assertEqual(error, "Beacon comment must be 43 printable ASCII characters or fewer.")
+
+    def test_beacon_comment_ascii_is_enforced(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["beacon_comment"] = "Bad ł"
+            success, error = safe_update_station_settings(payload)
+            self.assertFalse(success)
+            self.assertEqual(error, "Beacon comment may contain only printable ASCII characters.")
+
+    def test_status_text_length_is_enforced(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["status_enabled"] = "1"
+            payload["status_text"] = "X" * 63
+            success, error = safe_update_station_settings(payload)
+            self.assertFalse(success)
+            self.assertEqual(error, "Status text must be 62 printable ASCII characters or fewer.")
+
+    def test_status_text_ascii_is_enforced(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["status_enabled"] = "1"
+            payload["status_text"] = "Ťext"
+            success, error = safe_update_station_settings(payload)
+            self.assertFalse(success)
+            self.assertEqual(error, "Status text may contain only printable ASCII characters.")
+
     def test_scheduler_state_persists_across_reload_and_restart_boundaries(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
