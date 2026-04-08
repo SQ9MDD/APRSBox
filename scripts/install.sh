@@ -479,8 +479,6 @@ wait_for_http() {
     fail "Health check failed for $service_name ($url)"
 }
 
-
-
 main() {
     require_root
     detect_os
