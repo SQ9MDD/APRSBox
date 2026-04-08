@@ -60,6 +60,10 @@ def get_map_station_payload() -> dict[str, Any]:
                 "speed": _speed_kmh(station["data_raw"]),
                 "course": _integer_value(station["data_raw"].get("course_deg")),
                 "altitude": _altitude_meters(station["data_raw"]),
+                "phg_power_w": _float_value(station["data_raw"].get("phg_power_w")),
+                "phg_height_ft": _float_value(station["data_raw"].get("phg_height_ft")),
+                "phg_gain_dbi": _float_value(station["data_raw"].get("phg_gain_dbi")),
+                "phg_range_km": _phg_range_km(station["data_raw"]),
                 "destination": station["destination"],
                 "packet_type": station["frame_type"],
                 "stale": bool((station["last_heard_age_s"] or 0) >= STALE_AFTER_SECONDS),
@@ -128,6 +132,32 @@ def _integer_value(value: Any) -> int | None:
         return int(round(float(value)))
     except (TypeError, ValueError):
         return None
+
+
+def _float_value(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _phg_range_km(metrics: dict[str, Any]) -> float | None:
+    power_w = _float_value(metrics.get("phg_power_w"))
+    height_ft = _float_value(metrics.get("phg_height_ft"))
+    gain_dbi = _float_value(metrics.get("phg_gain_dbi"))
+    if power_w is None or height_ft is None or gain_dbi is None:
+        return None
+    if power_w <= 0 or height_ft <= 0:
+        return None
+
+    # APRS-SPEC/PROTOCOL.TXT:
+    # GAIN = 10^(g/10)
+    # RANGE = sqrt(2*H*sqrt((P/10)*(GAIN/2)))  (miles)
+    gain_linear = 10 ** (gain_dbi / 10.0)
+    range_miles = (2.0 * height_ft * (((power_w / 10.0) * (gain_linear / 2.0)) ** 0.5)) ** 0.5
+    return round(range_miles * 1.609344, 2)
 
 
 def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[str, Any]]:

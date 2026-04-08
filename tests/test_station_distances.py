@@ -102,6 +102,23 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(track["points"][0]["heard_at"], "2026-01-01T00:00:00+00:00")
             self.assertEqual(track["points"][1]["heard_at"], "2026-01-01T00:05:00+00:00")
 
+    def test_map_payload_exposes_phg_range_for_station_with_phg(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload())
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5218.37N\\02104.87E#PHG5130/WIDE1-1 Digi test",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+
+            map_payload = get_map_station_payload()
+            self.assertEqual(len(map_payload["stations"]), 1)
+            station = map_payload["stations"][0]
+            self.assertEqual(station["display_callsign"], "SP8ABC-9")
+            self.assertEqual(station["phg_power_w"], 25.0)
+            self.assertEqual(station["phg_height_ft"], 20.0)
+            self.assertEqual(station["phg_gain_dbi"], 3.0)
+            self.assertAlmostEqual(float(station["phg_range_km"]), 12.79, places=2)
+
 
 if __name__ == "__main__":
     unittest.main()

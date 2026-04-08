@@ -21,6 +21,8 @@
     const resetButton = document.getElementById("map-reset-view");
     const toggleTracksButton = document.getElementById("map-toggle-tracks");
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
+    const toggleCoverageButton = document.getElementById("map-toggle-coverage");
+    const toggleCoverageIcon = document.getElementById("map-toggle-coverage-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
@@ -43,15 +45,19 @@
         comment: root.dataset.i18nComment || "Comment",
         showTracks: root.dataset.i18nShowTracks || "Show tracks",
         hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
+        showCoverage: root.dataset.i18nShowCoverage || "Show coverage",
+        hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
     });
     const stationLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
+    const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
+    let coverageVisible = true;
     let latestStations = [];
     let latestMobileTracks = [];
 
@@ -148,6 +154,30 @@
             const label = tracksVisible ? i18n.hideTracks : i18n.showTracks;
             toggleTracksButton.setAttribute("title", label);
             toggleTracksButton.setAttribute("aria-label", label);
+        }
+    }
+
+    function resolveCoverageVisible() {
+        const storedValue = String(window.localStorage.getItem(mapCoverageVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function applyCoverageToggleState(visible) {
+        coverageVisible = Boolean(visible);
+        window.localStorage.setItem(mapCoverageVisibleStorageKey, coverageVisible ? "1" : "0");
+        if (toggleCoverageIcon) {
+            toggleCoverageIcon.setAttribute("src", `${staticRoot}icons/${coverageVisible ? "map-marker-radius.svg" : "map-marker-radius-outline.svg"}`);
+        }
+        if (toggleCoverageButton) {
+            const label = coverageVisible ? i18n.hideCoverage : i18n.showCoverage;
+            toggleCoverageButton.setAttribute("title", label);
+            toggleCoverageButton.setAttribute("aria-label", label);
         }
     }
 
@@ -249,6 +279,13 @@
     if (toggleTracksButton) {
         toggleTracksButton.addEventListener("click", function () {
             applyTracksToggleState(!tracksVisible);
+            renderStations(latestStations, latestMobileTracks);
+        });
+    }
+    applyCoverageToggleState(resolveCoverageVisible());
+    if (toggleCoverageButton) {
+        toggleCoverageButton.addEventListener("click", function () {
+            applyCoverageToggleState(!coverageVisible);
             renderStations(latestStations, latestMobileTracks);
         });
     }
@@ -367,6 +404,27 @@
 
     function renderStations(stations, mobileTracks) {
         stationLayer.clearLayers();
+        if (coverageVisible) {
+            for (const station of stations || []) {
+                if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
+                    continue;
+                }
+                if (!Number.isFinite(station.phg_range_km) || station.phg_range_km <= 0) {
+                    continue;
+                }
+                const coverageColor = colorForCallsign(station.display_callsign || station.callsign || "");
+                const coverageCircle = window.L.circle([station.latitude, station.longitude], {
+                    radius: station.phg_range_km * 1000,
+                    color: coverageColor,
+                    fillColor: coverageColor,
+                    opacity: 0.2,
+                    fillOpacity: 0.2,
+                    weight: 1,
+                    interactive: false,
+                });
+                stationLayer.addLayer(coverageCircle);
+            }
+        }
         if (tracksVisible) {
             for (const track of mobileTracks || []) {
                 const points = (track.points || []).filter((point) => (
