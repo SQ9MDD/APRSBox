@@ -447,9 +447,10 @@ body {
 .login-meta {
     margin-top: var(--space-3);
     display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
+    flex-direction: row;
+    gap: 0.4rem;
     align-items: center;
+    justify-content: center;
     font-size: 0.74rem;
 }
 

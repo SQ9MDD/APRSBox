@@ -25,7 +25,10 @@ def login_page(request: Request) -> object:
     station_ssid = str(station.get("ssid") or "").strip()
     station_identity = None
     if station_callsign:
-        station_identity = f"{station_callsign}-{station_ssid}" if station_ssid else station_callsign
+        normalized_ssid = station_ssid if station_ssid and station_ssid != "0" else ""
+        station_identity = station_callsign if not normalized_ssid else f"{station_callsign}-{normalized_ssid}"
+    else:
+        station_identity = "N0CALL"
     context = build_template_context(
         request,
         page_title="Login",
