@@ -33,6 +33,8 @@
             data-i18n-packet-type="{{ t('Packet type') }}"
             data-i18n-comment="{{ t('Comment') }}"
             data-i18n-reset-view="{{ t('Reset view') }}"
+            data-i18n-show-tracks="{{ t('Show tracks') }}"
+            data-i18n-hide-tracks="{{ t('Hide tracks') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -44,6 +46,15 @@
                         title="{{ t('Reset view') }}"
                     >
                         <img src="{{ request.scope.root_path }}/static/icons/crosshairs-gps.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
+                        id="map-toggle-tracks"
+                        aria-label="{{ t('Hide tracks') }}"
+                        title="{{ t('Hide tracks') }}"
+                    >
+                        <img id="map-toggle-tracks-icon" src="{{ request.scope.root_path }}/static/icons/track-light.svg" alt="">
                     </button>
                     <label class="map-mask-opacity-control" for="map-mask-opacity">
                         <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="{{ t('Mask opacity') }}">

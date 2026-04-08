@@ -27,6 +27,20 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("window.L.circleMarker", script_source)
         self.assertIn("points.slice(0, -1)", script_source)
 
+    def test_map_template_renders_track_toggle_button(self) -> None:
+        template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+        self.assertIn('id="map-toggle-tracks"', template_source)
+        self.assertIn('id="map-toggle-tracks-icon"', template_source)
+        self.assertIn("data-i18n-show-tracks", template_source)
+        self.assertIn("data-i18n-hide-tracks", template_source)
+
+    def test_map_script_supports_track_toggle_state(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("mapTracksVisibleStorageKey", script_source)
+        self.assertIn("function resolveTracksVisible()", script_source)
+        self.assertIn("function applyTracksToggleState(visible)", script_source)
+        self.assertIn("if (tracksVisible)", script_source)
+
     def test_stations_page_script_skips_table_rerender_when_payload_is_unchanged(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
         self.assertIn("let lastStationsSignature = \"\";", template_source)

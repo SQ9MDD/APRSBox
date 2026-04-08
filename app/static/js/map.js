@@ -19,6 +19,8 @@
     const tileSourceOutput = document.getElementById("map-tile-source");
     const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
+    const toggleTracksButton = document.getElementById("map-toggle-tracks");
+    const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
@@ -39,13 +41,19 @@
         altitude: root.dataset.i18nAltitude || "Altitude",
         packetType: root.dataset.i18nPacketType || "Packet type",
         comment: root.dataset.i18nComment || "Comment",
+        showTracks: root.dataset.i18nShowTracks || "Show tracks",
+        hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
     });
     const stationLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
+    const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
     let lastStationsSignature = "";
+    let tracksVisible = true;
+    let latestStations = [];
+    let latestMobileTracks = [];
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -117,6 +125,30 @@
             maskOpacitySelect.value = String(normalizedOpacity);
         }
         window.localStorage.setItem(maskOpacityStorageKey(), String(normalizedOpacity));
+    }
+
+    function resolveTracksVisible() {
+        const storedValue = String(window.localStorage.getItem(mapTracksVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function applyTracksToggleState(visible) {
+        tracksVisible = Boolean(visible);
+        window.localStorage.setItem(mapTracksVisibleStorageKey, tracksVisible ? "1" : "0");
+        if (toggleTracksIcon) {
+            toggleTracksIcon.setAttribute("src", `${staticRoot}icons/${tracksVisible ? "track-light.svg" : "track-light-off.svg"}`);
+        }
+        if (toggleTracksButton) {
+            const label = tracksVisible ? i18n.hideTracks : i18n.showTracks;
+            toggleTracksButton.setAttribute("title", label);
+            toggleTracksButton.setAttribute("aria-label", label);
+        }
     }
 
     function escapeHtml(value) {
@@ -211,6 +243,13 @@
         applyMaskOpacity(resolveDefaultMaskOpacity());
         maskOpacitySelect.addEventListener("change", function () {
             applyMaskOpacity(Number.parseInt(maskOpacitySelect.value || "", 10));
+        });
+    }
+    applyTracksToggleState(resolveTracksVisible());
+    if (toggleTracksButton) {
+        toggleTracksButton.addEventListener("click", function () {
+            applyTracksToggleState(!tracksVisible);
+            renderStations(latestStations, latestMobileTracks);
         });
     }
 
@@ -328,37 +367,39 @@
 
     function renderStations(stations, mobileTracks) {
         stationLayer.clearLayers();
-        for (const track of mobileTracks || []) {
-            const points = (track.points || []).filter((point) => (
-                Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
-            ));
-            if (points.length < 2) {
-                continue;
-            }
-            const trackColor = colorForCallsign(track.display_callsign || "");
-            const polyline = window.L.polyline(
-                points.map((point) => ([point.latitude, point.longitude])),
-                {
-                    color: trackColor,
-                    weight: 3,
-                    opacity: 0.85,
-                    lineJoin: "round",
-                    lineCap: "round",
-                    interactive: false,
+        if (tracksVisible) {
+            for (const track of mobileTracks || []) {
+                const points = (track.points || []).filter((point) => (
+                    Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+                ));
+                if (points.length < 2) {
+                    continue;
                 }
-            );
-            stationLayer.addLayer(polyline);
-            for (const point of points.slice(0, -1)) {
-                const dot = window.L.circleMarker([point.latitude, point.longitude], {
-                    radius: 3,
-                    color: trackColor,
-                    fillColor: trackColor,
-                    fillOpacity: 0.65,
-                    opacity: 0.95,
-                    weight: 1,
-                    interactive: false,
-                });
-                stationLayer.addLayer(dot);
+                const trackColor = colorForCallsign(track.display_callsign || "");
+                const polyline = window.L.polyline(
+                    points.map((point) => ([point.latitude, point.longitude])),
+                    {
+                        color: trackColor,
+                        weight: 3,
+                        opacity: 0.85,
+                        lineJoin: "round",
+                        lineCap: "round",
+                        interactive: false,
+                    }
+                );
+                stationLayer.addLayer(polyline);
+                for (const point of points.slice(0, -1)) {
+                    const dot = window.L.circleMarker([point.latitude, point.longitude], {
+                        radius: 3,
+                        color: trackColor,
+                        fillColor: trackColor,
+                        fillOpacity: 0.65,
+                        opacity: 0.95,
+                        weight: 1,
+                        interactive: false,
+                    });
+                    stationLayer.addLayer(dot);
+                }
             }
         }
         for (const station of stations || []) {
@@ -395,6 +436,8 @@
             const payload = await response.json();
             const stations = payload.stations || [];
             const mobileTracks = payload.mobile_tracks || [];
+            latestStations = stations;
+            latestMobileTracks = mobileTracks;
             const nextSignature = `${stationsSignature(stations)}|${mobileTracksSignature(mobileTracks)}`;
             if (nextSignature === lastStationsSignature) {
                 return;
