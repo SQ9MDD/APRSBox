@@ -1095,39 +1095,48 @@ select:focus-visible,
 }
 
 .digi-flows-col-name {
-    width: 18rem;
-    white-space: nowrap;
+    width: 16%;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .digi-flows-col-description {
-    width: 20rem;
+    width: 28%;
     white-space: normal;
     overflow-wrap: anywhere;
 }
 
 .digi-flows-col-source,
 .digi-flows-col-target {
-    width: 14rem;
+    width: 17%;
     white-space: normal;
     overflow-wrap: anywhere;
 }
 
 .digi-flows-col-status {
-    width: 8.5rem;
-    white-space: nowrap;
+    width: 10%;
+    white-space: normal;
 }
 
 .digi-flows-col-actions {
-    width: 14rem;
-    white-space: nowrap;
+    width: 12%;
+    white-space: normal;
 }
 
 .digi-flows-actions {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 0.45rem;
-    flex-wrap: nowrap;
+    gap: 0.32rem;
+    flex-wrap: wrap;
+    max-width: calc((var(--icon-control-size) * 2) + 0.5rem);
+}
+
+.digi-flows-col-status .tnc-badge {
+    padding: 0.28rem 0.45rem;
+    min-height: 1.72rem;
+    gap: 0.26rem;
+    font-size: 0.72rem;
 }
 
 .digi-flow-endpoints {
