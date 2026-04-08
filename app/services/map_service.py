@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import settings
-from app.services.content import build_station_detail_href, get_station_settings, get_visible_station_snapshots
+from app.db import fetch_all
+from app.services.content import build_station_detail_href, get_station_settings, get_visible_station_snapshots, parse_tnc2_frame
 
 DEFAULT_STATION_ZOOM = 10
 DETAIL_STATION_ZOOM = 14
 FALLBACK_CENTER = {"latitude": 52.1, "longitude": 19.4, "zoom": 6}
 STALE_AFTER_SECONDS = 30 * 60
+MOBILE_TRACK_SCAN_ROW_LIMIT = 8000
+MOBILE_TRACK_MAX_POINTS_PER_STATION = 60
 
 
 def get_map_page_config() -> dict[str, Any]:
@@ -63,7 +66,10 @@ def get_map_station_payload() -> dict[str, Any]:
                 "detail_href": build_station_detail_href(station["display_callsign"]),
             }
         )
-    return {"stations": stations}
+    return {
+        "stations": stations,
+        "mobile_tracks": _build_mobile_station_tracks(stations),
+    }
 
 
 def get_station_detail_map_config(station: dict[str, Any]) -> dict[str, Any]:
@@ -122,3 +128,70 @@ def _integer_value(value: Any) -> int | None:
         return int(round(float(value)))
     except (TypeError, ValueError):
         return None
+
+
+def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    visible_station_keys: dict[str, str] = {}
+    for station in stations:
+        display_callsign = str(station.get("display_callsign") or "").strip()
+        if display_callsign:
+            visible_station_keys[display_callsign.casefold()] = display_callsign
+    if not visible_station_keys:
+        return []
+
+    rows = fetch_all(
+        """
+        SELECT line, created_at
+        FROM (
+            SELECT line, created_at, id
+            FROM traffic_frames
+            WHERE format IN ('TNC2', 'TNC2-TX')
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+        ) AS recent
+        ORDER BY created_at ASC, id ASC
+        """,
+        (MOBILE_TRACK_SCAN_ROW_LIMIT,),
+    )
+
+    points_by_station: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        parsed = parse_tnc2_frame(str(row["line"] or ""))
+        if parsed is None or parsed.get("classification") != "mobile":
+            continue
+        station_key = str(parsed.get("entity_name") or parsed.get("source_key") or "").strip()
+        if not station_key:
+            continue
+        visible_station_key = visible_station_keys.get(station_key.casefold())
+        if not visible_station_key:
+            continue
+
+        aprs_data = dict(parsed.get("aprs_data") or {})
+        latitude = _parse_coordinate(aprs_data.get("latitude"))
+        longitude = _parse_coordinate(aprs_data.get("longitude"))
+        if latitude is None or longitude is None:
+            continue
+
+        points = points_by_station.setdefault(visible_station_key, [])
+        points.append(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "heard_at": str(row["created_at"] or ""),
+            }
+        )
+        if len(points) > MOBILE_TRACK_MAX_POINTS_PER_STATION:
+            points.pop(0)
+
+    tracks: list[dict[str, Any]] = []
+    for display_callsign, points in points_by_station.items():
+        if len(points) < 2:
+            continue
+        tracks.append(
+            {
+                "display_callsign": display_callsign,
+                "points": points,
+            }
+        )
+    tracks.sort(key=lambda item: str(item.get("display_callsign") or ""))
+    return tracks

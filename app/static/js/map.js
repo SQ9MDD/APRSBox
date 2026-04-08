@@ -305,8 +305,49 @@
         ])));
     }
 
-    function renderStations(stations) {
+    function mobileTracksSignature(mobileTracks) {
+        return JSON.stringify((mobileTracks || []).map((track) => ([
+            track.display_callsign || "",
+            (track.points || []).map((point) => ([
+                point.latitude,
+                point.longitude,
+                point.heard_at || "",
+            ])),
+        ])));
+    }
+
+    function colorForCallsign(callsign) {
+        const value = String(callsign || "");
+        let hash = 0;
+        for (let index = 0; index < value.length; index += 1) {
+            hash = ((hash * 31) + value.charCodeAt(index)) >>> 0;
+        }
+        const hue = hash % 360;
+        return `hsl(${hue} 80% 52%)`;
+    }
+
+    function renderStations(stations, mobileTracks) {
         stationLayer.clearLayers();
+        for (const track of mobileTracks || []) {
+            const points = (track.points || []).filter((point) => (
+                Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+            ));
+            if (points.length < 2) {
+                continue;
+            }
+            const polyline = window.L.polyline(
+                points.map((point) => ([point.latitude, point.longitude])),
+                {
+                    color: colorForCallsign(track.display_callsign || ""),
+                    weight: 3,
+                    opacity: 0.85,
+                    lineJoin: "round",
+                    lineCap: "round",
+                    interactive: false,
+                }
+            );
+            stationLayer.addLayer(polyline);
+        }
         for (const station of stations || []) {
             if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
                 continue;
@@ -340,12 +381,13 @@
             }
             const payload = await response.json();
             const stations = payload.stations || [];
-            const nextSignature = stationsSignature(stations);
+            const mobileTracks = payload.mobile_tracks || [];
+            const nextSignature = `${stationsSignature(stations)}|${mobileTracksSignature(mobileTracks)}`;
             if (nextSignature === lastStationsSignature) {
                 return;
             }
             lastStationsSignature = nextSignature;
-            renderStations(stations);
+            renderStations(stations, mobileTracks);
         } catch (_error) {
         }
     }
