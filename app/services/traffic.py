@@ -470,6 +470,7 @@ class _TrafficModemRuntime:
             band=band,
             line=decoded,
             port=str(port),
+            command="TX-PROXY",
             payload_hex=kiss_frame.hex(" ").upper(),
         )
 

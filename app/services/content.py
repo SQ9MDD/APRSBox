@@ -565,6 +565,7 @@ def _traffic_frame_row_class(
     normalized_direction = str(direction or "").strip().upper()
     normalized_command = str(command or "").strip().upper()
     is_skipped_tx = normalized_direction == "TX" and normalized_command.startswith("TX-SKIP")
+    is_proxy_tx = normalized_direction == "TX" and normalized_command.startswith("TX-PROXY")
     if is_skipped_tx:
         classes.append("traffic-log-row-skipped")
 
@@ -598,7 +599,9 @@ def _traffic_frame_row_class(
     is_own_callsign = bool(station_callsign) and source_callsign == station_callsign
 
     if normalized_direction == "TX":
-        if (is_own_wx_source or is_own_callsign) and is_weather:
+        if is_proxy_tx and source_key and source_key not in {station_source_key, wx_source_key}:
+            classes.append("traffic-log-row-proxy-tx")
+        elif (is_own_wx_source or is_own_callsign) and is_weather:
             classes.append("traffic-log-row-own-wx-tx")
         elif is_own_station_source and is_beacon_or_status:
             classes.append("traffic-log-row-own-beacon-tx")

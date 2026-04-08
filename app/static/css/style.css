@@ -2754,6 +2754,16 @@ select:focus-visible,
     color: #d24b4b;
 }
 
+.traffic-log-row-proxy-tx {
+    background: rgba(166, 95, 193, 0.2);
+}
+
+.traffic-log-row-proxy-tx .traffic-log-time,
+.traffic-log-row-proxy-tx .traffic-log-source,
+.traffic-log-row-proxy-tx .traffic-log-line {
+    color: #a65fc1;
+}
+
 .traffic-log-row-skipped .traffic-log-time,
 .traffic-log-row-skipped .traffic-log-source,
 .traffic-log-row-skipped .traffic-log-line {

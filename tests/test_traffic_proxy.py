@@ -338,7 +338,7 @@ class TrafficProxyRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 assert tx_row is not None
                 self.assertEqual(int(tx_row["interface_id"]), interface_id)
                 self.assertIn("SP8XYZ-9", str(tx_row["line"]))
-                self.assertEqual(str(tx_row["command"] or "").upper(), "TX")
+                self.assertEqual(str(tx_row["command"] or "").upper(), "TX-PROXY")
 
                 stations = get_map_station_payload()["stations"]
                 station = next((item for item in stations if item["display_callsign"] == "SP8XYZ-9"), None)

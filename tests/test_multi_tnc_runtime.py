@@ -80,7 +80,8 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 VALUES
                     ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APBOX0:=5218.37N/02104.87E-Test beacon', '0', 'TX', 43, '', '2026-01-01T00:00:02+00:00'),
                     ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APBOX0::BLN1     :System bulletin', '0', 'TX', 45, '', '2026-01-01T00:00:01+00:00'),
-                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SP8XYZ-9>APRS,WIDE1-1:>Relayed packet', '0', 'TX', 38, '', '2026-01-01T00:00:00+00:00')
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SP8XYZ-9>APRS,WIDE1-1:>Relayed packet', '0', 'TX', 38, '', '2026-01-01T00:00:00+00:00'),
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SP9AAA-1>APRS:>Remote proxy packet', '0', 'TX-PROXY', 33, '', '2026-01-01T00:00:03+00:00')
                 """
             )
 
@@ -90,6 +91,7 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(row_classes["SQ9MDD-4>APBOX0:=5218.37N/02104.87E-Test beacon"], "traffic-log-row-own-beacon-tx")
             self.assertEqual(row_classes["SQ9MDD-4>APBOX0::BLN1     :System bulletin"], "traffic-log-row-own-message-tx")
             self.assertEqual(row_classes["SP8XYZ-9>APRS,WIDE1-1:>Relayed packet"], "traffic-log-row-repeated-tx")
+            self.assertEqual(row_classes["SP9AAA-1>APRS:>Remote proxy packet"], "traffic-log-row-proxy-tx")
 
     async def test_traffic_snapshot_marks_wx_from_local_callsign_with_other_ssid_as_weather(self) -> None:
         with temporary_database():
