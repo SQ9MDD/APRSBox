@@ -18,7 +18,7 @@
             <div class="band-condition-card-heading">
                 <div>
                     <h2>{{ item.band_label }}</h2>
-                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}" title="Ogólna ocena pasma wyliczona z połączenia lokalnej słyszalności referencji, zajętości kanału i pojawiania się rzadkich stałych stacji.">{{ t(item.label) }}</span>
+                    <span class="status-pill band-condition-status {% if item.label == 'Insufficient data' %}status-unknown{% elif item.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ t(item.label) }}</span>
                 </div>
             </div>
 
@@ -28,14 +28,14 @@
                     <strong>{{ t(item.diagnosis_title) }}</strong>
                     <p>{{ t(item.diagnosis_summary) }}</p>
                 </div>
-                <div class="band-condition-hero-score" title="Końcowy wynik kondycji pasma zbudowany z lokalnej słyszalności referencji, zajętości kanału i openingu wykrytego przez rzadkie stałe stacje.">
+                <div class="band-condition-hero-score">
                     <span class="muted">{{ t("Condition") }}</span>
                     <strong>{{ "%.2f"|format(item.condition_score) }}</strong>
                 </div>
             </section>
 
             <div class="band-condition-card-header">
-                <div class="band-condition-confidence" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
+                <div class="band-condition-confidence">
                     <span class="muted">{{ item.band_label }} {{ t(item.label) }}</span>
                     <strong>{{ t("Confidence") }} {{ "%.0f"|format(item.confidence_score * 100) }}%</strong>
                 </div>
@@ -46,17 +46,17 @@
             </div>
 
             <div class="band-condition-pill-grid">
-                <div class="band-condition-pill band-condition-pill-{{ item.opening_tone }}" title="Wskaźnik openingu wyliczony z obecności stałych stacji, które historycznie są słyszane rzadko albo wcale o tej porze na tym paśmie.">
+                <div class="band-condition-pill band-condition-pill-{{ item.opening_tone }}">
                     <span class="band-condition-pill-label">{{ t("Opening") }}</span>
                     <strong>{{ t(item.opening_label) }}</strong>
                     <span class="band-condition-pill-value">{{ "%.2f"|format(item.dx_opening_score) }}</span>
                 </div>
-                <div class="band-condition-pill band-condition-pill-{{ item.load_tone }}" title="Wskaźnik zajętości kanału wyliczony z korelacji ruchu całkowitego, mobilnego i lokalnej słyszalności referencji.">
+                <div class="band-condition-pill band-condition-pill-{{ item.load_tone }}">
                     <span class="band-condition-pill-label">{{ t("Load") }}</span>
                     <strong>{{ t(item.load_label) }}</strong>
                     <span class="band-condition-pill-value">{{ "%.2f"|format(item.occupancy_score) }}</span>
                 </div>
-                <div class="band-condition-pill band-condition-pill-{{ item.reference_tone }}" title="Znormalizowany wynik pokazujący, czy lokalne stacje referencyjne są słyszane gorzej lub lepiej niż zwykle o tej porze dla tego pasma.">
+                <div class="band-condition-pill band-condition-pill-{{ item.reference_tone }}">
                     <span class="band-condition-pill-label">{{ t("References") }}</span>
                     <strong>{{ t(item.reference_label) }}</strong>
                     <span class="band-condition-pill-value">{{ "%.2f"|format(item.local_reference_score) }}</span>
@@ -75,27 +75,27 @@
             {% endif %}
 
             <dl class="band-condition-stats">
-                <div title="Liczba unikalnych stałych stacji słyszanych w bieżącym krótkim oknie oceny, niezależnie od tego czy są referencjami.">
+                <div>
                     <dt>{{ t("Current fixed stations") }}</dt>
                     <dd>{{ item.current_fixed_station_count }}</dd>
                 </div>
-                <div title="Liczba stałych stacji spoza listy reference, które zostały uznane za rzadkie lub nowe dla tej pory dnia i weszły do składowej openingu.">
+                <div>
                     <dt>{{ t("Rare fixed stations now") }}</dt>
                     <dd>{{ item.dx_station_count }}</dd>
                 </div>
-                <div title="Długoterminowa średnia aktywność ruchu mobilnego dla tej godziny doby i tego pasma. Służy do porównania z aktualnym obciążeniem kanału.">
+                <div>
                     <dt>{{ t("Baseline mobile activity") }}</dt>
                     <dd>{{ "%.1f"|format(item.baseline_mobile_activity) }}</dd>
                 </div>
-                <div title="Średnia bieżąca liczba wszystkich ramek w krótkim oknie oceny dla tego pasma, niezależnie od typu stacji.">
+                <div>
                     <dt>{{ t("Current total activity") }}</dt>
                     <dd>{{ "%.1f"|format(item.current_total_activity) }}</dd>
                 </div>
-                <div title="Długoterminowa średnia liczba wszystkich ramek dla tej godziny doby i tego pasma. Pomaga ocenić, czy kanał jest obecnie bardziej lub mniej zajęty niż zwykle.">
+                <div>
                     <dt>{{ t("Baseline total activity") }}</dt>
                     <dd>{{ "%.1f"|format(item.baseline_total_activity) }}</dd>
                 </div>
-                <div title="Liczba historycznych 5-minutowych bucketów dla tej godziny doby, które zasilają baseline aktywności i wykrywanie rzadkich stałych stacji.">
+                <div>
                     <dt>{{ t("Activity baseline samples") }}</dt>
                     <dd>{{ item.baseline_activity_samples }}</dd>
                 </div>
@@ -231,7 +231,7 @@
                 </div>
             </div>
             <div class="band-condition-confidence-panel">
-                <div class="band-condition-confidence-score" title="Pewność oceny. Zależy od liczby stacji referencyjnych, ilości danych historycznych, aktualnej gęstości danych i wpływu wysokiego ruchu mobilnego.">
+                <div class="band-condition-confidence-score">
                     <span class="muted">{{ primary_band.band_label }}</span>
                     <strong>{{ "%.0f"|format(primary_band.confidence_score * 100) }}%</strong>
                     <span class="status-pill band-condition-status {% if primary_band.label == 'Insufficient data' %}status-unknown{% elif primary_band.condition_score < -0.18 %}status-stopped{% else %}status-running{% endif %}">{{ t(primary_band.label) }}</span>
@@ -320,7 +320,7 @@
                                 <form method="post" action="{{ request.scope.root_path }}/band-condition/reference-stations/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return confirm({{ t('Delete this reference station?')|tojson }});">
                                     <button
                                         type="submit"
-                                        class="table-icon-button"
+                                        class="table-icon-button table-icon-button-danger"
                                         title="{{ t('Delete reference station') }}"
                                         aria-label="{{ t('Delete reference station') }} {{ row.station_key }}"
                                     >

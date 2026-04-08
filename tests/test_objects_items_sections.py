@@ -459,7 +459,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertIn('id="bulletins-message-error"', template_source)
 
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("['igate', 'wx']", base_source)
+        self.assertIn("['igate']", base_source)
         self.assertNotIn("['digi-flows', 'igate', 'bulletins']", base_source)
         helpers_source = Path("app/template_helpers.py").read_text(encoding="utf-8")
         self.assertIn('"label": "Bulletins"', helpers_source)

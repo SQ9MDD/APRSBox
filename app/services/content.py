@@ -286,7 +286,12 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
     beacon_interval_minutes = _normalize_station_interval(payload.get("beacon_interval_minutes"), label="Beacon interval")
     status_interval_minutes = _normalize_station_interval(payload.get("status_interval_minutes"), label="Status interval")
     status_enabled = int(bool(payload.get("status_enabled")))
-    status_text = str(payload.get("status_text") or "").strip()
+    beacon_comment = _normalize_station_text_field(
+        payload.get("beacon_comment", ""), max_length=43, label="Beacon comment"
+    )
+    status_text = _normalize_station_text_field(
+        payload.get("status_text", ""), max_length=62, label="Status text"
+    )
     if status_enabled and not status_text:
         raise ValueError("Status text is required when APRS Status is enabled.")
     symbol_table = str(payload.get("symbol_table", "/") or "/").strip()
@@ -299,7 +304,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
         "beacon_interface_id": beacon_interface_id,
-        "beacon_comment": payload.get("beacon_comment", ""),
+        "beacon_comment": beacon_comment,
         "beacon_interval_minutes": beacon_interval_minutes,
         "beacon_path": payload.get("beacon_path", ""),
         "status_enabled": status_enabled,
@@ -355,6 +360,8 @@ def recent_station_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
         else:
             item["line"] = ""
         item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        skip_reason = str(item.get("last_error") or "").strip()
+        item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
         item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
         jobs.append(item)
     return jobs
@@ -372,7 +379,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     wx_config = get_wx_config()
     station_source_key = _station_source_key(station_settings)
     wx_source_key = _build_source_key(
-        station_settings.get("callsign"),
+        wx_config.get("callsign"),
         wx_config.get("ssid"),
     )
     interface_rows = fetch_all(
@@ -499,6 +506,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         row_class = _traffic_frame_row_class(
             direction=direction,
             line=str(row["line"] or ""),
+            command=str(row["command"] or ""),
             station_source_key=station_source_key,
             wx_source_key=wx_source_key,
         )
@@ -533,6 +541,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
 def _build_source_key(callsign: Any, ssid: Any) -> str:
     callsign_text = str(callsign or "").strip().upper()
     ssid_text = str(ssid or "").strip()
+    if ssid_text == "0":
+        ssid_text = ""
     if not callsign_text:
         return ""
     return f"{callsign_text}-{ssid_text}" if ssid_text else callsign_text
@@ -549,43 +559,67 @@ def _traffic_frame_row_class(
     *,
     direction: str,
     line: str,
+    command: str,
     station_source_key: str,
     wx_source_key: str = "",
 ) -> str:
-    if direction != "TX":
-        return ""
+    classes: list[str] = []
+    normalized_direction = str(direction or "").strip().upper()
+    normalized_command = str(command or "").strip().upper()
+    is_skipped_tx = normalized_direction == "TX" and normalized_command.startswith("TX-SKIP")
+    is_proxy_tx = normalized_direction == "TX" and normalized_command.startswith("TX-PROXY")
+    if is_skipped_tx:
+        classes.append("traffic-log-row-skipped")
 
     parsed = parse_tnc2_frame(line)
     if parsed is None:
-        return ""
+        return " ".join(classes)
 
     source_key = str(parsed.get("source_key") or "").strip().upper()
     if not source_key:
-        return ""
+        return " ".join(classes)
 
     station_source_key = str(station_source_key or "").strip().upper()
     wx_source_key = str(wx_source_key or "").strip().upper()
+    station_callsign = station_source_key.partition("-")[0]
+    source_callsign = str(parsed.get("source_callsign") or "").strip().upper()
 
     aprs_data = parsed.get("aprs_data") or {}
-    packet_group = str(aprs_data.get("packet_group") or "").strip()
-    packet_type_code = str(aprs_data.get("packet_type_code") or "").strip()
+    packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+    packet_type_code = str(aprs_data.get("packet_type_code") or "").strip().lower()
     symbol = str(aprs_data.get("symbol") or "").strip()
+    is_weather = packet_group == "weather" or symbol.endswith("_")
+    is_beacon_or_status = packet_group in {"position", "status"} and not is_weather
+    is_message_or_bulletin = packet_group == "message" and packet_type_code in {
+        "message",
+        "bulletin",
+        "announcement",
+        "group_bulletin",
+    }
+    is_own_station_source = bool(station_source_key) and source_key == station_source_key
+    is_own_wx_source = bool(wx_source_key) and source_key == wx_source_key
+    is_own_callsign = bool(station_callsign) and source_callsign == station_callsign
 
-    if wx_source_key and source_key == wx_source_key:
-        return "traffic-log-row-weather"
+    if normalized_direction == "TX":
+        if is_proxy_tx and source_key and source_key not in {station_source_key, wx_source_key}:
+            classes.append("traffic-log-row-proxy-tx")
+        elif (is_own_wx_source or is_own_callsign) and is_weather:
+            classes.append("traffic-log-row-own-wx-tx")
+        elif is_own_station_source and is_beacon_or_status:
+            classes.append("traffic-log-row-own-beacon-tx")
+        elif is_own_station_source and is_message_or_bulletin:
+            classes.append("traffic-log-row-own-message-tx")
+        elif source_key and source_key not in {station_source_key, wx_source_key}:
+            classes.append("traffic-log-row-repeated-tx")
+    elif normalized_direction == "RX":
+        if (is_own_wx_source or is_own_callsign) and is_weather:
+            classes.append("traffic-log-row-own-wx-rx")
+        elif is_own_station_source and is_beacon_or_status:
+            classes.append("traffic-log-row-own-beacon-rx")
+        elif is_own_station_source and is_message_or_bulletin:
+            classes.append("traffic-log-row-own-message-rx")
 
-    if station_source_key and source_key == station_source_key:
-        if packet_group == "weather" or symbol.endswith("_"):
-            return "traffic-log-row-weather"
-        if packet_group == "position":
-            return "traffic-log-row-local"
-        if packet_type_code == "object":
-            return "traffic-log-row-local"
-        if packet_type_code in {"bulletin", "announcement", "group_bulletin"}:
-            return "traffic-log-row-local"
-        return ""
-
-    return "traffic-log-row-repeated"
+    return " ".join(classes)
 
 
 def _format_monitor_timestamp(timestamp: str | None) -> str:
@@ -646,8 +680,108 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     traffic = dashboard_traffic_summary()
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
-    selected_interface_id = station_settings.get("beacon_interface_id")
+    selected_interface_id_raw = station_settings.get("beacon_interface_id")
+    try:
+        selected_interface_id = int(selected_interface_id_raw) if selected_interface_id_raw not in {None, ""} else None
+    except (TypeError, ValueError):
+        selected_interface_id = None
     selected_interface = next((item for item in interfaces if item.get("id") == selected_interface_id), None)
+    selected_interface_row = (
+        fetch_one(
+            """
+            SELECT id, name, enabled, tx_blocked
+            FROM modems
+            WHERE id = ?
+            """,
+            (selected_interface_id,),
+        )
+        if selected_interface_id is not None
+        else None
+    )
+    selected_interface_enabled = bool(int(selected_interface_row["enabled"])) if selected_interface_row else False
+    selected_interface_tx_blocked = bool(int(selected_interface_row["tx_blocked"])) if selected_interface_row else False
+
+    runtime_rows = fetch_all(
+        """
+        SELECT modem_id, status, status_detail, last_error
+        FROM traffic_runtime_interfaces
+        """
+    )
+    runtime_by_modem_id: dict[int, dict[str, Any]] = {}
+    for row in runtime_rows:
+        if row["modem_id"] is None:
+            continue
+        try:
+            runtime_by_modem_id[int(row["modem_id"])] = dict(row)
+        except (TypeError, ValueError):
+            continue
+    selected_runtime = runtime_by_modem_id.get(selected_interface_id) if selected_interface_id is not None else None
+    runtime_state_row = fetch_one(
+        """
+        SELECT status, status_detail, last_error
+        FROM traffic_runtime_state
+        WHERE id = 1
+        """
+    )
+
+    monitor_status = str((selected_runtime or {}).get("status") or "").strip().lower()
+    monitor_detail = str((selected_runtime or {}).get("status_detail") or "").strip()
+    monitor_error = str((selected_runtime or {}).get("last_error") or "").strip()
+    if not monitor_status and runtime_state_row:
+        monitor_status = str(runtime_state_row["status"] or "").strip().lower()
+        monitor_detail = str(runtime_state_row["status_detail"] or "").strip()
+        monitor_error = str(runtime_state_row["last_error"] or "").strip()
+
+    if not enabled_interfaces:
+        monitor_check_state = "warn"
+        monitor_check_value = "Disabled"
+    elif monitor_error or monitor_status == "error":
+        monitor_check_state = "error"
+        monitor_check_value = "Error"
+    elif monitor_status in {"connected", "running", "idle"}:
+        monitor_check_state = "ok"
+        monitor_check_value = "Enabled"
+    elif monitor_status == "connecting":
+        monitor_check_state = "warn"
+        monitor_check_value = "Enabled"
+    elif monitor_status in {"disabled", "stopped"}:
+        monitor_check_state = "warn"
+        monitor_check_value = "Disabled"
+    elif monitor_status:
+        monitor_check_state = "warn"
+        monitor_check_value = "Unknown"
+    else:
+        monitor_check_state = "warn"
+        monitor_check_value = "Unknown"
+
+    recent_tx_jobs = recent_station_outbound_jobs(limit=1)
+    latest_station_tx_display = "Never"
+    latest_station_tx_state = "warn"
+    latest_station_tx_value = "Never"
+    latest_station_tx_note = ""
+    if recent_tx_jobs:
+        latest_tx = recent_tx_jobs[0]
+        latest_tx_time = _format_monitor_timestamp(str(latest_tx.get("display_time") or ""))
+        if latest_tx_time and latest_tx_time != "-":
+            latest_station_tx_display = latest_tx_time
+        tx_status = str(latest_tx.get("status") or "").strip().lower()
+        if latest_tx.get("is_tx_skipped"):
+            latest_station_tx_state = "warn"
+            latest_station_tx_value = "Skipped"
+            latest_station_tx_note = str(latest_tx.get("last_error") or "").strip()
+        elif tx_status == "failed":
+            latest_station_tx_state = "error"
+            latest_station_tx_value = "Failed"
+            latest_station_tx_note = str(latest_tx.get("last_error") or "").strip() or latest_station_tx_display
+        elif tx_status in {"queued", "processing"}:
+            latest_station_tx_state = "warn"
+            latest_station_tx_value = "Queued"
+            latest_station_tx_note = latest_station_tx_display
+        else:
+            latest_station_tx_state = "ok"
+            latest_station_tx_value = "Sent"
+            latest_station_tx_note = latest_station_tx_display
+
     latest_frame_row = fetch_one(
         """
         SELECT created_at
@@ -657,32 +791,75 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         """
     )
     latest_activity = _format_monitor_timestamp(latest_frame_row["created_at"]) if latest_frame_row else "No traffic yet"
+    callsign = str(station_settings.get("callsign") or "").strip()
+    location_configured = bool(station_settings.get("latitude")) and bool(station_settings.get("longitude"))
+    selected_interface_name = (
+        str(selected_interface_row["name"]).strip()
+        if selected_interface_row and str(selected_interface_row["name"] or "").strip()
+        else (selected_interface["name"] if selected_interface else "Not selected")
+    )
 
     checks = [
         {
             "label": "Callsign",
-            "state": "ok" if station_settings.get("callsign") else "warn",
-            "value": station_settings.get("callsign") or "Not set",
+            "state": "ok" if callsign else "warn",
+            "value": callsign or "Not set",
+            "blocks": not callsign,
         },
         {
             "label": "Location",
-            "state": "ok" if station_settings.get("latitude") and station_settings.get("longitude") else "warn",
-            "value": "Configured" if station_settings.get("latitude") and station_settings.get("longitude") else "Missing coordinates",
+            "state": "ok" if location_configured else "warn",
+            "value": "Configured" if location_configured else "Missing coordinates",
+            "blocks": not location_configured,
         },
         {
             "label": "Beacon interface",
-            "state": "ok" if selected_interface else "warn",
-            "value": selected_interface["name"] if selected_interface else "Not selected",
+            "state": "warn" if not selected_interface_row else ("error" if not selected_interface_enabled else "ok"),
+            "value": selected_interface_name,
+            "note": "Disabled" if selected_interface_row and not selected_interface_enabled else "",
+            "blocks": not selected_interface_row or (selected_interface_row is not None and not selected_interface_enabled),
         },
         {
             "label": "Active interfaces",
             "state": "ok" if enabled_interfaces else "warn",
             "value": str(len(enabled_interfaces)),
+            "blocks": not enabled_interfaces,
+        },
+        {
+            "label": "Traffic Monitor",
+            "state": monitor_check_state,
+            "value": monitor_check_value,
+            "note": monitor_error or monitor_detail,
+            "blocks": monitor_check_state == "error",
+        },
+        {
+            "label": "TX Block",
+            "state": "warn" if not selected_interface_row else ("warn" if selected_interface_tx_blocked else "ok"),
+            "value": "Not selected" if not selected_interface_row else ("On" if selected_interface_tx_blocked else "Off"),
+            "blocks": bool(selected_interface_row) and selected_interface_tx_blocked,
+        },
+        {
+            "label": "TX Enabled",
+            "state": "ok" if bool(station_settings.get("tx_enabled")) else "warn",
+            "value": "On" if bool(station_settings.get("tx_enabled")) else "Off",
+            "blocks": False,
+        },
+        {
+            "label": "APRS Status enabled",
+            "state": "ok" if bool(station_settings.get("status_enabled")) else "warn",
+            "value": "On" if bool(station_settings.get("status_enabled")) else "Off",
+            "blocks": False,
+        },
+        {
+            "label": "Last station TX",
+            "state": latest_station_tx_state,
+            "value": latest_station_tx_value,
+            "note": latest_station_tx_note,
+            "blocks": False,
         },
     ]
-    next_steps = [item for item in checks if item["state"] != "ok"]
-    ready_count = sum(1 for item in checks if item["state"] == "ok")
-    beacon_ready = ready_count == len(checks)
+    next_steps = [item for item in checks if item["blocks"] and item["state"] != "ok"]
+    beacon_ready = len(next_steps) == 0
 
     if traffic["heard_stations"] > 0 and traffic["decoded_aprs"] > 0:
         hero = {
@@ -723,13 +900,13 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             {"label": "Heard stations", "value": str(traffic["heard_stations"]), "suffix": "in last h"},
             {"label": "APRS frames", "value": str(traffic["decoded_aprs"]), "suffix": "/ h"},
             {"label": "Active interfaces", "value": str(len(enabled_interfaces)), "suffix": ""},
-            {"label": "Last traffic", "value": latest_activity, "suffix": ""},
+            {"label": "Last station TX", "value": latest_station_tx_display, "suffix": ""},
         ],
         "checks": checks,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,
-        "station_callsign": station_settings.get("callsign") or "Not set",
-        "selected_interface_name": selected_interface["name"] if selected_interface else "Not selected",
+        "station_callsign": callsign or "Not set",
+        "selected_interface_name": selected_interface_name,
         "latest_activity": latest_activity,
         "band_summary": band_summary,
     }
@@ -2586,6 +2763,23 @@ def _normalize_printable_ascii(value: str) -> str:
     return value
 
 
+def _ensure_printable_station_ascii(value: str, *, label: str) -> str:
+    try:
+        return _normalize_printable_ascii(value)
+    except ValueError as exc:
+        raise ValueError(f"{label} may contain only printable ASCII characters.") from exc
+
+
+def _normalize_station_text_field(value: Any, *, max_length: int, label: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    normalized = _ensure_printable_station_ascii(text, label=label)
+    if len(normalized) > max_length:
+        raise ValueError(f"{label} must be {max_length} printable ASCII characters or fewer.")
+    return normalized
+
+
 def _normalize_aprs_message_text(value: str) -> str:
     if len(value) > 67:
         raise ValueError("Message text must be 67 ASCII characters or fewer.")
@@ -2751,6 +2945,8 @@ def _build_preview_source(station_settings: dict[str, Any]) -> str:
     if not callsign:
         return ""
     ssid = str(station_settings.get("ssid") or "").strip()
+    if ssid == "0":
+        ssid = ""
     return f"{callsign}-{ssid}" if ssid else callsign
 
 

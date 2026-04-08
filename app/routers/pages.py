@@ -239,7 +239,7 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
     ]
     return {
         "interface_options": [{"value": "", "label": "Select interface"}] + interface_options,
-        "ssid_options": [{"value": "", "label": "None"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
+        "ssid_options": [{"value": "", "label": "Select SSID"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
         "symbol_table_options": [
             {"value": "/", "label": "Primary (/)"},
             {"value": "\\", "label": "Alternate (\\)"},
@@ -568,6 +568,7 @@ def modems_create(
     device_path: str = Form(""),
     baud_rate: int | None = Form(None),
     enabled: str | None = Form(None),
+    tx_blocked: str | None = Form(None),
     expose_port_enabled: str | None = Form(None),
     expose_bind_address: str = Form("0.0.0.0"),
     expose_port: int | None = Form(8002),
@@ -586,6 +587,7 @@ def modems_create(
         "device_path": device_path.strip(),
         "baud_rate": baud_rate,
         "enabled": enabled,
+        "tx_blocked": tx_blocked,
         "expose_port_enabled": expose_port_enabled,
         "expose_bind_address": expose_bind_address.strip(),
         "expose_port": expose_port,

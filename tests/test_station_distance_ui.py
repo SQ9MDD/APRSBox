@@ -13,7 +13,8 @@ class StationDistanceUiTests(unittest.TestCase):
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("function formatDistance(distanceKm)", script_source)
         self.assertIn("station.distance_km", script_source)
-        self.assertIn("Odległość:", script_source)
+        self.assertIn("i18n.distance", script_source)
+        self.assertIn("root.dataset.i18nDistance", script_source)
 
     def test_map_script_skips_marker_rerender_when_station_payload_is_unchanged(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")

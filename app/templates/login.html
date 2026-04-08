@@ -16,7 +16,12 @@
     <main class="login-card">
         <div class="panel-body">
             <div class="login-topbar">
-                <h1>APRSBox</h1>
+                <div class="login-brand">
+                    <h1>APRSBox</h1>
+                    {% if station_identity %}
+                    <span class="login-station-identity">{{ station_identity }}</span>
+                    {% endif %}
+                </div>
                 <button type="button" class="theme-toggle" id="theme-toggle">{{ t("Switch to night mode") }}</button>
             </div>
             {% if login_error %}
@@ -34,7 +39,10 @@
                 <button type="submit" class="button">{{ t("Sign In") }}</button>
             </form>
         </div>
-        <div class="copyright">© SQ9MDD 2026</div>
+        <div class="login-meta">
+            <span class="login-version">{{ t("Version") }} {{ app_version }}</span>
+            <span class="login-copyright">© SQ9MDD 2026</span>
+        </div>
     </main>
     <script>
         (() => {

@@ -12,6 +12,12 @@
         color: var(--danger, #c62828);
         font-weight: 600;
     }
+
+    .station-tx-row-skipped td {
+        text-decoration: line-through;
+        text-decoration-thickness: 1.3px;
+        opacity: 0.82;
+    }
 </style>
 {% endblock %}
 
@@ -75,7 +81,66 @@
                     </label>
                     <label>
                         <span>{{ t("Beacon Path") }}</span>
-                        <input type="text" name="beacon_path" value="{{ station.beacon_path }}" placeholder="WIDE2-2">
+                        <input type="text" name="beacon_path" value="{{ station.beacon_path }}">
+                    </label>
+                    <label class="full">
+                        <span>{{ t("Get location") }}</span>
+                        <button type="button" class="button button-secondary location-picker-button" id="station-open-map-picker">
+                            <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
+                            <span>{{ t("Get location") }}</span>
+                        </button>
+                    </label>
+                    <label>
+                        <span>{{ t("Latitude") }}</span>
+                        <input type="text" name="latitude" value="{{ station.latitude }}">
+                    </label>
+                    <label>
+                        <span>{{ t("Longitude") }}</span>
+                        <input type="text" name="longitude" value="{{ station.longitude }}">
+                    </label>
+                    <label>
+                        <span>{{ t("Symbol Table") }}</span>
+                        <select name="symbol_table" id="station-symbol-table">
+                            {% for option in symbol_table_options %}
+                            <option value="{{ option.value }}" {% if station.symbol_table == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="station-symbol-field">
+                        <span>{{ t("Symbol Code") }}</span>
+                        <div class="station-symbol-picker">
+                            <input type="hidden" name="symbol_code" id="station-symbol-code" value="{{ station.symbol_code or '>' }}">
+                            <div class="station-symbol-dropdown" id="station-symbol-dropdown">
+                                <button type="button" class="station-symbol-trigger" id="station-symbol-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                    <span class="station-symbol-trigger-copy">
+                                        <img id="station-symbol-trigger-image" src="{{ request.scope.root_path }}/static/icons/verG/x.gif" alt="">
+                                        <span id="station-symbol-trigger-text">{{ t("Select symbol") }}</span>
+                                    </span>
+                                    <span class="station-symbol-trigger-caret">▾</span>
+                                </button>
+                                <div class="station-symbol-menu" id="station-symbol-menu" role="listbox" tabindex="-1" aria-label="{{ t('Symbol Code') }}">
+                                    {% for option in symbol_code_options %}
+                                    <button
+                                        type="button"
+                                        class="station-symbol-option{% if station.symbol_code == option.value %} active{% endif %}"
+                                        data-value="{{ option.value }}"
+                                        data-label="{{ option.label }}"
+                                        data-primary-icon="{{ request.scope.root_path }}/static/{{ option.primary_icon }}"
+                                        data-alternate-icon="{{ request.scope.root_path }}/static/{{ option.alternate_icon }}"
+                                        role="option"
+                                        aria-selected="{% if station.symbol_code == option.value %}true{% else %}false{% endif %}"
+                                    >
+                                        <img class="station-symbol-option-image" src="{{ request.scope.root_path }}/static/{{ option.primary_icon }}" alt="">
+                                        <span class="station-symbol-option-label">{{ option.label }}</span>
+                                    </button>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
+                        <span>{{ t("Enable automatic beacon transmission every selected interval") }}</span>
                     </label>
                 </div>
             </div>
@@ -85,10 +150,6 @@
                     <p class="section-lead">{{ t("Status is sent as a separate APRS frame with data type identifier <code>&gt;</code>, independent from the position beacon.")|safe }}</p>
                 </div>
                 <div class="form-grid station-settings-subgrid">
-                    <label class="full checkbox-row">
-                        <input type="checkbox" name="status_enabled" value="1" {% if station.status_enabled %}checked{% endif %}>
-                        <span>{{ t("Enable periodic APRS Status transmission") }}</span>
-                    </label>
                     <label>
                         <span>
                             {{ t("Status Text") }}
@@ -111,67 +172,12 @@
                             {% endfor %}
                         </select>
                     </label>
+                    <label class="full checkbox-row">
+                        <input type="checkbox" name="status_enabled" value="1" {% if station.status_enabled %}checked{% endif %}>
+                        <span>{{ t("Enable periodic APRS Status transmission") }}</span>
+                    </label>
                 </div>
             </div>
-            <label class="full">
-                <span>{{ t("Get location") }}</span>
-                <button type="button" class="button button-secondary location-picker-button" id="station-open-map-picker">
-                    <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
-                    <span>{{ t("Get location") }}</span>
-                </button>
-            </label>
-            <label>
-                <span>{{ t("Latitude") }}</span>
-                <input type="text" name="latitude" value="{{ station.latitude }}">
-            </label>
-            <label>
-                <span>{{ t("Longitude") }}</span>
-                <input type="text" name="longitude" value="{{ station.longitude }}">
-            </label>
-            <label>
-                <span>{{ t("Symbol Table") }}</span>
-                <select name="symbol_table" id="station-symbol-table">
-                    {% for option in symbol_table_options %}
-                    <option value="{{ option.value }}" {% if station.symbol_table == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label class="station-symbol-field">
-                <span>{{ t("Symbol Code") }}</span>
-                <div class="station-symbol-picker">
-                    <input type="hidden" name="symbol_code" id="station-symbol-code" value="{{ station.symbol_code or '>' }}">
-                    <div class="station-symbol-dropdown" id="station-symbol-dropdown">
-                        <button type="button" class="station-symbol-trigger" id="station-symbol-trigger" aria-haspopup="listbox" aria-expanded="false">
-                            <span class="station-symbol-trigger-copy">
-                                <img id="station-symbol-trigger-image" src="{{ request.scope.root_path }}/static/icons/verG/x.gif" alt="">
-                                <span id="station-symbol-trigger-text">{{ t("Select symbol") }}</span>
-                            </span>
-                            <span class="station-symbol-trigger-caret">▾</span>
-                        </button>
-                        <div class="station-symbol-menu" id="station-symbol-menu" role="listbox" tabindex="-1" aria-label="{{ t('Symbol Code') }}">
-                            {% for option in symbol_code_options %}
-                            <button
-                                type="button"
-                                class="station-symbol-option{% if station.symbol_code == option.value %} active{% endif %}"
-                                data-value="{{ option.value }}"
-                                data-label="{{ option.label }}"
-                                data-primary-icon="{{ request.scope.root_path }}/static/{{ option.primary_icon }}"
-                                data-alternate-icon="{{ request.scope.root_path }}/static/{{ option.alternate_icon }}"
-                                role="option"
-                                aria-selected="{% if station.symbol_code == option.value %}true{% else %}false{% endif %}"
-                            >
-                                <img class="station-symbol-option-image" src="{{ request.scope.root_path }}/static/{{ option.primary_icon }}" alt="">
-                                <span class="station-symbol-option-label">{{ option.label }}</span>
-                            </button>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </label>
-            <label class="checkbox-row">
-                <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
-                <span>{{ t("Enable automatic beacon transmission every selected interval") }}</span>
-            </label>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save Station Settings") }}</button>
                 <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/station/send-beacon">{{ t("Send beacon") }}</button>
@@ -252,7 +258,7 @@
                 </thead>
                 <tbody>
                     {% for row in beacon_log_rows %}
-                    <tr>
+                    <tr{% if row.is_tx_skipped %} class="station-tx-row-skipped"{% endif %}>
                         <td>{{ row.display_time.replace('T', ' ').replace('+00:00', ' UTC') if row.display_time else '-' }}</td>
                         <td>{{ t(row.kind) }}</td>
                         <td>

@@ -42,6 +42,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             {"name": "device_path", "label": "Path / Adress", "type": "text", "required": False},
             {"name": "baud_rate", "label": "Baud Rate", "type": "number", "required": False},
             {"name": "enabled", "label": "Enabled", "type": "checkbox", "required": False},
+            {"name": "tx_blocked", "label": "Block TX on this interface", "type": "checkbox", "required": False},
             {"name": "expose_port_enabled", "label": "Expose Port", "type": "checkbox", "required": False},
             {"name": "expose_bind_address", "label": "Bind Address", "type": "text", "required": False, "default": "0.0.0.0"},
             {"name": "expose_port", "label": "Port", "type": "number", "required": False, "default": "8002"},

@@ -608,6 +608,19 @@ def mark_outbound_job_sent(job_id: int) -> None:
         )
 
 
+def mark_outbound_job_skipped(job_id: int, reason: str) -> None:
+    timestamp = utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE outbound_jobs
+            SET status = ?, sent_at = ?, last_error = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (OUTBOUND_STATUS_SENT, timestamp, str(reason or "").strip()[:500], timestamp, job_id),
+        )
+
+
 def mark_outbound_job_failed(job_id: int, error: str) -> None:
     timestamp = utc_now()
     with get_connection() as connection:
@@ -799,6 +812,8 @@ def _normalize_symbol_code(value: Any) -> str:
 def _format_station_callsign(callsign: Any, ssid: Any) -> str:
     base = str(callsign or "").strip().upper()
     ssid_text = str(ssid or "").strip()
+    if ssid_text == "0":
+        ssid_text = ""
     return f"{base}-{ssid_text}" if ssid_text else base
 
 

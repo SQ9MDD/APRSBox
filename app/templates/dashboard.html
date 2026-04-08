@@ -83,6 +83,9 @@
                     <div class="dashboard-next-step">
                         <strong>{{ t(item.label) }}</strong>
                         <p>{{ t(item.value) }}</p>
+                        {% if item.note %}
+                        <p class="dashboard-check-note">{{ t(item.note) }}</p>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
@@ -106,9 +109,18 @@
                         <div>
                             <strong>{{ t(item.label) }}</strong>
                             <p>{{ t(item.value) }}</p>
+                            {% if item.note %}
+                            <p class="dashboard-check-note">{{ t(item.note) }}</p>
+                            {% endif %}
                         </div>
-                        <span class="status-pill {% if item.state == 'ok' %}status-running{% else %}status-unknown{% endif %}">
-                            {{ t("OK") if item.state == "ok" else t("Needs attention") }}
+                        <span class="status-pill {% if item.state == 'ok' %}status-running{% elif item.state == 'error' %}status-stopped{% else %}status-unknown{% endif %}">
+                            {% if item.state == "ok" %}
+                            {{ t("OK") }}
+                            {% elif item.state == "error" %}
+                            {{ t("Error") }}
+                            {% else %}
+                            {{ t("Needs attention") }}
+                            {% endif %}
                         </span>
                     </div>
                     {% endfor %}

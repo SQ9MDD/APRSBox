@@ -32,6 +32,15 @@
         classDescription: pageRoot.dataset.i18nClassDescription || "Class description",
         os: pageRoot.dataset.i18nOs || "OS",
         capabilities: pageRoot.dataset.i18nCapabilities || "Capabilities",
+        lastHeard: pageRoot.dataset.i18nLastHeard || "Last heard",
+        source: pageRoot.dataset.i18nSource || "Source",
+        path: pageRoot.dataset.i18nPath || "Path",
+        noPacketHistory: pageRoot.dataset.i18nNoPacketHistory || "No stored packet history is available for this station yet.",
+        noOtherSsids: pageRoot.dataset.i18nNoOtherSsids || "No other known SSIDs are currently available for {callsign}.",
+        current: pageRoot.dataset.i18nCurrent || "current",
+        timestamp: pageRoot.dataset.i18nTimestamp || "Timestamp",
+        destination: pageRoot.dataset.i18nDestination || "Destination",
+        rawPacket: pageRoot.dataset.i18nRawPacket || "Raw packet",
     });
     let map = null;
     let marker = null;
@@ -54,21 +63,27 @@
             .replaceAll("'", "&#39;");
     }
 
+    function formatText(template, params = {}) {
+        return String(template || "").replace(/\{(\w+)\}/g, function (match, key) {
+            return Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match;
+        });
+    }
+
     function renderMeta(station) {
         if (!meta) return;
         const parts = [];
         if (station.last_heard_date) {
-            let heard = `${escapeHtml(station.activity_label || "Last heard")} ${escapeHtml(station.last_heard_date)}`;
+            let heard = `${escapeHtml(station.activity_label || i18n.lastHeard)} ${escapeHtml(station.last_heard_date)}`;
             if (station.last_heard_relative) {
                 heard += ` <span class="muted">(${escapeHtml(station.last_heard_relative)})</span>`;
             }
             parts.push(heard);
         }
         if (station.source) {
-            parts.push(`<span class="muted">• Source ${escapeHtml(station.source)}</span>`);
+            parts.push(`<span class="muted">• ${escapeHtml(i18n.source)} ${escapeHtml(station.source)}</span>`);
         }
         if (station.path) {
-            parts.push(`<span class="muted">• Path ${escapeHtml(station.path)}</span>`);
+            parts.push(`<span class="muted">• ${escapeHtml(i18n.path)} ${escapeHtml(station.path)}</span>`);
         }
         meta.innerHTML = parts.join(" ");
     }
@@ -126,7 +141,7 @@
     function renderRecentPackets(packets) {
         if (!recentPackets) return;
         if (!packets || !packets.length) {
-            recentPackets.innerHTML = '<p class="muted">No stored packet history is available for this station yet.</p>';
+            recentPackets.innerHTML = `<p class="muted">${escapeHtml(i18n.noPacketHistory)}</p>`;
             return;
         }
         recentPackets.innerHTML = `
@@ -139,9 +154,9 @@
                     </colgroup>
                     <thead>
                         <tr>
-                            <th>Timestamp</th>
-                            <th>Destination</th>
-                            <th>Raw packet</th>
+                            <th>${escapeHtml(i18n.timestamp)}</th>
+                            <th>${escapeHtml(i18n.destination)}</th>
+                            <th>${escapeHtml(i18n.rawPacket)}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -166,7 +181,7 @@
     function renderRelatedSsids(station, items) {
         if (!relatedSsids) return;
         if (!items || items.length <= 1) {
-            relatedSsids.innerHTML = `<p class="muted">No other known SSIDs are currently available for ${escapeHtml(station.base_callsign || "")}.</p>`;
+            relatedSsids.innerHTML = `<p class="muted">${escapeHtml(formatText(i18n.noOtherSsids, { callsign: station.base_callsign || "" }))}</p>`;
             return;
         }
         relatedSsids.innerHTML = `
@@ -174,7 +189,7 @@
                 ${items.map((item) => `
                     <a href="${escapeHtml(item.detail_href && item.detail_href.startsWith("/") ? `${rootPath}${item.detail_href}` : (item.detail_href || "#"))}" class="station-ssid-chip${item.is_current ? " current" : ""}">
                         <span>${escapeHtml(item.display_callsign || "")}</span>
-                        ${item.is_current ? '<span class="muted">current</span>' : ""}
+                        ${item.is_current ? `<span class="muted">${escapeHtml(i18n.current)}</span>` : ""}
                     </a>
                 `).join("")}
             </div>

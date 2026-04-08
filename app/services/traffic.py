@@ -8,6 +8,7 @@ from typing import Any, Callable
 from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
 from app.services.band_condition import process_incoming_frame
 from app.services.messages import process_incoming_tnc2_message
+from app.services.outbound import persist_outbound_frame
 from app.services.serial_tnc import (
     close_serial_device,
     normalize_serial_baud_rate,
@@ -48,6 +49,7 @@ class _TrafficModemRuntime:
         self._last_error: str | None = None
         self._updated_at = utc_now()
         self._kiss_buffer = bytearray()
+        self._proxy_uplink_buffer = bytearray()
         self._tnc_writer: asyncio.StreamWriter | None = None
         self._tnc_serial_fd: int | None = None
         self._tnc_write_lock = asyncio.Lock()
@@ -184,7 +186,7 @@ class _TrafficModemRuntime:
         while not self._stop_event.is_set():
             modem = self._load_active_modem()
             if modem is None:
-                self._kiss_buffer.clear()
+                self._clear_kiss_buffers()
                 await self._stop_proxy_server()
                 self._set_state(
                     status="idle",
@@ -238,7 +240,7 @@ class _TrafficModemRuntime:
             await self._sleep(self._reconnect_delay)
             return
 
-        self._kiss_buffer.clear()
+        self._clear_kiss_buffers()
         connect_message = f"Connected to TCP TNC {modem['name']} at {host}:{port}"
         self._tnc_writer = writer
         proxy_error = await self._sync_proxy_server(modem)
@@ -288,7 +290,7 @@ class _TrafficModemRuntime:
             await self._sleep(self._reconnect_delay)
             return
 
-        self._kiss_buffer.clear()
+        self._clear_kiss_buffers()
         self._tnc_serial_fd = serial_fd
         connect_message = f"Connected to serial TNC {modem['name']} at {device_path} ({baud_rate} baud)"
         proxy_error = await self._sync_proxy_server(modem)
@@ -313,7 +315,7 @@ class _TrafficModemRuntime:
         while not self._stop_event.is_set():
             current_modem = self._load_active_modem()
             if current_modem != modem:
-                self._kiss_buffer.clear()
+                self._clear_kiss_buffers()
                 self._set_state(
                     status="idle",
                     detail="Active TNC configuration changed. Reconnecting.",
@@ -335,7 +337,7 @@ class _TrafficModemRuntime:
 
             if not chunk:
                 message = f"TCP TNC {host}:{port} closed the connection."
-                self._kiss_buffer.clear()
+                self._clear_kiss_buffers()
                 self._set_state(status="error", detail=message, modem=modem, error="Remote side closed the connection.")
                 log_event("WARNING", "traffic", message)
                 await self._sleep(self._reconnect_delay)
@@ -354,7 +356,7 @@ class _TrafficModemRuntime:
         while not self._stop_event.is_set():
             current_modem = self._load_active_modem()
             if current_modem != modem:
-                self._kiss_buffer.clear()
+                self._clear_kiss_buffers()
                 self._set_state(
                     status="idle",
                     detail="Active TNC configuration changed. Reconnecting.",
@@ -407,6 +409,70 @@ class _TrafficModemRuntime:
                 continue
 
             self._record_kiss_frame(raw_frame)
+
+    def _consume_proxy_uplink_chunk(self, chunk: bytes) -> None:
+        self._proxy_uplink_buffer.extend(chunk)
+
+        while True:
+            try:
+                start = self._proxy_uplink_buffer.index(KISS_FEND)
+            except ValueError:
+                if len(self._proxy_uplink_buffer) > 8192:
+                    self._proxy_uplink_buffer.clear()
+                return
+
+            if start > 0:
+                del self._proxy_uplink_buffer[:start]
+
+            if len(self._proxy_uplink_buffer) < 2:
+                return
+
+            try:
+                end = self._proxy_uplink_buffer.index(KISS_FEND, 1)
+            except ValueError:
+                return
+
+            raw_frame = bytes(self._proxy_uplink_buffer[1:end])
+            del self._proxy_uplink_buffer[: end + 1]
+
+            if not raw_frame:
+                continue
+
+            self._record_proxy_uplink_frame(raw_frame)
+
+    def _record_proxy_uplink_frame(self, raw_frame: bytes) -> None:
+        command = raw_frame[0]
+        command_id = command & 0x0F
+        if command_id != 0x00:
+            return
+
+        port = (command >> 4) & 0x0F
+        payload = self._kiss_unescape(raw_frame[1:])
+        decoded = self._decode_ax25_to_tnc2(payload)
+        if decoded is None:
+            return
+
+        interface_id: int | None = None
+        band = ""
+        with self._lock:
+            if self._active_modem:
+                try:
+                    interface_id = int(self._active_modem["id"])
+                except (TypeError, ValueError, KeyError):
+                    interface_id = None
+                band = str(self._active_modem.get("band") or "").strip()
+            self._updated_at = utc_now()
+
+        kiss_frame = bytes([KISS_FEND]) + raw_frame + bytes([KISS_FEND])
+        persist_outbound_frame(
+            source=self._format_modem_label(),
+            interface_id=interface_id,
+            band=band,
+            line=decoded,
+            port=str(port),
+            command="TX-PROXY",
+            payload_hex=kiss_frame.hex(" ").upper(),
+        )
 
     def _record_kiss_frame(self, raw_frame: bytes) -> None:
         command = raw_frame[0]
@@ -629,7 +695,7 @@ class _TrafficModemRuntime:
                     break
 
                 try:
-                    await self._forward_client_chunk_to_tnc(chunk)
+                    await self._forward_client_chunk_to_tnc(chunk, record_proxy_tx=True)
                 except OSError as exc:
                     log_event("WARNING", "traffic", f"Forward from expose port client {client_host} failed: {exc}")
                     break
@@ -660,14 +726,18 @@ class _TrafficModemRuntime:
                 await self._close_proxy_client(writer)
             self._update_proxy_state(active_clients=len(self._proxy_clients))
 
-    async def _forward_client_chunk_to_tnc(self, chunk: bytes) -> None:
+    async def _forward_client_chunk_to_tnc(self, chunk: bytes, *, record_proxy_tx: bool = False) -> None:
         async with self._tnc_write_lock:
             if self._tnc_writer is not None:
                 self._tnc_writer.write(chunk)
                 await self._tnc_writer.drain()
+                if record_proxy_tx:
+                    self._consume_proxy_uplink_chunk(chunk)
                 return
             if self._tnc_serial_fd is not None:
                 await asyncio.to_thread(write_serial_data, self._tnc_serial_fd, chunk)
+                if record_proxy_tx:
+                    self._consume_proxy_uplink_chunk(chunk)
                 return
             raise RuntimeError("TNC connection is not available.")
 
@@ -933,6 +1003,10 @@ class _TrafficModemRuntime:
         if port < 1 or port > 65535:
             return None
         return host.strip(), port
+
+    def _clear_kiss_buffers(self) -> None:
+        self._kiss_buffer.clear()
+        self._proxy_uplink_buffer.clear()
 
 
 class TrafficMonitorService:

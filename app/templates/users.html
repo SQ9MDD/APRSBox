@@ -5,12 +5,12 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>User Management</h2>
-                <p class="section-lead">Only administrators can manage accounts and assign one of the built-in roles: <code>admin</code>, <code>operator</code>, or <code>viewer</code>.</p>
+                <h2>{{ t("User Management") }}</h2>
+                <p class="section-lead">{{ t("Only administrators can manage accounts and assign one of the built-in roles: <code>admin</code>, <code>operator</code>, or <code>viewer</code>.")|safe }}</p>
             </div>
         </div>
         {% if flash %}
-        <div class="alert">{{ flash }}</div>
+        <div class="alert">{{ t(flash) }}</div>
         {% endif %}
     </div>
 </section>
@@ -20,18 +20,18 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Users List</h2>
+                    <h2>{{ t("Users List") }}</h2>
                 </div>
             </div>
             <div class="table-wrap">
                 <table class="data-table compact-table users-table">
                     <thead>
                         <tr>
-                            <th>Username</th>
-                            <th>Role</th>
-                            <th>Status</th>
-                            <th>Last login</th>
-                            <th>Actions</th>
+                            <th>{{ t("Username") }}</th>
+                            <th>{{ t("Role") }}</th>
+                            <th>{{ t("Status") }}</th>
+                            <th>{{ t("Last login") }}</th>
+                            <th>{{ t("Actions") }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -41,7 +41,7 @@
                             <td>{{ user.role }}</td>
                             <td>
                                 <span class="status-pill {{ 'status-running' if user.is_active else 'status-stopped' }}">
-                                    {{ "active" if user.is_active else "disabled" }}
+                                    {{ t("Active") if user.is_active else t("Disabled") }}
                                 </span>
                             </td>
                             <td>{{ user.last_login_display }}</td>
@@ -57,8 +57,8 @@
                                     <button
                                         type="submit"
                                         class="table-icon-button"
-                                        title="{{ 'Disable' if user.is_active else 'Enable' }} user"
-                                        aria-label="{{ 'Disable' if user.is_active else 'Enable' }} user {{ user.username }}"
+                                        title="{{ t('Disable user') if user.is_active else t('Enable user') }}"
+                                        aria-label="{{ (t('Disable user') if user.is_active else t('Enable user')) }} {{ user.username }}"
                                         {% if user.is_current_user %}disabled{% endif %}
                                     >
                                         <img src="{{ request.scope.root_path }}/static/icons/{{ 'account-off.svg' if user.is_active else 'account-reactivate.svg' }}" alt="">
@@ -69,13 +69,13 @@
                                     action="{{ request.scope.root_path }}/admin/users/{{ user.id }}/delete"
                                     class="table-action-form"
                                     onclick="event.stopPropagation();"
-                                    onsubmit="event.stopPropagation(); return confirm('Delete user {{ user.username }}?');"
+                                    onsubmit="event.stopPropagation(); return confirm({{ tf('Delete user {username}?', {'username': user.username})|tojson }});"
                                 >
                                     <button
                                         type="submit"
-                                        class="table-icon-button"
-                                        title="Delete user"
-                                        aria-label="Delete user {{ user.username }}"
+                                        class="table-icon-button table-icon-button-danger"
+                                        title="{{ t('Delete user') }}"
+                                        aria-label="{{ t('Delete user') }} {{ user.username }}"
                                         {% if user.is_current_user %}disabled{% endif %}
                                     >
                                         <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
@@ -94,7 +94,7 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>{{ "Edit User" if edit_user else "Create User" }}</h2>
+                    <h2>{{ t("Edit User") if edit_user else t("Create User") }}</h2>
                 </div>
             </div>
             <form method="post" action="{{ request.scope.root_path }}/admin/users" class="form-grid">
@@ -102,21 +102,27 @@
                 <input type="hidden" name="record_id" value="{{ edit_user.id }}">
                 {% endif %}
                 <label>
-                    <span>Username</span>
+                    <span>{{ t("Username") }}</span>
                     <input type="text" name="username" value="{{ edit_user.username if edit_user else '' }}" {% if edit_user %}readonly{% else %}required{% endif %}>
                 </label>
                 <label>
-                    <span>{{ "New password" if edit_user else "Password" }}</span>
+                    <span>{{ t("New password") if edit_user else t("Password") }}</span>
                     <div class="password-field-group">
                         <input id="user-password" type="password" name="password" {% if not edit_user %}required{% endif %}>
                         <div class="password-field-actions">
-                            <button type="button" class="button button-secondary" id="generate-password">Generate</button>
-                            <button type="button" class="button button-secondary" id="toggle-password-visibility">Show</button>
+                            <button type="button" class="button button-secondary" id="generate-password">{{ t("Generate") }}</button>
+                            <button
+                                type="button"
+                                class="button button-secondary"
+                                id="toggle-password-visibility"
+                                data-label-show="{{ t('Show') }}"
+                                data-label-hide="{{ t('Hide') }}"
+                            >{{ t("Show") }}</button>
                         </div>
                     </div>
                 </label>
                 <label>
-                    <span>Role</span>
+                    <span>{{ t("Role") }}</span>
                     <select name="role" required>
                         {% for role in roles %}
                         <option value="{{ role }}" {% if edit_user and edit_user.role == role %}selected{% endif %}>{{ role }}</option>
@@ -125,12 +131,12 @@
                 </label>
                 <label class="checkbox-row">
                     <input type="checkbox" name="is_active" value="1" {% if edit_user %}{% if edit_user.is_active %}checked{% endif %}{% else %}checked{% endif %}>
-                    <span>User is active</span>
+                    <span>{{ t("User is active") }}</span>
                 </label>
                 <div class="form-actions">
-                    <button type="submit" class="button">{{ "Save Changes" if edit_user else "Create User" }}</button>
+                    <button type="submit" class="button">{{ t("Save Changes") if edit_user else t("Create User") }}</button>
                     {% if edit_user %}
-                    <a href="{{ request.scope.root_path }}/admin/users" class="button button-secondary">Cancel</a>
+                    <a href="{{ request.scope.root_path }}/admin/users" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% endif %}
                 </div>
             </form>
@@ -159,9 +165,11 @@
 
         const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         const passwordLength = 16;
+        const showLabel = toggleVisibilityButton.dataset.labelShow || "Show";
+        const hideLabel = toggleVisibilityButton.dataset.labelHide || "Hide";
 
         const syncPasswordVisibilityLabel = () => {
-            toggleVisibilityButton.textContent = passwordInput.type === "password" ? "Show" : "Hide";
+            toggleVisibilityButton.textContent = passwordInput.type === "password" ? showLabel : hideLabel;
         };
 
         const buildPassword = () => {

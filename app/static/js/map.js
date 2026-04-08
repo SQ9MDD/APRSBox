@@ -22,6 +22,24 @@
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
+    const locale = document.documentElement.lang || undefined;
+    const relativeTimeFormatter = (typeof Intl !== "undefined" && typeof Intl.RelativeTimeFormat === "function")
+        ? new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+        : null;
+    const i18n = Object.freeze({
+        aprsClient: root.dataset.i18nAprsClient || "APRS client",
+        lastActivity: root.dataset.i18nLastActivity || "Last activity",
+        age: root.dataset.i18nAge || "Age",
+        source: root.dataset.i18nSource || "Source",
+        path: root.dataset.i18nPath || "Path",
+        destination: root.dataset.i18nDestination || "Destination",
+        distance: root.dataset.i18nDistance || "Distance",
+        speed: root.dataset.i18nSpeed || "Speed",
+        course: root.dataset.i18nCourse || "Course",
+        altitude: root.dataset.i18nAltitude || "Altitude",
+        packetType: root.dataset.i18nPacketType || "Packet type",
+        comment: root.dataset.i18nComment || "Comment",
+    });
     const stationLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
     const aprsIconSize = [20, 20];
@@ -122,7 +140,7 @@
         if (Number.isNaN(date.getTime())) {
             return String(value);
         }
-        return date.toLocaleString("pl-PL", {
+        return date.toLocaleString(locale, {
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -137,16 +155,23 @@
         if (!Number.isFinite(seconds) || seconds < 0) {
             return "";
         }
+        const relative = relativeTimeFormatter;
+        if (!relative) {
+            if (seconds < 60) return `${Math.round(seconds)}s`;
+            if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+            if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+            return `${Math.round(seconds / 86400)}d`;
+        }
         if (seconds < 60) {
-            return seconds <= 1 ? "teraz" : `${seconds} s temu`;
+            return relative.format(-Math.round(seconds), "second");
         }
         if (seconds < 3600) {
-            return `${Math.floor(seconds / 60)} min temu`;
+            return relative.format(-Math.round(seconds / 60), "minute");
         }
         if (seconds < 86400) {
-            return `${Math.floor(seconds / 3600)} h temu`;
+            return relative.format(-Math.round(seconds / 3600), "hour");
         }
-        return `${Math.floor(seconds / 86400)} d temu`;
+        return relative.format(-Math.round(seconds / 86400), "day");
     }
 
     function formatDistance(distanceKm) {
@@ -213,40 +238,40 @@
         const heardAge = formatAge(station.last_heard_age_s);
         lines.push(title);
         if (station.aprs_device_short) {
-            lines.push(`<span><strong>APRS client:</strong> ${escapeHtml(station.aprs_device_short)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.aprsClient)}:</strong> ${escapeHtml(station.aprs_device_short)}</span>`);
         }
         if (heardAt) {
-            lines.push(`<span><strong>${escapeHtml(station.activity_label || "Last activity")}:</strong> ${escapeHtml(heardAt)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(station.activity_label || i18n.lastActivity)}:</strong> ${escapeHtml(heardAt)}</span>`);
         }
         if (heardAge) {
-            lines.push(`<span><strong>${escapeHtml(station.activity_age_label || "Age")}:</strong> ${escapeHtml(heardAge)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(station.activity_age_label || i18n.age)}:</strong> ${escapeHtml(heardAge)}</span>`);
         }
         if (station.source) {
-            lines.push(`<span><strong>Źródło:</strong> ${escapeHtml(station.source)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.source)}:</strong> ${escapeHtml(station.source)}</span>`);
         }
         if (station.path) {
-            lines.push(`<span><strong>Ścieżka:</strong> ${escapeHtml(station.path)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.path)}:</strong> ${escapeHtml(station.path)}</span>`);
         }
         if (station.destination) {
-            lines.push(`<span><strong>Cel:</strong> ${escapeHtml(station.destination)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.destination)}:</strong> ${escapeHtml(station.destination)}</span>`);
         }
         if (Number.isFinite(station.distance_km)) {
-            lines.push(`<span><strong>Odległość:</strong> ${escapeHtml(formatDistance(station.distance_km))}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.distance)}:</strong> ${escapeHtml(formatDistance(station.distance_km))}</span>`);
         }
         if (station.comment) {
-            lines.push(`<span><strong>Komentarz:</strong> ${escapeHtml(station.comment)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.comment)}:</strong> ${escapeHtml(station.comment)}</span>`);
         }
         if (Number.isFinite(station.speed)) {
-            lines.push(`<span><strong>Prędkość:</strong> ${escapeHtml(`${station.speed} km/h`)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.speed)}:</strong> ${escapeHtml(`${station.speed} km/h`)}</span>`);
         }
         if (Number.isFinite(station.course)) {
-            lines.push(`<span><strong>Kurs:</strong> ${escapeHtml(`${station.course}°`)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.course)}:</strong> ${escapeHtml(`${station.course}°`)}</span>`);
         }
         if (Number.isFinite(station.altitude)) {
-            lines.push(`<span><strong>Wysokość:</strong> ${escapeHtml(`${station.altitude} m`)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.altitude)}:</strong> ${escapeHtml(`${station.altitude} m`)}</span>`);
         }
         if (station.packet_type) {
-            lines.push(`<span><strong>Typ pakietu:</strong> ${escapeHtml(station.packet_type)}</span>`);
+            lines.push(`<span><strong>${escapeHtml(i18n.packetType)}:</strong> ${escapeHtml(station.packet_type)}</span>`);
         }
         return `<div class="map-station-tooltip">${lines.join("")}</div>`;
     }
