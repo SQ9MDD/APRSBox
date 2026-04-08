@@ -323,7 +323,7 @@ class _TrafficModemRuntime:
                 return
 
             try:
-                chunk = await asyncio.wait_for(reader.read(1024), timeout=1.0)
+                chunk = await asyncio.wait_for(reader.read(1024), timeout=5.0)
             except TimeoutError:
                 continue
             except OSError as exc:
