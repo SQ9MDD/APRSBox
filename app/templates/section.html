@@ -134,7 +134,7 @@
                             {% for field in section.fields %}
                             {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
-                            <td>
+                            <td class="modems-summary-icon-cell">
                                 <span
                                     class="tnc-status-icon tnc-status-icon-{{ row.modem_runtime_status or ('enabled' if row[field.name] else 'disabled') }}"
                                     title="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}{% if row.modem_runtime_title %} · {{ row.modem_runtime_title }}{% endif %}"
@@ -147,9 +147,35 @@
                                 </span>
                             </td>
                             {% else %}
-                            <td>
+                            <td{% if section.slug == 'modems' and field.type == 'checkbox' %} class="modems-summary-icon-cell"{% endif %}>
                                 {% if field.type == 'checkbox' %}
+                                {% if section.slug == 'modems' and field.name == 'tx_blocked' %}
+                                {% set tx_blocked = row[field.name] %}
+                                <span
+                                    class="tnc-status-icon {{ 'tnc-status-icon-error' if tx_blocked else 'tnc-status-icon-enabled' }}"
+                                    title="{{ t('On' if tx_blocked else 'Off') }}"
+                                    aria-label="{{ t('On' if tx_blocked else 'Off') }}"
+                                >
+                                    <img
+                                        src="{{ request.scope.root_path }}/static/icons/{{ 'lock.svg' if tx_blocked else 'lock-open.svg' }}"
+                                        alt="{{ t('On' if tx_blocked else 'Off') }}"
+                                    >
+                                </span>
+                                {% elif section.slug == 'modems' and field.name == 'expose_port_enabled' %}
+                                {% set lan_enabled = row[field.name] %}
+                                <span
+                                    class="tnc-status-icon {{ 'tnc-status-icon-enabled' if lan_enabled else 'tnc-status-icon-disabled' }}"
+                                    title="{{ t('On' if lan_enabled else 'Off') }}"
+                                    aria-label="{{ t('On' if lan_enabled else 'Off') }}"
+                                >
+                                    <img
+                                        src="{{ request.scope.root_path }}/static/icons/{{ 'lan-check.svg' if lan_enabled else 'lan-disconnect.svg' }}"
+                                        alt="{{ t('On' if lan_enabled else 'Off') }}"
+                                    >
+                                </span>
+                                {% else %}
                                 {{ t('Yes' if row[field.name] else 'No') }}
+                                {% endif %}
                                 {% else %}
                                 {{ row[field.name] if row[field.name] is not none else '' }}
                                 {% endif %}

@@ -812,6 +812,8 @@ def _normalize_symbol_code(value: Any) -> str:
 def _format_station_callsign(callsign: Any, ssid: Any) -> str:
     base = str(callsign or "").strip().upper()
     ssid_text = str(ssid or "").strip()
+    if ssid_text == "0":
+        ssid_text = ""
     return f"{base}-{ssid_text}" if ssid_text else base
 
 

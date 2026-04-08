@@ -541,6 +541,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
 def _build_source_key(callsign: Any, ssid: Any) -> str:
     callsign_text = str(callsign or "").strip().upper()
     ssid_text = str(ssid or "").strip()
+    if ssid_text == "0":
+        ssid_text = ""
     if not callsign_text:
         return ""
     return f"{callsign_text}-{ssid_text}" if ssid_text else callsign_text
@@ -2800,6 +2802,8 @@ def _build_preview_source(station_settings: dict[str, Any]) -> str:
     if not callsign:
         return ""
     ssid = str(station_settings.get("ssid") or "").strip()
+    if ssid == "0":
+        ssid = ""
     return f"{callsign}-{ssid}" if ssid else callsign
 
 

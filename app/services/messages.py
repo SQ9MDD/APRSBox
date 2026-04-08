@@ -570,10 +570,10 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
 
     local_sender = _local_station_identity()
-    if not local_sender or addressee.upper() != local_sender:
+    if not local_sender or not _callsign_identity_matches(addressee.upper(), local_sender):
         return
 
-    if local_sender and sender == local_sender:
+    if local_sender and _callsign_identity_matches(sender, local_sender):
         return
     received_at = _normalize_timestamp(timestamp)
     if text_field.startswith("?"):
@@ -1244,4 +1244,26 @@ def _local_station_identity() -> str:
     if not callsign:
         return ""
     ssid = str(station.get("ssid") or "").strip()
+    if ssid == "0":
+        ssid = ""
     return f"{callsign}-{ssid}" if ssid else callsign
+
+
+def _canonical_callsign_identity(value: str) -> str:
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        return ""
+    base, ssid = split_callsign_ssid(normalized)
+    if not base:
+        return ""
+    if ssid == "0":
+        return base
+    return f"{base}-{ssid}" if ssid else base
+
+
+def _callsign_identity_matches(left: str, right: str) -> bool:
+    left_canonical = _canonical_callsign_identity(left)
+    right_canonical = _canonical_callsign_identity(right)
+    if not left_canonical or not right_canonical:
+        return False
+    return left_canonical == right_canonical

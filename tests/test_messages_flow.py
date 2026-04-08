@@ -66,10 +66,10 @@ def insert_modem(*, name: str = "Test TNC", device_path: str = "127.0.0.1:9201")
     return int(row["id"])
 
 
-def station_payload(interface_id: int) -> dict[str, str]:
+def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
     return {
         "callsign": "SQ9MDD",
-        "ssid": "4",
+        "ssid": ssid,
         "beacon_interface_id": str(interface_id),
         "beacon_comment": "",
         "beacon_interval_minutes": "30",
@@ -204,6 +204,54 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             cancelled_retry = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(retry_job["id"]),))
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
+
+    async def test_ack_for_local_ssid_zero_matches_when_remote_omits_dash_zero(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id, ssid="0"))
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Test SSID 0", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+            self.assertEqual(message["message_number"], "00")
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(build_message_tnc2(job["payload"]), "SQ9MDD>APBOX0,WIDE1-1::SP8ABC   :Test SSID 0{00")
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(_host: str, _port: int):
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await OutboundService()._process_job(job)
+
+            ack_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "ack",
+                    "addressee": "SQ9MDD",
+                    "message_text": "ack00",
+                }
+            )
+            process_incoming_tnc2_message(ack_line, timestamp="2026-01-01T00:00:15+00:00")
+
+            acked_row = fetch_one("SELECT status, acked_at FROM aprs_messages WHERE id = ?", (int(message["id"]),))
+            assert acked_row is not None
+            self.assertEqual(acked_row["status"], MESSAGE_STATUS_ACKED)
+            self.assertEqual(acked_row["acked_at"], "2026-01-01T00:00:15+00:00")
 
     def test_incoming_message_with_closed_brace_suffix_is_acked(self) -> None:
         with temporary_database():

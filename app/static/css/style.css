@@ -2884,6 +2884,14 @@ code {
     white-space: nowrap;
 }
 
+.modems-summary-icon-cell {
+    text-align: center;
+}
+
+.modems-summary-icon-cell .tnc-status-icon {
+    margin-inline: auto;
+}
+
 .modems-summary-table th:nth-child(1),
 .modems-summary-table td:nth-child(1) {
     width: 48%;

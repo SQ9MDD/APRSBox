@@ -239,7 +239,7 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
     ]
     return {
         "interface_options": [{"value": "", "label": "Select interface"}] + interface_options,
-        "ssid_options": [{"value": "", "label": "None"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
+        "ssid_options": [{"value": "", "label": "Select SSID"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
         "symbol_table_options": [
             {"value": "/", "label": "Primary (/)"},
             {"value": "\\", "label": "Alternate (\\)"},

@@ -121,6 +121,30 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "traffic-log-row-own-wx-tx",
             )
 
+    async def test_traffic_snapshot_treats_local_ssid_zero_as_base_callsign_for_row_classification(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'SQ9MDD',
+                    ssid = '0'
+                WHERE id = 1
+                """
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD>APBOX0:=5218.37N/02104.87E-Test beacon', '0', 'TX', 41, '', '2026-01-01T00:00:02+00:00')
+                """
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            row_classes = {frame["line"]: frame["row_class"] for frame in snapshot["frames"]}
+            self.assertEqual(row_classes["SQ9MDD>APBOX0:=5218.37N/02104.87E-Test beacon"], "traffic-log-row-own-beacon-tx")
+
     async def test_traffic_snapshot_marks_rx_local_rows_and_skipped_tx_rows(self) -> None:
         with temporary_database():
             execute(
