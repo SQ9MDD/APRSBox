@@ -107,6 +107,14 @@ class OutboundService:
             if job.get("interface_enabled") in {0, "0", False}:
                 skip_reason = f"TX skipped: interface {interface_name} is disabled in configuration."
                 mark_outbound_job_skipped(job_id, skip_reason)
+                persist_outbound_frame(
+                    source=interface_name,
+                    interface_id=normalized_interface_id,
+                    band=str(job.get("band") or "").strip(),
+                    line=tnc2_line,
+                    command="TX-SKIP",
+                    payload_hex=frame.hex(" ").upper(),
+                )
                 payload = job.get("payload") or {}
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:
@@ -121,6 +129,14 @@ class OutboundService:
             if normalized_interface_id is not None and self._is_interface_tx_blocked(normalized_interface_id):
                 skip_reason = f"TX skipped: TX is blocked on interface {interface_name}."
                 mark_outbound_job_skipped(job_id, skip_reason)
+                persist_outbound_frame(
+                    source=interface_name,
+                    interface_id=normalized_interface_id,
+                    band=str(job.get("band") or "").strip(),
+                    line=tnc2_line,
+                    command="TX-SKIP",
+                    payload_hex=frame.hex(" ").upper(),
+                )
                 payload = job.get("payload") or {}
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:

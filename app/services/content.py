@@ -379,7 +379,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     wx_config = get_wx_config()
     station_source_key = _station_source_key(station_settings)
     wx_source_key = _build_source_key(
-        station_settings.get("callsign"),
+        wx_config.get("callsign"),
         wx_config.get("ssid"),
     )
     interface_rows = fetch_all(
@@ -506,6 +506,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         row_class = _traffic_frame_row_class(
             direction=direction,
             line=str(row["line"] or ""),
+            command=str(row["command"] or ""),
             station_source_key=station_source_key,
             wx_source_key=wx_source_key,
         )
@@ -556,43 +557,64 @@ def _traffic_frame_row_class(
     *,
     direction: str,
     line: str,
+    command: str,
     station_source_key: str,
     wx_source_key: str = "",
 ) -> str:
-    if direction != "TX":
-        return ""
+    classes: list[str] = []
+    normalized_direction = str(direction or "").strip().upper()
+    normalized_command = str(command or "").strip().upper()
+    is_skipped_tx = normalized_direction == "TX" and normalized_command.startswith("TX-SKIP")
+    if is_skipped_tx:
+        classes.append("traffic-log-row-skipped")
 
     parsed = parse_tnc2_frame(line)
     if parsed is None:
-        return ""
+        return " ".join(classes)
 
     source_key = str(parsed.get("source_key") or "").strip().upper()
     if not source_key:
-        return ""
+        return " ".join(classes)
 
     station_source_key = str(station_source_key or "").strip().upper()
     wx_source_key = str(wx_source_key or "").strip().upper()
+    station_callsign = station_source_key.partition("-")[0]
+    source_callsign = str(parsed.get("source_callsign") or "").strip().upper()
 
     aprs_data = parsed.get("aprs_data") or {}
-    packet_group = str(aprs_data.get("packet_group") or "").strip()
-    packet_type_code = str(aprs_data.get("packet_type_code") or "").strip()
+    packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+    packet_type_code = str(aprs_data.get("packet_type_code") or "").strip().lower()
     symbol = str(aprs_data.get("symbol") or "").strip()
+    is_weather = packet_group == "weather" or symbol.endswith("_")
+    is_beacon_or_status = packet_group in {"position", "status"} and not is_weather
+    is_message_or_bulletin = packet_group == "message" and packet_type_code in {
+        "message",
+        "bulletin",
+        "announcement",
+        "group_bulletin",
+    }
+    is_own_station_source = bool(station_source_key) and source_key == station_source_key
+    is_own_wx_source = bool(wx_source_key) and source_key == wx_source_key
+    is_own_callsign = bool(station_callsign) and source_callsign == station_callsign
 
-    if wx_source_key and source_key == wx_source_key:
-        return "traffic-log-row-weather"
+    if normalized_direction == "TX":
+        if (is_own_wx_source or is_own_callsign) and is_weather:
+            classes.append("traffic-log-row-own-wx-tx")
+        elif is_own_station_source and is_beacon_or_status:
+            classes.append("traffic-log-row-own-beacon-tx")
+        elif is_own_station_source and is_message_or_bulletin:
+            classes.append("traffic-log-row-own-message-tx")
+        elif source_key and source_key not in {station_source_key, wx_source_key}:
+            classes.append("traffic-log-row-repeated-tx")
+    elif normalized_direction == "RX":
+        if (is_own_wx_source or is_own_callsign) and is_weather:
+            classes.append("traffic-log-row-own-wx-rx")
+        elif is_own_station_source and is_beacon_or_status:
+            classes.append("traffic-log-row-own-beacon-rx")
+        elif is_own_station_source and is_message_or_bulletin:
+            classes.append("traffic-log-row-own-message-rx")
 
-    if station_source_key and source_key == station_source_key:
-        if packet_group == "weather" or symbol.endswith("_"):
-            return "traffic-log-row-weather"
-        if packet_group == "position":
-            return "traffic-log-row-local"
-        if packet_type_code == "object":
-            return "traffic-log-row-local"
-        if packet_type_code in {"bulletin", "announcement", "group_bulletin"}:
-            return "traffic-log-row-local"
-        return ""
-
-    return "traffic-log-row-repeated"
+    return " ".join(classes)
 
 
 def _format_monitor_timestamp(timestamp: str | None) -> str:

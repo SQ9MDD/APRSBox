@@ -322,9 +322,16 @@ class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert job_row is not None
             self.assertEqual(job_row["status"], "sent")
 
-            tx_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames WHERE direction = 'tx'")
+            tx_row = fetch_one(
+                """
+                SELECT COUNT(*) AS total
+                FROM traffic_frames
+                WHERE direction = 'tx'
+                  AND command = 'TX-SKIP'
+                """
+            )
             assert tx_row is not None
-            self.assertEqual(int(tx_row["total"]), 0)
+            self.assertEqual(int(tx_row["total"]), 1)
 
             log_row = fetch_one(
                 """
@@ -362,9 +369,16 @@ class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(job_row["status"], "sent")
             self.assertIn("TX skipped:", str(job_row["last_error"] or ""))
 
-            tx_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames WHERE direction = 'tx'")
+            tx_row = fetch_one(
+                """
+                SELECT COUNT(*) AS total
+                FROM traffic_frames
+                WHERE direction = 'tx'
+                  AND command = 'TX-SKIP'
+                """
+            )
             assert tx_row is not None
-            self.assertEqual(int(tx_row["total"]), 0)
+            self.assertEqual(int(tx_row["total"]), 1)
 
             log_row = fetch_one(
                 """

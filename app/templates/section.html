@@ -105,15 +105,17 @@
                     </tbody>
                 </table>
                 {% else %}
-                <table class="data-table">
+                <table class="data-table{% if section.slug == 'modems' %} modems-summary-table compact-table{% endif %}">
                     <thead>
                         <tr>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
+                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <th>{{ t("Status") }}</th>
                             {% elif section.slug == 'modems' and field.name == 'tx_blocked' %}
                             <th>{{ t("TX Block") }}</th>
+                            {% elif section.slug == 'modems' and field.name == 'expose_port_enabled' %}
+                            <th>{{ t("LAN") }}</th>
                             {% else %}
                             <th>{{ t(field.label) }}</th>
                             {% endif %}
@@ -130,7 +132,7 @@
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
+                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <td>
                                 <span
@@ -174,7 +176,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ (6 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">{{ t("No records yet.") }}</td>
+                            <td colspan="{{ (4 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -2684,8 +2684,87 @@ select:focus-visible,
     border-bottom: 0;
 }
 
+.traffic-log-row-own-beacon-tx {
+    background: rgba(79, 141, 255, 0.2);
+}
+
+.traffic-log-row-own-beacon-tx .traffic-log-time,
+.traffic-log-row-own-beacon-tx .traffic-log-source,
+.traffic-log-row-own-beacon-tx .traffic-log-line {
+    color: #4f8dff;
+}
+
+.traffic-log-row-own-beacon-rx {
+    background: rgba(79, 141, 255, 0.08);
+}
+
+.traffic-log-row-own-beacon-rx .traffic-log-time,
+.traffic-log-row-own-beacon-rx .traffic-log-source,
+.traffic-log-row-own-beacon-rx .traffic-log-line {
+    color: #7aa9ff;
+}
+
+.traffic-log-row-own-wx-tx {
+    background: rgba(70, 168, 95, 0.2);
+}
+
+.traffic-log-row-own-wx-tx .traffic-log-time,
+.traffic-log-row-own-wx-tx .traffic-log-source,
+.traffic-log-row-own-wx-tx .traffic-log-line {
+    color: #46a85f;
+}
+
+.traffic-log-row-own-wx-rx {
+    background: rgba(70, 168, 95, 0.08);
+}
+
+.traffic-log-row-own-wx-rx .traffic-log-time,
+.traffic-log-row-own-wx-rx .traffic-log-source,
+.traffic-log-row-own-wx-rx .traffic-log-line {
+    color: #75c98a;
+}
+
+.traffic-log-row-own-message-tx {
+    background: rgba(230, 145, 58, 0.2);
+}
+
+.traffic-log-row-own-message-tx .traffic-log-time,
+.traffic-log-row-own-message-tx .traffic-log-source,
+.traffic-log-row-own-message-tx .traffic-log-line {
+    color: #e8913a;
+}
+
+.traffic-log-row-own-message-rx {
+    background: rgba(230, 145, 58, 0.09);
+}
+
+.traffic-log-row-own-message-rx .traffic-log-time,
+.traffic-log-row-own-message-rx .traffic-log-source,
+.traffic-log-row-own-message-rx .traffic-log-line {
+    color: #f0b36e;
+}
+
+.traffic-log-row-repeated-tx {
+    background: rgba(210, 75, 75, 0.16);
+}
+
+.traffic-log-row-repeated-tx .traffic-log-time,
+.traffic-log-row-repeated-tx .traffic-log-source,
+.traffic-log-row-repeated-tx .traffic-log-line {
+    color: #d24b4b;
+}
+
+.traffic-log-row-skipped .traffic-log-time,
+.traffic-log-row-skipped .traffic-log-source,
+.traffic-log-row-skipped .traffic-log-line {
+    text-decoration: line-through;
+    text-decoration-thickness: 1.3px;
+    opacity: 0.88;
+}
+
+/* Legacy classes kept for compatibility with older snapshots/tests. */
 .traffic-log-row-local {
-    background: rgba(68, 123, 224, 0.1);
+    background: rgba(79, 141, 255, 0.2);
 }
 
 .traffic-log-row-local .traffic-log-time,
@@ -2695,7 +2774,7 @@ select:focus-visible,
 }
 
 .traffic-log-row-weather {
-    background: rgba(70, 168, 95, 0.08);
+    background: rgba(70, 168, 95, 0.2);
 }
 
 .traffic-log-row-weather .traffic-log-time,
@@ -2705,7 +2784,7 @@ select:focus-visible,
 }
 
 .traffic-log-row-repeated {
-    background: rgba(210, 75, 75, 0.08);
+    background: rgba(210, 75, 75, 0.16);
 }
 
 .traffic-log-row-repeated .traffic-log-time,
@@ -2784,6 +2863,29 @@ code {
     display: block;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.modems-summary-table {
+    table-layout: auto;
+}
+
+.modems-summary-table th,
+.modems-summary-table td {
+    white-space: nowrap;
+}
+
+.modems-summary-table th:nth-child(1),
+.modems-summary-table td:nth-child(1) {
+    width: 48%;
+    max-width: 24rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.modems-summary-table th:last-child,
+.modems-summary-table td:last-child {
+    width: 3.5rem;
+    text-align: center;
 }
 
 .wx-mapping-groups,
