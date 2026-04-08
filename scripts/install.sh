@@ -479,40 +479,7 @@ wait_for_http() {
     fail "Health check failed for $service_name ($url)"
 }
 
-get_network_ip() {
-    # Try hostname -I (Linux)
-    if command -v hostname >/dev/null 2>&1; then
-        local ips
-        ips="$(hostname -I 2>/dev/null || true)"
-        if [ -n "$ips" ]; then
-            printf '%s\n' "$ips" | awk '{print $1}'
-            return 0
-        fi
-    fi
 
-    # Try ip addr (Linux)
-    if command -v ip >/dev/null 2>&1; then
-        local ip
-        ip="$(ip addr show 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | head -1 || true)"
-        if [ -n "$ip" ]; then
-            printf '%s\n' "$ip"
-            return 0
-        fi
-    fi
-
-    # Try ifconfig (BSD/Darwin)
-    if command -v ifconfig >/dev/null 2>&1; then
-        local ip
-        ip="$(ifconfig 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | head -1 || true)"
-        if [ -n "$ip" ]; then
-            printf '%s\n' "$ip"
-            return 0
-        fi
-    fi
-
-    # Fallback to localhost
-    printf '%s\n' "127.0.0.1"
-}
 
 main() {
     require_root
@@ -542,9 +509,7 @@ main() {
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"
     log ""
-    local app_ip
-    app_ip="$(get_network_ip)"
-    log "Application URL: http://${app_ip}:8000"
+    log "Application URL: http://127.0.0.1:8000"
     log "Login: $ADMIN_USER"
     log "Password: $ADMIN_PASSWORD"
     log ""
