@@ -21,6 +21,7 @@ from app.services.outbound import (
     build_tnc2_kiss_frame,
     claim_next_outbound_job,
     mark_outbound_job_failed,
+    mark_outbound_job_skipped,
     mark_outbound_job_sent,
     persist_outbound_frame,
 )
@@ -103,8 +104,23 @@ class OutboundService:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
             log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
             frame = build_tnc2_kiss_frame(tnc2_line)
+            if job.get("interface_enabled") in {0, "0", False}:
+                skip_reason = f"TX skipped: interface {interface_name} is disabled in configuration."
+                mark_outbound_job_skipped(job_id, skip_reason)
+                payload = job.get("payload") or {}
+                message_kind = str(payload.get("message_kind") or "").strip()
+                if kind == "message" and payload.get("aprs_message_id") is not None:
+                    if message_kind == "direct_message":
+                        register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
+                    elif message_kind == QUERY_MESSAGE_KIND:
+                        register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                    register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                log_event("WARNING", "outbound", f"Skipped {kind} outbound job #{job_id}: interface {interface_name} is disabled")
+                return
             if normalized_interface_id is not None and self._is_interface_tx_blocked(normalized_interface_id):
-                mark_outbound_job_sent(job_id)
+                skip_reason = f"TX skipped: TX is blocked on interface {interface_name}."
+                mark_outbound_job_skipped(job_id, skip_reason)
                 payload = job.get("payload") or {}
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:

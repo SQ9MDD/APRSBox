@@ -12,6 +12,12 @@
         color: var(--danger, #c62828);
         font-weight: 600;
     }
+
+    .station-tx-row-skipped td {
+        text-decoration: line-through;
+        text-decoration-thickness: 1.3px;
+        opacity: 0.82;
+    }
 </style>
 {% endblock %}
 
@@ -252,7 +258,7 @@
                 </thead>
                 <tbody>
                     {% for row in beacon_log_rows %}
-                    <tr>
+                    <tr{% if row.is_tx_skipped %} class="station-tx-row-skipped"{% endif %}>
                         <td>{{ row.display_time.replace('T', ' ').replace('+00:00', ' UTC') if row.display_time else '-' }}</td>
                         <td>{{ t(row.kind) }}</td>
                         <td>

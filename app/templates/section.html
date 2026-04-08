@@ -112,6 +112,8 @@
                             {% if section.slug == 'modems' and field.name in ['device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <th>{{ t("Status") }}</th>
+                            {% elif section.slug == 'modems' and field.name == 'tx_blocked' %}
+                            <th>{{ t("TX Block") }}</th>
                             {% else %}
                             <th>{{ t(field.label) }}</th>
                             {% endif %}
@@ -219,7 +221,7 @@
                     <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if section.slug == 'objects' and field.name == 'comment' %}id="objects-comment-text"{% endif %}{% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else (field.default if field.default is defined else '') }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-enabled"{% endif %} {% if edit_row and edit_row[field.name] %}checked{% endif %}>
-                    <span>{{ t(field.label) }}</span>
+                    <span>{% if section.slug == 'modems' and field.name == 'tx_blocked' %}{{ t("Block TX on this interface") }}{% else %}{{ t(field.label) }}{% endif %}</span>
                     {% elif field.type == 'select' %}
                     <span>{{ t(field.label) }}</span>
                     <select name="{{ field.name }}" {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}{% if section.slug == 'bulletins' and field.name == 'message_kind' %} id="bulletins-message-kind"{% endif %} {% if field.required %}required{% endif %}>

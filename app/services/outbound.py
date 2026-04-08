@@ -608,6 +608,19 @@ def mark_outbound_job_sent(job_id: int) -> None:
         )
 
 
+def mark_outbound_job_skipped(job_id: int, reason: str) -> None:
+    timestamp = utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE outbound_jobs
+            SET status = ?, sent_at = ?, last_error = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (OUTBOUND_STATUS_SENT, timestamp, str(reason or "").strip()[:500], timestamp, job_id),
+        )
+
+
 def mark_outbound_job_failed(job_id: int, error: str) -> None:
     timestamp = utc_now()
     with get_connection() as connection:

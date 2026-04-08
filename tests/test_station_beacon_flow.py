@@ -339,6 +339,46 @@ class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIsNotNone(log_row)
 
+    async def test_disabled_interface_skips_runtime_transmit_and_logs_diagnostic(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(device_path="127.0.0.1:9004")
+            execute("UPDATE modems SET enabled = 0 WHERE id = ?", (interface_id,))
+            update_station_settings(station_payload(interface_id, tx_enabled="1"))
+
+            scheduler = BeaconSchedulerService()
+            scheduler._tick()
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "beacon")
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
+                await outbound_service._process_job(job)
+                open_connection_mock.assert_not_called()
+
+            job_row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert job_row is not None
+            self.assertEqual(job_row["status"], "sent")
+            self.assertIn("TX skipped:", str(job_row["last_error"] or ""))
+
+            tx_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames WHERE direction = 'tx'")
+            assert tx_row is not None
+            self.assertEqual(int(tx_row["total"]), 0)
+
+            log_row = fetch_one(
+                """
+                SELECT message
+                FROM event_logs
+                WHERE category = 'outbound'
+                  AND level = 'WARNING'
+                  AND message LIKE '%is disabled%'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            self.assertIsNotNone(log_row)
+
 
 if __name__ == "__main__":
     unittest.main()

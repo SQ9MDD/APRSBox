@@ -360,6 +360,8 @@ def recent_station_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
         else:
             item["line"] = ""
         item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        skip_reason = str(item.get("last_error") or "").strip()
+        item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
         item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
         jobs.append(item)
     return jobs
