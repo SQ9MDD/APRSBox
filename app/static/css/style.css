@@ -2899,7 +2899,7 @@ code {
 }
 
 .table-wrap .data-table {
-    min-width: max-content;
+    min-width: 100%;
 }
 
 .section-symbol-preview {
