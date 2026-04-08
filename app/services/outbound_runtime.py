@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.db import log_event
+from app.db import fetch_one, log_event
 from app.services.messages import (
     QUERY_MESSAGE_KIND,
     expire_direct_message_timeouts,
@@ -78,6 +78,11 @@ class OutboundService:
             modem_type = str(job.get("modem_type") or "").strip().upper()
             interface_name = str(job.get("interface_name") or f"interface-{job.get('interface_id') or 'unknown'}")
             device_path = str(job.get("device_path") or "").strip()
+            interface_id = job.get("interface_id")
+            try:
+                normalized_interface_id = int(interface_id) if interface_id is not None else None
+            except (TypeError, ValueError):
+                normalized_interface_id = None
 
             kind = str(job.get("kind") or "").strip()
             if kind == "beacon":
@@ -98,6 +103,23 @@ class OutboundService:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
             log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
             frame = build_tnc2_kiss_frame(tnc2_line)
+            if normalized_interface_id is not None and self._is_interface_tx_blocked(normalized_interface_id):
+                mark_outbound_job_sent(job_id)
+                payload = job.get("payload") or {}
+                message_kind = str(payload.get("message_kind") or "").strip()
+                if kind == "message" and payload.get("aprs_message_id") is not None:
+                    if message_kind == "direct_message":
+                        register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
+                    elif message_kind == QUERY_MESSAGE_KIND:
+                        register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                    register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                log_event(
+                    "WARNING",
+                    "outbound",
+                    f"Skipped {kind} outbound job #{job_id}: TX is blocked on interface {interface_name}",
+                )
+                return
             if modem_type == "TCP":
                 endpoint = self._parse_endpoint(device_path)
                 if endpoint is None:
@@ -115,11 +137,6 @@ class OutboundService:
                         pass
                     _ = reader
             elif modem_type == "SERIALL":
-                interface_id = job.get("interface_id")
-                try:
-                    normalized_interface_id = int(interface_id) if interface_id is not None else None
-                except (TypeError, ValueError):
-                    normalized_interface_id = None
                 if self._traffic_monitor is not None:
                     sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
                         interface_id=normalized_interface_id,
@@ -201,3 +218,15 @@ class OutboundService:
         if port < 1 or port > 65535:
             return None
         return host.strip(), port
+
+    def _is_interface_tx_blocked(self, interface_id: int) -> bool:
+        try:
+            row = fetch_one("SELECT tx_blocked FROM modems WHERE id = ?", (interface_id,))
+        except Exception:
+            return False
+        if row is None:
+            return False
+        try:
+            return bool(int(row["tx_blocked"]))
+        except (TypeError, ValueError, KeyError):
+            return False

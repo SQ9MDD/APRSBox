@@ -87,6 +87,7 @@ class SerialTncValidationTests(unittest.TestCase):
                     "device_path": "/dev/ttyACM0",
                     "baud_rate": "9600",
                     "enabled": "1",
+                    "tx_blocked": "1",
                     "expose_port_enabled": "1",
                     "expose_bind_address": "0.0.0.0",
                     "expose_port": "8002",
@@ -99,6 +100,7 @@ class SerialTncValidationTests(unittest.TestCase):
             assert row is not None
             self.assertEqual(row["device_path"], "/dev/ttyACM0")
             self.assertEqual(int(row["baud_rate"]), 9600)
+            self.assertEqual(int(row["tx_blocked"]), 1)
             self.assertEqual(int(row["expose_port_enabled"]), 1)
 
 

@@ -315,6 +315,8 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 self.assertIn("interface_id", columns)
                 self.assertIn("direction", columns)
                 self.assertIn("band", columns)
+                modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
+                self.assertIn("tx_blocked", modem_columns)
                 index_row = connection.execute(
                     """
                     SELECT name

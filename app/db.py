@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS modems (
     device_path TEXT,
     baud_rate INTEGER,
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    tx_blocked INTEGER NOT NULL DEFAULT 0 CHECK (tx_blocked IN (0, 1)),
     expose_port_enabled INTEGER NOT NULL DEFAULT 0 CHECK (expose_port_enabled IN (0, 1)),
     expose_bind_address TEXT NOT NULL DEFAULT '0.0.0.0',
     expose_port INTEGER NOT NULL DEFAULT 8002 CHECK (expose_port BETWEEN 1 AND 65535),
@@ -617,6 +618,14 @@ def init_db() -> None:
                 """
                 ALTER TABLE modems
                 ADD COLUMN band TEXT NOT NULL DEFAULT ''
+                """
+            )
+        if "tx_blocked" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN tx_blocked INTEGER NOT NULL DEFAULT 0
+                CHECK (tx_blocked IN (0, 1))
                 """
             )
         if "expose_port_enabled" not in modem_columns:

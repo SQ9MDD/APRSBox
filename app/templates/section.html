@@ -172,7 +172,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ (5 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">{{ t("No records yet.") }}</td>
+                            <td colspan="{{ (6 if section.slug == 'modems' else section.fields|length + 1) + (1 if can_edit and section.supports_delete else 0) }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
