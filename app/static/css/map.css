@@ -86,10 +86,9 @@
 }
 
 .map-mask-opacity-select {
-    min-width: 4.5rem;
+  min-width: 4.5rem;
     min-height: var(--control-height);
 }
-
 .leaflet-container {
     font: inherit;
     background: var(--panel-soft);
