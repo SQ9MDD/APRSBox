@@ -1,7 +1,7 @@
 # Roadmap
 
-## Kamienie milowe do implementacji
-
+## Kolejne funkcjonalności do implementacji
+- PHG kalkulator
 - items
 - digi filter:
   - duplicate filter
@@ -17,8 +17,8 @@
 - obsluga mic-e status
 - obiekty obszarowe
 
-## Pomysly do implementacji jeszcze nie uporządkowane
-
+## Pomysly do przemyślenia
 - metoalert status
 - meteoalert
-- 
+- webhooki / powiadomienia / telegram ? wlasna apka ?
+- WX Peet Bros
