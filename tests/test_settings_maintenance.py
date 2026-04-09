@@ -69,6 +69,23 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertNotIn('{{ t("Update log") }}', template_source)
         self.assertNotIn("update-log-preview", template_source)
 
+    def test_settings_template_uses_shared_async_action_handler(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("window.aprsboxSubmitSettingsAction = submitSettingsAction;", template_source)
+        self.assertIn('data-settings-action-id="check-gui-version"', template_source)
+        self.assertIn('data-settings-action-id="update-application"', template_source)
+        self.assertIn('data-settings-action-id="restart-services"', template_source)
+        self.assertIn('data-settings-action-id="reboot-host"', template_source)
+        self.assertIn('data-settings-action-id="poweroff-host"', template_source)
+        self.assertIn('data-settings-action-group="update-controls"', template_source)
+        self.assertIn('data-settings-action-group="danger-actions"', template_source)
+
+    def test_settings_styles_include_busy_state_spinner(self) -> None:
+        style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".settings-action-button-busy", style_source)
+        self.assertIn(".settings-progress-spinner", style_source)
+        self.assertIn("@keyframes settings-spin", style_source)
+
     def test_settings_router_contains_danger_zone_endpoints(self) -> None:
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('@router.post("/settings/update-application")', router_source)

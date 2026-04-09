@@ -54,7 +54,14 @@
             </div>
         </div>
         {% if can_manage_updates %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/update-channel" class="form-grid" onsubmit="return aprsboxShowSettingsProgress({{ t('Saving update channel...')|tojson }});">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/update-channel"
+            class="form-grid"
+            data-settings-action-id="update-channel"
+            data-settings-action-group="update-controls"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-channel', group: 'update-controls', message: {{ t('Saving update channel...')|tojson }}, busyLabel: {{ t('Saving...')|tojson }}, lockTimeoutMs: 45000});"
+        >
             <label>
                 <span>{{ t("Update channel") }}</span>
                 <select name="update_channel">
@@ -79,11 +86,25 @@
         {% endif %}
         <p class="muted">{{ t("Update fetches code from the selected channel, runs init-db, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end. GUI may temporarily lose connection.")|safe }}</p>
         <div class="settings-update-actions">
-            <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack" onsubmit="return aprsboxShowSettingsProgress({{ t('Checking versions, please wait...')|tojson }});">
+            <form
+                method="post"
+                action="{{ request.scope.root_path }}/settings/check-gui-version"
+                class="form-stack"
+                data-settings-action-id="check-gui-version"
+                data-settings-action-group="update-controls"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'check-gui-version', group: 'update-controls', message: {{ t('Checking for updates...')|tojson }}, busyLabel: {{ t('Checking...')|tojson }}, lockTimeoutMs: 120000});"
+            >
                 <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
             </form>
             {% if can_manage_updates %}
-            <form method="post" action="{{ request.scope.root_path }}/settings/update-application" class="form-stack" onsubmit="return confirm({{ t('Start application update now?')|tojson }}) && aprsboxStartApplicationUpdateProgress();">
+            <form
+                method="post"
+                action="{{ request.scope.root_path }}/settings/update-application"
+                class="form-stack"
+                data-settings-action-id="update-application"
+                data-settings-action-group="update-controls"
+                onsubmit="return confirm({{ t('Start application update now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson }}, busyLabel: {{ t('Starting update...')|tojson }}, persist: true, lockTimeoutMs: 900000});"
+            >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
             {% endif %}
@@ -118,7 +139,14 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Restart services") }}</h3>
                 <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
-                <form method="post" action="{{ request.scope.root_path }}/settings/restart-services" class="form-stack" onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting service restart, please wait...')|tojson }});">
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/restart-services"
+                    class="form-stack"
+                    data-settings-action-id="restart-services"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson }}, busyLabel: {{ t('Restarting...')|tojson }}, persist: true, lockTimeoutMs: 240000});"
+                >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
             </div>
@@ -126,7 +154,14 @@
                 <h3>{{ t("Reboot host") }}</h3>
                 <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
                 <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
-                <form method="post" action="{{ request.scope.root_path }}/settings/reboot-host" class="form-stack" onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxShowSettingsProgress({{ t('Starting host reboot, please wait...')|tojson }});">
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/reboot-host"
+                    class="form-stack"
+                    data-settings-action-id="reboot-host"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson }}, busyLabel: {{ t('Rebooting...')|tojson }}, persist: true, lockTimeoutMs: 900000});"
+                >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
             </div>
@@ -134,7 +169,14 @@
                 <h3>{{ t("Power off host") }}</h3>
                 <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
                 <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
-                <form method="post" action="{{ request.scope.root_path }}/settings/poweroff-host" class="form-stack" onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxShowSettingsProgress({{ t('Starting host shutdown, please wait...')|tojson }});">
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/poweroff-host"
+                    class="form-stack"
+                    data-settings-action-id="poweroff-host"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson }}, busyLabel: {{ t('Shutting down...')|tojson }}, persist: true, lockTimeoutMs: 1200000});"
+                >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
                 </form>
             </div>
@@ -174,7 +216,13 @@
             {% endif %}
         </dl>
         {% if can_manage_updates %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/update-aprs-device-identification" class="form-stack" onsubmit="return aprsboxShowSettingsProgress({{ t('Starting update, please wait...')|tojson }});">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
+            class="form-stack"
+            data-settings-action-id="update-aprs-device-identification"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson }}, busyLabel: {{ t('Updating...')|tojson }}, lockTimeoutMs: 180000});"
+        >
             <button type="submit" class="button">{{ t("Update now") }}</button>
         </form>
         {% else %}
@@ -206,7 +254,13 @@
             </dd>
         </dl>
         {% if can_manage_database_maintenance %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/vacuum-db" class="form-stack" onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting operation, please wait...')|tojson }});">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/vacuum-db"
+            class="form-stack"
+            data-settings-action-id="vacuum-db"
+            onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson }}, busyLabel: {{ t('Running...')|tojson }}, lockTimeoutMs: 180000});"
+        >
             <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
         </form>
         {% else %}
@@ -220,20 +274,36 @@
 {% block extra_scripts %}
 <script>
     (() => {
+        const rootPath = {{ request.scope.root_path|tojson }};
         const labels = {
             defaultTitle: {{ t("Please wait")|tojson }},
             defaultMessage: {{ t("Operation started. The page will refresh after completion.")|tojson }},
-            updateInProgress: {{ t("Starting application update, please wait...")|tojson }},
-            reconnectHint: {{ t("GUI may temporarily lose connection.")|tojson }},
+            operationTakingLong: {{ t("This operation is taking longer than expected. Please wait or refresh if needed.")|tojson }},
+            updateInProgress: {{ t("Update in progress. Please wait...")|tojson }},
+            restartInProgress: {{ t("Service restart in progress. Please wait...")|tojson }},
+            rebootInProgress: {{ t("Host reboot in progress. Please wait...")|tojson }},
+            poweroffInProgress: {{ t("Host shutdown in progress. Please wait...")|tojson }},
+            reconnectHint: {{ t("GUI may temporarily lose connection while services are restarting.")|tojson }},
             updateFinished: {{ t("Application update finished successfully.")|tojson }},
             updateFailed: {{ t("Application update failed. Check update log for details.")|tojson }},
+            reconnectRecovered: {{ t("Connection restored. Operation appears completed.")|tojson }},
+            reconnectTimeout: {{ t("Operation status timeout. Refresh the page to verify current state.")|tojson }},
         };
-        const updateStateStorageKey = "aprsbox-update-in-progress";
+        const flashMeta = {
+            hasFlash: {{ (flash is not none)|tojson }},
+            success: {{ (flash_success if flash is not none else none)|tojson }},
+        };
+        const pendingActionStorageKey = "aprsbox-settings-pending-action";
+        const legacyUpdateStateStorageKey = "aprsbox-update-in-progress";
+        const reconnectHealthUrl = `${rootPath}/api/messages/unread-status`;
         const backdrop = document.createElement("div");
         backdrop.className = "settings-progress-backdrop";
         backdrop.innerHTML = `
             <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
-                <h3 class="settings-progress-title"></h3>
+                <div class="settings-progress-header">
+                    <span class="settings-progress-spinner" aria-hidden="true"></span>
+                    <h3 class="settings-progress-title"></h3>
+                </div>
                 <p class="settings-progress-message"></p>
             </div>
         `;
@@ -242,20 +312,159 @@
         const titleNode = backdrop.querySelector(".settings-progress-title");
         const messageNode = backdrop.querySelector(".settings-progress-message");
         let hideTimer = null;
+        let lockTimeoutTimer = null;
         let progressLocked = false;
         let updatePollTimer = null;
-        const hideBackdrop = () => {
-            if (progressLocked) return;
-            backdrop.hidden = true;
+        let reconnectPollTimer = null;
+        const activeFormActions = new Set();
+        const actionForms = Array.from(document.querySelectorAll("form[data-settings-action-id]"));
+        const actionButtons = actionForms.reduce((controls, form) => {
+            const formControls = Array.from(form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")).filter(
+                (node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement
+            );
+            return controls.concat(formControls);
+        }, []);
+        for (const control of actionButtons) {
+            if (!control.dataset.settingsOriginalDisabled) {
+                control.dataset.settingsOriginalDisabled = control.disabled ? "1" : "0";
+            }
+            if (control instanceof HTMLButtonElement && !control.dataset.settingsOriginalLabel) {
+                control.dataset.settingsOriginalLabel = control.textContent || "";
+            }
+            if (control instanceof HTMLInputElement && !control.dataset.settingsOriginalLabel) {
+                control.dataset.settingsOriginalLabel = control.value || "";
+            }
+        }
+        const persistentActions = {
+            "update-application": {
+                message: `${labels.updateInProgress} ${labels.reconnectHint}`.trim(),
+                lockTimeoutMs: 900000,
+                group: "update-controls",
+                mode: "update-log",
+                reloadAfterFinish: true,
+            },
+            "restart-services": {
+                message: `${labels.restartInProgress} ${labels.reconnectHint}`.trim(),
+                lockTimeoutMs: 240000,
+                group: "danger-actions",
+                mode: "reconnect",
+                minimumWaitMs: 8000,
+                requireFailure: false,
+                reloadAfterFinish: true,
+            },
+            "reboot-host": {
+                message: `${labels.rebootInProgress} ${labels.reconnectHint}`.trim(),
+                lockTimeoutMs: 900000,
+                group: "danger-actions",
+                mode: "reconnect",
+                minimumWaitMs: 20000,
+                requireFailure: true,
+                reloadAfterFinish: true,
+            },
+            "poweroff-host": {
+                message: `${labels.poweroffInProgress} ${labels.reconnectHint}`.trim(),
+                lockTimeoutMs: 1200000,
+                group: "danger-actions",
+                mode: "reconnect",
+                minimumWaitMs: 20000,
+                requireFailure: true,
+                reloadAfterFinish: true,
+            },
+        };
+        const clearTimers = () => {
             if (hideTimer !== null) {
                 window.clearTimeout(hideTimer);
                 hideTimer = null;
             }
+            if (lockTimeoutTimer !== null) {
+                window.clearTimeout(lockTimeoutTimer);
+                lockTimeoutTimer = null;
+            }
+        };
+        const hideBackdrop = () => {
+            if (progressLocked) return;
+            backdrop.hidden = true;
+            clearTimers();
         };
         const stopUpdatePolling = () => {
             if (updatePollTimer !== null) {
                 window.clearInterval(updatePollTimer);
                 updatePollTimer = null;
+            }
+        };
+        const stopReconnectPolling = () => {
+            if (reconnectPollTimer !== null) {
+                window.clearInterval(reconnectPollTimer);
+                reconnectPollTimer = null;
+            }
+        };
+        const formByActionId = (actionId) =>
+            actionForms.find((form) => String(form.dataset.settingsActionId || "") === String(actionId || ""));
+        const controlsForForm = (form) =>
+            Array.from(form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")).filter(
+                (node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement
+            );
+        const markControlBusy = (control, busyLabel) => {
+            control.classList.add("settings-action-control-busy");
+            if (control instanceof HTMLButtonElement) {
+                control.classList.add("settings-action-button-busy");
+                if (busyLabel) control.textContent = busyLabel;
+            }
+            if (control instanceof HTMLInputElement && busyLabel) {
+                control.value = busyLabel;
+            }
+        };
+        const restoreControls = () => {
+            for (const form of actionForms) {
+                form.removeAttribute("aria-busy");
+                for (const control of controlsForForm(form)) {
+                    const originallyDisabled = control.dataset.settingsOriginalDisabled === "1";
+                    control.disabled = originallyDisabled;
+                    control.classList.remove("settings-action-control-busy");
+                    control.classList.remove("settings-action-button-busy");
+                    if (control instanceof HTMLButtonElement && control.dataset.settingsOriginalLabel !== undefined) {
+                        control.textContent = control.dataset.settingsOriginalLabel;
+                    }
+                    if (control instanceof HTMLInputElement && control.dataset.settingsOriginalLabel !== undefined) {
+                        control.value = control.dataset.settingsOriginalLabel;
+                    }
+                }
+            }
+            activeFormActions.clear();
+        };
+        const disableFormControls = (form, busyLabel = "") => {
+            const controls = controlsForForm(form);
+            if (!controls.length) return;
+            form.setAttribute("aria-busy", "true");
+            let primaryControl = null;
+            if (
+                document.activeElement instanceof HTMLButtonElement ||
+                document.activeElement instanceof HTMLInputElement
+            ) {
+                if (form.contains(document.activeElement)) {
+                    primaryControl = document.activeElement;
+                }
+            }
+            if (!(primaryControl instanceof HTMLButtonElement || primaryControl instanceof HTMLInputElement)) {
+                primaryControl = controls[0];
+            }
+            for (const control of controls) {
+                control.disabled = true;
+                if (control === primaryControl) {
+                    markControlBusy(control, busyLabel);
+                }
+            }
+        };
+        const disableGroupControls = (group, exceptForm) => {
+            if (!group) return;
+            for (const form of actionForms) {
+                if (form === exceptForm) continue;
+                if (String(form.dataset.settingsActionGroup || "") !== String(group)) continue;
+                for (const control of controlsForForm(form)) {
+                    control.disabled = true;
+                    control.classList.add("settings-action-control-busy");
+                }
+                form.setAttribute("aria-busy", "true");
             }
         };
         const parseLogLines = (content) => {
@@ -271,63 +480,92 @@
             return parsed;
         };
         const hasLineAfter = (lines, minAt, marker) => lines.some((entry) => entry.at >= minAt && entry.text.includes(marker));
-        const markUpdateStarted = () => {
+        const savePendingAction = (actionId, startedAt) => {
             try {
-                window.sessionStorage.setItem(updateStateStorageKey, String(Date.now()));
+                window.sessionStorage.setItem(
+                    pendingActionStorageKey,
+                    JSON.stringify({
+                        actionId: String(actionId || ""),
+                        startedAt: Number(startedAt || Date.now()),
+                    })
+                );
+                if (String(actionId || "") === "update-application") {
+                    window.sessionStorage.setItem(legacyUpdateStateStorageKey, String(Number(startedAt || Date.now())));
+                }
             } catch (_error) {
                 // Ignore storage failures; fallback is plain popup display.
             }
         };
-        const clearUpdateStarted = () => {
+        const clearPendingAction = () => {
             try {
-                window.sessionStorage.removeItem(updateStateStorageKey);
+                window.sessionStorage.removeItem(pendingActionStorageKey);
+                window.sessionStorage.removeItem(legacyUpdateStateStorageKey);
             } catch (_error) {
                 // Ignore storage failures.
             }
         };
-        const loadUpdateStartEpoch = () => {
+        const loadPendingAction = () => {
             try {
-                const raw = window.sessionStorage.getItem(updateStateStorageKey);
-                const epoch = Number(raw || "");
-                return Number.isFinite(epoch) ? epoch : 0;
+                const raw = window.sessionStorage.getItem(pendingActionStorageKey);
+                if (!raw) {
+                    const legacyRaw = window.sessionStorage.getItem(legacyUpdateStateStorageKey);
+                    const legacyEpoch = Number(legacyRaw || "");
+                    if (!Number.isFinite(legacyEpoch) || legacyEpoch <= 0) return null;
+                    return { actionId: "update-application", startedAt: legacyEpoch };
+                }
+                const parsed = JSON.parse(raw);
+                if (!parsed || typeof parsed !== "object") return null;
+                const actionId = String(parsed.actionId || "").trim();
+                const startedAt = Number(parsed.startedAt || "");
+                if (!actionId || !Number.isFinite(startedAt) || startedAt <= 0) return null;
+                return { actionId, startedAt };
             } catch (_error) {
-                return 0;
+                return null;
             }
         };
-        const showUpdateFinished = (message) => {
+        const finishPersistentAction = (message, options = {}) => {
+            const shouldReload = Boolean(options.reload);
             stopUpdatePolling();
+            stopReconnectPolling();
             progressLocked = false;
-            clearUpdateStarted();
+            clearPendingAction();
+            restoreControls();
+            clearTimers();
             if (messageNode instanceof HTMLElement) {
                 messageNode.textContent = message;
             }
-            if (hideTimer !== null) window.clearTimeout(hideTimer);
             hideTimer = window.setTimeout(hideBackdrop, 2500);
+            if (shouldReload) {
+                window.setTimeout(() => {
+                    window.location.reload();
+                }, 1200);
+            }
         };
-        const ensureUpdatePoll = () => {
+        const ensureUpdatePoll = (startedAt, config) => {
             if (updatePollTimer !== null) return;
-            const updateStartedAt = loadUpdateStartEpoch();
-            if (!updateStartedAt) return;
-            const logUrl = "{{ request.scope.root_path }}/api/settings/update/log";
-            const minTimestamp = updateStartedAt - 5000;
+            const logUrl = `${rootPath}/api/settings/update/log`;
+            const minTimestamp = Number(startedAt || Date.now()) - 5000;
             progressLocked = true;
             if (titleNode instanceof HTMLElement) titleNode.textContent = labels.defaultTitle;
-            if (messageNode instanceof HTMLElement) messageNode.textContent = `${labels.updateInProgress} ${labels.reconnectHint}`.trim();
+            if (messageNode instanceof HTMLElement) messageNode.textContent = config.message;
             backdrop.hidden = false;
             const poll = async () => {
+                const elapsed = Date.now() - Number(startedAt || Date.now());
+                if (elapsed > Number(config.lockTimeoutMs || 0)) {
+                    finishPersistentAction(labels.reconnectTimeout, { reload: false });
+                    return;
+                }
                 try {
                     const response = await window.fetch(logUrl, { cache: "no-store", credentials: "same-origin" });
                     if (!response.ok) return;
                     const payload = await response.json();
                     const parsedLines = parseLogLines(payload && payload.content);
-                    const started = hasLineAfter(parsedLines, minTimestamp, "Starting application update from");
-                    if (!started) return;
                     if (hasLineAfter(parsedLines, minTimestamp, "Application update finished successfully.")) {
-                        showUpdateFinished(labels.updateFinished);
+                        finishPersistentAction(labels.updateFinished, { reload: Boolean(config.reloadAfterFinish) });
                         return;
                     }
                     if (hasLineAfter(parsedLines, minTimestamp, "ERROR:")) {
-                        showUpdateFinished(labels.updateFailed);
+                        finishPersistentAction(labels.updateFailed, { reload: false });
                     }
                 } catch (_error) {
                     // During service restart fetch can fail; keep waiting.
@@ -336,24 +574,115 @@
             poll();
             updatePollTimer = window.setInterval(poll, 3000);
         };
-        window.aprsboxShowSettingsProgress = (message, options = {}) => {
+        const ensureReconnectPoll = (startedAt, config) => {
+            if (reconnectPollTimer !== null) return;
+            progressLocked = true;
+            if (titleNode instanceof HTMLElement) titleNode.textContent = labels.defaultTitle;
+            if (messageNode instanceof HTMLElement) messageNode.textContent = config.message;
+            backdrop.hidden = false;
+            let sawFailure = false;
+            let consecutiveSuccess = 0;
+            const poll = async () => {
+                const elapsed = Date.now() - Number(startedAt || Date.now());
+                if (elapsed > Number(config.lockTimeoutMs || 0)) {
+                    finishPersistentAction(labels.reconnectTimeout, { reload: false });
+                    return;
+                }
+                try {
+                    const response = await window.fetch(reconnectHealthUrl, {
+                        cache: "no-store",
+                        credentials: "same-origin",
+                    });
+                    if (!response.ok) throw new Error("Reconnect poll failed");
+                    consecutiveSuccess += 1;
+                    const minimumWaitReached = elapsed >= Number(config.minimumWaitMs || 0);
+                    const failureConditionSatisfied = !config.requireFailure || sawFailure;
+                    if (minimumWaitReached && failureConditionSatisfied && consecutiveSuccess >= 2) {
+                        finishPersistentAction(labels.reconnectRecovered, { reload: Boolean(config.reloadAfterFinish) });
+                    }
+                } catch (_error) {
+                    sawFailure = true;
+                    consecutiveSuccess = 0;
+                }
+            };
+            poll();
+            reconnectPollTimer = window.setInterval(poll, 3000);
+        };
+        const showSettingsProgress = (message, options = {}) => {
             if (!(titleNode instanceof HTMLElement) || !(messageNode instanceof HTMLElement)) return true;
+            clearTimers();
             titleNode.textContent = labels.defaultTitle;
             messageNode.textContent = String(message || labels.defaultMessage);
             progressLocked = Boolean(options.locked);
             backdrop.hidden = false;
-            if (hideTimer !== null) window.clearTimeout(hideTimer);
             if (!progressLocked) {
                 hideTimer = window.setTimeout(hideBackdrop, 20000);
+                return true;
+            }
+            const timeoutMs = Number(options.lockTimeoutMs || 0);
+            if (timeoutMs > 0) {
+                lockTimeoutTimer = window.setTimeout(() => {
+                    progressLocked = false;
+                    if (messageNode instanceof HTMLElement) {
+                        messageNode.textContent = labels.operationTakingLong;
+                    }
+                }, timeoutMs);
             }
             return true;
         };
-        window.aprsboxStartApplicationUpdateProgress = () => {
-            markUpdateStarted();
-            stopUpdatePolling();
-            window.aprsboxShowSettingsProgress(`${labels.updateInProgress} ${labels.reconnectHint}`.trim(), { locked: true });
+        const submitSettingsAction = (form, options = {}) => {
+            if (!(form instanceof HTMLFormElement)) return true;
+            const actionId = String(options.actionId || form.dataset.settingsActionId || "");
+            const message = String(options.message || labels.defaultMessage);
+            const busyLabel = String(options.busyLabel || "");
+            const group = String(options.group || form.dataset.settingsActionGroup || "");
+            const persist = Boolean(options.persist);
+            const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
+            if (activeFormActions.has(actionId)) {
+                return false;
+            }
+            activeFormActions.add(actionId);
+            disableFormControls(form, busyLabel);
+            disableGroupControls(group, form);
+            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            if (persist && actionId) {
+                savePendingAction(actionId, Date.now());
+            }
             return true;
         };
+        const resumePendingAction = () => {
+            const pending = loadPendingAction();
+            if (!pending) return;
+            const config = persistentActions[pending.actionId];
+            if (!config) {
+                clearPendingAction();
+                return;
+            }
+            if (flashMeta.hasFlash && flashMeta.success === false) {
+                clearPendingAction();
+                return;
+            }
+            const elapsed = Date.now() - Number(pending.startedAt || Date.now());
+            if (elapsed > Number(config.lockTimeoutMs || 0)) {
+                clearPendingAction();
+                return;
+            }
+            const form = formByActionId(pending.actionId);
+            if (form) {
+                disableFormControls(form, "");
+            }
+            disableGroupControls(config.group, form || null);
+            showSettingsProgress(config.message, { locked: true });
+            if (config.mode === "update-log") {
+                ensureUpdatePoll(pending.startedAt, config);
+                return;
+            }
+            if (config.mode === "reconnect") {
+                ensureReconnectPoll(pending.startedAt, config);
+            }
+        };
+        window.aprsboxShowSettingsProgress = showSettingsProgress;
+        window.aprsboxSubmitSettingsAction = submitSettingsAction;
         window.aprsboxHideSettingsProgress = hideBackdrop;
         backdrop.addEventListener("click", (event) => {
             if (event.target === backdrop) hideBackdrop();
@@ -362,10 +691,15 @@
             if (event.key === "Escape") hideBackdrop();
         });
         window.addEventListener("pageshow", () => {
+            progressLocked = false;
+            clearTimers();
             hideBackdrop();
-            ensureUpdatePoll();
+            stopUpdatePolling();
+            stopReconnectPolling();
+            restoreControls();
+            resumePendingAction();
         });
-        ensureUpdatePoll();
+        resumePendingAction();
     })();
 </script>
 {% endblock %}
