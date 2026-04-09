@@ -9,7 +9,15 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
-from app.db import DEFAULT_EVENT_LOG_KEEP_ROWS, set_app_setting, vacuum_database
+from app.db import (
+    DEFAULT_EVENT_LOG_KEEP_ROWS,
+    create_system_job,
+    fetch_system_job,
+    mark_system_job_error,
+    mark_system_job_running,
+    set_app_setting,
+    vacuum_database,
+)
 from app.i18n import get_app_language, normalize_language, SUPPORTED_LANGUAGE_CODES
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
@@ -89,10 +97,10 @@ from app.services.system import (
     list_update_channels,
     read_update_log,
     save_update_channel,
-    start_application_update,
-    start_host_poweroff,
-    start_host_reboot,
-    start_service_restart,
+    start_application_update_job,
+    start_host_poweroff_job,
+    start_host_reboot_job,
+    start_service_restart_job,
 )
 from app.template_helpers import build_template_context
 from app.services.wx import (
@@ -673,67 +681,43 @@ def settings_page(
 
 @router.post("/settings/check-gui-version")
 def settings_check_gui_version(
-    request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(get_current_user),
 ) -> object:
-    templates = request.app.state.templates
     result = latest_gui_version()
-    flash = None if result.get("ok") else result.get("error")
-    context = _settings_page_context(request, current_user, latest_version_result=result, flash=flash, flash_success=False if flash else True)
-    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if flash else 200)
-
-
-@router.post("/settings/update-gui")
-def settings_update_gui(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> object:
-    templates = request.app.state.templates
-    result = start_application_update()
-    flash = None
     if not result.get("ok"):
-        flash = result.get("error")
-    else:
-        flash = f"Application update started in background. Log: {result['log_file']}"
-    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
-    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
-
+        return JSONResponse({"ok": False, "error": result.get("error") or "Version check failed."}, status_code=status.HTTP_502_BAD_GATEWAY)
+    return JSONResponse({"ok": True, "result": result})
 
 @router.post("/settings/update-channel")
 def settings_update_channel(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
     update_channel: str = Form(...),
 ) -> object:
-    templates = request.app.state.templates
     try:
-        save_update_channel(update_channel)
+        selected = save_update_channel(update_channel)
     except ValueError as exc:
-        context = _settings_page_context(request, current_user, flash=str(exc), flash_success=False)
-        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
-    context = _settings_page_context(
-        request,
-        current_user,
-        flash="Update channel saved.",
-        flash_success=True,
-    )
-    return templates.TemplateResponse("settings.html", context)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse({"ok": True, "channel": selected})
 
 
 @router.post("/settings/update-application")
 def settings_update_application(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
-    result = start_application_update()
-    flash = None
+    job_id = create_system_job("update-application", message="Queued.")
+    result = start_application_update_job(job_id=job_id)
     if not result.get("ok"):
-        flash = result.get("error")
-    else:
-        flash = f"Application update started in background. Log: {result['log_file']}"
-    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
-    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start update script."))
+        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start update."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    mark_system_job_running(
+        job_id,
+        pid=int(result.get("pid") or 0) or None,
+        log_file=str(result.get("log_file") or "") or None,
+        message="Running.",
+    )
+    return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.get("/api/settings/update/channels")
@@ -777,92 +761,101 @@ def settings_update_log_api(
     return JSONResponse(read_update_log())
 
 
+@router.get("/api/settings/jobs/{job_id}")
+def settings_job_status_api(
+    job_id: int,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    job = fetch_system_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    return JSONResponse({"ok": True, "job": job})
+
+
 @router.post("/settings/restart-services")
 def settings_restart_services(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
-    result = start_service_restart()
-    flash = None
+    job_id = create_system_job("restart-services", message="Queued.")
+    result = start_service_restart_job(job_id=job_id)
     if not result.get("ok"):
-        flash = result.get("error")
-    else:
-        flash = f"Service restart started in background. Log: {result['log_file']}"
-    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
-    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start restart script."))
+        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start service restart."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    mark_system_job_running(
+        job_id,
+        pid=int(result.get("pid") or 0) or None,
+        log_file=str(result.get("log_file") or "") or None,
+        message="Running.",
+    )
+    return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.post("/settings/reboot-host")
 def settings_reboot_host(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
-    result = start_host_reboot()
-    flash = None
+    job_id = create_system_job("reboot-host", message="Queued.")
+    result = start_host_reboot_job(job_id=job_id)
     if not result.get("ok"):
-        flash = result.get("error")
-    else:
-        flash = f"Host reboot started in background. Log: {result['log_file']}"
-    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
-    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start reboot script."))
+        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start host reboot."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    mark_system_job_running(
+        job_id,
+        pid=int(result.get("pid") or 0) or None,
+        log_file=str(result.get("log_file") or "") or None,
+        message="Running.",
+    )
+    return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.post("/settings/poweroff-host")
 def settings_poweroff_host(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
-    result = start_host_poweroff()
-    flash = None
+    job_id = create_system_job("poweroff-host", message="Queued.")
+    result = start_host_poweroff_job(job_id=job_id)
     if not result.get("ok"):
-        flash = result.get("error")
-    else:
-        flash = f"Host power off started in background. Log: {result['log_file']}"
-    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
-    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start poweroff script."))
+        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start host power off."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    mark_system_job_running(
+        job_id,
+        pid=int(result.get("pid") or 0) or None,
+        log_file=str(result.get("log_file") or "") or None,
+        message="Running.",
+    )
+    return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.post("/settings/update-aprs-device-identification")
 def settings_update_aprs_device_identification(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
     result = refresh_aprs_device_identification_cache()
-    if result.get("ok"):
-        flash = "APRS device identification database updated."
-    else:
-        flash = result.get("error") or "APRS device identification database update failed."
-    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
-    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+    if not result.get("ok"):
+        return JSONResponse(
+            {"ok": False, "error": result.get("error") or "APRS device identification database update failed."},
+            status_code=status.HTTP_502_BAD_GATEWAY,
+        )
+    return JSONResponse({"ok": True, "message": "APRS device identification database updated."})
 
 
 @router.post("/settings/vacuum-db")
 def settings_vacuum_db(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
     if has_enabled_modem_interface():
-        context = _settings_page_context(
-            request,
-            current_user,
-            flash="Disable all TNC interfaces before running database vacuum.",
-            flash_success=False,
+        return JSONResponse(
+            {"ok": False, "error": "Disable all TNC interfaces before running database vacuum."},
+            status_code=status.HTTP_409_CONFLICT,
         )
-        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     vacuum_database()
-    context = _settings_page_context(
-        request,
-        current_user,
-        flash="Database vacuum completed.",
-        flash_success=True,
-    )
-    return templates.TemplateResponse("settings.html", context)
+    return JSONResponse({"ok": True, "message": "Database vacuum completed."})
 
 
 @router.post("/settings/global")
@@ -872,57 +865,32 @@ def settings_update_global(
     default_units: str = Form(...),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
     raw_language = str(language or "").strip().lower()
     selected_language = normalize_language(language)
     selected_default_units = str(default_units or "").strip().lower()
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
-        context = _settings_page_context(
-            request,
-            current_user,
-            flash="Unsupported language selection.",
-            flash_success=False,
-            current_language=raw_language or get_app_language(),
-            current_default_units=selected_default_units or current_default_units,
-        )
-        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse({"ok": False, "error": "Unsupported language selection."}, status_code=status.HTTP_400_BAD_REQUEST)
     if selected_default_units not in {"metric", "imperial"}:
-        context = _settings_page_context(
-            request,
-            current_user,
-            flash="Unsupported unit selection.",
-            flash_success=False,
-            current_language=selected_language,
-            current_default_units=selected_default_units or current_default_units,
-        )
-        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse({"ok": False, "error": "Unsupported unit selection."}, status_code=status.HTTP_400_BAD_REQUEST)
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
     success, error = safe_update_station_settings(station_payload)
     if not success:
-        context = _settings_page_context(
-            request,
-            current_user,
-            flash=error,
-            flash_success=False,
-            current_language=selected_language,
-            current_default_units=selected_default_units,
-        )
-        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse({"ok": False, "error": error or "Failed to update global settings."}, status_code=status.HTTP_400_BAD_REQUEST)
 
     set_app_setting("app_language", selected_language)
-    context = _settings_page_context(
-        request,
-        current_user,
-        flash="Global settings updated.",
-        flash_success=True,
-        current_language=selected_language,
-        current_default_units=selected_default_units,
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": "Global settings updated.",
+            "current_language": selected_language,
+            "current_default_units": selected_default_units,
+            "reload": True,
+        }
     )
-    return templates.TemplateResponse("settings.html", context)
 
 
 @router.post("/settings/language")

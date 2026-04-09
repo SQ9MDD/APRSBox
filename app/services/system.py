@@ -220,6 +220,7 @@ def _start_background_script(
     script_name: str,
     log_filename: str,
     extra_env: dict[str, str] | None = None,
+    job_id: int | None = None,
 ) -> dict[str, Any]:
     script_path = settings.repo_root / "scripts" / script_name
     log_file = settings.log_dir / log_filename
@@ -241,6 +242,8 @@ def _start_background_script(
                 **dict(os.environ),
                 "APRSBOX_INSTALL_ROOT": str(settings.install_root),
                 "APRSBOX_LOG_DIR": str(settings.log_dir),
+                "APRSBOX_DB_PATH": str(settings.database_path),
+                **({"APRSBOX_JOB_ID": str(int(job_id))} if job_id is not None else {}),
                 **(extra_env or {}),
             },
         )
@@ -263,10 +266,30 @@ def start_application_update() -> dict[str, Any]:
     )
 
 
+def start_application_update_job(*, job_id: int) -> dict[str, Any]:
+    return _start_background_script(
+        script_name="update.sh",
+        log_filename=UPDATE_LOG_FILE_NAME,
+        job_id=job_id,
+        extra_env={
+            "APRSBOX_GIT_URL": settings.gui_update_url,
+            "APRSBOX_GIT_BRANCH": current_update_channel(),
+        },
+    )
+
+
 def start_service_restart() -> dict[str, Any]:
     return _start_background_script(
         script_name="restart-services.sh",
         log_filename="service-restart.log",
+    )
+
+
+def start_service_restart_job(*, job_id: int) -> dict[str, Any]:
+    return _start_background_script(
+        script_name="restart-services.sh",
+        log_filename="service-restart.log",
+        job_id=job_id,
     )
 
 
@@ -277,10 +300,26 @@ def start_host_reboot() -> dict[str, Any]:
     )
 
 
+def start_host_reboot_job(*, job_id: int) -> dict[str, Any]:
+    return _start_background_script(
+        script_name="reboot-host.sh",
+        log_filename="host-reboot.log",
+        job_id=job_id,
+    )
+
+
 def start_host_poweroff() -> dict[str, Any]:
     return _start_background_script(
         script_name="poweroff-host.sh",
         log_filename="host-poweroff.log",
+    )
+
+
+def start_host_poweroff_job(*, job_id: int) -> dict[str, Any]:
+    return _start_background_script(
+        script_name="poweroff-host.sh",
+        log_filename="host-poweroff.log",
+        job_id=job_id,
     )
 
 

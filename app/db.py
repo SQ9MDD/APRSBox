@@ -65,6 +65,20 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS system_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'success', 'error')),
+    message TEXT NOT NULL DEFAULT '',
+    log_file TEXT,
+    pid INTEGER,
+    exit_code INTEGER,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS modems (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -492,6 +506,7 @@ CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON t
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
+CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
@@ -512,6 +527,7 @@ CREATE INDEX IF NOT EXISTS idx_band_condition_fixed_station_baseline_band_hour
 def init_db() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA)
+        _migrate_system_jobs_table(connection)
         _migrate_entity_interval_constraints(connection)
         _migrate_bulletin_table(connection)
         _migrate_digi_flow_steps_table(connection)
@@ -822,6 +838,32 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
             """,
             (utc_now(), utc_now()),
         )
+
+
+def _migrate_system_jobs_table(connection: sqlite3.Connection) -> None:
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'system_jobs' LIMIT 1"
+    ).fetchone()
+    if exists is not None:
+        return
+    connection.execute(
+        """
+        CREATE TABLE system_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'success', 'error')),
+            message TEXT NOT NULL DEFAULT '',
+            log_file TEXT,
+            pid INTEGER,
+            exit_code INTEGER,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC)")
 
 
 def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None:
@@ -1147,6 +1189,75 @@ def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
 def execute(query: str, params: tuple[Any, ...] = ()) -> None:
     with get_connection() as connection:
         connection.execute(query, params)
+
+
+def create_system_job(kind: str, *, message: str = "", log_file: str | None = None) -> int:
+    now = utc_now()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO system_jobs(kind, status, message, log_file, created_at, updated_at)
+            VALUES (?, 'queued', ?, ?, ?, ?)
+            """,
+            (kind, str(message or ""), str(log_file) if log_file else None, now, now),
+        )
+        return int(cursor.lastrowid)
+
+
+def mark_system_job_running(
+    job_id: int,
+    *,
+    pid: int | None = None,
+    log_file: str | None = None,
+    message: str = "",
+) -> None:
+    now = utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE system_jobs
+            SET status = 'running',
+                message = ?,
+                pid = COALESCE(?, pid),
+                log_file = COALESCE(?, log_file),
+                started_at = COALESCE(started_at, ?),
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (str(message or ""), pid, str(log_file) if log_file else None, now, now, int(job_id)),
+        )
+
+
+def mark_system_job_error(job_id: int, *, message: str) -> None:
+    now = utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE system_jobs
+            SET status = 'error',
+                message = ?,
+                finished_at = COALESCE(finished_at, ?),
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (str(message or ""), now, now, int(job_id)),
+        )
+
+
+def fetch_system_job(job_id: int) -> dict[str, Any] | None:
+    row = fetch_one(
+        """
+        SELECT
+            id, kind, status, message, log_file, pid, exit_code,
+            created_at, started_at, finished_at, updated_at
+        FROM system_jobs
+        WHERE id = ?
+        """,
+        (int(job_id),),
+    )
+    if row is None:
+        return None
+    return {key: row[key] for key in row.keys()}
 
 
 def get_app_setting(key: str) -> str | None:

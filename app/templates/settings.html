@@ -96,16 +96,13 @@
                 <p class="section-lead">{{ t("Configure the interface language and default measurement units for the installed GUI.") }}</p>
             </div>
         </div>
-        {% if flash %}
-        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
-        {% endif %}
         {% if can_manage_global_settings %}
         <form
             method="post"
             action="{{ request.scope.root_path }}/settings/global"
             class="form-grid"
             data-settings-action-id="save-global-settings"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-global-settings', message: {{ t('Saving global settings...')|tojson }}, busyLabel: {{ t('Saving...')|tojson }}, mode: 'fetch-page', lockTimeoutMs: 45000});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-global-settings', message: {{ t('Saving global settings...')|tojson }}, busyLabel: {{ t('Saving...')|tojson }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500});"
         >
             <label>
                 <span>{{ t("Language") }}</span>
@@ -153,7 +150,7 @@
             class="form-grid"
             data-settings-action-id="update-channel"
             data-settings-action-group="update-controls"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-channel', group: 'update-controls', message: {{ t('Saving update channel...')|tojson }}, busyLabel: {{ t('Saving...')|tojson }}, mode: 'fetch-page', lockTimeoutMs: 45000});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-channel', group: 'update-controls', message: {{ t('Saving update channel...')|tojson }}, busyLabel: {{ t('Saving...')|tojson }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <label>
                 <span>{{ t("Update channel") }}</span>
@@ -185,7 +182,7 @@
                 class="form-stack"
                 data-settings-action-id="check-gui-version"
                 data-settings-action-group="update-controls"
-                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'check-gui-version', group: 'update-controls', message: {{ t('Checking for updates...')|tojson }}, busyLabel: {{ t('Checking...')|tojson }}, mode: 'fetch-page', lockTimeoutMs: 120000});"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'check-gui-version', group: 'update-controls', message: {{ t('Checking for updates...')|tojson }}, busyLabel: {{ t('Checking...')|tojson }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500});"
             >
                 <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
             </form>
@@ -196,26 +193,15 @@
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
-                onsubmit="return confirm({{ t('Start application update now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson }}, busyLabel: {{ t('Starting update...')|tojson }}, mode: 'native-submit', persist: true, lockTimeoutMs: 900000});"
+                onsubmit="return confirm({{ t('Start application update now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson }}, busyLabel: {{ t('Starting update...')|tojson }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
             {% endif %}
         </div>
-        {% if latest_version_result and latest_version_result.ok %}
-        <dl class="details-grid">
-            <dt>{{ t("Installed VERSION") }}</dt>
-            <dd><code>{{ latest_version_result.current_version }}</code></dd>
-            <dt>{{ t("Repository VERSION") }}</dt>
-            <dd><code>{{ latest_version_result.latest_version }}</code></dd>
-            <dt>{{ t("Channel") }}</dt>
-            <dd><code>{{ latest_version_result.channel or update_channel_selected }}</code></dd>
-            <dt>{{ t("Status") }}</dt>
-            <dd>{{ t("Up to date") if latest_version_result.up_to_date else t("Update available") }}</dd>
-        </dl>
-        {% else %}
-        <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
-        {% endif %}
+        <div id="settings-version-result">
+            <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
+        </div>
     </div>
 </section>
 
@@ -238,7 +224,7 @@
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson }}, busyLabel: {{ t('Restarting...')|tojson }}, mode: 'native-submit', persist: true, lockTimeoutMs: 240000});"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson }}, busyLabel: {{ t('Restarting...')|tojson }}, mode: 'job', lockTimeoutMs: 240000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -253,7 +239,7 @@
                     class="form-stack"
                     data-settings-action-id="reboot-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson }}, busyLabel: {{ t('Rebooting...')|tojson }}, mode: 'native-submit', persist: true, lockTimeoutMs: 900000});"
+                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson }}, busyLabel: {{ t('Rebooting...')|tojson }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
@@ -268,7 +254,7 @@
                     class="form-stack"
                     data-settings-action-id="poweroff-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson }}, busyLabel: {{ t('Shutting down...')|tojson }}, mode: 'native-submit', persist: true, lockTimeoutMs: 1200000});"
+                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson }}, busyLabel: {{ t('Shutting down...')|tojson }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
                 </form>
@@ -314,7 +300,7 @@
             action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
             class="form-stack"
             data-settings-action-id="update-aprs-device-identification"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson }}, busyLabel: {{ t('Updating...')|tojson }}, mode: 'fetch-page', lockTimeoutMs: 180000});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson }}, busyLabel: {{ t('Updating...')|tojson }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <button type="submit" class="button">{{ t("Update now") }}</button>
         </form>
@@ -352,7 +338,7 @@
             action="{{ request.scope.root_path }}/settings/vacuum-db"
             class="form-stack"
             data-settings-action-id="vacuum-db"
-            onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson }}, busyLabel: {{ t('Running...')|tojson }}, mode: 'fetch-page', lockTimeoutMs: 180000});"
+            onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson }}, busyLabel: {{ t('Running...')|tojson }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
         </form>
@@ -370,29 +356,23 @@
         const rootPath = {{ request.scope.root_path|tojson }};
         const labels = {
             defaultTitle: {{ t("Please wait")|tojson }},
-            defaultMessage: {{ t("Operation started. The page will refresh after completion.")|tojson }},
-            operationTakingLong: {{ t("This operation is taking longer than expected. Please wait or refresh if needed.")|tojson }},
-            requestFailed: {{ t("Operation failed. Please try again or refresh the page.")|tojson }},
-            checkingInProgress: {{ t("Checking for updates...")|tojson }},
-            updateInProgress: {{ t("Update in progress. Please wait...")|tojson }},
-            restartInProgress: {{ t("Service restart in progress. Please wait...")|tojson }},
-            rebootInProgress: {{ t("Host reboot in progress. Please wait...")|tojson }},
-            poweroffInProgress: {{ t("Host shutdown in progress. Please wait...")|tojson }},
-            reconnectHint: {{ t("GUI may temporarily lose connection while services are restarting.")|tojson }},
-            updateFinished: {{ t("Application update finished successfully.")|tojson }},
-            updateFailed: {{ t("Application update failed. Check update log for details.")|tojson }},
-            reconnectRecovered: {{ t("Connection restored. Operation appears completed.")|tojson }},
-            reconnectTimeout: {{ t("Operation status timeout. Refresh the page to verify current state.")|tojson }},
+            defaultMessage: {{ t("Working...")|tojson }},
+            requestFailed: {{ t("Operation failed.")|tojson }},
+            reconnecting: {{ t("Connection lost. Retrying...")|tojson }},
+            timeout: {{ t("Operation status timeout. Refresh the page to verify current state.")|tojson }},
+            done: {{ t("Done.")|tojson }},
+            completed: {{ t("Operation completed.")|tojson }},
+            failed: {{ t("Operation failed.")|tojson }},
+            versionInstalled: {{ t("Installed VERSION")|tojson }},
+            versionRepo: {{ t("Repository VERSION")|tojson }},
+            versionChannel: {{ t("Channel")|tojson }},
+            versionStatus: {{ t("Status")|tojson }},
+            versionUpToDate: {{ t("Up to date")|tojson }},
+            versionUpdateAvailable: {{ t("Update available")|tojson }},
         };
 
-        const flashMeta = {
-            hasFlash: {{ (flash is not none)|tojson }},
-            success: {{ (flash_success if flash is not none else none)|tojson }},
-        };
-
-        const pendingActionStorageKey = "aprsbox-settings-pending-action";
-        const legacyUpdateStateStorageKey = "aprsbox-update-in-progress";
-        const reconnectHealthUrl = `${rootPath}/health`;
+        const activeJobStorageKey = "aprsbox-settings-active-job-v1";
+        const versionResultNode = document.getElementById("settings-version-result");
 
         const backdrop = document.createElement("div");
         backdrop.className = "settings-progress-backdrop";
@@ -414,67 +394,24 @@
         let hideTimer = null;
         let lockTimeoutTimer = null;
         let progressLocked = false;
-        let updatePollTimer = null;
-        let reconnectPollTimer = null;
+        let activePollTimer = null;
 
-        const actionForms = Array.from(document.querySelectorAll("form[data-settings-action-id]"));
-        const nativeFormSubmit = HTMLFormElement.prototype.submit;
-        const activeFormActions = new Set();
+        const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+        const waitForNextPaint = () =>
+            new Promise((resolve) => {
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => {
+                        resolve();
+                    });
+                });
+            });
 
-        const controlsForForm = (form) =>
-            Array.from(form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")).filter(
-                (node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement
-            );
-
-        const allActionControls = actionForms.reduce((acc, form) => acc.concat(controlsForForm(form)), []);
-
-        for (const control of allActionControls) {
-            if (!control.dataset.settingsOriginalDisabled) {
-                control.dataset.settingsOriginalDisabled = control.disabled ? "1" : "0";
+        const ensureMinimumSpinner = async (startedAtMs, minMs) => {
+            const elapsed = Date.now() - Number(startedAtMs || Date.now());
+            const remaining = Math.max(0, Number(minMs || 0) - elapsed);
+            if (remaining > 0) {
+                await sleep(remaining);
             }
-            if (control instanceof HTMLButtonElement && control.dataset.settingsOriginalLabel === undefined) {
-                control.dataset.settingsOriginalLabel = control.textContent || "";
-            }
-            if (control instanceof HTMLInputElement && control.dataset.settingsOriginalLabel === undefined) {
-                control.dataset.settingsOriginalLabel = control.value || "";
-            }
-        }
-
-        const persistentActions = {
-            "update-application": {
-                message: `${labels.updateInProgress} ${labels.reconnectHint}`.trim(),
-                lockTimeoutMs: 900000,
-                group: "update-controls",
-                mode: "update-log",
-                reloadAfterFinish: true,
-            },
-            "restart-services": {
-                message: `${labels.restartInProgress} ${labels.reconnectHint}`.trim(),
-                lockTimeoutMs: 240000,
-                group: "danger-actions",
-                mode: "reconnect",
-                minimumWaitMs: 8000,
-                requireFailure: false,
-                reloadAfterFinish: true,
-            },
-            "reboot-host": {
-                message: `${labels.rebootInProgress} ${labels.reconnectHint}`.trim(),
-                lockTimeoutMs: 900000,
-                group: "danger-actions",
-                mode: "reconnect",
-                minimumWaitMs: 20000,
-                requireFailure: true,
-                reloadAfterFinish: true,
-            },
-            "poweroff-host": {
-                message: `${labels.poweroffInProgress} ${labels.reconnectHint}`.trim(),
-                lockTimeoutMs: 1200000,
-                group: "danger-actions",
-                mode: "reconnect",
-                minimumWaitMs: 20000,
-                requireFailure: true,
-                reloadAfterFinish: true,
-            },
         };
 
         const clearTimers = () => {
@@ -488,17 +425,10 @@
             }
         };
 
-        const stopUpdatePolling = () => {
-            if (updatePollTimer !== null) {
-                window.clearInterval(updatePollTimer);
-                updatePollTimer = null;
-            }
-        };
-
-        const stopReconnectPolling = () => {
-            if (reconnectPollTimer !== null) {
-                window.clearInterval(reconnectPollTimer);
-                reconnectPollTimer = null;
+        const stopPolling = () => {
+            if (activePollTimer !== null) {
+                window.clearTimeout(activePollTimer);
+                activePollTimer = null;
             }
         };
 
@@ -525,7 +455,7 @@
                 lockTimeoutTimer = window.setTimeout(() => {
                     progressLocked = false;
                     if (messageNode instanceof HTMLElement) {
-                        messageNode.textContent = labels.operationTakingLong;
+                        messageNode.textContent = labels.timeout;
                     }
                 }, timeoutMs);
             }
@@ -537,6 +467,26 @@
             backdrop.hidden = true;
             clearTimers();
         };
+
+        const actionForms = Array.from(document.querySelectorAll("form[data-settings-action-id]"));
+        const controlsForForm = (form) =>
+            Array.from(form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")).filter(
+                (node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement
+            );
+
+        for (const form of actionForms) {
+            for (const control of controlsForForm(form)) {
+                if (!control.dataset.settingsOriginalDisabled) {
+                    control.dataset.settingsOriginalDisabled = control.disabled ? "1" : "0";
+                }
+                if (control instanceof HTMLButtonElement && control.dataset.settingsOriginalLabel === undefined) {
+                    control.dataset.settingsOriginalLabel = control.textContent || "";
+                }
+                if (control instanceof HTMLInputElement && control.dataset.settingsOriginalLabel === undefined) {
+                    control.dataset.settingsOriginalLabel = control.value || "";
+                }
+            }
+        }
 
         const markControlBusy = (control, busyLabel) => {
             control.classList.add("settings-action-control-busy");
@@ -568,7 +518,6 @@
                     }
                 }
             }
-            activeFormActions.clear();
         };
 
         const disableFormControls = (form, busyLabel = "") => {
@@ -612,82 +561,9 @@
             }
         };
 
-        const waitForNextPaint = () =>
-            new Promise((resolve) => {
-                window.requestAnimationFrame(() => {
-                    window.requestAnimationFrame(() => {
-                        window.setTimeout(resolve, 80);
-                    });
-                });
-            });
-
-        const parseLogLines = (content) => {
-            const parsed = [];
-            const lines = String(content || "").split("\n");
-            for (const line of lines) {
-                const match = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\s+(.*)$/);
-                if (!match) continue;
-                const at = Date.parse(match[1]);
-                if (!Number.isFinite(at)) continue;
-                parsed.push({ at, text: match[2] || "" });
-            }
-            return parsed;
-        };
-
-        const hasLineAfter = (lines, minAt, marker) =>
-            lines.some((entry) => entry.at >= minAt && String(entry.text || "").includes(marker));
-
-        const savePendingAction = (actionId, startedAt) => {
-            try {
-                window.sessionStorage.setItem(
-                    pendingActionStorageKey,
-                    JSON.stringify({
-                        actionId: String(actionId || ""),
-                        startedAt: Number(startedAt || Date.now()),
-                    })
-                );
-                if (String(actionId || "") === "update-application") {
-                    window.sessionStorage.setItem(legacyUpdateStateStorageKey, String(Number(startedAt || Date.now())));
-                }
-            } catch (_error) {
-                // Ignore storage failures.
-            }
-        };
-
-        const clearPendingAction = () => {
-            try {
-                window.sessionStorage.removeItem(pendingActionStorageKey);
-                window.sessionStorage.removeItem(legacyUpdateStateStorageKey);
-            } catch (_error) {
-                // Ignore storage failures.
-            }
-        };
-
-        const loadPendingAction = () => {
-            try {
-                const raw = window.sessionStorage.getItem(pendingActionStorageKey);
-                if (!raw) {
-                    const legacyRaw = window.sessionStorage.getItem(legacyUpdateStateStorageKey);
-                    const legacyEpoch = Number(legacyRaw || "");
-                    if (!Number.isFinite(legacyEpoch) || legacyEpoch <= 0) return null;
-                    return { actionId: "update-application", startedAt: legacyEpoch };
-                }
-                const parsed = JSON.parse(raw);
-                if (!parsed || typeof parsed !== "object") return null;
-                const actionId = String(parsed.actionId || "").trim();
-                const startedAt = Number(parsed.startedAt || "");
-                if (!actionId || !Number.isFinite(startedAt) || startedAt <= 0) return null;
-                return { actionId, startedAt };
-            } catch (_error) {
-                return null;
-            }
-        };
-
-        const finishPersistentAction = (message, options = {}) => {
-            stopUpdatePolling();
-            stopReconnectPolling();
+        const finishAction = (message, options = {}) => {
+            stopPolling();
             progressLocked = false;
-            clearPendingAction();
             restoreControls();
             showSettingsProgress(message, { locked: false });
             if (options.reload) {
@@ -697,104 +573,30 @@
             }
         };
 
-        const ensureUpdatePoll = (startedAt, config) => {
-            if (updatePollTimer !== null) return;
-            const logUrl = `${rootPath}/api/settings/update/log`;
-            const minTimestamp = Number(startedAt || Date.now()) - 5000;
-
-            showSettingsProgress(config.message, { locked: true, lockTimeoutMs: config.lockTimeoutMs });
-
-            const poll = async () => {
-                const elapsed = Date.now() - Number(startedAt || Date.now());
-                if (elapsed > Number(config.lockTimeoutMs || 0)) {
-                    finishPersistentAction(labels.reconnectTimeout, { reload: false });
-                    return;
-                }
-
-                try {
-                    const response = await window.fetch(logUrl, {
-                        cache: "no-store",
-                        credentials: "same-origin",
-                    });
-                    if (!response.ok) return;
-
-                    const payload = await response.json();
-                    const content = String((payload && payload.content) || "");
-                    const parsedLines = parseLogLines(content);
-
-                    const hasSuccess =
-                        hasLineAfter(parsedLines, minTimestamp, "Application update finished successfully.") ||
-                        content.includes("Application update finished successfully.");
-
-                    const hasError =
-                        hasLineAfter(parsedLines, minTimestamp, "ERROR:") ||
-                        content.includes("ERROR:");
-
-                    if (hasSuccess) {
-                        finishPersistentAction(labels.updateFinished, { reload: Boolean(config.reloadAfterFinish) });
-                        return;
-                    }
-
-                    if (hasError) {
-                        finishPersistentAction(labels.updateFailed, { reload: false });
-                    }
-                } catch (_error) {
-                    // During restart fetch may fail for a while.
-                }
-            };
-
-            poll();
-            updatePollTimer = window.setInterval(poll, 3000);
+        const renderVersionResult = (result) => {
+            if (!(versionResultNode instanceof HTMLElement)) return;
+            if (!result || typeof result !== "object") return;
+            const safe = (value) => String(value === undefined || value === null ? "" : value);
+            const upToDate = Boolean(result.up_to_date);
+            versionResultNode.innerHTML = `
+                <dl class="details-grid">
+                    <dt>${labels.versionInstalled}</dt>
+                    <dd><code>${safe(result.current_version)}</code></dd>
+                    <dt>${labels.versionRepo}</dt>
+                    <dd><code>${safe(result.latest_version)}</code></dd>
+                    <dt>${labels.versionChannel}</dt>
+                    <dd><code>${safe(result.channel)}</code></dd>
+                    <dt>${labels.versionStatus}</dt>
+                    <dd>${upToDate ? labels.versionUpToDate : labels.versionUpdateAvailable}</dd>
+                </dl>
+            `;
         };
 
-        const ensureReconnectPoll = (startedAt, config) => {
-            if (reconnectPollTimer !== null) return;
+        const submitShortJson = async (form, options) => {
+            const startedAt = Date.now();
+            const minSpinnerMs = Number(options.minSpinnerMs || 500);
+            const reloadOnSuccess = Boolean(options.reloadOnSuccess);
 
-            showSettingsProgress(config.message, { locked: true, lockTimeoutMs: config.lockTimeoutMs });
-
-            let sawFailure = false;
-            let consecutiveSuccess = 0;
-
-            const poll = async () => {
-                const elapsed = Date.now() - Number(startedAt || Date.now());
-                if (elapsed > Number(config.lockTimeoutMs || 0)) {
-                    finishPersistentAction(labels.reconnectTimeout, { reload: false });
-                    return;
-                }
-
-                try {
-                    const response = await window.fetch(reconnectHealthUrl, {
-                        cache: "no-store",
-                        credentials: "same-origin",
-                    });
-                    if (!response.ok) {
-                        throw new Error("Reconnect health check failed");
-                    }
-
-                    consecutiveSuccess += 1;
-                    const minimumWaitReached = elapsed >= Number(config.minimumWaitMs || 0);
-                    const failureConditionSatisfied = !config.requireFailure || sawFailure;
-
-                    if (minimumWaitReached && failureConditionSatisfied && consecutiveSuccess >= 2) {
-                        finishPersistentAction(labels.reconnectRecovered, { reload: Boolean(config.reloadAfterFinish) });
-                    }
-                } catch (_error) {
-                    sawFailure = true;
-                    consecutiveSuccess = 0;
-                }
-            };
-
-            poll();
-            reconnectPollTimer = window.setInterval(poll, 3000);
-        };
-
-        const replaceDocumentWithHtml = (htmlText) => {
-            document.open();
-            document.write(htmlText);
-            document.close();
-        };
-
-        const submitViaFetchAndReplace = async (form, options) => {
             try {
                 await waitForNextPaint();
 
@@ -802,47 +604,155 @@
                     method: String(form.method || "post").toUpperCase(),
                     body: new FormData(form),
                     credentials: "same-origin",
-                    redirect: "follow",
                     headers: {
-                        "X-Requested-With": "XMLHttpRequest"
-                    }
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
                 });
 
-                const responseText = await response.text();
-
-                if (!response.ok && !responseText) {
-                    throw new Error(`HTTP ${response.status}`);
+                let payload = null;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    payload = null;
                 }
 
-                if (responseText) {
-                    replaceDocumentWithHtml(responseText);
+                await ensureMinimumSpinner(startedAt, minSpinnerMs);
+
+                if (!response.ok || !payload || payload.ok !== true) {
+                    const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
+                    finishAction(`${labels.requestFailed} ${detail}`, { reload: false });
                     return;
                 }
 
-                if (response.redirected && response.url) {
-                    window.location.assign(response.url);
-                    return;
+                if (String(options.actionId || "") === "check-gui-version" && payload.result) {
+                    renderVersionResult(payload.result);
                 }
 
-                window.location.reload();
+                const successMessage = payload.message ? String(payload.message) : labels.done;
+                finishAction(successMessage, { reload: reloadOnSuccess || Boolean(payload.reload) });
             } catch (error) {
-                progressLocked = false;
-                restoreControls();
-                showSettingsProgress(
-                    `${labels.requestFailed}${error && error.message ? ` ${error.message}` : ""}`,
-                    { locked: false }
-                );
+                await ensureMinimumSpinner(startedAt, minSpinnerMs);
+                const detail = error && error.message ? ` ${error.message}` : "";
+                finishAction(`${labels.requestFailed}${detail}`, { reload: false });
             }
         };
 
-        const scheduleNativeSubmit = async (form) => {
-            await waitForNextPaint();
-            if (!document.body.contains(form)) return;
-            nativeFormSubmit.call(form);
+        const jobStatusUrl = (jobId) => `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId || ""))}`;
+
+        const pollJobStatus = async (jobId, startedAt, options) => {
+            const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
+            const reloadAfterFinish = Boolean(options.reloadOnSuccess);
+
+            const pollOnce = async () => {
+                const elapsed = Date.now() - Number(startedAt || Date.now());
+                if (elapsed > lockTimeoutMs) {
+                    try {
+                        window.sessionStorage.removeItem(activeJobStorageKey);
+                    } catch (_error) {
+                        // Ignore storage errors.
+                    }
+                    finishAction(labels.timeout, { reload: false });
+                    return;
+                }
+
+                try {
+                    const response = await window.fetch(jobStatusUrl(jobId), {
+                        cache: "no-store",
+                        credentials: "same-origin",
+                        headers: { "Accept": "application/json" },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const payload = await response.json();
+                    const job = payload && payload.job ? payload.job : null;
+                    const status = job && job.status ? String(job.status) : "";
+                    const message = job && job.message ? String(job.message) : "";
+
+                    if (status === "success") {
+                        try {
+                            window.sessionStorage.removeItem(activeJobStorageKey);
+                        } catch (_error) {
+                            // Ignore storage errors.
+                        }
+                        finishAction(message || labels.completed, { reload: reloadAfterFinish });
+                        return;
+                    }
+
+                    if (status === "error") {
+                        try {
+                            window.sessionStorage.removeItem(activeJobStorageKey);
+                        } catch (_error) {
+                            // Ignore storage errors.
+                        }
+                        finishAction(message || labels.failed, { reload: false });
+                        return;
+                    }
+
+                    showSettingsProgress(message || String(options.message || labels.defaultMessage), {
+                        locked: true,
+                        lockTimeoutMs,
+                    });
+                } catch (_error) {
+                    const base = String(options.message || labels.defaultMessage);
+                    showSettingsProgress(`${base}\n${labels.reconnecting}`, {
+                        locked: true,
+                        lockTimeoutMs,
+                    });
+                }
+
+                activePollTimer = window.setTimeout(pollOnce, 3000);
+            };
+
+            pollOnce();
         };
 
-        const formByActionId = (actionId) =>
-            actionForms.find((form) => String(form.dataset.settingsActionId || "") === String(actionId || ""));
+        const startJob = async (form, options) => {
+            const startedAt = Date.now();
+            const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
+
+            try {
+                await waitForNextPaint();
+                const response = await window.fetch(form.action, {
+                    method: String(form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                });
+
+                const payload = await response.json();
+                if (response.status !== 202 || !payload || payload.ok !== true || !payload.job_id) {
+                    const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
+                    finishAction(`${labels.requestFailed} ${detail}`, { reload: false });
+                    return;
+                }
+
+                try {
+                    window.sessionStorage.setItem(
+                        activeJobStorageKey,
+                        JSON.stringify({
+                            jobId: Number(payload.job_id),
+                            actionId: String(options.actionId || ""),
+                            startedAt: startedAt,
+                            lockTimeoutMs,
+                            message: String(options.message || ""),
+                            reloadOnSuccess: Boolean(options.reloadOnSuccess),
+                        })
+                    );
+                } catch (_error) {
+                    // Ignore storage errors.
+                }
+
+                pollJobStatus(payload.job_id, startedAt, options);
+            } catch (error) {
+                const detail = error && error.message ? ` ${error.message}` : "";
+                finishAction(`${labels.requestFailed}${detail}`, { reload: false });
+            }
+        };
 
         const submitSettingsAction = (form, options = {}) => {
             if (!(form instanceof HTMLFormElement)) return true;
@@ -852,72 +762,60 @@
             const message = String(options.message || labels.defaultMessage);
             const busyLabel = String(options.busyLabel || "");
             const group = String(options.group || form.dataset.settingsActionGroup || "");
-            const persist = Boolean(options.persist);
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
-            const mode = String(options.mode || "fetch-page");
-
-            if (actionId && activeFormActions.has(actionId)) return false;
-
-            if (actionId) {
-                activeFormActions.add(actionId);
-            }
+            const mode = String(options.mode || "json");
 
             form.dataset.settingsSubmitQueued = "1";
             disableFormControls(form, busyLabel);
             disableGroupControls(group, form);
             showSettingsProgress(message, { locked: true, lockTimeoutMs });
 
-            if (mode === "native-submit") {
-                if (persist && actionId) {
-                    savePendingAction(actionId, Date.now());
-                }
-                scheduleNativeSubmit(form);
+            if (mode === "job") {
+                startJob(form, options);
                 return false;
             }
 
-            submitViaFetchAndReplace(form, options);
+            if (mode === "json") {
+                submitShortJson(form, { ...options, actionId });
+                return false;
+            }
+
+            finishAction(`${labels.requestFailed} Unsupported action mode.`, { reload: false });
             return false;
         };
 
-        const resumePendingAction = () => {
-            const pending = loadPendingAction();
-            if (!pending) return;
-
-            const config = persistentActions[pending.actionId];
-            if (!config) {
-                clearPendingAction();
-                return;
+        const resumeActiveJob = () => {
+            let stored = null;
+            try {
+                const raw = window.sessionStorage.getItem(activeJobStorageKey);
+                stored = raw ? JSON.parse(raw) : null;
+            } catch (_error) {
+                stored = null;
             }
+            if (!stored || typeof stored !== "object") return;
+            const jobId = Number(stored.jobId || "");
+            if (!Number.isFinite(jobId) || jobId <= 0) return;
 
-            if (flashMeta.hasFlash && flashMeta.success === false) {
-                clearPendingAction();
-                return;
-            }
-
-            const elapsed = Date.now() - Number(pending.startedAt || Date.now());
-            if (elapsed > Number(config.lockTimeoutMs || 0)) {
-                clearPendingAction();
-                return;
-            }
-
-            const form = formByActionId(pending.actionId);
-            if (form) {
+            const actionId = String(stored.actionId || "").trim();
+            const form = actionId
+                ? actionForms.find((candidate) => String(candidate.dataset.settingsActionId || "") === actionId)
+                : null;
+            if (form instanceof HTMLFormElement) {
                 disableFormControls(form, "");
-            }
-            disableGroupControls(config.group, form || null);
-
-            if (config.mode === "update-log") {
-                ensureUpdatePoll(pending.startedAt, config);
-                return;
+                disableGroupControls(String(form.dataset.settingsActionGroup || ""), form);
             }
 
-            if (config.mode === "reconnect") {
-                ensureReconnectPoll(pending.startedAt, config);
-            }
+            const lockTimeoutMs = Number(stored.lockTimeoutMs || 120000);
+            const startedAt = Number(stored.startedAt || Date.now());
+            const message = String(stored.message || labels.defaultMessage);
+            const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
+
+            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            pollJobStatus(jobId, startedAt, { lockTimeoutMs, message, reloadOnSuccess });
         };
 
-        window.aprsboxShowSettingsProgress = showSettingsProgress;
         window.aprsboxSubmitSettingsAction = submitSettingsAction;
+        window.aprsboxShowSettingsProgress = showSettingsProgress;
         window.aprsboxHideSettingsProgress = hideBackdrop;
 
         backdrop.addEventListener("click", (event) => {
@@ -932,18 +830,7 @@
             }
         });
 
-        window.addEventListener("pageshow", (event) => {
-            if (!event.persisted) return;
-            progressLocked = false;
-            clearTimers();
-            hideBackdrop(true);
-            stopUpdatePolling();
-            stopReconnectPolling();
-            restoreControls();
-            resumePendingAction();
-        });
-
-        resumePendingAction();
+        resumeActiveJob();
     })();
 </script>
 {% endblock %}

@@ -54,7 +54,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('@router.post("/settings/vacuum-db")', router_source)
         self.assertIn("if has_enabled_modem_interface():", router_source)
-        self.assertIn('flash="Disable all TNC interfaces before running database vacuum."', router_source)
+        self.assertIn("Disable all TNC interfaces before running database vacuum.", router_source)
+        self.assertIn("status.HTTP_409_CONFLICT", router_source)
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
@@ -97,6 +98,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('@router.get("/api/settings/update/channel")', router_source)
         self.assertIn('@router.post("/api/settings/update/channel")', router_source)
         self.assertIn('@router.get("/api/settings/update/log")', router_source)
+        self.assertIn('@router.get("/api/settings/jobs/{job_id}")', router_source)
 
 
 if __name__ == "__main__":
