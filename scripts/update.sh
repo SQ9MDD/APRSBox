@@ -54,16 +54,6 @@ detect_service_manager() {
     SERVICE_MANAGER="unknown"
 }
 
-running_inside_systemd_web_unit() {
-    if [ "$SERVICE_MANAGER" != "systemd" ]; then
-        return 1
-    fi
-    if [ ! -r /proc/self/cgroup ]; then
-        return 1
-    fi
-    grep -F "aprsbox-web.service" /proc/self/cgroup >/dev/null 2>&1
-}
-
 restart_services_fallback() {
     detect_service_manager
     case "$SERVICE_MANAGER" in
@@ -92,12 +82,8 @@ restart_services_fallback() {
 stop_services() {
     case "$SERVICE_MANAGER" in
         systemd)
-            if running_inside_systemd_web_unit; then
-                log "Detected updater running in aprsbox-web.service scope; skipping direct web stop to avoid self-termination."
-                systemctl stop aprsbox-core.service >/dev/null 2>&1 || true
-            else
-                systemctl stop aprsbox-web.service aprsbox-core.service >/dev/null 2>&1 || true
-            fi
+            log "Systemd update path: keeping aprsbox-web running during file switch to avoid updater self-termination."
+            systemctl stop aprsbox-core.service >/dev/null 2>&1 || true
             ;;
         openrc)
             rc-service aprsbox-web stop >/dev/null 2>&1 || true
@@ -250,7 +236,7 @@ PYTHONPATH="$APP_DIR" \
 chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 
 RESTART_SCRIPT="$APP_DIR/scripts/restart-services.sh"
-if [ "$SERVICE_MANAGER" = "systemd" ] && running_inside_systemd_web_unit; then
+if [ "$SERVICE_MANAGER" = "systemd" ]; then
     systemctl restart aprsbox-core.service
     if command -v systemd-run >/dev/null 2>&1; then
         restart_unit="aprsbox-web-restart-$$"
