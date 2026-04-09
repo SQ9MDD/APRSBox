@@ -53,14 +53,6 @@
                 <p class="section-lead">{{ t("Configure the update channel and run application update from the configured repository.") }}</p>
             </div>
         </div>
-        <dl class="details-grid">
-            <dt>{{ t("Current version") }}</dt>
-            <dd><code>{{ current_gui_version }}</code></dd>
-            <dt>{{ t("Repository") }}</dt>
-            <dd><code>{{ update_channel_source }}</code></dd>
-            <dt>{{ t("Update channel") }}</dt>
-            <dd><code>{{ update_channel_selected }}</code></dd>
-        </dl>
         {% if can_manage_updates %}
         <form method="post" action="{{ request.scope.root_path }}/settings/update-channel" class="form-grid" onsubmit="return aprsboxShowSettingsProgress({{ t('Saving update channel...')|tojson }});">
             <label>
