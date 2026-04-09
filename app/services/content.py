@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import ipaddress
 import json
 import math
@@ -535,6 +535,209 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         "last_error": last_error,
         "updated_at": updated_at,
         "frames": frames,
+    }
+
+
+def monitoring_public_snapshot() -> dict[str, Any]:
+    station_settings = get_station_settings()
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    ssid = str(station_settings.get("ssid") or "").strip()
+    normalized_ssid = "" if ssid == "0" else ssid
+    full_callsign = callsign if not (callsign and normalized_ssid) else f"{callsign}-{normalized_ssid}"
+
+    traffic = traffic_snapshot(limit=0)
+    runtime_by_modem_id: dict[int, dict[str, Any]] = {}
+    for interface in traffic.get("interfaces") or []:
+        modem_id = interface.get("modem_id")
+        if isinstance(modem_id, int):
+            runtime_by_modem_id[modem_id] = interface
+
+    modem_rows = get_section_rows("modems")
+    tnc_items: list[dict[str, Any]] = []
+    for row in modem_rows:
+        modem_id = int(row["id"])
+        runtime = runtime_by_modem_id.get(modem_id)
+        runtime_status = str((runtime or {}).get("status") or "").strip().lower()
+        runtime_detail = str((runtime or {}).get("status_detail") or "").strip()
+        if not runtime_status:
+            runtime_status = "disabled" if not bool(row.get("enabled")) else "unknown"
+        if not runtime_detail:
+            runtime_detail = str(row.get("modem_runtime_title") or "").strip()
+        tnc_items.append(
+            {
+                "id": modem_id,
+                "name": str(row.get("name") or ""),
+                "enabled": bool(row.get("enabled")),
+                "modem_type": str(row.get("modem_type") or ""),
+                "band": str(row.get("band") or ""),
+                "device_path": str(row.get("device_path") or ""),
+                "tx_blocked": bool(row.get("tx_blocked")),
+                "runtime_status": runtime_status,
+                "runtime_detail": runtime_detail,
+                "runtime_last_error": str((runtime or {}).get("last_error") or "").strip() or None,
+                "expose": {
+                    "enabled": bool(row.get("expose_port_enabled")),
+                    "bind_address": str(row.get("expose_bind_address") or ""),
+                    "port": int(row["expose_port"]) if row.get("expose_port") is not None else None,
+                    "active_clients": int(((runtime or {}).get("expose") or {}).get("active_clients") or 0),
+                },
+            }
+        )
+
+    now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+    hour_window_start_utc = (now_utc - timedelta(hours=1)).isoformat()
+    hourly_rows = fetch_all(
+        """
+        SELECT
+            COALESCE(band, '') AS band,
+            SUM(total_frames) AS total_frames,
+            SUM(mobile_frames) AS mobile_frames,
+            SUM(fixed_frames) AS fixed_frames
+        FROM band_condition_activity_buckets
+        WHERE bucket_start_utc >= ?
+        GROUP BY band
+        ORDER BY band ASC
+        """,
+        (hour_window_start_utc,),
+    )
+    hourly_by_band: list[dict[str, Any]] = []
+    for row in hourly_rows:
+        hourly_by_band.append(
+            {
+                "band": str(row["band"] or ""),
+                "total_frames": int(row["total_frames"] or 0),
+                "mobile_frames": int(row["mobile_frames"] or 0),
+                "fixed_frames": int(row["fixed_frames"] or 0),
+            }
+        )
+    hourly_total_frames = sum(item["total_frames"] for item in hourly_by_band)
+    hourly_mobile_frames = sum(item["mobile_frames"] for item in hourly_by_band)
+    hourly_fixed_frames = sum(item["fixed_frames"] for item in hourly_by_band)
+    raw_hourly_row = fetch_one(
+        """
+        SELECT COUNT(*) AS total
+        FROM traffic_frames
+        WHERE created_at >= ?
+        """,
+        (hour_window_start_utc,),
+    )
+    raw_hourly_frames = int(raw_hourly_row["total"]) if raw_hourly_row else 0
+
+    digi_total_row = fetch_one("SELECT COUNT(*) AS total FROM digi_rules")
+    digi_enabled_row = fetch_one("SELECT COUNT(*) AS total FROM digi_rules WHERE is_enabled = 1")
+    igate_total_row = fetch_one("SELECT COUNT(*) AS total FROM igate_rules")
+    igate_enabled_row = fetch_one("SELECT COUNT(*) AS total FROM igate_rules WHERE is_enabled = 1")
+    digi_total = int(digi_total_row["total"]) if digi_total_row else 0
+    digi_enabled = int(digi_enabled_row["total"]) if digi_enabled_row else 0
+    igate_total = int(igate_total_row["total"]) if igate_total_row else 0
+    igate_enabled = int(igate_enabled_row["total"]) if igate_enabled_row else 0
+
+    from app.services.wx import get_wx_config, get_wx_mapping_rows, list_wx_sources
+
+    wx_config = get_wx_config()
+    wx_sources = list_wx_sources()
+    wx_mappings = get_wx_mapping_rows()
+    wx_status_counts = {
+        "live": sum(1 for row in wx_mappings if str(row.get("status") or "").upper() == "LIVE"),
+        "cached": sum(1 for row in wx_mappings if str(row.get("status") or "").upper() == "CACHED"),
+        "stale": sum(1 for row in wx_mappings if str(row.get("status") or "").upper() == "STALE"),
+        "missing": sum(1 for row in wx_mappings if str(row.get("status") or "").upper() == "MISSING"),
+        "error": sum(1 for row in wx_mappings if str(row.get("status") or "").upper() == "ERROR"),
+    }
+
+    station_unit_system = str(station_settings.get("default_units") or "metric") or "metric"
+    stations = heard_stations(unit_system=station_unit_system)
+    stations_summary = station_summary(stations)
+    traffic_monitor_status = str(traffic.get("status") or "").strip().lower()
+    traffic_monitor_detail = str(traffic.get("status_detail") or "").strip()
+    runtime_interfaces = list(runtime_by_modem_id.values())
+    if runtime_interfaces and traffic_monitor_status in {"", "idle"}:
+        runtime_connected = [item for item in runtime_interfaces if str(item.get("status") or "").strip().lower() in {"connected", "running", "idle"}]
+        runtime_connecting = [item for item in runtime_interfaces if str(item.get("status") or "").strip().lower() == "connecting"]
+        runtime_error = [item for item in runtime_interfaces if str(item.get("status") or "").strip().lower() == "error"]
+        if runtime_connected:
+            traffic_monitor_status = "connected"
+            traffic_monitor_detail = f"{len(runtime_connected)}/{len(runtime_interfaces)} TNC interfaces connected."
+        elif runtime_connecting:
+            traffic_monitor_status = "connecting"
+            traffic_monitor_detail = f"Connecting {len(runtime_connecting)} TNC interface(s)."
+        elif runtime_error:
+            traffic_monitor_status = "error"
+            traffic_monitor_detail = str(runtime_error[0].get("last_error") or runtime_error[0].get("status_detail") or "TNC runtime error.")
+        elif not traffic_monitor_status:
+            traffic_monitor_status = "idle"
+
+    return {
+        "generated_at": utc_now(),
+        "station": {
+            "callsign": callsign,
+            "ssid": normalized_ssid,
+            "full_callsign": full_callsign,
+            "beacon_interface_id": station_settings.get("beacon_interface_id"),
+            "tx_enabled": bool(station_settings.get("tx_enabled")),
+            "status_enabled": bool(station_settings.get("status_enabled")),
+        },
+        "tnc": {
+            "total": len(tnc_items),
+            "enabled": sum(1 for item in tnc_items if item["enabled"]),
+            "runtime_connected": sum(1 for item in tnc_items if item["runtime_status"] in {"connected", "running", "idle"}),
+            "runtime_connecting": sum(1 for item in tnc_items if item["runtime_status"] == "connecting"),
+            "runtime_error": sum(1 for item in tnc_items if item["runtime_status"] == "error"),
+            "items": tnc_items,
+        },
+        "services": {
+            "traffic_monitor": {
+                "status": traffic_monitor_status,
+                "status_detail": traffic_monitor_detail,
+                "updated_at": traffic.get("updated_at"),
+                "active_modem": traffic.get("active_modem"),
+            },
+            "digi": {
+                "configured_rules": digi_total,
+                "enabled_rules": digi_enabled,
+            },
+            "igate": {
+                "configured_rules": igate_total,
+                "enabled_rules": igate_enabled,
+            },
+        },
+        "wx": {
+            "enabled": bool(wx_config.get("enabled")),
+            "ssid": str(wx_config.get("ssid") or "").strip(),
+            "beacon_interface_id": wx_config.get("beacon_interface_id"),
+            "path": str(wx_config.get("path") or "").strip(),
+            "latitude": str(wx_config.get("latitude") or "").strip(),
+            "longitude": str(wx_config.get("longitude") or "").strip(),
+            "configured": bool(
+                str(wx_config.get("ssid") or "").strip()
+                or wx_config.get("beacon_interface_id") not in {None, ""}
+                or str(wx_config.get("latitude") or "").strip()
+                or str(wx_config.get("longitude") or "").strip()
+                or str(wx_config.get("path") or "").strip()
+            ),
+            "sources_total": len(wx_sources),
+            "sources_enabled": sum(1 for source in wx_sources if bool(source.get("enabled"))),
+            "mappings_total": len(wx_mappings),
+            "mappings_enabled": sum(1 for row in wx_mappings if bool(row.get("enabled"))),
+            "mapping_status": wx_status_counts,
+        },
+        "stats": {
+            "stations": {
+                "total": int(stations_summary.get("total") or 0),
+                "stationary": int(stations_summary.get("stationary") or 0),
+                "mobile": int(stations_summary.get("mobile") or 0),
+                "objects": int(stations_summary.get("objects") or 0),
+            },
+            "frames_last_hour": {
+                "window_start_utc": hour_window_start_utc,
+                "window_end_utc": now_utc.isoformat(),
+                "total_frames": hourly_total_frames,
+                "mobile_frames": hourly_mobile_frames,
+                "fixed_frames": hourly_fixed_frames,
+                "raw_frames": raw_hourly_frames,
+                "by_band": hourly_by_band,
+            },
+        },
     }
 
 
