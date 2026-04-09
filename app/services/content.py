@@ -1575,11 +1575,18 @@ _PACKET_GROUP_LABELS = {
 
 
 def _parse_tnc2_line(line: str) -> dict[str, str] | None:
-    match = _TNC2_RE.match(line.strip())
+    match = _TNC2_RE.match(line.strip("\r\n"))
     if not match:
         return None
     parsed = match.groupdict(default="")
-    return {key: value.strip() for key, value in parsed.items()}
+    return {
+        "source": parsed["source"].strip(),
+        "destination": parsed["destination"].strip(),
+        "path": parsed["path"].strip(),
+        # Preserve trailing info-field spaces: compressed c/s/T can legally
+        # carry spaces and stripping them breaks fixed-offset decoding.
+        "info": parsed["info"].lstrip(),
+    }
 
 
 def parse_tnc2_frame(line: str) -> dict[str, Any] | None:
