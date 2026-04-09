@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -189,12 +190,29 @@ def read_update_log(*, max_bytes: int = 65536) -> dict[str, Any]:
     }
 
 
+def _auto_privileged_runner() -> list[str]:
+    for candidate in (["sudo", "-n"], ["doas", "-n"]):
+        if shutil.which(candidate[0]):
+            return candidate
+    return []
+
+
 def _script_command(script_path: Path) -> list[str]:
     command = [str(script_path)]
-    runner = settings.privileged_runner.strip()
-    if not runner:
+    runner_raw = settings.privileged_runner.strip()
+    if runner_raw:
+        runner_tokens = shlex.split(runner_raw)
+        if runner_tokens and shutil.which(runner_tokens[0]):
+            return [*runner_tokens, *command]
+        # Configured runner is unavailable on this host. Try a compatible fallback.
+        fallback_runner = _auto_privileged_runner()
+        if fallback_runner:
+            return [*fallback_runner, *command]
         return command
-    return [*shlex.split(runner), *command]
+    auto_runner = _auto_privileged_runner()
+    if auto_runner:
+        return [*auto_runner, *command]
+    return command
 
 
 def _start_background_script(
