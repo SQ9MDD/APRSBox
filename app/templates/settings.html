@@ -1,5 +1,102 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<style>
+    .settings-progress-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(2px);
+    }
+
+    .settings-progress-backdrop[hidden] {
+        display: none;
+    }
+
+    .settings-progress-modal {
+        width: min(100%, 30rem);
+        border-radius: 1rem;
+        padding: 1.1rem 1.2rem;
+        background: var(--panel, #1f2430);
+        color: var(--text, #f5f7fb);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .settings-progress-header {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        margin-bottom: 0.7rem;
+    }
+
+    .settings-progress-title {
+        margin: 0;
+        font-size: 1.05rem;
+        line-height: 1.2;
+    }
+
+    .settings-progress-message {
+        margin: 0;
+        color: var(--muted, #b3bccb);
+        line-height: 1.45;
+        white-space: pre-line;
+    }
+
+    .settings-progress-actions {
+        margin-top: 0.9rem;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .settings-progress-close {
+        min-width: 4.5rem;
+    }
+
+    .settings-progress-spinner {
+        width: 1.2rem;
+        height: 1.2rem;
+        border-radius: 999px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-top-color: currentColor;
+        animation: settings-progress-spin 0.85s linear infinite;
+        flex: 0 0 auto;
+    }
+
+    @keyframes settings-progress-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .settings-action-button-busy {
+        position: relative;
+    }
+
+    .settings-action-button-busy::before {
+        content: "";
+        display: inline-block;
+        width: 0.9em;
+        height: 0.9em;
+        margin-right: 0.5em;
+        border-radius: 999px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        vertical-align: -0.1em;
+        animation: settings-progress-spin 0.85s linear infinite;
+    }
+
+    .settings-action-control-busy {
+        opacity: 0.78;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <section class="panel">
     <div class="panel-body">
@@ -9,11 +106,14 @@
                 <p class="section-lead">{{ t("Configure the interface language and default measurement units for the installed GUI.") }}</p>
             </div>
         </div>
-        {% if flash %}
-        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
-        {% endif %}
         {% if can_manage_global_settings %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/global" class="form-grid">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/global"
+            class="form-grid"
+            data-settings-action-id="save-global-settings"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-global-settings', message: {{ t('Saving global settings...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500});"
+        >
             <label>
                 <span>{{ t("Language") }}</span>
                 <select name="language">
@@ -54,7 +154,14 @@
             </div>
         </div>
         {% if can_manage_updates %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/update-channel" class="form-grid" onsubmit="return aprsboxShowSettingsProgress({{ t('Saving update channel...')|tojson }});">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/update-channel"
+            class="form-grid"
+            data-settings-action-id="update-channel"
+            data-settings-action-group="update-controls"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-channel', group: 'update-controls', message: {{ t('Saving update channel...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
             <label>
                 <span>{{ t("Update channel") }}</span>
                 <select name="update_channel">
@@ -79,29 +186,32 @@
         {% endif %}
         <p class="muted">{{ t("Update fetches code from the selected channel, runs init-db, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end. GUI may temporarily lose connection.")|safe }}</p>
         <div class="settings-update-actions">
-            <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack" onsubmit="return aprsboxShowSettingsProgress({{ t('Checking versions, please wait...')|tojson }});">
+            <form
+                method="post"
+                action="{{ request.scope.root_path }}/settings/check-gui-version"
+                class="form-stack"
+                data-settings-action-id="check-gui-version"
+                data-settings-action-group="update-controls"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'check-gui-version', group: 'update-controls', message: {{ t('Checking for updates...')|tojson|forceescape }}, busyLabel: {{ t('Checking...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500});"
+            >
                 <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
             </form>
             {% if can_manage_updates %}
-            <form method="post" action="{{ request.scope.root_path }}/settings/update-application" class="form-stack" onsubmit="return confirm({{ t('Start application update now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting application update, please wait...')|tojson }});">
+            <form
+                method="post"
+                action="{{ request.scope.root_path }}/settings/update-application"
+                class="form-stack"
+                data-settings-action-id="update-application"
+                data-settings-action-group="update-controls"
+                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true});"
+            >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
             {% endif %}
         </div>
-        {% if latest_version_result and latest_version_result.ok %}
-        <dl class="details-grid">
-            <dt>{{ t("Installed VERSION") }}</dt>
-            <dd><code>{{ latest_version_result.current_version }}</code></dd>
-            <dt>{{ t("Repository VERSION") }}</dt>
-            <dd><code>{{ latest_version_result.latest_version }}</code></dd>
-            <dt>{{ t("Channel") }}</dt>
-            <dd><code>{{ latest_version_result.channel or update_channel_selected }}</code></dd>
-            <dt>{{ t("Status") }}</dt>
-            <dd>{{ t("Up to date") if latest_version_result.up_to_date else t("Update available") }}</dd>
-        </dl>
-        {% else %}
-        <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
-        {% endif %}
+        <div id="settings-version-result">
+            <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
+        </div>
     </div>
 </section>
 
@@ -118,7 +228,14 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Restart services") }}</h3>
                 <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
-                <form method="post" action="{{ request.scope.root_path }}/settings/restart-services" class="form-stack" onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting service restart, please wait...')|tojson }});">
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/restart-services"
+                    class="form-stack"
+                    data-settings-action-id="restart-services"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true, reloadDelayMs: 7000});"
+                >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
             </div>
@@ -126,7 +243,14 @@
                 <h3>{{ t("Reboot host") }}</h3>
                 <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
                 <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
-                <form method="post" action="{{ request.scope.root_path }}/settings/reboot-host" class="form-stack" onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxShowSettingsProgress({{ t('Starting host reboot, please wait...')|tojson }});">
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/reboot-host"
+                    class="form-stack"
+                    data-settings-action-id="reboot-host"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson|forceescape }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
+                >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
             </div>
@@ -134,7 +258,14 @@
                 <h3>{{ t("Power off host") }}</h3>
                 <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
                 <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
-                <form method="post" action="{{ request.scope.root_path }}/settings/poweroff-host" class="form-stack" onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxShowSettingsProgress({{ t('Starting host shutdown, please wait...')|tojson }});">
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/poweroff-host"
+                    class="form-stack"
+                    data-settings-action-id="poweroff-host"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson|forceescape }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
+                >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
                 </form>
             </div>
@@ -174,7 +305,13 @@
             {% endif %}
         </dl>
         {% if can_manage_updates %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/update-aprs-device-identification" class="form-stack" onsubmit="return aprsboxShowSettingsProgress({{ t('Starting update, please wait...')|tojson }});">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
+            class="form-stack"
+            data-settings-action-id="update-aprs-device-identification"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
             <button type="submit" class="button">{{ t("Update now") }}</button>
         </form>
         {% else %}
@@ -206,7 +343,13 @@
             </dd>
         </dl>
         {% if can_manage_database_maintenance %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/vacuum-db" class="form-stack" onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting operation, please wait...')|tojson }});">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/vacuum-db"
+            class="form-stack"
+            data-settings-action-id="vacuum-db"
+            onsubmit="return confirm({{ t('Run database vacuum now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
             <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
         </form>
         {% else %}
@@ -220,49 +363,746 @@
 {% block extra_scripts %}
 <script>
     (() => {
+        const rootPath = {{ request.scope.root_path|tojson }};
+        const fallbackCloseLabel = {{ t("OK")|tojson }};
+        let fallbackDismissed = false;
+
+        const ensureFallbackBackdrop = () => {
+            const existing = document.querySelector(".settings-progress-backdrop");
+            if (existing instanceof HTMLElement) {
+                return existing;
+            }
+            const backdrop = document.createElement("div");
+            backdrop.className = "settings-progress-backdrop";
+            backdrop.hidden = true;
+            backdrop.innerHTML = `
+                <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+                    <div class="settings-progress-header">
+                        <span class="settings-progress-spinner" aria-hidden="true"></span>
+                        <h3 class="settings-progress-title"></h3>
+                    </div>
+                    <p class="settings-progress-message"></p>
+                    <div class="settings-progress-actions">
+                        <button type="button" class="button button-secondary settings-progress-close">${fallbackCloseLabel}</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(backdrop);
+            const closeButton = backdrop.querySelector(".settings-progress-close");
+            if (closeButton instanceof HTMLButtonElement) {
+                closeButton.addEventListener("click", () => {
+                    fallbackDismissed = true;
+                    backdrop.hidden = true;
+                });
+            }
+            backdrop.addEventListener("click", (event) => {
+                if (event.target === backdrop) {
+                    fallbackDismissed = true;
+                    backdrop.hidden = true;
+                }
+            });
+            return backdrop;
+        };
+
+        const fallbackShow = (message) => {
+            if (fallbackDismissed) {
+                return;
+            }
+            const backdrop = ensureFallbackBackdrop();
+            const titleNode = backdrop.querySelector(".settings-progress-title");
+            const messageNode = backdrop.querySelector(".settings-progress-message");
+            if (titleNode instanceof HTMLElement) {
+                titleNode.textContent = "Please wait";
+            }
+            if (messageNode instanceof HTMLElement) {
+                messageNode.textContent = String(message || "Working...");
+            }
+            backdrop.hidden = false;
+        };
+
+        const fallbackDisableControls = (form) => {
+            if (!(form instanceof HTMLFormElement)) return;
+            const controls = Array.from(
+                form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")
+            ).filter((node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement);
+            form.setAttribute("aria-busy", "true");
+            for (const control of controls) {
+                control.disabled = true;
+                control.classList.add("settings-action-control-busy");
+                if (control instanceof HTMLButtonElement) {
+                    control.classList.add("settings-action-button-busy");
+                }
+            }
+        };
+
+        const fallbackPollJob = (jobId) => {
+            const url = `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId))}`;
+            const pollOnce = async () => {
+                try {
+                    const response = await window.fetch(url, {
+                        cache: "no-store",
+                        credentials: "same-origin",
+                        headers: { "Accept": "application/json" },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const payload = await response.json();
+                    const job = payload && payload.job ? payload.job : null;
+                    const status = job && job.status ? String(job.status) : "";
+                    const message = job && job.message ? String(job.message) : "";
+                    fallbackShow(message || "Working...");
+                    if (status === "success") {
+                        window.setTimeout(() => window.location.reload(), 1200);
+                        return;
+                    }
+                    if (status === "error") {
+                        return;
+                    }
+                } catch (_error) {
+                    fallbackShow("Connection lost. Retrying...");
+                }
+                window.setTimeout(pollOnce, 3000);
+            };
+            pollOnce();
+        };
+
+        const fallbackSubmit = async (form, options = {}) => {
+            fallbackDismissed = false;
+            fallbackDisableControls(form);
+            const message = String(options.message || "Working...");
+            fallbackShow(message);
+            const startedAt = Date.now();
+            const minSpinnerMs = Math.max(0, Number(options.minSpinnerMs || 500));
+            try {
+                const response = await window.fetch(form.action, {
+                    method: String(form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                });
+                let payload = null;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    payload = null;
+                }
+                const elapsed = Date.now() - startedAt;
+                if (elapsed < minSpinnerMs) {
+                    await new Promise((resolve) => window.setTimeout(resolve, minSpinnerMs - elapsed));
+                }
+
+                if (response.status === 202 && payload && payload.job_id) {
+                    fallbackPollJob(payload.job_id);
+                    return;
+                }
+
+                if (!response.ok || !payload || payload.ok !== true) {
+                    const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
+                    fallbackShow(`Operation failed. ${detail}`);
+                    return;
+                }
+
+                fallbackShow(payload.message || "Done.");
+                if (payload.reload || options.reloadOnSuccess) {
+                    window.setTimeout(() => window.location.reload(), 1200);
+                }
+            } catch (error) {
+                fallbackShow(`Operation failed. ${error && error.message ? error.message : ""}`.trim());
+            }
+        };
+
+        window.aprsboxSubmitSettingsAction = (form, options) => {
+            try {
+                if (typeof window.__aprsboxSettingsSubmit === "function") {
+                    return window.__aprsboxSettingsSubmit(form, options);
+                }
+            } catch (_error) {
+                // Fall back below.
+            }
+            void fallbackSubmit(form, options || {});
+            return false;
+        };
+    })();
+    (() => {
+        const rootPath = {{ request.scope.root_path|tojson }};
         const labels = {
             defaultTitle: {{ t("Please wait")|tojson }},
-            defaultMessage: {{ t("Operation started. The page will refresh after completion.")|tojson }},
+            defaultMessage: {{ t("Working...")|tojson }},
+            requestFailed: {{ t("Operation failed.")|tojson }},
+            reconnecting: {{ t("Connection lost. Retrying...")|tojson }},
+            timeout: {{ t("Operation status timeout. Refresh the page to verify current state.")|tojson }},
+            done: {{ t("Done.")|tojson }},
+            completed: {{ t("Operation completed.")|tojson }},
+            failed: {{ t("Operation failed.")|tojson }},
+            versionInstalled: {{ t("Installed VERSION")|tojson }},
+            versionRepo: {{ t("Repository VERSION")|tojson }},
+            versionChannel: {{ t("Channel")|tojson }},
+            versionStatus: {{ t("Status")|tojson }},
+            versionUpToDate: {{ t("Up to date")|tojson }},
+            versionUpdateAvailable: {{ t("Update available")|tojson }},
+            closeButton: {{ t("OK")|tojson }},
         };
+
+        const activeJobStorageKey = "aprsbox-settings-active-job-v1";
+        const versionResultNode = document.getElementById("settings-version-result");
+
         const backdrop = document.createElement("div");
         backdrop.className = "settings-progress-backdrop";
+        backdrop.hidden = true;
         backdrop.innerHTML = `
             <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
-                <h3 class="settings-progress-title"></h3>
+                <div class="settings-progress-header">
+                    <span class="settings-progress-spinner" aria-hidden="true"></span>
+                    <h3 class="settings-progress-title"></h3>
+                </div>
                 <p class="settings-progress-message"></p>
+                <div class="settings-progress-actions">
+                    <button type="button" class="button button-secondary settings-progress-close">${labels.closeButton}</button>
+                </div>
             </div>
         `;
-        backdrop.hidden = true;
         document.body.appendChild(backdrop);
+
         const titleNode = backdrop.querySelector(".settings-progress-title");
         const messageNode = backdrop.querySelector(".settings-progress-message");
+        const closeButton = backdrop.querySelector(".settings-progress-close");
+
         let hideTimer = null;
-        const hideBackdrop = () => {
-            backdrop.hidden = true;
+        let lockTimeoutTimer = null;
+        let progressLocked = false;
+        let activePollTimer = null;
+        let progressDismissed = false;
+
+        const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+        const waitForNextPaint = () =>
+            new Promise((resolve) => {
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => {
+                        resolve();
+                    });
+                });
+            });
+
+        const ensureMinimumSpinner = async (startedAtMs, minMs) => {
+            const elapsed = Date.now() - Number(startedAtMs || Date.now());
+            const remaining = Math.max(0, Number(minMs || 0) - elapsed);
+            if (remaining > 0) {
+                await sleep(remaining);
+            }
+        };
+
+        const clearTimers = () => {
             if (hideTimer !== null) {
                 window.clearTimeout(hideTimer);
                 hideTimer = null;
             }
+            if (lockTimeoutTimer !== null) {
+                window.clearTimeout(lockTimeoutTimer);
+                lockTimeoutTimer = null;
+            }
         };
-        window.aprsboxShowSettingsProgress = (message) => {
-            if (!(titleNode instanceof HTMLElement) || !(messageNode instanceof HTMLElement)) return true;
-            titleNode.textContent = labels.defaultTitle;
-            messageNode.textContent = String(message || labels.defaultMessage);
+
+        const stopPolling = () => {
+            if (activePollTimer !== null) {
+                window.clearTimeout(activePollTimer);
+                activePollTimer = null;
+            }
+        };
+
+        const showSettingsProgress = (message, options = {}) => {
+            clearTimers();
+            if (titleNode instanceof HTMLElement) {
+                titleNode.textContent = String(options.title || labels.defaultTitle);
+            }
+            if (messageNode instanceof HTMLElement) {
+                messageNode.textContent = String(message || labels.defaultMessage);
+            }
+            progressLocked = Boolean(options.locked);
+            if (progressLocked && progressDismissed) {
+                return true;
+            }
             backdrop.hidden = false;
-            if (hideTimer !== null) window.clearTimeout(hideTimer);
-            hideTimer = window.setTimeout(hideBackdrop, 20000);
+
+            if (!progressLocked) {
+                hideTimer = window.setTimeout(() => {
+                    hideBackdrop(true);
+                }, 2500);
+                return true;
+            }
+
+            const timeoutMs = Number(options.lockTimeoutMs || 0);
+            if (timeoutMs > 0) {
+                lockTimeoutTimer = window.setTimeout(() => {
+                    progressLocked = false;
+                    if (messageNode instanceof HTMLElement) {
+                        messageNode.textContent = labels.timeout;
+                    }
+                }, timeoutMs);
+            }
             return true;
         };
+
+        const hideBackdrop = (force = false) => {
+            if (progressLocked && !force) return;
+            backdrop.hidden = true;
+            clearTimers();
+        };
+
+        const actionForms = Array.from(document.querySelectorAll("form[data-settings-action-id]"));
+        const controlsForForm = (form) =>
+            Array.from(form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")).filter(
+                (node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement
+            );
+
+        for (const form of actionForms) {
+            for (const control of controlsForForm(form)) {
+                if (!control.dataset.settingsOriginalDisabled) {
+                    control.dataset.settingsOriginalDisabled = control.disabled ? "1" : "0";
+                }
+                if (control instanceof HTMLButtonElement && control.dataset.settingsOriginalLabel === undefined) {
+                    control.dataset.settingsOriginalLabel = control.textContent || "";
+                }
+                if (control instanceof HTMLInputElement && control.dataset.settingsOriginalLabel === undefined) {
+                    control.dataset.settingsOriginalLabel = control.value || "";
+                }
+            }
+        }
+
+        const markControlBusy = (control, busyLabel) => {
+            control.classList.add("settings-action-control-busy");
+            if (control instanceof HTMLButtonElement) {
+                control.classList.add("settings-action-button-busy");
+                if (busyLabel) {
+                    control.textContent = busyLabel;
+                }
+            }
+            if (control instanceof HTMLInputElement && busyLabel) {
+                control.value = busyLabel;
+            }
+        };
+
+        const restoreControls = () => {
+            for (const form of actionForms) {
+                delete form.dataset.settingsSubmitQueued;
+                form.removeAttribute("aria-busy");
+                for (const control of controlsForForm(form)) {
+                    const originallyDisabled = control.dataset.settingsOriginalDisabled === "1";
+                    control.disabled = originallyDisabled;
+                    control.classList.remove("settings-action-control-busy");
+                    control.classList.remove("settings-action-button-busy");
+                    if (control instanceof HTMLButtonElement && control.dataset.settingsOriginalLabel !== undefined) {
+                        control.textContent = control.dataset.settingsOriginalLabel;
+                    }
+                    if (control instanceof HTMLInputElement && control.dataset.settingsOriginalLabel !== undefined) {
+                        control.value = control.dataset.settingsOriginalLabel;
+                    }
+                }
+            }
+        };
+
+        const disableFormControls = (form, busyLabel = "") => {
+            const controls = controlsForForm(form);
+            if (!controls.length) return;
+            form.setAttribute("aria-busy", "true");
+
+            let primaryControl = null;
+            if (
+                document.activeElement instanceof HTMLButtonElement ||
+                document.activeElement instanceof HTMLInputElement
+            ) {
+                if (form.contains(document.activeElement)) {
+                    primaryControl = document.activeElement;
+                }
+            }
+            if (!(primaryControl instanceof HTMLButtonElement || primaryControl instanceof HTMLInputElement)) {
+                primaryControl = controls[0];
+            }
+
+            for (const control of controls) {
+                control.disabled = true;
+                if (control === primaryControl) {
+                    markControlBusy(control, busyLabel);
+                } else {
+                    control.classList.add("settings-action-control-busy");
+                }
+            }
+        };
+
+        const disableGroupControls = (group, exceptForm = null) => {
+            if (!group) return;
+            for (const form of actionForms) {
+                if (form === exceptForm) continue;
+                if (String(form.dataset.settingsActionGroup || "") !== String(group)) continue;
+                form.setAttribute("aria-busy", "true");
+                for (const control of controlsForForm(form)) {
+                    control.disabled = true;
+                    control.classList.add("settings-action-control-busy");
+                }
+            }
+        };
+
+        const finishAction = (message, options = {}) => {
+            stopPolling();
+            progressLocked = false;
+            restoreControls();
+            showSettingsProgress(message, { locked: false });
+            if (options.reload) {
+                const parsedDelay = Number(options.reloadDelayMs);
+                const reloadDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 1200;
+                window.setTimeout(() => {
+                    window.location.reload();
+                }, reloadDelayMs);
+            }
+        };
+
+        const renderVersionResult = (result) => {
+            if (!(versionResultNode instanceof HTMLElement)) return;
+            if (!result || typeof result !== "object") return;
+            const safe = (value) => String(value === undefined || value === null ? "" : value);
+            const upToDate = Boolean(result.up_to_date);
+            versionResultNode.innerHTML = `
+                <dl class="details-grid">
+                    <dt>${labels.versionInstalled}</dt>
+                    <dd><code>${safe(result.current_version)}</code></dd>
+                    <dt>${labels.versionRepo}</dt>
+                    <dd><code>${safe(result.latest_version)}</code></dd>
+                    <dt>${labels.versionChannel}</dt>
+                    <dd><code>${safe(result.channel)}</code></dd>
+                    <dt>${labels.versionStatus}</dt>
+                    <dd>${upToDate ? labels.versionUpToDate : labels.versionUpdateAvailable}</dd>
+                </dl>
+            `;
+        };
+
+        const submitShortJson = async (form, options) => {
+            const startedAt = Date.now();
+            const minSpinnerMs = Number(options.minSpinnerMs || 500);
+            const reloadOnSuccess = Boolean(options.reloadOnSuccess);
+
+            try {
+                await waitForNextPaint();
+
+                const response = await window.fetch(form.action, {
+                    method: String(form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                });
+
+                let payload = null;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    payload = null;
+                }
+
+                await ensureMinimumSpinner(startedAt, minSpinnerMs);
+
+                if (!response.ok || !payload || payload.ok !== true) {
+                    const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
+                    finishAction(`${labels.requestFailed} ${detail}`, { reload: false });
+                    return;
+                }
+
+                if (String(options.actionId || "") === "check-gui-version" && payload.result) {
+                    renderVersionResult(payload.result);
+                }
+
+                const successMessage = payload.message ? String(payload.message) : labels.done;
+                finishAction(successMessage, { reload: reloadOnSuccess || Boolean(payload.reload) });
+            } catch (error) {
+                await ensureMinimumSpinner(startedAt, minSpinnerMs);
+                const detail = error && error.message ? ` ${error.message}` : "";
+                finishAction(`${labels.requestFailed}${detail}`, { reload: false });
+            }
+        };
+
+        const jobStatusUrl = (jobId) => `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId || ""))}`;
+        const healthUrl = `${rootPath}/health`;
+
+        const canReloadOnHealthRecovery = (actionId, reloadOnSuccess) => {
+            if (!reloadOnSuccess) {
+                return false;
+            }
+            const normalized = String(actionId || "");
+            return normalized === "update-application" ||
+                normalized === "restart-services" ||
+                normalized === "reboot-host" ||
+                normalized === "poweroff-host";
+        };
+
+        const canFinalizeRunningJobFromHealth = (actionId, reloadOnSuccess) => {
+            if (!reloadOnSuccess) {
+                return false;
+            }
+            return String(actionId || "") === "restart-services";
+        };
+
+        const pollJobStatus = async (jobId, startedAt, options) => {
+            const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
+            const reloadAfterFinish = Boolean(options.reloadOnSuccess);
+            const actionId = String(options.actionId || "");
+            const reloadDelayMs = Number(options.reloadDelayMs || 0);
+
+            const pollOnce = async () => {
+                const elapsed = Date.now() - Number(startedAt || Date.now());
+                if (elapsed > lockTimeoutMs) {
+                    try {
+                        window.sessionStorage.removeItem(activeJobStorageKey);
+                    } catch (_error) {
+                        // Ignore storage errors.
+                    }
+                    finishAction(labels.timeout, { reload: false });
+                    return;
+                }
+
+                try {
+                    const response = await window.fetch(jobStatusUrl(jobId), {
+                        cache: "no-store",
+                        credentials: "same-origin",
+                        headers: { "Accept": "application/json" },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const payload = await response.json();
+                    const job = payload && payload.job ? payload.job : null;
+                    const status = job && job.status ? String(job.status) : "";
+                    const message = job && job.message ? String(job.message) : "";
+
+                    if (status === "success") {
+                        try {
+                            window.sessionStorage.removeItem(activeJobStorageKey);
+                        } catch (_error) {
+                            // Ignore storage errors.
+                        }
+                        finishAction(message || labels.completed, { reload: reloadAfterFinish, reloadDelayMs });
+                        return;
+                    }
+
+                    if (status === "error") {
+                        try {
+                            window.sessionStorage.removeItem(activeJobStorageKey);
+                        } catch (_error) {
+                            // Ignore storage errors.
+                        }
+                        finishAction(message || labels.failed, { reload: false });
+                        return;
+                    }
+
+                    if (canFinalizeRunningJobFromHealth(actionId, reloadAfterFinish)) {
+                        try {
+                            const healthResponse = await window.fetch(healthUrl, {
+                                cache: "no-store",
+                                credentials: "same-origin",
+                                headers: { "Accept": "application/json" },
+                            });
+                            if (healthResponse.ok) {
+                                try {
+                                    window.sessionStorage.removeItem(activeJobStorageKey);
+                                } catch (_storageError) {
+                                    // Ignore storage errors.
+                                }
+                                finishAction(message || labels.completed, { reload: true, reloadDelayMs });
+                                return;
+                            }
+                        } catch (_healthError) {
+                            // Ignore health check errors and continue polling.
+                        }
+                    }
+
+                    showSettingsProgress(message || String(options.message || labels.defaultMessage), {
+                        locked: true,
+                        lockTimeoutMs,
+                    });
+                } catch (_error) {
+                    if (canReloadOnHealthRecovery(actionId, reloadAfterFinish)) {
+                        try {
+                            const healthResponse = await window.fetch(healthUrl, {
+                                cache: "no-store",
+                                credentials: "same-origin",
+                                headers: { "Accept": "application/json" },
+                            });
+                            if (healthResponse.ok) {
+                                try {
+                                    window.sessionStorage.removeItem(activeJobStorageKey);
+                                } catch (_storageError) {
+                                    // Ignore storage errors.
+                                }
+                                finishAction(labels.completed, { reload: true, reloadDelayMs });
+                                return;
+                            }
+                        } catch (_healthError) {
+                            // Ignore health check errors and keep polling.
+                        }
+                    }
+                    const base = String(options.message || labels.defaultMessage);
+                    showSettingsProgress(`${base}\n${labels.reconnecting}`, {
+                        locked: true,
+                        lockTimeoutMs,
+                    });
+                }
+
+                activePollTimer = window.setTimeout(pollOnce, 3000);
+            };
+
+            pollOnce();
+        };
+
+        const startJob = async (form, options) => {
+            const startedAt = Date.now();
+            const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
+
+            try {
+                await waitForNextPaint();
+                const response = await window.fetch(form.action, {
+                    method: String(form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                });
+
+                const payload = await response.json();
+                if (response.status !== 202 || !payload || payload.ok !== true || !payload.job_id) {
+                    const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
+                    finishAction(`${labels.requestFailed} ${detail}`, { reload: false });
+                    return;
+                }
+
+                try {
+                    window.sessionStorage.setItem(
+                        activeJobStorageKey,
+                        JSON.stringify({
+                            jobId: Number(payload.job_id),
+                            actionId: String(options.actionId || ""),
+                            startedAt: startedAt,
+                            lockTimeoutMs,
+                            message: String(options.message || ""),
+                            reloadOnSuccess: Boolean(options.reloadOnSuccess),
+                            reloadDelayMs: Number(options.reloadDelayMs || 0),
+                        })
+                    );
+                } catch (_error) {
+                    // Ignore storage errors.
+                }
+
+                pollJobStatus(payload.job_id, startedAt, options);
+            } catch (error) {
+                const detail = error && error.message ? ` ${error.message}` : "";
+                finishAction(`${labels.requestFailed}${detail}`, { reload: false });
+            }
+        };
+
+        const submitSettingsAction = (form, options = {}) => {
+            if (!(form instanceof HTMLFormElement)) return true;
+            if (form.dataset.settingsSubmitQueued === "1") return false;
+
+            const actionId = String(options.actionId || form.dataset.settingsActionId || "");
+            const message = String(options.message || labels.defaultMessage);
+            const busyLabel = String(options.busyLabel || "");
+            const group = String(options.group || form.dataset.settingsActionGroup || "");
+            const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
+            const mode = String(options.mode || "json");
+
+            progressDismissed = false;
+            form.dataset.settingsSubmitQueued = "1";
+            disableFormControls(form, busyLabel);
+            disableGroupControls(group, form);
+            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+
+            if (mode === "job") {
+                startJob(form, options);
+                return false;
+            }
+
+            if (mode === "json") {
+                const mergedOptions = {};
+                if (options && typeof options === "object") {
+                    for (const key in options) {
+                        if (Object.prototype.hasOwnProperty.call(options, key)) {
+                            mergedOptions[key] = options[key];
+                        }
+                    }
+                }
+                mergedOptions.actionId = actionId;
+                submitShortJson(form, mergedOptions);
+                return false;
+            }
+
+            finishAction(`${labels.requestFailed} Unsupported action mode.`, { reload: false });
+            return false;
+        };
+
+        const resumeActiveJob = () => {
+            let stored = null;
+            try {
+                const raw = window.sessionStorage.getItem(activeJobStorageKey);
+                stored = raw ? JSON.parse(raw) : null;
+            } catch (_error) {
+                stored = null;
+            }
+            if (!stored || typeof stored !== "object") return;
+            const jobId = Number(stored.jobId || "");
+            if (!Number.isFinite(jobId) || jobId <= 0) return;
+
+            const actionId = String(stored.actionId || "").trim();
+            const form = actionId
+                ? actionForms.find((candidate) => String(candidate.dataset.settingsActionId || "") === actionId)
+                : null;
+            if (form instanceof HTMLFormElement) {
+                disableFormControls(form, "");
+                disableGroupControls(String(form.dataset.settingsActionGroup || ""), form);
+            }
+
+            const lockTimeoutMs = Number(stored.lockTimeoutMs || 120000);
+            const startedAt = Number(stored.startedAt || Date.now());
+            const message = String(stored.message || labels.defaultMessage);
+            const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
+            const reloadDelayMs = Number(stored.reloadDelayMs || 0);
+
+            progressDismissed = false;
+            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess, reloadDelayMs });
+        };
+
+        window.__aprsboxSettingsSubmit = submitSettingsAction;
+        window.aprsboxShowSettingsProgress = showSettingsProgress;
         window.aprsboxHideSettingsProgress = hideBackdrop;
+
         backdrop.addEventListener("click", (event) => {
-            if (event.target === backdrop) hideBackdrop();
+            if (event.target === backdrop) {
+                hideBackdrop();
+            }
         });
+
         window.addEventListener("keydown", (event) => {
-            if (event.key === "Escape") hideBackdrop();
+            if (event.key === "Escape") {
+                hideBackdrop();
+            }
         });
-        window.addEventListener("pageshow", () => {
-            hideBackdrop();
-        });
+
+        if (closeButton instanceof HTMLButtonElement) {
+            closeButton.addEventListener("click", () => {
+                if (progressLocked) {
+                    progressDismissed = true;
+                    backdrop.hidden = true;
+                    return;
+                }
+                hideBackdrop();
+            });
+        }
+
+        resumeActiveJob();
     })();
 </script>
 {% endblock %}

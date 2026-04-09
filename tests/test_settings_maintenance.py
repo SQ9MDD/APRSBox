@@ -1,5 +1,6 @@
 import contextlib
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,7 +55,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('@router.post("/settings/vacuum-db")', router_source)
         self.assertIn("if has_enabled_modem_interface():", router_source)
-        self.assertIn('flash="Disable all TNC interfaces before running database vacuum."', router_source)
+        self.assertIn("Disable all TNC interfaces before running database vacuum.", router_source)
+        self.assertIn("status.HTTP_409_CONFLICT", router_source)
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
@@ -69,6 +71,25 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertNotIn('{{ t("Update log") }}', template_source)
         self.assertNotIn("update-log-preview", template_source)
 
+    def test_settings_template_uses_shared_async_action_handler(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("window.aprsboxSubmitSettingsAction", template_source)
+        self.assertIn("window.__aprsboxSettingsSubmit", template_source)
+        self.assertIn("settings-progress-close", template_source)
+        self.assertIn('data-settings-action-id="check-gui-version"', template_source)
+        self.assertIn('data-settings-action-id="update-application"', template_source)
+        self.assertIn('data-settings-action-id="restart-services"', template_source)
+        self.assertIn('data-settings-action-id="reboot-host"', template_source)
+        self.assertIn('data-settings-action-id="poweroff-host"', template_source)
+        self.assertIn('data-settings-action-group="update-controls"', template_source)
+        self.assertIn('data-settings-action-group="danger-actions"', template_source)
+
+    def test_settings_styles_include_busy_state_spinner(self) -> None:
+        style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".settings-action-button-busy", style_source)
+        self.assertIn(".settings-progress-spinner", style_source)
+        self.assertIn("@keyframes settings-spin", style_source)
+
     def test_settings_router_contains_danger_zone_endpoints(self) -> None:
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('@router.post("/settings/update-application")', router_source)
@@ -80,6 +101,23 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('@router.get("/api/settings/update/channel")', router_source)
         self.assertIn('@router.post("/api/settings/update/channel")', router_source)
         self.assertIn('@router.get("/api/settings/update/log")', router_source)
+        self.assertIn('@router.get("/api/settings/jobs/{job_id}")', router_source)
+
+    def test_settings_template_escapes_tojson_in_onsubmit_attributes(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        unescaped_tojson = re.findall(r'onsubmit="[^"]*\|tojson(?!\|forceescape)', template_source)
+        self.assertEqual([], unescaped_tojson)
+
+    def test_update_application_has_forty_five_second_timeout(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("actionId: 'update-application'", template_source)
+        self.assertIn("lockTimeoutMs: 45000", template_source)
+
+    def test_restart_services_has_reload_delay(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("actionId: 'restart-services'", template_source)
+        self.assertIn("lockTimeoutMs: 45000", template_source)
+        self.assertIn("reloadDelayMs: 7000", template_source)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
 LOG_DIR="${APRSBOX_LOG_DIR:-$INSTALL_ROOT/logs}"
 GIT_URL="${APRSBOX_GIT_URL:-https://github.com/SQ9MDD/APRSBox.git}"
 GIT_BRANCH="${APRSBOX_GIT_BRANCH:-}"
+JOB_ID="${APRSBOX_JOB_ID:-}"
 WORKDIR="$(mktemp -d)"
 CHECKOUT_DIR="$WORKDIR/repo"
 STAGING_APP_DIR="$INSTALL_ROOT/app.new.$$"
@@ -17,13 +18,50 @@ PREVIOUS_VENV_DIR=""
 PREVIOUS_APP_DIR=""
 SERVICE_MANAGER="unknown"
 UPDATE_CHANNEL_SETTING_KEY="gui_update_branch"
+JOB_FINAL_STATUS=""
+JOB_FINAL_MESSAGE=""
 
 log() {
     printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
 }
 
+job_can_update() {
+    if [ -z "$JOB_ID" ] || [ -z "$DB_PATH" ]; then
+        return 1
+    fi
+    case "$JOB_ID" in
+        *[!0-9]*)
+            return 1
+            ;;
+    esac
+    command -v sqlite3 >/dev/null 2>&1
+}
+
+job_escape() {
+    printf '%s' "$1" | sed "s/'/''/g"
+}
+
+job_update() {
+    status="$1"
+    message="${2:-}"
+    exit_code="${3:-}"
+    if ! job_can_update; then
+        return 0
+    fi
+    now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    safe_message="$(job_escape "$message")"
+    safe_status="$(job_escape "$status")"
+    exit_sql="NULL"
+    if [ -n "$exit_code" ]; then
+        exit_sql="$(job_escape "$exit_code")"
+    fi
+    sqlite3 "$DB_PATH" ".timeout 5000" "UPDATE system_jobs SET status = '$safe_status', message = '$safe_message', exit_code = $exit_sql, started_at = COALESCE(started_at, '$now'), finished_at = CASE WHEN '$safe_status' IN ('success','error') THEN COALESCE(finished_at, '$now') ELSE finished_at END, updated_at = '$now' WHERE id = $JOB_ID;" >/dev/null 2>&1 || true
+}
+
 fail() {
     log "ERROR: $*"
+    JOB_FINAL_STATUS="error"
+    JOB_FINAL_MESSAGE="Application update failed: $*"
     exit 1
 }
 
@@ -39,7 +77,27 @@ cleanup() {
     fi
 }
 
-trap cleanup EXIT INT TERM
+on_exit() {
+    code="$?"
+    status="$JOB_FINAL_STATUS"
+    message="$JOB_FINAL_MESSAGE"
+    if [ -z "$status" ]; then
+        if [ "$code" -eq 0 ]; then
+            status="success"
+            message="Application update finished successfully."
+        else
+            status="error"
+            message="Application update failed (exit $code)."
+        fi
+    fi
+    job_update "$status" "$message" "$code"
+    cleanup
+    exit "$code"
+}
+
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 detect_service_manager() {
     init_comm="$(cat /proc/1/comm 2>/dev/null || true)"
@@ -82,7 +140,8 @@ restart_services_fallback() {
 stop_services() {
     case "$SERVICE_MANAGER" in
         systemd)
-            systemctl stop aprsbox-web.service aprsbox-core.service >/dev/null 2>&1 || true
+            log "Systemd update path: keeping aprsbox-web running during file switch to avoid updater self-termination."
+            systemctl stop aprsbox-core.service >/dev/null 2>&1 || true
             ;;
         openrc)
             rc-service aprsbox-web stop >/dev/null 2>&1 || true
@@ -148,6 +207,7 @@ resolve_update_channel() {
 
 resolve_update_channel
 log "Starting application update from $GIT_URL ($GIT_BRANCH)"
+job_update "running" "Application update started." ""
 mkdir -p "$LOG_DIR"
 mkdir -p "$INSTALL_ROOT/backups"
 
@@ -235,7 +295,21 @@ PYTHONPATH="$APP_DIR" \
 chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 
 RESTART_SCRIPT="$APP_DIR/scripts/restart-services.sh"
-if [ -x "$RESTART_SCRIPT" ]; then
+if [ "$SERVICE_MANAGER" = "systemd" ]; then
+    systemctl restart aprsbox-core.service
+    if command -v systemd-run >/dev/null 2>&1; then
+        restart_unit="aprsbox-web-restart-$$"
+        if systemd-run --quiet --collect --unit "$restart_unit" /bin/sh -c "sleep 1; systemctl restart aprsbox-web.service" >/dev/null 2>&1; then
+            log "Scheduled aprsbox-web restart using transient systemd unit: $restart_unit"
+        else
+            log "WARNING: Failed to schedule deferred aprsbox-web restart; falling back to direct restart."
+            systemctl restart aprsbox-web.service
+        fi
+    else
+        log "WARNING: systemd-run not available; restarting aprsbox-web directly."
+        systemctl restart aprsbox-web.service
+    fi
+elif [ -x "$RESTART_SCRIPT" ]; then
     "$RESTART_SCRIPT"
 else
     log "WARNING: restart script missing at $RESTART_SCRIPT. Using built-in fallback."
@@ -251,3 +325,5 @@ if [ -n "$PREVIOUS_VENV_DIR" ] && [ -d "$PREVIOUS_VENV_DIR" ]; then
 fi
 
 log "Application update finished successfully."
+JOB_FINAL_STATUS="success"
+JOB_FINAL_MESSAGE="Application update finished successfully."

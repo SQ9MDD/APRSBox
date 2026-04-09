@@ -1010,6 +1010,36 @@ select:focus-visible,
     transform: translateY(0);
 }
 
+.button:disabled,
+.button-secondary:disabled,
+.theme-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.68;
+    transform: none;
+    filter: none;
+}
+
+.settings-action-control-busy {
+    pointer-events: none;
+}
+
+.button.settings-action-button-busy,
+.button-secondary.settings-action-button-busy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.settings-action-button-busy::before {
+    content: "";
+    width: 0.78rem;
+    height: 0.78rem;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: settings-spin 0.8s linear infinite;
+}
+
 .button-secondary.button-danger:hover {
     border-color: rgba(201, 122, 122, 0.46);
     background: rgba(201, 122, 122, 0.08);
@@ -2450,6 +2480,22 @@ select:focus-visible,
     cursor: default;
 }
 
+.settings-progress-header {
+    display: flex;
+    align-items: center;
+    gap: 0.62rem;
+}
+
+.settings-progress-spinner {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    border: 2px solid rgba(109, 189, 128, 0.35);
+    border-top-color: var(--accent);
+    animation: settings-spin 0.85s linear infinite;
+    flex-shrink: 0;
+}
+
 .settings-progress-title {
     margin: 0;
     font-size: 0.96rem;
@@ -2458,6 +2504,12 @@ select:focus-visible,
 .settings-progress-message {
     margin: 0;
     color: var(--muted);
+}
+
+@keyframes settings-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .simple-list {
