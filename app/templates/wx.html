@@ -386,7 +386,7 @@
                         <td>
                             <span class="status-pill {{ source.last_test_status_class }}">{{ source.last_test_status_label }}</span>
                             {% if source.last_test_at %}
-                            <div class="muted small">{{ source.last_test_at }}</div>
+                            <div class="muted small">{{ format_datetime(source.last_test_at, use_utc=True) }}</div>
                             {% endif %}
                             {% if source.last_test_error %}
                             <div class="muted small">{{ source.last_test_error }}</div>

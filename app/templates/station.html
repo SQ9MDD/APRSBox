@@ -259,7 +259,7 @@
                 <tbody>
                     {% for row in beacon_log_rows %}
                     <tr{% if row.is_tx_skipped %} class="station-tx-row-skipped"{% endif %}>
-                        <td>{{ row.display_time.replace('T', ' ').replace('+00:00', ' UTC') if row.display_time else '-' }}</td>
+                        <td>{{ format_datetime(row.display_time, use_utc=True) if row.display_time else '-' }}</td>
                         <td>{{ t(row.kind) }}</td>
                         <td>
                             <span class="status-pill {% if row.status == 'sent' %}status-running{% elif row.status == 'failed' %}status-stopped{% else %}status-unknown{% endif %}">

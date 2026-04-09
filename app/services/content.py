@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.config import settings
+from app.datetime_utils import format_display_datetime
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.i18n import get_app_language, get_translator
 from app.services.aprs_device_identification import (
@@ -828,11 +829,8 @@ def _traffic_frame_row_class(
 def _format_monitor_timestamp(timestamp: str | None) -> str:
     if not timestamp:
         return "-"
-    try:
-        local_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone()
-    except ValueError:
-        return timestamp
-    return local_time.strftime("%Y.%m.%d %H:%M:%S")
+    formatted = format_display_datetime(timestamp)
+    return formatted or "-"
 
 
 def dashboard_summary() -> dict[str, Any]:
