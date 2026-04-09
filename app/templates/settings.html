@@ -49,52 +49,69 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("GUI Update") }}</h2>
-                <p class="section-lead">{{ t("Check version and, when a newer release is available, update the installed GUI from GitHub.") }}</p>
+                <h2>{{ t("Application update") }}</h2>
+                <p class="section-lead">{{ t("Configure the update channel and run application update from the configured repository.") }}</p>
             </div>
         </div>
-    </div>
-</section>
-
-<section class="grid two">
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>{{ t("Installed GUI") }}</h2>
-                </div>
+        <dl class="details-grid">
+            <dt>{{ t("Current version") }}</dt>
+            <dd><code>{{ current_gui_version }}</code></dd>
+            <dt>{{ t("Repository") }}</dt>
+            <dd><code>{{ update_channel_source }}</code></dd>
+            <dt>{{ t("Update channel") }}</dt>
+            <dd><code>{{ update_channel_selected }}</code></dd>
+        </dl>
+        {% if can_manage_updates %}
+        <form method="post" action="{{ request.scope.root_path }}/settings/update-channel" class="form-grid">
+            <label>
+                <span>{{ t("Update channel") }}</span>
+                <select name="update_channel">
+                    {% for option in update_channel_options %}
+                    <option value="{{ option.value }}" {% if update_channel_selected == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button button-secondary">{{ t("Save update channel") }}</button>
             </div>
-            <dl class="details-grid">
-                <dt>{{ t("Current version") }}</dt>
-                <dd><code>{{ current_gui_version }}</code></dd>
-                <dt>{{ t("Repository") }}</dt>
-                <dd><code>{{ gui_update_url }}</code></dd>
-                <dt>{{ t("Branch") }}</dt>
-                <dd><code>{{ gui_update_branch }}</code></dd>
-            </dl>
+        </form>
+        {% else %}
+        <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
+        {% endif %}
+        {% if update_channels_fetch_error %}
+        <div class="alert">{{ t("Update channel list could not be refreshed. Using saved channel.") }}</div>
+        <p class="muted"><code>{{ update_channels_fetch_error }}</code></p>
+        {% endif %}
+        {% if update_channel_is_unstable %}
+        <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
+        {% endif %}
+        <p class="muted">{{ t("This action fetches the latest code, prepares staged files, runs database init, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end.")|safe }}</p>
+        <p class="muted">{{ t("Services are restarted only after update preparation. The GUI may temporarily lose connection during restart.") }}</p>
+        <div class="settings-update-actions">
             <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack">
-                <button type="submit" class="button">{{ t("Check version") }}</button>
+                <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
             </form>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>{{ t("Update application") }}</h2>
-                </div>
-            </div>
             {% if can_manage_updates %}
-            <p class="muted">{{ t("This action fetches the latest code, prepares staged files, runs database init, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end.")|safe }}</p>
-            <p class="muted">{{ t("Services are restarted only after update preparation. The GUI may temporarily lose connection during restart.") }}</p>
             <form method="post" action="{{ request.scope.root_path }}/settings/update-application" class="form-stack" onsubmit="return confirm({{ t('Start application update now?')|tojson }});">
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
-            {% else %}
-            <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
             {% endif %}
         </div>
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Update log") }}</h2>
+                <p class="section-lead">{{ t("Latest lines from the last application update run.") }}</p>
+            </div>
+        </div>
+        {% if update_log_exists %}
+        <p class="muted"><code>{{ update_log_path }}</code></p>
+        <pre class="update-log-preview">{{ update_log_content }}</pre>
+        {% if update_log_truncated %}
+        <p class="muted">{{ t("Log output is truncated to the most recent lines.") }}</p>
+        {% endif %}
+        {% else %}
+        <p class="muted">{{ t("No update log is available yet.") }}</p>
+        {% endif %}
     </div>
 </section>
 
@@ -108,13 +125,6 @@
         </div>
         {% if can_manage_updates %}
         <div class="danger-zone-actions">
-            <div class="danger-zone-item">
-                <h3>{{ t("Update application") }}</h3>
-                <p class="muted">{{ t("Services are restarted at the end of update. The GUI may temporarily lose connection.") }}</p>
-                <form method="post" action="{{ request.scope.root_path }}/settings/update-application" class="form-stack" onsubmit="return confirm({{ t('Start application update now?')|tojson }});">
-                    <button type="submit" class="button button-secondary">{{ t("Update application") }}</button>
-                </form>
-            </div>
             <div class="danger-zone-item">
                 <h3>{{ t("Restart services") }}</h3>
                 <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>

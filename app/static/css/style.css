@@ -2403,6 +2403,26 @@ select:focus-visible,
     font-size: 0.92rem;
 }
 
+.settings-update-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.update-log-preview {
+    margin: 0;
+    max-height: 20rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+    font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--text);
+}
+
 .simple-list {
     padding-left: 1rem;
     margin: 0;

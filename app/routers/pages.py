@@ -83,8 +83,12 @@ from app.services.map_service import (
 )
 from app.services.outbound import enqueue_beacon_job
 from app.services.system import (
+    current_update_channel,
     current_gui_version,
     latest_gui_version,
+    list_update_channels,
+    read_update_log,
+    save_update_channel,
     start_application_update,
     start_host_poweroff,
     start_host_reboot,
@@ -331,6 +335,14 @@ def _settings_page_context(
 ) -> dict:
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
+    update_channels = list_update_channels()
+    selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
+    stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
+    update_channel_options = [
+        {"value": str(name), "label": str(name)}
+        for name in (update_channels.get("channels") or [selected_update_channel])
+    ]
+    update_log_snapshot = read_update_log()
     return build_template_context(
         request,
         page_title="Settings",
@@ -338,7 +350,7 @@ def _settings_page_context(
         active_nav="settings",
         current_gui_version=current_gui_version(),
         gui_update_url=request.app.state.settings.gui_update_url,
-        gui_update_branch=request.app.state.settings.gui_update_branch,
+        gui_update_branch=selected_update_channel,
         latest_version_result=latest_version_result,
         flash=flash,
         flash_success=flash_success,
@@ -350,6 +362,16 @@ def _settings_page_context(
         aprs_device_identification_status=get_aprs_device_identification_status(),
         event_log_keep_rows=DEFAULT_EVENT_LOG_KEEP_ROWS,
         database_vacuum_blocked=database_vacuum_blocked,
+        update_channel_selected=selected_update_channel,
+        update_channel_stable=stable_update_channel,
+        update_channel_is_unstable=selected_update_channel != stable_update_channel,
+        update_channel_options=update_channel_options,
+        update_channels_fetch_error=str(update_channels.get("error") or "").strip() or None,
+        update_channel_source=str(update_channels.get("source") or request.app.state.settings.gui_update_url),
+        update_log_exists=bool(update_log_snapshot.get("exists")),
+        update_log_content=str(update_log_snapshot.get("content") or ""),
+        update_log_path=str(update_log_snapshot.get("path") or ""),
+        update_log_truncated=bool(update_log_snapshot.get("truncated")),
     )
 
 
@@ -677,6 +699,27 @@ def settings_update_gui(
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
 
 
+@router.post("/settings/update-channel")
+def settings_update_channel(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    update_channel: str = Form(...),
+) -> object:
+    templates = request.app.state.templates
+    try:
+        save_update_channel(update_channel)
+    except ValueError as exc:
+        context = _settings_page_context(request, current_user, flash=str(exc), flash_success=False)
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Update channel saved.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("settings.html", context)
+
+
 @router.post("/settings/update-application")
 def settings_update_application(
     request: Request,
@@ -691,6 +734,47 @@ def settings_update_application(
         flash = f"Application update started in background. Log: {result['log_file']}"
     context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.get("/api/settings/update/channels")
+def settings_update_channels_api(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(list_update_channels())
+
+
+@router.get("/api/settings/update/channel")
+def settings_update_channel_api(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    channels = list_update_channels()
+    return JSONResponse(
+        {
+            "channel": channels.get("selected_channel") or current_update_channel(),
+            "stable_channel": channels.get("stable_channel"),
+            "source": channels.get("source"),
+        }
+    )
+
+
+@router.post("/api/settings/update/channel")
+async def settings_update_channel_set_api(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    try:
+        selected = save_update_channel(str(payload.get("channel") or ""))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse({"ok": True, "channel": selected})
+
+
+@router.get("/api/settings/update/log")
+def settings_update_log_api(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(read_update_log())
 
 
 @router.post("/settings/restart-services")
