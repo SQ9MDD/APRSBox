@@ -82,7 +82,14 @@ from app.services.map_service import (
     get_station_detail_track_payload,
 )
 from app.services.outbound import enqueue_beacon_job
-from app.services.system import current_gui_version, latest_gui_version, start_gui_update
+from app.services.system import (
+    current_gui_version,
+    latest_gui_version,
+    start_application_update,
+    start_host_poweroff,
+    start_host_reboot,
+    start_service_restart,
+)
 from app.template_helpers import build_template_context
 from app.services.wx import (
     delete_wx_source,
@@ -660,12 +667,76 @@ def settings_update_gui(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
-    result = start_gui_update()
+    result = start_application_update()
     flash = None
     if not result.get("ok"):
         flash = result.get("error")
     else:
-        flash = f"GUI update started in background. Log: {result['log_file']}"
+        flash = f"Application update started in background. Log: {result['log_file']}"
+    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/update-application")
+def settings_update_application(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = start_application_update()
+    flash = None
+    if not result.get("ok"):
+        flash = result.get("error")
+    else:
+        flash = f"Application update started in background. Log: {result['log_file']}"
+    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/restart-services")
+def settings_restart_services(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = start_service_restart()
+    flash = None
+    if not result.get("ok"):
+        flash = result.get("error")
+    else:
+        flash = f"Service restart started in background. Log: {result['log_file']}"
+    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/reboot-host")
+def settings_reboot_host(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = start_host_reboot()
+    flash = None
+    if not result.get("ok"):
+        flash = result.get("error")
+    else:
+        flash = f"Host reboot started in background. Log: {result['log_file']}"
+    context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
+
+
+@router.post("/settings/poweroff-host")
+def settings_poweroff_host(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = start_host_poweroff()
+    flash = None
+    if not result.get("ok"):
+        flash = result.get("error")
+    else:
+        flash = f"Host power off started in background. Log: {result['log_file']}"
     context = _settings_page_context(request, current_user, flash=flash, flash_success=bool(result.get("ok")))
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST if not result.get("ok") else 200)
 

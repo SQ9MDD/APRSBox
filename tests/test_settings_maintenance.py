@@ -56,6 +56,23 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("if has_enabled_modem_interface():", router_source)
         self.assertIn('flash="Disable all TNC interfaces before running database vacuum."', router_source)
 
+    def test_settings_template_contains_danger_zone_actions(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('{{ t("Danger zone") }}', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/update-application"', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/restart-services"', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/reboot-host"', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/poweroff-host"', template_source)
+        self.assertIn("Type REBOOT to confirm host reboot.", template_source)
+        self.assertIn("Type POWER OFF to confirm host shutdown.", template_source)
+
+    def test_settings_router_contains_danger_zone_endpoints(self) -> None:
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        self.assertIn('@router.post("/settings/update-application")', router_source)
+        self.assertIn('@router.post("/settings/restart-services")', router_source)
+        self.assertIn('@router.post("/settings/reboot-host")', router_source)
+        self.assertIn('@router.post("/settings/poweroff-host")', router_source)
+
 
 if __name__ == "__main__":
     unittest.main()

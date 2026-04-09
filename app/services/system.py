@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -55,18 +56,32 @@ def latest_gui_version() -> dict[str, Any]:
         }
 
 
-def start_gui_update() -> dict[str, Any]:
-    script_path = settings.repo_root / "scripts" / "update-gui.sh"
-    log_file = settings.log_dir / "gui-update.log"
+def _script_command(script_path: Path) -> list[str]:
+    command = [str(script_path)]
+    runner = settings.privileged_runner.strip()
+    if not runner:
+        return command
+    return [*shlex.split(runner), *command]
+
+
+def _start_background_script(
+    *,
+    script_name: str,
+    log_filename: str,
+    extra_env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    script_path = settings.repo_root / "scripts" / script_name
+    log_file = settings.log_dir / log_filename
     settings.log_dir.mkdir(parents=True, exist_ok=True)
 
-    if not script_path.exists():
-        return {"ok": False, "error": f"Update script not found: {script_path}"}
+    if not script_path.is_file():
+        return {"ok": False, "error": f"Script not found: {script_path}"}
 
     log_handle = log_file.open("a", encoding="utf-8")
+    command = _script_command(script_path)
     try:
         process = subprocess.Popen(
-            [str(script_path)],
+            command,
             stdout=log_handle,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -75,13 +90,49 @@ def start_gui_update() -> dict[str, Any]:
                 **dict(os.environ),
                 "APRSBOX_INSTALL_ROOT": str(settings.install_root),
                 "APRSBOX_LOG_DIR": str(settings.log_dir),
-                "APRSBOX_GIT_URL": settings.gui_update_url,
-                "APRSBOX_GIT_BRANCH": settings.gui_update_branch,
+                **(extra_env or {}),
             },
         )
     except OSError as exc:
         log_handle.close()
-        return {"ok": False, "error": f"Failed to start update script: {exc}"}
+        return {"ok": False, "error": f"Failed to start script: {exc}"}
 
     log_handle.close()
-    return {"ok": True, "pid": process.pid, "log_file": str(log_file)}
+    return {"ok": True, "pid": process.pid, "log_file": str(log_file), "command": " ".join(command)}
+
+
+def start_application_update() -> dict[str, Any]:
+    return _start_background_script(
+        script_name="update.sh",
+        log_filename="application-update.log",
+        extra_env={
+            "APRSBOX_GIT_URL": settings.gui_update_url,
+            "APRSBOX_GIT_BRANCH": settings.gui_update_branch,
+        },
+    )
+
+
+def start_service_restart() -> dict[str, Any]:
+    return _start_background_script(
+        script_name="restart-services.sh",
+        log_filename="service-restart.log",
+    )
+
+
+def start_host_reboot() -> dict[str, Any]:
+    return _start_background_script(
+        script_name="reboot-host.sh",
+        log_filename="host-reboot.log",
+    )
+
+
+def start_host_poweroff() -> dict[str, Any]:
+    return _start_background_script(
+        script_name="poweroff-host.sh",
+        log_filename="host-poweroff.log",
+    )
+
+
+def start_gui_update() -> dict[str, Any]:
+    # Backward-compatible alias for older call sites.
+    return start_application_update()

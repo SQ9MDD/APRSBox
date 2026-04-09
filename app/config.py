@@ -21,6 +21,7 @@ class Settings:
     repo_root: Path = _repo_root()
     gui_update_url: str = os.getenv("APRSBOX_GIT_URL", "https://github.com/SQ9MDD/APRSBox.git")
     gui_update_branch: str = os.getenv("APRSBOX_GIT_BRANCH", "main")
+    privileged_runner: str = os.getenv("APRSBOX_PRIVILEGED_RUNNER", "").strip()
     core_host: str = os.getenv("APRSBOX_CORE_HOST", "127.0.0.1")
     core_port: int = int(os.getenv("APRSBOX_CORE_PORT", "18081"))
     root_path: str = os.getenv("APRSBOX_ROOT_PATH", "").rstrip("/")

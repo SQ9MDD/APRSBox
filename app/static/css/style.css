@@ -2379,6 +2379,30 @@ select:focus-visible,
     color: var(--success);
 }
 
+.danger-zone-panel {
+    border-color: rgba(201, 122, 122, 0.34);
+}
+
+.danger-zone-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+.danger-zone-item {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+}
+
+.danger-zone-item h3 {
+    margin: 0;
+    font-size: 0.92rem;
+}
+
 .simple-list {
     padding-left: 1rem;
     margin: 0;
@@ -3719,6 +3743,7 @@ button.message-delivery-badge {
     .dashboard-overview-grid,
     .dashboard-detail-grid,
     .band-condition-layout,
+    .danger-zone-actions,
     .form-grid,
     .station-detail-hero,
     .digi-flow-endpoints,
