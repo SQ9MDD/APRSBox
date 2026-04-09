@@ -28,8 +28,16 @@ case "$SERVICE_MANAGER" in
         systemctl restart aprsbox-web.service
         ;;
     openrc)
-        rc-service aprsbox-core restart || rc-service aprsbox-core start
-        rc-service aprsbox-web restart || rc-service aprsbox-web start
+        if rc-service aprsbox-core status >/dev/null 2>&1; then
+            rc-service aprsbox-core restart || { rc-service aprsbox-core stop || true; rc-service aprsbox-core start; }
+        else
+            rc-service aprsbox-core start
+        fi
+        if rc-service aprsbox-web status >/dev/null 2>&1; then
+            rc-service aprsbox-web restart || { rc-service aprsbox-web stop || true; rc-service aprsbox-web start; }
+        else
+            rc-service aprsbox-web start
+        fi
         ;;
     *)
         log "No supported service manager detected."
