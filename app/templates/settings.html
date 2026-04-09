@@ -48,6 +48,21 @@
         white-space: pre-line;
     }
 
+    .settings-progress-actions {
+        margin-top: 0.9rem;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .settings-progress-close {
+        min-width: 4.5rem;
+    }
+
+    .settings-progress-close[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
     .settings-progress-spinner {
         width: 1.2rem;
         height: 1.2rem;
@@ -354,6 +369,7 @@
 <script>
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};
+        const fallbackCloseLabel = {{ t("OK")|tojson }};
 
         const ensureFallbackBackdrop = () => {
             const existing = document.querySelector(".settings-progress-backdrop");
@@ -370,9 +386,23 @@
                         <h3 class="settings-progress-title"></h3>
                     </div>
                     <p class="settings-progress-message"></p>
+                    <div class="settings-progress-actions">
+                        <button type="button" class="button button-secondary settings-progress-close">${fallbackCloseLabel}</button>
+                    </div>
                 </div>
             `;
             document.body.appendChild(backdrop);
+            const closeButton = backdrop.querySelector(".settings-progress-close");
+            if (closeButton instanceof HTMLButtonElement) {
+                closeButton.addEventListener("click", () => {
+                    backdrop.hidden = true;
+                });
+            }
+            backdrop.addEventListener("click", (event) => {
+                if (event.target === backdrop) {
+                    backdrop.hidden = true;
+                }
+            });
             return backdrop;
         };
 
@@ -512,6 +542,7 @@
             versionStatus: {{ t("Status")|tojson }},
             versionUpToDate: {{ t("Up to date")|tojson }},
             versionUpdateAvailable: {{ t("Update available")|tojson }},
+            closeButton: {{ t("OK")|tojson }},
         };
 
         const activeJobStorageKey = "aprsbox-settings-active-job-v1";
@@ -527,17 +558,27 @@
                     <h3 class="settings-progress-title"></h3>
                 </div>
                 <p class="settings-progress-message"></p>
+                <div class="settings-progress-actions">
+                    <button type="button" class="button button-secondary settings-progress-close">${labels.closeButton}</button>
+                </div>
             </div>
         `;
         document.body.appendChild(backdrop);
 
         const titleNode = backdrop.querySelector(".settings-progress-title");
         const messageNode = backdrop.querySelector(".settings-progress-message");
+        const closeButton = backdrop.querySelector(".settings-progress-close");
 
         let hideTimer = null;
         let lockTimeoutTimer = null;
         let progressLocked = false;
         let activePollTimer = null;
+
+        const syncCloseButtonState = () => {
+            if (closeButton instanceof HTMLButtonElement) {
+                closeButton.disabled = progressLocked;
+            }
+        };
 
         const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
         const waitForNextPaint = () =>
@@ -584,6 +625,7 @@
                 messageNode.textContent = String(message || labels.defaultMessage);
             }
             progressLocked = Boolean(options.locked);
+            syncCloseButtonState();
             backdrop.hidden = false;
 
             if (!progressLocked) {
@@ -597,6 +639,7 @@
             if (timeoutMs > 0) {
                 lockTimeoutTimer = window.setTimeout(() => {
                     progressLocked = false;
+                    syncCloseButtonState();
                     if (messageNode instanceof HTMLElement) {
                         messageNode.textContent = labels.timeout;
                     }
@@ -981,6 +1024,12 @@
                 hideBackdrop();
             }
         });
+
+        if (closeButton instanceof HTMLButtonElement) {
+            closeButton.addEventListener("click", () => {
+                hideBackdrop();
+            });
+        }
 
         resumeActiveJob();
     })();
