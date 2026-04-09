@@ -7,6 +7,9 @@ APRSBox is a lightweight APRS operations application for Raspberry Pi and Linux 
 
 The project is no longer "GUI only". It already includes a working SQLite-backed configuration model, authenticated GUI, TCP KISS and serial KISS traffic monitoring, outbound APRS transmission for selected packet types, and native installation scripts for OpenRC and systemd hosts.
 
+<img width="1702" height="1147" alt="APRSBox" src="https://github.com/user-attachments/assets/cfa35f80-3db4-4601-af37-ad8fb9f1f4ce" />
+
+
 ## Fast Install
 
 If you want to install APRSBox on a target Linux machine, the fastest path is a single installer command.
