@@ -102,6 +102,29 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(track["points"][0]["heard_at"], "2026-01-01T00:00:00+00:00")
             self.assertEqual(track["points"][1]["heard_at"], "2026-01-01T00:05:00+00:00")
 
+    def test_map_payload_ignores_null_island_points_in_mobile_tracks(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload())
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5218.37N\\02104.87Eu243/002/A=000278Back on track!",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+            insert_position_frame(
+                "SP8ABC-9>APRS:!0000.00N\\00000.00Eu243/002/A=000278No GPS fix",
+                created_at="2026-01-01T00:03:00+00:00",
+            )
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5219.00N\\02105.30Eu240/010/A=000300Moving east",
+                created_at="2026-01-01T00:05:00+00:00",
+            )
+
+            map_payload = get_map_station_payload()
+            self.assertEqual(len(map_payload["mobile_tracks"]), 1)
+            track = map_payload["mobile_tracks"][0]
+            self.assertEqual(len(track["points"]), 2)
+            self.assertEqual(track["points"][0]["heard_at"], "2026-01-01T00:00:00+00:00")
+            self.assertEqual(track["points"][1]["heard_at"], "2026-01-01T00:05:00+00:00")
+
     def test_map_payload_exposes_phg_range_for_station_with_phg(self) -> None:
         with temporary_database():
             update_station_settings(station_payload())

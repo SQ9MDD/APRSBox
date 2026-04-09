@@ -201,6 +201,8 @@ def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[st
         longitude = _parse_coordinate(aprs_data.get("longitude"))
         if latitude is None or longitude is None:
             continue
+        if _is_null_island_point(latitude, longitude):
+            continue
 
         points = points_by_station.setdefault(visible_station_key, [])
         points.append(
@@ -225,3 +227,7 @@ def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[st
         )
     tracks.sort(key=lambda item: str(item.get("display_callsign") or ""))
     return tracks
+
+
+def _is_null_island_point(latitude: float, longitude: float) -> bool:
+    return abs(latitude) < 1e-6 and abs(longitude) < 1e-6
