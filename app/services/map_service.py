@@ -90,6 +90,17 @@ def get_station_detail_map_config(station: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def get_station_detail_track_payload(display_callsign: str) -> dict[str, Any]:
+    normalized_callsign = str(display_callsign or "").strip()
+    if not normalized_callsign:
+        return {"display_callsign": "", "points": []}
+    points = _build_mobile_track_points_by_station_keys({normalized_callsign.casefold(): normalized_callsign})
+    return {
+        "display_callsign": normalized_callsign,
+        "points": points.get(normalized_callsign, []),
+    }
+
+
 def _resolve_default_view(station_settings: dict[str, Any]) -> dict[str, float | int]:
     latitude = _parse_coordinate(station_settings.get("latitude"))
     longitude = _parse_coordinate(station_settings.get("longitude"))
@@ -168,6 +179,31 @@ def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[st
             visible_station_keys[display_callsign.casefold()] = display_callsign
     if not visible_station_keys:
         return []
+    points_by_station = _build_mobile_track_points_by_station_keys(visible_station_keys)
+
+    tracks: list[dict[str, Any]] = []
+    for display_callsign, points in points_by_station.items():
+        if len(points) < 2:
+            continue
+        tracks.append(
+            {
+                "display_callsign": display_callsign,
+                "points": points,
+            }
+        )
+    tracks.sort(key=lambda item: str(item.get("display_callsign") or ""))
+    return tracks
+
+
+def _is_null_island_point(latitude: float, longitude: float) -> bool:
+    return abs(latitude) < 1e-6 and abs(longitude) < 1e-6
+
+
+def _build_mobile_track_points_by_station_keys(
+    station_keys: dict[str, str],
+) -> dict[str, list[dict[str, Any]]]:
+    if not station_keys:
+        return {}
 
     rows = fetch_all(
         """
@@ -192,8 +228,8 @@ def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[st
         station_key = str(parsed.get("entity_name") or parsed.get("source_key") or "").strip()
         if not station_key:
             continue
-        visible_station_key = visible_station_keys.get(station_key.casefold())
-        if not visible_station_key:
+        resolved_key = station_keys.get(station_key.casefold())
+        if not resolved_key:
             continue
 
         aprs_data = dict(parsed.get("aprs_data") or {})
@@ -204,7 +240,7 @@ def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[st
         if _is_null_island_point(latitude, longitude):
             continue
 
-        points = points_by_station.setdefault(visible_station_key, [])
+        points = points_by_station.setdefault(resolved_key, [])
         points.append(
             {
                 "latitude": latitude,
@@ -214,20 +250,4 @@ def _build_mobile_station_tracks(stations: list[dict[str, Any]]) -> list[dict[st
         )
         if len(points) > MOBILE_TRACK_MAX_POINTS_PER_STATION:
             points.pop(0)
-
-    tracks: list[dict[str, Any]] = []
-    for display_callsign, points in points_by_station.items():
-        if len(points) < 2:
-            continue
-        tracks.append(
-            {
-                "display_callsign": display_callsign,
-                "points": points,
-            }
-        )
-    tracks.sort(key=lambda item: str(item.get("display_callsign") or ""))
-    return tracks
-
-
-def _is_null_island_point(latitude: float, longitude: float) -> bool:
-    return abs(latitude) < 1e-6 and abs(longitude) < 1e-6
+    return points_by_station

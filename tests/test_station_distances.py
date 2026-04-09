@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.db import execute, init_db
 from app.services.content import get_station_detail, heard_stations, update_station_settings
-from app.services.map_service import get_map_station_payload
+from app.services.map_service import get_map_station_payload, get_station_detail_track_payload
 
 
 @contextlib.contextmanager
@@ -141,6 +141,24 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(station["phg_height_ft"], 20.0)
             self.assertEqual(station["phg_gain_dbi"], 3.0)
             self.assertAlmostEqual(float(station["phg_range_km"]), 12.79, places=2)
+
+    def test_station_detail_track_payload_returns_track_for_selected_mobile_station(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload())
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5218.37N\\02104.87Eu243/002/A=000278Back on track!",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5219.00N\\02105.30Eu240/010/A=000300Moving east",
+                created_at="2026-01-01T00:05:00+00:00",
+            )
+
+            track_payload = get_station_detail_track_payload("SP8ABC-9")
+            self.assertEqual(track_payload["display_callsign"], "SP8ABC-9")
+            self.assertEqual(len(track_payload["points"]), 2)
+            self.assertEqual(track_payload["points"][0]["heard_at"], "2026-01-01T00:00:00+00:00")
+            self.assertEqual(track_payload["points"][1]["heard_at"], "2026-01-01T00:05:00+00:00")
 
 
 if __name__ == "__main__":

@@ -50,6 +50,18 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("if (coverageVisible)", script_source)
         self.assertIn("window.L.circle([station.latitude, station.longitude]", script_source)
 
+    def test_station_detail_map_script_renders_station_track(self) -> None:
+        script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")
+        self.assertIn("function renderTrack(station, stationTrack)", script_source)
+        self.assertIn("window.L.polyline(", script_source)
+        self.assertIn("window.L.circleMarker(", script_source)
+        self.assertIn("ensureMap(station, mapConfig, stationTrack)", script_source)
+
+    def test_station_detail_template_exposes_initial_track_points(self) -> None:
+        template_source = Path("app/templates/station_detail.html").read_text(encoding="utf-8")
+        self.assertIn("data-track-points=", template_source)
+        self.assertIn("station_map_config.track_points|tojson", template_source)
+
     def test_stations_page_script_skips_table_rerender_when_payload_is_unchanged(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
         self.assertIn("let lastStationsSignature = \"\";", template_source)
