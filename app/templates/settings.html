@@ -102,7 +102,7 @@
             action="{{ request.scope.root_path }}/settings/global"
             class="form-grid"
             data-settings-action-id="save-global-settings"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-global-settings', message: {{ t('Saving global settings...')|tojson }}, busyLabel: {{ t('Saving...')|tojson }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-global-settings', message: {{ t('Saving global settings...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500});"
         >
             <label>
                 <span>{{ t("Language") }}</span>
@@ -150,7 +150,7 @@
             class="form-grid"
             data-settings-action-id="update-channel"
             data-settings-action-group="update-controls"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-channel', group: 'update-controls', message: {{ t('Saving update channel...')|tojson }}, busyLabel: {{ t('Saving...')|tojson }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-channel', group: 'update-controls', message: {{ t('Saving update channel...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <label>
                 <span>{{ t("Update channel") }}</span>
@@ -182,7 +182,7 @@
                 class="form-stack"
                 data-settings-action-id="check-gui-version"
                 data-settings-action-group="update-controls"
-                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'check-gui-version', group: 'update-controls', message: {{ t('Checking for updates...')|tojson }}, busyLabel: {{ t('Checking...')|tojson }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500});"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'check-gui-version', group: 'update-controls', message: {{ t('Checking for updates...')|tojson|forceescape }}, busyLabel: {{ t('Checking...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500});"
             >
                 <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
             </form>
@@ -193,7 +193,7 @@
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
-                onsubmit="return confirm({{ t('Start application update now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson }}, busyLabel: {{ t('Starting update...')|tojson }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
+                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
@@ -224,7 +224,7 @@
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson }}, busyLabel: {{ t('Restarting...')|tojson }}, mode: 'job', lockTimeoutMs: 240000, reloadOnSuccess: true});"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 240000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -239,7 +239,7 @@
                     class="form-stack"
                     data-settings-action-id="reboot-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson }}, busyLabel: {{ t('Rebooting...')|tojson }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
+                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson|forceescape }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
@@ -254,7 +254,7 @@
                     class="form-stack"
                     data-settings-action-id="poweroff-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson }}, busyLabel: {{ t('Shutting down...')|tojson }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
+                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson|forceescape }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
                 </form>
@@ -300,7 +300,7 @@
             action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
             class="form-stack"
             data-settings-action-id="update-aprs-device-identification"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson }}, busyLabel: {{ t('Updating...')|tojson }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <button type="submit" class="button">{{ t("Update now") }}</button>
         </form>
@@ -338,7 +338,7 @@
             action="{{ request.scope.root_path }}/settings/vacuum-db"
             class="form-stack"
             data-settings-action-id="vacuum-db"
-            onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson }}, busyLabel: {{ t('Running...')|tojson }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+            onsubmit="return confirm({{ t('Run database vacuum now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
         </form>

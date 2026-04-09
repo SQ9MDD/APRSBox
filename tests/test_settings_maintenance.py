@@ -1,5 +1,6 @@
 import contextlib
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -100,6 +101,11 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('@router.post("/api/settings/update/channel")', router_source)
         self.assertIn('@router.get("/api/settings/update/log")', router_source)
         self.assertIn('@router.get("/api/settings/jobs/{job_id}")', router_source)
+
+    def test_settings_template_escapes_tojson_in_onsubmit_attributes(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        unescaped_tojson = re.findall(r'onsubmit="[^"]*\|tojson(?!\|forceescape)', template_source)
+        self.assertEqual([], unescaped_tojson)
 
 
 if __name__ == "__main__":
