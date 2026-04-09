@@ -85,8 +85,7 @@
         {% if update_channel_is_unstable %}
         <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
         {% endif %}
-        <p class="muted">{{ t("This action fetches the latest code, prepares staged files, runs database init, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end.")|safe }}</p>
-        <p class="muted">{{ t("Services are restarted only after update preparation. The GUI may temporarily lose connection during restart.") }}</p>
+        <p class="muted">{{ t("Update fetches code from the selected channel, runs init-db, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end. GUI may temporarily lose connection.")|safe }}</p>
         <div class="settings-update-actions">
             <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack" onsubmit="return aprsboxShowSettingsProgress({{ t('Checking versions, please wait...')|tojson }});">
                 <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
@@ -97,6 +96,20 @@
             </form>
             {% endif %}
         </div>
+        {% if latest_version_result and latest_version_result.ok %}
+        <dl class="details-grid">
+            <dt>{{ t("Installed VERSION") }}</dt>
+            <dd><code>{{ latest_version_result.current_version }}</code></dd>
+            <dt>{{ t("Repository VERSION") }}</dt>
+            <dd><code>{{ latest_version_result.latest_version }}</code></dd>
+            <dt>{{ t("Channel") }}</dt>
+            <dd><code>{{ latest_version_result.channel or update_channel_selected }}</code></dd>
+            <dt>{{ t("Status") }}</dt>
+            <dd>{{ t("Up to date") if latest_version_result.up_to_date else t("Update available") }}</dd>
+        </dl>
+        {% else %}
+        <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
+        {% endif %}
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Update log") }}</h2>
@@ -225,29 +238,6 @@
     </div>
 </section>
 
-{% if latest_version_result and latest_version_result.ok %}
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Latest GUI Version") }}</h2>
-            </div>
-        </div>
-        <dl class="details-grid">
-            <dt>{{ t("Installed") }}</dt>
-            <dd><code>{{ latest_version_result.current_version }}</code></dd>
-            <dt>{{ t("GitHub") }}</dt>
-            <dd><code>{{ latest_version_result.latest_version }}</code></dd>
-            <dt>{{ t("Channel") }}</dt>
-            <dd><code>{{ latest_version_result.channel or update_channel_selected }}</code></dd>
-            <dt>{{ t("Status") }}</dt>
-            <dd>{{ t("Up to date") if latest_version_result.up_to_date else t("Update available") }}</dd>
-            <dt>{{ t("Source") }}</dt>
-            <dd><code>{{ latest_version_result.source }}</code></dd>
-        </dl>
-    </div>
-</section>
-{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
