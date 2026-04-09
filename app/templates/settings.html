@@ -318,6 +318,7 @@
         let reconnectPollTimer = null;
         const activeFormActions = new Set();
         const actionForms = Array.from(document.querySelectorAll("form[data-settings-action-id]"));
+        const nativeFormSubmit = HTMLFormElement.prototype.submit;
         const actionButtons = actionForms.reduce((controls, form) => {
             const formControls = Array.from(form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")).filter(
                 (node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement
@@ -416,6 +417,7 @@
         };
         const restoreControls = () => {
             for (const form of actionForms) {
+                delete form.dataset.settingsSubmitQueued;
                 form.removeAttribute("aria-busy");
                 for (const control of controlsForForm(form)) {
                     const originallyDisabled = control.dataset.settingsOriginalDisabled === "1";
@@ -632,6 +634,9 @@
         };
         const submitSettingsAction = (form, options = {}) => {
             if (!(form instanceof HTMLFormElement)) return true;
+            if (form.dataset.settingsSubmitQueued === "1") {
+                return false;
+            }
             const actionId = String(options.actionId || form.dataset.settingsActionId || "");
             const message = String(options.message || labels.defaultMessage);
             const busyLabel = String(options.busyLabel || "");
@@ -648,7 +653,14 @@
             if (persist && actionId) {
                 savePendingAction(actionId, Date.now());
             }
-            return true;
+            form.dataset.settingsSubmitQueued = "1";
+            window.requestAnimationFrame(() => {
+                window.setTimeout(() => {
+                    if (!document.body.contains(form)) return;
+                    nativeFormSubmit.call(form);
+                }, 10);
+            });
+            return false;
         };
         const resumePendingAction = () => {
             const pending = loadPendingAction();
