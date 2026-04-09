@@ -72,7 +72,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
 
     def test_settings_template_uses_shared_async_action_handler(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn("window.aprsboxSubmitSettingsAction = submitSettingsAction;", template_source)
+        self.assertIn("window.aprsboxSubmitSettingsAction", template_source)
+        self.assertIn("window.__aprsboxSettingsSubmit", template_source)
         self.assertIn('data-settings-action-id="check-gui-version"', template_source)
         self.assertIn('data-settings-action-id="update-application"', template_source)
         self.assertIn('data-settings-action-id="restart-services"', template_source)

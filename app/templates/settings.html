@@ -354,6 +354,149 @@
 <script>
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};
+
+        const ensureFallbackBackdrop = () => {
+            const existing = document.querySelector(".settings-progress-backdrop");
+            if (existing instanceof HTMLElement) {
+                return existing;
+            }
+            const backdrop = document.createElement("div");
+            backdrop.className = "settings-progress-backdrop";
+            backdrop.hidden = true;
+            backdrop.innerHTML = `
+                <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+                    <div class="settings-progress-header">
+                        <span class="settings-progress-spinner" aria-hidden="true"></span>
+                        <h3 class="settings-progress-title"></h3>
+                    </div>
+                    <p class="settings-progress-message"></p>
+                </div>
+            `;
+            document.body.appendChild(backdrop);
+            return backdrop;
+        };
+
+        const fallbackShow = (message) => {
+            const backdrop = ensureFallbackBackdrop();
+            const titleNode = backdrop.querySelector(".settings-progress-title");
+            const messageNode = backdrop.querySelector(".settings-progress-message");
+            if (titleNode instanceof HTMLElement) {
+                titleNode.textContent = "Please wait";
+            }
+            if (messageNode instanceof HTMLElement) {
+                messageNode.textContent = String(message || "Working...");
+            }
+            backdrop.hidden = false;
+        };
+
+        const fallbackDisableControls = (form) => {
+            if (!(form instanceof HTMLFormElement)) return;
+            const controls = Array.from(
+                form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']")
+            ).filter((node) => node instanceof HTMLButtonElement || node instanceof HTMLInputElement);
+            form.setAttribute("aria-busy", "true");
+            for (const control of controls) {
+                control.disabled = true;
+                control.classList.add("settings-action-control-busy");
+                if (control instanceof HTMLButtonElement) {
+                    control.classList.add("settings-action-button-busy");
+                }
+            }
+        };
+
+        const fallbackPollJob = (jobId) => {
+            const url = `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId))}`;
+            const pollOnce = async () => {
+                try {
+                    const response = await window.fetch(url, {
+                        cache: "no-store",
+                        credentials: "same-origin",
+                        headers: { "Accept": "application/json" },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const payload = await response.json();
+                    const job = payload && payload.job ? payload.job : null;
+                    const status = job && job.status ? String(job.status) : "";
+                    const message = job && job.message ? String(job.message) : "";
+                    fallbackShow(message || "Working...");
+                    if (status === "success") {
+                        window.setTimeout(() => window.location.reload(), 1200);
+                        return;
+                    }
+                    if (status === "error") {
+                        return;
+                    }
+                } catch (_error) {
+                    fallbackShow("Connection lost. Retrying...");
+                }
+                window.setTimeout(pollOnce, 3000);
+            };
+            pollOnce();
+        };
+
+        const fallbackSubmit = async (form, options = {}) => {
+            fallbackDisableControls(form);
+            const message = String(options.message || "Working...");
+            fallbackShow(message);
+            const startedAt = Date.now();
+            const minSpinnerMs = Math.max(0, Number(options.minSpinnerMs || 500));
+            try {
+                const response = await window.fetch(form.action, {
+                    method: String(form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                });
+                let payload = null;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    payload = null;
+                }
+                const elapsed = Date.now() - startedAt;
+                if (elapsed < minSpinnerMs) {
+                    await new Promise((resolve) => window.setTimeout(resolve, minSpinnerMs - elapsed));
+                }
+
+                if (response.status === 202 && payload && payload.job_id) {
+                    fallbackPollJob(payload.job_id);
+                    return;
+                }
+
+                if (!response.ok || !payload || payload.ok !== true) {
+                    const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
+                    fallbackShow(`Operation failed. ${detail}`);
+                    return;
+                }
+
+                fallbackShow(payload.message || "Done.");
+                if (payload.reload || options.reloadOnSuccess) {
+                    window.setTimeout(() => window.location.reload(), 1200);
+                }
+            } catch (error) {
+                fallbackShow(`Operation failed. ${error && error.message ? error.message : ""}`.trim());
+            }
+        };
+
+        window.aprsboxSubmitSettingsAction = (form, options) => {
+            try {
+                if (typeof window.__aprsboxSettingsSubmit === "function") {
+                    return window.__aprsboxSettingsSubmit(form, options);
+                }
+            } catch (_error) {
+                // Fall back below.
+            }
+            void fallbackSubmit(form, options || {});
+            return false;
+        };
+    })();
+    (() => {
+        const rootPath = {{ request.scope.root_path|tojson }};
         const labels = {
             defaultTitle: {{ t("Please wait")|tojson }},
             defaultMessage: {{ t("Working...")|tojson }},
@@ -776,7 +919,16 @@
             }
 
             if (mode === "json") {
-                submitShortJson(form, { ...options, actionId });
+                const mergedOptions = {};
+                if (options && typeof options === "object") {
+                    for (const key in options) {
+                        if (Object.prototype.hasOwnProperty.call(options, key)) {
+                            mergedOptions[key] = options[key];
+                        }
+                    }
+                }
+                mergedOptions.actionId = actionId;
+                submitShortJson(form, mergedOptions);
                 return false;
             }
 
@@ -814,7 +966,7 @@
             pollJobStatus(jobId, startedAt, { lockTimeoutMs, message, reloadOnSuccess });
         };
 
-        window.aprsboxSubmitSettingsAction = submitSettingsAction;
+        window.__aprsboxSettingsSubmit = submitSettingsAction;
         window.aprsboxShowSettingsProgress = showSettingsProgress;
         window.aprsboxHideSettingsProgress = hideBackdrop;
 
