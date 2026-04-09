@@ -60,6 +60,43 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(parsed["latitude"], "52.22970")
         self.assertEqual(parsed["longitude"], "21.01220")
 
+    def test_parse_tnc2_frame_decodes_compressed_position_when_cst_is_spaces(self) -> None:
+        compressed_info = self._build_compressed_packet(52.2297, 21.0122)[:-3] + "   "
+        parsed = parse_tnc2_frame(f"SP8ABC-9>APRS:{compressed_info}")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "position_compressed")
+        self.assertEqual(aprs_data.get("latitude"), "52.22970")
+        self.assertEqual(aprs_data.get("longitude"), "21.01220")
+
+    def test_parse_tnc2_frame_decodes_timestamped_compressed_position_when_cst_is_spaces(self) -> None:
+        compressed_info = "@010203z/4)HLSj:R>   "
+        parsed = parse_tnc2_frame(f"SP8ABC-9>APRS:{compressed_info}")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "position_compressed_timestamped")
+        self.assertEqual(aprs_data.get("latitude"), "52.22970")
+        self.assertEqual(aprs_data.get("longitude"), "21.01220")
+
+    def test_parse_tnc2_frame_decodes_uncompressed_position(self) -> None:
+        parsed = parse_tnc2_frame("SP8ABC-9>APRS:!5218.37N\\02104.87E-Test")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "position")
+        self.assertEqual(aprs_data.get("latitude"), "52.30617")
+        self.assertEqual(aprs_data.get("longitude"), "21.08117")
+
+    def test_parse_tnc2_frame_decodes_mic_e_position(self) -> None:
+        parsed = parse_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!')
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
+        self.assertEqual(aprs_data.get("latitude"), "52.78550")
+        self.assertEqual(aprs_data.get("longitude"), "21.40817")
+
+    def test_parse_tnc2_frame_decodes_mic_e_longitude_hundredths_without_60_wrap(self) -> None:
+        parsed = parse_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14d^\\^]D[/"4N}Witam!')
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
+        self.assertEqual(aprs_data.get("latitude"), "52.78550")
+        self.assertEqual(aprs_data.get("longitude"), "21.41200")
+
     def test_parse_tnc2_frame_exposes_packet_group_for_status_query_telemetry_and_item(self) -> None:
         status = parse_tnc2_frame("SP8ABC-9>APRS:>Station online")
         query = parse_tnc2_frame("SP8ABC-9>APRS::SQ9MDD-4:?APRSP")

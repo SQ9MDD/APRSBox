@@ -196,6 +196,7 @@ Useful endpoints:
 - Web:
   - `/health`
   - `/version`
+  - `/api/public/monitoring`
 - Core:
   - `/health`
   - `/version`

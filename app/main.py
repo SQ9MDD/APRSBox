@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -14,6 +15,7 @@ from app import __version__, get_version
 from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
+from app.services.content import monitoring_public_snapshot
 
 
 class ForwardedPrefixMiddleware:
@@ -76,3 +78,8 @@ def health() -> dict[str, str]:
 @app.get("/version")
 def version() -> dict[str, str]:
     return {"version": get_version()}
+
+
+@app.get("/api/public/monitoring")
+def public_monitoring() -> JSONResponse:
+    return JSONResponse(monitoring_public_snapshot())
