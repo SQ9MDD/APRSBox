@@ -31,7 +31,7 @@
                     {% for row in log_rows %}
                     <tr class="{% if row.level == 'WARNING' %}log-row-warning{% endif %}">
                         <td>{{ row.id }}</td>
-                        <td>{{ row.created_at.replace('T', ' ').replace('+00:00', ' UTC') }}</td>
+                        <td>{{ format_datetime(row.created_at, use_utc=True) }}</td>
                         <td>{{ row.level }}</td>
                         <td title="{{ row.category }}">{{ row.category }}</td>
                         <td title="{{ row.message }}">{{ row.message }}</td>

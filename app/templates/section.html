@@ -183,7 +183,7 @@
                             {% endif %}
                             {% endfor %}
                             {% if section.slug != 'modems' %}
-                            <td>{{ row.updated_at or row.created_at }}</td>
+                            <td>{{ format_datetime(row.updated_at or row.created_at, use_utc=True) or '-' }}</td>
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
                             <td>

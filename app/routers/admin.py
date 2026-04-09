@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, Request, status
 
@@ -20,7 +20,9 @@ def _format_user_datetime(value: str | None) -> str:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return value
-    return parsed.strftime("%Y-%m-%d %H:%M:%S UTC")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y.%m.%d %H:%M")
 
 
 def _users_template_context(

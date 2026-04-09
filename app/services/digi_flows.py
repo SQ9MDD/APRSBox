@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
@@ -1508,7 +1508,9 @@ def _format_execution_time_utc(value: str) -> str:
         timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return value
-    return timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc).strftime("%Y.%m.%d %H:%M")
 
 
 def _execution_predates_flow_update(execution_created_at: str, flow_updated_at: str) -> bool:
