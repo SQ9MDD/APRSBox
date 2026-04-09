@@ -203,7 +203,7 @@
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
-                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 180000, reloadOnSuccess: true});"
+                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
@@ -234,7 +234,7 @@
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 240000, reloadOnSuccess: true});"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true, reloadDelayMs: 7000});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -751,9 +751,11 @@
             restoreControls();
             showSettingsProgress(message, { locked: false });
             if (options.reload) {
+                const parsedDelay = Number(options.reloadDelayMs);
+                const reloadDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 1200;
                 window.setTimeout(() => {
                     window.location.reload();
-                }, 1200);
+                }, reloadDelayMs);
             }
         };
 
@@ -836,10 +838,18 @@
                 normalized === "poweroff-host";
         };
 
+        const canFinalizeRunningJobFromHealth = (actionId, reloadOnSuccess) => {
+            if (!reloadOnSuccess) {
+                return false;
+            }
+            return String(actionId || "") === "restart-services";
+        };
+
         const pollJobStatus = async (jobId, startedAt, options) => {
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
             const reloadAfterFinish = Boolean(options.reloadOnSuccess);
             const actionId = String(options.actionId || "");
+            const reloadDelayMs = Number(options.reloadDelayMs || 0);
 
             const pollOnce = async () => {
                 const elapsed = Date.now() - Number(startedAt || Date.now());
@@ -873,7 +883,7 @@
                         } catch (_error) {
                             // Ignore storage errors.
                         }
-                        finishAction(message || labels.completed, { reload: reloadAfterFinish });
+                        finishAction(message || labels.completed, { reload: reloadAfterFinish, reloadDelayMs });
                         return;
                     }
 
@@ -885,6 +895,27 @@
                         }
                         finishAction(message || labels.failed, { reload: false });
                         return;
+                    }
+
+                    if (canFinalizeRunningJobFromHealth(actionId, reloadAfterFinish)) {
+                        try {
+                            const healthResponse = await window.fetch(healthUrl, {
+                                cache: "no-store",
+                                credentials: "same-origin",
+                                headers: { "Accept": "application/json" },
+                            });
+                            if (healthResponse.ok) {
+                                try {
+                                    window.sessionStorage.removeItem(activeJobStorageKey);
+                                } catch (_storageError) {
+                                    // Ignore storage errors.
+                                }
+                                finishAction(message || labels.completed, { reload: true, reloadDelayMs });
+                                return;
+                            }
+                        } catch (_healthError) {
+                            // Ignore health check errors and continue polling.
+                        }
                     }
 
                     showSettingsProgress(message || String(options.message || labels.defaultMessage), {
@@ -905,7 +936,7 @@
                                 } catch (_storageError) {
                                     // Ignore storage errors.
                                 }
-                                finishAction(labels.completed, { reload: true });
+                                finishAction(labels.completed, { reload: true, reloadDelayMs });
                                 return;
                             }
                         } catch (_healthError) {
@@ -958,6 +989,7 @@
                             lockTimeoutMs,
                             message: String(options.message || ""),
                             reloadOnSuccess: Boolean(options.reloadOnSuccess),
+                            reloadDelayMs: Number(options.reloadDelayMs || 0),
                         })
                     );
                 } catch (_error) {
@@ -1036,10 +1068,11 @@
             const startedAt = Number(stored.startedAt || Date.now());
             const message = String(stored.message || labels.defaultMessage);
             const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
+            const reloadDelayMs = Number(stored.reloadDelayMs || 0);
 
             progressDismissed = false;
             showSettingsProgress(message, { locked: true, lockTimeoutMs });
-            pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess });
+            pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess, reloadDelayMs });
         };
 
         window.__aprsboxSettingsSubmit = submitSettingsAction;
