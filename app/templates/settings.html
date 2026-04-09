@@ -49,51 +49,99 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("GUI Update") }}</h2>
-                <p class="section-lead">{{ t("Check version and, when a newer release is available, update the installed GUI from GitHub.") }}</p>
+                <h2>{{ t("Application update") }}</h2>
+                <p class="section-lead">{{ t("Configure the update channel and run application update from the configured repository.") }}</p>
             </div>
         </div>
+        {% if can_manage_updates %}
+        <form method="post" action="{{ request.scope.root_path }}/settings/update-channel" class="form-grid" onsubmit="return aprsboxShowSettingsProgress({{ t('Saving update channel...')|tojson }});">
+            <label>
+                <span>{{ t("Update channel") }}</span>
+                <select name="update_channel">
+                    {% for option in update_channel_options %}
+                    <option value="{{ option.value }}" {% if update_channel_selected == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button button-secondary">{{ t("Save update channel") }}</button>
+            </div>
+        </form>
+        {% else %}
+        <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
+        {% endif %}
+        {% if update_channels_fetch_error %}
+        <div class="alert">{{ t("Update channel list could not be refreshed. Using saved channel.") }}</div>
+        <p class="muted"><code>{{ update_channels_fetch_error }}</code></p>
+        {% endif %}
+        {% if update_channel_is_unstable %}
+        <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
+        {% endif %}
+        <p class="muted">{{ t("Update fetches code from the selected channel, runs init-db, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end. GUI may temporarily lose connection.")|safe }}</p>
+        <div class="settings-update-actions">
+            <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack" onsubmit="return aprsboxShowSettingsProgress({{ t('Checking versions, please wait...')|tojson }});">
+                <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
+            </form>
+            {% if can_manage_updates %}
+            <form method="post" action="{{ request.scope.root_path }}/settings/update-application" class="form-stack" onsubmit="return confirm({{ t('Start application update now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting application update, please wait...')|tojson }});">
+                <button type="submit" class="button">{{ t("Update application") }}</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if latest_version_result and latest_version_result.ok %}
+        <dl class="details-grid">
+            <dt>{{ t("Installed VERSION") }}</dt>
+            <dd><code>{{ latest_version_result.current_version }}</code></dd>
+            <dt>{{ t("Repository VERSION") }}</dt>
+            <dd><code>{{ latest_version_result.latest_version }}</code></dd>
+            <dt>{{ t("Channel") }}</dt>
+            <dd><code>{{ latest_version_result.channel or update_channel_selected }}</code></dd>
+            <dt>{{ t("Status") }}</dt>
+            <dd>{{ t("Up to date") if latest_version_result.up_to_date else t("Update available") }}</dd>
+        </dl>
+        {% else %}
+        <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
+        {% endif %}
     </div>
 </section>
 
-<section class="grid two">
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>{{ t("Installed GUI") }}</h2>
-                </div>
+<section class="panel danger-zone-panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Danger zone") }}</h2>
+                <p class="section-lead">{{ t("Administrative operations that can interrupt service or shut down the host.") }}</p>
             </div>
-            <dl class="details-grid">
-                <dt>{{ t("Current version") }}</dt>
-                <dd><code>{{ current_gui_version }}</code></dd>
-                <dt>{{ t("Repository") }}</dt>
-                <dd><code>{{ gui_update_url }}</code></dd>
-                <dt>{{ t("Branch") }}</dt>
-                <dd><code>{{ gui_update_branch }}</code></dd>
-            </dl>
-            <form method="post" action="{{ request.scope.root_path }}/settings/check-gui-version" class="form-stack">
-                <button type="submit" class="button">{{ t("Check version") }}</button>
-            </form>
         </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>{{ t("Update GUI") }}</h2>
-                </div>
+        {% if can_manage_updates %}
+        <div class="danger-zone-actions">
+            <div class="danger-zone-item">
+                <h3>{{ t("Restart services") }}</h3>
+                <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
+                <form method="post" action="{{ request.scope.root_path }}/settings/restart-services" class="form-stack" onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting service restart, please wait...')|tojson }});">
+                    <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
+                </form>
             </div>
-            {% if can_manage_updates %}
-            <p class="muted">{{ t("This action downloads all GUI files from GitHub, replaces installed files, refreshes Python dependencies, initializes the database schema, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
-            <form method="post" action="{{ request.scope.root_path }}/settings/update-gui" class="form-stack" onsubmit="return confirm({{ t('Start GUI update now?')|tojson }});">
-                <button type="submit" class="button">{{ t("Update") }}</button>
-            </form>
-            {% else %}
-            <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
-            {% endif %}
+            <div class="danger-zone-item">
+                <h3>{{ t("Reboot host") }}</h3>
+                <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
+                <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
+                <form method="post" action="{{ request.scope.root_path }}/settings/reboot-host" class="form-stack" onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxShowSettingsProgress({{ t('Starting host reboot, please wait...')|tojson }});">
+                    <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
+                </form>
+            </div>
+            <div class="danger-zone-item">
+                <h3>{{ t("Power off host") }}</h3>
+                <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
+                <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
+                <form method="post" action="{{ request.scope.root_path }}/settings/poweroff-host" class="form-stack" onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxShowSettingsProgress({{ t('Starting host shutdown, please wait...')|tojson }});">
+                    <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
+                </form>
+            </div>
         </div>
+        {% else %}
+        <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
+        {% endif %}
     </div>
 </section>
 
@@ -126,7 +174,7 @@
             {% endif %}
         </dl>
         {% if can_manage_updates %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/update-aprs-device-identification" class="form-stack">
+        <form method="post" action="{{ request.scope.root_path }}/settings/update-aprs-device-identification" class="form-stack" onsubmit="return aprsboxShowSettingsProgress({{ t('Starting update, please wait...')|tojson }});">
             <button type="submit" class="button">{{ t("Update now") }}</button>
         </form>
         {% else %}
@@ -158,7 +206,7 @@
             </dd>
         </dl>
         {% if can_manage_database_maintenance %}
-        <form method="post" action="{{ request.scope.root_path }}/settings/vacuum-db" class="form-stack" onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }});">
+        <form method="post" action="{{ request.scope.root_path }}/settings/vacuum-db" class="form-stack" onsubmit="return confirm({{ t('Run database vacuum now?')|tojson }}) && aprsboxShowSettingsProgress({{ t('Starting operation, please wait...')|tojson }});">
             <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
         </form>
         {% else %}
@@ -167,25 +215,54 @@
     </div>
 </section>
 
-{% if latest_version_result and latest_version_result.ok %}
-<section class="panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Latest GUI Version") }}</h2>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (() => {
+        const labels = {
+            defaultTitle: {{ t("Please wait")|tojson }},
+            defaultMessage: {{ t("Operation started. The page will refresh after completion.")|tojson }},
+        };
+        const backdrop = document.createElement("div");
+        backdrop.className = "settings-progress-backdrop";
+        backdrop.innerHTML = `
+            <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+                <h3 class="settings-progress-title"></h3>
+                <p class="settings-progress-message"></p>
             </div>
-        </div>
-        <dl class="details-grid">
-            <dt>{{ t("Installed") }}</dt>
-            <dd><code>{{ latest_version_result.current_version }}</code></dd>
-            <dt>{{ t("GitHub") }}</dt>
-            <dd><code>{{ latest_version_result.latest_version }}</code></dd>
-            <dt>{{ t("Status") }}</dt>
-            <dd>{{ t("Up to date") if latest_version_result.up_to_date else t("Update available") }}</dd>
-            <dt>{{ t("Source") }}</dt>
-            <dd><code>{{ latest_version_result.source }}</code></dd>
-        </dl>
-    </div>
-</section>
-{% endif %}
+        `;
+        backdrop.hidden = true;
+        document.body.appendChild(backdrop);
+        const titleNode = backdrop.querySelector(".settings-progress-title");
+        const messageNode = backdrop.querySelector(".settings-progress-message");
+        let hideTimer = null;
+        const hideBackdrop = () => {
+            backdrop.hidden = true;
+            if (hideTimer !== null) {
+                window.clearTimeout(hideTimer);
+                hideTimer = null;
+            }
+        };
+        window.aprsboxShowSettingsProgress = (message) => {
+            if (!(titleNode instanceof HTMLElement) || !(messageNode instanceof HTMLElement)) return true;
+            titleNode.textContent = labels.defaultTitle;
+            messageNode.textContent = String(message || labels.defaultMessage);
+            backdrop.hidden = false;
+            if (hideTimer !== null) window.clearTimeout(hideTimer);
+            hideTimer = window.setTimeout(hideBackdrop, 20000);
+            return true;
+        };
+        window.aprsboxHideSettingsProgress = hideBackdrop;
+        backdrop.addEventListener("click", (event) => {
+            if (event.target === backdrop) hideBackdrop();
+        });
+        window.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") hideBackdrop();
+        });
+        window.addEventListener("pageshow", () => {
+            hideBackdrop();
+        });
+    })();
+</script>
 {% endblock %}

@@ -26,6 +26,8 @@ SERVICE_MANAGER="unknown"
 CORE_PIDFILE="/run/aprsbox-core.pid"
 WEB_PIDFILE="/run/aprsbox-web.pid"
 SERIAL_DEVICE_GLOBS="${APRSBOX_SERIAL_DEVICE_GLOBS:-/dev/ttyACM* /dev/ttyUSB*}"
+PRIV_WRAPPER_DIR="/usr/local/libexec/aprsbox"
+SUDOERS_FILE="/etc/sudoers.d/aprsbox"
 
 log() {
     printf '%s\n' "$*"
@@ -72,17 +74,17 @@ detect_os() {
 install_system_packages() {
     case "$OS_ID" in
         alpine)
-            apk add --no-cache python3 py3-pip py3-virtualenv sqlite openrc shadow curl git rsync ca-certificates
+            apk add --no-cache python3 py3-pip py3-virtualenv sqlite openrc shadow curl git rsync ca-certificates sudo
             ;;
         debian|raspbian)
             apt-get update
-            apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync curl git ca-certificates
+            apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync curl git ca-certificates sudo
             ;;
         *)
             case "$OS_LIKE" in
                 *debian*)
                     apt-get update
-                    apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync curl git ca-certificates
+                    apt-get install -y python3 python3-venv python3-pip sqlite3 adduser rsync curl git ca-certificates sudo
                     ;;
                 *)
                     fail "Unsupported operating system: $OS_ID"
@@ -316,6 +318,9 @@ sync_application_files() {
         cp -R "$REPO_ROOT/deploy" "$STAGING_APP_DIR/"
         cp "$REPO_ROOT/README.md" "$STAGING_APP_DIR/"
     fi
+    if [ -d "$STAGING_APP_DIR/scripts" ]; then
+        find "$STAGING_APP_DIR/scripts" -type f -name '*.sh' -exec chmod 0755 {} \;
+    fi
     chown -R "$APP_USER":"$APP_USER" "$STAGING_APP_DIR"
 }
 
@@ -347,13 +352,13 @@ verify_python_runtime() {
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m gunicorn --check-config --reload --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
+        "$VENV_DIR/bin/python" -m gunicorn --check-config --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
 
     PYTHONPATH="$STAGING_APP_DIR" \
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m gunicorn --check-config --reload --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
+        "$VENV_DIR/bin/python" -m gunicorn --check-config --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
 }
 
 activate_staged_installation() {
@@ -414,6 +419,48 @@ install_service_units() {
             log "No supported service manager detected. Service files were not installed."
             ;;
     esac
+}
+
+install_privileged_wrappers() {
+    mkdir -p "$PRIV_WRAPPER_DIR"
+    cat > "$PRIV_WRAPPER_DIR/restart-services" <<EOF
+#!/bin/sh
+set -eu
+exec "$TARGET_APP_DIR/scripts/restart-services.sh" "\$@"
+EOF
+    cat > "$PRIV_WRAPPER_DIR/reboot-host" <<EOF
+#!/bin/sh
+set -eu
+exec "$TARGET_APP_DIR/scripts/reboot-host.sh" "\$@"
+EOF
+    cat > "$PRIV_WRAPPER_DIR/poweroff-host" <<EOF
+#!/bin/sh
+set -eu
+exec "$TARGET_APP_DIR/scripts/poweroff-host.sh" "\$@"
+EOF
+    chmod 0755 "$PRIV_WRAPPER_DIR/restart-services" "$PRIV_WRAPPER_DIR/reboot-host" "$PRIV_WRAPPER_DIR/poweroff-host"
+    chown root:root "$PRIV_WRAPPER_DIR/restart-services" "$PRIV_WRAPPER_DIR/reboot-host" "$PRIV_WRAPPER_DIR/poweroff-host"
+}
+
+install_sudoers_policy() {
+    if ! command -v sudo >/dev/null 2>&1; then
+        fail "sudo is required but not available."
+    fi
+    cat > "$SUDOERS_FILE" <<EOF
+Defaults:$APP_USER !requiretty
+$APP_USER ALL=(root) NOPASSWD: $TARGET_APP_DIR/scripts/update.sh
+$APP_USER ALL=(root) NOPASSWD: $TARGET_APP_DIR/scripts/restart-services.sh
+$APP_USER ALL=(root) NOPASSWD: $TARGET_APP_DIR/scripts/reboot-host.sh
+$APP_USER ALL=(root) NOPASSWD: $TARGET_APP_DIR/scripts/poweroff-host.sh
+$APP_USER ALL=(root) NOPASSWD: $PRIV_WRAPPER_DIR/restart-services
+$APP_USER ALL=(root) NOPASSWD: $PRIV_WRAPPER_DIR/reboot-host
+$APP_USER ALL=(root) NOPASSWD: $PRIV_WRAPPER_DIR/poweroff-host
+EOF
+    chmod 0440 "$SUDOERS_FILE"
+    chown root:root "$SUDOERS_FILE"
+    if command -v visudo >/dev/null 2>&1; then
+        visudo -cf "$SUDOERS_FILE" >/dev/null
+    fi
 }
 
 enable_services() {
@@ -488,15 +535,17 @@ main() {
     ensure_user
     grant_serial_permissions
     prepare_directories
-    stop_services
-    backup_database
     prepare_staging_installation
     sync_application_files
     setup_venv
-    initialize_database
     verify_python_runtime
+    stop_services
+    backup_database
+    initialize_database
     create_admin_user
     activate_staged_installation
+    install_privileged_wrappers
+    install_sudoers_policy
     install_service_units
     enable_services
     verify_services
