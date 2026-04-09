@@ -90,6 +90,13 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("latitude"), "52.78550")
         self.assertEqual(aprs_data.get("longitude"), "21.40817")
 
+    def test_parse_tnc2_frame_decodes_mic_e_longitude_hundredths_without_60_wrap(self) -> None:
+        parsed = parse_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14d^\\^]D[/"4N}Witam!')
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
+        self.assertEqual(aprs_data.get("latitude"), "52.78550")
+        self.assertEqual(aprs_data.get("longitude"), "21.41200")
+
     def test_parse_tnc2_frame_exposes_packet_group_for_status_query_telemetry_and_item(self) -> None:
         status = parse_tnc2_frame("SP8ABC-9>APRS:>Station online")
         query = parse_tnc2_frame("SP8ABC-9>APRS::SQ9MDD-4:?APRSP")

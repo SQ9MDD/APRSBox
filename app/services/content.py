@@ -2077,8 +2077,6 @@ def _decode_mic_e_longitude(destination: str, info: str) -> str | None:
             minutes -= 60
 
         hundredths = ord(info[3]) - 28
-        if hundredths >= 60:
-            hundredths -= 60
     except (IndexError, TypeError):
         return None
 
