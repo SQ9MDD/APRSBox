@@ -75,7 +75,12 @@ from app.services.aprs_device_identification import (
     refresh_aprs_device_identification_cache,
 )
 from app.services.core_client import restart_core_traffic_monitor
-from app.services.map_service import get_map_page_config, get_map_station_payload, get_station_detail_map_config
+from app.services.map_service import (
+    get_map_page_config,
+    get_map_station_payload,
+    get_station_detail_map_config,
+    get_station_detail_track_payload,
+)
 from app.services.outbound import enqueue_beacon_job
 from app.services.system import current_gui_version, latest_gui_version, start_gui_update
 from app.template_helpers import build_template_context
@@ -144,9 +149,13 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
     related_ssids = get_related_ssids(detail["base_callsign"], snapshots=snapshots)
     for item in related_ssids:
         item["is_current"] = item["display_callsign"].casefold() == detail["display_callsign"].casefold()
+    station_track = get_station_detail_track_payload(detail["display_callsign"])
+    station_map_config = get_station_detail_map_config(detail)
+    station_map_config["track_points"] = station_track.get("points", [])
     return {
         "station": detail,
-        "station_map_config": get_station_detail_map_config(detail),
+        "station_map_config": station_map_config,
+        "station_track": station_track,
         "recent_packets": get_recent_station_packets(detail["display_callsign"], snapshot=detail),
         "related_ssids": related_ssids,
     }

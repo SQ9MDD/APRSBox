@@ -19,6 +19,10 @@
     const tileSourceOutput = document.getElementById("map-tile-source");
     const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
+    const toggleTracksButton = document.getElementById("map-toggle-tracks");
+    const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
+    const toggleCoverageButton = document.getElementById("map-toggle-coverage");
+    const toggleCoverageIcon = document.getElementById("map-toggle-coverage-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
@@ -39,13 +43,23 @@
         altitude: root.dataset.i18nAltitude || "Altitude",
         packetType: root.dataset.i18nPacketType || "Packet type",
         comment: root.dataset.i18nComment || "Comment",
+        showTracks: root.dataset.i18nShowTracks || "Show tracks",
+        hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
+        showCoverage: root.dataset.i18nShowCoverage || "Show coverage",
+        hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
     });
     const stationLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
+    const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
+    const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
     let lastStationsSignature = "";
+    let tracksVisible = true;
+    let coverageVisible = true;
+    let latestStations = [];
+    let latestMobileTracks = [];
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -117,6 +131,54 @@
             maskOpacitySelect.value = String(normalizedOpacity);
         }
         window.localStorage.setItem(maskOpacityStorageKey(), String(normalizedOpacity));
+    }
+
+    function resolveTracksVisible() {
+        const storedValue = String(window.localStorage.getItem(mapTracksVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function applyTracksToggleState(visible) {
+        tracksVisible = Boolean(visible);
+        window.localStorage.setItem(mapTracksVisibleStorageKey, tracksVisible ? "1" : "0");
+        if (toggleTracksIcon) {
+            toggleTracksIcon.setAttribute("src", `${staticRoot}icons/${tracksVisible ? "track-light.svg" : "track-light-off.svg"}`);
+        }
+        if (toggleTracksButton) {
+            const label = tracksVisible ? i18n.hideTracks : i18n.showTracks;
+            toggleTracksButton.setAttribute("title", label);
+            toggleTracksButton.setAttribute("aria-label", label);
+        }
+    }
+
+    function resolveCoverageVisible() {
+        const storedValue = String(window.localStorage.getItem(mapCoverageVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function applyCoverageToggleState(visible) {
+        coverageVisible = Boolean(visible);
+        window.localStorage.setItem(mapCoverageVisibleStorageKey, coverageVisible ? "1" : "0");
+        if (toggleCoverageIcon) {
+            toggleCoverageIcon.setAttribute("src", `${staticRoot}icons/${coverageVisible ? "map-marker-radius.svg" : "map-marker-radius-outline.svg"}`);
+        }
+        if (toggleCoverageButton) {
+            const label = coverageVisible ? i18n.hideCoverage : i18n.showCoverage;
+            toggleCoverageButton.setAttribute("title", label);
+            toggleCoverageButton.setAttribute("aria-label", label);
+        }
     }
 
     function escapeHtml(value) {
@@ -213,6 +275,20 @@
             applyMaskOpacity(Number.parseInt(maskOpacitySelect.value || "", 10));
         });
     }
+    applyTracksToggleState(resolveTracksVisible());
+    if (toggleTracksButton) {
+        toggleTracksButton.addEventListener("click", function () {
+            applyTracksToggleState(!tracksVisible);
+            renderStations(latestStations, latestMobileTracks);
+        });
+    }
+    applyCoverageToggleState(resolveCoverageVisible());
+    if (toggleCoverageButton) {
+        toggleCoverageButton.addEventListener("click", function () {
+            applyCoverageToggleState(!coverageVisible);
+            renderStations(latestStations, latestMobileTracks);
+        });
+    }
 
     const themeObserver = new window.MutationObserver(function (mutations) {
         for (const mutation of mutations) {
@@ -305,8 +381,85 @@
         ])));
     }
 
-    function renderStations(stations) {
+    function mobileTracksSignature(mobileTracks) {
+        return JSON.stringify((mobileTracks || []).map((track) => ([
+            track.display_callsign || "",
+            (track.points || []).map((point) => ([
+                point.latitude,
+                point.longitude,
+                point.heard_at || "",
+            ])),
+        ])));
+    }
+
+    function colorForCallsign(callsign) {
+        const value = String(callsign || "");
+        let hash = 0;
+        for (let index = 0; index < value.length; index += 1) {
+            hash = ((hash * 31) + value.charCodeAt(index)) >>> 0;
+        }
+        const hue = hash % 360;
+        return `hsl(${hue} 80% 52%)`;
+    }
+
+    function renderStations(stations, mobileTracks) {
         stationLayer.clearLayers();
+        if (coverageVisible) {
+            for (const station of stations || []) {
+                if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
+                    continue;
+                }
+                if (!Number.isFinite(station.phg_range_km) || station.phg_range_km <= 0) {
+                    continue;
+                }
+                const coverageColor = colorForCallsign(station.display_callsign || station.callsign || "");
+                const coverageCircle = window.L.circle([station.latitude, station.longitude], {
+                    radius: station.phg_range_km * 1000,
+                    color: coverageColor,
+                    fillColor: coverageColor,
+                    opacity: 0.2,
+                    fillOpacity: 0.2,
+                    weight: 1,
+                    interactive: false,
+                });
+                stationLayer.addLayer(coverageCircle);
+            }
+        }
+        if (tracksVisible) {
+            for (const track of mobileTracks || []) {
+                const points = (track.points || []).filter((point) => (
+                    Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+                ));
+                if (points.length < 2) {
+                    continue;
+                }
+                const trackColor = colorForCallsign(track.display_callsign || "");
+                const polyline = window.L.polyline(
+                    points.map((point) => ([point.latitude, point.longitude])),
+                    {
+                        color: trackColor,
+                        weight: 3,
+                        opacity: 0.85,
+                        lineJoin: "round",
+                        lineCap: "round",
+                        interactive: false,
+                    }
+                );
+                stationLayer.addLayer(polyline);
+                for (const point of points.slice(0, -1)) {
+                    const dot = window.L.circleMarker([point.latitude, point.longitude], {
+                        radius: 3,
+                        color: trackColor,
+                        fillColor: trackColor,
+                        fillOpacity: 0.65,
+                        opacity: 0.95,
+                        weight: 1,
+                        interactive: false,
+                    });
+                    stationLayer.addLayer(dot);
+                }
+            }
+        }
         for (const station of stations || []) {
             if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
                 continue;
@@ -340,12 +493,15 @@
             }
             const payload = await response.json();
             const stations = payload.stations || [];
-            const nextSignature = stationsSignature(stations);
+            const mobileTracks = payload.mobile_tracks || [];
+            latestStations = stations;
+            latestMobileTracks = mobileTracks;
+            const nextSignature = `${stationsSignature(stations)}|${mobileTracksSignature(mobileTracks)}`;
             if (nextSignature === lastStationsSignature) {
                 return;
             }
             lastStationsSignature = nextSignature;
-            renderStations(stations);
+            renderStations(stations, mobileTracks);
         } catch (_error) {
         }
     }

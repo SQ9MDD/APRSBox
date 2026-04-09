@@ -45,6 +45,8 @@
     let map = null;
     let marker = null;
     let tileLayer = null;
+    let trackPolyline = null;
+    let trackDots = [];
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -203,6 +205,39 @@
         `;
     }
 
+    function colorForCallsign(callsign) {
+        const value = String(callsign || "");
+        let hash = 0;
+        for (let index = 0; index < value.length; index += 1) {
+            hash = ((hash * 31) + value.charCodeAt(index)) >>> 0;
+        }
+        const hue = hash % 360;
+        return `hsl(${hue} 80% 52%)`;
+    }
+
+    function parseTrackPoints(value) {
+        if (!value) {
+            return [];
+        }
+        try {
+            const parsed = JSON.parse(value);
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+            return parsed.filter((item) => (
+                item
+                && Number.isFinite(Number(item.latitude))
+                && Number.isFinite(Number(item.longitude))
+            )).map((item) => ({
+                latitude: Number(item.latitude),
+                longitude: Number(item.longitude),
+                heard_at: String(item.heard_at || ""),
+            }));
+        } catch (_error) {
+            return [];
+        }
+    }
+
     function resolveMaskOpacity() {
         const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey()) || "", 10);
         if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
@@ -221,7 +256,53 @@
         mapCanvas.style.setProperty("--map-pane-opacity", String(1 - (opacityPercent / 100)));
     }
 
-    function ensureMap(station, mapConfig) {
+    function renderTrack(station, stationTrack) {
+        if (!map) {
+            return;
+        }
+
+        if (trackPolyline) {
+            map.removeLayer(trackPolyline);
+            trackPolyline = null;
+        }
+        for (const dot of trackDots) {
+            map.removeLayer(dot);
+        }
+        trackDots = [];
+
+        const points = Array.isArray(stationTrack?.points) ? stationTrack.points : [];
+        if (points.length < 2) {
+            return;
+        }
+
+        const trackColor = colorForCallsign(station.display_callsign || "");
+        trackPolyline = window.L.polyline(
+            points.map((point) => ([Number(point.latitude), Number(point.longitude)])),
+            {
+                color: trackColor,
+                weight: 3,
+                opacity: 0.85,
+                lineJoin: "round",
+                lineCap: "round",
+                interactive: false,
+            }
+        ).addTo(map);
+
+        for (const point of points.slice(0, -1)) {
+            const dot = window.L.circleMarker([Number(point.latitude), Number(point.longitude)], {
+                radius: 3,
+                color: trackColor,
+                fillColor: trackColor,
+                fillOpacity: 0.65,
+                opacity: 0.95,
+                weight: 1,
+                interactive: false,
+            }).addTo(map);
+            trackDots.push(dot);
+        }
+    }
+
+    function ensureMap(station, mapConfig, stationTrack) {
         const hasCoordinates = Number.isFinite(Number(station.latitude_float)) && Number.isFinite(Number(station.longitude_float));
         if (!hasCoordinates) {
             if (mapRoot) {
@@ -266,6 +347,7 @@
                 attribution: mapConfig.tile_attribution || "",
                 maxZoom: 19,
             }).addTo(map);
+            renderTrack(station, stationTrack);
             marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);
             map.whenReady(function () {
                 window.setTimeout(function () {
@@ -277,6 +359,7 @@
 
         marker.setLatLng(latLng);
         marker.setIcon(icon);
+        renderTrack(station, stationTrack);
         map.setView(latLng, map.getZoom(), { animate: false });
         if (tileLayer && tileLayer._url !== (mapConfig.tile_url || "")) {
             tileLayer.setUrl(mapConfig.tile_url || "");
@@ -291,6 +374,7 @@
             const payload = await response.json();
             const station = payload.station || {};
             const mapConfig = payload.station_map_config || {};
+            const stationTrack = payload.station_track || { points: [] };
             if (title) {
                 title.textContent = station.display_callsign || "";
             }
@@ -299,7 +383,7 @@
             renderAprsDevice(station.aprs_device || null);
             renderRecentPackets(payload.recent_packets || []);
             renderRelatedSsids(station, payload.related_ssids || []);
-            ensureMap(station, mapConfig);
+            ensureMap(station, mapConfig, stationTrack);
         } catch (_error) {
         }
     }
@@ -314,10 +398,12 @@
         tile_url: mapRoot.dataset.tileUrl || "",
         tile_attribution: mapRoot.dataset.tileAttribution || "",
         symbol_icon: mapRoot.dataset.symbolIcon || "",
+        track_points: parseTrackPoints(mapRoot.dataset.trackPoints || ""),
     } : {};
+    const initialStationTrack = { points: initialMapConfig.track_points || [] };
 
     applyMaskOpacity();
-    ensureMap(initialStation, initialMapConfig);
+    ensureMap(initialStation, initialMapConfig, initialStationTrack);
     const themeObserver = new window.MutationObserver(function (mutations) {
         for (const mutation of mutations) {
             if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
