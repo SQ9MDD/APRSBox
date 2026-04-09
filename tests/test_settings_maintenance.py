@@ -107,6 +107,11 @@ class SettingsMaintenanceTests(unittest.TestCase):
         unescaped_tojson = re.findall(r'onsubmit="[^"]*\|tojson(?!\|forceescape)', template_source)
         self.assertEqual([], unescaped_tojson)
 
+    def test_update_application_has_three_minute_timeout(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("actionId: 'update-application'", template_source)
+        self.assertIn("lockTimeoutMs: 180000", template_source)
+
 
 if __name__ == "__main__":
     unittest.main()
