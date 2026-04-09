@@ -145,7 +145,7 @@
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson }}, busyLabel: {{ t('Restarting...')|tojson }}, persist: true, lockTimeoutMs: 240000});"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson }}, busyLabel: {{ t('Restarting...')|tojson }}, persist: true, lockTimeoutMs: 240000});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -153,14 +153,14 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Reboot host") }}</h3>
                 <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
-                <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
+                <p class="muted">{{ t("This action will reboot the host system.") }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/reboot-host"
                     class="form-stack"
                     data-settings-action-id="reboot-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson }}, busyLabel: {{ t('Rebooting...')|tojson }}, persist: true, lockTimeoutMs: 900000});"
+                    onsubmit="return confirm({{ t('Are you sure you want to reboot the host?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson }}, busyLabel: {{ t('Rebooting...')|tojson }}, persist: true, lockTimeoutMs: 900000});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
@@ -168,14 +168,14 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Power off host") }}</h3>
                 <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
-                <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
+                <p class="muted">{{ t("This action will shut down the host system.") }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/poweroff-host"
                     class="form-stack"
                     data-settings-action-id="poweroff-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson }}, busyLabel: {{ t('Shutting down...')|tojson }}, persist: true, lockTimeoutMs: 1200000});"
+                    onsubmit="return confirm({{ t('Are you sure you want to power off the host?')|tojson }}) && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson }}, busyLabel: {{ t('Shutting down...')|tojson }}, persist: true, lockTimeoutMs: 1200000});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
                 </form>
