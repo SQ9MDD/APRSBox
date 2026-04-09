@@ -54,6 +54,16 @@ detect_service_manager() {
     SERVICE_MANAGER="unknown"
 }
 
+running_inside_systemd_web_unit() {
+    if [ "$SERVICE_MANAGER" != "systemd" ]; then
+        return 1
+    fi
+    if [ ! -r /proc/self/cgroup ]; then
+        return 1
+    fi
+    grep -F "aprsbox-web.service" /proc/self/cgroup >/dev/null 2>&1
+}
+
 restart_services_fallback() {
     detect_service_manager
     case "$SERVICE_MANAGER" in
@@ -82,7 +92,12 @@ restart_services_fallback() {
 stop_services() {
     case "$SERVICE_MANAGER" in
         systemd)
-            systemctl stop aprsbox-web.service aprsbox-core.service >/dev/null 2>&1 || true
+            if running_inside_systemd_web_unit; then
+                log "Detected updater running in aprsbox-web.service scope; skipping direct web stop to avoid self-termination."
+                systemctl stop aprsbox-core.service >/dev/null 2>&1 || true
+            else
+                systemctl stop aprsbox-web.service aprsbox-core.service >/dev/null 2>&1 || true
+            fi
             ;;
         openrc)
             rc-service aprsbox-web stop >/dev/null 2>&1 || true
@@ -235,7 +250,21 @@ PYTHONPATH="$APP_DIR" \
 chown "$APP_USER":"$APP_USER" "$DB_PATH" 2>/dev/null || true
 
 RESTART_SCRIPT="$APP_DIR/scripts/restart-services.sh"
-if [ -x "$RESTART_SCRIPT" ]; then
+if [ "$SERVICE_MANAGER" = "systemd" ] && running_inside_systemd_web_unit; then
+    systemctl restart aprsbox-core.service
+    if command -v systemd-run >/dev/null 2>&1; then
+        restart_unit="aprsbox-web-restart-$$"
+        if systemd-run --quiet --collect --unit "$restart_unit" /bin/sh -c "sleep 1; systemctl restart aprsbox-web.service" >/dev/null 2>&1; then
+            log "Scheduled aprsbox-web restart using transient systemd unit: $restart_unit"
+        else
+            log "WARNING: Failed to schedule deferred aprsbox-web restart; falling back to direct restart."
+            systemctl restart aprsbox-web.service
+        fi
+    else
+        log "WARNING: systemd-run not available; restarting aprsbox-web directly."
+        systemctl restart aprsbox-web.service
+    fi
+elif [ -x "$RESTART_SCRIPT" ]; then
     "$RESTART_SCRIPT"
 else
     log "WARNING: restart script missing at $RESTART_SCRIPT. Using built-in fallback."
