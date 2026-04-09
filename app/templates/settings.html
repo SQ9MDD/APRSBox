@@ -58,11 +58,6 @@
         min-width: 4.5rem;
     }
 
-    .settings-progress-close[disabled] {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
     .settings-progress-spinner {
         width: 1.2rem;
         height: 1.2rem;
@@ -370,6 +365,7 @@
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};
         const fallbackCloseLabel = {{ t("OK")|tojson }};
+        let fallbackDismissed = false;
 
         const ensureFallbackBackdrop = () => {
             const existing = document.querySelector(".settings-progress-backdrop");
@@ -395,11 +391,13 @@
             const closeButton = backdrop.querySelector(".settings-progress-close");
             if (closeButton instanceof HTMLButtonElement) {
                 closeButton.addEventListener("click", () => {
+                    fallbackDismissed = true;
                     backdrop.hidden = true;
                 });
             }
             backdrop.addEventListener("click", (event) => {
                 if (event.target === backdrop) {
+                    fallbackDismissed = true;
                     backdrop.hidden = true;
                 }
             });
@@ -407,6 +405,9 @@
         };
 
         const fallbackShow = (message) => {
+            if (fallbackDismissed) {
+                return;
+            }
             const backdrop = ensureFallbackBackdrop();
             const titleNode = backdrop.querySelector(".settings-progress-title");
             const messageNode = backdrop.querySelector(".settings-progress-message");
@@ -467,6 +468,7 @@
         };
 
         const fallbackSubmit = async (form, options = {}) => {
+            fallbackDismissed = false;
             fallbackDisableControls(form);
             const message = String(options.message || "Working...");
             fallbackShow(message);
@@ -573,12 +575,7 @@
         let lockTimeoutTimer = null;
         let progressLocked = false;
         let activePollTimer = null;
-
-        const syncCloseButtonState = () => {
-            if (closeButton instanceof HTMLButtonElement) {
-                closeButton.disabled = progressLocked;
-            }
-        };
+        let progressDismissed = false;
 
         const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
         const waitForNextPaint = () =>
@@ -625,7 +622,9 @@
                 messageNode.textContent = String(message || labels.defaultMessage);
             }
             progressLocked = Boolean(options.locked);
-            syncCloseButtonState();
+            if (progressLocked && progressDismissed) {
+                return true;
+            }
             backdrop.hidden = false;
 
             if (!progressLocked) {
@@ -639,7 +638,6 @@
             if (timeoutMs > 0) {
                 lockTimeoutTimer = window.setTimeout(() => {
                     progressLocked = false;
-                    syncCloseButtonState();
                     if (messageNode instanceof HTMLElement) {
                         messageNode.textContent = labels.timeout;
                     }
@@ -825,10 +823,23 @@
         };
 
         const jobStatusUrl = (jobId) => `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId || ""))}`;
+        const healthUrl = `${rootPath}/health`;
+
+        const canReloadOnHealthRecovery = (actionId, reloadOnSuccess) => {
+            if (!reloadOnSuccess) {
+                return false;
+            }
+            const normalized = String(actionId || "");
+            return normalized === "update-application" ||
+                normalized === "restart-services" ||
+                normalized === "reboot-host" ||
+                normalized === "poweroff-host";
+        };
 
         const pollJobStatus = async (jobId, startedAt, options) => {
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
             const reloadAfterFinish = Boolean(options.reloadOnSuccess);
+            const actionId = String(options.actionId || "");
 
             const pollOnce = async () => {
                 const elapsed = Date.now() - Number(startedAt || Date.now());
@@ -881,6 +892,26 @@
                         lockTimeoutMs,
                     });
                 } catch (_error) {
+                    if (canReloadOnHealthRecovery(actionId, reloadAfterFinish)) {
+                        try {
+                            const healthResponse = await window.fetch(healthUrl, {
+                                cache: "no-store",
+                                credentials: "same-origin",
+                                headers: { "Accept": "application/json" },
+                            });
+                            if (healthResponse.ok) {
+                                try {
+                                    window.sessionStorage.removeItem(activeJobStorageKey);
+                                } catch (_storageError) {
+                                    // Ignore storage errors.
+                                }
+                                finishAction(labels.completed, { reload: true });
+                                return;
+                            }
+                        } catch (_healthError) {
+                            // Ignore health check errors and keep polling.
+                        }
+                    }
                     const base = String(options.message || labels.defaultMessage);
                     showSettingsProgress(`${base}\n${labels.reconnecting}`, {
                         locked: true,
@@ -951,6 +982,7 @@
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
             const mode = String(options.mode || "json");
 
+            progressDismissed = false;
             form.dataset.settingsSubmitQueued = "1";
             disableFormControls(form, busyLabel);
             disableGroupControls(group, form);
@@ -1005,8 +1037,9 @@
             const message = String(stored.message || labels.defaultMessage);
             const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
 
+            progressDismissed = false;
             showSettingsProgress(message, { locked: true, lockTimeoutMs });
-            pollJobStatus(jobId, startedAt, { lockTimeoutMs, message, reloadOnSuccess });
+            pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess });
         };
 
         window.__aprsboxSettingsSubmit = submitSettingsAction;
@@ -1027,6 +1060,11 @@
 
         if (closeButton instanceof HTMLButtonElement) {
             closeButton.addEventListener("click", () => {
+                if (progressLocked) {
+                    progressDismissed = true;
+                    backdrop.hidden = true;
+                    return;
+                }
                 hideBackdrop();
             });
         }
