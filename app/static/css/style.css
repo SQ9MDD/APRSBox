@@ -2423,6 +2423,37 @@ select:focus-visible,
     color: var(--text);
 }
 
+.settings-progress-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    background: rgba(0, 0, 0, 0.38);
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+}
+
+.settings-progress-modal {
+    width: min(34rem, 100%);
+    padding: 1rem 1.1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--panel), var(--panel-alt));
+    box-shadow: var(--shadow-lg);
+    display: grid;
+    gap: var(--space-2);
+}
+
+.settings-progress-title {
+    margin: 0;
+    font-size: 0.96rem;
+}
+
+.settings-progress-message {
+    margin: 0;
+    color: var(--muted);
+}
+
 .simple-list {
     padding-left: 1rem;
     margin: 0;
