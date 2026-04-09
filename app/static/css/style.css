@@ -2431,6 +2431,7 @@ select:focus-visible,
     display: grid;
     place-items: center;
     padding: 1rem;
+    cursor: pointer;
 }
 
 .settings-progress-modal {
@@ -2442,6 +2443,7 @@ select:focus-visible,
     box-shadow: var(--shadow-lg);
     display: grid;
     gap: var(--space-2);
+    cursor: default;
 }
 
 .settings-progress-title {

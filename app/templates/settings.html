@@ -253,7 +253,6 @@
 {% block extra_scripts %}
 <script>
     (() => {
-        const rootPath = {{ request.scope.root_path|tojson }};
         const labels = {
             defaultTitle: {{ t("Please wait")|tojson }},
             defaultMessage: {{ t("Operation started. The page will refresh after completion.")|tojson }},
@@ -270,15 +269,32 @@
         document.body.appendChild(backdrop);
         const titleNode = backdrop.querySelector(".settings-progress-title");
         const messageNode = backdrop.querySelector(".settings-progress-message");
+        let hideTimer = null;
+        const hideBackdrop = () => {
+            backdrop.hidden = true;
+            if (hideTimer !== null) {
+                window.clearTimeout(hideTimer);
+                hideTimer = null;
+            }
+        };
         window.aprsboxShowSettingsProgress = (message) => {
             if (!(titleNode instanceof HTMLElement) || !(messageNode instanceof HTMLElement)) return true;
             titleNode.textContent = labels.defaultTitle;
             messageNode.textContent = String(message || labels.defaultMessage);
             backdrop.hidden = false;
+            if (hideTimer !== null) window.clearTimeout(hideTimer);
+            hideTimer = window.setTimeout(hideBackdrop, 20000);
             return true;
         };
+        window.aprsboxHideSettingsProgress = hideBackdrop;
+        backdrop.addEventListener("click", (event) => {
+            if (event.target === backdrop) hideBackdrop();
+        });
+        window.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") hideBackdrop();
+        });
         window.addEventListener("pageshow", () => {
-            backdrop.hidden = true;
+            hideBackdrop();
         });
     })();
 </script>
