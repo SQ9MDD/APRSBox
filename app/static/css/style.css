@@ -2434,6 +2434,10 @@ select:focus-visible,
     cursor: pointer;
 }
 
+.settings-progress-backdrop[hidden] {
+    display: none !important;
+}
+
 .settings-progress-modal {
     width: min(34rem, 100%);
     padding: 1rem 1.1rem;
