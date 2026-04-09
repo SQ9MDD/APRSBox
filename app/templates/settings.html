@@ -102,21 +102,6 @@
         {% else %}
         <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
         {% endif %}
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Update log") }}</h2>
-                <p class="section-lead">{{ t("Latest lines from the last application update run.") }}</p>
-            </div>
-        </div>
-        {% if update_log_exists %}
-        <p class="muted"><code>{{ update_log_path }}</code></p>
-        <pre class="update-log-preview">{{ update_log_content }}</pre>
-        {% if update_log_truncated %}
-        <p class="muted">{{ t("Log output is truncated to the most recent lines.") }}</p>
-        {% endif %}
-        {% else %}
-        <p class="muted">{{ t("No update log is available yet.") }}</p>
-        {% endif %}
     </div>
 </section>
 

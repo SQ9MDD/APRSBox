@@ -66,8 +66,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("Type REBOOT to confirm host reboot.", template_source)
         self.assertIn("Type POWER OFF to confirm host shutdown.", template_source)
         self.assertIn('action="{{ request.scope.root_path }}/settings/update-channel"', template_source)
-        self.assertIn('{{ t("Update log") }}', template_source)
-        self.assertIn("update-log-preview", template_source)
+        self.assertNotIn('{{ t("Update log") }}', template_source)
+        self.assertNotIn("update-log-preview", template_source)
 
     def test_settings_router_contains_danger_zone_endpoints(self) -> None:
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
