@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.db import init_db
+from app.db import execute, init_db
 from app.services.content import get_heard_station_snapshots, get_related_ssids, get_station_detail, get_visible_station_snapshots
 
 
@@ -99,6 +99,29 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
         self.assertEqual(len(second), 1)
         self.assertEqual(heard_mock.call_count, 1)
         self.assertEqual(local_mock.call_count, 1)
+
+    def test_heard_station_snapshots_map_third_party_position_to_inner_sender(self) -> None:
+        with temporary_database():
+            line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}SQ2IBK>U2QU28,TCPIP,SR0DZ*:`0SZl4{[/>145.575MHz&"
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'rx', '2m', 'TNC2', ?, '0', 'RX', ?, '', '2026-01-01T00:00:00+00:00')
+                """,
+                ("TNC-2m", line, len(line)),
+            )
+
+            snapshots = get_heard_station_snapshots(limit=50)
+            display_callsigns = {str(item.get("display_callsign") or "") for item in snapshots}
+            self.assertIn("SQ2IBK", display_callsigns)
+            self.assertNotIn("SR0DZ", display_callsigns)
+
+            station = next(item for item in snapshots if str(item.get("display_callsign") or "") == "SQ2IBK")
+            self.assertEqual(station["callsign"], "SQ2IBK")
+            self.assertTrue(str(station.get("latitude") or ""))
+            self.assertTrue(str(station.get("longitude") or ""))
 
 
 if __name__ == "__main__":

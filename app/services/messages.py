@@ -546,7 +546,7 @@ def expire_direct_message_timeouts() -> None:
 
 
 def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) -> None:
-    parsed = _parse_tnc2_line(line)
+    parsed = _parse_effective_incoming_tnc2_line(line, log_invalid_third_party=True)
     if parsed is None:
         return
     info = parsed["info"]
@@ -1127,6 +1127,23 @@ def _parse_tnc2_line(line: str) -> dict[str, str] | None:
     return {key: value.strip() for key, value in parsed.items()}
 
 
+def _parse_effective_incoming_tnc2_line(line: str, *, log_invalid_third_party: bool = False) -> dict[str, str] | None:
+    parsed = _parse_tnc2_line(line)
+    if parsed is None:
+        return None
+    info = str(parsed.get("info") or "")
+    if not info.startswith("}"):
+        return parsed
+    encapsulated = info[1:].lstrip()
+    embedded = _parse_tnc2_line(encapsulated)
+    if embedded is not None:
+        return embedded
+    if log_invalid_third_party:
+        outer_source = str(parsed.get("source") or "").strip() or "unknown"
+        log_event("WARNING", "messages", f"Ignored malformed third-party APRS message frame from {outer_source}.")
+    return None
+
+
 def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
     timestamp = str(row.get("created_at") or row.get("updated_at") or utc_now())
     has_message_number = bool(str(row.get("message_number") or "").strip())
@@ -1168,7 +1185,7 @@ def _heard_station_lookup() -> dict[str, dict[str, Any]]:
     )
     snapshots: dict[str, dict[str, Any]] = {}
     for row in rows:
-        parsed = _parse_tnc2_line(str(row["line"] or ""))
+        parsed = _parse_effective_incoming_tnc2_line(str(row["line"] or ""))
         if parsed is None:
             continue
         source = normalize_aprs_destination_callsign(parsed["source"])

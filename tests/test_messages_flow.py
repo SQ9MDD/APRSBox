@@ -323,6 +323,42 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(ack_jobs), 2)
             self.assertTrue(all('"message_text":"ack08"' in str(job["payload_json"]) for job in ack_jobs))
 
+    def test_incoming_third_party_message_uses_inner_sender(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}SQ2IBK>APRS,TCPIP,SR0DZ*::SQ9MDD-4 :relay test{34"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one(
+                """
+                SELECT direction, sender, addressee, message_text, message_number, status
+                FROM aprs_messages
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert row is not None
+            self.assertEqual(row["direction"], "rx")
+            self.assertEqual(row["sender"], "SQ2IBK")
+            self.assertEqual(row["addressee"], "SQ9MDD-4")
+            self.assertEqual(row["message_text"], "relay test")
+            self.assertEqual(row["message_number"], "34")
+            self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
+
+    def test_incoming_malformed_third_party_message_is_ignored(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}NOT_A_VALID_FRAME"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert row is not None
+            self.assertEqual(int(row["total"]), 0)
+
     def test_single_char_ack_number_matches_outbound_message(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
