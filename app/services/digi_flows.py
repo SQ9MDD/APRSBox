@@ -35,10 +35,13 @@ PACKET_TYPE_FILTER_GROUPS = (
     "query",
 )
 PACKET_TYPE_FILTER_LEGACY_CODES = {"M", "S", "O", "W"}
+DUPLICATE_FILTER_WINDOW_SECONDS = (2, 3, 4, 5, 6, 7)
+DUPLICATE_FILTER_DEFAULT_WINDOW_SEC = 5
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_rf",
     "receiver_aprsis",
+    "filter_dupe",
     "filter_path",
     "filter_strict",
     "filter_direct_only",
@@ -73,11 +76,23 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_dupe": {
         "category": "filter",
-        "label": "Duplicate Filter",
+        "label": "Duplicate Filter (viscous-delay)",
         "badge": "Filter",
-        "description": "Stores a duplicate suppression window.",
+        "description": "Waits for a short duplicate window and compares source callsign + payload only (path ignored).",
+        "editor_help_lines": (
+            "The fingerprint is built from source callsign and payload (information field).",
+            "Path is ignored for duplicate comparison.",
+            "A frame is released only after the listening window expires without a duplicate.",
+            "This filter can be used only once in a flow and must remain the first step.",
+        ),
         "config_fields": (
-            {"name": "window_sec", "label": "Window (sec)", "type": "number", "required": True},
+            {
+                "name": "window_sec",
+                "label": "Listening window",
+                "type": "select",
+                "required": True,
+                "options": tuple(str(item) for item in DUPLICATE_FILTER_WINDOW_SECONDS),
+            },
         ),
     },
     "filter_path": {
@@ -297,6 +312,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
 
 LEGACY_DEFAULT_STEP_TITLES = {
     "filter_path": {"Path Filter"},
+    "filter_dupe": {"Duplicate Filter"},
 }
 
 STEP_TYPE_TO_REF_FIELD = {
@@ -462,7 +478,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "receiver_aprsis":
         return {"aprsis_source": ref_value}
     if step_type == "filter_dupe":
-        return {"window_sec": 30}
+        return {"window_sec": DUPLICATE_FILTER_DEFAULT_WINDOW_SEC}
     if step_type == "filter_direct_only":
         return {}
     if step_type == "filter_digi":
@@ -507,7 +523,15 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
             raise ValueError(_t("Receiver APRS-IS step requires an APRS-IS Source value."))
         return {"aprsis_source": value}
     if step_type == "filter_dupe":
-        return {"window_sec": _normalize_number(config.get("window_sec"), label="Duplicate window", minimum=1)}
+        window_sec = _normalize_number(config.get("window_sec"), label="Listening window", minimum=2)
+        if window_sec not in DUPLICATE_FILTER_WINDOW_SECONDS:
+            raise ValueError(
+                _tf(
+                    "Listening window must be one of: {values}.",
+                    {"values": ", ".join(f"{item} s" for item in DUPLICATE_FILTER_WINDOW_SECONDS)},
+                )
+            )
+        return {"window_sec": window_sec}
     if step_type == "filter_path":
         mode = _normalize_text(config.get("mode")).lower() or "allow"
         if mode != "allow":
@@ -925,6 +949,11 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     for middle_step in normalized_steps[1:-1]:
         if _step_category(middle_step["step_type"]) != "filter":
             raise ValueError(_t("All middle flow steps must be filter steps."))
+    duplicate_filter_positions = [index for index, step in enumerate(normalized_steps) if step["step_type"] == "filter_dupe"]
+    if len(duplicate_filter_positions) > 1:
+        raise ValueError(_t("Duplicate filter (viscous-delay) can be used only once in a flow."))
+    if duplicate_filter_positions and duplicate_filter_positions[0] != 1:
+        raise ValueError(_t("Duplicate filter (viscous-delay) must be the first filter step in the flow."))
     first_ref = _step_ref_value(first_step["step_type"], first_step["config"])
     last_ref = _step_ref_value(last_step["step_type"], last_step["config"])
     if source_kind != first_step["step_type"] or source_ref != first_ref:
@@ -1353,7 +1382,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
             if event_type == "source_step":
                 step_state["status"] = "passed"
                 step_state["description"] = _t("Source matched and packet entered the flow.")
-            elif event_type in {"filter_callsign", "filter_digi", "direct_only", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
+            elif event_type in {"filter_callsign", "filter_digi", "filter_dupe", "direct_only", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
                 step_state["status"] = "rejected" if decision == "rejected" else "passed"
                 step_state["description"] = message
             elif event_type == "output_action":
@@ -1465,6 +1494,8 @@ def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -
         return str(flow.get("source_kind") or "")
     if event_type == "filter_callsign":
         return "filter_callsign"
+    if event_type == "filter_dupe":
+        return "filter_dupe"
     if event_type == "path_rule":
         return "filter_path"
     if event_type == "strict_filter":

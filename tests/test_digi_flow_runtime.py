@@ -1,4 +1,5 @@
 import contextlib
+import asyncio
 import json
 import os
 import tempfile
@@ -140,6 +141,113 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             rows = get_digi_flow_event_log(flow_id)
             self.assertTrue(any(row["event_type"] == "flow_matched" for row in rows))
             self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
+
+    async def test_duplicate_filter_viscous_delay_drops_same_source_and_payload_even_with_different_paths(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Viscous delay duplicates",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_dupe",
+                            "title": "Duplicate Filter (viscous-delay)",
+                            "enabled": 1,
+                            "config": {"window_sec": 2},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                first = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-9>APRS,WIDE1-1:>Viscous duplicate",
+                )
+                second = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-9>APRS,TRACE2-2:>Viscous duplicate",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            first_rows = event_rows_for_frame(str(first["frame_uid"]))
+            second_rows = event_rows_for_frame(str(second["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_dupe" and row["decision"] == "rejected" for row in first_rows))
+            self.assertTrue(any(row["event_type"] == "filter_dupe" and row["decision"] == "rejected" for row in second_rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in first_rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in second_rows))
+            self.assertFalse(any(row["event_type"] == "output_action" for row in first_rows))
+            self.assertFalse(any(row["event_type"] == "output_action" for row in second_rows))
+            self.assertTrue(any("duplicate seen within 2s" in row["message"] for row in second_rows if row["event_type"] == "filter_dupe"))
+
+    async def test_duplicate_filter_viscous_delay_waits_then_allows_unique_fingerprints(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Viscous delay pass",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_dupe",
+                            "title": "Duplicate Filter (viscous-delay)",
+                            "enabled": 1,
+                            "config": {"window_sec": 2},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                first = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-9>APRS,WIDE1-1:>Window check",
+                )
+                await asyncio.sleep(0.25)
+                first_early_rows = event_rows_for_frame(str(first["frame_uid"]))
+                self.assertTrue(any(row["event_type"] == "filter_dupe" and row["decision"] == "waiting" for row in first_early_rows))
+                self.assertFalse(any(row["event_type"] == "output_action" for row in first_early_rows))
+
+                second = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ8XYZ-1>APRS,TRACE2-2:>Window check",
+                )
+                third = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-9>APRS,WIDE2-2:>Different payload",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            for frame_uid in (str(first["frame_uid"]), str(second["frame_uid"]), str(third["frame_uid"])):
+                rows = event_rows_for_frame(frame_uid)
+                self.assertTrue(any(row["event_type"] == "filter_dupe" and row["decision"] == "passed" for row in rows))
+                self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
+                self.assertTrue(any("duplicate window expired" in row["message"] for row in rows if row["event_type"] == "filter_dupe"))
+                self.assertFalse(any(row["event_type"] == "filter_dupe" and row["decision"] == "rejected" for row in rows))
 
     async def test_callsign_filter_logs_pass_and_reject(self) -> None:
         with temporary_database():

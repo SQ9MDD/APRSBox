@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
+import time
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from app.db import log_event, utc_now
@@ -12,6 +15,8 @@ from app.services.digi_flows import list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import enqueue_digi_tx_job
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
+_DUPLICATE_FILTER_WINDOW_DEFAULT_SEC = 5
+_DUPLICATE_FILTER_WINDOW_ALLOWED = {2, 3, 4, 5, 6, 7}
 
 
 def _t(message: object) -> str:
@@ -22,12 +27,30 @@ def _tf(message: object, params: dict[str, object] | None = None) -> str:
     return get_format_translator(get_app_language())(message, params)
 
 
+@dataclass
+class _ViscousDelayEntry:
+    flow_id: int
+    step_id: int
+    source_callsign: str
+    payload: str
+    window_sec: int
+    expires_at: float
+    first_context: dict[str, Any] | None
+    first_next_step_index: int
+    duplicate_seen: bool = False
+    first_finalized: bool = False
+    cleanup_task: asyncio.Task[None] | None = None
+
+
 class DigiFlowRuntimeService:
     def __init__(self, *, poll_interval: float = 0.5) -> None:
         self._poll_interval = poll_interval
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
+        self._viscous_delay_lock = asyncio.Lock()
+        self._viscous_delay_entries: dict[tuple[int, int, str, str], _ViscousDelayEntry] = {}
+        self._pending_viscous_wait_count = 0
 
     async def start(self) -> None:
         if self._task is not None:
@@ -37,6 +60,20 @@ class DigiFlowRuntimeService:
 
     async def stop(self) -> None:
         self._stop_event.set()
+        cleanup_tasks: list[asyncio.Task[None]] = []
+        async with self._viscous_delay_lock:
+            cleanup_tasks = [
+                entry.cleanup_task
+                for entry in self._viscous_delay_entries.values()
+                if entry.cleanup_task is not None and not entry.cleanup_task.done()
+            ]
+            self._viscous_delay_entries.clear()
+            self._pending_viscous_wait_count = 0
+        for task in cleanup_tasks:
+            task.cancel()
+        for task in cleanup_tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         if self._task is None:
             return
         self._task.cancel()
@@ -48,6 +85,12 @@ class DigiFlowRuntimeService:
 
     async def wait_until_idle(self) -> None:
         await self._queue.join()
+        while True:
+            async with self._viscous_delay_lock:
+                pending = self._pending_viscous_wait_count
+            if pending <= 0:
+                return
+            await asyncio.sleep(0.01)
 
     def enqueue_tnc2_frame(
         self,
@@ -166,12 +209,14 @@ class DigiFlowRuntimeService:
             if _receiver_source_ref_matches(str(flow.get("source_ref") or ""), normalized_ref)
         ]
 
-    async def _execute_flow(self, context: dict[str, Any]) -> None:
+    async def _execute_flow(self, context: dict[str, Any], *, start_index: int = 0) -> None:
         flow = context["flow"]
         flow_id = int(flow["id"])
         last_decision = "continue"
 
-        for step in flow.get("steps") or []:
+        steps = list(flow.get("steps") or [])
+        for step_index in range(start_index, len(steps)):
+            step = steps[step_index]
             step_id = int(step["id"])
             step_type = str(step["step_type"])
             step_title = str(step.get("title") or step_type)
@@ -194,7 +239,7 @@ class DigiFlowRuntimeService:
                 decision="continue",
                 message=f"Entering step {step_title}.",
             )
-            result = self._execute_step(context, step)
+            result = await self._execute_step(context, step, step_index=step_index)
             last_decision = str(result["decision"])
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
@@ -204,27 +249,15 @@ class DigiFlowRuntimeService:
                 decision=last_decision,
                 message=f"Step {step_title} returned decision {last_decision}.",
             )
+            if last_decision == "defer":
+                return
             if last_decision != "continue":
-                log_digi_flow_event(
-                    frame_uid=context["frame_uid"],
-                    flow_id=flow_id,
-                    step_id=None,
-                    event_type="pipeline_finished",
-                    decision=last_decision,
-                    message=f"Flow finished with decision {last_decision}.",
-                )
+                self._log_pipeline_finished(context, decision=last_decision)
                 return
 
-        log_digi_flow_event(
-            frame_uid=context["frame_uid"],
-            flow_id=flow_id,
-            step_id=None,
-            event_type="pipeline_finished",
-            decision=last_decision,
-            message=f"Flow finished with decision {last_decision}.",
-        )
+        self._log_pipeline_finished(context, decision=last_decision)
 
-    def _execute_step(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+    async def _execute_step(self, context: dict[str, Any], step: dict[str, Any], *, step_index: int) -> dict[str, str]:
         step_type = str(step["step_type"])
         if step_type in {"receiver_rf", "receiver_aprsis"}:
             log_digi_flow_event(
@@ -236,6 +269,8 @@ class DigiFlowRuntimeService:
                 message=f"Source step confirmed for {context['source_kind']}:{context['source_ref']}.",
             )
             return {"decision": "continue"}
+        if step_type == "filter_dupe":
+            return await self._execute_duplicate_filter(context, step, step_index=step_index)
         if step_type == "filter_callsign":
             return self._execute_callsign_filter(context, step)
         if step_type == "filter_path":
@@ -268,6 +303,172 @@ class DigiFlowRuntimeService:
             message=f"Step type {step_type} is not implemented in ETAP 2 and was skipped.",
         )
         return {"decision": "continue"}
+
+    async def _execute_duplicate_filter(self, context: dict[str, Any], step: dict[str, Any], *, step_index: int) -> dict[str, str]:
+        parsed = context.get("parsed")
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        if parsed is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_dupe",
+                decision="rejected",
+                message=_t("Duplicate filter (viscous-delay) rejected frame because TNC2 parsing failed."),
+            )
+            return {"decision": "drop"}
+
+        source_callsign = str(parsed.get("source") or "").strip().upper()
+        payload = str(parsed.get("info") or "")
+        if not source_callsign:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_dupe",
+                decision="rejected",
+                message=_t("Duplicate filter (viscous-delay) rejected frame because source callsign could not be parsed."),
+            )
+            return {"decision": "drop"}
+
+        window_sec = self._duplicate_window_seconds(step)
+        fingerprint_label = self._duplicate_fingerprint_label(source_callsign, payload)
+        entry_key = (flow_id, step_id, source_callsign, payload)
+        first_context_to_drop: dict[str, Any] | None = None
+        created_entry = False
+        now = time.monotonic()
+        async with self._viscous_delay_lock:
+            entry = self._viscous_delay_entries.get(entry_key)
+            if entry is None:
+                expires_at = now + float(window_sec)
+                entry = _ViscousDelayEntry(
+                    flow_id=flow_id,
+                    step_id=step_id,
+                    source_callsign=source_callsign,
+                    payload=payload,
+                    window_sec=window_sec,
+                    expires_at=expires_at,
+                    first_context=context,
+                    first_next_step_index=step_index + 1,
+                )
+                entry.cleanup_task = asyncio.create_task(
+                    self._finalize_viscous_delay_entry(entry_key, expires_at=expires_at),
+                    name=f"aprsbox-viscous-delay-{flow_id}-{step_id}",
+                )
+                self._viscous_delay_entries[entry_key] = entry
+                self._pending_viscous_wait_count += 1
+                created_entry = True
+            else:
+                entry.duplicate_seen = True
+                if entry.first_context is not None and not entry.first_finalized:
+                    first_context_to_drop = entry.first_context
+                    entry.first_context = None
+                    entry.first_finalized = True
+                    self._pending_viscous_wait_count = max(0, self._pending_viscous_wait_count - 1)
+
+        if created_entry:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_dupe",
+                decision="waiting",
+                message=_tf(
+                    "Duplicate filter (viscous-delay): fingerprint {fingerprint} created, waiting for duplicate window {window_sec}s.",
+                    {"fingerprint": fingerprint_label, "window_sec": window_sec},
+                ),
+            )
+            return {"decision": "defer"}
+
+        duplicate_message = _tf(
+            "Duplicate filter (viscous-delay): duplicate seen within {window_sec}s for fingerprint {fingerprint}; dropped.",
+            {"window_sec": window_sec, "fingerprint": fingerprint_label},
+        )
+        if first_context_to_drop is not None:
+            log_digi_flow_event(
+                frame_uid=first_context_to_drop["frame_uid"],
+                flow_id=int(first_context_to_drop["flow"]["id"]),
+                step_id=step_id,
+                event_type="filter_dupe",
+                decision="rejected",
+                message=duplicate_message,
+            )
+            self._log_pipeline_finished(first_context_to_drop, decision="drop")
+
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="filter_dupe",
+            decision="rejected",
+            message=duplicate_message,
+        )
+        return {"decision": "drop"}
+
+    async def _finalize_viscous_delay_entry(self, entry_key: tuple[int, int, str, str], *, expires_at: float) -> None:
+        sleep_seconds = max(0.0, expires_at - time.monotonic())
+        if sleep_seconds > 0:
+            await asyncio.sleep(sleep_seconds)
+
+        entry_to_resume: _ViscousDelayEntry | None = None
+        resume_context: dict[str, Any] | None = None
+        async with self._viscous_delay_lock:
+            entry = self._viscous_delay_entries.pop(entry_key, None)
+            if entry is None:
+                return
+            if entry.first_context is not None and not entry.first_finalized and not entry.duplicate_seen:
+                entry_to_resume = entry
+                resume_context = entry.first_context
+                entry.first_context = None
+                entry.first_finalized = True
+                self._pending_viscous_wait_count = max(0, self._pending_viscous_wait_count - 1)
+
+        if entry_to_resume is None:
+            return
+        if self._stop_event.is_set():
+            return
+
+        if resume_context is None:
+            return
+        log_digi_flow_event(
+            frame_uid=resume_context["frame_uid"],
+            flow_id=entry_to_resume.flow_id,
+            step_id=entry_to_resume.step_id,
+            event_type="filter_dupe",
+            decision="passed",
+            message=_tf(
+                "Duplicate filter (viscous-delay): duplicate window expired after {window_sec}s for fingerprint {fingerprint}; frame allowed to continue.",
+                {
+                    "window_sec": entry_to_resume.window_sec,
+                    "fingerprint": self._duplicate_fingerprint_label(entry_to_resume.source_callsign, entry_to_resume.payload),
+                },
+            ),
+        )
+        await self._execute_flow(resume_context, start_index=entry_to_resume.first_next_step_index)
+
+    def _duplicate_window_seconds(self, step: dict[str, Any]) -> int:
+        config = dict(step.get("config") or {})
+        try:
+            parsed = int(str(config.get("window_sec") or _DUPLICATE_FILTER_WINDOW_DEFAULT_SEC).strip())
+        except ValueError:
+            return _DUPLICATE_FILTER_WINDOW_DEFAULT_SEC
+        if parsed not in _DUPLICATE_FILTER_WINDOW_ALLOWED:
+            return _DUPLICATE_FILTER_WINDOW_DEFAULT_SEC
+        return parsed
+
+    def _duplicate_fingerprint_label(self, source_callsign: str, payload: str) -> str:
+        return f"{source_callsign} | {payload}"
+
+    def _log_pipeline_finished(self, context: dict[str, Any], *, decision: str) -> None:
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=int(context["flow"]["id"]),
+            step_id=None,
+            event_type="pipeline_finished",
+            decision=decision,
+            message=f"Flow finished with decision {decision}.",
+        )
 
     def _execute_callsign_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         parsed = context.get("parsed") or {}

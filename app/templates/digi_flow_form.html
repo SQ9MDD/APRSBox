@@ -302,6 +302,7 @@
             selectSymbol: {{ t("Select symbol")|tojson }},
             symbolCode: {{ t("Symbol Code")|tojson }},
             symbolTable: {{ t("Symbol Table")|tojson }},
+            duplicateFilterUsed: {{ t("Duplicate filter (viscous-delay) is already used in this flow.")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
@@ -346,7 +347,7 @@
         const defaultConfig = (stepType, refValue = "") => {
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
-            if (stepType === "filter_dupe") return { window_sec: 30 };
+            if (stepType === "filter_dupe") return { window_sec: 5 };
             if (stepType === "filter_direct_only") return {};
             if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
             if (stepType === "filter_strict") return {};
@@ -451,7 +452,29 @@
         };
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
+        const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
+        const hasViscousDelayStep = () => steps.some(
+            (step, index) => index > 0 && index < steps.length - 1 && isViscousDelayStepType(step.step_type),
+        );
         const iconPath = (name) => `${rootPath}/static/icons/${name}`;
+
+        const syncPaletteState = () => {
+            const hasViscous = hasViscousDelayStep();
+            for (const button of paletteButtons) {
+                const stepType = button.dataset.stepType || "";
+                if (!isViscousDelayStepType(stepType)) {
+                    continue;
+                }
+                button.disabled = hasViscous;
+                if (hasViscous) {
+                    button.title = i18n.duplicateFilterUsed;
+                    button.setAttribute("aria-label", i18n.duplicateFilterUsed);
+                } else {
+                    button.removeAttribute("title");
+                    button.removeAttribute("aria-label");
+                }
+            }
+        };
 
         const ensureIconPickerState = (step) => {
             if (!step.__iconPicker || typeof step.__iconPicker !== "object") {
@@ -830,6 +853,7 @@
 
         const render = () => {
             syncBoundarySteps();
+            syncPaletteState();
             stepsJsonInput.value = JSON.stringify(steps);
             stepsChain.innerHTML = "";
 
@@ -913,7 +937,7 @@
                 moveUpButton.className = "table-icon-button digi-step-icon-button";
                 moveUpButton.title = i18n.moveStepUp;
                 moveUpButton.setAttribute("aria-label", i18n.moveStepUp);
-                moveUpButton.disabled = index <= 1;
+                moveUpButton.disabled = index <= 1 || isViscousDelayStepType((steps[index - 1] || {}).step_type || "");
                 const moveUpIcon = document.createElement("img");
                 moveUpIcon.src = iconPath("arrow-up.svg");
                 moveUpIcon.alt = "";
@@ -932,7 +956,7 @@
                 moveDownButton.className = "table-icon-button digi-step-icon-button";
                 moveDownButton.title = i18n.moveStepDown;
                 moveDownButton.setAttribute("aria-label", i18n.moveStepDown);
-                moveDownButton.disabled = index >= steps.length - 2;
+                moveDownButton.disabled = index >= steps.length - 2 || isViscousDelayStepType(step.step_type);
                 const moveDownIcon = document.createElement("img");
                 moveDownIcon.src = iconPath("arrow-down.svg");
                 moveDownIcon.alt = "";
@@ -1056,14 +1080,18 @@
                 if (!filterTypes.includes(stepType)) {
                     return;
                 }
-                steps.splice(steps.length - 1, 0, {
+                if (isViscousDelayStepType(stepType) && hasViscousDelayStep()) {
+                    return;
+                }
+                const insertIndex = isViscousDelayStepType(stepType) ? 1 : steps.length - 1;
+                steps.splice(insertIndex, 0, {
                     step_type: stepType,
                     title: stepLabel(stepType),
                     enabled: 1,
                     config: clone(defaultConfig(stepType)),
                     __editing: false,
                 });
-                setExpandedStep(steps.length - 2);
+                setExpandedStep(insertIndex);
                 render();
             });
         });
