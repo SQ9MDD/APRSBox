@@ -41,7 +41,7 @@ QUERY_RESPONSE_DELAY_SECONDS = 3
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
-_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?)?$")
+_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
 
 
@@ -590,27 +590,33 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         )
         _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
         return
-    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?", text_field, flags=re.IGNORECASE)
-    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?", text_field, flags=re.IGNORECASE)
+    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
+    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
     if ack_match:
-        acknowledge_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=ack_match.group("number").upper(), timestamp=received_at)
+        message_number = _normalize_message_number(ack_match.group("number"))
+        if not message_number:
+            return
+        acknowledge_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=message_number, timestamp=received_at)
         return
     if reject_match:
-        reject_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=reject_match.group("number").upper(), timestamp=received_at)
+        message_number = _normalize_message_number(reject_match.group("number"))
+        if not message_number:
+            return
+        reject_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=message_number, timestamp=received_at)
         return
 
     suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
     if suffix_match is None:
         return
     message_text = suffix_match.group("text") or ""
-    message_number = suffix_match.group("number")
+    message_number = _normalize_message_number(suffix_match.group("number"))
     if not message_number:
         return
     store_incoming_message(
         sender=sender,
         addressee=addressee.upper(),
         message_text=message_text,
-        message_number=message_number.upper(),
+        message_number=message_number,
         path=parsed["path"],
         timestamp=received_at,
     )
@@ -1039,8 +1045,19 @@ def _parse_query_text(text_field: str) -> tuple[str, str | None]:
     if suffix_match is None:
         return "", None
     query_text = str(suffix_match.group("text") or "").strip()
-    message_number = suffix_match.group("number")
-    return query_text, message_number.upper() if message_number else None
+    message_number = _normalize_message_number(suffix_match.group("number"))
+    return query_text, message_number
+
+
+def _normalize_message_number(value: str | None) -> str | None:
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        return None
+    if not re.fullmatch(r"[0-9A-Z]{1,2}", normalized):
+        return None
+    if len(normalized) == 1:
+        return f"0{normalized}"
+    return normalized
 
 
 def _build_query_position_text(station_settings: dict[str, Any]) -> str:
