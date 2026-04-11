@@ -2,10 +2,20 @@ import contextlib
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.db import execute, fetch_one, init_db, utc_now
-from app.services.aprsis import get_aprsis_diagnostics, persist_aprsis_runtime_status
+from app.services.aprsis import (
+    APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY,
+    APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX,
+    APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY,
+    APRSIS_STRICT_REASON_OTHER,
+    get_aprsis_diagnostics,
+    persist_aprsis_runtime_status,
+    record_aprsis_strict_reject,
+    record_aprsis_tx_result,
+)
 
 
 @contextlib.contextmanager
@@ -55,9 +65,12 @@ class AprsisDiagnosticsTests(unittest.TestCase):
 
     def test_get_aprsis_diagnostics_aggregates_tx_and_strict_guard_stats(self) -> None:
         with temporary_database():
-            flow_id = insert_tx_aprsis_flow(name="APRSIS-1", enabled=1)
+            insert_tx_aprsis_flow(name="APRSIS-1", enabled=1)
             insert_tx_aprsis_flow(name="APRSIS-disabled", enabled=0)
-            now = utc_now()
+            now_dt = datetime.now(timezone.utc).replace(microsecond=0)
+            now = now_dt.isoformat()
+            two_hours_ago = (now_dt - timedelta(hours=2)).isoformat()
+            thirty_hours_ago = (now_dt - timedelta(hours=30)).isoformat()
             last_sent_line = "SQ9MDD-4>APRS,WIDE1-1:>TX SAMPLE"
             last_blocked_line = "SP8ABC-9>APRS,TCPIP*:>BLOCKED SAMPLE"
 
@@ -71,61 +84,41 @@ class AprsisDiagnosticsTests(unittest.TestCase):
                 last_error=None,
             )
 
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'frame_received', 'accepted', ?, ?)
-                """,
-                ("tx-1", flow_id, f"Frame accepted from receiver_rf:RF-APRSIS-1 | line={last_sent_line}", now),
+            record_aprsis_tx_result(sent=True, frame_line="SQ9MDD-4>APRS,WIDE1-1:>OLD TX", occurred_at=thirty_hours_ago)
+            record_aprsis_tx_result(sent=True, frame_line="SQ9MDD-4>APRS,WIDE1-1:>24H TX", occurred_at=two_hours_ago)
+            record_aprsis_tx_result(sent=True, frame_line=last_sent_line, occurred_at=now)
+            record_aprsis_tx_result(sent=False, frame_line="SQ9MDD-4>APRS:>DROP OLD", occurred_at=thirty_hours_ago)
+            record_aprsis_tx_result(sent=False, frame_line="SQ9MDD-4>APRS:>DROP NOW", occurred_at=now)
+
+            record_aprsis_strict_reject(
+                reason_key=APRSIS_STRICT_REASON_OTHER,
+                frame_line="SP8ABC-9>APRS:>OLD STRICT",
+                reason_message="Strict filter rejected frame because old policy scope is blocked.",
+                occurred_at=thirty_hours_ago,
             )
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'output_action', 'tx', 'APRS-IS TX queued.', ?)
-                """,
-                ("tx-1", flow_id, now),
+            record_aprsis_strict_reject(
+                reason_key=APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX,
+                frame_line="SP8ABC-9>APRS,TCPXX*:>STRICT TCP",
+                reason_message="Strict filter rejected frame because outer path contains blocked token TCPXX.",
+                occurred_at=now,
             )
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'output_action', 'drop', 'APRS-IS TX dropped.', ?)
-                """,
-                ("drop-1", flow_id, now),
+            record_aprsis_strict_reject(
+                reason_key=APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY,
+                frame_line="SP8ABC-9>APRS,NOGATE*:>STRICT NOGATE",
+                reason_message="Strict filter rejected frame because outer path contains blocked token NOGATE.",
+                occurred_at=now,
             )
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'strict_filter', 'rejected', 'Strict filter rejected frame because outer path contains blocked token TCPXX.', ?)
-                """,
-                ("strict-tcpxx", flow_id, now),
+            record_aprsis_strict_reject(
+                reason_key=APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY,
+                frame_line="SP8ABC-9>APRS:}INVALID THIRD PARTY",
+                reason_message="Strict filter rejected frame because third-party encapsulation is malformed or invalid.",
+                occurred_at=now,
             )
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'strict_filter', 'rejected', 'Strict filter rejected frame because outer path contains blocked token NOGATE.', ?)
-                """,
-                ("strict-nogate", flow_id, now),
-            )
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'strict_filter', 'rejected', 'Strict filter rejected frame because third-party encapsulation is malformed or invalid.', ?)
-                """,
-                ("strict-malformed", flow_id, now),
-            )
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'frame_received', 'accepted', ?, ?)
-                """,
-                ("strict-other", flow_id, f"Frame accepted from receiver_rf:RF-APRSIS-1 | line={last_blocked_line}", now),
-            )
-            execute(
-                """
-                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
-                VALUES (?, ?, NULL, 'strict_filter', 'rejected', 'Strict filter rejected frame because policy scope is blocked.', ?)
-                """,
-                ("strict-other", flow_id, now),
+            record_aprsis_strict_reject(
+                reason_key=APRSIS_STRICT_REASON_OTHER,
+                frame_line=last_blocked_line,
+                reason_message="Strict filter rejected frame because policy scope is blocked.",
+                occurred_at=now,
             )
 
             execute(
@@ -150,24 +143,24 @@ class AprsisDiagnosticsTests(unittest.TestCase):
             self.assertNotEqual(diagnostics["session_uptime"], "-")
             self.assertIsNotNone(diagnostics["last_activity_at"])
 
-            self.assertEqual(diagnostics["tx"]["sent_total"], 1)
+            self.assertEqual(diagnostics["tx"]["sent_total"], 3)
             self.assertEqual(diagnostics["tx"]["sent_1h"], 1)
-            self.assertEqual(diagnostics["tx"]["sent_24h"], 1)
-            self.assertEqual(diagnostics["tx"]["drop_total"], 1)
+            self.assertEqual(diagnostics["tx"]["sent_24h"], 2)
+            self.assertEqual(diagnostics["tx"]["drop_total"], 2)
             self.assertEqual(diagnostics["tx"]["drop_1h"], 1)
             self.assertEqual(diagnostics["tx"]["drop_24h"], 1)
-            self.assertEqual(diagnostics["tx"]["last_sent_frame_uid"], "tx-1")
-            self.assertEqual(diagnostics["tx"]["last_drop_frame_uid"], "drop-1")
+            self.assertIsNone(diagnostics["tx"]["last_sent_frame_uid"])
+            self.assertIsNone(diagnostics["tx"]["last_drop_frame_uid"])
             self.assertEqual(diagnostics["tx"]["last_sent_frame_line"], last_sent_line)
 
-            self.assertEqual(diagnostics["strict_rejects"]["total"], 4)
+            self.assertEqual(diagnostics["strict_rejects"]["total"], 5)
             self.assertEqual(diagnostics["strict_rejects"]["last_1h"], 4)
             self.assertEqual(diagnostics["strict_rejects"]["last_24h"], 4)
             self.assertEqual(diagnostics["strict_rejects"]["last_24h_blocked_tcpip_tcpxx"], 1)
             self.assertEqual(diagnostics["strict_rejects"]["last_24h_blocked_nogate_rfonly"], 1)
             self.assertEqual(diagnostics["strict_rejects"]["last_24h_malformed_third_party"], 1)
             self.assertEqual(diagnostics["strict_rejects"]["last_24h_other"], 1)
-            self.assertEqual(diagnostics["strict_rejects"]["last_rejected_frame_uid"], "strict-other")
+            self.assertIsNone(diagnostics["strict_rejects"]["last_rejected_frame_uid"])
             self.assertEqual(diagnostics["strict_rejects"]["last_rejected_frame_line"], last_blocked_line)
             self.assertEqual(diagnostics["strict_rejects"]["last_rejected_reason"], "Strict filter rejected frame because policy scope is blocked.")
 

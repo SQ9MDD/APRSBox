@@ -419,6 +419,37 @@ CREATE TABLE IF NOT EXISTS aprsis_runtime_state (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS aprsis_uplink_stats (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    tx_total INTEGER NOT NULL DEFAULT 0,
+    drop_total INTEGER NOT NULL DEFAULT 0,
+    strict_total INTEGER NOT NULL DEFAULT 0,
+    strict_blocked_tcpip_tcpxx_total INTEGER NOT NULL DEFAULT 0,
+    strict_blocked_nogate_rfonly_total INTEGER NOT NULL DEFAULT 0,
+    strict_malformed_third_party_total INTEGER NOT NULL DEFAULT 0,
+    strict_other_total INTEGER NOT NULL DEFAULT 0,
+    last_sent_at TEXT,
+    last_sent_line TEXT,
+    last_drop_at TEXT,
+    last_drop_line TEXT,
+    last_strict_reject_at TEXT,
+    last_strict_reject_line TEXT,
+    last_strict_reject_reason TEXT,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_uplink_minute_stats (
+    bucket_minute_utc TEXT PRIMARY KEY,
+    tx_count INTEGER NOT NULL DEFAULT 0,
+    drop_count INTEGER NOT NULL DEFAULT 0,
+    strict_count INTEGER NOT NULL DEFAULT 0,
+    strict_blocked_tcpip_tcpxx_count INTEGER NOT NULL DEFAULT 0,
+    strict_blocked_nogate_rfonly_count INTEGER NOT NULL DEFAULT 0,
+    strict_malformed_third_party_count INTEGER NOT NULL DEFAULT 0,
+    strict_other_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS traffic_runtime_interfaces (
     modem_id INTEGER PRIMARY KEY,
     modem_name TEXT NOT NULL,
@@ -767,6 +798,20 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 id, status, status_detail, server, port, login, connected_at, last_error, updated_at
             )
             VALUES (1, 'inactive', 'APRS-IS uplink is inactive.', NULL, NULL, NULL, NULL, NULL, ?)
+            ON CONFLICT(id) DO NOTHING
+            """,
+            (utc_now(),),
+        )
+        connection.execute(
+            """
+            INSERT INTO aprsis_uplink_stats (
+                id, tx_total, drop_total, strict_total,
+                strict_blocked_tcpip_tcpxx_total, strict_blocked_nogate_rfonly_total,
+                strict_malformed_third_party_total, strict_other_total,
+                last_sent_at, last_sent_line, last_drop_at, last_drop_line,
+                last_strict_reject_at, last_strict_reject_line, last_strict_reject_reason, updated_at
+            )
+            VALUES (1, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),

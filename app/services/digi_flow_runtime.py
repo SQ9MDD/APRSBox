@@ -10,7 +10,15 @@ from typing import Any
 
 from app.db import log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
-from app.services.aprsis import AprsisClientService
+from app.services.aprsis import (
+    APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY,
+    APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX,
+    APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY,
+    APRSIS_STRICT_REASON_OTHER,
+    AprsisClientService,
+    record_aprsis_strict_reject,
+    record_aprsis_tx_result,
+)
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.digi_flows import list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import enqueue_digi_tx_job
@@ -663,15 +671,23 @@ class DigiFlowRuntimeService:
         parsed = context.get("parsed")
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
+        is_aprsis_target = str((context.get("flow") or {}).get("target_kind") or "").strip() == "tx_aprsis"
         if parsed is None:
+            message = _t("Strict filter rejected frame because TNC2 parsing failed.")
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
                 event_type="strict_filter",
                 decision="rejected",
-                message=_t("Strict filter rejected frame because TNC2 parsing failed."),
+                message=message,
             )
+            if is_aprsis_target:
+                record_aprsis_strict_reject(
+                    reason_key=APRSIS_STRICT_REASON_OTHER,
+                    frame_line=str(context.get("current_line") or ""),
+                    reason_message=message,
+                )
             return {"decision": "drop"}
 
         blocked = _find_blocked_strict_token(parsed)
@@ -705,6 +721,12 @@ class DigiFlowRuntimeService:
             decision="rejected",
             message=message,
         )
+        if is_aprsis_target:
+            record_aprsis_strict_reject(
+                reason_key=_strict_reject_reason_key(blocked_token),
+                frame_line=str(context.get("current_line") or ""),
+                reason_message=message,
+            )
         return {"decision": "drop"}
 
     def _execute_direct_only_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
@@ -1018,49 +1040,57 @@ class DigiFlowRuntimeService:
         step_id = int(step["id"])
         parsed = context.get("parsed")
         if parsed is None:
+            message = _t("APRS-IS TX rejected frame because TNC2 parsing failed.")
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
                 event_type="output_action",
                 decision="drop",
-                message=_t("APRS-IS TX rejected frame because TNC2 parsing failed."),
+                message=message,
             )
+            record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
         local_igate = _local_station_identity()
         if not local_igate:
+            message = _t("APRS-IS TX rejected frame because local station identity is not configured.")
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
                 event_type="output_action",
                 decision="drop",
-                message=_t("APRS-IS TX rejected frame because local station identity is not configured."),
+                message=message,
             )
+            record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
         tx_line = _build_aprsis_uplink_line(parsed, local_igate=local_igate)
         if not tx_line:
+            message = _t("APRS-IS TX rejected frame because APRS-IS uplink formatting failed.")
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
                 event_type="output_action",
                 decision="drop",
-                message=_t("APRS-IS TX rejected frame because APRS-IS uplink formatting failed."),
+                message=message,
             )
+            record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
         if self._aprsis_client is None:
+            message = _t("APRS-IS TX rejected frame because APRS-IS uplink runtime is unavailable.")
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
                 event_type="output_action",
                 decision="drop",
-                message=_t("APRS-IS TX rejected frame because APRS-IS uplink runtime is unavailable."),
+                message=message,
             )
+            record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
         success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
@@ -1074,6 +1104,7 @@ class DigiFlowRuntimeService:
             decision=decision,
             message=f"{message} | line={tx_line}",
         )
+        record_aprsis_tx_result(sent=success, frame_line=tx_line)
         return {"decision": decision}
 
     def _execute_tx_stub(self, context: dict[str, Any], step: dict[str, Any], *, target_label: str) -> dict[str, str]:
@@ -1206,6 +1237,17 @@ def _find_blocked_strict_token(parsed: dict[str, Any]) -> dict[str, str] | None:
     if inner_blocked is not None:
         return {"token": inner_blocked, "scope": "third-party inner path", "path": inner_path}
     return None
+
+
+def _strict_reject_reason_key(blocked_token: str | None) -> str:
+    normalized = str(blocked_token or "").strip().upper()
+    if normalized == "THIRD_PARTY_INVALID":
+        return APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY
+    if normalized in {"NOGATE", "RFONLY"}:
+        return APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY
+    if normalized.startswith("TCPIP") or normalized.startswith("TCPXX"):
+        return APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX
+    return APRSIS_STRICT_REASON_OTHER
 
 
 def _callsign_matches_pattern(callsign: str, pattern: str) -> bool:

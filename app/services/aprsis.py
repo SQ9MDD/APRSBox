@@ -24,6 +24,17 @@ _APRSIS_ALLOWED_STATUSES = {
 }
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,9}(?:-(?:[0-9]|1[0-5]))?$")
 _PASSCODE_RE = re.compile(r"^-?[0-9]{1,5}$")
+APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX = "blocked_tcpip_tcpxx"
+APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY = "blocked_nogate_rfonly"
+APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY = "malformed_third_party"
+APRSIS_STRICT_REASON_OTHER = "other"
+_APRSIS_STRICT_REASON_KEYS = {
+    APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX,
+    APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY,
+    APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY,
+    APRSIS_STRICT_REASON_OTHER,
+}
+_APRSIS_MINUTE_STATS_RETENTION_HOURS = 72
 
 
 def _normalize_text(value: Any) -> str:
@@ -290,43 +301,367 @@ def _row_value(row: Any, key: str, default: Any = None) -> Any:
         return default
 
 
-def _extract_line_from_event_message(message: Any) -> str:
+def _normalize_optional_line(value: Any) -> str | None:
+    line = str(value or "").rstrip("\r\n")
+    return line if line else None
+
+
+def _extract_line_suffix(message: Any) -> str | None:
     text = str(message or "")
     marker = "| line="
     marker_index = text.find(marker)
     if marker_index < 0:
-        return ""
-    return text[marker_index + len(marker) :]
-
-
-def _frame_line_for_uid(connection: Any, frame_uid: str | None) -> str | None:
-    normalized_uid = str(frame_uid or "").strip()
-    if not normalized_uid:
         return None
-    row = connection.execute(
+    line = text[marker_index + len(marker) :].rstrip("\r\n")
+    return line or None
+
+
+def _minute_bucket_start(value: str | None = None) -> str:
+    timestamp = _parse_iso_timestamp(value)
+    if timestamp is None:
+        timestamp = datetime.now(timezone.utc)
+    return timestamp.replace(second=0, microsecond=0).isoformat()
+
+
+def _max_timestamp(values: list[str | None]) -> str | None:
+    latest: datetime | None = None
+    latest_value: str | None = None
+    for value in values:
+        parsed = _parse_iso_timestamp(value)
+        if parsed is None:
+            continue
+        if latest is None or parsed > latest:
+            latest = parsed
+            latest_value = value
+    return latest_value
+
+
+def _upsert_aprsis_minute_bucket(
+    connection: Any,
+    *,
+    bucket_minute_utc: str,
+    tx_count: int = 0,
+    drop_count: int = 0,
+    strict_count: int = 0,
+    strict_blocked_tcpip_tcpxx_count: int = 0,
+    strict_blocked_nogate_rfonly_count: int = 0,
+    strict_malformed_third_party_count: int = 0,
+    strict_other_count: int = 0,
+) -> None:
+    updated_at = utc_now()
+    connection.execute(
         """
-        SELECT l.message
+        INSERT INTO aprsis_uplink_minute_stats (
+            bucket_minute_utc,
+            tx_count,
+            drop_count,
+            strict_count,
+            strict_blocked_tcpip_tcpxx_count,
+            strict_blocked_nogate_rfonly_count,
+            strict_malformed_third_party_count,
+            strict_other_count,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(bucket_minute_utc) DO UPDATE SET
+            tx_count = tx_count + excluded.tx_count,
+            drop_count = drop_count + excluded.drop_count,
+            strict_count = strict_count + excluded.strict_count,
+            strict_blocked_tcpip_tcpxx_count = strict_blocked_tcpip_tcpxx_count + excluded.strict_blocked_tcpip_tcpxx_count,
+            strict_blocked_nogate_rfonly_count = strict_blocked_nogate_rfonly_count + excluded.strict_blocked_nogate_rfonly_count,
+            strict_malformed_third_party_count = strict_malformed_third_party_count + excluded.strict_malformed_third_party_count,
+            strict_other_count = strict_other_count + excluded.strict_other_count,
+            updated_at = excluded.updated_at
+        """,
+        (
+            bucket_minute_utc,
+            int(tx_count),
+            int(drop_count),
+            int(strict_count),
+            int(strict_blocked_tcpip_tcpxx_count),
+            int(strict_blocked_nogate_rfonly_count),
+            int(strict_malformed_third_party_count),
+            int(strict_other_count),
+            updated_at,
+        ),
+    )
+
+
+def _prune_aprsis_minute_stats(connection: Any) -> None:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=_APRSIS_MINUTE_STATS_RETENTION_HOURS)).replace(second=0, microsecond=0).isoformat()
+    connection.execute(
+        """
+        DELETE FROM aprsis_uplink_minute_stats
+        WHERE bucket_minute_utc < ?
+        """,
+        (cutoff,),
+    )
+
+
+def _ensure_aprsis_uplink_stats_row(connection: Any) -> None:
+    connection.execute(
+        """
+        INSERT INTO aprsis_uplink_stats (
+            id, tx_total, drop_total, strict_total,
+            strict_blocked_tcpip_tcpxx_total, strict_blocked_nogate_rfonly_total,
+            strict_malformed_third_party_total, strict_other_total,
+            last_sent_at, last_sent_line, last_drop_at, last_drop_line,
+            last_strict_reject_at, last_strict_reject_line, last_strict_reject_reason, updated_at
+        )
+        VALUES (1, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
+        ON CONFLICT(id) DO NOTHING
+        """,
+        (utc_now(),),
+    )
+
+
+def _legacy_event_log_metrics(connection: Any, *, start_1h: str, start_24h: str) -> dict[str, Any]:
+    tx_stats_row = connection.execute(
+        """
+        SELECT
+            SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' THEN 1 ELSE 0 END) AS tx_total,
+            SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' AND l.created_at >= ? THEN 1 ELSE 0 END) AS tx_1h,
+            SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' AND l.created_at >= ? THEN 1 ELSE 0 END) AS tx_24h,
+            SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' THEN 1 ELSE 0 END) AS drop_total,
+            SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' AND l.created_at >= ? THEN 1 ELSE 0 END) AS drop_1h,
+            SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' AND l.created_at >= ? THEN 1 ELSE 0 END) AS drop_24h,
+            SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' THEN 1 ELSE 0 END) AS strict_total,
+            SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' AND l.created_at >= ? THEN 1 ELSE 0 END) AS strict_1h,
+            SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' AND l.created_at >= ? THEN 1 ELSE 0 END) AS strict_24h
         FROM digi_flow_event_log l
         JOIN digi_flows f ON f.id = l.flow_id
         WHERE f.target_kind = 'tx_aprsis'
-          AND l.frame_uid = ?
-          AND l.message LIKE '%| line=%'
+        """,
+        (start_1h, start_24h, start_1h, start_24h, start_1h, start_24h),
+    ).fetchone()
+    strict_reasons_row = connection.execute(
+        """
+        SELECT
+            SUM(
+                CASE
+                    WHEN l.created_at >= ?
+                     AND l.event_type = 'strict_filter'
+                     AND l.decision = 'rejected'
+                     AND (UPPER(l.message) LIKE '%TCPIP%' OR UPPER(l.message) LIKE '%TCPXX%')
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS blocked_tcp,
+            SUM(
+                CASE
+                    WHEN l.created_at >= ?
+                     AND l.event_type = 'strict_filter'
+                     AND l.decision = 'rejected'
+                     AND (UPPER(l.message) LIKE '%NOGATE%' OR UPPER(l.message) LIKE '%RFONLY%')
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS blocked_rfonly,
+            SUM(
+                CASE
+                    WHEN l.created_at >= ?
+                     AND l.event_type = 'strict_filter'
+                     AND l.decision = 'rejected'
+                     AND UPPER(l.message) LIKE '%MALFORMED OR INVALID%'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS malformed_third_party
+        FROM digi_flow_event_log l
+        JOIN digi_flows f ON f.id = l.flow_id
+        WHERE f.target_kind = 'tx_aprsis'
+        """,
+        (start_24h, start_24h, start_24h),
+    ).fetchone()
+    last_tx_row = connection.execute(
+        """
+        SELECT l.created_at, l.message
+        FROM digi_flow_event_log l
+        JOIN digi_flows f ON f.id = l.flow_id
+        WHERE f.target_kind = 'tx_aprsis'
+          AND l.event_type = 'output_action'
+          AND l.decision = 'tx'
         ORDER BY l.id DESC
         LIMIT 1
-        """,
-        (normalized_uid,),
+        """
     ).fetchone()
-    line = _extract_line_from_event_message(_row_value(row, "message", ""))
-    return line or None
+    last_drop_row = connection.execute(
+        """
+        SELECT l.created_at, l.message
+        FROM digi_flow_event_log l
+        JOIN digi_flows f ON f.id = l.flow_id
+        WHERE f.target_kind = 'tx_aprsis'
+          AND l.event_type = 'output_action'
+          AND l.decision = 'drop'
+        ORDER BY l.id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    last_strict_row = connection.execute(
+        """
+        SELECT l.frame_uid, l.created_at, l.message
+        FROM digi_flow_event_log l
+        JOIN digi_flows f ON f.id = l.flow_id
+        WHERE f.target_kind = 'tx_aprsis'
+          AND l.event_type = 'strict_filter'
+          AND l.decision = 'rejected'
+        ORDER BY l.id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+
+    strict_line = None
+    strict_frame_uid = str(_row_value(last_strict_row, "frame_uid", "") or "").strip()
+    if strict_frame_uid:
+        strict_line_row = connection.execute(
+            """
+            SELECT l.message
+            FROM digi_flow_event_log l
+            JOIN digi_flows f ON f.id = l.flow_id
+            WHERE f.target_kind = 'tx_aprsis'
+              AND l.frame_uid = ?
+              AND l.message LIKE '%| line=%'
+            ORDER BY l.id DESC
+            LIMIT 1
+            """,
+            (strict_frame_uid,),
+        ).fetchone()
+        strict_line = _extract_line_suffix(_row_value(strict_line_row, "message", ""))
+
+    strict_24h_total = int(_row_value(tx_stats_row, "strict_24h", 0) or 0)
+    strict_tcp = int(_row_value(strict_reasons_row, "blocked_tcp", 0) or 0)
+    strict_rfonly = int(_row_value(strict_reasons_row, "blocked_rfonly", 0) or 0)
+    strict_malformed = int(_row_value(strict_reasons_row, "malformed_third_party", 0) or 0)
+    strict_other = max(0, strict_24h_total - strict_tcp - strict_rfonly - strict_malformed)
+
+    return {
+        "tx_total": int(_row_value(tx_stats_row, "tx_total", 0) or 0),
+        "tx_1h": int(_row_value(tx_stats_row, "tx_1h", 0) or 0),
+        "tx_24h": int(_row_value(tx_stats_row, "tx_24h", 0) or 0),
+        "drop_total": int(_row_value(tx_stats_row, "drop_total", 0) or 0),
+        "drop_1h": int(_row_value(tx_stats_row, "drop_1h", 0) or 0),
+        "drop_24h": int(_row_value(tx_stats_row, "drop_24h", 0) or 0),
+        "strict_total": int(_row_value(tx_stats_row, "strict_total", 0) or 0),
+        "strict_1h": int(_row_value(tx_stats_row, "strict_1h", 0) or 0),
+        "strict_24h": strict_24h_total,
+        "strict_tcp_24h": strict_tcp,
+        "strict_rfonly_24h": strict_rfonly,
+        "strict_malformed_24h": strict_malformed,
+        "strict_other_24h": strict_other,
+        "last_sent_at": str(_row_value(last_tx_row, "created_at", "") or "") or None,
+        "last_sent_line": _extract_line_suffix(_row_value(last_tx_row, "message", "")),
+        "last_drop_at": str(_row_value(last_drop_row, "created_at", "") or "") or None,
+        "last_drop_line": _extract_line_suffix(_row_value(last_drop_row, "message", "")),
+        "last_strict_reject_at": str(_row_value(last_strict_row, "created_at", "") or "") or None,
+        "last_strict_reject_line": strict_line,
+        "last_strict_reject_reason": str(_row_value(last_strict_row, "message", "") or "") or None,
+    }
+
+
+def record_aprsis_tx_result(
+    *,
+    sent: bool,
+    frame_line: str | None,
+    occurred_at: str | None = None,
+) -> None:
+    timestamp = str(occurred_at or utc_now())
+    normalized_line = _normalize_optional_line(frame_line)
+    bucket_minute = _minute_bucket_start(timestamp)
+    with get_connection() as connection:
+        _ensure_aprsis_uplink_stats_row(connection)
+        if sent:
+            connection.execute(
+                """
+                UPDATE aprsis_uplink_stats
+                SET tx_total = tx_total + 1,
+                    last_sent_at = ?,
+                    last_sent_line = COALESCE(?, last_sent_line),
+                    updated_at = ?
+                WHERE id = 1
+                """,
+                (timestamp, normalized_line, utc_now()),
+            )
+            _upsert_aprsis_minute_bucket(connection, bucket_minute_utc=bucket_minute, tx_count=1)
+        else:
+            connection.execute(
+                """
+                UPDATE aprsis_uplink_stats
+                SET drop_total = drop_total + 1,
+                    last_drop_at = ?,
+                    last_drop_line = COALESCE(?, last_drop_line),
+                    updated_at = ?
+                WHERE id = 1
+                """,
+                (timestamp, normalized_line, utc_now()),
+            )
+            _upsert_aprsis_minute_bucket(connection, bucket_minute_utc=bucket_minute, drop_count=1)
+        _prune_aprsis_minute_stats(connection)
+
+
+def record_aprsis_strict_reject(
+    *,
+    reason_key: str,
+    frame_line: str | None,
+    reason_message: str | None,
+    occurred_at: str | None = None,
+) -> None:
+    normalized_reason = str(reason_key or "").strip().lower()
+    if normalized_reason not in _APRSIS_STRICT_REASON_KEYS:
+        normalized_reason = APRSIS_STRICT_REASON_OTHER
+    timestamp = str(occurred_at or utc_now())
+    normalized_line = _normalize_optional_line(frame_line)
+    normalized_message = str(reason_message or "").strip() or None
+    bucket_minute = _minute_bucket_start(timestamp)
+
+    reason_total_column = {
+        APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX: "strict_blocked_tcpip_tcpxx_total",
+        APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY: "strict_blocked_nogate_rfonly_total",
+        APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY: "strict_malformed_third_party_total",
+        APRSIS_STRICT_REASON_OTHER: "strict_other_total",
+    }[normalized_reason]
+    connection_updates = (
+        f"strict_total = strict_total + 1, "
+        f"{reason_total_column} = {reason_total_column} + 1, "
+        "last_strict_reject_at = ?, "
+        "last_strict_reject_line = COALESCE(?, last_strict_reject_line), "
+        "last_strict_reject_reason = COALESCE(?, last_strict_reject_reason), "
+        "updated_at = ?"
+    )
+
+    minute_reason_kwargs = {
+        "strict_blocked_tcpip_tcpxx_count": 1 if normalized_reason == APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX else 0,
+        "strict_blocked_nogate_rfonly_count": 1 if normalized_reason == APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY else 0,
+        "strict_malformed_third_party_count": 1 if normalized_reason == APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY else 0,
+        "strict_other_count": 1 if normalized_reason == APRSIS_STRICT_REASON_OTHER else 0,
+    }
+
+    with get_connection() as connection:
+        _ensure_aprsis_uplink_stats_row(connection)
+        connection.execute(
+            f"""
+            UPDATE aprsis_uplink_stats
+            SET {connection_updates}
+            WHERE id = 1
+            """,
+            (timestamp, normalized_line, normalized_message, utc_now()),
+        )
+        _upsert_aprsis_minute_bucket(
+            connection,
+            bucket_minute_utc=bucket_minute,
+            strict_count=1,
+            **minute_reason_kwargs,
+        )
+        _prune_aprsis_minute_stats(connection)
 
 
 def get_aprsis_diagnostics() -> dict[str, Any]:
     now_ts = datetime.now(timezone.utc)
-    start_1h = (now_ts - timedelta(hours=1)).replace(microsecond=0).isoformat()
-    start_24h = (now_ts - timedelta(hours=24)).replace(microsecond=0).isoformat()
+    start_1h = (now_ts - timedelta(hours=1)).replace(second=0, microsecond=0).isoformat()
+    start_24h = (now_ts - timedelta(hours=24)).replace(second=0, microsecond=0).isoformat()
     runtime = get_aprsis_runtime_status()
 
     with get_connection() as connection:
+        _ensure_aprsis_uplink_stats_row(connection)
         active_flow_row = connection.execute(
             """
             SELECT COUNT(*) AS total
@@ -344,111 +679,31 @@ def get_aprsis_diagnostics() -> dict[str, Any]:
             ORDER BY updated_at DESC, id DESC
             """
         ).fetchall()
+        stats_row = connection.execute(
+            """
+            SELECT *
+            FROM aprsis_uplink_stats
+            WHERE id = 1
+            """
+        ).fetchone()
 
-        tx_stats_row = connection.execute(
+        minute_stats_row = connection.execute(
             """
             SELECT
-                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' THEN 1 ELSE 0 END) AS tx_total,
-                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' AND l.created_at >= ? THEN 1 ELSE 0 END) AS tx_1h,
-                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' AND l.created_at >= ? THEN 1 ELSE 0 END) AS tx_24h,
-                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' THEN 1 ELSE 0 END) AS drop_total,
-                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' AND l.created_at >= ? THEN 1 ELSE 0 END) AS drop_1h,
-                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' AND l.created_at >= ? THEN 1 ELSE 0 END) AS drop_24h,
-                SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' THEN 1 ELSE 0 END) AS strict_total,
-                SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' AND l.created_at >= ? THEN 1 ELSE 0 END) AS strict_1h,
-                SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' AND l.created_at >= ? THEN 1 ELSE 0 END) AS strict_24h
-            FROM digi_flow_event_log l
-            JOIN digi_flows f ON f.id = l.flow_id
-            WHERE f.target_kind = 'tx_aprsis'
-            """,
-            (start_1h, start_24h, start_1h, start_24h, start_1h, start_24h),
-        ).fetchone()
-
-        strict_reasons_row = connection.execute(
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN tx_count ELSE 0 END), 0) AS tx_1h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN tx_count ELSE 0 END), 0) AS tx_24h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN drop_count ELSE 0 END), 0) AS drop_1h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN drop_count ELSE 0 END), 0) AS drop_24h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN strict_count ELSE 0 END), 0) AS strict_1h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN strict_count ELSE 0 END), 0) AS strict_24h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN strict_blocked_tcpip_tcpxx_count ELSE 0 END), 0) AS strict_tcp_24h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN strict_blocked_nogate_rfonly_count ELSE 0 END), 0) AS strict_rfonly_24h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN strict_malformed_third_party_count ELSE 0 END), 0) AS strict_malformed_24h,
+                COALESCE(SUM(CASE WHEN bucket_minute_utc >= ? THEN strict_other_count ELSE 0 END), 0) AS strict_other_24h
+            FROM aprsis_uplink_minute_stats
             """
-            SELECT
-                SUM(
-                    CASE
-                        WHEN l.created_at >= ?
-                         AND l.event_type = 'strict_filter'
-                         AND l.decision = 'rejected'
-                         AND (UPPER(l.message) LIKE '%TCPIP%' OR UPPER(l.message) LIKE '%TCPXX%')
-                        THEN 1
-                        ELSE 0
-                    END
-                ) AS blocked_tcp,
-                SUM(
-                    CASE
-                        WHEN l.created_at >= ?
-                         AND l.event_type = 'strict_filter'
-                         AND l.decision = 'rejected'
-                         AND (UPPER(l.message) LIKE '%NOGATE%' OR UPPER(l.message) LIKE '%RFONLY%')
-                        THEN 1
-                        ELSE 0
-                    END
-                ) AS blocked_rfonly,
-                SUM(
-                    CASE
-                        WHEN l.created_at >= ?
-                         AND l.event_type = 'strict_filter'
-                         AND l.decision = 'rejected'
-                         AND UPPER(l.message) LIKE '%MALFORMED OR INVALID%'
-                        THEN 1
-                        ELSE 0
-                    END
-                ) AS malformed_third_party
-            FROM digi_flow_event_log l
-            JOIN digi_flows f ON f.id = l.flow_id
-            WHERE f.target_kind = 'tx_aprsis'
-            """,
-            (start_24h, start_24h, start_24h),
-        ).fetchone()
-
-        last_tx_row = connection.execute(
-            """
-            SELECT l.frame_uid, l.created_at
-            FROM digi_flow_event_log l
-            JOIN digi_flows f ON f.id = l.flow_id
-            WHERE f.target_kind = 'tx_aprsis'
-              AND l.event_type = 'output_action'
-              AND l.decision = 'tx'
-            ORDER BY l.id DESC
-            LIMIT 1
-            """
-        ).fetchone()
-        last_drop_row = connection.execute(
-            """
-            SELECT l.frame_uid, l.created_at
-            FROM digi_flow_event_log l
-            JOIN digi_flows f ON f.id = l.flow_id
-            WHERE f.target_kind = 'tx_aprsis'
-              AND l.event_type = 'output_action'
-              AND l.decision = 'drop'
-            ORDER BY l.id DESC
-            LIMIT 1
-            """
-        ).fetchone()
-        last_activity_row = connection.execute(
-            """
-            SELECT l.created_at
-            FROM digi_flow_event_log l
-            JOIN digi_flows f ON f.id = l.flow_id
-            WHERE f.target_kind = 'tx_aprsis'
-            ORDER BY l.id DESC
-            LIMIT 1
-            """
-        ).fetchone()
-        last_strict_reject_row = connection.execute(
-            """
-            SELECT l.frame_uid, l.created_at, l.message
-            FROM digi_flow_event_log l
-            JOIN digi_flows f ON f.id = l.flow_id
-            WHERE f.target_kind = 'tx_aprsis'
-              AND l.event_type = 'strict_filter'
-              AND l.decision = 'rejected'
-            ORDER BY l.id DESC
-            LIMIT 1
-            """
+            ,
+            (start_1h, start_24h, start_1h, start_24h, start_1h, start_24h, start_24h, start_24h, start_24h, start_24h),
         ).fetchone()
 
         connect_events_row = connection.execute(
@@ -462,10 +717,6 @@ def get_aprsis_diagnostics() -> dict[str, Any]:
             """,
             (start_24h,),
         ).fetchone()
-
-        last_sent_frame_line = _frame_line_for_uid(connection, _row_value(last_tx_row, "frame_uid", None))
-        last_drop_frame_line = _frame_line_for_uid(connection, _row_value(last_drop_row, "frame_uid", None))
-        last_strict_reject_frame_line = _frame_line_for_uid(connection, _row_value(last_strict_reject_row, "frame_uid", None))
         warning_events_row = connection.execute(
             """
             SELECT
@@ -476,44 +727,46 @@ def get_aprsis_diagnostics() -> dict[str, Any]:
             """,
             (start_24h,),
         ).fetchone()
-
-    strict_24h_total = int(_row_value(tx_stats_row, "strict_24h", 0) or 0)
-    strict_tcp = int(_row_value(strict_reasons_row, "blocked_tcp", 0) or 0)
-    strict_rfonly = int(_row_value(strict_reasons_row, "blocked_rfonly", 0) or 0)
-    strict_malformed = int(_row_value(strict_reasons_row, "malformed_third_party", 0) or 0)
-    strict_other = max(0, strict_24h_total - strict_tcp - strict_rfonly - strict_malformed)
+    last_sent_at = str(_row_value(stats_row, "last_sent_at", "") or "") or None
+    last_drop_at = str(_row_value(stats_row, "last_drop_at", "") or "") or None
+    last_strict_reject_at = str(_row_value(stats_row, "last_strict_reject_at", "") or "") or None
+    strict_24h_total = int(_row_value(minute_stats_row, "strict_24h", 0) or 0)
+    strict_tcp = int(_row_value(minute_stats_row, "strict_tcp_24h", 0) or 0)
+    strict_rfonly = int(_row_value(minute_stats_row, "strict_rfonly_24h", 0) or 0)
+    strict_malformed = int(_row_value(minute_stats_row, "strict_malformed_24h", 0) or 0)
+    strict_other = int(_row_value(minute_stats_row, "strict_other_24h", 0) or 0)
 
     return {
         "active_flow_count": int(_row_value(active_flow_row, "total", 0) or 0),
         "active_flow_names": [str(row["name"]) for row in active_flows if row and row["name"]],
         "session_uptime": _format_uptime_label(runtime.get("connected_at")),
-        "last_activity_at": str(_row_value(last_activity_row, "created_at", "") or "") or None,
+        "last_activity_at": _max_timestamp([last_sent_at, last_drop_at, last_strict_reject_at]),
         "tx": {
-            "sent_total": int(_row_value(tx_stats_row, "tx_total", 0) or 0),
-            "sent_1h": int(_row_value(tx_stats_row, "tx_1h", 0) or 0),
-            "sent_24h": int(_row_value(tx_stats_row, "tx_24h", 0) or 0),
-            "drop_total": int(_row_value(tx_stats_row, "drop_total", 0) or 0),
-            "drop_1h": int(_row_value(tx_stats_row, "drop_1h", 0) or 0),
-            "drop_24h": int(_row_value(tx_stats_row, "drop_24h", 0) or 0),
-            "last_sent_at": str(_row_value(last_tx_row, "created_at", "") or "") or None,
-            "last_sent_frame_uid": str(_row_value(last_tx_row, "frame_uid", "") or "") or None,
-            "last_sent_frame_line": last_sent_frame_line,
-            "last_drop_at": str(_row_value(last_drop_row, "created_at", "") or "") or None,
-            "last_drop_frame_uid": str(_row_value(last_drop_row, "frame_uid", "") or "") or None,
-            "last_drop_frame_line": last_drop_frame_line,
+            "sent_total": int(_row_value(stats_row, "tx_total", 0) or 0),
+            "sent_1h": int(_row_value(minute_stats_row, "tx_1h", 0) or 0),
+            "sent_24h": int(_row_value(minute_stats_row, "tx_24h", 0) or 0),
+            "drop_total": int(_row_value(stats_row, "drop_total", 0) or 0),
+            "drop_1h": int(_row_value(minute_stats_row, "drop_1h", 0) or 0),
+            "drop_24h": int(_row_value(minute_stats_row, "drop_24h", 0) or 0),
+            "last_sent_at": last_sent_at,
+            "last_sent_frame_uid": None,
+            "last_sent_frame_line": str(_row_value(stats_row, "last_sent_line", "") or "") or None,
+            "last_drop_at": last_drop_at,
+            "last_drop_frame_uid": None,
+            "last_drop_frame_line": str(_row_value(stats_row, "last_drop_line", "") or "") or None,
         },
         "strict_rejects": {
-            "total": int(_row_value(tx_stats_row, "strict_total", 0) or 0),
-            "last_1h": int(_row_value(tx_stats_row, "strict_1h", 0) or 0),
+            "total": int(_row_value(stats_row, "strict_total", 0) or 0),
+            "last_1h": int(_row_value(minute_stats_row, "strict_1h", 0) or 0),
             "last_24h": strict_24h_total,
             "last_24h_blocked_tcpip_tcpxx": strict_tcp,
             "last_24h_blocked_nogate_rfonly": strict_rfonly,
             "last_24h_malformed_third_party": strict_malformed,
             "last_24h_other": strict_other,
-            "last_rejected_at": str(_row_value(last_strict_reject_row, "created_at", "") or "") or None,
-            "last_rejected_frame_uid": str(_row_value(last_strict_reject_row, "frame_uid", "") or "") or None,
-            "last_rejected_reason": str(_row_value(last_strict_reject_row, "message", "") or "") or None,
-            "last_rejected_frame_line": last_strict_reject_frame_line,
+            "last_rejected_at": last_strict_reject_at,
+            "last_rejected_frame_uid": None,
+            "last_rejected_reason": str(_row_value(stats_row, "last_strict_reject_reason", "") or "") or None,
+            "last_rejected_frame_line": str(_row_value(stats_row, "last_strict_reject_line", "") or "") or None,
         },
         "reconnects": {
             "total": int(_row_value(connect_events_row, "reconnect_total", 0) or 0),
