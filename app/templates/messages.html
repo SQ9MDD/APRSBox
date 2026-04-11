@@ -370,18 +370,17 @@
         if (!conversation) return;
         const hadUnread = conversation.unread_count > 0;
         state.activeConversationId = conversation.id;
-        conversation.unread_count = 0;
-        conversation.message_state = "read";
-        conversation.messages = conversation.messages.map((message) => ({
-            ...message,
-            unread: message.direction === "rx" ? false : message.unread,
-        }));
+        render({ autoScroll: true });
         if (hadUnread) {
-            await apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversation.id)}/read`, { method: "POST", body: "{}" });
-            await refreshState();
+            try {
+                await apiRequest(`${messagesApi}/conversations/${encodeURIComponent(conversation.id)}/read`, { method: "POST", body: "{}" });
+            } catch (error) {
+                composerError.hidden = false;
+                composerError.textContent = error instanceof Error ? error.message : i18n.requestFailed;
+            }
+            await refreshState().catch(() => {});
             return;
         }
-        render({ autoScroll: true });
     }
 
     async function createConversation(callsign) {
@@ -566,16 +565,21 @@
         }
         const activeConversation = nextState.conversations.find((conversation) => conversation.id === nextState.activeConversationId);
         if (activeConversation && activeConversation.unread_count > 0) {
-            activeConversation.unread_count = 0;
-            activeConversation.message_state = "read";
-            activeConversation.messages = activeConversation.messages.map((message) => ({
-                ...message,
-                unread: message.direction === "rx" ? false : message.unread,
-            }));
-            void apiRequest(`${messagesApi}/conversations/${encodeURIComponent(activeConversation.id)}/read`, {
-                method: "POST",
-                body: "{}",
-            }).catch(() => {});
+            try {
+                await apiRequest(`${messagesApi}/conversations/${encodeURIComponent(activeConversation.id)}/read`, {
+                    method: "POST",
+                    body: "{}",
+                });
+                activeConversation.unread_count = 0;
+                activeConversation.message_state = "read";
+                activeConversation.messages = activeConversation.messages.map((message) => ({
+                    ...message,
+                    unread: message.direction === "rx" ? false : message.unread,
+                }));
+            } catch (error) {
+                composerError.hidden = false;
+                composerError.textContent = error instanceof Error ? error.message : i18n.requestFailed;
+            }
         }
         state = nextState;
         const nextActiveConversation = getActiveConversation();

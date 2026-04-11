@@ -825,6 +825,51 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             messages_item = next(item for item in context["navigation"] if item.get("key") == "messages")
             self.assertEqual(messages_item["icon"], "message-reply-text-outline.svg")
 
+    def test_unread_inbox_count_excludes_hidden_local_self_conversation(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            execute(
+                """
+                INSERT INTO aprs_message_conversations(remote_callsign, remote_ssid, path, created_at, updated_at)
+                VALUES (?, ?, '', ?, ?)
+                """,
+                ("SQ9MDD", "4", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+            )
+            conversation = fetch_one(
+                """
+                SELECT id
+                FROM aprs_message_conversations
+                WHERE remote_callsign = ? AND remote_ssid = ?
+                LIMIT 1
+                """,
+                ("SQ9MDD", "4"),
+            )
+            assert conversation is not None
+            execute(
+                """
+                INSERT INTO aprs_messages(
+                    conversation_id, direction, sender, addressee, message_text, path, message_number,
+                    status, tx_attempt_count, is_unread, outbound_job_id, created_at, updated_at,
+                    sent_at, acked_at, last_attempt_at, failed_at, failure_reason
+                )
+                VALUES (?, 'rx', ?, ?, ?, '', 'AA', ?, 0, 1, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
+                """,
+                (
+                    int(conversation["id"]),
+                    "SQ9MDD-4",
+                    "SQ9MDD-4",
+                    "Loopback",
+                    MESSAGE_STATUS_RECEIVED,
+                    "2026-01-01T00:01:00+00:00",
+                    "2026-01-01T00:01:00+00:00",
+                ),
+            )
+
+            self.assertEqual(get_messages_page_data()["conversations"], [])
+            self.assertEqual(get_unread_inbox_count(), 0)
+
     def test_messages_page_data_exposes_heard_recently_state(self) -> None:
         with temporary_database():
             interface_id = insert_modem()

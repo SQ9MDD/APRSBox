@@ -234,7 +234,7 @@ def get_messages_page_data() -> dict[str, Any]:
     local_sender = _local_station_identity()
     for row in conversation_rows:
         display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
-        if local_sender and display_callsign == local_sender:
+        if local_sender and _callsign_identity_matches(display_callsign, local_sender):
             continue
         conversation_id = int(row["id"])
         messages = [dict(item) for item in fetch_all(
@@ -295,17 +295,24 @@ def get_messages_page_data() -> dict[str, Any]:
 
 
 def get_unread_inbox_count() -> int:
-    row = fetch_one(
+    rows = fetch_all(
         """
-        SELECT COUNT(*) AS total
-        FROM aprs_messages
-        WHERE direction = ? AND is_unread = 1
+        SELECT c.remote_callsign, c.remote_ssid, COUNT(m.id) AS unread_count
+        FROM aprs_message_conversations c
+        JOIN aprs_messages m ON m.conversation_id = c.id
+        WHERE m.direction = ? AND m.is_unread = 1
+        GROUP BY c.id, c.remote_callsign, c.remote_ssid
         """,
         (MESSAGE_DIRECTION_RX,),
     )
-    if row is None:
-        return 0
-    return int(row["total"] or 0)
+    local_sender = _local_station_identity()
+    unread_total = 0
+    for row in rows:
+        display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
+        if local_sender and _callsign_identity_matches(display_callsign, local_sender):
+            continue
+        unread_total += int(row["unread_count"] or 0)
+    return unread_total
 
 
 def mark_conversation_read(conversation_id: int) -> None:
