@@ -286,8 +286,8 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_icon"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_digi"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_digi"]["runtime_label"], "Runtime")
-            self.assertEqual(type_meta["filter_dupe"]["runtime_status"], "config_only")
-            self.assertEqual(type_meta["filter_dupe"]["runtime_label"], "Config only")
+            self.assertEqual(type_meta["filter_dupe"]["runtime_status"], "implemented")
+            self.assertEqual(type_meta["filter_dupe"]["runtime_label"], "Runtime")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():
@@ -518,12 +518,70 @@ class DigiFlowsTests(unittest.TestCase):
                 "step_type": "filter_dupe",
                 "title": "Duplicate Filter",
                 "enabled": 1,
-                "config": {"window_sec": 30},
+                "config": {"window_sec": 5},
             },
             payload["steps"][2],
         ]
         with temporary_database():
             with self.assertRaisesRegex(ValueError, "must include at least one enabled Path Rule"):
+                normalize_digi_flow_payload(payload)
+
+    def test_duplicate_filter_can_be_used_only_once_in_flow(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 5},
+            },
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 6},
+            },
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "can be used only once"):
+                normalize_digi_flow_payload(payload)
+
+    def test_duplicate_filter_must_be_first_filter_step(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_callsign",
+                "title": "Callsign Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "callsigns": ["SP8ABC-9"]},
+            },
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 5},
+            },
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "must be the first filter step"):
                 normalize_digi_flow_payload(payload)
 
     def test_rf_target_does_not_require_strict_filter(self) -> None:

@@ -153,6 +153,31 @@ class OutboundService:
                 )
                 return
             if modem_type == "TCP":
+                if self._traffic_monitor is not None:
+                    sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
+                        interface_id=normalized_interface_id,
+                        frame=frame,
+                    )
+                    if sent_via_monitor:
+                        persist_outbound_frame(
+                            source=interface_name,
+                            interface_id=normalized_interface_id,
+                            band=str(job.get("band") or "").strip(),
+                            line=tnc2_line,
+                            payload_hex=frame.hex(" ").upper(),
+                        )
+                        mark_outbound_job_sent(job_id)
+                        payload = job.get("payload") or {}
+                        message_kind = str(payload.get("message_kind") or "").strip()
+                        if kind == "message" and payload.get("aprs_message_id") is not None:
+                            if message_kind == "direct_message":
+                                register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
+                            elif message_kind == QUERY_MESSAGE_KIND:
+                                register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                        elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                            register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                        log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
+                        return
                 endpoint = self._parse_endpoint(device_path)
                 if endpoint is None:
                     raise ValueError(f"Interface {interface_name} has invalid TCP endpoint.")

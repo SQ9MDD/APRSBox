@@ -121,6 +121,59 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual((ack or {}).get("aprs_data", {}).get("packet_group"), "message")
         self.assertEqual((ack or {}).get("aprs_data", {}).get("packet_type_code"), "ack")
 
+    def test_parse_tnc2_frame_third_party_position_uses_inner_logical_source(self) -> None:
+        line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}SQ2IBK>U2QU28,TCPIP,SR0DZ*:`0SZl4{[/>145.575MHz&"
+        parsed = parse_tnc2_frame(line)
+        assert parsed is not None
+        aprs_data = dict(parsed.get("aprs_data") or {})
+
+        self.assertEqual(parsed.get("source_key"), "SR0DZ")
+        self.assertEqual(parsed.get("logical_source_key"), "SQ2IBK")
+        self.assertEqual(parsed.get("logical_destination"), "U2QU28")
+        self.assertEqual(parsed.get("logical_path"), "TCPIP,SR0DZ*")
+        self.assertTrue(bool(parsed.get("is_third_party")))
+        self.assertTrue(bool(parsed.get("third_party_inner_valid")))
+        self.assertEqual(aprs_data.get("outer_source"), "SR0DZ")
+        self.assertEqual(aprs_data.get("packet_group"), "position")
+        self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
+
+    def test_parse_tnc2_frame_third_party_message_uses_inner_sender(self) -> None:
+        line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}SQ2IBK>APRS,TCPIP,SR0DZ*::SQ9MDD-4 :test third-party{12"
+        parsed = parse_tnc2_frame(line)
+        assert parsed is not None
+        aprs_data = dict(parsed.get("aprs_data") or {})
+
+        self.assertEqual(parsed.get("source_key"), "SR0DZ")
+        self.assertEqual(parsed.get("logical_source_key"), "SQ2IBK")
+        self.assertTrue(bool(parsed.get("is_third_party")))
+        self.assertTrue(bool(parsed.get("third_party_inner_valid")))
+        self.assertEqual(aprs_data.get("packet_group"), "message")
+        self.assertEqual(aprs_data.get("packet_type_code"), "message")
+        self.assertEqual(aprs_data.get("addressee"), "SQ9MDD-4")
+        self.assertEqual(aprs_data.get("comment"), "test third-party")
+
+    def test_parse_tnc2_frame_third_party_invalid_inner_keeps_outer_source(self) -> None:
+        line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}NOT_A_VALID_FRAME"
+        parsed = parse_tnc2_frame(line)
+        assert parsed is not None
+        aprs_data = dict(parsed.get("aprs_data") or {})
+
+        self.assertEqual(parsed.get("source_key"), "SR0DZ")
+        self.assertEqual(parsed.get("logical_source_key"), "SR0DZ")
+        self.assertTrue(bool(parsed.get("is_third_party")))
+        self.assertFalse(bool(parsed.get("third_party_inner_valid")))
+        self.assertEqual(aprs_data.get("packet_type_code"), "third_party")
+        self.assertEqual(aprs_data.get("outer_source"), "SR0DZ")
+
+    def test_parse_tnc2_frame_non_third_party_keeps_existing_source_contract(self) -> None:
+        parsed = parse_tnc2_frame("SP8ABC-9>APRS:!5218.37N\\02104.87E-Test")
+        assert parsed is not None
+
+        self.assertEqual(parsed.get("source_key"), "SP8ABC-9")
+        self.assertEqual(parsed.get("logical_source_key"), "SP8ABC-9")
+        self.assertFalse(bool(parsed.get("is_third_party")))
+        self.assertFalse(bool(parsed.get("third_party_inner_valid")))
+
 
 if __name__ == "__main__":
     unittest.main()

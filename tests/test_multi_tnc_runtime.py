@@ -8,7 +8,8 @@ from pathlib import Path
 
 from app.db import execute, fetch_one, init_db
 from app.services.content import traffic_snapshot as build_traffic_snapshot
-from app.services.outbound import build_tnc2_kiss_frame
+from app.services.outbound import build_tnc2_kiss_frame, claim_next_outbound_job
+from app.services.outbound_runtime import OutboundService
 from app.services.traffic import TrafficMonitorService
 
 
@@ -273,3 +274,69 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 server_70cm.close()
                 await server_2m.wait_closed()
                 await server_70cm.wait_closed()
+
+    async def test_outbound_service_reuses_active_tcp_monitor_connection_for_tx(self) -> None:
+        with temporary_database():
+            tnc_port = free_tcp_port()
+            modem_id = insert_tcp_modem(name="TNC-2m", band="2m", device_path=f"127.0.0.1:{tnc_port}")
+
+            accepted_connections = 0
+            tnc_reader_queue: asyncio.Queue[bytes] = asyncio.Queue()
+
+            async def handle_tnc_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+                nonlocal accepted_connections
+                accepted_connections += 1
+                try:
+                    while True:
+                        chunk = await reader.read(1024)
+                        if not chunk:
+                            break
+                        await tnc_reader_queue.put(chunk)
+                finally:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
+
+            tnc_server = await asyncio.start_server(handle_tnc_client, host="127.0.0.1", port=tnc_port)
+            traffic_monitor = TrafficMonitorService(reconnect_delay=0.1)
+            try:
+                await traffic_monitor.start()
+                await wait_until(
+                    lambda: len(traffic_monitor.snapshot().get("interfaces") or []) == 1
+                    and traffic_monitor.snapshot()["interfaces"][0]["status"] == "connected",
+                    timeout=4.0,
+                )
+                self.assertEqual(accepted_connections, 1)
+
+                line = "SQ9MDD-4>APRS:>TCP monitor TX"
+                expected_frame = build_tnc2_kiss_frame(line)
+                execute(
+                    """
+                    INSERT INTO outbound_jobs(
+                        kind, interface_id, payload_json, status, scheduled_at,
+                        locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                    )
+                    VALUES (
+                        'digi_tx', ?, ?, 'queued', '2026-01-01T00:00:00+00:00',
+                        NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                    )
+                    """,
+                    (modem_id, '{"line":"SQ9MDD-4>APRS:>TCP monitor TX"}'),
+                )
+
+                job = claim_next_outbound_job()
+                assert job is not None
+                await OutboundService(traffic_monitor=traffic_monitor)._process_job(job)
+
+                self.assertEqual(await asyncio.wait_for(tnc_reader_queue.get(), timeout=1.0), expected_frame)
+                self.assertEqual(accepted_connections, 1)
+
+                row = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+                assert row is not None
+                self.assertEqual(row["status"], "sent")
+            finally:
+                await traffic_monitor.stop()
+                tnc_server.close()
+                await tnc_server.wait_closed()

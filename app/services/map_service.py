@@ -225,7 +225,7 @@ def _build_mobile_track_points_by_station_keys(
         parsed = parse_tnc2_frame(str(row["line"] or ""))
         if parsed is None or parsed.get("classification") != "mobile":
             continue
-        station_key = str(parsed.get("entity_name") or parsed.get("source_key") or "").strip()
+        station_key = str(parsed.get("entity_name") or parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
         if not station_key:
             continue
         resolved_key = station_keys.get(station_key.casefold())

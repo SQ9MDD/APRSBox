@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app import get_version
-from app.db import execute, fetch_all, fetch_one, init_db
+from app.db import execute, fetch_all, fetch_one, init_db, set_app_setting
 from app.services.content import update_station_settings
 from app.services.messages import (
     HEARD_FRESH_SECONDS,
@@ -287,6 +287,103 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(ack_jobs), 2)
             self.assertTrue(all('"message_text":"ack02"' in str(job["payload_json"]) for job in ack_jobs))
+
+    def test_incoming_message_with_single_char_suffix_number_is_normalized_and_acked(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SP8ABC>APRS::SQ9MDD-4 :ide na spacerek :){8"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one(
+                """
+                SELECT direction, sender, addressee, message_text, message_number, status
+                FROM aprs_messages
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert row is not None
+            self.assertEqual(row["direction"], "rx")
+            self.assertEqual(row["sender"], "SP8ABC")
+            self.assertEqual(row["addressee"], "SQ9MDD-4")
+            self.assertEqual(row["message_text"], "ide na spacerek :)")
+            self.assertEqual(row["message_number"], "08")
+            self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"message_text":"ack08"' in str(job["payload_json"]) for job in ack_jobs))
+
+    def test_incoming_third_party_message_uses_inner_sender(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}SQ2IBK>APRS,TCPIP,SR0DZ*::SQ9MDD-4 :relay test{34"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one(
+                """
+                SELECT direction, sender, addressee, message_text, message_number, status
+                FROM aprs_messages
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert row is not None
+            self.assertEqual(row["direction"], "rx")
+            self.assertEqual(row["sender"], "SQ2IBK")
+            self.assertEqual(row["addressee"], "SQ9MDD-4")
+            self.assertEqual(row["message_text"], "relay test")
+            self.assertEqual(row["message_number"], "34")
+            self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
+
+    def test_incoming_malformed_third_party_message_is_ignored(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}NOT_A_VALID_FRAME"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert row is not None
+            self.assertEqual(int(row["total"]), 0)
+
+    def test_single_char_ack_number_matches_outbound_message(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            set_app_setting("messages.next_message_number", "08")
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Test single char ACK", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+            self.assertEqual(message["message_number"], "08")
+
+            ack_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "ack",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "ack8",
+                }
+            )
+            process_incoming_tnc2_message(ack_line, timestamp="2026-01-01T00:00:15+00:00")
+
+            acked_row = fetch_one("SELECT status, acked_at FROM aprs_messages WHERE id = ?", (int(message["id"]),))
+            assert acked_row is not None
+            self.assertEqual(acked_row["status"], MESSAGE_STATUS_ACKED)
+            self.assertEqual(acked_row["acked_at"], "2026-01-01T00:00:15+00:00")
 
     async def test_queue_send_query_without_message_number_and_retry(self) -> None:
         with temporary_database():

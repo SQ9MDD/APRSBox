@@ -41,7 +41,7 @@ QUERY_RESPONSE_DELAY_SECONDS = 3
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
-_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?)?$")
+_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
 
 
@@ -546,7 +546,7 @@ def expire_direct_message_timeouts() -> None:
 
 
 def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) -> None:
-    parsed = _parse_tnc2_line(line)
+    parsed = _parse_effective_incoming_tnc2_line(line, log_invalid_third_party=True)
     if parsed is None:
         return
     info = parsed["info"]
@@ -590,27 +590,33 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         )
         _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
         return
-    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?", text_field, flags=re.IGNORECASE)
-    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{2})(?:}(?P<reply_ack>[0-9A-Z]{2})?)?", text_field, flags=re.IGNORECASE)
+    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
+    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
     if ack_match:
-        acknowledge_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=ack_match.group("number").upper(), timestamp=received_at)
+        message_number = _normalize_message_number(ack_match.group("number"))
+        if not message_number:
+            return
+        acknowledge_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=message_number, timestamp=received_at)
         return
     if reject_match:
-        reject_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=reject_match.group("number").upper(), timestamp=received_at)
+        message_number = _normalize_message_number(reject_match.group("number"))
+        if not message_number:
+            return
+        reject_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=message_number, timestamp=received_at)
         return
 
     suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
     if suffix_match is None:
         return
     message_text = suffix_match.group("text") or ""
-    message_number = suffix_match.group("number")
+    message_number = _normalize_message_number(suffix_match.group("number"))
     if not message_number:
         return
     store_incoming_message(
         sender=sender,
         addressee=addressee.upper(),
         message_text=message_text,
-        message_number=message_number.upper(),
+        message_number=message_number,
         path=parsed["path"],
         timestamp=received_at,
     )
@@ -1039,8 +1045,19 @@ def _parse_query_text(text_field: str) -> tuple[str, str | None]:
     if suffix_match is None:
         return "", None
     query_text = str(suffix_match.group("text") or "").strip()
-    message_number = suffix_match.group("number")
-    return query_text, message_number.upper() if message_number else None
+    message_number = _normalize_message_number(suffix_match.group("number"))
+    return query_text, message_number
+
+
+def _normalize_message_number(value: str | None) -> str | None:
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        return None
+    if not re.fullmatch(r"[0-9A-Z]{1,2}", normalized):
+        return None
+    if len(normalized) == 1:
+        return f"0{normalized}"
+    return normalized
 
 
 def _build_query_position_text(station_settings: dict[str, Any]) -> str:
@@ -1110,6 +1127,23 @@ def _parse_tnc2_line(line: str) -> dict[str, str] | None:
     return {key: value.strip() for key, value in parsed.items()}
 
 
+def _parse_effective_incoming_tnc2_line(line: str, *, log_invalid_third_party: bool = False) -> dict[str, str] | None:
+    parsed = _parse_tnc2_line(line)
+    if parsed is None:
+        return None
+    info = str(parsed.get("info") or "")
+    if not info.startswith("}"):
+        return parsed
+    encapsulated = info[1:].lstrip()
+    embedded = _parse_tnc2_line(encapsulated)
+    if embedded is not None:
+        return embedded
+    if log_invalid_third_party:
+        outer_source = str(parsed.get("source") or "").strip() or "unknown"
+        log_event("WARNING", "messages", f"Ignored malformed third-party APRS message frame from {outer_source}.")
+    return None
+
+
 def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
     timestamp = str(row.get("created_at") or row.get("updated_at") or utc_now())
     has_message_number = bool(str(row.get("message_number") or "").strip())
@@ -1151,7 +1185,7 @@ def _heard_station_lookup() -> dict[str, dict[str, Any]]:
     )
     snapshots: dict[str, dict[str, Any]] = {}
     for row in rows:
-        parsed = _parse_tnc2_line(str(row["line"] or ""))
+        parsed = _parse_effective_incoming_tnc2_line(str(row["line"] or ""))
         if parsed is None:
             continue
         source = normalize_aprs_destination_callsign(parsed["source"])

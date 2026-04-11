@@ -1226,15 +1226,13 @@ def get_recent_station_packets(
 
     packets: list[dict[str, Any]] = []
     for row in rows:
-        parsed = _parse_tnc2_line(row["line"])
+        parsed = parse_tnc2_frame(str(row["line"] or ""))
         if parsed is None:
             continue
-        aprs_data = _parse_aprs_packet(parsed)
-        if aprs_data is None:
-            continue
+        aprs_data = dict(parsed.get("aprs_data") or {})
         if not _aprs_data_has_station_snapshot_fields(aprs_data):
             continue
-        row_station_key = (aprs_data.get("entity_name") or parsed["source"]).strip()
+        row_station_key = str(aprs_data.get("entity_name") or parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
         if row_station_key.casefold() != station_key.casefold():
             continue
 
@@ -1249,13 +1247,17 @@ def get_recent_station_packets(
                 "timestamp": row["created_at"],
                 "timestamp_label": heard_date,
                 "timestamp_relative": heard_relative,
-                "source": parsed["source"],
-                "destination": parsed["destination"],
-                "path": parsed["path"],
+                "source": str(parsed.get("logical_source_key") or parsed.get("source_key") or ""),
+                "destination": str(parsed.get("logical_destination") or parsed.get("destination") or ""),
+                "path": str(parsed.get("logical_path") or parsed.get("path") or ""),
                 "decoded_summary": decoded_summary,
                 "raw_packet": row["line"],
             }
         )
+        if bool(parsed.get("is_third_party")):
+            packets[-1]["third_party"] = True
+            packets[-1]["outer_source"] = str(parsed.get("source_key") or "")
+            packets[-1]["outer_path"] = str(parsed.get("path") or "")
         if len(packets) >= limit:
             break
     return packets
@@ -1397,14 +1399,12 @@ def _build_station_snapshots_from_rows(
     device_database = get_aprs_device_identification_database()
 
     for row in rows:
-        parsed = _parse_tnc2_line(row["line"])
+        parsed = parse_tnc2_frame(str(row["line"] or ""))
         if parsed is None:
             continue
 
-        callsign = parsed["source"].strip()
-        aprs_data = _parse_aprs_packet(parsed)
-        if aprs_data is None:
-            continue
+        callsign = str(parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
+        aprs_data = dict(parsed.get("aprs_data") or {})
         if not _aprs_data_has_station_snapshot_fields(aprs_data):
             continue
 
@@ -1417,8 +1417,8 @@ def _build_station_snapshots_from_rows(
                 station_key,
                 row["created_at"],
                 row["source"],
-                parsed["destination"],
-                parsed["path"],
+                str(parsed.get("logical_destination") or parsed.get("destination") or ""),
+                str(parsed.get("logical_path") or parsed.get("path") or ""),
                 row["line"],
                 origin=origin,
             )
@@ -1426,8 +1426,8 @@ def _build_station_snapshots_from_rows(
         station = stations[station_key]
         if not station["aprs_device"] and station_key.casefold() == callsign.casefold():
             device_identification = lookup_aprs_device_identification(
-                destination=parsed["destination"],
-                info=parsed["info"],
+                destination=str(parsed.get("logical_destination") or parsed.get("destination") or ""),
+                info=str(parsed.get("logical_info") or parsed.get("info") or ""),
                 database=device_database,
             )
             if device_identification is not None:
@@ -1595,6 +1595,28 @@ def parse_tnc2_frame(line: str) -> dict[str, Any] | None:
     aprs_data = _parse_aprs_packet(parsed)
     source_key = parsed["source"].strip()
     source_callsign, source_ssid = _split_ssid(source_key)
+    third_party_inner_valid = bool((aprs_data or {}).get("third_party_inner_valid"))
+    logical_source_key = (
+        str((aprs_data or {}).get("inner_source_key") or "").strip()
+        if third_party_inner_valid
+        else source_key
+    ) or source_key
+    logical_source_callsign, logical_source_ssid = _split_ssid(logical_source_key)
+    logical_destination = (
+        str((aprs_data or {}).get("inner_destination") or "").strip()
+        if third_party_inner_valid
+        else parsed["destination"]
+    ) or parsed["destination"]
+    logical_path = (
+        str((aprs_data or {}).get("inner_path") or "").strip()
+        if third_party_inner_valid
+        else parsed["path"]
+    ) or parsed["path"]
+    logical_info = (
+        str((aprs_data or {}).get("inner_info") or "")
+        if third_party_inner_valid
+        else parsed["info"]
+    )
     entity_name = (aprs_data or {}).get("entity_name")
     entity_class = str((aprs_data or {}).get("entity_class") or "").strip()
     classification = "unknown"
@@ -1613,6 +1635,14 @@ def parse_tnc2_frame(line: str) -> dict[str, Any] | None:
         "source_key": source_key,
         "source_callsign": source_callsign,
         "source_ssid": source_ssid,
+        "logical_source_key": logical_source_key,
+        "logical_source_callsign": logical_source_callsign,
+        "logical_source_ssid": logical_source_ssid,
+        "logical_destination": logical_destination,
+        "logical_path": logical_path,
+        "logical_info": logical_info,
+        "is_third_party": bool((aprs_data or {}).get("is_third_party")),
+        "third_party_inner_valid": third_party_inner_valid,
         "entity_name": str(entity_name or "").strip(),
         "entity_class": entity_class,
         "classification": classification,
@@ -1852,7 +1882,7 @@ def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     if packet_type == "T" and info.upper().startswith("T#"):
         return _parse_telemetry_packet(info)
     if packet_type == "}":
-        return _parse_third_party_packet(info)
+        return _parse_third_party_packet(packet)
     return None
 
 
@@ -2275,23 +2305,45 @@ def _parse_telemetry_packet(info: str) -> dict[str, Any] | None:
     }
 
 
-def _parse_third_party_packet(info: str) -> dict[str, Any] | None:
-    encapsulated = info[1:].strip()
+def _parse_third_party_packet(packet: dict[str, str]) -> dict[str, Any] | None:
+    info = packet["info"]
+    encapsulated = info[1:].lstrip()
+    outer_source = str(packet.get("source") or "").strip()
+    outer_destination = str(packet.get("destination") or "").strip()
+    outer_path = str(packet.get("path") or "").strip()
+    base_result: dict[str, Any] = {
+        "packet_type_code": "third_party",
+        "comment": encapsulated,
+        "is_third_party": True,
+        "third_party_inner_valid": False,
+        "outer_source": outer_source,
+        "outer_destination": outer_destination,
+        "outer_path": outer_path,
+        "third_party_payload": encapsulated,
+    }
     parsed = _parse_tnc2_line(encapsulated)
     if parsed is None:
-        return {
-            "packet_type_code": "third_party",
-            "comment": encapsulated,
-        }
+        return base_result
+    base_result["inner_source_key"] = parsed["source"]
+    base_result["inner_destination"] = parsed["destination"]
+    base_result["inner_path"] = parsed["path"]
+    base_result["inner_info"] = parsed["info"]
     embedded = _parse_aprs_packet(parsed)
     if embedded is None:
-        return {
-            "packet_type_code": "third_party",
-            "comment": encapsulated,
-        }
+        return base_result
     result = dict(embedded)
+    result["is_third_party"] = True
+    result["third_party_inner_valid"] = True
+    result["outer_source"] = outer_source
+    result["outer_destination"] = outer_destination
+    result["outer_path"] = outer_path
+    result["third_party_payload"] = encapsulated
+    result["inner_source_key"] = parsed["source"]
+    result["inner_destination"] = parsed["destination"]
+    result["inner_path"] = parsed["path"]
+    result["inner_info"] = parsed["info"]
     result["wrapped_packet_type_code"] = str(embedded.get("packet_type_code") or "")
-    result["packet_type_code"] = "third_party"
+    result["encapsulation_packet_type_code"] = "third_party"
     return result
 
 

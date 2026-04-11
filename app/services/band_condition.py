@@ -255,11 +255,18 @@ def process_incoming_frame(line: str, band: str | None = None, timestamp: str | 
     parsed = parse_tnc2_frame(line)
     if parsed is None:
         return
+    if bool(parsed.get("is_third_party")) and not bool(parsed.get("third_party_inner_valid")):
+        source_label = str(parsed.get("source_key") or parsed.get("source") or "").strip() or "unknown"
+        log_event("WARNING", "aprs", f"Ignored malformed third-party APRS payload from {source_label}.")
+        return
 
     bucket_band = normalize_band(band or "") or "unknown"
     bucket_start = current_bucket_start()
     classification = parsed["classification"]
-    source_station_key = build_station_key(parsed["source_callsign"], parsed["source_ssid"])
+    source_station_key = build_station_key(
+        str(parsed.get("logical_source_callsign") or parsed.get("source_callsign") or ""),
+        str(parsed.get("logical_source_ssid") or parsed.get("source_ssid") or ""),
+    )
     if not source_station_key:
         return
 
@@ -272,8 +279,8 @@ def process_incoming_frame(line: str, band: str | None = None, timestamp: str | 
             connection,
             bucket_start,
             bucket_band,
-            source_callsign=parsed["source_callsign"],
-            source_ssid=parsed["source_ssid"],
+            source_callsign=str(parsed.get("logical_source_callsign") or parsed.get("source_callsign") or ""),
+            source_ssid=str(parsed.get("logical_source_ssid") or parsed.get("source_ssid") or ""),
         )
         _rollup_closed_buckets(connection, current_bucket_utc=bucket_start, processed_at=timestamp or utc_now())
 
