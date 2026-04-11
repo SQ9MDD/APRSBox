@@ -125,6 +125,41 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(track["points"][0]["heard_at"], "2026-01-01T00:00:00+00:00")
             self.assertEqual(track["points"][1]["heard_at"], "2026-01-01T00:05:00+00:00")
 
+    def test_map_payload_builds_tracks_for_position_changes_without_course_speed(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload())
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5218.37N\\02104.87E>First position only",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5219.00N\\02105.30E>Second position only",
+                created_at="2026-01-01T00:05:00+00:00",
+            )
+
+            map_payload = get_map_station_payload()
+            self.assertEqual(len(map_payload["mobile_tracks"]), 1)
+            track = map_payload["mobile_tracks"][0]
+            self.assertEqual(track["display_callsign"], "SP8ABC-9")
+            self.assertEqual(len(track["points"]), 2)
+            self.assertEqual(track["points"][0]["heard_at"], "2026-01-01T00:00:00+00:00")
+            self.assertEqual(track["points"][1]["heard_at"], "2026-01-01T00:05:00+00:00")
+
+    def test_map_payload_does_not_draw_track_for_unchanged_position(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload())
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5218.37N\\02104.87E>First position only",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5218.37N\\02104.87E>Still same position",
+                created_at="2026-01-01T00:05:00+00:00",
+            )
+
+            map_payload = get_map_station_payload()
+            self.assertEqual(len(map_payload["mobile_tracks"]), 0)
+
     def test_map_payload_exposes_phg_range_for_station_with_phg(self) -> None:
         with temporary_database():
             update_station_settings(station_payload())

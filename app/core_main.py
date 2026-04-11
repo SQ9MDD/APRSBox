@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.db import init_db, log_event
+from app.services.aprsis import AprsisClientService
 from app.services.beacon_scheduler import BeaconSchedulerService
 from app.services.bulletin_scheduler import BulletinSchedulerService
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
@@ -20,7 +21,8 @@ from app.services.wx_scheduler import WxSchedulerService
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     init_db()
-    digi_flow_runtime = DigiFlowRuntimeService()
+    aprsis_uplink = AprsisClientService()
+    digi_flow_runtime = DigiFlowRuntimeService(aprsis_client=aprsis_uplink)
     traffic_monitor = TrafficMonitorService(frame_consumer=digi_flow_runtime.enqueue_rx_tnc2_frame)
     outbound_service = OutboundService(traffic_monitor=traffic_monitor)
     beacon_scheduler = BeaconSchedulerService()
@@ -28,6 +30,7 @@ async def lifespan(app_instance: FastAPI):
     maintenance_scheduler = MaintenanceSchedulerService()
     object_scheduler = ObjectSchedulerService()
     wx_scheduler = WxSchedulerService()
+    app_instance.state.aprsis_uplink = aprsis_uplink
     app_instance.state.digi_flow_runtime = digi_flow_runtime
     app_instance.state.traffic_monitor = traffic_monitor
     app_instance.state.outbound_service = outbound_service
@@ -36,6 +39,7 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.maintenance_scheduler = maintenance_scheduler
     app_instance.state.object_scheduler = object_scheduler
     app_instance.state.wx_scheduler = wx_scheduler
+    await aprsis_uplink.start()
     await digi_flow_runtime.start()
     await traffic_monitor.start()
     await outbound_service.start()
@@ -56,6 +60,7 @@ async def lifespan(app_instance: FastAPI):
         await outbound_service.stop()
         await traffic_monitor.stop()
         await digi_flow_runtime.stop()
+        await aprsis_uplink.stop()
 
 
 app = FastAPI(title="APRSBox Core", version=__version__, lifespan=lifespan)

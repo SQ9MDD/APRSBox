@@ -407,6 +407,18 @@ CREATE TABLE IF NOT EXISTS traffic_runtime_state (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS aprsis_runtime_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    status TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('inactive', 'connecting', 'connected', 'error')),
+    status_detail TEXT NOT NULL DEFAULT '',
+    server TEXT,
+    port INTEGER,
+    login TEXT,
+    connected_at TEXT,
+    last_error TEXT,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS traffic_runtime_interfaces (
     modem_id INTEGER PRIMARY KEY,
     modem_name TEXT NOT NULL,
@@ -748,6 +760,16 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
     ON outbound_jobs(aprs_message_id, status, scheduled_at, id)
 """
+        )
+        connection.execute(
+            """
+            INSERT INTO aprsis_runtime_state (
+                id, status, status_detail, server, port, login, connected_at, last_error, updated_at
+            )
+            VALUES (1, 'inactive', 'APRS-IS uplink is inactive.', NULL, NULL, NULL, NULL, NULL, ?)
+            ON CONFLICT(id) DO NOTHING
+            """,
+            (utc_now(),),
         )
         if "state" not in object_columns:
             connection.execute(

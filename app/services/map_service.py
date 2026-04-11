@@ -199,6 +199,14 @@ def _is_null_island_point(latitude: float, longitude: float) -> bool:
     return abs(latitude) < 1e-6 and abs(longitude) < 1e-6
 
 
+def _is_same_track_position(point: dict[str, Any], latitude: float, longitude: float) -> bool:
+    point_latitude = _parse_coordinate(point.get("latitude"))
+    point_longitude = _parse_coordinate(point.get("longitude"))
+    if point_latitude is None or point_longitude is None:
+        return False
+    return abs(point_latitude - latitude) < 1e-6 and abs(point_longitude - longitude) < 1e-6
+
+
 def _build_mobile_track_points_by_station_keys(
     station_keys: dict[str, str],
 ) -> dict[str, list[dict[str, Any]]]:
@@ -223,7 +231,7 @@ def _build_mobile_track_points_by_station_keys(
     points_by_station: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         parsed = parse_tnc2_frame(str(row["line"] or ""))
-        if parsed is None or parsed.get("classification") != "mobile":
+        if parsed is None:
             continue
         station_key = str(parsed.get("entity_name") or parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
         if not station_key:
@@ -241,6 +249,8 @@ def _build_mobile_track_points_by_station_keys(
             continue
 
         points = points_by_station.setdefault(resolved_key, [])
+        if points and _is_same_track_position(points[-1], latitude, longitude):
+            continue
         points.append(
             {
                 "latitude": latitude,

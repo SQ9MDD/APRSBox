@@ -459,11 +459,12 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertIn('id="bulletins-message-error"', template_source)
 
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("['igate']", base_source)
+        self.assertNotIn("['igate']", base_source)
         self.assertNotIn("['digi-flows', 'igate', 'bulletins']", base_source)
         helpers_source = Path("app/template_helpers.py").read_text(encoding="utf-8")
         self.assertIn('"label": "Bulletins"', helpers_source)
-        self.assertIn("DIGI Flows", helpers_source)
+        self.assertIn("Packet Routing", helpers_source)
+        self.assertIn("iGATE settings", helpers_source)
         self.assertNotIn("Digi Settings", helpers_source)
 
 

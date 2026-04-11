@@ -78,6 +78,13 @@ from app.services.band_condition import (
     save_reference_station,
     split_station_key,
 )
+from app.services.aprsis import (
+    aprsis_runtime_badge,
+    get_aprsis_config,
+    get_aprsis_diagnostics,
+    get_aprsis_runtime_status,
+    safe_save_aprsis_config,
+)
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_status,
     refresh_aprs_device_identification_cache,
@@ -226,7 +233,7 @@ def _digi_flow_editor_context(
     station_form_options = _station_form_options()
     return build_template_context(
         request,
-        page_title="DIGI Flow Editor" if flow_id else "New DIGI Flow",
+        page_title="Packet Routing Editor" if flow_id else "New Packet Routing Flow",
         current_user=current_user,
         active_nav="digi-flows",
         flow_id=flow_id,
@@ -243,6 +250,30 @@ def _digi_flow_editor_context(
         flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=10) if flow_id is not None else [],
         symbol_table_options=station_form_options["symbol_table_options"],
         symbol_code_options=station_form_options["symbol_code_options"],
+        flash=flash,
+        flash_success=flash_success,
+    )
+
+
+def _igate_settings_page_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    flash: str | None = None,
+    flash_success: bool = False,
+) -> dict[str, object]:
+    aprsis_runtime = get_aprsis_runtime_status()
+    aprsis_diagnostics = get_aprsis_diagnostics()
+    return build_template_context(
+        request,
+        page_title="iGATE settings",
+        current_user=current_user,
+        active_nav="igate",
+        aprsis_config=get_aprsis_config(),
+        aprsis_runtime=aprsis_runtime,
+        aprsis_diagnostics=aprsis_diagnostics,
+        aprsis_runtime_badge=aprsis_runtime_badge(aprsis_runtime.get("status", "")),
+        can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=flash_success,
     )
@@ -941,32 +972,41 @@ def servers_create(
 def igate_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    flash: str | None = None,
+    success: int = 0,
 ) -> object:
     templates = request.app.state.templates
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "igate"))
+    return templates.TemplateResponse(
+        "igate_settings.html",
+        _igate_settings_page_context(request, current_user, flash=flash, flash_success=bool(success)),
+    )
 
 
 @router.post("/igate")
-def igate_create(
+def igate_settings_update(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-    name: str = Form(...),
-    direction: str = Form(...),
-    is_enabled: str | None = Form(None),
-    policy_text: str = Form(""),
+    server: str = Form(""),
+    port: str = Form(""),
+    login: str = Form(""),
+    passcode: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
-    success, error = safe_create_section_row(
-        "igate",
+    success, error = safe_save_aprsis_config(
         {
-            "name": name.strip(),
-            "direction": direction.strip(),
-            "is_enabled": is_enabled,
-            "policy_text": policy_text.strip(),
-        },
+            "server": server,
+            "port": port,
+            "login": login,
+            "passcode": passcode,
+        }
     )
-    context = _section_template_context(request, current_user, "igate", flash=None if success else error)
-    return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+    context = _igate_settings_page_context(
+        request,
+        current_user,
+        flash="APRS-IS settings updated." if success else error,
+        flash_success=success,
+    )
+    return templates.TemplateResponse("igate_settings.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.get("/digi")
@@ -1013,7 +1053,7 @@ def digi_flows_page(
     templates = request.app.state.templates
     context = build_template_context(
         request,
-        page_title="DIGI Flows",
+        page_title="Packet Routing",
         current_user=current_user,
         active_nav="digi-flows",
         flows=list_digi_flows(),
@@ -1022,6 +1062,34 @@ def digi_flows_page(
         flash_success=bool(success),
     )
     return templates.TemplateResponse("digi_flows.html", context)
+
+
+@router.post("/digi-flows/aprsis-config")
+def digi_flows_aprsis_config_update(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+    server: str = Form(""),
+    port: str = Form(""),
+    login: str = Form(""),
+    passcode: str = Form(""),
+) -> RedirectResponse:
+    success, error = safe_save_aprsis_config(
+        {
+            "server": server,
+            "port": port,
+            "login": login,
+            "passcode": passcode,
+        }
+    )
+    if not success:
+        return RedirectResponse(
+            url=_path(request, f"/igate?flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    return RedirectResponse(
+        url=_path(request, "/igate?flash=APRS-IS%20settings%20updated.&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/digi-flows/new")
@@ -1119,7 +1187,7 @@ async def digi_flow_create(
         current_user,
         flow_id=flow_id,
         form_data=build_digi_flow_editor_payload(flow),
-        flash="DIGI Flow created.",
+        flash="Packet Routing flow created.",
         flash_success=True,
     )
     return templates.TemplateResponse("digi_flow_form.html", context)
@@ -1153,7 +1221,7 @@ async def digi_flow_update(
         current_user,
         flow_id=flow_id,
         form_data=build_digi_flow_editor_payload(flow),
-        flash="DIGI Flow updated.",
+        flash="Packet Routing flow updated.",
         flash_success=True,
     )
     return templates.TemplateResponse("digi_flow_form.html", context)
@@ -1174,7 +1242,7 @@ def digi_flow_toggle(
             status_code=status.HTTP_303_SEE_OTHER,
         )
     return RedirectResponse(
-        url=_path(request, f"/digi-flows?flash={'DIGI%20Flow%20status%20updated.'}&success=1"),
+        url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20status%20updated.'}&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -1187,7 +1255,7 @@ def digi_flow_delete(
 ) -> RedirectResponse:
     delete_digi_flow(flow_id)
     return RedirectResponse(
-        url=_path(request, f"/digi-flows?flash={'DIGI%20Flow%20deleted.'}&success=1"),
+        url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20deleted.'}&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

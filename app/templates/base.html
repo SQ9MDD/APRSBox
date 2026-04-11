@@ -73,7 +73,7 @@
             {% else %}
             <a
                 href="{{ request.scope.root_path }}{{ item.href }}"
-                class="nav-link {% if active_nav == item.key %}active{% endif %}{% if item.key in ['igate'] %} nav-link-struck{% endif %}{% if item.key == 'messages' and item.has_unread %} nav-link-unread{% endif %}"
+                class="nav-link {% if active_nav == item.key %}active{% endif %}{% if item.key == 'messages' and item.has_unread %} nav-link-unread{% endif %}"
                 data-nav-key="{{ item.key }}"
                 {% if item.key == 'messages' %}
                 data-icon-normal="message-reply-text-outline.svg"

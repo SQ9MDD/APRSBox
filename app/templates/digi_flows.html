@@ -5,11 +5,11 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("Configured Flows") }}</h2>
+                <h2>{{ t("Configured Packet Routing Flows") }}</h2>
             </div>
             <div class="form-actions">
                 {% if can_edit %}
-                <a href="{{ request.scope.root_path }}/digi-flows/new" class="button">{{ t("New flow") }}</a>
+                <a href="{{ request.scope.root_path }}/digi-flows/new" class="button">{{ t("New routing flow") }}</a>
                 {% endif %}
             </div>
         </div>
@@ -49,8 +49,8 @@
                             <a
                                 href="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}"
                                 class="table-icon-button"
-                                title="{{ t('Edit flow') }}"
-                                aria-label="{{ t('Edit flow') }} {{ flow.name }}"
+                                title="{{ t('Edit routing flow') }}"
+                                aria-label="{{ t('Edit routing flow') }} {{ flow.name }}"
                             >
                                 <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                             </a>
@@ -64,8 +64,8 @@
                                 <button
                                     type="submit"
                                     class="table-icon-button"
-                                    title="{{ t('Disable flow') if flow.enabled else t('Enable flow') }}"
-                                    aria-label="{{ (t('Disable flow') if flow.enabled else t('Enable flow')) }} {{ flow.name }}"
+                                    title="{{ t('Disable routing flow') if flow.enabled else t('Enable routing flow') }}"
+                                    aria-label="{{ (t('Disable routing flow') if flow.enabled else t('Enable routing flow')) }} {{ flow.name }}"
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'pause-circle-outline.svg' if flow.enabled else 'play-circle-outline.svg' }}" alt="">
                                 </button>
@@ -82,13 +82,13 @@
                                 method="post"
                                 action="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}/delete"
                                 class="table-action-form"
-                                onsubmit="return confirm({{ tf('Delete DIGI Flow {name}?', {'name': flow.name})|tojson }});"
+                                onsubmit="return confirm({{ tf('Delete Packet Routing flow {name}?', {'name': flow.name})|tojson }});"
                             >
                                 <button
                                     type="submit"
                                     class="table-icon-button table-icon-button-danger"
-                                    title="{{ t('Delete flow') }}"
-                                    aria-label="{{ t('Delete flow') }} {{ flow.name }}"
+                                    title="{{ t('Delete routing flow') }}"
+                                    aria-label="{{ t('Delete routing flow') }} {{ flow.name }}"
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                 </button>
@@ -99,7 +99,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 6 if can_edit else 5 }}">{{ t("No DIGI Flows configured yet.") }}</td>
+                        <td colspan="{{ 6 if can_edit else 5 }}">{{ t("No Packet Routing flows configured yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
