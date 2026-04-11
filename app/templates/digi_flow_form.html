@@ -288,7 +288,7 @@
             failedRefreshExecutions: {{ t("Failed to refresh DIGI Flow execution summaries.")|tojson }},
             freeze: {{ t("Freeze")|tojson }},
             release: {{ t("Release")|tojson }},
-            rejectsTcpNogateRfonly: {{ t("Rejects TCP, NOGATE, RFONLY")|tojson }},
+            strictGuardSummary: {{ t("Rejects TCPIP/TCPXX, NOGATE/RFONLY and invalid third-party packets")|tojson }},
             directPacketsOnly: {{ t("Passes only direct packets")|tojson }},
             LOGGED: {{ t("LOGGED")|tojson }},
             DROPPED: {{ t("DROPPED")|tojson }},
@@ -408,7 +408,7 @@
                 const noTracePaths = config.no_trace_paths || [];
                 return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.paths}: ${tracePaths.length + noTracePaths.length}`;
             }
-            if (step.step_type === "filter_strict") return i18n.rejectsTcpNogateRfonly;
+            if (step.step_type === "filter_strict") return i18n.strictGuardSummary;
             if (step.step_type === "filter_direct_only") return i18n.directPacketsOnly;
             if (step.step_type === "filter_callsign") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.callsigns}: ${(config.callsigns || []).length}`;
             if (step.step_type === "filter_packet_type") {

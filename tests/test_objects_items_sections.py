@@ -464,6 +464,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         helpers_source = Path("app/template_helpers.py").read_text(encoding="utf-8")
         self.assertIn('"label": "Bulletins"', helpers_source)
         self.assertIn("Packet Routing", helpers_source)
+        self.assertIn("iGATE settings", helpers_source)
         self.assertNotIn("Digi Settings", helpers_source)
 
 

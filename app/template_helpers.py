@@ -24,6 +24,7 @@ PRIMARY_NAV = [
     {"key": "objects", "label": "Objects / Items", "href": "/objects", "roles": ("admin", "operator", "viewer"), "icon": "crosshairs.svg"},
     {"key": "bulletins", "label": "Bulletins", "href": "/bulletins", "roles": ("admin", "operator", "viewer"), "icon": "message-text-outline.svg"},
     {"key": "digi-flows", "label": "Packet Routing", "href": "/digi-flows", "roles": ("admin", "operator", "viewer"), "icon": "source-branch-check.svg"},
+    {"key": "igate", "label": "iGATE settings", "href": "/igate", "roles": ("admin", "operator", "viewer"), "icon": "lan-connect.svg"},
     {"key": "nav-separator-secondary", "separator": True, "roles": ("admin", "operator", "viewer")},
     {"key": "logs", "label": "Logs", "href": "/logs", "roles": ("admin", "operator", "viewer"), "icon": "book-open-variant.svg"},
     {"key": "users", "label": "Users / Roles", "href": "/admin/users", "roles": ("admin",), "icon": "account-cog.svg"},

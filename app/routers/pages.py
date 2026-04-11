@@ -254,6 +254,28 @@ def _digi_flow_editor_context(
     )
 
 
+def _igate_settings_page_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    flash: str | None = None,
+    flash_success: bool = False,
+) -> dict[str, object]:
+    aprsis_runtime = get_aprsis_runtime_status()
+    return build_template_context(
+        request,
+        page_title="iGATE settings",
+        current_user=current_user,
+        active_nav="igate",
+        aprsis_config=get_aprsis_config(),
+        aprsis_runtime=aprsis_runtime,
+        aprsis_runtime_badge=aprsis_runtime_badge(aprsis_runtime.get("status", "")),
+        can_edit=current_user.role in {"admin", "operator"},
+        flash=flash,
+        flash_success=flash_success,
+    )
+
+
 def _dashboard_band_condition_card() -> dict | None:
     snapshot = get_band_condition_snapshot()
     bands = snapshot.get("bands") or []
@@ -947,32 +969,41 @@ def servers_create(
 def igate_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    flash: str | None = None,
+    success: int = 0,
 ) -> object:
     templates = request.app.state.templates
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "igate"))
+    return templates.TemplateResponse(
+        "igate_settings.html",
+        _igate_settings_page_context(request, current_user, flash=flash, flash_success=bool(success)),
+    )
 
 
 @router.post("/igate")
-def igate_create(
+def igate_settings_update(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-    name: str = Form(...),
-    direction: str = Form(...),
-    is_enabled: str | None = Form(None),
-    policy_text: str = Form(""),
+    server: str = Form(""),
+    port: str = Form(""),
+    login: str = Form(""),
+    passcode: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
-    success, error = safe_create_section_row(
-        "igate",
+    success, error = safe_save_aprsis_config(
         {
-            "name": name.strip(),
-            "direction": direction.strip(),
-            "is_enabled": is_enabled,
-            "policy_text": policy_text.strip(),
-        },
+            "server": server,
+            "port": port,
+            "login": login,
+            "passcode": passcode,
+        }
     )
-    context = _section_template_context(request, current_user, "igate", flash=None if success else error)
-    return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+    context = _igate_settings_page_context(
+        request,
+        current_user,
+        flash="APRS-IS settings updated." if success else error,
+        flash_success=success,
+    )
+    return templates.TemplateResponse("igate_settings.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.get("/digi")
@@ -1017,16 +1048,12 @@ def digi_flows_page(
     success: int = 0,
 ) -> object:
     templates = request.app.state.templates
-    aprsis_runtime = get_aprsis_runtime_status()
     context = build_template_context(
         request,
         page_title="Packet Routing",
         current_user=current_user,
         active_nav="digi-flows",
         flows=list_digi_flows(),
-        aprsis_config=get_aprsis_config(),
-        aprsis_runtime=aprsis_runtime,
-        aprsis_runtime_badge=aprsis_runtime_badge(aprsis_runtime.get("status", "")),
         can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=bool(success),
@@ -1053,11 +1080,11 @@ def digi_flows_aprsis_config_update(
     )
     if not success:
         return RedirectResponse(
-            url=_path(request, f"/digi-flows?flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0"),
+            url=_path(request, f"/igate?flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0"),
             status_code=status.HTTP_303_SEE_OTHER,
         )
     return RedirectResponse(
-        url=_path(request, "/digi-flows?flash=APRS-IS%20settings%20updated.&success=1"),
+        url=_path(request, "/igate?flash=APRS-IS%20settings%20updated.&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

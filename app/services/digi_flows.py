@@ -128,10 +128,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Strict Filter",
         "badge": "Rule",
-        "description": "Rejects frames when the path contains TCP, NOGATE or RFONLY.",
+        "description": "Rejects frames with blocked routing tokens and invalid third-party encapsulation for APRS-IS uplink.",
         "editor_help_lines": (
-            "Use this when the flow must never process packets marked TCP, NOGATE or RFONLY.",
-            "The whole path is inspected. If any blocked token is present, the packet is rejected immediately.",
+            "This system guard rejects packets containing TCPIP, TCPXX, NOGATE or RFONLY in the outer path.",
+            "For third-party packets, the inner header/path is validated and rejected when malformed.",
+            "Valid third-party packets are inspected for blocked tokens in the inner path as well.",
         ),
         "config_fields": (),
     },
@@ -632,7 +633,7 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         no_trace_paths = config.get("no_trace_paths") or []
         return f"Allow only, paths: {len(trace_paths) + len(no_trace_paths)}"
     if step_type == "filter_strict":
-        return "Rejects TCP, NOGATE, RFONLY"
+        return _t("Rejects TCPIP/TCPXX, NOGATE/RFONLY and invalid third-party packets")
     if step_type == "filter_direct_only":
         return _t("Passes only direct packets")
     if step_type == "filter_callsign":
