@@ -1009,6 +1009,21 @@ def igate_settings_update(
     return templates.TemplateResponse("igate_settings.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
+@router.get("/api/igate/diagnostics")
+def igate_diagnostics_api(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    runtime = get_aprsis_runtime_status()
+    return JSONResponse(
+        {
+            "runtime": runtime,
+            "runtime_badge": aprsis_runtime_badge(runtime.get("status", "")),
+            "config": get_aprsis_config(),
+            "diagnostics": get_aprsis_diagnostics(),
+        }
+    )
+
+
 @router.get("/digi")
 def digi_page(
     request: Request,

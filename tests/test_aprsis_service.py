@@ -58,6 +58,8 @@ class AprsisDiagnosticsTests(unittest.TestCase):
             flow_id = insert_tx_aprsis_flow(name="APRSIS-1", enabled=1)
             insert_tx_aprsis_flow(name="APRSIS-disabled", enabled=0)
             now = utc_now()
+            last_sent_line = "SQ9MDD-4>APRS,WIDE1-1:>TX SAMPLE"
+            last_blocked_line = "SP8ABC-9>APRS,TCPIP*:>BLOCKED SAMPLE"
 
             persist_aprsis_runtime_status(
                 status="connected",
@@ -69,6 +71,13 @@ class AprsisDiagnosticsTests(unittest.TestCase):
                 last_error=None,
             )
 
+            execute(
+                """
+                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
+                VALUES (?, ?, NULL, 'frame_received', 'accepted', ?, ?)
+                """,
+                ("tx-1", flow_id, f"Frame accepted from receiver_rf:RF-APRSIS-1 | line={last_sent_line}", now),
+            )
             execute(
                 """
                 INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
@@ -103,6 +112,13 @@ class AprsisDiagnosticsTests(unittest.TestCase):
                 VALUES (?, ?, NULL, 'strict_filter', 'rejected', 'Strict filter rejected frame because third-party encapsulation is malformed or invalid.', ?)
                 """,
                 ("strict-malformed", flow_id, now),
+            )
+            execute(
+                """
+                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
+                VALUES (?, ?, NULL, 'frame_received', 'accepted', ?, ?)
+                """,
+                ("strict-other", flow_id, f"Frame accepted from receiver_rf:RF-APRSIS-1 | line={last_blocked_line}", now),
             )
             execute(
                 """
@@ -142,6 +158,7 @@ class AprsisDiagnosticsTests(unittest.TestCase):
             self.assertEqual(diagnostics["tx"]["drop_24h"], 1)
             self.assertEqual(diagnostics["tx"]["last_sent_frame_uid"], "tx-1")
             self.assertEqual(diagnostics["tx"]["last_drop_frame_uid"], "drop-1")
+            self.assertEqual(diagnostics["tx"]["last_sent_frame_line"], last_sent_line)
 
             self.assertEqual(diagnostics["strict_rejects"]["total"], 4)
             self.assertEqual(diagnostics["strict_rejects"]["last_1h"], 4)
@@ -150,6 +167,9 @@ class AprsisDiagnosticsTests(unittest.TestCase):
             self.assertEqual(diagnostics["strict_rejects"]["last_24h_blocked_nogate_rfonly"], 1)
             self.assertEqual(diagnostics["strict_rejects"]["last_24h_malformed_third_party"], 1)
             self.assertEqual(diagnostics["strict_rejects"]["last_24h_other"], 1)
+            self.assertEqual(diagnostics["strict_rejects"]["last_rejected_frame_uid"], "strict-other")
+            self.assertEqual(diagnostics["strict_rejects"]["last_rejected_frame_line"], last_blocked_line)
+            self.assertEqual(diagnostics["strict_rejects"]["last_rejected_reason"], "Strict filter rejected frame because policy scope is blocked.")
 
             self.assertEqual(diagnostics["reconnects"]["total"], 1)
             self.assertEqual(diagnostics["reconnects"]["last_24h"], 1)

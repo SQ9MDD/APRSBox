@@ -290,6 +290,36 @@ def _row_value(row: Any, key: str, default: Any = None) -> Any:
         return default
 
 
+def _extract_line_from_event_message(message: Any) -> str:
+    text = str(message or "")
+    marker = "| line="
+    marker_index = text.find(marker)
+    if marker_index < 0:
+        return ""
+    return text[marker_index + len(marker) :]
+
+
+def _frame_line_for_uid(connection: Any, frame_uid: str | None) -> str | None:
+    normalized_uid = str(frame_uid or "").strip()
+    if not normalized_uid:
+        return None
+    row = connection.execute(
+        """
+        SELECT l.message
+        FROM digi_flow_event_log l
+        JOIN digi_flows f ON f.id = l.flow_id
+        WHERE f.target_kind = 'tx_aprsis'
+          AND l.frame_uid = ?
+          AND l.message LIKE '%| line=%'
+        ORDER BY l.id DESC
+        LIMIT 1
+        """,
+        (normalized_uid,),
+    ).fetchone()
+    line = _extract_line_from_event_message(_row_value(row, "message", ""))
+    return line or None
+
+
 def get_aprsis_diagnostics() -> dict[str, Any]:
     now_ts = datetime.now(timezone.utc)
     start_1h = (now_ts - timedelta(hours=1)).replace(microsecond=0).isoformat()
@@ -408,6 +438,18 @@ def get_aprsis_diagnostics() -> dict[str, Any]:
             LIMIT 1
             """
         ).fetchone()
+        last_strict_reject_row = connection.execute(
+            """
+            SELECT l.frame_uid, l.created_at, l.message
+            FROM digi_flow_event_log l
+            JOIN digi_flows f ON f.id = l.flow_id
+            WHERE f.target_kind = 'tx_aprsis'
+              AND l.event_type = 'strict_filter'
+              AND l.decision = 'rejected'
+            ORDER BY l.id DESC
+            LIMIT 1
+            """
+        ).fetchone()
 
         connect_events_row = connection.execute(
             """
@@ -420,6 +462,10 @@ def get_aprsis_diagnostics() -> dict[str, Any]:
             """,
             (start_24h,),
         ).fetchone()
+
+        last_sent_frame_line = _frame_line_for_uid(connection, _row_value(last_tx_row, "frame_uid", None))
+        last_drop_frame_line = _frame_line_for_uid(connection, _row_value(last_drop_row, "frame_uid", None))
+        last_strict_reject_frame_line = _frame_line_for_uid(connection, _row_value(last_strict_reject_row, "frame_uid", None))
         warning_events_row = connection.execute(
             """
             SELECT
@@ -451,8 +497,10 @@ def get_aprsis_diagnostics() -> dict[str, Any]:
             "drop_24h": int(_row_value(tx_stats_row, "drop_24h", 0) or 0),
             "last_sent_at": str(_row_value(last_tx_row, "created_at", "") or "") or None,
             "last_sent_frame_uid": str(_row_value(last_tx_row, "frame_uid", "") or "") or None,
+            "last_sent_frame_line": last_sent_frame_line,
             "last_drop_at": str(_row_value(last_drop_row, "created_at", "") or "") or None,
             "last_drop_frame_uid": str(_row_value(last_drop_row, "frame_uid", "") or "") or None,
+            "last_drop_frame_line": last_drop_frame_line,
         },
         "strict_rejects": {
             "total": int(_row_value(tx_stats_row, "strict_total", 0) or 0),
@@ -462,6 +510,10 @@ def get_aprsis_diagnostics() -> dict[str, Any]:
             "last_24h_blocked_nogate_rfonly": strict_rfonly,
             "last_24h_malformed_third_party": strict_malformed,
             "last_24h_other": strict_other,
+            "last_rejected_at": str(_row_value(last_strict_reject_row, "created_at", "") or "") or None,
+            "last_rejected_frame_uid": str(_row_value(last_strict_reject_row, "frame_uid", "") or "") or None,
+            "last_rejected_reason": str(_row_value(last_strict_reject_row, "message", "") or "") or None,
+            "last_rejected_frame_line": last_strict_reject_frame_line,
         },
         "reconnects": {
             "total": int(_row_value(connect_events_row, "reconnect_total", 0) or 0),
