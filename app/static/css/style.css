@@ -185,6 +185,8 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--panel-alt);
+    justify-items: center;
+    text-align: center;
 }
 
 .sidebar-utc-clock-label {
@@ -201,10 +203,12 @@ body {
     color: var(--text);
     font-variant-numeric: tabular-nums;
     font-family: "Space Grotesk", "JetBrains Mono", monospace;
+    justify-items: center;
+    width: 100%;
 }
 
 .sidebar-utc-clock-time {
-    font-size: 1.16rem;
+    font-size: 1.34rem;
     font-weight: 700;
     white-space: nowrap;
 }
