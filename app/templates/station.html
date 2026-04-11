@@ -19,23 +19,19 @@
         opacity: 0.82;
     }
 
-    .beacon-comment-label-row {
+    .beacon-comment-input-row {
         display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: var(--space-2);
-    }
-
-    .beacon-comment-label-copy {
-        display: inline-flex;
         align-items: center;
-        flex-wrap: wrap;
-        gap: 0.25rem;
+        gap: var(--space-2);
         min-width: 0;
     }
 
+    .beacon-comment-input {
+        width: min(100%, 17rem);
+    }
+
     .beacon-phg-button {
-        margin-left: auto;
+        flex: 0 0 auto;
     }
 
     .phg-generator-modal[hidden] {
@@ -107,6 +103,10 @@
     }
 
     @media (max-width: 640px) {
+        .beacon-comment-input {
+            width: 100%;
+        }
+
         .phg-generator-grid {
             grid-template-columns: 1fr;
         }
@@ -152,11 +152,19 @@
                         </select>
                     </label>
                     <label>
-                        <span class="beacon-comment-label-row">
-                            <span class="beacon-comment-label-copy">
-                                {{ t("Beacon Comment") }}
-                                <small class="muted field-counter-inline" id="beacon-comment-counter" aria-live="polite">(0 / {{ beacon_comment_max }})</small>
-                            </span>
+                        <span>
+                            {{ t("Beacon Comment") }}
+                            <small class="muted field-counter-inline" id="beacon-comment-counter" aria-live="polite">(0 / {{ beacon_comment_max }})</small>
+                        </span>
+                        <div class="beacon-comment-input-row">
+                            <input
+                                type="text"
+                                class="beacon-comment-input"
+                                name="beacon_comment"
+                                value="{{ station.beacon_comment }}"
+                                maxlength="{{ beacon_comment_max }}"
+                                data-maxlength-counter="beacon-comment-counter"
+                            >
                             <button
                                 type="button"
                                 class="sidebar-action-button beacon-phg-button"
@@ -166,14 +174,7 @@
                             >
                                 <img src="{{ request.scope.root_path }}/static/icons/calculator.svg" alt="">
                             </button>
-                        </span>
-                        <input
-                            type="text"
-                            name="beacon_comment"
-                            value="{{ station.beacon_comment }}"
-                            maxlength="{{ beacon_comment_max }}"
-                            data-maxlength-counter="beacon-comment-counter"
-                        >
+                        </div>
                     </label>
                     <label>
                         <span>{{ t("Beacon at every") }}</span>
