@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import Request
 
 from app import get_version
+from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
 from app.services.messages import get_unread_inbox_count
 
@@ -68,5 +69,6 @@ def build_template_context(
         "navigation": navigation,
         "t": translate,
         "tf": translate_format,
+        "format_datetime": format_display_datetime,
         **extra,
     }

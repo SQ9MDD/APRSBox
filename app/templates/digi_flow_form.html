@@ -1201,7 +1201,12 @@
             if (Number.isNaN(parsed.getTime())) {
                 return escapeHtml(value);
             }
-            return escapeHtml(parsed.toISOString().replace("T", " ").replace(".000Z", " UTC"));
+            const year = parsed.getUTCFullYear();
+            const month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+            const day = String(parsed.getUTCDate()).padStart(2, "0");
+            const hour = String(parsed.getUTCHours()).padStart(2, "0");
+            const minute = String(parsed.getUTCMinutes()).padStart(2, "0");
+            return `${year}.${month}.${day} ${hour}:${minute}`;
         };
 
         const executionBadgeClass = (result) => {

@@ -290,14 +290,14 @@
             <dt>{{ t("Active source") }}</dt>
             <dd>{{ t(aprs_device_identification_status.active_source_label) }}</dd>
             <dt>{{ t("Generation time") }}</dt>
-            <dd><code>{{ aprs_device_identification_status.generation_time or t("Unknown") }}</code></dd>
+            <dd><code>{{ format_datetime(aprs_device_identification_status.generation_time, use_utc=True) or t("Unknown") }}</code></dd>
             <dt>{{ t("Last successful update") }}</dt>
-            <dd><code>{{ aprs_device_identification_status.last_success_at or t("Never") }}</code></dd>
+            <dd><code>{{ format_datetime(aprs_device_identification_status.last_success_at, use_utc=True) or t("Never") }}</code></dd>
             <dt>{{ t("Local cache") }}</dt>
             <dd>{{ t("Available") if aprs_device_identification_status.cache_exists else t("Missing") }}</dd>
             {% if aprs_device_identification_status.cache_updated_at %}
             <dt>{{ t("Local cache updated") }}</dt>
-            <dd><code>{{ aprs_device_identification_status.cache_updated_at }}</code></dd>
+            <dd><code>{{ format_datetime(aprs_device_identification_status.cache_updated_at, use_utc=True) }}</code></dd>
             {% endif %}
             {% if aprs_device_identification_status.last_error %}
             <dt>{{ t("Last update error") }}</dt>
