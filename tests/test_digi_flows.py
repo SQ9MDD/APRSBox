@@ -595,6 +595,64 @@ class DigiFlowsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be the first filter step"):
                 normalize_digi_flow_payload(payload)
 
+    def test_duplicate_filter_can_be_used_only_once_in_flow(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 5},
+            },
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 6},
+            },
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "can be used only once"):
+                normalize_digi_flow_payload(payload)
+
+    def test_duplicate_filter_must_be_first_filter_step(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_callsign",
+                "title": "Callsign Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "callsigns": ["SP8ABC-9"]},
+            },
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 5},
+            },
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "must be the first filter step"):
+                normalize_digi_flow_payload(payload)
+
     def test_rf_target_does_not_require_strict_filter(self) -> None:
         payload = sample_flow_payload()
         payload["target_kind"] = "tx_rf"
