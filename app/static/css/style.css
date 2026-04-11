@@ -195,11 +195,23 @@ body {
 }
 
 .sidebar-utc-clock-value {
-    font-size: 0.82rem;
-    line-height: 1.2;
+    display: grid;
+    gap: 0.08rem;
+    line-height: 1.1;
     color: var(--text);
     font-variant-numeric: tabular-nums;
     font-family: "Space Grotesk", "JetBrains Mono", monospace;
+}
+
+.sidebar-utc-clock-time {
+    font-size: 1.16rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.sidebar-utc-clock-date {
+    font-size: 0.78rem;
+    color: var(--muted);
     white-space: nowrap;
 }
 

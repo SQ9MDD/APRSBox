@@ -89,7 +89,10 @@
         </nav>
         <div class="sidebar-utc-clock" id="sidebar-utc-clock">
             <div class="sidebar-utc-clock-label">{{ t("UTC Clock") }}</div>
-            <div class="sidebar-utc-clock-value" id="sidebar-utc-clock-value">0000.00.00 00:00:00</div>
+            <div class="sidebar-utc-clock-value">
+                <span class="sidebar-utc-clock-time" id="sidebar-utc-clock-time">00:00:00</span>
+                <span class="sidebar-utc-clock-date" id="sidebar-utc-clock-date">0000.00.00</span>
+            </div>
         </div>
         <div class="sidebar-footer">
             <div class="muted">{{ t("Version") }} {{ app_version }}</div>
@@ -179,8 +182,9 @@
             });
         })();
         (() => {
-            const utcClockValue = document.getElementById("sidebar-utc-clock-value");
-            if (!(utcClockValue instanceof HTMLElement)) return;
+            const utcClockTime = document.getElementById("sidebar-utc-clock-time");
+            const utcClockDate = document.getElementById("sidebar-utc-clock-date");
+            if (!(utcClockTime instanceof HTMLElement) || !(utcClockDate instanceof HTMLElement)) return;
 
             const pad = (value) => String(value).padStart(2, "0");
             let timerId = null;
@@ -193,7 +197,8 @@
                 const hour = pad(now.getUTCHours());
                 const minute = pad(now.getUTCMinutes());
                 const second = pad(now.getUTCSeconds());
-                utcClockValue.textContent = `${year}.${month}.${day} ${hour}:${minute}:${second}`;
+                utcClockTime.textContent = `${hour}:${minute}:${second}`;
+                utcClockDate.textContent = `${year}.${month}.${day}`;
             };
 
             const scheduleNextTick = () => {
