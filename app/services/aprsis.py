@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import re
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app import get_version
@@ -250,6 +251,225 @@ def get_aprsis_runtime_status() -> dict[str, Any]:
         "connected_at": str(row["connected_at"] or "") or None,
         "last_error": str(row["last_error"] or "") or None,
         "updated_at": str(row["updated_at"] or "") or None,
+    }
+
+
+def _parse_iso_timestamp(value: str | None) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        timestamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc)
+
+
+def _format_uptime_label(connected_at: str | None) -> str:
+    connected_ts = _parse_iso_timestamp(connected_at)
+    if connected_ts is None:
+        return "-"
+    delta = datetime.now(timezone.utc) - connected_ts
+    total_seconds = max(0, int(delta.total_seconds()))
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days > 0:
+        return f"{days}d {hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _row_value(row: Any, key: str, default: Any = None) -> Any:
+    if row is None:
+        return default
+    try:
+        return row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
+def get_aprsis_diagnostics() -> dict[str, Any]:
+    now_ts = datetime.now(timezone.utc)
+    start_1h = (now_ts - timedelta(hours=1)).replace(microsecond=0).isoformat()
+    start_24h = (now_ts - timedelta(hours=24)).replace(microsecond=0).isoformat()
+    runtime = get_aprsis_runtime_status()
+
+    with get_connection() as connection:
+        active_flow_row = connection.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM digi_flows
+            WHERE enabled = 1
+              AND target_kind = 'tx_aprsis'
+            """
+        ).fetchone()
+        active_flows = connection.execute(
+            """
+            SELECT id, name
+            FROM digi_flows
+            WHERE enabled = 1
+              AND target_kind = 'tx_aprsis'
+            ORDER BY updated_at DESC, id DESC
+            """
+        ).fetchall()
+
+        tx_stats_row = connection.execute(
+            """
+            SELECT
+                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' THEN 1 ELSE 0 END) AS tx_total,
+                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' AND l.created_at >= ? THEN 1 ELSE 0 END) AS tx_1h,
+                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'tx' AND l.created_at >= ? THEN 1 ELSE 0 END) AS tx_24h,
+                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' THEN 1 ELSE 0 END) AS drop_total,
+                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' AND l.created_at >= ? THEN 1 ELSE 0 END) AS drop_1h,
+                SUM(CASE WHEN l.event_type = 'output_action' AND l.decision = 'drop' AND l.created_at >= ? THEN 1 ELSE 0 END) AS drop_24h,
+                SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' THEN 1 ELSE 0 END) AS strict_total,
+                SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' AND l.created_at >= ? THEN 1 ELSE 0 END) AS strict_1h,
+                SUM(CASE WHEN l.event_type = 'strict_filter' AND l.decision = 'rejected' AND l.created_at >= ? THEN 1 ELSE 0 END) AS strict_24h
+            FROM digi_flow_event_log l
+            JOIN digi_flows f ON f.id = l.flow_id
+            WHERE f.target_kind = 'tx_aprsis'
+            """,
+            (start_1h, start_24h, start_1h, start_24h, start_1h, start_24h),
+        ).fetchone()
+
+        strict_reasons_row = connection.execute(
+            """
+            SELECT
+                SUM(
+                    CASE
+                        WHEN l.created_at >= ?
+                         AND l.event_type = 'strict_filter'
+                         AND l.decision = 'rejected'
+                         AND (UPPER(l.message) LIKE '%TCPIP%' OR UPPER(l.message) LIKE '%TCPXX%')
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS blocked_tcp,
+                SUM(
+                    CASE
+                        WHEN l.created_at >= ?
+                         AND l.event_type = 'strict_filter'
+                         AND l.decision = 'rejected'
+                         AND (UPPER(l.message) LIKE '%NOGATE%' OR UPPER(l.message) LIKE '%RFONLY%')
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS blocked_rfonly,
+                SUM(
+                    CASE
+                        WHEN l.created_at >= ?
+                         AND l.event_type = 'strict_filter'
+                         AND l.decision = 'rejected'
+                         AND UPPER(l.message) LIKE '%MALFORMED OR INVALID%'
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS malformed_third_party
+            FROM digi_flow_event_log l
+            JOIN digi_flows f ON f.id = l.flow_id
+            WHERE f.target_kind = 'tx_aprsis'
+            """,
+            (start_24h, start_24h, start_24h),
+        ).fetchone()
+
+        last_tx_row = connection.execute(
+            """
+            SELECT l.frame_uid, l.created_at
+            FROM digi_flow_event_log l
+            JOIN digi_flows f ON f.id = l.flow_id
+            WHERE f.target_kind = 'tx_aprsis'
+              AND l.event_type = 'output_action'
+              AND l.decision = 'tx'
+            ORDER BY l.id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        last_drop_row = connection.execute(
+            """
+            SELECT l.frame_uid, l.created_at
+            FROM digi_flow_event_log l
+            JOIN digi_flows f ON f.id = l.flow_id
+            WHERE f.target_kind = 'tx_aprsis'
+              AND l.event_type = 'output_action'
+              AND l.decision = 'drop'
+            ORDER BY l.id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        last_activity_row = connection.execute(
+            """
+            SELECT l.created_at
+            FROM digi_flow_event_log l
+            JOIN digi_flows f ON f.id = l.flow_id
+            WHERE f.target_kind = 'tx_aprsis'
+            ORDER BY l.id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+        connect_events_row = connection.execute(
+            """
+            SELECT
+                SUM(CASE WHEN message LIKE 'Connected APRS-IS uplink to %' THEN 1 ELSE 0 END) AS reconnect_total,
+                SUM(CASE WHEN message LIKE 'Connected APRS-IS uplink to %' AND created_at >= ? THEN 1 ELSE 0 END) AS reconnect_24h,
+                MAX(CASE WHEN message LIKE 'Connected APRS-IS uplink to %' THEN created_at ELSE NULL END) AS last_connect_at
+            FROM event_logs
+            WHERE category = 'aprsis'
+            """,
+            (start_24h,),
+        ).fetchone()
+        warning_events_row = connection.execute(
+            """
+            SELECT
+                SUM(CASE WHEN level = 'WARNING' THEN 1 ELSE 0 END) AS warning_total,
+                SUM(CASE WHEN level = 'WARNING' AND created_at >= ? THEN 1 ELSE 0 END) AS warning_24h
+            FROM event_logs
+            WHERE category = 'aprsis'
+            """,
+            (start_24h,),
+        ).fetchone()
+
+    strict_24h_total = int(_row_value(tx_stats_row, "strict_24h", 0) or 0)
+    strict_tcp = int(_row_value(strict_reasons_row, "blocked_tcp", 0) or 0)
+    strict_rfonly = int(_row_value(strict_reasons_row, "blocked_rfonly", 0) or 0)
+    strict_malformed = int(_row_value(strict_reasons_row, "malformed_third_party", 0) or 0)
+    strict_other = max(0, strict_24h_total - strict_tcp - strict_rfonly - strict_malformed)
+
+    return {
+        "active_flow_count": int(_row_value(active_flow_row, "total", 0) or 0),
+        "active_flow_names": [str(row["name"]) for row in active_flows if row and row["name"]],
+        "session_uptime": _format_uptime_label(runtime.get("connected_at")),
+        "last_activity_at": str(_row_value(last_activity_row, "created_at", "") or "") or None,
+        "tx": {
+            "sent_total": int(_row_value(tx_stats_row, "tx_total", 0) or 0),
+            "sent_1h": int(_row_value(tx_stats_row, "tx_1h", 0) or 0),
+            "sent_24h": int(_row_value(tx_stats_row, "tx_24h", 0) or 0),
+            "drop_total": int(_row_value(tx_stats_row, "drop_total", 0) or 0),
+            "drop_1h": int(_row_value(tx_stats_row, "drop_1h", 0) or 0),
+            "drop_24h": int(_row_value(tx_stats_row, "drop_24h", 0) or 0),
+            "last_sent_at": str(_row_value(last_tx_row, "created_at", "") or "") or None,
+            "last_sent_frame_uid": str(_row_value(last_tx_row, "frame_uid", "") or "") or None,
+            "last_drop_at": str(_row_value(last_drop_row, "created_at", "") or "") or None,
+            "last_drop_frame_uid": str(_row_value(last_drop_row, "frame_uid", "") or "") or None,
+        },
+        "strict_rejects": {
+            "total": int(_row_value(tx_stats_row, "strict_total", 0) or 0),
+            "last_1h": int(_row_value(tx_stats_row, "strict_1h", 0) or 0),
+            "last_24h": strict_24h_total,
+            "last_24h_blocked_tcpip_tcpxx": strict_tcp,
+            "last_24h_blocked_nogate_rfonly": strict_rfonly,
+            "last_24h_malformed_third_party": strict_malformed,
+            "last_24h_other": strict_other,
+        },
+        "reconnects": {
+            "total": int(_row_value(connect_events_row, "reconnect_total", 0) or 0),
+            "last_24h": int(_row_value(connect_events_row, "reconnect_24h", 0) or 0),
+            "last_connected_at": str(_row_value(connect_events_row, "last_connect_at", "") or "") or None,
+            "warning_total": int(_row_value(warning_events_row, "warning_total", 0) or 0),
+            "warning_24h": int(_row_value(warning_events_row, "warning_24h", 0) or 0),
+        },
     }
 
 

@@ -128,7 +128,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Strict Filter",
         "badge": "Rule",
-        "description": "Rejects frames with blocked routing tokens and invalid third-party encapsulation for APRS-IS uplink.",
+        "description": "Rejects TCPIP/TCPXX, NOGATE/RFONLY and invalid third-party packets",
         "editor_help_lines": (
             "This system guard rejects packets containing TCPIP, TCPXX, NOGATE or RFONLY in the outer path.",
             "For third-party packets, the inner header/path is validated and rejected when malformed.",

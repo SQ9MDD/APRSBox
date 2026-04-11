@@ -81,6 +81,7 @@ from app.services.band_condition import (
 from app.services.aprsis import (
     aprsis_runtime_badge,
     get_aprsis_config,
+    get_aprsis_diagnostics,
     get_aprsis_runtime_status,
     safe_save_aprsis_config,
 )
@@ -262,6 +263,7 @@ def _igate_settings_page_context(
     flash_success: bool = False,
 ) -> dict[str, object]:
     aprsis_runtime = get_aprsis_runtime_status()
+    aprsis_diagnostics = get_aprsis_diagnostics()
     return build_template_context(
         request,
         page_title="iGATE settings",
@@ -269,6 +271,7 @@ def _igate_settings_page_context(
         active_nav="igate",
         aprsis_config=get_aprsis_config(),
         aprsis_runtime=aprsis_runtime,
+        aprsis_diagnostics=aprsis_diagnostics,
         aprsis_runtime_badge=aprsis_runtime_badge(aprsis_runtime.get("status", "")),
         can_edit=current_user.role in {"admin", "operator"},
         flash=flash,

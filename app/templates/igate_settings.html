@@ -44,6 +44,120 @@
                 </tbody>
             </table>
         </div>
+        {% set diag = aprsis_diagnostics %}
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h3>{{ t("iGATE diagnostics") }}</h3>
+                <p class="section-lead">{{ t("Live runtime counters for APRS-IS uplink activity and strict guard decisions.") }}</p>
+                <p class="muted small">{{ t("Strict APRS-IS guard rejects paths with TCPIP/TCPXX or NOGATE/RFONLY and rejects malformed third-party encapsulation.") }}</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table">
+                <tbody>
+                    <tr>
+                        <th>{{ t("Active APRSIS routing flows") }}</th>
+                        <td>{{ diag.active_flow_count }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Enabled APRSIS flow names") }}</th>
+                        <td>
+                            {% if diag.active_flow_names %}
+                            <code>{{ diag.active_flow_names|join(", ") }}</code>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Session uptime") }}</th>
+                        <td>{{ diag.session_uptime or "-" }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Last routing activity") }}</th>
+                        <td>{{ format_datetime(diag.last_activity_at) if diag.last_activity_at else "-" }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Last APRS-IS connect event") }}</th>
+                        <td>{{ format_datetime(diag.reconnects.last_connected_at) if diag.reconnects.last_connected_at else "-" }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Reconnects (total / 24h)") }}</th>
+                        <td>{{ diag.reconnects.total }} / {{ diag.reconnects.last_24h }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Warnings (total / 24h)") }}</th>
+                        <td>{{ diag.reconnects.warning_total }} / {{ diag.reconnects.warning_24h }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table">
+                <tbody>
+                    <tr>
+                        <th>{{ t("Frames sent to APRS-IS (total / 1h / 24h)") }}</th>
+                        <td>{{ diag.tx.sent_total }} / {{ diag.tx.sent_1h }} / {{ diag.tx.sent_24h }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Frames dropped before APRS-IS TX (total / 1h / 24h)") }}</th>
+                        <td>{{ diag.tx.drop_total }} / {{ diag.tx.drop_1h }} / {{ diag.tx.drop_24h }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Last sent frame") }}</th>
+                        <td>
+                            {% if diag.tx.last_sent_at %}
+                            {{ format_datetime(diag.tx.last_sent_at) }}
+                            {% if diag.tx.last_sent_frame_uid %}
+                            <span class="muted small">({{ t("Frame UID") }}: <code>{{ diag.tx.last_sent_frame_uid }}</code>)</span>
+                            {% endif %}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Last dropped frame") }}</th>
+                        <td>
+                            {% if diag.tx.last_drop_at %}
+                            {{ format_datetime(diag.tx.last_drop_at) }}
+                            {% if diag.tx.last_drop_frame_uid %}
+                            <span class="muted small">({{ t("Frame UID") }}: <code>{{ diag.tx.last_drop_frame_uid }}</code>)</span>
+                            {% endif %}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table">
+                <tbody>
+                    <tr>
+                        <th>{{ t("Strict guard rejects (total / 1h / 24h)") }}</th>
+                        <td>{{ diag.strict_rejects.total }} / {{ diag.strict_rejects.last_1h }} / {{ diag.strict_rejects.last_24h }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Blocked TCPIP/TCPXX (24h)") }}</th>
+                        <td>{{ diag.strict_rejects.last_24h_blocked_tcpip_tcpxx }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Blocked NOGATE/RFONLY (24h)") }}</th>
+                        <td>{{ diag.strict_rejects.last_24h_blocked_nogate_rfonly }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Malformed third-party rejects (24h)") }}</th>
+                        <td>{{ diag.strict_rejects.last_24h_malformed_third_party }}</td>
+                    </tr>
+                    <tr>
+                        <th>{{ t("Other strict rejects (24h)") }}</th>
+                        <td>{{ diag.strict_rejects.last_24h_other }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
         {% if can_edit %}
         <form method="post" action="{{ request.scope.root_path }}/igate" class="form-stack">
             <div class="form-grid">
