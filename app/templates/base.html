@@ -66,6 +66,13 @@
                 </form>
             </div>
         </div>
+        <div class="sidebar-utc-clock" id="sidebar-utc-clock">
+            <div class="sidebar-utc-clock-label">{{ t("UTC") }}</div>
+            <div class="sidebar-utc-clock-value">
+                <span class="sidebar-utc-clock-time" id="sidebar-utc-clock-time">00:00:00</span>
+                <span class="sidebar-utc-clock-date" id="sidebar-utc-clock-date">0000.00.00</span>
+            </div>
+        </div>
         <nav class="nav-list">
             {% for item in navigation %}
             {% if item.separator %}
@@ -87,13 +94,6 @@
             {% endif %}
             {% endfor %}
         </nav>
-        <div class="sidebar-utc-clock" id="sidebar-utc-clock">
-            <div class="sidebar-utc-clock-label">{{ t("UTC Clock") }}</div>
-            <div class="sidebar-utc-clock-value">
-                <span class="sidebar-utc-clock-time" id="sidebar-utc-clock-time">00:00:00</span>
-                <span class="sidebar-utc-clock-date" id="sidebar-utc-clock-date">0000.00.00</span>
-            </div>
-        </div>
         <div class="sidebar-footer">
             <div class="muted">{{ t("Version") }} {{ app_version }}</div>
             <div class="muted">{{ t("Copyright SQ9MDD") }}</div>
