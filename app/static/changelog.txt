@@ -1,3 +1,0 @@
-Version: 1.4.40
-    - dodanie changeloga
-    - poprawki w wyświetlaniu opisów filtra STRICT

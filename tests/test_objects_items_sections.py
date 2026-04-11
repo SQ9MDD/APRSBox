@@ -470,8 +470,9 @@ class BulletinAndMessageFormTests(unittest.TestCase):
     def test_igate_template_includes_realtime_diagnostics_bindings(self) -> None:
         template_source = Path("app/templates/igate_settings.html").read_text(encoding="utf-8")
         self.assertIn("api/igate/diagnostics", template_source)
-        self.assertIn('id="igate-diag-last-sent-line"', template_source)
-        self.assertIn('id="igate-diag-last-strict-line"', template_source)
+        self.assertNotIn('id="igate-diag-last-sent-line"', template_source)
+        self.assertNotIn('id="igate-diag-last-strict-line"', template_source)
+        self.assertIn('id="igate-diag-tx-sent"', template_source)
         self.assertIn('id="igate-runtime-label"', template_source)
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('@router.get("/api/igate/diagnostics")', router_source)

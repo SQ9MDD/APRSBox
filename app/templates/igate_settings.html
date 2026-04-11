@@ -97,21 +97,6 @@
                         <th>{{ t("Frames dropped before APRS-IS TX (total / 1h / 24h)") }}</th>
                         <td id="igate-diag-tx-drop">{{ diag.tx.drop_total }} / {{ diag.tx.drop_1h }} / {{ diag.tx.drop_24h }}</td>
                     </tr>
-                    <tr>
-                        <th>{{ t("Last sent frame") }}</th>
-                        <td>
-                            <div id="igate-diag-last-sent-at">{% if diag.tx.last_sent_at %}{{ format_datetime(diag.tx.last_sent_at) }}{% else %}-{% endif %}</div>
-                            <div class="muted small">{{ t("Raw frame") }}: <code id="igate-diag-last-sent-line">{{ diag.tx.last_sent_frame_line or "-" }}</code></div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Last strict blocked frame") }}</th>
-                        <td>
-                            <div id="igate-diag-last-strict-at">{% if diag.strict_rejects.last_rejected_at %}{{ format_datetime(diag.strict_rejects.last_rejected_at) }}{% else %}-{% endif %}</div>
-                            <div class="muted small">{{ t("Raw frame") }}: <code id="igate-diag-last-strict-line">{{ diag.strict_rejects.last_rejected_frame_line or "-" }}</code></div>
-                            <div class="muted small">{{ t("Reject reason") }}: <span id="igate-diag-last-strict-reason">{{ diag.strict_rejects.last_rejected_reason or "-" }}</span></div>
-                        </td>
-                    </tr>
                 </tbody>
             </table>
         </div>
@@ -264,12 +249,6 @@
 
         setCounterTriple("igate-diag-tx-sent", tx.sent_total, tx.sent_1h, tx.sent_24h);
         setCounterTriple("igate-diag-tx-drop", tx.drop_total, tx.drop_1h, tx.drop_24h);
-        setText("igate-diag-last-sent-at", renderDateTime(tx.last_sent_at));
-        setText("igate-diag-last-sent-line", tx.last_sent_frame_line || "-");
-
-        setText("igate-diag-last-strict-at", renderDateTime(strictRejects.last_rejected_at));
-        setText("igate-diag-last-strict-line", strictRejects.last_rejected_frame_line || "-");
-        setText("igate-diag-last-strict-reason", strictRejects.last_rejected_reason || "-");
 
         setCounterTriple("igate-diag-strict-total", strictRejects.total, strictRejects.last_1h, strictRejects.last_24h);
         setText("igate-diag-strict-tcp", String(Number(strictRejects.last_24h_blocked_tcpip_tcpxx || 0)));
