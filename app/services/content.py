@@ -1581,9 +1581,10 @@ def _parse_tnc2_line(line: str) -> dict[str, str] | None:
         "source": parsed["source"].strip(),
         "destination": parsed["destination"].strip(),
         "path": parsed["path"].strip(),
-        # Preserve trailing info-field spaces: compressed c/s/T can legally
-        # carry spaces and stripping them breaks fixed-offset decoding.
-        "info": parsed["info"].lstrip(),
+        # Preserve leading and trailing info-field spaces: compressed c/s/T
+        # can legally carry spaces and stripping them breaks fixed-offset
+        # decoding and packet integrity for forwarding paths.
+        "info": parsed["info"],
     }
 
 

@@ -8,7 +8,7 @@ from typing import Any
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
 
-SOURCE_STEP_TYPES = ("receiver_rf", "receiver_aprsis")
+SOURCE_STEP_TYPES = ("receiver_rf",)
 FILTER_STEP_TYPES = (
     "filter_path",
     "filter_strict",
@@ -40,7 +40,6 @@ DUPLICATE_FILTER_DEFAULT_WINDOW_SEC = 5
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_rf",
-    "receiver_aprsis",
     "filter_dupe",
     "filter_path",
     "filter_strict",
@@ -50,10 +49,11 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "filter_packet_type",
     "filter_icon",
     "tx_rf",
+    "tx_aprsis",
     "action_drop",
     "action_log",
 }
-RUNTIME_STUB_STEP_TYPES = {"tx_aprsis"}
+RUNTIME_STUB_STEP_TYPES: set[str] = set()
 
 STEP_TYPE_META: dict[str, dict[str, Any]] = {
     "receiver_rf": {
@@ -447,7 +447,7 @@ def _packet_type_filter_value_label(value: Any) -> str:
 
 
 def _flow_requires_path_rule(target_kind: str) -> bool:
-    return target_kind in {"tx_rf", "tx_aprsis"}
+    return target_kind == "tx_rf"
 
 
 def _has_enabled_step_type(steps: list[dict[str, Any]], step_type: str) -> bool:
@@ -456,6 +456,19 @@ def _has_enabled_step_type(steps: list[dict[str, Any]], step_type: str) -> bool:
 
 def _has_enabled_path_rule(steps: list[dict[str, Any]]) -> bool:
     return _has_enabled_step_type(steps, "filter_path")
+
+
+def _has_enabled_aprsis_strict_guard(steps: list[dict[str, Any]]) -> bool:
+    middle_steps = list(steps[1:-1])
+    if len(middle_steps) != 1:
+        return False
+    strict_step = middle_steps[0]
+    return strict_step.get("step_type") == "filter_strict" and int(strict_step.get("enabled") or 0) == 1
+
+
+def _reindex_steps(steps: list[dict[str, Any]]) -> None:
+    for index, step in enumerate(steps, start=1):
+        step["step_order"] = index
 
 
 def _default_step_title(step_type: str) -> str:
@@ -502,7 +515,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "tx_rf":
         return {"rf_target": ref_value}
     if step_type == "tx_aprsis":
-        return {"aprsis_target": ref_value}
+        return {"aprsis_target": ref_value or "aprsis"}
     if step_type == "action_drop":
         return {"note": ""}
     if step_type == "action_log":
@@ -586,10 +599,7 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
             raise ValueError(_t("TX RF step requires an RF Target value."))
         return {"rf_target": value}
     if step_type == "tx_aprsis":
-        value = _normalize_text(config.get("aprsis_target"))
-        if not value:
-            raise ValueError(_t("TX APRS-IS step requires an APRS-IS Target value."))
-        return {"aprsis_target": value}
+        return {"aprsis_target": _normalize_text(config.get("aprsis_target")) or "aprsis"}
     if step_type == "action_drop":
         return {"note": _normalize_text(config.get("note"))}
     if step_type == "action_log":
@@ -646,7 +656,7 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
     if step_type == "tx_rf":
         return f"RF target: {_normalize_text(config.get('rf_target')) or '-'}"
     if step_type == "tx_aprsis":
-        return f"APRS-IS target: {_normalize_text(config.get('aprsis_target')) or '-'}"
+        return "APRS-IS RX-only uplink"
     if step_type == "action_drop":
         note = _normalize_text(config.get("note"))
         return note or "Drop packet"
@@ -685,12 +695,10 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
 
 def get_digi_flow_reference_options() -> dict[str, list[str]]:
     rf_rows = fetch_all("SELECT name FROM modems ORDER BY name COLLATE NOCASE ASC, id ASC")
-    aprsis_rows = fetch_all("SELECT name FROM aprsis_servers ORDER BY name COLLATE NOCASE ASC, id ASC")
     return {
         "receiver_rf": [str(row["name"]) for row in rf_rows if row["name"]],
         "tx_rf": [str(row["name"]) for row in rf_rows if row["name"]],
-        "receiver_aprsis": [str(row["name"]) for row in aprsis_rows if row["name"]],
-        "tx_aprsis": [str(row["name"]) for row in aprsis_rows if row["name"]],
+        "tx_aprsis": ["aprsis"],
         "action_drop": ["drop"],
         "action_log": ["log-only"],
     }
@@ -702,36 +710,23 @@ def get_digi_flow_endpoint_options(
     current_flow_id: int | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     rf_rows = fetch_all("SELECT name FROM modems ORDER BY name COLLATE NOCASE ASC, id ASC")
-    aprsis_rows = fetch_all("SELECT name FROM aprsis_servers ORDER BY name COLLATE NOCASE ASC, id ASC")
     source_options = [
         {"value": f"receiver_rf::{row['name']}", "label": str(row["name"]), "kind": "receiver_rf", "ref": str(row["name"])}
         for row in rf_rows
         if row["name"]
     ]
-    source_options.extend(
-        {
-            "value": f"receiver_aprsis::{row['name']}",
-            "label": str(row["name"]),
-            "kind": "receiver_aprsis",
-            "ref": str(row["name"]),
-        }
-        for row in aprsis_rows
-        if row["name"]
-    )
     target_options = [
         {"value": f"tx_rf::{row['name']}", "label": str(row["name"]), "kind": "tx_rf", "ref": str(row["name"])}
         for row in rf_rows
         if row["name"]
     ]
-    target_options.extend(
+    target_options.append(
         {
-            "value": f"tx_aprsis::{row['name']}",
-            "label": str(row["name"]),
+            "value": "tx_aprsis::aprsis",
+            "label": _t("APRS-IS RX-only uplink"),
             "kind": "tx_aprsis",
-            "ref": str(row["name"]),
+            "ref": "aprsis",
         }
-        for row in aprsis_rows
-        if row["name"]
     )
     if str(selected_target_selector or "").strip() == "action_drop::drop":
         target_options.append({"value": "action_drop::drop", "label": _t("Drop"), "kind": "action_drop", "ref": "drop"})
@@ -770,6 +765,8 @@ def _serialize_flow_row(row: sqlite3.Row | dict[str, Any], steps: list[dict[str,
 def _flow_endpoint_display(kind: Any, ref: Any) -> str:
     normalized_kind = _normalize_text(kind)
     normalized_ref = _normalize_text(ref)
+    if normalized_kind == "tx_aprsis":
+        return _t("APRS-IS RX-only uplink")
     if normalized_kind == "action_log" and normalized_ref == "log-only":
         return _t("Black Hole")
     if normalized_kind == "action_drop" and normalized_ref == "drop":
@@ -898,6 +895,8 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Flow target must be one of the supported target step types."))
     source_ref = _normalize_text(payload.get("source_ref"))
     target_ref = _normalize_text(payload.get("target_ref"))
+    if target_kind == "tx_aprsis" and not target_ref:
+        target_ref = "aprsis"
     if not source_ref:
         raise ValueError(_t("Flow source reference is required."))
     if target_kind in {"tx_rf", "tx_aprsis"} and not target_ref:
@@ -954,6 +953,38 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Duplicate filter (viscous-delay) can be used only once in a flow."))
     if duplicate_filter_positions and duplicate_filter_positions[0] != 1:
         raise ValueError(_t("Duplicate filter (viscous-delay) must be the first filter step in the flow."))
+    has_strict_filter = any(step["step_type"] == "filter_strict" for step in normalized_steps[1:-1])
+    if target_kind != "tx_aprsis" and has_strict_filter:
+        raise ValueError(_t("Strict APRS-IS guard can be used only in APRS-IS target flows."))
+    if target_kind == "tx_aprsis":
+        if source_kind != "receiver_rf":
+            raise ValueError(_t("APRS-IS RX-only target flow must use Receiver RF as source."))
+        disallowed_filter_steps = [step for step in normalized_steps[1:-1] if step["step_type"] != "filter_strict"]
+        if disallowed_filter_steps:
+            raise ValueError(_t("APRS-IS target flow cannot include user-defined filters or rules in this step."))
+        strict_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == "filter_strict"]
+        if len(strict_steps) > 1:
+            raise ValueError(_t("APRS-IS target flow can contain only one system Strict APRS-IS guard step."))
+        if not strict_steps:
+            normalized_steps.insert(
+                1,
+                {
+                    "id": None,
+                    "step_order": 0,
+                    "step_type": "filter_strict",
+                    "title": _default_step_title("filter_strict"),
+                    "enabled": 1,
+                    "config": {},
+                },
+            )
+        strict_step = next(step for step in normalized_steps[1:-1] if step["step_type"] == "filter_strict")
+        strict_step["enabled"] = 1
+        strict_step["config"] = {}
+        strict_index = normalized_steps.index(strict_step)
+        if strict_index != 1:
+            normalized_steps.pop(strict_index)
+            normalized_steps.insert(1, strict_step)
+        _reindex_steps(normalized_steps)
     first_ref = _step_ref_value(first_step["step_type"], first_step["config"])
     last_ref = _step_ref_value(last_step["step_type"], last_step["config"])
     if source_kind != first_step["step_type"] or source_ref != first_ref:
@@ -961,7 +992,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     if target_kind != last_step["step_type"] or target_ref != last_ref:
         raise ValueError(_t("Flow target must match the last step type and reference."))
     if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
-        raise ValueError(_t("Flow with an RF or APRS-IS TX target must include at least one enabled Path Rule step."))
+        raise ValueError(_t("Flow with an RF TX target must include at least one enabled Path Rule step."))
 
     duplicate = fetch_one(
         """
@@ -1190,8 +1221,15 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
         flow = get_digi_flow(flow_id)
         if flow is None:
             raise ValueError(_t("DIGI Flow not found."))
-        if _flow_requires_path_rule(str(flow.get("target_kind") or "")) and not _has_enabled_path_rule(list(flow.get("steps") or [])):
-            raise ValueError(_t("DIGI Flow with an RF or APRS-IS TX target cannot be enabled without an enabled Path Rule step."))
+        source_kind = str(flow.get("source_kind") or "")
+        target_kind = str(flow.get("target_kind") or "")
+        flow_steps = list(flow.get("steps") or [])
+        if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(flow_steps):
+            raise ValueError(_t("DIGI Flow with an RF TX target cannot be enabled without an enabled Path Rule step."))
+        if target_kind == "tx_aprsis" and source_kind != "receiver_rf":
+            raise ValueError(_t("APRS-IS RX-only target flow must use Receiver RF as source."))
+        if target_kind == "tx_aprsis" and not _has_enabled_aprsis_strict_guard(flow_steps):
+            raise ValueError(_t("DIGI Flow with an APRS-IS target cannot be enabled without a mandatory enabled Strict APRS-IS guard step."))
     with get_connection() as connection:
         connection.execute(
             """

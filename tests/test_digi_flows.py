@@ -40,7 +40,7 @@ def sample_flow_payload() -> dict:
         "source_kind": "receiver_rf",
         "source_ref": "TNC-1",
         "target_kind": "tx_aprsis",
-        "target_ref": "APRS-IS Main",
+        "target_ref": "aprsis",
         "enabled": 1,
         "steps": [
             {
@@ -50,16 +50,16 @@ def sample_flow_payload() -> dict:
                 "config": {"rf_port": "TNC-1"},
             },
             {
-                "step_type": "filter_path",
-                "title": "Path Filter",
+                "step_type": "filter_strict",
+                "title": "Strict Filter",
                 "enabled": 1,
-                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": ["SP2-2"]},
+                "config": {},
             },
             {
                 "step_type": "tx_aprsis",
                 "title": "TX APRS-IS",
                 "enabled": 1,
-                "config": {"aprsis_target": "APRS-IS Main"},
+                "config": {"aprsis_target": "aprsis"},
             },
         ],
     }
@@ -124,7 +124,7 @@ class DigiFlowsTests(unittest.TestCase):
                             "receiver_rf",
                             "TNC-1",
                             "tx_aprsis",
-                            "APRS-IS Main",
+                            "aprsis",
                             1,
                             "2026-01-01T00:00:00+00:00",
                             "2026-01-01T00:00:00+00:00",
@@ -212,7 +212,7 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(flow["target_kind"], "tx_aprsis")
             self.assertEqual(len(flow["steps"]), 3)
             self.assertEqual(flow["steps"][0]["step_type"], "receiver_rf")
-            self.assertEqual(flow["steps"][1]["step_type"], "filter_path")
+            self.assertEqual(flow["steps"][1]["step_type"], "filter_strict")
             self.assertEqual(flow["steps"][2]["step_type"], "tx_aprsis")
 
     def test_get_digi_flow_uses_black_hole_label_for_action_log_target_display(self) -> None:
@@ -220,12 +220,15 @@ class DigiFlowsTests(unittest.TestCase):
             payload = sample_flow_payload()
             payload["target_kind"] = "action_log"
             payload["target_ref"] = "log-only"
-            payload["steps"][-1] = {
-                "step_type": "action_log",
-                "title": "Black Hole",
-                "enabled": 1,
-                "config": {"log_tag": "log-only", "note": ""},
-            }
+            payload["steps"] = [
+                payload["steps"][0],
+                {
+                    "step_type": "action_log",
+                    "title": "Black Hole",
+                    "enabled": 1,
+                    "config": {"log_tag": "log-only", "note": ""},
+                },
+            ]
 
             flow_id = create_digi_flow(payload)
             flow = get_digi_flow(flow_id)
@@ -304,7 +307,7 @@ class DigiFlowsTests(unittest.TestCase):
                     "source_kind": "receiver_rf",
                     "source_ref": "TNC-1",
                     "target_kind": "tx_aprsis",
-                    "target_ref": "APRS-IS Main",
+                    "target_ref": "aprsis",
                     "enabled": 1,
                     "steps": [
                         {
@@ -320,16 +323,10 @@ class DigiFlowsTests(unittest.TestCase):
                             "config": {},
                         },
                         {
-                            "step_type": "filter_path",
-                            "title": "Path Rule",
-                            "enabled": 1,
-                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": ["SP2-2"]},
-                        },
-                        {
                             "step_type": "tx_aprsis",
                             "title": "TX APRS-IS",
                             "enabled": 1,
-                            "config": {"aprsis_target": "APRS-IS Main"},
+                            "config": {"aprsis_target": "aprsis"},
                         },
                     ],
                 },
@@ -339,9 +336,8 @@ class DigiFlowsTests(unittest.TestCase):
             assert updated is not None
             updated_steps = {step["step_type"]: step for step in updated["steps"]}
             self.assertEqual(int(updated_steps["receiver_rf"]["id"]), original_ids["receiver_rf"])
-            self.assertEqual(int(updated_steps["filter_path"]["id"]), original_ids["filter_path"])
+            self.assertEqual(int(updated_steps["filter_strict"]["id"]), original_ids["filter_strict"])
             self.assertEqual(int(updated_steps["tx_aprsis"]["id"]), original_ids["tx_aprsis"])
-            self.assertIn("filter_strict", updated_steps)
 
     def test_update_digi_flow_can_replace_middle_step_without_step_order_conflict(self) -> None:
         with temporary_database():
@@ -395,10 +391,10 @@ class DigiFlowsTests(unittest.TestCase):
                             "config": {"rf_port": "TNC-1"},
                         },
                         {
-                            "step_type": "filter_strict",
-                            "title": "Strict Filter",
+                            "step_type": "filter_digi",
+                            "title": "DIGI Filter",
                             "enabled": 1,
-                            "config": {},
+                            "config": {"mode": "allow", "digis": ["SQ9MDD*"]},
                         },
                         {
                             "step_type": "action_log",
@@ -412,18 +408,14 @@ class DigiFlowsTests(unittest.TestCase):
 
             updated = get_digi_flow(flow_id)
             assert updated is not None
-            self.assertEqual([step["step_type"] for step in updated["steps"]], ["receiver_rf", "filter_strict", "action_log"])
+            self.assertEqual([step["step_type"] for step in updated["steps"]], ["receiver_rf", "filter_digi", "action_log"])
 
     def test_new_filter_types_and_packet_type_mode_are_accepted(self) -> None:
         payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
         payload["steps"] = [
             payload["steps"][0],
-            {
-                "step_type": "filter_strict",
-                "title": "Strict Filter",
-                "enabled": 1,
-                "config": {},
-            },
             {
                 "step_type": "filter_digi",
                 "title": "DIGI Filter",
@@ -454,17 +446,22 @@ class DigiFlowsTests(unittest.TestCase):
                 "enabled": 1,
                 "config": {"packets_per_minute": 5},
             },
-            payload["steps"][2],
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
         ]
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
-            self.assertEqual(normalized["steps"][1]["config"], {})
-            self.assertEqual(normalized["steps"][2]["config"]["mode"], "deny")
-            self.assertEqual(normalized["steps"][3]["config"]["trace_paths"], ["WIDE1-1"])
+            self.assertEqual(normalized["steps"][1]["config"]["mode"], "deny")
+            self.assertEqual(normalized["steps"][2]["config"]["trace_paths"], ["WIDE1-1"])
+            self.assertEqual(normalized["steps"][3]["config"]["mode"], "allow")
+            self.assertEqual(normalized["steps"][3]["config"]["packet_types"], ["position", "message"])
             self.assertEqual(normalized["steps"][4]["config"]["mode"], "allow")
-            self.assertEqual(normalized["steps"][4]["config"]["packet_types"], ["position", "message"])
-            self.assertEqual(normalized["steps"][5]["config"]["icons"], ["/>", "\\#"])
-            self.assertEqual(normalized["steps"][6]["config"]["packets_per_minute"], 5)
+            self.assertEqual(normalized["steps"][4]["config"]["icons"], ["/>", "\\#"])
+            self.assertEqual(normalized["steps"][5]["config"]["packets_per_minute"], 5)
 
     def test_packet_type_filter_normalizes_main_groups_and_preserves_legacy_codes(self) -> None:
         payload = sample_flow_payload()
@@ -491,6 +488,8 @@ class DigiFlowsTests(unittest.TestCase):
 
     def test_path_filter_uses_trace_and_no_trace_fields(self) -> None:
         payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
         payload["steps"] = [
             payload["steps"][0],
             {
@@ -503,15 +502,22 @@ class DigiFlowsTests(unittest.TestCase):
                     "no_trace_paths": ["TCPIP", "NOGATE"],
                 },
             },
-            payload["steps"][2],
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
         ]
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["steps"][1]["config"]["trace_paths"], ["TRACE2-2", "WIDE1-1"])
             self.assertEqual(normalized["steps"][1]["config"]["no_trace_paths"], ["TCPIP", "NOGATE"])
 
-    def test_non_log_target_requires_path_filter(self) -> None:
+    def test_rf_target_requires_path_filter(self) -> None:
         payload = sample_flow_payload()
+        payload["target_kind"] = "tx_rf"
+        payload["target_ref"] = "RF-OUT"
         payload["steps"] = [
             payload["steps"][0],
             {
@@ -520,10 +526,15 @@ class DigiFlowsTests(unittest.TestCase):
                 "enabled": 1,
                 "config": {"window_sec": 5},
             },
-            payload["steps"][2],
+            {
+                "step_type": "tx_rf",
+                "title": "TX RF",
+                "enabled": 1,
+                "config": {"rf_target": "RF-OUT"},
+            },
         ]
         with temporary_database():
-            with self.assertRaisesRegex(ValueError, "must include at least one enabled Path Rule"):
+            with self.assertRaisesRegex(ValueError, "RF TX target"):
                 normalize_digi_flow_payload(payload)
 
     def test_duplicate_filter_can_be_used_only_once_in_flow(self) -> None:
@@ -642,7 +653,7 @@ class DigiFlowsTests(unittest.TestCase):
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["target_kind"], "action_drop")
 
-    def test_enabling_tx_flow_without_enabled_path_rule_is_blocked(self) -> None:
+    def test_enabling_tx_aprsis_flow_without_enabled_strict_guard_is_blocked(self) -> None:
         with temporary_database():
             connection = connect()
             try:
@@ -659,7 +670,7 @@ class DigiFlowsTests(unittest.TestCase):
                         "receiver_rf",
                         "TNC-1",
                         "tx_aprsis",
-                        "APRS-IS Main",
+                        "aprsis",
                         0,
                         "2026-01-01T00:00:00+00:00",
                         "2026-01-01T00:00:00+00:00",
@@ -687,10 +698,10 @@ class DigiFlowsTests(unittest.TestCase):
                         (
                             flow_id,
                             2,
-                            "filter_path",
-                            "Path Rule",
+                            "filter_strict",
+                            "Strict Filter",
                             0,
-                            '{"mode":"allow","trace_paths":["WIDE1-1"],"no_trace_paths":[]}',
+                            '{}',
                             "2026-01-01T00:00:00+00:00",
                             "2026-01-01T00:00:00+00:00",
                         ),
@@ -700,7 +711,7 @@ class DigiFlowsTests(unittest.TestCase):
                             "tx_aprsis",
                             "TX APRS-IS",
                             1,
-                            '{"aprsis_target":"APRS-IS Main"}',
+                            '{"aprsis_target":"aprsis"}',
                             "2026-01-01T00:00:00+00:00",
                             "2026-01-01T00:00:00+00:00",
                         ),
@@ -709,7 +720,7 @@ class DigiFlowsTests(unittest.TestCase):
                 connection.commit()
             finally:
                 connection.close()
-            with self.assertRaisesRegex(ValueError, "cannot be enabled without an enabled Path Rule"):
+            with self.assertRaisesRegex(ValueError, "cannot be enabled without a mandatory enabled Strict APRS-IS guard step"):
                 set_digi_flow_enabled(flow_id, True)
 
     def test_enabling_rf_tx_flow_without_enabled_strict_filter_is_allowed(self) -> None:
@@ -797,6 +808,8 @@ class DigiFlowsTests(unittest.TestCase):
 
     def test_path_filter_allows_only_allow_mode(self) -> None:
         payload = sample_flow_payload()
+        payload["target_kind"] = "tx_rf"
+        payload["target_ref"] = "RF-OUT"
         payload["steps"] = [
             payload["steps"][0],
             {
@@ -809,7 +822,12 @@ class DigiFlowsTests(unittest.TestCase):
                     "no_trace_paths": [],
                 },
             },
-            payload["steps"][2],
+            {
+                "step_type": "tx_rf",
+                "title": "TX RF",
+                "enabled": 1,
+                "config": {"rf_target": "RF-OUT"},
+            },
         ]
         with temporary_database():
             with self.assertRaisesRegex(ValueError, "Path filter mode must be allow"):

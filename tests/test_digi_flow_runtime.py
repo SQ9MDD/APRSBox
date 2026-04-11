@@ -547,23 +547,34 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_strict_filter_rejects_tcp_nogate_and_rfonly_paths(self) -> None:
         with temporary_database():
+            set_local_station_identity()
             create_flow(
                 {
-                    "name": "Strict LOG",
+                    "name": "Strict APRSIS",
                     "description": "",
                     "source_kind": "receiver_rf",
                     "source_ref": "TNC-1",
-                    "target_kind": "action_log",
-                    "target_ref": "log-only",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
                     "enabled": 1,
                     "steps": [
                         {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
                         {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
-                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
                     ],
                 }
             )
-            runtime = DigiFlowRuntimeService()
+
+            class FakeAprsisClient:
+                def __init__(self) -> None:
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    return True, "APRS-IS TX queued."
+
+            fake_client = FakeAprsisClient()
+            runtime = DigiFlowRuntimeService(aprsis_client=fake_client)
             await runtime.start()
             try:
                 clean = runtime.enqueue_tnc2_frame(
@@ -595,13 +606,15 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             nogate_rows = event_rows_for_frame(str(nogate["frame_uid"]))
             rfonly_rows = event_rows_for_frame(str(rfonly["frame_uid"]))
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "passed" for row in clean_rows))
-            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in clean_rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "tx" for row in clean_rows))
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "TCPIP" in row["message"] for row in tcp_rows))
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "NOGATE" in row["message"] for row in nogate_rows))
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "RFONLY" in row["message"] for row in rfonly_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in tcp_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in nogate_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rfonly_rows))
+            self.assertEqual(len(fake_client.lines), 1)
+            self.assertIn("qAO,SQ9MDD-4", fake_client.lines[0])
 
     async def test_path_rule_rejects_when_local_digi_is_already_consumed_in_path(self) -> None:
         with temporary_database():
@@ -1038,7 +1051,12 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     "enabled": 1,
                     "steps": [
                         {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
-                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {
+                            "step_type": "filter_digi",
+                            "title": "DIGI Filter",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "digis": ["SR5*"]},
+                        },
                         {
                             "step_type": "filter_callsign",
                             "title": "Callsign Filter",

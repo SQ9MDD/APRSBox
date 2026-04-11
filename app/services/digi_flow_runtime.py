@@ -10,6 +10,7 @@ from typing import Any
 
 from app.db import log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
+from app.services.aprsis import AprsisClientService
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.digi_flows import list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import enqueue_digi_tx_job
@@ -43,8 +44,9 @@ class _ViscousDelayEntry:
 
 
 class DigiFlowRuntimeService:
-    def __init__(self, *, poll_interval: float = 0.5) -> None:
+    def __init__(self, *, poll_interval: float = 0.5, aprsis_client: AprsisClientService | None = None) -> None:
         self._poll_interval = poll_interval
+        self._aprsis_client = aprsis_client
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
@@ -292,7 +294,7 @@ class DigiFlowRuntimeService:
         if step_type == "tx_rf":
             return self._execute_tx_rf(context, step)
         if step_type == "tx_aprsis":
-            return self._execute_tx_stub(context, step, target_label="APRS-IS")
+            return await self._execute_tx_aprsis(context, step)
 
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
@@ -672,9 +674,9 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "drop"}
 
-        input_path = str(parsed.get("path") or "").strip().upper()
-        blocked_token = _find_blocked_strict_path_token(_split_path_tokens(input_path))
-        if blocked_token is None:
+        blocked = _find_blocked_strict_token(parsed)
+        if blocked is None:
+            input_path = str(parsed.get("path") or "").strip().upper()
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
@@ -685,16 +687,23 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "continue"}
 
+        blocked_token = blocked["token"]
+        blocked_scope = blocked["scope"]
+        blocked_path = blocked["path"]
+        if blocked_token == "THIRD_PARTY_INVALID":
+            message = _t("Strict filter rejected frame because third-party encapsulation is malformed or invalid.")
+        else:
+            message = _tf(
+                "Strict filter rejected frame because {scope} contains blocked token {blocked_token}. Input path: {input_path}",
+                {"scope": blocked_scope, "blocked_token": blocked_token, "input_path": blocked_path or "-"},
+            )
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
             event_type="strict_filter",
             decision="rejected",
-            message=_tf(
-                "Strict filter rejected frame because path contains blocked token {blocked_token}. Input path: {input_path}",
-                {"blocked_token": blocked_token, "input_path": input_path or "-"},
-            ),
+            message=message,
         )
         return {"decision": "drop"}
 
@@ -1004,6 +1013,69 @@ class DigiFlowRuntimeService:
         )
         return {"decision": decision}
 
+    async def _execute_tx_aprsis(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        parsed = context.get("parsed")
+        if parsed is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="output_action",
+                decision="drop",
+                message=_t("APRS-IS TX rejected frame because TNC2 parsing failed."),
+            )
+            return {"decision": "drop"}
+
+        local_igate = _local_station_identity()
+        if not local_igate:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="output_action",
+                decision="drop",
+                message=_t("APRS-IS TX rejected frame because local station identity is not configured."),
+            )
+            return {"decision": "drop"}
+
+        tx_line = _build_aprsis_uplink_line(parsed, local_igate=local_igate)
+        if not tx_line:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="output_action",
+                decision="drop",
+                message=_t("APRS-IS TX rejected frame because APRS-IS uplink formatting failed."),
+            )
+            return {"decision": "drop"}
+
+        if self._aprsis_client is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="output_action",
+                decision="drop",
+                message=_t("APRS-IS TX rejected frame because APRS-IS uplink runtime is unavailable."),
+            )
+            return {"decision": "drop"}
+
+        success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
+        decision = "tx" if success else "drop"
+        message = detail or ("APRS-IS TX queued." if success else "APRS-IS TX failed.")
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="output_action",
+            decision=decision,
+            message=f"{message} | line={tx_line}",
+        )
+        return {"decision": decision}
+
     def _execute_tx_stub(self, context: dict[str, Any], step: dict[str, Any], *, target_label: str) -> dict[str, str]:
         config = dict(step.get("config") or {})
         if str(step["step_type"]) == "tx_rf":
@@ -1036,7 +1108,7 @@ class DigiFlowRuntimeService:
         created_at: str | None,
     ) -> dict[str, Any]:
         timestamp = created_at or utc_now()
-        line = str(raw_payload or "").strip()
+        line = str(raw_payload or "").rstrip("\r\n")
         return {
             "frame_uid": frame_uid or uuid.uuid4().hex,
             "source_kind": str(source_kind or "").strip(),
@@ -1112,8 +1184,27 @@ def _find_blocked_strict_path_token(path_tokens: list[str]) -> str | None:
         normalized = token.strip().upper().rstrip("*")
         if normalized in {"NOGATE", "RFONLY"}:
             return normalized
-        if normalized.startswith("TCP"):
+        if normalized in {"TCPIP", "TCPXX"} or normalized.startswith("TCPIP") or normalized.startswith("TCPXX"):
             return normalized
+    return None
+
+
+def _find_blocked_strict_token(parsed: dict[str, Any]) -> dict[str, str] | None:
+    outer_path = str(parsed.get("path") or "").strip().upper()
+    outer_blocked = _find_blocked_strict_path_token(_split_path_tokens(outer_path))
+    if outer_blocked is not None:
+        return {"token": outer_blocked, "scope": "outer path", "path": outer_path}
+
+    if not bool(parsed.get("is_third_party")):
+        return None
+    if not bool(parsed.get("third_party_inner_valid")):
+        return {"token": "THIRD_PARTY_INVALID", "scope": "third-party payload", "path": outer_path}
+
+    aprs_data = dict(parsed.get("aprs_data") or {})
+    inner_path = str(aprs_data.get("inner_path") or "").strip().upper()
+    inner_blocked = _find_blocked_strict_path_token(_split_path_tokens(inner_path))
+    if inner_blocked is not None:
+        return {"token": inner_blocked, "scope": "third-party inner path", "path": inner_path}
     return None
 
 
@@ -1164,6 +1255,48 @@ def _build_tnc2_line(parsed: dict[str, Any]) -> str:
     if path:
         header = f"{header},{path}"
     return f"{header}:{str(parsed.get('info') or '')}"
+
+
+def _build_aprsis_uplink_line(parsed: dict[str, Any], *, local_igate: str) -> str:
+    source = str(parsed.get("source") or "").strip()
+    destination = str(parsed.get("destination") or "").strip()
+    path = str(parsed.get("path") or "").strip()
+    info = str(parsed.get("info") or "")
+    if not source or not destination:
+        return ""
+
+    if bool(parsed.get("is_third_party")):
+        if not bool(parsed.get("third_party_inner_valid")):
+            return ""
+        aprs_data = dict(parsed.get("aprs_data") or {})
+        inner_source = str(aprs_data.get("inner_source_key") or "").strip()
+        inner_destination = str(aprs_data.get("inner_destination") or "").strip()
+        inner_path = str(aprs_data.get("inner_path") or "").strip()
+        inner_info = str(aprs_data.get("inner_info") or "")
+        outer_source = str(aprs_data.get("outer_source") or source).strip()
+        outer_path = str(aprs_data.get("outer_path") or path).strip()
+        if not inner_source or not inner_destination:
+            return ""
+        source = inner_source
+        destination = inner_destination
+        info = inner_info
+        merged_path_tokens = [token for token in _split_path_tokens_keep_case(inner_path) if token]
+        if outer_source:
+            merged_path_tokens.append(outer_source)
+        merged_path_tokens.extend(token for token in _split_path_tokens_keep_case(outer_path) if token)
+    else:
+        merged_path_tokens = [token for token in _split_path_tokens_keep_case(path) if token]
+
+    merged_path_tokens.extend(["qAO", local_igate])
+    merged_path = ",".join(merged_path_tokens)
+    header = f"{source}>{destination}"
+    if merged_path:
+        header = f"{header},{merged_path}"
+    return f"{header}:{info}"
+
+
+def _split_path_tokens_keep_case(path: str) -> list[str]:
+    return [item.strip() for item in str(path or "").split(",") if item.strip()]
 
 
 def _local_station_identity() -> str:

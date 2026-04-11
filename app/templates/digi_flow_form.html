@@ -5,11 +5,11 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("Edit DIGI Flow") if flow_id else t("New DIGI Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. Stage 2 executes active RF flows through a small runtime skeleton with per-flow debug logging.") }}</p>
+                <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
+                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRSIS target is RX-only and uses a mandatory system strict guard step.") }}</p>
             </div>
         </div>
-        <div class="notice">{{ t("Source must be the first step, target must be the last step, the source+target pair must be unique, and RF/APRS-IS TX targets require an enabled Path Rule step.") }}</div>
+        <div class="notice">{{ t("Source must be the first step, target must be the last step, and the source+target pair must be unique. RF TX flows require an enabled Path Rule step. APRSIS flows are system-restricted.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -129,7 +129,7 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("Digi Queue Log") }}</h2>
+                <h2>{{ t("Routing Queue Log") }}</h2>
                 <p class="section-lead">{{ t("Each block below shows one packet running through this flow from source to final outcome. The list is limited to the latest 10 frames.") }}</p>
             </div>
             <div class="form-actions">
@@ -276,7 +276,8 @@
             primarySymbolTable: {{ t("Primary (/)")|tojson }},
             cardTitle: {{ t("Card Title")|tojson }},
             minimumPathRuleRf: {{ t("Minimum Path Rule is required before an RF TX target.")|tojson }},
-            minimumPathRuleAprsis: {{ t("Minimum Path Rule is required before an APRS-IS TX target.")|tojson }},
+            aprsisSystemFlowLocked: {{ t("APRSIS target flow is system-restricted to one mandatory strict guard step.")|tojson }},
+            strictGuardSystemManaged: {{ t("Strict APRS-IS guard is system-managed and available only in APRSIS target flows.")|tojson }},
             flowSteps: {{ t("Flow {count} steps")|tojson }},
             inputPacket: {{ t("Input packet")|tojson }},
             outputPacket: {{ t("Output packet")|tojson }},
@@ -453,16 +454,60 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
+        const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
         const hasViscousDelayStep = () => steps.some(
             (step, index) => index > 0 && index < steps.length - 1 && isViscousDelayStepType(step.step_type),
         );
         const iconPath = (name) => `${rootPath}/static/icons/${name}`;
 
+        const enforceAprsisFlowRestrictions = () => {
+            if (!Array.isArray(steps) || steps.length < 2) {
+                return;
+            }
+            const sourceStep = { ...steps[0] };
+            const targetStep = { ...steps[steps.length - 1] };
+            if (!isAprsisTargetFlow()) {
+                const middle = steps
+                    .slice(1, -1)
+                    .filter((step) => String(step.step_type || "").trim() !== "filter_strict");
+                steps = [sourceStep, ...middle, targetStep];
+                return;
+            }
+            const existingStrict = steps.slice(1, -1).find((step) => String(step.step_type || "").trim() === "filter_strict");
+            const strictStep = existingStrict ? { ...existingStrict } : {
+                step_type: "filter_strict",
+                title: stepLabel("filter_strict"),
+                enabled: 1,
+                config: {},
+            };
+            strictStep.step_type = "filter_strict";
+            strictStep.title = stepLabel("filter_strict");
+            strictStep.enabled = 1;
+            strictStep.config = {};
+            steps = [sourceStep, strictStep, targetStep];
+        };
+
         const syncPaletteState = () => {
             const hasViscous = hasViscousDelayStep();
+            const aprsisTarget = isAprsisTargetFlow();
             for (const button of paletteButtons) {
                 const stepType = button.dataset.stepType || "";
+                if (aprsisTarget) {
+                    button.disabled = true;
+                    button.title = i18n.aprsisSystemFlowLocked;
+                    button.setAttribute("aria-label", i18n.aprsisSystemFlowLocked);
+                    continue;
+                }
+                if (stepType === "filter_strict") {
+                    button.disabled = true;
+                    button.title = i18n.strictGuardSystemManaged;
+                    button.setAttribute("aria-label", i18n.strictGuardSystemManaged);
+                    continue;
+                }
                 if (!isViscousDelayStepType(stepType)) {
+                    button.disabled = false;
+                    button.removeAttribute("title");
+                    button.removeAttribute("aria-label");
                     continue;
                 }
                 button.disabled = hasViscous;
@@ -853,6 +898,8 @@
 
         const render = () => {
             syncBoundarySteps();
+            enforceAprsisFlowRestrictions();
+            syncBoundarySteps();
             syncPaletteState();
             stepsJsonInput.value = JSON.stringify(steps);
             stepsChain.innerHTML = "";
@@ -896,14 +943,21 @@
 
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
+                const aprsisLockedFlow = isAprsisTargetFlow();
+                const aprsisSystemStrictStep = aprsisLockedFlow && step.step_type === "filter_strict" && index === 1;
 
                 const enabledRow = document.createElement("label");
                 enabledRow.className = "digi-step-inline-toggle";
                 const enabledInput = document.createElement("input");
                 enabledInput.type = "checkbox";
                 enabledInput.value = "1";
-                enabledInput.checked = !!step.enabled;
+                enabledInput.checked = aprsisSystemStrictStep ? true : !!step.enabled;
+                enabledInput.disabled = aprsisSystemStrictStep;
                 enabledInput.addEventListener("change", () => {
+                    if (aprsisSystemStrictStep) {
+                        step.enabled = 1;
+                        return;
+                    }
                     step.enabled = enabledInput.checked ? 1 : 0;
                     render();
                 });
@@ -937,7 +991,11 @@
                 moveUpButton.className = "table-icon-button digi-step-icon-button";
                 moveUpButton.title = i18n.moveStepUp;
                 moveUpButton.setAttribute("aria-label", i18n.moveStepUp);
-                moveUpButton.disabled = index <= 1 || isViscousDelayStepType((steps[index - 1] || {}).step_type || "");
+                moveUpButton.disabled = (
+                    index <= 1
+                    || isViscousDelayStepType((steps[index - 1] || {}).step_type || "")
+                    || aprsisLockedFlow
+                );
                 const moveUpIcon = document.createElement("img");
                 moveUpIcon.src = iconPath("arrow-up.svg");
                 moveUpIcon.alt = "";
@@ -956,7 +1014,11 @@
                 moveDownButton.className = "table-icon-button digi-step-icon-button";
                 moveDownButton.title = i18n.moveStepDown;
                 moveDownButton.setAttribute("aria-label", i18n.moveStepDown);
-                moveDownButton.disabled = index >= steps.length - 2 || isViscousDelayStepType(step.step_type);
+                moveDownButton.disabled = (
+                    index >= steps.length - 2
+                    || isViscousDelayStepType(step.step_type)
+                    || aprsisLockedFlow
+                );
                 const moveDownIcon = document.createElement("img");
                 moveDownIcon.src = iconPath("arrow-down.svg");
                 moveDownIcon.alt = "";
@@ -975,7 +1037,7 @@
                 deleteButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
                 deleteButton.title = i18n.deleteStep;
                 deleteButton.setAttribute("aria-label", i18n.deleteStep);
-                deleteButton.disabled = stepCategory(step.step_type) !== "filter";
+                deleteButton.disabled = stepCategory(step.step_type) !== "filter" || aprsisLockedFlow;
                 const deleteIcon = document.createElement("img");
                 deleteIcon.src = iconPath("delete-outline.svg");
                 deleteIcon.alt = "";
@@ -1017,6 +1079,12 @@
                         }
                         editor.appendChild(helpBlock);
                     }
+                    if (aprsisSystemStrictStep) {
+                        const lockedNote = document.createElement("div");
+                        lockedNote.className = "full muted small";
+                        lockedNote.textContent = i18n.aprsisSystemFlowLocked;
+                        editor.appendChild(lockedNote);
+                    }
 
                     const titleField = document.createElement("label");
                     const titleCaption = document.createElement("span");
@@ -1024,7 +1092,14 @@
                     const titleInput = document.createElement("input");
                     titleInput.type = "text";
                     titleInput.value = normalizedStepTitle(step);
+                    if (aprsisSystemStrictStep) {
+                        titleInput.disabled = true;
+                    }
                     titleInput.addEventListener("input", () => {
+                        if (aprsisSystemStrictStep) {
+                            step.title = stepLabel("filter_strict");
+                            return;
+                        }
                         step.title = titleInput.value;
                     });
                     titleField.appendChild(titleCaption);
@@ -1045,7 +1120,7 @@
                     const showMinimumPathFilterWarning =
                         steps.length === 2 &&
                         index === 0 &&
-                        ["tx_rf", "tx_aprsis"].includes(steps[steps.length - 1]?.step_type);
+                        steps[steps.length - 1]?.step_type === "tx_rf";
                     if (showMinimumPathFilterWarning) {
                         connector.className = "digi-step-connector digi-step-connector-warning";
 
@@ -1056,9 +1131,7 @@
 
                         const text = document.createElement("span");
                         text.className = "digi-step-warning-text";
-                        text.textContent = steps[steps.length - 1]?.step_type === "tx_rf"
-                            ? i18n.minimumPathRuleRf
-                            : i18n.minimumPathRuleAprsis;
+                        text.textContent = i18n.minimumPathRuleRf;
                         connector.appendChild(text);
                     } else {
                         connector.className = "digi-step-connector";
@@ -1078,6 +1151,9 @@
             button.addEventListener("click", () => {
                 const stepType = button.dataset.stepType || "";
                 if (!filterTypes.includes(stepType)) {
+                    return;
+                }
+                if (isAprsisTargetFlow() || stepType === "filter_strict") {
                     return;
                 }
                 if (isViscousDelayStepType(stepType) && hasViscousDelayStep()) {
@@ -1116,6 +1192,8 @@
         });
 
         form.addEventListener("submit", () => {
+            syncBoundarySteps();
+            enforceAprsisFlowRestrictions();
             syncBoundarySteps();
             stepsJsonInput.value = JSON.stringify(steps.map((step) => ({
                 id: step.id || null,

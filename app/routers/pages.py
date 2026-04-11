@@ -78,6 +78,12 @@ from app.services.band_condition import (
     save_reference_station,
     split_station_key,
 )
+from app.services.aprsis import (
+    aprsis_runtime_badge,
+    get_aprsis_config,
+    get_aprsis_runtime_status,
+    safe_save_aprsis_config,
+)
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_status,
     refresh_aprs_device_identification_cache,
@@ -226,7 +232,7 @@ def _digi_flow_editor_context(
     station_form_options = _station_form_options()
     return build_template_context(
         request,
-        page_title="DIGI Flow Editor" if flow_id else "New DIGI Flow",
+        page_title="Packet Routing Editor" if flow_id else "New Packet Routing Flow",
         current_user=current_user,
         active_nav="digi-flows",
         flow_id=flow_id,
@@ -1011,17 +1017,49 @@ def digi_flows_page(
     success: int = 0,
 ) -> object:
     templates = request.app.state.templates
+    aprsis_runtime = get_aprsis_runtime_status()
     context = build_template_context(
         request,
-        page_title="DIGI Flows",
+        page_title="Packet Routing",
         current_user=current_user,
         active_nav="digi-flows",
         flows=list_digi_flows(),
+        aprsis_config=get_aprsis_config(),
+        aprsis_runtime=aprsis_runtime,
+        aprsis_runtime_badge=aprsis_runtime_badge(aprsis_runtime.get("status", "")),
         can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=bool(success),
     )
     return templates.TemplateResponse("digi_flows.html", context)
+
+
+@router.post("/digi-flows/aprsis-config")
+def digi_flows_aprsis_config_update(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+    server: str = Form(""),
+    port: str = Form(""),
+    login: str = Form(""),
+    passcode: str = Form(""),
+) -> RedirectResponse:
+    success, error = safe_save_aprsis_config(
+        {
+            "server": server,
+            "port": port,
+            "login": login,
+            "passcode": passcode,
+        }
+    )
+    if not success:
+        return RedirectResponse(
+            url=_path(request, f"/digi-flows?flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    return RedirectResponse(
+        url=_path(request, "/digi-flows?flash=APRS-IS%20settings%20updated.&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/digi-flows/new")
@@ -1119,7 +1157,7 @@ async def digi_flow_create(
         current_user,
         flow_id=flow_id,
         form_data=build_digi_flow_editor_payload(flow),
-        flash="DIGI Flow created.",
+        flash="Packet Routing flow created.",
         flash_success=True,
     )
     return templates.TemplateResponse("digi_flow_form.html", context)
@@ -1153,7 +1191,7 @@ async def digi_flow_update(
         current_user,
         flow_id=flow_id,
         form_data=build_digi_flow_editor_payload(flow),
-        flash="DIGI Flow updated.",
+        flash="Packet Routing flow updated.",
         flash_success=True,
     )
     return templates.TemplateResponse("digi_flow_form.html", context)
@@ -1174,7 +1212,7 @@ def digi_flow_toggle(
             status_code=status.HTTP_303_SEE_OTHER,
         )
     return RedirectResponse(
-        url=_path(request, f"/digi-flows?flash={'DIGI%20Flow%20status%20updated.'}&success=1"),
+        url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20status%20updated.'}&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -1187,7 +1225,7 @@ def digi_flow_delete(
 ) -> RedirectResponse:
     delete_digi_flow(flow_id)
     return RedirectResponse(
-        url=_path(request, f"/digi-flows?flash={'DIGI%20Flow%20deleted.'}&success=1"),
+        url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20deleted.'}&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
