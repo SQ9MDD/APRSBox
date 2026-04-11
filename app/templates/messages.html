@@ -175,28 +175,46 @@
         ));
     }
 
-    function formatDateTime(value) {
-        const date = new Date(value);
+    function parseUtcDate(value) {
+        const text = String(value || "").trim();
+        if (!text) {
+            return null;
+        }
+        const normalized = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(text) ? text : `${text}Z`;
+        const date = new Date(normalized);
         if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+        return date;
+    }
+
+    function parseUtcTimestampMs(value) {
+        const parsed = parseUtcDate(value);
+        return parsed ? parsed.getTime() : 0;
+    }
+
+    function formatDateTime(value) {
+        const date = parseUtcDate(value);
+        if (date === null) {
             return value || "";
         }
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        const hour = String(date.getHours()).padStart(2, "0");
-        const minute = String(date.getMinutes()).padStart(2, "0");
-        return `${year}.${month}.${day} ${hour}:${minute}`;
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(date.getUTCDate()).padStart(2, "0");
+        const hour = String(date.getUTCHours()).padStart(2, "0");
+        const minute = String(date.getUTCMinutes()).padStart(2, "0");
+        return `${year}.${month}.${day} ${hour}:${minute} UTC`;
     }
 
     function formatDay(value) {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
+        const date = parseUtcDate(value);
+        if (date === null) {
             return "";
         }
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        return `${year}.${month}.${day}`;
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(date.getUTCDate()).padStart(2, "0");
+        return `${year}.${month}.${day} UTC`;
     }
 
     function validateComposer(value) {
@@ -286,8 +304,8 @@
 
     function sortConversations(conversations) {
         conversations.sort((left, right) => {
-            const leftTime = Date.parse(left.last_activity_at || left.created_at || "") || 0;
-            const rightTime = Date.parse(right.last_activity_at || right.created_at || "") || 0;
+            const leftTime = parseUtcTimestampMs(left.last_activity_at || left.created_at || "");
+            const rightTime = parseUtcTimestampMs(right.last_activity_at || right.created_at || "");
             if (leftTime !== rightTime) {
                 return rightTime - leftTime;
             }

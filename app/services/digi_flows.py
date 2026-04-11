@@ -1580,7 +1580,7 @@ def _format_execution_time_utc(value: str) -> str:
         return value
     if timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=timezone.utc)
-    return timestamp.astimezone(timezone.utc).strftime("%Y.%m.%d %H:%M")
+    return timestamp.astimezone(timezone.utc).strftime("%Y.%m.%d %H:%M UTC")
 
 
 def _execution_predates_flow_update(execution_created_at: str, flow_updated_at: str) -> bool:
@@ -1591,6 +1591,14 @@ def _execution_predates_flow_update(execution_created_at: str, flow_updated_at: 
         flow_ts = datetime.fromisoformat(flow_updated_at.replace("Z", "+00:00"))
     except ValueError:
         return False
+    if execution_ts.tzinfo is None:
+        execution_ts = execution_ts.replace(tzinfo=timezone.utc)
+    else:
+        execution_ts = execution_ts.astimezone(timezone.utc)
+    if flow_ts.tzinfo is None:
+        flow_ts = flow_ts.replace(tzinfo=timezone.utc)
+    else:
+        flow_ts = flow_ts.astimezone(timezone.utc)
     return execution_ts <= flow_ts
 
 

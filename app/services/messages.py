@@ -1205,21 +1205,18 @@ def _heard_station_lookup() -> dict[str, dict[str, Any]]:
 
 
 def _heard_age_seconds(timestamp: str) -> int | None:
-    try:
-        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    except ValueError:
+    heard_at = _parse_iso_timestamp_utc(timestamp)
+    if heard_at is None:
         return None
-    return max(0, int((datetime.now(timezone.utc) - heard_at.astimezone(timezone.utc)).total_seconds()))
+    return max(0, int((datetime.now(timezone.utc) - heard_at).total_seconds()))
 
 
 def _format_heard_parts(timestamp: str) -> tuple[str, str]:
-    try:
-        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    except ValueError:
+    heard_at = _parse_iso_timestamp_utc(timestamp)
+    if heard_at is None:
         return timestamp, ""
 
-    local_time = heard_at.astimezone()
-    delta_seconds = max(0, int((datetime.now(timezone.utc) - heard_at.astimezone(timezone.utc)).total_seconds()))
+    delta_seconds = max(0, int((datetime.now(timezone.utc) - heard_at).total_seconds()))
     if delta_seconds < 60:
         relative = "teraz"
     elif delta_seconds < 3600:
@@ -1228,7 +1225,17 @@ def _format_heard_parts(timestamp: str) -> tuple[str, str]:
     else:
         hours = delta_seconds // 3600
         relative = _format_hours_ago(hours)
-    return local_time.strftime("%Y.%m.%d %H:%M"), relative
+    return heard_at.strftime("%Y.%m.%d %H:%M UTC"), relative
+
+
+def _parse_iso_timestamp_utc(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _format_minutes_ago(value: int) -> str:

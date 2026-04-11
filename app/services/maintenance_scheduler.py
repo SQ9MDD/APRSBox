@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db import DEFAULT_EVENT_LOG_KEEP_ROWS, get_app_setting, log_event, prune_event_logs, set_app_setting
 
@@ -39,7 +39,7 @@ class MaintenanceSchedulerService:
             await self._sleep(self._poll_interval)
 
     def _tick(self, now: datetime | None = None) -> None:
-        current = now if now is not None else datetime.now().astimezone()
+        current = now if now is not None else datetime.now(timezone.utc)
         current_date = current.date().isoformat()
         if str(get_app_setting(LAST_EVENT_LOG_PRUNE_DATE_KEY) or "").strip() == current_date:
             return

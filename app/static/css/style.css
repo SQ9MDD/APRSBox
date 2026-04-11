@@ -178,6 +178,31 @@ body {
     gap: 0.12rem;
 }
 
+.sidebar-utc-clock {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.58rem 0.62rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+}
+
+.sidebar-utc-clock-label {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.sidebar-utc-clock-value {
+    font-size: 0.82rem;
+    line-height: 1.2;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-family: "Space Grotesk", "JetBrains Mono", monospace;
+    white-space: nowrap;
+}
+
 .nav-separator {
     height: 1px;
     margin: var(--space-2) 0.3rem;

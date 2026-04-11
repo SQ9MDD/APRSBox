@@ -102,7 +102,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             datetime_mock.fromisoformat.side_effect = datetime.fromisoformat
             label, relative = _format_heard_parts("2026-04-01T12:00:00+00:00")
 
-        self.assertEqual(label, "2026.04.01 14:00")
+        self.assertEqual(label, "2026.04.01 12:00 UTC")
         self.assertEqual(relative, "12 minut temu")
 
     async def test_queue_send_and_ack_direct_message(self) -> None:

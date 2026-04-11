@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-DISPLAY_DATETIME_FORMAT = "%Y.%m.%d %H:%M"
+DISPLAY_DATETIME_FORMAT = "%Y.%m.%d %H:%M UTC"
 
 
 def parse_datetime(value: Any) -> datetime | None:
@@ -26,5 +26,6 @@ def format_display_datetime(value: Any, *, use_utc: bool = False) -> str:
     parsed = parse_datetime(value)
     if parsed is None:
         return str(value or "").strip()
-    display = parsed.astimezone(timezone.utc) if use_utc else parsed.astimezone()
-    return display.strftime(DISPLAY_DATETIME_FORMAT)
+    # Backward-compatible signature: display formatting is always UTC.
+    _ = use_utc
+    return parsed.astimezone(timezone.utc).strftime(DISPLAY_DATETIME_FORMAT)

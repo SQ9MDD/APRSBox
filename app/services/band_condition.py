@@ -66,7 +66,9 @@ def format_band_label(value: str) -> str:
 
 def hour_of_day_from_utc(bucket_start_utc: str) -> int:
     bucket_time = datetime.fromisoformat(bucket_start_utc.replace("Z", "+00:00"))
-    return bucket_time.astimezone().hour
+    if bucket_time.tzinfo is None:
+        bucket_time = bucket_time.replace(tzinfo=timezone.utc)
+    return bucket_time.astimezone(timezone.utc).hour
 
 
 def current_bucket_start(reference: datetime | None = None) -> str:
@@ -581,7 +583,7 @@ def _build_band_snapshot(band: str) -> dict[str, Any]:
     window_start = (
         datetime.fromisoformat(current_bucket.replace("Z", "+00:00")) - timedelta(minutes=BUCKET_MINUTES * (CURRENT_WINDOW_BUCKETS - 1))
     ).isoformat()
-    baseline_hour = datetime.now(timezone.utc).astimezone().hour
+    baseline_hour = datetime.now(timezone.utc).hour
 
     audibility_rows = fetch_all(
         """

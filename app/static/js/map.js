@@ -194,20 +194,33 @@
         return Number.isFinite(value) ? value.toFixed(5) : "--";
     }
 
+    function parseUtcDate(value) {
+        const text = String(value || "").trim();
+        if (!text) {
+            return null;
+        }
+        const normalized = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(text) ? text : `${text}Z`;
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+        return date;
+    }
+
     function formatTimestamp(value) {
         if (!value) {
             return "";
         }
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
+        const date = parseUtcDate(value);
+        if (date === null) {
             return String(value);
         }
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        const hour = String(date.getHours()).padStart(2, "0");
-        const minute = String(date.getMinutes()).padStart(2, "0");
-        return `${year}.${month}.${day} ${hour}:${minute}`;
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(date.getUTCDate()).padStart(2, "0");
+        const hour = String(date.getUTCHours()).padStart(2, "0");
+        const minute = String(date.getUTCMinutes()).padStart(2, "0");
+        return `${year}.${month}.${day} ${hour}:${minute} UTC`;
     }
 
     function formatAge(seconds) {

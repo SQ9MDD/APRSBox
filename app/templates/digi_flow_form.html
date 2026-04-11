@@ -1275,7 +1275,10 @@
             if (!value) {
                 return "-";
             }
-            const parsed = new Date(value);
+            const normalized = String(value || "").trim();
+            const parsed = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized)
+                ? new Date(normalized)
+                : new Date(`${normalized}Z`);
             if (Number.isNaN(parsed.getTime())) {
                 return escapeHtml(value);
             }
@@ -1284,7 +1287,7 @@
             const day = String(parsed.getUTCDate()).padStart(2, "0");
             const hour = String(parsed.getUTCHours()).padStart(2, "0");
             const minute = String(parsed.getUTCMinutes()).padStart(2, "0");
-            return `${year}.${month}.${day} ${hour}:${minute}`;
+            return `${year}.${month}.${day} ${hour}:${minute} UTC`;
         };
 
         const executionBadgeClass = (result) => {
