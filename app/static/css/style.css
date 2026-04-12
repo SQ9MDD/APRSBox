@@ -2443,6 +2443,7 @@ select:focus-visible,
     background: rgba(201, 122, 122, 0.1);
     border: 1px solid rgba(201, 122, 122, 0.24);
     color: var(--danger);
+    overflow-wrap: anywhere;
 }
 
 .alert.success {
@@ -2546,6 +2547,18 @@ select:focus-visible,
 .settings-progress-message {
     margin: 0;
     color: var(--muted);
+    line-height: 1.45;
+    white-space: pre-line;
+}
+
+.settings-progress-actions {
+    margin-top: 0.9rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.settings-progress-close {
+    min-width: 4.5rem;
 }
 
 @keyframes settings-spin {
@@ -3070,6 +3083,8 @@ code {
     overflow-y: hidden;
     width: 100%;
     scrollbar-gutter: stable both-edges;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
     border-radius: var(--radius-sm);
 }
 
@@ -3867,6 +3882,10 @@ button.message-delivery-badge {
         height: auto;
         max-height: none;
         min-height: auto;
+    }
+
+    .users-management-grid {
+        grid-template-columns: 1fr;
     }
 }
 

@@ -19,7 +19,6 @@ from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
     lookup_aprs_device_identification,
 )
-from app.services.messages import get_messages_page_data
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_object_tnc2, build_status_tnc2, resolve_message_addressee
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
 from app.sections import SECTION_DEFINITIONS

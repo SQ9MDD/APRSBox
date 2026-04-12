@@ -181,34 +181,29 @@
         {% if recent_packets %}
         <div class="table-wrap">
             <table class="data-table compact-table station-packets-table">
-                <colgroup>
-                    <col style="width: 7rem">
-                    <col style="width: 5.5rem">
-                    <col style="width: 32rem">
-                </colgroup>
-                    <thead>
-                        <tr>
-                            <th>{{ t("Timestamp") }}</th>
-                            <th>{{ t("Destination") }}</th>
-                            <th>{{ t("Raw packet") }}</th>
-                        </tr>
-                    </thead>
+                <thead>
+                    <tr>
+                        <th>{{ t("Timestamp") }}</th>
+                        <th>{{ t("Destination") }}</th>
+                        <th>{{ t("Raw packet") }}</th>
+                    </tr>
+                </thead>
                 <tbody>
                     {% for packet in recent_packets %}
                     <tr>
-                                <td>
-                                    <div class="last-heard-cell">
-                                        <span>{{ packet.timestamp_label }}</span>
-                                        {% if packet.timestamp_relative %}<span class="muted">{{ packet.timestamp_relative }}</span>{% endif %}
-                                    </div>
-                                </td>
-                                <td>{{ packet.destination }}</td>
-                                <td title="{{ packet.raw_packet }}"><code>{{ packet.raw_packet }}</code></td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                        <td>
+                            <div class="last-heard-cell">
+                                <span>{{ packet.timestamp_label }}</span>
+                                {% if packet.timestamp_relative %}<span class="muted">{{ packet.timestamp_relative }}</span>{% endif %}
+                            </div>
+                        </td>
+                        <td>{{ packet.destination }}</td>
+                        <td title="{{ packet.raw_packet }}"><code>{{ packet.raw_packet }}</code></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <p class="muted">{{ t("No stored packet history is available for this station yet.") }}</p>
         {% endif %}

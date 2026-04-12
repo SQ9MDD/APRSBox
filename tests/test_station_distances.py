@@ -175,6 +175,7 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(station["phg_power_w"], 25.0)
             self.assertEqual(station["phg_height_ft"], 20.0)
             self.assertEqual(station["phg_gain_dbi"], 3.0)
+            self.assertEqual(station["phg_direction"], "omni")
             self.assertAlmostEqual(float(station["phg_range_km"]), 12.79, places=2)
 
     def test_station_detail_track_payload_returns_track_for_selected_mobile_station(self) -> None:

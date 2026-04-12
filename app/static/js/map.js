@@ -23,6 +23,8 @@
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
     const toggleCoverageButton = document.getElementById("map-toggle-coverage");
     const toggleCoverageIcon = document.getElementById("map-toggle-coverage-icon");
+    const toggleRulerButton = document.getElementById("map-toggle-ruler");
+    const toggleRulerIcon = document.getElementById("map-toggle-ruler-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
@@ -47,19 +49,25 @@
         hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
         showCoverage: root.dataset.i18nShowCoverage || "Show coverage",
         hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
+        showRuler: root.dataset.i18nShowRuler || "Show ruler",
+        hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
     });
     const stationLayer = window.L.layerGroup();
+    const rulerLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
+    const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
     let coverageVisible = true;
+    let rulerVisible = true;
     let latestStations = [];
     let latestMobileTracks = [];
+    let rulerState = null;
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -107,6 +115,7 @@
         maxZoom: 19,
     }).addTo(map);
     stationLayer.addTo(map);
+    rulerLayer.addTo(map);
 
     if (tileSourceOutput) {
         tileSourceOutput.textContent = tileSourceName;
@@ -178,6 +187,43 @@
             const label = coverageVisible ? i18n.hideCoverage : i18n.showCoverage;
             toggleCoverageButton.setAttribute("title", label);
             toggleCoverageButton.setAttribute("aria-label", label);
+        }
+    }
+
+    function resolveRulerVisible() {
+        const storedValue = String(window.localStorage.getItem(mapRulerVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function syncRulerLayerVisibility() {
+        if (rulerVisible) {
+            if (!map.hasLayer(rulerLayer)) {
+                rulerLayer.addTo(map);
+            }
+            return;
+        }
+        if (map.hasLayer(rulerLayer)) {
+            map.removeLayer(rulerLayer);
+        }
+    }
+
+    function applyRulerToggleState(visible) {
+        rulerVisible = Boolean(visible);
+        window.localStorage.setItem(mapRulerVisibleStorageKey, rulerVisible ? "1" : "0");
+        syncRulerLayerVisibility();
+        if (toggleRulerIcon) {
+            toggleRulerIcon.setAttribute("src", `${staticRoot}icons/${rulerVisible ? "ruler.svg" : "ruler-square.svg"}`);
+        }
+        if (toggleRulerButton) {
+            const label = rulerVisible ? i18n.hideRuler : i18n.showRuler;
+            toggleRulerButton.setAttribute("title", label);
+            toggleRulerButton.setAttribute("aria-label", label);
         }
     }
 
@@ -253,6 +299,174 @@
         return `${distanceKm} km`;
     }
 
+    function normalizeBearing(bearingDeg) {
+        return (bearingDeg + 360) % 360;
+    }
+
+    function bearingBetweenPoints(fromLatLng, toLatLng) {
+        const fromLatitudeRad = (fromLatLng.lat * Math.PI) / 180;
+        const toLatitudeRad = (toLatLng.lat * Math.PI) / 180;
+        const deltaLongitudeRad = ((toLatLng.lng - fromLatLng.lng) * Math.PI) / 180;
+        const y = Math.sin(deltaLongitudeRad) * Math.cos(toLatitudeRad);
+        const x = (
+            (Math.cos(fromLatitudeRad) * Math.sin(toLatitudeRad))
+            - (Math.sin(fromLatitudeRad) * Math.cos(toLatitudeRad) * Math.cos(deltaLongitudeRad))
+        );
+        return normalizeBearing((Math.atan2(y, x) * 180) / Math.PI);
+    }
+
+    function formatRulerDistance(distanceMeters) {
+        if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
+            return "--";
+        }
+        const distanceKm = distanceMeters / 1000;
+        const precision = distanceKm < 10 ? 2 : 1;
+        return `${distanceKm.toFixed(precision)} km`;
+    }
+
+    function buildRulerPickerIcon(side) {
+        return window.L.divIcon({
+            className: "map-ruler-picker-icon",
+            html: `<span class="map-ruler-picker map-ruler-picker-${side.toLowerCase()}">${escapeHtml(side)}</span>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
+            tooltipAnchor: [0, -12],
+        });
+    }
+
+    function buildRulerInitialPoints() {
+        const viewportSize = map.getSize();
+        const anchorY = Math.max(40, viewportSize.y - 56);
+        const leftPadding = 16;
+        const rightPadding = 24;
+        const viewportRight = Math.max(leftPadding + 48, viewportSize.x - rightPadding);
+        const minGap = Math.max(48, Math.min(90, viewportRight - leftPadding));
+        const preferredGap = Math.max(minGap, Math.min(220, viewportRight - leftPadding));
+        let firstAnchorX = Math.min(168, viewportRight - minGap);
+        firstAnchorX = Math.max(leftPadding, firstAnchorX);
+        let secondAnchorX = Math.min(firstAnchorX + preferredGap, viewportRight);
+        if ((secondAnchorX - firstAnchorX) < minGap) {
+            firstAnchorX = Math.max(leftPadding, secondAnchorX - minGap);
+        }
+        return [
+            map.containerPointToLatLng([firstAnchorX, anchorY]),
+            map.containerPointToLatLng([secondAnchorX, anchorY]),
+        ];
+    }
+
+    function buildRulerTooltipHtml(title, bearingDeg, distanceMeters) {
+        return `
+            <div class="map-ruler-tooltip-content">
+                <strong>${escapeHtml(title)}</strong>
+                <span>${escapeHtml(i18n.course)}: ${Math.round(normalizeBearing(bearingDeg))}°</span>
+                <span>${escapeHtml(i18n.distance)}: ${escapeHtml(formatRulerDistance(distanceMeters))}</span>
+            </div>
+        `;
+    }
+
+    function syncRulerMeasurements() {
+        if (!rulerState) {
+            return;
+        }
+        const pointA = rulerState.markerA.getLatLng();
+        const pointB = rulerState.markerB.getLatLng();
+        const distanceMeters = map.distance(pointA, pointB);
+        const bearingAtoB = bearingBetweenPoints(pointA, pointB);
+        const bearingBtoA = bearingBetweenPoints(pointB, pointA);
+        rulerState.lineHalo.setLatLngs([pointA, pointB]);
+        rulerState.lineCore.setLatLngs([pointA, pointB]);
+        rulerState.markerA.setTooltipContent(buildRulerTooltipHtml("A -> B", bearingAtoB, distanceMeters));
+        rulerState.markerB.setTooltipContent(buildRulerTooltipHtml("B -> A", bearingBtoA, distanceMeters));
+    }
+
+    function anchorRulerToFrameIfIdle() {
+        if (!rulerState || rulerState.measurementActive) {
+            return;
+        }
+        const [anchorPointA, anchorPointB] = buildRulerInitialPoints();
+        rulerState.markerA.setLatLng(anchorPointA);
+        rulerState.markerB.setLatLng(anchorPointB);
+        rulerState.lineHalo.setLatLngs([anchorPointA, anchorPointB]);
+        rulerState.lineCore.setLatLngs([anchorPointA, anchorPointB]);
+    }
+
+    function initializeRuler() {
+        const [startPointA, startPointB] = buildRulerInitialPoints();
+        const rulerLineHalo = window.L.polyline([startPointA, startPointB], {
+            color: "rgba(255, 255, 255, 0.98)",
+            weight: 8,
+            opacity: 0.98,
+            lineCap: "round",
+            lineJoin: "round",
+            interactive: false,
+        });
+        const rulerLineCore = window.L.polyline([startPointA, startPointB], {
+            color: "#0078ff",
+            weight: 3.4,
+            opacity: 1,
+            lineCap: "round",
+            lineJoin: "round",
+            interactive: false,
+        });
+        const markerA = window.L.marker(startPointA, {
+            icon: buildRulerPickerIcon("A"),
+            draggable: true,
+            keyboard: false,
+            autoPan: true,
+            zIndexOffset: 1000,
+        });
+        const markerB = window.L.marker(startPointB, {
+            icon: buildRulerPickerIcon("B"),
+            draggable: true,
+            keyboard: false,
+            autoPan: true,
+            zIndexOffset: 1000,
+        });
+        markerA.bindTooltip("", {
+            direction: "top",
+            className: "aprs-tooltip map-ruler-tooltip",
+            opacity: 0.96,
+            permanent: true,
+            sticky: false,
+            offset: [-28, -10],
+        });
+        markerB.bindTooltip("", {
+            direction: "top",
+            className: "aprs-tooltip map-ruler-tooltip",
+            opacity: 0.96,
+            permanent: true,
+            sticky: false,
+            offset: [28, -10],
+        });
+
+        markerA.on("dragstart", function () {
+            if (rulerState) {
+                rulerState.measurementActive = true;
+            }
+        });
+        markerB.on("dragstart", function () {
+            if (rulerState) {
+                rulerState.measurementActive = true;
+            }
+        });
+        markerA.on("drag dragend", syncRulerMeasurements);
+        markerB.on("drag dragend", syncRulerMeasurements);
+
+        rulerLayer.addLayer(rulerLineHalo);
+        rulerLayer.addLayer(rulerLineCore);
+        rulerLayer.addLayer(markerA);
+        rulerLayer.addLayer(markerB);
+        rulerState = {
+            lineHalo: rulerLineHalo,
+            lineCore: rulerLineCore,
+            markerA,
+            markerB,
+            measurementActive: false,
+        };
+        anchorRulerToFrameIfIdle();
+        syncRulerMeasurements();
+    }
+
     function syncStatus() {
         const center = map.getCenter();
         if (centerOutput) {
@@ -297,6 +511,12 @@
         toggleCoverageButton.addEventListener("click", function () {
             applyCoverageToggleState(!coverageVisible);
             renderStations(latestStations, latestMobileTracks);
+        });
+    }
+    applyRulerToggleState(resolveRulerVisible());
+    if (toggleRulerButton) {
+        toggleRulerButton.addEventListener("click", function () {
+            applyRulerToggleState(!rulerVisible);
         });
     }
 
@@ -412,6 +632,128 @@
         return `hsl(${hue} 80% 52%)`;
     }
 
+    function phgDirectionAzimuth(directionValue) {
+        if (directionValue === null || directionValue === undefined) {
+            return null;
+        }
+        const normalized = String(directionValue).trim().toUpperCase();
+        if (!normalized || normalized === "OMNI" || normalized === "0") {
+            return null;
+        }
+        const codeMap = Object.freeze({
+            1: 45,
+            2: 90,
+            3: 135,
+            4: 180,
+            5: 225,
+            6: 270,
+            7: 315,
+            8: 0,
+        });
+        if (Object.prototype.hasOwnProperty.call(codeMap, normalized)) {
+            return codeMap[normalized];
+        }
+        const directionMap = Object.freeze({
+            N: 0,
+            NE: 45,
+            E: 90,
+            SE: 135,
+            S: 180,
+            SW: 225,
+            W: 270,
+            NW: 315,
+        });
+        if (Object.prototype.hasOwnProperty.call(directionMap, normalized)) {
+            return directionMap[normalized];
+        }
+        return null;
+    }
+
+    function destinationPoint(latitude, longitude, bearingDeg, distanceMeters) {
+        const earthRadiusMeters = 6371000;
+        const angularDistance = distanceMeters / earthRadiusMeters;
+        const bearingRad = (bearingDeg * Math.PI) / 180;
+        const latitudeRad = (latitude * Math.PI) / 180;
+        const longitudeRad = (longitude * Math.PI) / 180;
+        const sinLatitude = Math.sin(latitudeRad);
+        const cosLatitude = Math.cos(latitudeRad);
+        const sinAngularDistance = Math.sin(angularDistance);
+        const cosAngularDistance = Math.cos(angularDistance);
+
+        const targetLatitudeRad = Math.asin(
+            (sinLatitude * cosAngularDistance)
+            + (cosLatitude * sinAngularDistance * Math.cos(bearingRad))
+        );
+        const targetLongitudeRad = longitudeRad + Math.atan2(
+            Math.sin(bearingRad) * sinAngularDistance * cosLatitude,
+            cosAngularDistance - (sinLatitude * Math.sin(targetLatitudeRad))
+        );
+        const targetLongitudeDeg = ((((targetLongitudeRad * 180) / Math.PI) + 540) % 360) - 180;
+        return [(targetLatitudeRad * 180) / Math.PI, targetLongitudeDeg];
+    }
+
+    function buildPhgCardioidPoints(station, azimuthDeg, radiusMeters) {
+        const sampleCount = 96;
+        const points = [];
+        const backwardOffsetMeters = radiusMeters / 3;
+        const cardioidRadiusMeters = radiusMeters + backwardOffsetMeters;
+        const azimuthRad = (azimuthDeg * Math.PI) / 180;
+        const cosAzimuth = Math.cos(azimuthRad);
+        const sinAzimuth = Math.sin(azimuthRad);
+
+        for (let index = 0; index < sampleCount; index += 1) {
+            const theta = (index / sampleCount) * Math.PI * 2;
+            const radialDistance = cardioidRadiusMeters * ((1 + Math.cos(theta)) / 2);
+            const localX = radialDistance * Math.sin(theta);
+            const localY = (radialDistance * Math.cos(theta)) - backwardOffsetMeters;
+            const rotatedX = (localX * cosAzimuth) + (localY * sinAzimuth);
+            const rotatedY = (-localX * sinAzimuth) + (localY * cosAzimuth);
+            const distanceMeters = Math.hypot(rotatedX, rotatedY);
+            if (distanceMeters < 0.01) {
+                points.push([station.latitude, station.longitude]);
+                continue;
+            }
+            const bearingDeg = (Math.atan2(rotatedX, rotatedY) * 180) / Math.PI;
+            points.push(destinationPoint(station.latitude, station.longitude, bearingDeg, distanceMeters));
+        }
+        if (points.length > 0) {
+            points.push(points[0]);
+        }
+        return points;
+    }
+
+    function buildPhgCoverageLayer(station, coverageColor) {
+        const radiusMeters = Number(station.phg_range_km) * 1000;
+        const circleOptions = {
+            radius: radiusMeters,
+            color: coverageColor,
+            fillColor: coverageColor,
+            opacity: 1,
+            fillOpacity: 0.2,
+            stroke: true,
+            weight: 1.25,
+            interactive: false,
+        };
+        const fallbackCircle = window.L.circle([station.latitude, station.longitude], circleOptions);
+        const azimuth = phgDirectionAzimuth(station.phg_direction);
+        if (azimuth === null || !Number.isFinite(azimuth)) {
+            return fallbackCircle;
+        }
+        const cardioidPoints = buildPhgCardioidPoints(station, azimuth, radiusMeters);
+        if (cardioidPoints.length < 4) {
+            return fallbackCircle;
+        }
+        return window.L.polygon(cardioidPoints, {
+            color: coverageColor,
+            fillColor: coverageColor,
+            opacity: 1,
+            fillOpacity: 0.2,
+            stroke: true,
+            weight: 1.25,
+            interactive: false,
+        });
+    }
+
     function renderStations(stations, mobileTracks) {
         stationLayer.clearLayers();
         if (coverageVisible) {
@@ -423,16 +765,11 @@
                     continue;
                 }
                 const coverageColor = colorForCallsign(station.display_callsign || station.callsign || "");
-                const coverageCircle = window.L.circle([station.latitude, station.longitude], {
-                    radius: station.phg_range_km * 1000,
-                    color: coverageColor,
-                    fillColor: coverageColor,
-                    opacity: 0.2,
-                    fillOpacity: 0.2,
-                    weight: 1,
-                    interactive: false,
-                });
-                stationLayer.addLayer(coverageCircle);
+                const coverageLayer = buildPhgCoverageLayer(station, coverageColor);
+                if (!coverageLayer) {
+                    continue;
+                }
+                stationLayer.addLayer(coverageLayer);
             }
         }
         if (tracksVisible) {
@@ -524,12 +861,17 @@
     }
 
     map.on("moveend zoomend", function () {
+        anchorRulerToFrameIfIdle();
         syncStatus();
         persistView();
+    });
+    map.on("resize", function () {
+        anchorRulerToFrameIfIdle();
     });
     map.whenReady(function () {
         window.setTimeout(function () {
             map.invalidateSize();
+            initializeRuler();
         }, 0);
     });
     refreshStations();

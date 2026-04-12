@@ -37,6 +37,10 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('id="map-toggle-coverage-icon"', template_source)
         self.assertIn("data-i18n-show-coverage", template_source)
         self.assertIn("data-i18n-hide-coverage", template_source)
+        self.assertIn('id="map-toggle-ruler"', template_source)
+        self.assertIn('id="map-toggle-ruler-icon"', template_source)
+        self.assertIn("data-i18n-show-ruler", template_source)
+        self.assertIn("data-i18n-hide-ruler", template_source)
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -48,6 +52,12 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function resolveCoverageVisible()", script_source)
         self.assertIn("function applyCoverageToggleState(visible)", script_source)
         self.assertIn("if (coverageVisible)", script_source)
+        self.assertIn("mapRulerVisibleStorageKey", script_source)
+        self.assertIn("function resolveRulerVisible()", script_source)
+        self.assertIn("function applyRulerToggleState(visible)", script_source)
+        self.assertIn("function buildPhgCoverageLayer(station, coverageColor)", script_source)
+        self.assertIn("function buildPhgCardioidPoints(station, azimuthDeg, radiusMeters)", script_source)
+        self.assertIn("window.L.polygon(", script_source)
         self.assertIn("window.L.circle([station.latitude, station.longitude]", script_source)
 
     def test_station_detail_map_script_renders_station_track(self) -> None:
@@ -56,6 +66,19 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("window.L.polyline(", script_source)
         self.assertIn("window.L.circleMarker(", script_source)
         self.assertIn("ensureMap(station, mapConfig, stationTrack)", script_source)
+
+    def test_map_script_initializes_ruler_with_draggable_markers(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("const rulerLayer = window.L.layerGroup();", script_source)
+        self.assertIn("function initializeRuler()", script_source)
+        self.assertIn("function anchorRulerToFrameIfIdle()", script_source)
+        self.assertIn("function buildRulerInitialPoints()", script_source)
+        self.assertIn("draggable: true", script_source)
+        self.assertIn("measurementActive: false", script_source)
+        self.assertIn("color: \"rgba(255, 255, 255, 0.98)\"", script_source)
+        self.assertIn("color: \"#0078ff\"", script_source)
+        self.assertIn("map.containerPointToLatLng(", script_source)
+        self.assertIn("map-ruler-tooltip", script_source)
 
     def test_station_detail_template_exposes_initial_track_points(self) -> None:
         template_source = Path("app/templates/station_detail.html").read_text(encoding="utf-8")
