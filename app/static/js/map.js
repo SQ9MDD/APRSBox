@@ -476,13 +476,14 @@
         const sampleCount = 96;
         const points = [];
         const backwardOffsetMeters = radiusMeters / 3;
+        const cardioidRadiusMeters = radiusMeters + backwardOffsetMeters;
         const azimuthRad = (azimuthDeg * Math.PI) / 180;
         const cosAzimuth = Math.cos(azimuthRad);
         const sinAzimuth = Math.sin(azimuthRad);
 
         for (let index = 0; index < sampleCount; index += 1) {
             const theta = (index / sampleCount) * Math.PI * 2;
-            const radialDistance = radiusMeters * ((1 + Math.cos(theta)) / 2);
+            const radialDistance = cardioidRadiusMeters * ((1 + Math.cos(theta)) / 2);
             const localX = radialDistance * Math.sin(theta);
             const localY = (radialDistance * Math.cos(theta)) - backwardOffsetMeters;
             const rotatedX = (localX * cosAzimuth) + (localY * sinAzimuth);
