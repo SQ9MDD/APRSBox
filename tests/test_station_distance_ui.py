@@ -64,8 +64,12 @@ class StationDistanceUiTests(unittest.TestCase):
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("const rulerLayer = window.L.layerGroup();", script_source)
         self.assertIn("function initializeRuler()", script_source)
+        self.assertIn("function anchorRulerToFrameIfIdle()", script_source)
         self.assertIn("function buildRulerInitialPoints()", script_source)
         self.assertIn("draggable: true", script_source)
+        self.assertIn("measurementActive: false", script_source)
+        self.assertIn("color: \"rgba(255, 255, 255, 0.98)\"", script_source)
+        self.assertIn("color: \"#0078ff\"", script_source)
         self.assertIn("map.containerPointToLatLng(", script_source)
         self.assertIn("map-ruler-tooltip", script_source)
 

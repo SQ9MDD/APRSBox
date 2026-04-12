@@ -61,6 +61,7 @@
     let coverageVisible = true;
     let latestStations = [];
     let latestMobileTracks = [];
+    let rulerState = null;
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -314,11 +315,45 @@
         `;
     }
 
+    function syncRulerMeasurements() {
+        if (!rulerState) {
+            return;
+        }
+        const pointA = rulerState.markerA.getLatLng();
+        const pointB = rulerState.markerB.getLatLng();
+        const distanceMeters = map.distance(pointA, pointB);
+        const bearingAtoB = bearingBetweenPoints(pointA, pointB);
+        const bearingBtoA = bearingBetweenPoints(pointB, pointA);
+        rulerState.lineHalo.setLatLngs([pointA, pointB]);
+        rulerState.lineCore.setLatLngs([pointA, pointB]);
+        rulerState.markerA.setTooltipContent(buildRulerTooltipHtml("A -> B", bearingAtoB, distanceMeters));
+        rulerState.markerB.setTooltipContent(buildRulerTooltipHtml("B -> A", bearingBtoA, distanceMeters));
+    }
+
+    function anchorRulerToFrameIfIdle() {
+        if (!rulerState || rulerState.measurementActive) {
+            return;
+        }
+        const [anchorPointA, anchorPointB] = buildRulerInitialPoints();
+        rulerState.markerA.setLatLng(anchorPointA);
+        rulerState.markerB.setLatLng(anchorPointB);
+        rulerState.lineHalo.setLatLngs([anchorPointA, anchorPointB]);
+        rulerState.lineCore.setLatLngs([anchorPointA, anchorPointB]);
+    }
+
     function initializeRuler() {
         const [startPointA, startPointB] = buildRulerInitialPoints();
-        const rulerLine = window.L.polyline([startPointA, startPointB], {
-            color: "#54b7ff",
-            weight: 2.5,
+        const rulerLineHalo = window.L.polyline([startPointA, startPointB], {
+            color: "rgba(255, 255, 255, 0.98)",
+            weight: 8,
+            opacity: 0.98,
+            lineCap: "round",
+            lineJoin: "round",
+            interactive: false,
+        });
+        const rulerLineCore = window.L.polyline([startPointA, startPointB], {
+            color: "#0078ff",
+            weight: 3.4,
             opacity: 1,
             lineCap: "round",
             lineJoin: "round",
@@ -353,23 +388,31 @@
             sticky: false,
         });
 
-        function syncRulerMeasurements() {
-            const pointA = markerA.getLatLng();
-            const pointB = markerB.getLatLng();
-            const distanceMeters = map.distance(pointA, pointB);
-            const bearingAtoB = bearingBetweenPoints(pointA, pointB);
-            const bearingBtoA = bearingBetweenPoints(pointB, pointA);
-            rulerLine.setLatLngs([pointA, pointB]);
-            markerA.setTooltipContent(buildRulerTooltipHtml("A -> B", bearingAtoB, distanceMeters));
-            markerB.setTooltipContent(buildRulerTooltipHtml("B -> A", bearingBtoA, distanceMeters));
-        }
-
+        markerA.on("dragstart", function () {
+            if (rulerState) {
+                rulerState.measurementActive = true;
+            }
+        });
+        markerB.on("dragstart", function () {
+            if (rulerState) {
+                rulerState.measurementActive = true;
+            }
+        });
         markerA.on("drag dragend", syncRulerMeasurements);
         markerB.on("drag dragend", syncRulerMeasurements);
 
-        rulerLayer.addLayer(rulerLine);
+        rulerLayer.addLayer(rulerLineHalo);
+        rulerLayer.addLayer(rulerLineCore);
         rulerLayer.addLayer(markerA);
         rulerLayer.addLayer(markerB);
+        rulerState = {
+            lineHalo: rulerLineHalo,
+            lineCore: rulerLineCore,
+            markerA,
+            markerB,
+            measurementActive: false,
+        };
+        anchorRulerToFrameIfIdle();
         syncRulerMeasurements();
     }
 
@@ -761,8 +804,12 @@
     }
 
     map.on("moveend zoomend", function () {
+        anchorRulerToFrameIfIdle();
         syncStatus();
         persistView();
+    });
+    map.on("resize", function () {
+        anchorRulerToFrameIfIdle();
     });
     map.whenReady(function () {
         window.setTimeout(function () {
