@@ -102,6 +102,11 @@
     const newConversationForm = document.getElementById("messages-new-conversation-form");
     const newConversationInput = document.getElementById("messages-new-callsign");
     const defaultPath = String(initialData.default_path || "");
+    const serviceDestinations = new Set(
+        (Array.isArray(initialData.service_destinations) ? initialData.service_destinations : [])
+            .map((value) => normalizeCallsign(value))
+            .filter((value) => value.length > 0)
+    );
     const messagesApi = `${window.location.pathname.replace(/\/messages$/, "")}/api/messages`.replace(/\/\//g, "/");
     const requestedCallsign = new URLSearchParams(window.location.search).get("callsign");
     const i18n = Object.freeze({
@@ -157,7 +162,7 @@
 
     function validateCallsign(value) {
         const normalized = normalizeCallsign(value);
-        return /^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$/.test(normalized);
+        return /^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$/.test(normalized) || serviceDestinations.has(normalized);
     }
 
     function escapeHtml(value) {

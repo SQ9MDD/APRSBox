@@ -23,10 +23,12 @@ from app.services.messages import (
     get_unread_inbox_count,
     get_messages_page_data,
     mark_conversation_read,
+    normalize_aprs_destination_callsign,
     normalize_aprs_message_text,
     process_incoming_tnc2_message,
     queue_outgoing_message,
     retry_failed_message,
+    split_callsign_ssid,
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
@@ -87,6 +89,18 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
         self.assertEqual(normalize_aprs_message_text(allowed), allowed)
 
+    def test_destination_callsign_accepts_documented_aprs_service_aliases(self) -> None:
+        for alias in ("WHO-IS", "WHO-15", "WLNK-1", "EMAIL", "E", "ANSRVR", "CQSRVR", "QRU", "QRZ", "WXBOT", "WHERE-IS", "SMSGTE"):
+            self.assertEqual(normalize_aprs_destination_callsign(alias.lower()), alias)
+
+    def test_destination_callsign_rejects_unknown_non_callsign_alias(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Destination callsign"):
+            normalize_aprs_destination_callsign("FOO-BAR")
+
+    def test_split_callsign_ssid_keeps_non_ssid_alias_intact(self) -> None:
+        self.assertEqual(split_callsign_ssid("WHO-IS"), ("WHO-IS", ""))
+        self.assertEqual(split_callsign_ssid("WLNK-1"), ("WLNK", "1"))
+
     def test_heard_recently_state_uses_expected_thresholds(self) -> None:
         self.assertEqual(_heard_recently_state(HEARD_FRESH_SECONDS), "fresh")
         self.assertEqual(_heard_recently_state(HEARD_FRESH_SECONDS + 1), "warn")
@@ -119,7 +133,6 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(conversation_row["remote_callsign"], "SP8ABC")
             self.assertEqual(conversation_row["remote_ssid"], "")
             self.assertEqual(conversation_row["path"], "WIDE1-1")
-
             queued_job = fetch_one(
                 """
                 SELECT kind, status, aprs_message_id
@@ -204,6 +217,20 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             cancelled_retry = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(retry_job["id"]),))
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
+
+    async def test_queue_message_to_service_alias_keeps_full_destination(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            message = queue_outgoing_message(callsign="WHO-IS", message_text="SP9XYZ", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+            self.assertEqual(message["addressee"], "WHO-IS")
+
+            conversation_row = fetch_one("SELECT remote_callsign, remote_ssid FROM aprs_message_conversations")
+            assert conversation_row is not None
+            self.assertEqual(conversation_row["remote_callsign"], "WHO-IS")
+            self.assertEqual(conversation_row["remote_ssid"], "")
 
     async def test_ack_for_local_ssid_zero_matches_when_remote_omits_dash_zero(self) -> None:
         with temporary_database():

@@ -43,6 +43,24 @@ _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
 _MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
+APRS_SERVICE_DESTINATIONS = (
+    "ANSRVR",
+    "AVRS",
+    "CQ",
+    "CQSRVR",
+    "E",
+    "EMAIL",
+    "QRU",
+    "QRZ",
+    "SMSGTE",
+    "WHERE",
+    "WHERE-IS",
+    "WHO-15",
+    "WHO-IS",
+    "WLNK-1",
+    "WXBOT",
+)
+_APRS_SERVICE_DESTINATION_SET = frozenset(APRS_SERVICE_DESTINATIONS)
 
 
 def _t(message: str) -> str:
@@ -53,7 +71,7 @@ def normalize_aprs_destination_callsign(value: str) -> str:
     normalized = str(value or "").strip().upper()
     if not normalized:
         raise ValueError(_t("Destination callsign is required."))
-    if not _CALLSIGN_RE.fullmatch(normalized):
+    if not _CALLSIGN_RE.fullmatch(normalized) and normalized not in _APRS_SERVICE_DESTINATION_SET:
         raise ValueError(_t("Destination callsign must be an AX.25/APRS callsign with optional SSID 0-15."))
     return normalized
 
@@ -291,6 +309,7 @@ def get_messages_page_data() -> dict[str, Any]:
         "composer_limit": MESSAGE_MAX_LENGTH,
         "recently_heard_window_minutes": HEARD_WARN_SECONDS // 60,
         "default_path": str(station_settings.get("beacon_path") or "").strip(),
+        "service_destinations": list(APRS_SERVICE_DESTINATIONS),
     }
 
 
@@ -1096,10 +1115,13 @@ def _format_bulletin_display_text(addressee: str, message_text: str) -> str:
 
 
 def split_callsign_ssid(value: str) -> tuple[str, str]:
-    base, separator, suffix = str(value or "").strip().upper().partition("-")
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        return "", ""
+    base, separator, suffix = normalized.partition("-")
     if separator and suffix.isdigit():
         return base, suffix
-    return base, ""
+    return normalized, ""
 
 
 def format_display_callsign(callsign: str, ssid: str) -> str:
