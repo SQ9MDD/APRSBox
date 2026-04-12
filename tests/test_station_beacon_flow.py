@@ -86,6 +86,8 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             self.assertIn("Enable automatic beacon transmission every selected interval", template_source)
             self.assertIn('name="status_enabled" value="1" {% if station.status_enabled %}checked{% endif %}', template_source)
             self.assertIn("Status is sent as a separate APRS frame", template_source)
+            self.assertIn('id="station-phg-gain-input"', template_source)
+            self.assertIn('id="station-phg-direction-input"', template_source)
 
     def test_status_validation_rejects_enabled_empty_text(self) -> None:
         with temporary_database():

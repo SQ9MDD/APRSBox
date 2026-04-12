@@ -338,7 +338,7 @@
                         <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
                     </button>
                 </div>
-                <p class="section-lead">{{ t("Set power and antenna height above ground. Generated PHG is inserted at the beginning of Beacon Comment.") }}</p>
+                <p class="section-lead">{{ t("Set power, antenna height above ground, gain, and direction. Generated PHG is inserted at the beginning of Beacon Comment.") }}</p>
                 <div class="phg-generator-grid">
                     <label>
                         <span>{{ t("Power") }} <small class="muted" id="station-phg-power-unit">W</small></span>
@@ -347,6 +347,25 @@
                     <label>
                         <span>{{ t("Height above ground") }} <small class="muted" id="station-phg-height-unit">m</small></span>
                         <input type="number" id="station-phg-height-input" min="0" step="0.1" inputmode="decimal">
+                    </label>
+                    <label>
+                        <span>{{ t("Gain") }} <small class="muted">dBi</small></span>
+                        <input type="number" id="station-phg-gain-input" min="0" max="9" step="1" inputmode="numeric">
+                    </label>
+                    <label>
+                        <span>{{ t("Direction") }}</span>
+                        <select id="station-phg-direction-input">
+                            <option value="0">{{ t("Omni") }}</option>
+                            <option value="1">NE (45°)</option>
+                            <option value="2">E (90°)</option>
+                            <option value="3">SE (135°)</option>
+                            <option value="4">S (180°)</option>
+                            <option value="5">SW (225°)</option>
+                            <option value="6">W (270°)</option>
+                            <option value="7">NW (315°)</option>
+                            <option value="8">N (360°)</option>
+                            <option value="9">9</option>
+                        </select>
                     </label>
                     <div class="phg-generator-preview">
                         <small class="muted">{{ t("Generated PHG") }}</small>
@@ -664,6 +683,8 @@
             const applyButton = document.getElementById("station-apply-phg-generator");
             const powerInput = document.getElementById("station-phg-power-input");
             const heightInput = document.getElementById("station-phg-height-input");
+            const gainInput = document.getElementById("station-phg-gain-input");
+            const directionInput = document.getElementById("station-phg-direction-input");
             const powerUnitNode = document.getElementById("station-phg-power-unit");
             const heightUnitNode = document.getElementById("station-phg-height-unit");
             const previewCodeNode = document.getElementById("station-phg-preview-code");
@@ -675,6 +696,8 @@
                 || !(applyButton instanceof HTMLButtonElement)
                 || !(powerInput instanceof HTMLInputElement)
                 || !(heightInput instanceof HTMLInputElement)
+                || !(gainInput instanceof HTMLInputElement)
+                || !(directionInput instanceof HTMLSelectElement)
                 || !(powerUnitNode instanceof HTMLElement)
                 || !(heightUnitNode instanceof HTMLElement)
                 || !(previewCodeNode instanceof HTMLElement)
@@ -686,6 +709,18 @@
             const unitSystem = String(dialog.dataset.defaultUnits || "").toLowerCase() === "imperial" ? "imperial" : "metric";
             const powerWattsByCode = Array.from({ length: 10 }, (_, code) => code * code);
             const heightFeetByCode = Array.from({ length: 10 }, (_, code) => 10 * (2 ** code));
+            const directionLabelByCode = {
+                0: "omni",
+                1: "NE",
+                2: "E",
+                3: "SE",
+                4: "S",
+                5: "SW",
+                6: "W",
+                7: "NW",
+                8: "N",
+                9: "9",
+            };
             const metersToFeet = (meters) => meters * 3.28084;
             const feetToMeters = (feet) => feet * 0.3048;
 
@@ -701,9 +736,11 @@
 
             const openModal = () => {
                 const existingCodes = parseLeadingPhgCodes(beaconCommentInput.value);
-                const defaults = existingCodes || { powerCode: 5, heightCode: 2 };
+                const defaults = existingCodes || { powerCode: 5, heightCode: 2, gainCode: 0, directionCode: 0 };
                 powerInput.value = String(powerWattsByCode[defaults.powerCode]);
                 heightInput.value = String(roundHeightDisplay(heightValueFromCode(defaults.heightCode)));
+                gainInput.value = String(defaults.gainCode);
+                directionInput.value = String(defaults.directionCode);
                 modal.hidden = false;
                 document.body.classList.add("modal-open");
                 updatePreview();
@@ -739,6 +776,9 @@
                 const heightFeet = unitSystem === "imperial" ? heightValue : metersToFeet(heightValue);
                 return nearestCode(Math.max(0, heightFeet), heightFeetByCode);
             };
+            const singleDigitCode = (value) => Math.max(0, Math.min(9, Number.parseInt(String(value), 10) || 0));
+            const gainCodeFromValue = (gainValue) => singleDigitCode(Math.round(Math.max(0, gainValue)));
+            const directionCodeFromValue = (directionValue) => singleDigitCode(directionValue);
 
             const heightValueFromCode = (code) => {
                 const feet = heightFeetByCode[Math.max(0, Math.min(9, Number(code) || 0))];
@@ -753,29 +793,37 @@
             };
 
             const parseLeadingPhgCodes = (text) => {
-                const match = String(text || "").match(/^\s*PHG([0-9])([0-9])[0-9][0-9]\b/i);
+                const match = String(text || "").match(/^\s*PHG([0-9])([0-9])([0-9])([0-9])\b/i);
                 if (!match) {
                     return null;
                 }
                 return {
-                    powerCode: Math.max(0, Math.min(9, Number.parseInt(match[1], 10) || 0)),
-                    heightCode: Math.max(0, Math.min(9, Number.parseInt(match[2], 10) || 0)),
+                    powerCode: singleDigitCode(match[1]),
+                    heightCode: singleDigitCode(match[2]),
+                    gainCode: singleDigitCode(match[3]),
+                    directionCode: singleDigitCode(match[4]),
                 };
             };
 
             const updatePreview = () => {
                 const powerValue = Math.max(0, normalizeNumber(powerInput.value));
                 const heightValue = Math.max(0, normalizeNumber(heightInput.value));
+                const gainValue = Math.max(0, normalizeNumber(gainInput.value));
+                const directionValue = Math.max(0, normalizeNumber(directionInput.value));
 
                 powerInput.value = String(Math.round(powerValue));
                 heightInput.value = String(roundHeightDisplay(heightValue));
+                gainInput.value = String(gainCodeFromValue(gainValue));
+                directionInput.value = String(directionCodeFromValue(directionValue));
 
                 const powerCode = powerCodeFromWatts(powerValue);
                 const heightCode = heightCodeFromValue(heightValue);
-                const phgToken = `PHG${powerCode}${heightCode}00`;
+                const gainCode = gainCodeFromValue(gainValue);
+                const directionCode = directionCodeFromValue(directionValue);
+                const phgToken = `PHG${powerCode}${heightCode}${gainCode}${directionCode}`;
 
                 previewCodeNode.textContent = phgToken;
-                previewDetailsNode.textContent = `${powerWattsByCode[powerCode]} W, ${formatHeightForPreview(heightFeetByCode[heightCode])}`;
+                previewDetailsNode.textContent = `${powerWattsByCode[powerCode]} W, ${formatHeightForPreview(heightFeetByCode[heightCode])}, ${gainCode} dBi, ${directionLabelByCode[directionCode] || String(directionCode)}`;
                 applyButton.dataset.phgToken = phgToken;
             };
 
@@ -784,6 +832,8 @@
 
             powerInput.addEventListener("input", updatePreview);
             heightInput.addEventListener("input", updatePreview);
+            gainInput.addEventListener("input", updatePreview);
+            directionInput.addEventListener("change", updatePreview);
 
             applyButton.addEventListener("click", () => {
                 const phgToken = String(applyButton.dataset.phgToken || "PHG0000").toUpperCase();
