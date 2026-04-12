@@ -506,9 +506,10 @@
             radius: radiusMeters,
             color: coverageColor,
             fillColor: coverageColor,
-            opacity: 0.2,
+            opacity: 1,
             fillOpacity: 0.2,
-            weight: 1,
+            stroke: true,
+            weight: 1.25,
             interactive: false,
         };
         const fallbackCircle = window.L.circle([station.latitude, station.longitude], circleOptions);
@@ -523,7 +524,7 @@
         return window.L.polygon(cardioidPoints, {
             color: coverageColor,
             fillColor: coverageColor,
-            opacity: 0.35,
+            opacity: 1,
             fillOpacity: 0.2,
             stroke: true,
             weight: 1.25,
