@@ -294,11 +294,17 @@
     function buildRulerInitialPoints() {
         const viewportSize = map.getSize();
         const anchorY = Math.max(40, viewportSize.y - 56);
-        const leftPadding = 24;
+        const leftPadding = 16;
         const rightPadding = 24;
-        const minGap = 24;
-        const firstAnchorX = Math.max(leftPadding, Math.min(56, viewportSize.x - rightPadding - minGap));
-        const secondAnchorX = Math.max(firstAnchorX + minGap, Math.min(164, viewportSize.x - rightPadding));
+        const viewportRight = Math.max(leftPadding + 48, viewportSize.x - rightPadding);
+        const minGap = Math.max(48, Math.min(90, viewportRight - leftPadding));
+        const preferredGap = Math.max(minGap, Math.min(220, viewportRight - leftPadding));
+        let firstAnchorX = Math.min(168, viewportRight - minGap);
+        firstAnchorX = Math.max(leftPadding, firstAnchorX);
+        let secondAnchorX = Math.min(firstAnchorX + preferredGap, viewportRight);
+        if ((secondAnchorX - firstAnchorX) < minGap) {
+            firstAnchorX = Math.max(leftPadding, secondAnchorX - minGap);
+        }
         return [
             map.containerPointToLatLng([firstAnchorX, anchorY]),
             map.containerPointToLatLng([secondAnchorX, anchorY]),
@@ -379,6 +385,7 @@
             opacity: 0.96,
             permanent: true,
             sticky: false,
+            offset: [-28, -10],
         });
         markerB.bindTooltip("", {
             direction: "top",
@@ -386,6 +393,7 @@
             opacity: 0.96,
             permanent: true,
             sticky: false,
+            offset: [28, -10],
         });
 
         markerA.on("dragstart", function () {
