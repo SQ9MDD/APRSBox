@@ -49,6 +49,7 @@
         hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
     });
     const stationLayer = window.L.layerGroup();
+    const rulerLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
@@ -107,6 +108,7 @@
         maxZoom: 19,
     }).addTo(map);
     stationLayer.addTo(map);
+    rulerLayer.addTo(map);
 
     if (tileSourceOutput) {
         tileSourceOutput.textContent = tileSourceName;
@@ -251,6 +253,124 @@
             return "";
         }
         return `${distanceKm} km`;
+    }
+
+    function normalizeBearing(bearingDeg) {
+        return (bearingDeg + 360) % 360;
+    }
+
+    function bearingBetweenPoints(fromLatLng, toLatLng) {
+        const fromLatitudeRad = (fromLatLng.lat * Math.PI) / 180;
+        const toLatitudeRad = (toLatLng.lat * Math.PI) / 180;
+        const deltaLongitudeRad = ((toLatLng.lng - fromLatLng.lng) * Math.PI) / 180;
+        const y = Math.sin(deltaLongitudeRad) * Math.cos(toLatitudeRad);
+        const x = (
+            (Math.cos(fromLatitudeRad) * Math.sin(toLatitudeRad))
+            - (Math.sin(fromLatitudeRad) * Math.cos(toLatitudeRad) * Math.cos(deltaLongitudeRad))
+        );
+        return normalizeBearing((Math.atan2(y, x) * 180) / Math.PI);
+    }
+
+    function formatRulerDistance(distanceMeters) {
+        if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
+            return "--";
+        }
+        const distanceKm = distanceMeters / 1000;
+        const precision = distanceKm < 10 ? 2 : 1;
+        return `${distanceKm.toFixed(precision)} km`;
+    }
+
+    function buildRulerPickerIcon(side) {
+        return window.L.divIcon({
+            className: "map-ruler-picker-icon",
+            html: `<span class="map-ruler-picker map-ruler-picker-${side.toLowerCase()}">${escapeHtml(side)}</span>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
+            tooltipAnchor: [0, -12],
+        });
+    }
+
+    function buildRulerInitialPoints() {
+        const viewportSize = map.getSize();
+        const anchorY = Math.max(40, viewportSize.y - 56);
+        const leftPadding = 24;
+        const rightPadding = 24;
+        const minGap = 24;
+        const firstAnchorX = Math.max(leftPadding, Math.min(56, viewportSize.x - rightPadding - minGap));
+        const secondAnchorX = Math.max(firstAnchorX + minGap, Math.min(164, viewportSize.x - rightPadding));
+        return [
+            map.containerPointToLatLng([firstAnchorX, anchorY]),
+            map.containerPointToLatLng([secondAnchorX, anchorY]),
+        ];
+    }
+
+    function buildRulerTooltipHtml(title, bearingDeg, distanceMeters) {
+        return `
+            <div class="map-ruler-tooltip-content">
+                <strong>${escapeHtml(title)}</strong>
+                <span>${escapeHtml(i18n.course)}: ${Math.round(normalizeBearing(bearingDeg))}°</span>
+                <span>${escapeHtml(i18n.distance)}: ${escapeHtml(formatRulerDistance(distanceMeters))}</span>
+            </div>
+        `;
+    }
+
+    function initializeRuler() {
+        const [startPointA, startPointB] = buildRulerInitialPoints();
+        const rulerLine = window.L.polyline([startPointA, startPointB], {
+            color: "#54b7ff",
+            weight: 2.5,
+            opacity: 1,
+            lineCap: "round",
+            lineJoin: "round",
+            interactive: false,
+        });
+        const markerA = window.L.marker(startPointA, {
+            icon: buildRulerPickerIcon("A"),
+            draggable: true,
+            keyboard: false,
+            autoPan: true,
+            zIndexOffset: 1000,
+        });
+        const markerB = window.L.marker(startPointB, {
+            icon: buildRulerPickerIcon("B"),
+            draggable: true,
+            keyboard: false,
+            autoPan: true,
+            zIndexOffset: 1000,
+        });
+        markerA.bindTooltip("", {
+            direction: "top",
+            className: "aprs-tooltip map-ruler-tooltip",
+            opacity: 0.96,
+            permanent: true,
+            sticky: false,
+        });
+        markerB.bindTooltip("", {
+            direction: "top",
+            className: "aprs-tooltip map-ruler-tooltip",
+            opacity: 0.96,
+            permanent: true,
+            sticky: false,
+        });
+
+        function syncRulerMeasurements() {
+            const pointA = markerA.getLatLng();
+            const pointB = markerB.getLatLng();
+            const distanceMeters = map.distance(pointA, pointB);
+            const bearingAtoB = bearingBetweenPoints(pointA, pointB);
+            const bearingBtoA = bearingBetweenPoints(pointB, pointA);
+            rulerLine.setLatLngs([pointA, pointB]);
+            markerA.setTooltipContent(buildRulerTooltipHtml("A -> B", bearingAtoB, distanceMeters));
+            markerB.setTooltipContent(buildRulerTooltipHtml("B -> A", bearingBtoA, distanceMeters));
+        }
+
+        markerA.on("drag dragend", syncRulerMeasurements);
+        markerB.on("drag dragend", syncRulerMeasurements);
+
+        rulerLayer.addLayer(rulerLine);
+        rulerLayer.addLayer(markerA);
+        rulerLayer.addLayer(markerB);
+        syncRulerMeasurements();
     }
 
     function syncStatus() {
@@ -647,6 +767,7 @@
     map.whenReady(function () {
         window.setTimeout(function () {
             map.invalidateSize();
+            initializeRuler();
         }, 0);
     });
     refreshStations();

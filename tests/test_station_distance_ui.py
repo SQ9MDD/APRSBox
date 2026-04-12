@@ -60,6 +60,15 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("window.L.circleMarker(", script_source)
         self.assertIn("ensureMap(station, mapConfig, stationTrack)", script_source)
 
+    def test_map_script_initializes_ruler_with_draggable_markers(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("const rulerLayer = window.L.layerGroup();", script_source)
+        self.assertIn("function initializeRuler()", script_source)
+        self.assertIn("function buildRulerInitialPoints()", script_source)
+        self.assertIn("draggable: true", script_source)
+        self.assertIn("map.containerPointToLatLng(", script_source)
+        self.assertIn("map-ruler-tooltip", script_source)
+
     def test_station_detail_template_exposes_initial_track_points(self) -> None:
         template_source = Path("app/templates/station_detail.html").read_text(encoding="utf-8")
         self.assertIn("data-track-points=", template_source)
