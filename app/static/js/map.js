@@ -475,6 +475,7 @@
     function buildPhgCardioidPoints(station, azimuthDeg, radiusMeters) {
         const sampleCount = 96;
         const points = [];
+        const backwardOffsetMeters = radiusMeters / 3;
         const azimuthRad = (azimuthDeg * Math.PI) / 180;
         const cosAzimuth = Math.cos(azimuthRad);
         const sinAzimuth = Math.sin(azimuthRad);
@@ -483,7 +484,7 @@
             const theta = (index / sampleCount) * Math.PI * 2;
             const radialDistance = radiusMeters * ((1 + Math.cos(theta)) / 2);
             const localX = radialDistance * Math.sin(theta);
-            const localY = radialDistance * Math.cos(theta);
+            const localY = (radialDistance * Math.cos(theta)) - backwardOffsetMeters;
             const rotatedX = (localX * cosAzimuth) + (localY * sinAzimuth);
             const rotatedY = (-localX * sinAzimuth) + (localY * cosAzimuth);
             const distanceMeters = Math.hypot(rotatedX, rotatedY);
