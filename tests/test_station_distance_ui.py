@@ -48,6 +48,9 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function resolveCoverageVisible()", script_source)
         self.assertIn("function applyCoverageToggleState(visible)", script_source)
         self.assertIn("if (coverageVisible)", script_source)
+        self.assertIn("function buildPhgCoverageLayer(station, coverageColor)", script_source)
+        self.assertIn("function buildPhgCardioidPoints(station, azimuthDeg, radiusMeters)", script_source)
+        self.assertIn("window.L.polygon(", script_source)
         self.assertIn("window.L.circle([station.latitude, station.longitude]", script_source)
 
     def test_station_detail_map_script_renders_station_track(self) -> None:

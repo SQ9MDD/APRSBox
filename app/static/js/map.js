@@ -412,6 +412,125 @@
         return `hsl(${hue} 80% 52%)`;
     }
 
+    function phgDirectionAzimuth(directionValue) {
+        if (directionValue === null || directionValue === undefined) {
+            return null;
+        }
+        const normalized = String(directionValue).trim().toUpperCase();
+        if (!normalized || normalized === "OMNI" || normalized === "0") {
+            return null;
+        }
+        const codeMap = Object.freeze({
+            1: 45,
+            2: 90,
+            3: 135,
+            4: 180,
+            5: 225,
+            6: 270,
+            7: 315,
+            8: 0,
+        });
+        if (Object.prototype.hasOwnProperty.call(codeMap, normalized)) {
+            return codeMap[normalized];
+        }
+        const directionMap = Object.freeze({
+            N: 0,
+            NE: 45,
+            E: 90,
+            SE: 135,
+            S: 180,
+            SW: 225,
+            W: 270,
+            NW: 315,
+        });
+        if (Object.prototype.hasOwnProperty.call(directionMap, normalized)) {
+            return directionMap[normalized];
+        }
+        return null;
+    }
+
+    function destinationPoint(latitude, longitude, bearingDeg, distanceMeters) {
+        const earthRadiusMeters = 6371000;
+        const angularDistance = distanceMeters / earthRadiusMeters;
+        const bearingRad = (bearingDeg * Math.PI) / 180;
+        const latitudeRad = (latitude * Math.PI) / 180;
+        const longitudeRad = (longitude * Math.PI) / 180;
+        const sinLatitude = Math.sin(latitudeRad);
+        const cosLatitude = Math.cos(latitudeRad);
+        const sinAngularDistance = Math.sin(angularDistance);
+        const cosAngularDistance = Math.cos(angularDistance);
+
+        const targetLatitudeRad = Math.asin(
+            (sinLatitude * cosAngularDistance)
+            + (cosLatitude * sinAngularDistance * Math.cos(bearingRad))
+        );
+        const targetLongitudeRad = longitudeRad + Math.atan2(
+            Math.sin(bearingRad) * sinAngularDistance * cosLatitude,
+            cosAngularDistance - (sinLatitude * Math.sin(targetLatitudeRad))
+        );
+        const targetLongitudeDeg = ((((targetLongitudeRad * 180) / Math.PI) + 540) % 360) - 180;
+        return [(targetLatitudeRad * 180) / Math.PI, targetLongitudeDeg];
+    }
+
+    function buildPhgCardioidPoints(station, azimuthDeg, radiusMeters) {
+        const sampleCount = 96;
+        const points = [];
+        const azimuthRad = (azimuthDeg * Math.PI) / 180;
+        const cosAzimuth = Math.cos(azimuthRad);
+        const sinAzimuth = Math.sin(azimuthRad);
+
+        for (let index = 0; index < sampleCount; index += 1) {
+            const theta = (index / sampleCount) * Math.PI * 2;
+            const radialDistance = radiusMeters * ((1 + Math.cos(theta)) / 2);
+            const localX = radialDistance * Math.sin(theta);
+            const localY = radialDistance * Math.cos(theta);
+            const rotatedX = (localX * cosAzimuth) + (localY * sinAzimuth);
+            const rotatedY = (-localX * sinAzimuth) + (localY * cosAzimuth);
+            const distanceMeters = Math.hypot(rotatedX, rotatedY);
+            if (distanceMeters < 0.01) {
+                points.push([station.latitude, station.longitude]);
+                continue;
+            }
+            const bearingDeg = (Math.atan2(rotatedX, rotatedY) * 180) / Math.PI;
+            points.push(destinationPoint(station.latitude, station.longitude, bearingDeg, distanceMeters));
+        }
+        if (points.length > 0) {
+            points.push(points[0]);
+        }
+        return points;
+    }
+
+    function buildPhgCoverageLayer(station, coverageColor) {
+        const radiusMeters = Number(station.phg_range_km) * 1000;
+        const circleOptions = {
+            radius: radiusMeters,
+            color: coverageColor,
+            fillColor: coverageColor,
+            opacity: 0.2,
+            fillOpacity: 0.2,
+            weight: 1,
+            interactive: false,
+        };
+        const fallbackCircle = window.L.circle([station.latitude, station.longitude], circleOptions);
+        const azimuth = phgDirectionAzimuth(station.phg_direction);
+        if (azimuth === null || !Number.isFinite(azimuth)) {
+            return fallbackCircle;
+        }
+        const cardioidPoints = buildPhgCardioidPoints(station, azimuth, radiusMeters);
+        if (cardioidPoints.length < 4) {
+            return fallbackCircle;
+        }
+        return window.L.polygon(cardioidPoints, {
+            color: coverageColor,
+            fillColor: coverageColor,
+            opacity: 0.35,
+            fillOpacity: 0.2,
+            stroke: true,
+            weight: 1.25,
+            interactive: false,
+        });
+    }
+
     function renderStations(stations, mobileTracks) {
         stationLayer.clearLayers();
         if (coverageVisible) {
@@ -423,16 +542,11 @@
                     continue;
                 }
                 const coverageColor = colorForCallsign(station.display_callsign || station.callsign || "");
-                const coverageCircle = window.L.circle([station.latitude, station.longitude], {
-                    radius: station.phg_range_km * 1000,
-                    color: coverageColor,
-                    fillColor: coverageColor,
-                    opacity: 0.2,
-                    fillOpacity: 0.2,
-                    weight: 1,
-                    interactive: false,
-                });
-                stationLayer.addLayer(coverageCircle);
+                const coverageLayer = buildPhgCoverageLayer(station, coverageColor);
+                if (!coverageLayer) {
+                    continue;
+                }
+                stationLayer.addLayer(coverageLayer);
             }
         }
         if (tracksVisible) {

@@ -63,6 +63,7 @@ def get_map_station_payload() -> dict[str, Any]:
                 "phg_power_w": _float_value(station["data_raw"].get("phg_power_w")),
                 "phg_height_ft": _float_value(station["data_raw"].get("phg_height_ft")),
                 "phg_gain_dbi": _float_value(station["data_raw"].get("phg_gain_dbi")),
+                "phg_direction": station["data_raw"].get("phg_direction"),
                 "phg_range_km": _phg_range_km(station["data_raw"]),
                 "destination": station["destination"],
                 "packet_type": station["frame_type"],
