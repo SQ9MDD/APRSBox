@@ -277,8 +277,7 @@ CREATE TABLE IF NOT EXISTS digi_flows (
     target_ref TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE (source_kind, source_ref, target_kind, target_ref)
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS digi_flow_steps (
@@ -548,6 +547,7 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frame
 CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
+CREATE INDEX IF NOT EXISTS idx_digi_flows_route_pair ON digi_flows(source_kind, source_ref, target_kind, target_ref);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
@@ -573,8 +573,10 @@ def init_db() -> None:
         _migrate_system_jobs_table(connection)
         _migrate_entity_interval_constraints(connection)
         _migrate_bulletin_table(connection)
+        _migrate_digi_flows_table(connection)
         _migrate_digi_flow_steps_table(connection)
         _migrate_digi_flow_event_log_table(connection)
+        _cleanup_legacy_digi_flow_tables(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
@@ -1144,6 +1146,56 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
+    flows_sql = _table_sql(connection, "digi_flows")
+    if not flows_sql:
+        return
+    if "UNIQUE (source_kind, source_ref, target_kind, target_ref)" not in flows_sql:
+        return
+    connection.executescript(
+        """
+        ALTER TABLE digi_flows RENAME TO digi_flows_old;
+        CREATE TABLE digi_flows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis')),
+            source_ref TEXT NOT NULL,
+            target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
+            target_ref TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO digi_flows (
+            id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+        )
+        SELECT
+            id,
+            name,
+            description,
+            CASE
+                WHEN source_kind IN ('receiver_rf', 'receiver_aprsis') THEN source_kind
+                ELSE 'receiver_rf'
+            END,
+            COALESCE(source_ref, ''),
+            CASE
+                WHEN target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log') THEN target_kind
+                ELSE 'action_log'
+            END,
+            COALESCE(target_ref, ''),
+            CASE
+                WHEN enabled IN (0, 1) THEN enabled
+                ELSE 0
+            END,
+            COALESCE(created_at, updated_at, '1970-01-01T00:00:00+00:00'),
+            COALESCE(updated_at, created_at, '1970-01-01T00:00:00+00:00')
+        FROM digi_flows_old;
+        CREATE INDEX IF NOT EXISTS idx_digi_flows_route_pair ON digi_flows(source_kind, source_ref, target_kind, target_ref);
+        """
+    )
+
+
 def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
     steps_sql = _table_sql(connection, "digi_flow_steps")
     if not steps_sql:
@@ -1155,7 +1207,9 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         "filter_rate_limit_per_callsign",
         "filter_strict",
     )
-    if all(step_type in steps_sql for step_type in required_step_types):
+    foreign_keys = list(connection.execute("PRAGMA foreign_key_list(digi_flow_steps)").fetchall())
+    references_legacy_flows = any(str(row["table"] or "") == "digi_flows_old" for row in foreign_keys)
+    if all(step_type in steps_sql for step_type in required_step_types) and not references_legacy_flows:
         return
     connection.executescript(
         """
@@ -1207,7 +1261,7 @@ def _migrate_digi_flow_event_log_table(connection: sqlite3.Connection) -> None:
     if not event_log_sql:
         return
     foreign_keys = list(connection.execute("PRAGMA foreign_key_list(digi_flow_event_log)").fetchall())
-    if not any(str(row["table"] or "") == "digi_flow_steps_old" for row in foreign_keys):
+    if not any(str(row["table"] or "") in {"digi_flow_steps_old", "digi_flows_old"} for row in foreign_keys):
         return
     connection.executescript(
         """
@@ -1233,6 +1287,19 @@ def _migrate_digi_flow_event_log_table(connection: sqlite3.Connection) -> None:
         DROP TABLE digi_flow_event_log_old;
         """
     )
+
+
+def _cleanup_legacy_digi_flow_tables(connection: sqlite3.Connection) -> None:
+    legacy_flows_exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'digi_flows_old' LIMIT 1"
+    ).fetchone()
+    if legacy_flows_exists is None:
+        return
+    step_fk = list(connection.execute("PRAGMA foreign_key_list(digi_flow_steps)").fetchall())
+    event_log_fk = list(connection.execute("PRAGMA foreign_key_list(digi_flow_event_log)").fetchall())
+    if any(str(row["table"] or "") == "digi_flows_old" for row in step_fk + event_log_fk):
+        return
+    connection.execute("DROP TABLE digi_flows_old")
 
 
 def _table_sql(connection: sqlite3.Connection, table_name: str) -> str:

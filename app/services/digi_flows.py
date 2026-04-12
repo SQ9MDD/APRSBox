@@ -995,22 +995,6 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
         raise ValueError(_t("Flow with an RF TX target must include at least one enabled Path Rule step."))
 
-    duplicate = fetch_one(
-        """
-        SELECT id
-        FROM digi_flows
-        WHERE source_kind = ?
-          AND source_ref = ?
-          AND target_kind = ?
-          AND target_ref = ?
-          AND (? IS NULL OR id <> ?)
-        LIMIT 1
-        """,
-        (source_kind, source_ref, target_kind, target_ref, existing_flow_id, existing_flow_id),
-    )
-    if duplicate is not None:
-        raise ValueError(_t("A DIGI Flow with the same source and target already exists."))
-
     return {
         "name": name,
         "description": description,
@@ -1063,6 +1047,32 @@ def _preserve_existing_step_ids(existing_steps: list[dict[str, Any]], normalized
     return preserved_steps
 
 
+def _disable_other_enabled_flows_for_route_pair(
+    connection: sqlite3.Connection,
+    *,
+    source_kind: str,
+    source_ref: str,
+    target_kind: str,
+    target_ref: str,
+    keep_flow_id: int,
+    updated_at: str,
+) -> None:
+    connection.execute(
+        """
+        UPDATE digi_flows
+        SET enabled = 0,
+            updated_at = ?
+        WHERE source_kind = ?
+          AND source_ref = ?
+          AND target_kind = ?
+          AND target_ref = ?
+          AND id <> ?
+          AND enabled = 1
+        """,
+        (updated_at, source_kind, source_ref, target_kind, target_ref, keep_flow_id),
+    )
+
+
 def create_digi_flow(payload: dict[str, Any]) -> int:
     normalized = normalize_digi_flow_payload(payload)
     timestamp = utc_now()
@@ -1105,6 +1115,16 @@ def create_digi_flow(payload: dict[str, Any]) -> int:
                     timestamp,
                     timestamp,
                 ),
+            )
+        if int(normalized["enabled"]) == 1:
+            _disable_other_enabled_flows_for_route_pair(
+                connection,
+                source_kind=str(normalized["source_kind"]),
+                source_ref=str(normalized["source_ref"]),
+                target_kind=str(normalized["target_kind"]),
+                target_ref=str(normalized["target_ref"]),
+                keep_flow_id=flow_id,
+                updated_at=timestamp,
             )
     log_event("INFO", "config", f"Created DIGI Flow #{flow_id}")
     return flow_id
@@ -1208,6 +1228,16 @@ def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
                 f"DELETE FROM digi_flow_steps WHERE flow_id = ? AND id IN ({placeholders})",
                 (flow_id, *stale_step_ids),
             )
+        if int(normalized["enabled"]) == 1:
+            _disable_other_enabled_flows_for_route_pair(
+                connection,
+                source_kind=str(normalized["source_kind"]),
+                source_ref=str(normalized["source_ref"]),
+                target_kind=str(normalized["target_kind"]),
+                target_ref=str(normalized["target_ref"]),
+                keep_flow_id=flow_id,
+                updated_at=timestamp,
+            )
     log_event("INFO", "config", f"Updated DIGI Flow #{flow_id}")
 
 
@@ -1218,6 +1248,7 @@ def delete_digi_flow(flow_id: int) -> None:
 
 
 def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
+    timestamp = utc_now()
     if enabled:
         flow = get_digi_flow(flow_id)
         if flow is None:
@@ -1231,16 +1262,36 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
             raise ValueError(_t("APRS-IS RX-only target flow must use Receiver RF as source."))
         if target_kind == "tx_aprsis" and not _has_enabled_aprsis_strict_guard(flow_steps):
             raise ValueError(_t("DIGI Flow with an APRS-IS target cannot be enabled without a mandatory enabled Strict APRS-IS guard step."))
-    with get_connection() as connection:
-        connection.execute(
-            """
-            UPDATE digi_flows
-            SET enabled = ?,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (1 if enabled else 0, utc_now(), flow_id),
-        )
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE digi_flows
+                SET enabled = 1,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (timestamp, flow_id),
+            )
+            _disable_other_enabled_flows_for_route_pair(
+                connection,
+                source_kind=source_kind,
+                source_ref=str(flow.get("source_ref") or ""),
+                target_kind=target_kind,
+                target_ref=str(flow.get("target_ref") or ""),
+                keep_flow_id=flow_id,
+                updated_at=timestamp,
+            )
+    else:
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE digi_flows
+                SET enabled = 0,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (timestamp, flow_id),
+            )
     log_event("INFO", "config", f"Set DIGI Flow #{flow_id} enabled={1 if enabled else 0}")
 
 
@@ -1251,8 +1302,6 @@ def safe_create_digi_flow(payload: dict[str, Any]) -> tuple[int | None, str | No
         return None, str(exc)
     except sqlite3.IntegrityError as exc:
         message = str(exc).strip()
-        if "digi_flows.source_kind, digi_flows.source_ref, digi_flows.target_kind, digi_flows.target_ref" in message:
-            return None, _t("A DIGI Flow with the same source and target already exists.")
         return None, _tf("Failed to save DIGI Flow: {message}.", {"message": message or _t("database integrity error")})
 
 
@@ -1263,8 +1312,6 @@ def safe_update_digi_flow(flow_id: int, payload: dict[str, Any]) -> str | None:
         return str(exc)
     except sqlite3.IntegrityError as exc:
         message = str(exc).strip()
-        if "digi_flows.source_kind, digi_flows.source_ref, digi_flows.target_kind, digi_flows.target_ref" in message:
-            return _t("A DIGI Flow with the same source and target already exists.")
         return _tf("Failed to update DIGI Flow: {message}.", {"message": message or _t("database integrity error")})
     return None
 
