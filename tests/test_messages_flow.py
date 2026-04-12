@@ -23,10 +23,12 @@ from app.services.messages import (
     get_unread_inbox_count,
     get_messages_page_data,
     mark_conversation_read,
+    normalize_aprs_destination_callsign,
     normalize_aprs_message_text,
     process_incoming_tnc2_message,
     queue_outgoing_message,
     retry_failed_message,
+    split_callsign_ssid,
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
@@ -87,6 +89,18 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
         self.assertEqual(normalize_aprs_message_text(allowed), allowed)
 
+    def test_destination_callsign_accepts_documented_aprs_service_aliases(self) -> None:
+        for alias in ("WHO-IS", "WHO-15", "WLNK-1", "EMAIL", "E", "ANSRVR", "CQSRVR", "QRU", "QRZ", "WXBOT", "WHERE-IS", "SMSGTE"):
+            self.assertEqual(normalize_aprs_destination_callsign(alias.lower()), alias)
+
+    def test_destination_callsign_rejects_unknown_non_callsign_alias(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Destination callsign"):
+            normalize_aprs_destination_callsign("FOO-BAR")
+
+    def test_split_callsign_ssid_keeps_non_ssid_alias_intact(self) -> None:
+        self.assertEqual(split_callsign_ssid("WHO-IS"), ("WHO-IS", ""))
+        self.assertEqual(split_callsign_ssid("WLNK-1"), ("WLNK", "1"))
+
     def test_heard_recently_state_uses_expected_thresholds(self) -> None:
         self.assertEqual(_heard_recently_state(HEARD_FRESH_SECONDS), "fresh")
         self.assertEqual(_heard_recently_state(HEARD_FRESH_SECONDS + 1), "warn")
@@ -102,7 +116,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             datetime_mock.fromisoformat.side_effect = datetime.fromisoformat
             label, relative = _format_heard_parts("2026-04-01T12:00:00+00:00")
 
-        self.assertEqual(label, "2026.04.01 14:00")
+        self.assertEqual(label, "2026.04.01 12:00 UTC")
         self.assertEqual(relative, "12 minut temu")
 
     async def test_queue_send_and_ack_direct_message(self) -> None:
@@ -119,7 +133,6 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(conversation_row["remote_callsign"], "SP8ABC")
             self.assertEqual(conversation_row["remote_ssid"], "")
             self.assertEqual(conversation_row["path"], "WIDE1-1")
-
             queued_job = fetch_one(
                 """
                 SELECT kind, status, aprs_message_id
@@ -204,6 +217,20 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             cancelled_retry = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(retry_job["id"]),))
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
+
+    async def test_queue_message_to_service_alias_keeps_full_destination(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            message = queue_outgoing_message(callsign="WHO-IS", message_text="SP9XYZ", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+            self.assertEqual(message["addressee"], "WHO-IS")
+
+            conversation_row = fetch_one("SELECT remote_callsign, remote_ssid FROM aprs_message_conversations")
+            assert conversation_row is not None
+            self.assertEqual(conversation_row["remote_callsign"], "WHO-IS")
+            self.assertEqual(conversation_row["remote_ssid"], "")
 
     async def test_ack_for_local_ssid_zero_matches_when_remote_omits_dash_zero(self) -> None:
         with temporary_database():
@@ -824,6 +851,51 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             context = build_template_context(request, page_title="Dashboard", current_user=current_user, active_nav="dashboard")
             messages_item = next(item for item in context["navigation"] if item.get("key") == "messages")
             self.assertEqual(messages_item["icon"], "message-reply-text-outline.svg")
+
+    def test_unread_inbox_count_excludes_hidden_local_self_conversation(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            execute(
+                """
+                INSERT INTO aprs_message_conversations(remote_callsign, remote_ssid, path, created_at, updated_at)
+                VALUES (?, ?, '', ?, ?)
+                """,
+                ("SQ9MDD", "4", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+            )
+            conversation = fetch_one(
+                """
+                SELECT id
+                FROM aprs_message_conversations
+                WHERE remote_callsign = ? AND remote_ssid = ?
+                LIMIT 1
+                """,
+                ("SQ9MDD", "4"),
+            )
+            assert conversation is not None
+            execute(
+                """
+                INSERT INTO aprs_messages(
+                    conversation_id, direction, sender, addressee, message_text, path, message_number,
+                    status, tx_attempt_count, is_unread, outbound_job_id, created_at, updated_at,
+                    sent_at, acked_at, last_attempt_at, failed_at, failure_reason
+                )
+                VALUES (?, 'rx', ?, ?, ?, '', 'AA', ?, 0, 1, NULL, ?, ?, NULL, NULL, NULL, NULL, NULL)
+                """,
+                (
+                    int(conversation["id"]),
+                    "SQ9MDD-4",
+                    "SQ9MDD-4",
+                    "Loopback",
+                    MESSAGE_STATUS_RECEIVED,
+                    "2026-01-01T00:01:00+00:00",
+                    "2026-01-01T00:01:00+00:00",
+                ),
+            )
+
+            self.assertEqual(get_messages_page_data()["conversations"], [])
+            self.assertEqual(get_unread_inbox_count(), 0)
 
     def test_messages_page_data_exposes_heard_recently_state(self) -> None:
         with temporary_database():

@@ -1652,12 +1652,10 @@ def parse_tnc2_frame(line: str) -> dict[str, Any] | None:
 
 
 def _format_last_heard(timestamp: str) -> str:
-    try:
-        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    except ValueError:
+    heard_at = _parse_iso_timestamp_utc(timestamp)
+    if heard_at is None:
         return timestamp
 
-    local_time = heard_at.astimezone()
     now = datetime.now(timezone.utc)
     delta_seconds = max(0, int((now - heard_at).total_seconds()))
     relative = "teraz"
@@ -1669,16 +1667,14 @@ def _format_last_heard(timestamp: str) -> str:
     else:
         hours = delta_seconds // 3600
         relative = f"{hours} {_pluralize_hours(hours)} temu"
-    return f"{local_time.strftime('%Y.%m.%d %H:%M')} ({relative})"
+    return f"{heard_at.strftime('%Y.%m.%d %H:%M UTC')} ({relative})"
 
 
 def _format_last_heard_parts(timestamp: str) -> tuple[str, str]:
-    try:
-        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    except ValueError:
+    heard_at = _parse_iso_timestamp_utc(timestamp)
+    if heard_at is None:
         return timestamp, ""
 
-    local_time = heard_at.astimezone()
     now = datetime.now(timezone.utc)
     delta_seconds = max(0, int((now - heard_at).total_seconds()))
     if delta_seconds < 60:
@@ -1689,15 +1685,24 @@ def _format_last_heard_parts(timestamp: str) -> tuple[str, str]:
     else:
         hours = delta_seconds // 3600
         relative = f"{hours} {_pluralize_hours(hours)} temu"
-    return local_time.strftime("%Y.%m.%d %H:%M"), relative
+    return heard_at.strftime("%Y.%m.%d %H:%M UTC"), relative
 
 
 def _last_heard_age_seconds(timestamp: str) -> int | None:
-    try:
-        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    except ValueError:
+    heard_at = _parse_iso_timestamp_utc(timestamp)
+    if heard_at is None:
         return None
     return max(0, int((datetime.now(timezone.utc) - heard_at).total_seconds()))
+
+
+def _parse_iso_timestamp_utc(timestamp: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _split_ssid(value: str) -> tuple[str, str]:

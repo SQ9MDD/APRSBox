@@ -18,6 +18,102 @@
         text-decoration-thickness: 1.3px;
         opacity: 0.82;
     }
+
+    .beacon-comment-input-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        width: 100%;
+    }
+
+    .beacon-comment-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        width: auto;
+    }
+
+    .beacon-phg-button {
+        flex: 0 0 auto;
+    }
+
+    .phg-generator-modal[hidden] {
+        display: none !important;
+    }
+
+    .phg-generator-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1200;
+    }
+
+    .phg-generator-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.58);
+    }
+
+    .phg-generator-dialog {
+        position: relative;
+        width: min(31rem, calc(100vw - 2rem));
+        margin: clamp(1rem, 8vh, 4.5rem) auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: var(--shadow-lg);
+        display: grid;
+        gap: var(--space-3);
+        padding: var(--space-3);
+    }
+
+    .phg-generator-header,
+    .phg-generator-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+    }
+
+    .phg-generator-header h3 {
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    .phg-generator-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-3);
+    }
+
+    .phg-generator-preview {
+        grid-column: 1 / -1;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--panel-alt);
+        padding: 0.56rem 0.68rem;
+        display: grid;
+        gap: 0.2rem;
+    }
+
+    .phg-generator-preview code {
+        font-size: 0.95rem;
+        letter-spacing: 0.04em;
+        word-break: break-all;
+    }
+
+    .phg-generator-footer {
+        justify-content: flex-end;
+    }
+
+    @media (max-width: 640px) {
+        .beacon-comment-input {
+            width: 100%;
+        }
+
+        .phg-generator-grid {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -63,13 +159,25 @@
                             {{ t("Beacon Comment") }}
                             <small class="muted field-counter-inline" id="beacon-comment-counter" aria-live="polite">(0 / {{ beacon_comment_max }})</small>
                         </span>
-                        <input
-                            type="text"
-                            name="beacon_comment"
-                            value="{{ station.beacon_comment }}"
-                            maxlength="{{ beacon_comment_max }}"
-                            data-maxlength-counter="beacon-comment-counter"
-                        >
+                        <div class="beacon-comment-input-row">
+                            <input
+                                type="text"
+                                class="beacon-comment-input"
+                                name="beacon_comment"
+                                value="{{ station.beacon_comment }}"
+                                maxlength="{{ beacon_comment_max }}"
+                                data-maxlength-counter="beacon-comment-counter"
+                            >
+                            <button
+                                type="button"
+                                class="sidebar-action-button beacon-phg-button"
+                                id="station-open-phg-generator"
+                                aria-label="{{ t('Generate PHG') }}"
+                                title="{{ t('Generate PHG') }}"
+                            >
+                                <img src="{{ request.scope.root_path }}/static/icons/calculator.svg" alt="">
+                            </button>
+                        </div>
                     </label>
                     <label>
                         <span>{{ t("Beacon at every") }}</span>
@@ -212,6 +320,43 @@
                         <button type="button" class="button button-secondary" data-close-location-picker>{{ t("Cancel") }}</button>
                         <button type="button" class="button" id="station-apply-location-picker">{{ t("Get coordinates") }}</button>
                     </div>
+                </div>
+            </div>
+        </div>
+        <div class="phg-generator-modal" id="station-phg-generator" hidden>
+            <div class="phg-generator-backdrop" data-close-phg-generator></div>
+            <div
+                class="phg-generator-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="station-phg-generator-title"
+                data-default-units="{{ station.default_units or 'metric' }}"
+            >
+                <div class="phg-generator-header">
+                    <h3 id="station-phg-generator-title">{{ t("PHG Generator") }}</h3>
+                    <button type="button" class="sidebar-action-button" data-close-phg-generator aria-label="{{ t('Close PHG generator') }}" title="{{ t('Close PHG generator') }}">
+                        <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+                    </button>
+                </div>
+                <p class="section-lead">{{ t("Set power and antenna height above ground. Generated PHG is inserted at the beginning of Beacon Comment.") }}</p>
+                <div class="phg-generator-grid">
+                    <label>
+                        <span>{{ t("Power") }} <small class="muted" id="station-phg-power-unit">W</small></span>
+                        <input type="number" id="station-phg-power-input" min="0" step="1" inputmode="decimal">
+                    </label>
+                    <label>
+                        <span>{{ t("Height above ground") }} <small class="muted" id="station-phg-height-unit">m</small></span>
+                        <input type="number" id="station-phg-height-input" min="0" step="0.1" inputmode="decimal">
+                    </label>
+                    <div class="phg-generator-preview">
+                        <small class="muted">{{ t("Generated PHG") }}</small>
+                        <code id="station-phg-preview-code">PHG0000</code>
+                        <small class="muted" id="station-phg-preview-details"></small>
+                    </div>
+                </div>
+                <div class="phg-generator-footer">
+                    <button type="button" class="button button-secondary" data-close-phg-generator>{{ t("Cancel") }}</button>
+                    <button type="button" class="button" id="station-apply-phg-generator">{{ t("Insert PHG") }}</button>
                 </div>
             </div>
         </div>
@@ -505,9 +650,170 @@
             });
         };
 
+        const initPhgGenerator = () => {
+            const form = document.getElementById("station-form");
+            const modal = document.getElementById("station-phg-generator");
+            const openButton = document.getElementById("station-open-phg-generator");
+            if (!form || !modal || !openButton) {
+                return;
+            }
+
+            const beaconCommentInput = form.querySelector('input[name="beacon_comment"]');
+            const dialog = modal.querySelector(".phg-generator-dialog");
+            const closeButtons = modal.querySelectorAll("[data-close-phg-generator]");
+            const applyButton = document.getElementById("station-apply-phg-generator");
+            const powerInput = document.getElementById("station-phg-power-input");
+            const heightInput = document.getElementById("station-phg-height-input");
+            const powerUnitNode = document.getElementById("station-phg-power-unit");
+            const heightUnitNode = document.getElementById("station-phg-height-unit");
+            const previewCodeNode = document.getElementById("station-phg-preview-code");
+            const previewDetailsNode = document.getElementById("station-phg-preview-details");
+
+            if (
+                !(beaconCommentInput instanceof HTMLInputElement)
+                || !(dialog instanceof HTMLElement)
+                || !(applyButton instanceof HTMLButtonElement)
+                || !(powerInput instanceof HTMLInputElement)
+                || !(heightInput instanceof HTMLInputElement)
+                || !(powerUnitNode instanceof HTMLElement)
+                || !(heightUnitNode instanceof HTMLElement)
+                || !(previewCodeNode instanceof HTMLElement)
+                || !(previewDetailsNode instanceof HTMLElement)
+            ) {
+                return;
+            }
+
+            const unitSystem = String(dialog.dataset.defaultUnits || "").toLowerCase() === "imperial" ? "imperial" : "metric";
+            const powerWattsByCode = Array.from({ length: 10 }, (_, code) => code * code);
+            const heightFeetByCode = Array.from({ length: 10 }, (_, code) => 10 * (2 ** code));
+            const metersToFeet = (meters) => meters * 3.28084;
+            const feetToMeters = (feet) => feet * 0.3048;
+
+            powerUnitNode.textContent = "W";
+            heightUnitNode.textContent = unitSystem === "imperial" ? "ft" : "m";
+            heightInput.step = unitSystem === "imperial" ? "1" : "0.1";
+            heightInput.max = unitSystem === "imperial" ? "20000" : "7000";
+
+            const closeModal = () => {
+                modal.hidden = true;
+                document.body.classList.remove("modal-open");
+            };
+
+            const openModal = () => {
+                const existingCodes = parseLeadingPhgCodes(beaconCommentInput.value);
+                const defaults = existingCodes || { powerCode: 5, heightCode: 2 };
+                powerInput.value = String(powerWattsByCode[defaults.powerCode]);
+                heightInput.value = String(roundHeightDisplay(heightValueFromCode(defaults.heightCode)));
+                modal.hidden = false;
+                document.body.classList.add("modal-open");
+                updatePreview();
+            };
+
+            const normalizeNumber = (value, fallback = 0) => {
+                const parsed = Number.parseFloat(String(value || "").replace(",", "."));
+                if (!Number.isFinite(parsed)) {
+                    return fallback;
+                }
+                return parsed;
+            };
+
+            const roundHeightDisplay = (value) => (
+                unitSystem === "imperial" ? Math.round(value) : Number(value.toFixed(1))
+            );
+
+            const nearestCode = (target, values) => {
+                let winner = 0;
+                let winnerDistance = Number.POSITIVE_INFINITY;
+                values.forEach((candidate, index) => {
+                    const distance = Math.abs(candidate - target);
+                    if (distance < winnerDistance) {
+                        winner = index;
+                        winnerDistance = distance;
+                    }
+                });
+                return winner;
+            };
+
+            const powerCodeFromWatts = (watts) => nearestCode(Math.max(0, watts), powerWattsByCode);
+            const heightCodeFromValue = (heightValue) => {
+                const heightFeet = unitSystem === "imperial" ? heightValue : metersToFeet(heightValue);
+                return nearestCode(Math.max(0, heightFeet), heightFeetByCode);
+            };
+
+            const heightValueFromCode = (code) => {
+                const feet = heightFeetByCode[Math.max(0, Math.min(9, Number(code) || 0))];
+                return unitSystem === "imperial" ? feet : feetToMeters(feet);
+            };
+
+            const formatHeightForPreview = (feet) => {
+                if (unitSystem === "imperial") {
+                    return `${Math.round(feet)} ft`;
+                }
+                return `${Number(feetToMeters(feet).toFixed(1))} m`;
+            };
+
+            const parseLeadingPhgCodes = (text) => {
+                const match = String(text || "").match(/^\s*PHG([0-9])([0-9])[0-9][0-9]\b/i);
+                if (!match) {
+                    return null;
+                }
+                return {
+                    powerCode: Math.max(0, Math.min(9, Number.parseInt(match[1], 10) || 0)),
+                    heightCode: Math.max(0, Math.min(9, Number.parseInt(match[2], 10) || 0)),
+                };
+            };
+
+            const updatePreview = () => {
+                const powerValue = Math.max(0, normalizeNumber(powerInput.value));
+                const heightValue = Math.max(0, normalizeNumber(heightInput.value));
+
+                powerInput.value = String(Math.round(powerValue));
+                heightInput.value = String(roundHeightDisplay(heightValue));
+
+                const powerCode = powerCodeFromWatts(powerValue);
+                const heightCode = heightCodeFromValue(heightValue);
+                const phgToken = `PHG${powerCode}${heightCode}00`;
+
+                previewCodeNode.textContent = phgToken;
+                previewDetailsNode.textContent = `${powerWattsByCode[powerCode]} W, ${formatHeightForPreview(heightFeetByCode[heightCode])}`;
+                applyButton.dataset.phgToken = phgToken;
+            };
+
+            openButton.addEventListener("click", openModal);
+            closeButtons.forEach((button) => button.addEventListener("click", closeModal));
+
+            powerInput.addEventListener("input", updatePreview);
+            heightInput.addEventListener("input", updatePreview);
+
+            applyButton.addEventListener("click", () => {
+                const phgToken = String(applyButton.dataset.phgToken || "PHG0000").toUpperCase();
+                const existingWithoutPrefix = String(beaconCommentInput.value || "")
+                    .replace(/^\s*PHG[0-9A-Z]{4}\s*/i, "")
+                    .trimStart();
+                let nextValue = existingWithoutPrefix ? `${phgToken} ${existingWithoutPrefix}` : phgToken;
+
+                const maxLength = Number.parseInt(beaconCommentInput.getAttribute("maxlength") || "0", 10);
+                if (maxLength > 0 && nextValue.length > maxLength) {
+                    nextValue = nextValue.slice(0, maxLength).trimEnd();
+                }
+
+                beaconCommentInput.value = nextValue;
+                beaconCommentInput.dispatchEvent(new Event("input", { bubbles: true }));
+                closeModal();
+                beaconCommentInput.focus();
+            });
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && !modal.hidden) {
+                    closeModal();
+                }
+            });
+        };
+
         initSymbolPicker();
         initLengthCounters();
         initLocationPicker();
+        initPhgGenerator();
     })();
 </script>
 {% endblock %}

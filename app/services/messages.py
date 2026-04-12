@@ -43,6 +43,24 @@ _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
 _MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
+APRS_SERVICE_DESTINATIONS = (
+    "ANSRVR",
+    "AVRS",
+    "CQ",
+    "CQSRVR",
+    "E",
+    "EMAIL",
+    "QRU",
+    "QRZ",
+    "SMSGTE",
+    "WHERE",
+    "WHERE-IS",
+    "WHO-15",
+    "WHO-IS",
+    "WLNK-1",
+    "WXBOT",
+)
+_APRS_SERVICE_DESTINATION_SET = frozenset(APRS_SERVICE_DESTINATIONS)
 
 
 def _t(message: str) -> str:
@@ -53,7 +71,7 @@ def normalize_aprs_destination_callsign(value: str) -> str:
     normalized = str(value or "").strip().upper()
     if not normalized:
         raise ValueError(_t("Destination callsign is required."))
-    if not _CALLSIGN_RE.fullmatch(normalized):
+    if not _CALLSIGN_RE.fullmatch(normalized) and normalized not in _APRS_SERVICE_DESTINATION_SET:
         raise ValueError(_t("Destination callsign must be an AX.25/APRS callsign with optional SSID 0-15."))
     return normalized
 
@@ -234,7 +252,7 @@ def get_messages_page_data() -> dict[str, Any]:
     local_sender = _local_station_identity()
     for row in conversation_rows:
         display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
-        if local_sender and display_callsign == local_sender:
+        if local_sender and _callsign_identity_matches(display_callsign, local_sender):
             continue
         conversation_id = int(row["id"])
         messages = [dict(item) for item in fetch_all(
@@ -291,21 +309,29 @@ def get_messages_page_data() -> dict[str, Any]:
         "composer_limit": MESSAGE_MAX_LENGTH,
         "recently_heard_window_minutes": HEARD_WARN_SECONDS // 60,
         "default_path": str(station_settings.get("beacon_path") or "").strip(),
+        "service_destinations": list(APRS_SERVICE_DESTINATIONS),
     }
 
 
 def get_unread_inbox_count() -> int:
-    row = fetch_one(
+    rows = fetch_all(
         """
-        SELECT COUNT(*) AS total
-        FROM aprs_messages
-        WHERE direction = ? AND is_unread = 1
+        SELECT c.remote_callsign, c.remote_ssid, COUNT(m.id) AS unread_count
+        FROM aprs_message_conversations c
+        JOIN aprs_messages m ON m.conversation_id = c.id
+        WHERE m.direction = ? AND m.is_unread = 1
+        GROUP BY c.id, c.remote_callsign, c.remote_ssid
         """,
         (MESSAGE_DIRECTION_RX,),
     )
-    if row is None:
-        return 0
-    return int(row["total"] or 0)
+    local_sender = _local_station_identity()
+    unread_total = 0
+    for row in rows:
+        display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
+        if local_sender and _callsign_identity_matches(display_callsign, local_sender):
+            continue
+        unread_total += int(row["unread_count"] or 0)
+    return unread_total
 
 
 def mark_conversation_read(conversation_id: int) -> None:
@@ -1089,10 +1115,13 @@ def _format_bulletin_display_text(addressee: str, message_text: str) -> str:
 
 
 def split_callsign_ssid(value: str) -> tuple[str, str]:
-    base, separator, suffix = str(value or "").strip().upper().partition("-")
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        return "", ""
+    base, separator, suffix = normalized.partition("-")
     if separator and suffix.isdigit():
         return base, suffix
-    return base, ""
+    return normalized, ""
 
 
 def format_display_callsign(callsign: str, ssid: str) -> str:
@@ -1205,21 +1234,18 @@ def _heard_station_lookup() -> dict[str, dict[str, Any]]:
 
 
 def _heard_age_seconds(timestamp: str) -> int | None:
-    try:
-        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    except ValueError:
+    heard_at = _parse_iso_timestamp_utc(timestamp)
+    if heard_at is None:
         return None
-    return max(0, int((datetime.now(timezone.utc) - heard_at.astimezone(timezone.utc)).total_seconds()))
+    return max(0, int((datetime.now(timezone.utc) - heard_at).total_seconds()))
 
 
 def _format_heard_parts(timestamp: str) -> tuple[str, str]:
-    try:
-        heard_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    except ValueError:
+    heard_at = _parse_iso_timestamp_utc(timestamp)
+    if heard_at is None:
         return timestamp, ""
 
-    local_time = heard_at.astimezone()
-    delta_seconds = max(0, int((datetime.now(timezone.utc) - heard_at.astimezone(timezone.utc)).total_seconds()))
+    delta_seconds = max(0, int((datetime.now(timezone.utc) - heard_at).total_seconds()))
     if delta_seconds < 60:
         relative = "teraz"
     elif delta_seconds < 3600:
@@ -1228,7 +1254,17 @@ def _format_heard_parts(timestamp: str) -> tuple[str, str]:
     else:
         hours = delta_seconds // 3600
         relative = _format_hours_ago(hours)
-    return local_time.strftime("%Y.%m.%d %H:%M"), relative
+    return heard_at.strftime("%Y.%m.%d %H:%M UTC"), relative
+
+
+def _parse_iso_timestamp_utc(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _format_minutes_ago(value: int) -> str:

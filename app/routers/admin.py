@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, Request, status
 
 from app.auth import create_user, delete_user, get_user_record_by_id, list_users, set_user_active, update_user
+from app.datetime_utils import format_display_datetime
 from app.dependencies import require_roles
 from app.models import ROLES, UserIdentity
 from app.template_helpers import build_template_context
@@ -16,13 +16,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 def _format_user_datetime(value: str | None) -> str:
     if not value:
         return "Never"
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return value
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).strftime("%Y.%m.%d %H:%M")
+    return format_display_datetime(value)
 
 
 def _users_template_context(

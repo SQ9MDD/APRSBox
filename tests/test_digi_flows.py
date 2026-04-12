@@ -98,7 +98,7 @@ def sample_rf_flow_payload(*, name: str, source_ref: str, target_ref: str, enabl
 
 
 class DigiFlowsTests(unittest.TestCase):
-    def test_init_db_creates_digi_flow_tables_and_constraints(self) -> None:
+    def test_init_db_creates_digi_flow_tables_and_allows_duplicate_route_pairs(self) -> None:
         with temporary_database():
             connection = connect()
             try:
@@ -110,26 +110,37 @@ class DigiFlowsTests(unittest.TestCase):
                 self.assertIn("digi_flow_steps", table_names)
 
                 create_digi_flow(sample_flow_payload())
-                with self.assertRaises(sqlite3.IntegrityError):
-                    connection.execute(
-                        """
-                        INSERT INTO digi_flows (
-                            name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            "Duplicate",
-                            "",
-                            "receiver_rf",
-                            "TNC-1",
-                            "tx_aprsis",
-                            "aprsis",
-                            1,
-                            "2026-01-01T00:00:00+00:00",
-                            "2026-01-01T00:00:00+00:00",
-                        ),
+                connection.execute(
+                    """
+                    INSERT INTO digi_flows (
+                        name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
                     )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "Duplicate",
+                        "",
+                        "receiver_rf",
+                        "TNC-1",
+                        "tx_aprsis",
+                        "aprsis",
+                        0,
+                        "2026-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
+                count_row = connection.execute(
+                    """
+                    SELECT COUNT(*) AS total
+                    FROM digi_flows
+                    WHERE source_kind = 'receiver_rf'
+                      AND source_ref = 'TNC-1'
+                      AND target_kind = 'tx_aprsis'
+                      AND target_ref = 'aprsis'
+                    """
+                ).fetchone()
+                assert count_row is not None
+                self.assertEqual(int(count_row["total"]), 2)
             finally:
                 connection.close()
 
@@ -682,11 +693,16 @@ class DigiFlowsTests(unittest.TestCase):
             second_flow_id = create_digi_flow(sample_rf_flow_payload(name="70cm to 70cm", source_ref="TNC-70cm", target_ref="TNC-70cm"))
             self.assertIsInstance(second_flow_id, int)
 
-    def test_create_enabled_rf_flow_rejects_duplicate_source_target_pair(self) -> None:
+    def test_create_enabled_rf_flow_with_duplicate_source_target_disables_previous_profile(self) -> None:
         with temporary_database():
-            create_digi_flow(sample_rf_flow_payload(name="2m to 70cm", source_ref="TNC-2m", target_ref="TNC-70cm"))
-            with self.assertRaisesRegex(ValueError, "same source and target already exists"):
-                create_digi_flow(sample_rf_flow_payload(name="2m to 70cm clone", source_ref="TNC-2m", target_ref="TNC-70cm"))
+            first_flow_id = create_digi_flow(sample_rf_flow_payload(name="2m profile A", source_ref="TNC-2m", target_ref="TNC-70cm"))
+            second_flow_id = create_digi_flow(sample_rf_flow_payload(name="2m profile B", source_ref="TNC-2m", target_ref="TNC-70cm"))
+            first_row = fetch_one("SELECT enabled FROM digi_flows WHERE id = ?", (first_flow_id,))
+            second_row = fetch_one("SELECT enabled FROM digi_flows WHERE id = ?", (second_flow_id,))
+            assert first_row is not None
+            assert second_row is not None
+            self.assertEqual(int(first_row["enabled"]), 0)
+            self.assertEqual(int(second_row["enabled"]), 1)
 
     def test_action_drop_target_does_not_require_path_filter(self) -> None:
         payload = sample_flow_payload()
@@ -863,6 +879,20 @@ class DigiFlowsTests(unittest.TestCase):
             refreshed = fetch_one("SELECT enabled FROM digi_flows WHERE id = ?", (second_flow_id,))
             assert refreshed is not None
             self.assertEqual(int(refreshed["enabled"]), 1)
+
+    def test_enabling_flow_profile_disables_other_enabled_profile_for_same_route_pair(self) -> None:
+        with temporary_database():
+            active_flow_id = create_digi_flow(sample_rf_flow_payload(name="2m profile A", source_ref="TNC-2m", target_ref="TNC-70cm"))
+            standby_flow_id = create_digi_flow(
+                sample_rf_flow_payload(name="2m profile B", source_ref="TNC-2m", target_ref="TNC-70cm", enabled=0)
+            )
+            set_digi_flow_enabled(standby_flow_id, True)
+            active_row = fetch_one("SELECT enabled FROM digi_flows WHERE id = ?", (active_flow_id,))
+            standby_row = fetch_one("SELECT enabled FROM digi_flows WHERE id = ?", (standby_flow_id,))
+            assert active_row is not None
+            assert standby_row is not None
+            self.assertEqual(int(active_row["enabled"]), 0)
+            self.assertEqual(int(standby_row["enabled"]), 1)
 
     def test_path_filter_allows_only_allow_mode(self) -> None:
         payload = sample_flow_payload()

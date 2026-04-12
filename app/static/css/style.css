@@ -178,6 +178,47 @@ body {
     gap: 0.12rem;
 }
 
+.sidebar-utc-clock {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.58rem 0.62rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+    justify-items: center;
+    text-align: center;
+}
+
+.sidebar-utc-clock-label {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.sidebar-utc-clock-value {
+    display: grid;
+    gap: 0.08rem;
+    line-height: 1.1;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-family: "Space Grotesk", "JetBrains Mono", monospace;
+    justify-items: center;
+    width: 100%;
+}
+
+.sidebar-utc-clock-time {
+    font-size: 1.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.sidebar-utc-clock-date {
+    font-size: 0.78rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
 .nav-separator {
     height: 1px;
     margin: var(--space-2) 0.3rem;
@@ -237,6 +278,7 @@ body {
     gap: var(--space-1);
     text-align: center;
     justify-items: center;
+    opacity: 0.2;
 }
 
 .main-area {

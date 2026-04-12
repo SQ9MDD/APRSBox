@@ -66,6 +66,13 @@
                 </form>
             </div>
         </div>
+        <div class="sidebar-utc-clock" id="sidebar-utc-clock">
+            <div class="sidebar-utc-clock-label">{{ t("UTC") }}</div>
+            <div class="sidebar-utc-clock-value">
+                <span class="sidebar-utc-clock-time" id="sidebar-utc-clock-time">00:00:00</span>
+                <span class="sidebar-utc-clock-date" id="sidebar-utc-clock-date">0000.00.00</span>
+            </div>
+        </div>
         <nav class="nav-list">
             {% for item in navigation %}
             {% if item.separator %}
@@ -171,6 +178,42 @@
             window.addEventListener("beforeunload", () => {
                 if (refreshTimer !== null) {
                     window.clearInterval(refreshTimer);
+                }
+            });
+        })();
+        (() => {
+            const utcClockTime = document.getElementById("sidebar-utc-clock-time");
+            const utcClockDate = document.getElementById("sidebar-utc-clock-date");
+            if (!(utcClockTime instanceof HTMLElement) || !(utcClockDate instanceof HTMLElement)) return;
+
+            const pad = (value) => String(value).padStart(2, "0");
+            let timerId = null;
+
+            const renderUtcClock = () => {
+                const now = new Date();
+                const year = now.getUTCFullYear();
+                const month = pad(now.getUTCMonth() + 1);
+                const day = pad(now.getUTCDate());
+                const hour = pad(now.getUTCHours());
+                const minute = pad(now.getUTCMinutes());
+                const second = pad(now.getUTCSeconds());
+                utcClockTime.textContent = `${hour}:${minute}:${second}`;
+                utcClockDate.textContent = `${year}.${month}.${day}`;
+            };
+
+            const scheduleNextTick = () => {
+                const delayMs = 1000 - (Date.now() % 1000);
+                timerId = window.setTimeout(() => {
+                    renderUtcClock();
+                    scheduleNextTick();
+                }, delayMs);
+            };
+
+            renderUtcClock();
+            scheduleNextTick();
+            window.addEventListener("beforeunload", () => {
+                if (timerId !== null) {
+                    window.clearTimeout(timerId);
                 }
             });
         })();

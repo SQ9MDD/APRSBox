@@ -1009,6 +1009,21 @@ def igate_settings_update(
     return templates.TemplateResponse("igate_settings.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
+@router.get("/api/igate/diagnostics")
+def igate_diagnostics_api(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    runtime = get_aprsis_runtime_status()
+    return JSONResponse(
+        {
+            "runtime": runtime,
+            "runtime_badge": aprsis_runtime_badge(runtime.get("status", "")),
+            "config": get_aprsis_config(),
+            "diagnostics": get_aprsis_diagnostics(),
+        }
+    )
+
+
 @router.get("/digi")
 def digi_page(
     request: Request,
@@ -1107,7 +1122,7 @@ def digi_flow_new_page(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
         form_data = build_digi_flow_editor_payload(duplicate_flow)
         form_data["name"] = f"{form_data['name']} copy"
-        flash = "Flow duplicated into a new draft. Change source or target before saving because the source+target pair must stay unique."
+        flash = "Flow duplicated into a new draft. You can keep the same source and target; only one flow per source+target pair can stay enabled at a time."
         flash_success = True
     else:
         form_data = build_digi_flow_editor_payload()

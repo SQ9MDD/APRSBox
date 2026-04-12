@@ -1284,7 +1284,7 @@ def _format_human_timestamp(value: Any) -> str:
     parsed = _parse_timestamp(value)
     if parsed is None:
         return ""
-    return parsed.astimezone(timezone.utc).strftime("%Y.%m.%d %H:%M")
+    return parsed.astimezone(timezone.utc).strftime("%Y.%m.%d %H:%M UTC")
 
 
 def _format_callsign(callsign: str, ssid: str) -> str:
