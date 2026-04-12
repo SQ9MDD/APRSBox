@@ -23,6 +23,8 @@
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
     const toggleCoverageButton = document.getElementById("map-toggle-coverage");
     const toggleCoverageIcon = document.getElementById("map-toggle-coverage-icon");
+    const toggleRulerButton = document.getElementById("map-toggle-ruler");
+    const toggleRulerIcon = document.getElementById("map-toggle-ruler-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
@@ -47,18 +49,22 @@
         hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
         showCoverage: root.dataset.i18nShowCoverage || "Show coverage",
         hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
+        showRuler: root.dataset.i18nShowRuler || "Show ruler",
+        hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
     });
     const stationLayer = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
+    const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
     let coverageVisible = true;
+    let rulerVisible = true;
     let latestStations = [];
     let latestMobileTracks = [];
     let rulerState = null;
@@ -181,6 +187,43 @@
             const label = coverageVisible ? i18n.hideCoverage : i18n.showCoverage;
             toggleCoverageButton.setAttribute("title", label);
             toggleCoverageButton.setAttribute("aria-label", label);
+        }
+    }
+
+    function resolveRulerVisible() {
+        const storedValue = String(window.localStorage.getItem(mapRulerVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function syncRulerLayerVisibility() {
+        if (rulerVisible) {
+            if (!map.hasLayer(rulerLayer)) {
+                rulerLayer.addTo(map);
+            }
+            return;
+        }
+        if (map.hasLayer(rulerLayer)) {
+            map.removeLayer(rulerLayer);
+        }
+    }
+
+    function applyRulerToggleState(visible) {
+        rulerVisible = Boolean(visible);
+        window.localStorage.setItem(mapRulerVisibleStorageKey, rulerVisible ? "1" : "0");
+        syncRulerLayerVisibility();
+        if (toggleRulerIcon) {
+            toggleRulerIcon.setAttribute("src", `${staticRoot}icons/${rulerVisible ? "ruler.svg" : "ruler-square.svg"}`);
+        }
+        if (toggleRulerButton) {
+            const label = rulerVisible ? i18n.hideRuler : i18n.showRuler;
+            toggleRulerButton.setAttribute("title", label);
+            toggleRulerButton.setAttribute("aria-label", label);
         }
     }
 
@@ -468,6 +511,12 @@
         toggleCoverageButton.addEventListener("click", function () {
             applyCoverageToggleState(!coverageVisible);
             renderStations(latestStations, latestMobileTracks);
+        });
+    }
+    applyRulerToggleState(resolveRulerVisible());
+    if (toggleRulerButton) {
+        toggleRulerButton.addEventListener("click", function () {
+            applyRulerToggleState(!rulerVisible);
         });
     }
 

@@ -37,6 +37,10 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('id="map-toggle-coverage-icon"', template_source)
         self.assertIn("data-i18n-show-coverage", template_source)
         self.assertIn("data-i18n-hide-coverage", template_source)
+        self.assertIn('id="map-toggle-ruler"', template_source)
+        self.assertIn('id="map-toggle-ruler-icon"', template_source)
+        self.assertIn("data-i18n-show-ruler", template_source)
+        self.assertIn("data-i18n-hide-ruler", template_source)
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -48,6 +52,9 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function resolveCoverageVisible()", script_source)
         self.assertIn("function applyCoverageToggleState(visible)", script_source)
         self.assertIn("if (coverageVisible)", script_source)
+        self.assertIn("mapRulerVisibleStorageKey", script_source)
+        self.assertIn("function resolveRulerVisible()", script_source)
+        self.assertIn("function applyRulerToggleState(visible)", script_source)
         self.assertIn("function buildPhgCoverageLayer(station, coverageColor)", script_source)
         self.assertIn("function buildPhgCardioidPoints(station, azimuthDeg, radiusMeters)", script_source)
         self.assertIn("window.L.polygon(", script_source)

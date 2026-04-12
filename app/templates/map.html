@@ -37,6 +37,8 @@
             data-i18n-hide-tracks="{{ t('Hide tracks') }}"
             data-i18n-show-coverage="{{ t('Show coverage') }}"
             data-i18n-hide-coverage="{{ t('Hide coverage') }}"
+            data-i18n-show-ruler="{{ t('Show ruler') }}"
+            data-i18n-hide-ruler="{{ t('Hide ruler') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -66,6 +68,15 @@
                         title="{{ t('Hide coverage') }}"
                     >
                         <img id="map-toggle-coverage-icon" src="{{ request.scope.root_path }}/static/icons/map-marker-radius.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
+                        id="map-toggle-ruler"
+                        aria-label="{{ t('Hide ruler') }}"
+                        title="{{ t('Hide ruler') }}"
+                    >
+                        <img id="map-toggle-ruler-icon" src="{{ request.scope.root_path }}/static/icons/ruler.svg" alt="">
                     </button>
                     <label class="map-mask-opacity-control" for="map-mask-opacity">
                         <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="{{ t('Mask opacity') }}">
