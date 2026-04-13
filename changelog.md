@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.67 - 14.04.2026
+## 1.4.67.DEV - 14.04.2026
 
 ### Added
 - W tabeli `Configured Packet Routing Flows` dodano numerację reguł.
