@@ -32,6 +32,7 @@
   "Capabilities": "Capabilities",
   "Callsign": "Callsign",
   "Cancel": "Cancel",
+  "Changelog": "Changelog",
   "Check version": "Check version",
   "Check version and, when a newer release is available, update the installed GUI from GitHub.": "Check version and, when a newer release is available, update the installed GUI from GitHub.",
   "Class": "Class",

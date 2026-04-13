@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -125,6 +126,8 @@ from app.services.wx import (
 )
 
 router = APIRouter()
+_REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
+_CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
 
 
 def _section_template_context(
@@ -190,6 +193,13 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
+
+
+def _read_changelog_markdown() -> str:
+    try:
+        return _CHANGELOG_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return "# Changelog\n\nUnable to read changelog.md."
 
 
 def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:
@@ -1867,6 +1877,22 @@ def logs_page(
         log_rows=recent_event_logs(limit=200),
     )
     return templates.TemplateResponse("logs.html", context)
+
+
+@router.get("/changelog")
+def changelog_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Changelog",
+        current_user=current_user,
+        active_nav="changelog",
+        changelog_markdown=_read_changelog_markdown(),
+    )
+    return templates.TemplateResponse("changelog.html", context)
 
 
 @router.get("/traffic")

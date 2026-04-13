@@ -29,6 +29,7 @@ PRIMARY_NAV = [
     {"key": "logs", "label": "Logs", "href": "/logs", "roles": ("admin", "operator", "viewer"), "icon": "book-open-variant.svg"},
     {"key": "users", "label": "Users / Roles", "href": "/admin/users", "roles": ("admin",), "icon": "account-cog.svg"},
     {"key": "settings", "label": "Settings", "href": "/settings", "roles": ("admin", "operator", "viewer"), "icon": "cog.svg"},
+    {"key": "changelog", "label": "Changelog", "href": "/changelog", "roles": ("admin", "operator", "viewer"), "icon": "language-markdown-outline.svg"},
 ]
 
 

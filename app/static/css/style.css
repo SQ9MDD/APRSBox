@@ -3084,6 +3084,49 @@ code {
     padding: 0.1rem 0.3rem;
 }
 
+.changelog-markdown {
+    display: grid;
+    gap: 0.55rem;
+    line-height: 1.5;
+}
+
+.changelog-markdown h1,
+.changelog-markdown h2,
+.changelog-markdown h3,
+.changelog-markdown h4,
+.changelog-markdown h5,
+.changelog-markdown h6 {
+    margin: 0.22rem 0 0.12rem;
+}
+
+.changelog-markdown p {
+    margin: 0;
+}
+
+.changelog-markdown ul {
+    margin: 0;
+    padding-left: 1.18rem;
+}
+
+.changelog-markdown li {
+    margin: 0.16rem 0;
+}
+
+.changelog-markdown pre {
+    margin: 0;
+    padding: 0.72rem 0.82rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--panel-alt);
+    overflow-x: auto;
+}
+
+.changelog-markdown pre code {
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+}
+
 .table-wrap {
     overflow-x: auto;
     overflow-y: hidden;
