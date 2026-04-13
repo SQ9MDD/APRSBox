@@ -1220,7 +1220,7 @@ select:focus-visible,
 }
 
 .digi-flows-col-order {
-    width: 4%;
+    width: 3%;
     white-space: nowrap;
     text-align: center;
 }
@@ -1241,7 +1241,7 @@ select:focus-visible,
 
 .digi-flows-col-source,
 .digi-flows-col-target {
-    width: 14%;
+    width: 12%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
