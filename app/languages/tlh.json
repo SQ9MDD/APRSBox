@@ -543,7 +543,7 @@
   "Passes only packets heard direct, without any consumed digipeater hop in the path.": "pathDaq consumed digipeater hop pagh ghajbe'bogh packetmey direct Qoy'lu'bogh neH QapmoH.",
   "Password": "pegh mu'",
   "Path": "Path",
-  "Path / Adress": "Path / Adress",
+  "Path / Adress": "Path / Address (e.g. 192.168.0.1:8002)",
   "Path Rule": "Path Rule",
   "Path filter mode must be allow.": "Path filter mode allow 'oHnIS.",
   "Path rule matched TRACE {matched_trace} but local station callsign is not configured.": "Path rule matched TRACE {matched_trace} but local station callsign is not configured.",

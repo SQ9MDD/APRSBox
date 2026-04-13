@@ -677,7 +677,8 @@ def modems_create(
         edit_row = None
     else:
         success, error = safe_update_section_row("modems", record_id, payload)
-        edit_row = get_section_row("modems", record_id) if error else None
+        # Keep the form in edit mode after save; user exits via Cancel.
+        edit_row = get_section_row("modems", record_id)
     context = _section_template_context(request, current_user, "modems", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
