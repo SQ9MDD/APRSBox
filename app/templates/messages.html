@@ -127,6 +127,7 @@
         sentWithAttempts: {{ t("Sent {attemptCount}/{attemptLimit}")|tojson }},
         failed: {{ t("Failed")|tojson }},
         noAck: {{ t("No ACK")|tojson }},
+        rejectedRej: {{ t("Rejected (REJ)")|tojson }},
         received: {{ t("Received")|tojson }},
         noAckRetryHint: {{ t("No ACK received. Click to retry.")|tojson }},
         typeAprsMessageText: {{ t("Type APRS message text")|tojson }},
@@ -498,6 +499,8 @@
                     : i18n.sent;
             } else if (message.delivery_state === "acked") {
                 deliveryLabel = "ACK";
+            } else if (message.delivery_state === "rejected") {
+                deliveryLabel = i18n.rejectedRej;
             } else if (message.delivery_state === "failed") {
                 deliveryLabel = Number(message.tx_attempt_limit || 0) > 0 ? i18n.noAck : i18n.failed;
             } else if (message.delivery_state === "received") {
@@ -507,7 +510,10 @@
             if (message.direction === "tx" && message.delivery_state === "failed" && Number(message.tx_attempt_limit || 0) > 0) {
                 deliveryBadge = `<button type="button" class="message-delivery-badge message-delivery-badge-pending" data-retry-message="${escapeHtml(message.id)}" title="${escapeHtml(message.failure_reason || i18n.noAckRetryHint)}">${escapeHtml(deliveryLabel || i18n.noAck)}</button>`;
             } else if (message.direction === "tx") {
-                deliveryBadge = `<span class="message-delivery-badge ${message.delivery_state === "acked" ? "message-delivery-badge-acked" : "message-delivery-badge-pending"}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || i18n.sent)}</span>`;
+                const txBadgeClass = message.delivery_state === "acked"
+                    ? "message-delivery-badge-acked"
+                    : (message.delivery_state === "rejected" ? "message-delivery-badge-rejected" : "message-delivery-badge-pending");
+                deliveryBadge = `<span class="message-delivery-badge ${txBadgeClass}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || i18n.sent)}</span>`;
             }
             return `
                 ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}

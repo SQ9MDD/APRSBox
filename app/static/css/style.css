@@ -3831,6 +3831,12 @@ button.message-delivery-badge {
     background: rgba(107, 170, 121, 0.12);
 }
 
+.message-delivery-badge-rejected {
+    color: #c96e6e;
+    border-color: rgba(201, 110, 110, 0.32);
+    background: rgba(201, 110, 110, 0.14);
+}
+
 .message-delivery-badge-pending {
     color: var(--warning);
     border-color: rgba(205, 178, 110, 0.28);

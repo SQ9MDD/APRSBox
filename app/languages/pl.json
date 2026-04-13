@@ -461,6 +461,7 @@
   "Message text must be 67 ASCII characters or fewer.": "Treść wiadomości musi mieć maksymalnie 67 znaków ASCII.",
   "No ACK": "Brak ACK",
   "No ACK received. Click to retry.": "Nie odebrano ACK. Kliknij, aby ponowić.",
+  "Rejected (REJ)": "Odrzucono (REJ)",
   "No conversations loaded.": "Nie wczytano żadnych konwersacji.",
   "No messages in this conversation yet.": "W tej konwersacji nie ma jeszcze wiadomości.",
   "No recent heard-station entry": "Brak niedawno usłyszanej stacji",

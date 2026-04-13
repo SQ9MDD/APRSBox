@@ -15,6 +15,7 @@ from app.services.messages import (
     HEARD_WARN_SECONDS,
     MESSAGE_STATUS_ACKED,
     MESSAGE_STATUS_FAILED,
+    MESSAGE_STATUS_REJECTED,
     MESSAGE_STATUS_RECEIVED,
     MESSAGE_STATUS_SENT,
     QUERY_MESSAGE_KIND,
@@ -27,6 +28,7 @@ from app.services.messages import (
     normalize_aprs_message_text,
     process_incoming_tnc2_message,
     queue_outgoing_message,
+    register_direct_message_transmission,
     retry_failed_message,
     split_callsign_ssid,
 )
@@ -217,6 +219,110 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             cancelled_retry = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(retry_job["id"]),))
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
+
+    async def test_queue_send_and_rej_direct_message_marks_rejected_and_cancels_retry(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Test direct message", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+            self.assertEqual(message["message_number"], "00")
+
+            job = claim_next_outbound_job()
+            assert job is not None
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9201)
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await OutboundService()._process_job(job)
+
+            message_row = fetch_one("SELECT status FROM aprs_messages WHERE id = ?", (int(message["id"]),))
+            assert message_row is not None
+            self.assertEqual(message_row["status"], MESSAGE_STATUS_SENT)
+
+            retry_job = fetch_one(
+                """
+                SELECT id, status
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                  AND status = 'queued'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(message["id"]),),
+            )
+            assert retry_job is not None
+
+            rej_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "ack",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "rej00",
+                }
+            )
+            process_incoming_tnc2_message(rej_line, timestamp="2026-01-01T00:00:15+00:00")
+
+            rejected_row = fetch_one(
+                "SELECT status, failed_at, failure_reason FROM aprs_messages WHERE id = ?",
+                (int(message["id"]),),
+            )
+            assert rejected_row is not None
+            self.assertEqual(rejected_row["status"], MESSAGE_STATUS_REJECTED)
+            self.assertEqual(rejected_row["failed_at"], "2026-01-01T00:00:15+00:00")
+            self.assertIn("rejected APRS message (REJ)", str(rejected_row["failure_reason"]))
+
+            cancelled_retry = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(retry_job["id"]),))
+            assert cancelled_retry is not None
+            self.assertEqual(cancelled_retry["status"], "cancelled")
+
+            with self.assertRaisesRegex(ValueError, "Only failed messages can be retried"):
+                retry_failed_message(int(message["id"]))
+
+    def test_late_transmission_does_not_override_rejected_status(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Late TX test", path="WIDE1-1")
+            rej_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "ack",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": f"rej{message['message_number']}",
+                }
+            )
+            process_incoming_tnc2_message(rej_line, timestamp="2026-01-01T00:00:20+00:00")
+
+            register_direct_message_transmission(int(message["id"]), 999)
+
+            row = fetch_one(
+                "SELECT status, tx_attempt_count FROM aprs_messages WHERE id = ?",
+                (int(message["id"]),),
+            )
+            assert row is not None
+            self.assertEqual(row["status"], MESSAGE_STATUS_REJECTED)
+            self.assertEqual(int(row["tx_attempt_count"] or 0), 0)
 
     async def test_queue_message_to_service_alias_keeps_full_destination(self) -> None:
         with temporary_database():

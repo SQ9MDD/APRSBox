@@ -461,6 +461,7 @@
   "Message text must be 67 ASCII characters or fewer.": "Message text must be 67 ASCII characters or fewer.",
   "No ACK": "No ACK",
   "No ACK received. Click to retry.": "No ACK received. Click to retry.",
+  "Rejected (REJ)": "Rejected (REJ)",
   "No conversations loaded.": "No conversations loaded.",
   "No messages in this conversation yet.": "No messages in this conversation yet.",
   "No recent heard-station entry": "No recent heard-station entry",

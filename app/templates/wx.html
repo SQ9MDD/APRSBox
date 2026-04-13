@@ -39,10 +39,6 @@
                 </select>
             </label>
             <label>
-                <span>{{ t("Resulting callsign") }}</span>
-                <input type="text" value="{{ wx_config.full_callsign or wx_config.callsign or '' }}" readonly>
-            </label>
-            <label>
                 <span>{{ t("Interface") }}</span>
                 <select name="beacon_interface_id">
                     {% for option in interface_options %}
@@ -96,7 +92,6 @@
             <dt>{{ t("Enabled") }}</dt><dd>{{ t("Yes") if wx_config.enabled else t("No") }}</dd>
             <dt>{{ t("Callsign") }}</dt><dd>{{ wx_config.callsign or "-" }}</dd>
             <dt>{{ t("WX SSID") }}</dt><dd>{{ wx_config.ssid or "-" }}</dd>
-            <dt>{{ t("Resulting callsign") }}</dt><dd>{{ wx_config.full_callsign or "-" }}</dd>
             <dt>{{ t("Interface") }}</dt><dd>{% for option in interface_options %}{% if option.value == selected_wx_interface_id %}{{ t(option.label) }}{% endif %}{% endfor %}</dd>
             <dt>{{ t("Path") }}</dt><dd>{{ wx_config.path or "-" }}</dd>
             <dt>{{ t("Latitude") }}</dt><dd>{{ wx_config.latitude or "-" }}</dd>
