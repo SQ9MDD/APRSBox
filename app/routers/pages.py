@@ -1277,7 +1277,7 @@ def digi_flow_move(
             status_code=status.HTTP_303_SEE_OTHER,
         )
     return RedirectResponse(
-        url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20order%20updated.'}&success=1"),
+        url=_path(request, "/digi-flows"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
