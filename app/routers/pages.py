@@ -56,6 +56,7 @@ from app.services.digi_flows import (
     get_digi_flow_reference_options,
     get_digi_flow_type_meta,
     list_digi_flows,
+    safe_move_digi_flow,
     safe_create_digi_flow,
     safe_update_digi_flow,
     set_digi_flow_enabled,
@@ -1258,6 +1259,25 @@ def digi_flow_toggle(
         )
     return RedirectResponse(
         url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20status%20updated.'}&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/digi-flows/{flow_id}/move")
+def digi_flow_move(
+    flow_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+    direction: str = Form(...),
+) -> RedirectResponse:
+    error = safe_move_digi_flow(flow_id, direction)
+    if error:
+        return RedirectResponse(
+            url=_path(request, f"/digi-flows?flash={quote(error)}&success=0"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    return RedirectResponse(
+        url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20order%20updated.'}&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

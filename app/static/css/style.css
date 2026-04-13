@@ -1219,15 +1219,21 @@ select:focus-visible,
     vertical-align: middle;
 }
 
+.digi-flows-col-order {
+    width: 6%;
+    white-space: nowrap;
+    text-align: center;
+}
+
 .digi-flows-col-name {
-    width: 16%;
+    width: 14%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .digi-flows-col-description {
-    width: 28%;
+    width: 24%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1235,7 +1241,7 @@ select:focus-visible,
 
 .digi-flows-col-source,
 .digi-flows-col-target {
-    width: 17%;
+    width: 16%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1247,7 +1253,7 @@ select:focus-visible,
 }
 
 .digi-flows-col-actions {
-    width: 12%;
+    width: 14%;
     white-space: nowrap;
 }
 

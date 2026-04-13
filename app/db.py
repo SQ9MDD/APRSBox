@@ -275,6 +275,7 @@ CREATE TABLE IF NOT EXISTS digi_flows (
     target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
     target_ref TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -585,6 +586,7 @@ def init_db() -> None:
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
+        digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -723,6 +725,13 @@ def init_db() -> None:
                 """
                 ALTER TABLE outbound_jobs
                 ADD COLUMN aprs_message_id INTEGER
+                """
+            )
+        if "sort_order" not in digi_flow_columns:
+            connection.execute(
+                """
+                ALTER TABLE digi_flows
+                ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0
                 """
             )
         if "interface_id" not in traffic_frame_columns:
@@ -1163,11 +1172,12 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
             target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
             target_ref TEXT NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            sort_order INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
         INSERT INTO digi_flows (
-            id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+            id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
         )
         SELECT
             id,
@@ -1187,6 +1197,7 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
                 WHEN enabled IN (0, 1) THEN enabled
                 ELSE 0
             END,
+            0,
             COALESCE(created_at, updated_at, '1970-01-01T00:00:00+00:00'),
             COALESCE(updated_at, created_at, '1970-01-01T00:00:00+00:00')
         FROM digi_flows_old;
