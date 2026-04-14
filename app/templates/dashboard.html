@@ -20,14 +20,6 @@
                             <span class="muted">{{ t("Callsign") }}</span>
                             <strong>{{ t(dashboard_home.station_callsign) }}</strong>
                         </div>
-                        <div class="dashboard-hero-summary-item">
-                            <span class="muted">{{ t("Interface") }}</span>
-                            <strong>{{ t(dashboard_home.selected_interface_name) }}</strong>
-                        </div>
-                        <div class="dashboard-hero-summary-item">
-                            <span class="muted">{{ t("Last traffic") }}</span>
-                            <strong>{{ t(dashboard_home.latest_activity) }}</strong>
-                        </div>
                     </div>
                 </div>
                 <div class="dashboard-kpi-grid">
@@ -108,7 +100,18 @@
                     <div class="dashboard-check dashboard-check-{{ item.state }}">
                         <div>
                             <strong>{{ t(item.label) }}</strong>
+                            {% if item.entries %}
+                            <ul class="dashboard-check-list">
+                                {% for entry in item.entries %}
+                                <li>
+                                    <span>{{ t(entry.name) }}</span>
+                                    <strong>{{ t(entry.status) }}</strong>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% elif item.value %}
                             <p>{{ t(item.value) }}</p>
+                            {% endif %}
                             {% if item.note %}
                             <p class="dashboard-check-note">{{ t(item.note) }}</p>
                             {% endif %}

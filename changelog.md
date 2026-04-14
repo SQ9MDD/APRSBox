@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.68.DEV - 14.04.2026
+
+### Added
+- W `Station Readiness` dodano pozycję `WX callsign`.
+- W `Station Readiness` dodano listę `Active interfaces` z per‑interfejsowym statusem (`Enabled` / `Disabled` / `Connecting` / `Error` / `Unknown`).
+- W `Station Readiness` dodano sekcję `Enabled services` z wartościami `Yes/No` dla: `Beacon enabled`, `Status enabled`, `WX enabled`, `iGate enabled`.
+- Dodano nowe tłumaczenia UI dla etykiet dashboardu związanych z nową checklistą.
+
+### Changed
+- Dashboard został skompaktowany wizualnie (mniejsze odstępy, paddingi i wysokości kart), aby więcej treści było widoczne bez przewijania.
+- W pierwszym bloczku statusu pozostawiono tylko podsumowanie stacji (usunięto skróty `Interface` i `Last traffic`).
+- W `Station Readiness` `Callsign` zastąpiono polem `Main callsign` z dołączanym `SSID` (gdy ustawiony).
+- Logika statusu `Traffic Monitor` wykorzystuje runtime wybranego interfejsu beacon, a gdy brak danych runtime dla wyboru, przechodzi na pierwszy dostępny aktywny interfejs.
+
+### Fixed
+- Zaktualizowano testy dashboardu do nowego kontraktu danych checklisty (`entries` dla list statusów i nowe etykiety pól).
+
+### Removed
+- Z `Station Readiness` usunięto: `Beacon interface`, `TX Block`, `TX Enabled`, `APRS Status enabled`, `Last station TX`.
+
 ## 1.4.67.DEV - 14.04.2026
 
 ### Added

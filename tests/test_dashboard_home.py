@@ -61,17 +61,31 @@ def station_payload(interface_id: int) -> dict[str, str]:
 
 
 class DashboardHomeTests(unittest.TestCase):
-    def test_dashboard_marks_tx_block_as_attention_item(self) -> None:
+    def test_dashboard_exposes_compact_station_readiness_lists(self) -> None:
         with temporary_database():
-            interface_id = insert_modem(name="Blocked TNC", enabled=1, tx_blocked=1)
+            interface_id = insert_modem(name="Main TNC", enabled=1, tx_blocked=0)
+            insert_modem(name="Backup TNC", enabled=0, tx_blocked=0)
             update_station_settings(station_payload(interface_id))
 
             view = dashboard_home_data()
             checks = {item["label"]: item for item in view["checks"]}
 
-            self.assertEqual(checks["TX Block"]["state"], "warn")
-            self.assertEqual(checks["TX Block"]["value"], "On")
-            self.assertTrue(any(item["label"] == "TX Block" for item in view["next_steps"]))
+            self.assertEqual(checks["Main callsign"]["value"], "SQ9MDD-4")
+            self.assertEqual(checks["WX callsign"]["value"], "SQ9MDD")
+            self.assertNotIn("Beacon interface", checks)
+            self.assertNotIn("TX Block", checks)
+            self.assertNotIn("TX Enabled", checks)
+            self.assertNotIn("APRS Status enabled", checks)
+
+            interfaces = {entry["name"]: entry["status"] for entry in checks["Active interfaces"].get("entries") or []}
+            self.assertEqual(interfaces["Main TNC"], "Unknown")
+            self.assertEqual(interfaces["Backup TNC"], "Disabled")
+
+            services = {entry["name"]: entry["status"] for entry in checks["Enabled services"].get("entries") or []}
+            self.assertEqual(services["Beacon enabled"], "Yes")
+            self.assertEqual(services["Status enabled"], "Yes")
+            self.assertEqual(services["WX enabled"], "No")
+            self.assertEqual(services["iGate enabled"], "No")
 
     def test_dashboard_uses_runtime_error_for_traffic_monitor_check(self) -> None:
         with temporary_database():
@@ -97,7 +111,7 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertIn("Dial failed", checks["Traffic Monitor"].get("note") or "")
             self.assertTrue(any(item["label"] == "Traffic Monitor" for item in view["next_steps"]))
 
-    def test_dashboard_exposes_last_station_tx_state_for_skipped_jobs(self) -> None:
+    def test_dashboard_exposes_last_station_tx_time_in_stats(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="TX TNC", enabled=1, tx_blocked=0)
             update_station_settings(station_payload(interface_id))
@@ -127,12 +141,8 @@ class DashboardHomeTests(unittest.TestCase):
             )
 
             view = dashboard_home_data()
-            checks = {item["label"]: item for item in view["checks"]}
             stats = {item["label"]: item for item in view["stats"]}
 
-            self.assertEqual(checks["Last station TX"]["state"], "warn")
-            self.assertEqual(checks["Last station TX"]["value"], "Skipped")
-            self.assertIn("TX skipped:", checks["Last station TX"].get("note") or "")
             self.assertNotEqual(stats["Last station TX"]["value"], "Never")
 
 

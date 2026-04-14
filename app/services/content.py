@@ -876,6 +876,9 @@ def recent_alert_logs(limit: int = 5) -> list[dict[str, Any]]:
 
 
 def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.services.aprsis import has_enabled_aprsis_target_flow
+    from app.services.wx import get_wx_config
+
     station_settings = get_station_settings()
     traffic = dashboard_traffic_summary()
     interfaces = get_configured_modem_interfaces()
@@ -885,21 +888,6 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         selected_interface_id = int(selected_interface_id_raw) if selected_interface_id_raw not in {None, ""} else None
     except (TypeError, ValueError):
         selected_interface_id = None
-    selected_interface = next((item for item in interfaces if item.get("id") == selected_interface_id), None)
-    selected_interface_row = (
-        fetch_one(
-            """
-            SELECT id, name, enabled, tx_blocked
-            FROM modems
-            WHERE id = ?
-            """,
-            (selected_interface_id,),
-        )
-        if selected_interface_id is not None
-        else None
-    )
-    selected_interface_enabled = bool(int(selected_interface_row["enabled"])) if selected_interface_row else False
-    selected_interface_tx_blocked = bool(int(selected_interface_row["tx_blocked"])) if selected_interface_row else False
 
     runtime_rows = fetch_all(
         """
@@ -916,6 +904,15 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         except (TypeError, ValueError):
             continue
     selected_runtime = runtime_by_modem_id.get(selected_interface_id) if selected_interface_id is not None else None
+    if selected_runtime is None:
+        for item in enabled_interfaces:
+            try:
+                interface_id = int(item.get("id"))
+            except (TypeError, ValueError):
+                continue
+            selected_runtime = runtime_by_modem_id.get(interface_id)
+            if selected_runtime is not None:
+                break
     runtime_state_row = fetch_one(
         """
         SELECT status, status_detail, last_error
@@ -956,55 +953,70 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
 
     recent_tx_jobs = recent_station_outbound_jobs(limit=1)
     latest_station_tx_display = "Never"
-    latest_station_tx_state = "warn"
-    latest_station_tx_value = "Never"
-    latest_station_tx_note = ""
     if recent_tx_jobs:
         latest_tx = recent_tx_jobs[0]
         latest_tx_time = _format_monitor_timestamp(str(latest_tx.get("display_time") or ""))
         if latest_tx_time and latest_tx_time != "-":
             latest_station_tx_display = latest_tx_time
-        tx_status = str(latest_tx.get("status") or "").strip().lower()
-        if latest_tx.get("is_tx_skipped"):
-            latest_station_tx_state = "warn"
-            latest_station_tx_value = "Skipped"
-            latest_station_tx_note = str(latest_tx.get("last_error") or "").strip()
-        elif tx_status == "failed":
-            latest_station_tx_state = "error"
-            latest_station_tx_value = "Failed"
-            latest_station_tx_note = str(latest_tx.get("last_error") or "").strip() or latest_station_tx_display
-        elif tx_status in {"queued", "processing"}:
-            latest_station_tx_state = "warn"
-            latest_station_tx_value = "Queued"
-            latest_station_tx_note = latest_station_tx_display
-        else:
-            latest_station_tx_state = "ok"
-            latest_station_tx_value = "Sent"
-            latest_station_tx_note = latest_station_tx_display
 
-    latest_frame_row = fetch_one(
-        """
-        SELECT created_at
-        FROM traffic_frames
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1
-        """
-    )
-    latest_activity = _format_monitor_timestamp(latest_frame_row["created_at"]) if latest_frame_row else "No traffic yet"
-    callsign = str(station_settings.get("callsign") or "").strip()
+    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    station_ssid = str(station_settings.get("ssid") or "").strip()
+    normalized_station_ssid = "" if station_ssid == "0" else station_ssid
+    main_callsign = callsign if not (callsign and normalized_station_ssid) else f"{callsign}-{normalized_station_ssid}"
+
+    wx_config = get_wx_config()
+    wx_callsign = str(wx_config.get("full_callsign") or "").strip().upper()
+    igate_enabled = has_enabled_aprsis_target_flow()
     location_configured = bool(station_settings.get("latitude")) and bool(station_settings.get("longitude"))
-    selected_interface_name = (
-        str(selected_interface_row["name"]).strip()
-        if selected_interface_row and str(selected_interface_row["name"] or "").strip()
-        else (selected_interface["name"] if selected_interface else "Not selected")
-    )
+
+    interface_entries: list[dict[str, str]] = []
+    any_interface_error = False
+    for interface in interfaces:
+        try:
+            interface_id = int(interface.get("id"))
+        except (TypeError, ValueError):
+            continue
+        interface_name = str(interface.get("name") or "").strip() or f"#{interface_id}"
+        runtime = runtime_by_modem_id.get(interface_id)
+        runtime_status = str((runtime or {}).get("status") or "").strip().lower()
+        runtime_error = str((runtime or {}).get("last_error") or "").strip()
+        enabled = bool(interface.get("enabled"))
+        if not enabled:
+            status_label = "Disabled"
+        elif runtime_error or runtime_status == "error":
+            status_label = "Error"
+            any_interface_error = True
+        elif runtime_status == "connecting":
+            status_label = "Connecting"
+        elif runtime_status in {"connected", "running", "idle"}:
+            status_label = "Enabled"
+        elif runtime_status in {"disabled", "stopped"}:
+            status_label = "Disabled"
+        elif runtime_status:
+            status_label = "Unknown"
+        else:
+            status_label = "Unknown"
+        interface_entries.append({"name": interface_name, "status": status_label})
+
+    if not interfaces or not enabled_interfaces:
+        interface_check_state = "warn"
+    elif any_interface_error:
+        interface_check_state = "error"
+    else:
+        interface_check_state = "ok"
 
     checks = [
         {
-            "label": "Callsign",
-            "state": "ok" if callsign else "warn",
-            "value": callsign or "Not set",
+            "label": "Main callsign",
+            "state": "ok" if main_callsign else "warn",
+            "value": main_callsign or "Not set",
             "blocks": not callsign,
+        },
+        {
+            "label": "WX callsign",
+            "state": "ok" if wx_callsign else "warn",
+            "value": wx_callsign or "Not set",
+            "blocks": False,
         },
         {
             "label": "Location",
@@ -1013,16 +1025,10 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "blocks": not location_configured,
         },
         {
-            "label": "Beacon interface",
-            "state": "warn" if not selected_interface_row else ("error" if not selected_interface_enabled else "ok"),
-            "value": selected_interface_name,
-            "note": "Disabled" if selected_interface_row and not selected_interface_enabled else "",
-            "blocks": not selected_interface_row or (selected_interface_row is not None and not selected_interface_enabled),
-        },
-        {
             "label": "Active interfaces",
-            "state": "ok" if enabled_interfaces else "warn",
-            "value": str(len(enabled_interfaces)),
+            "state": interface_check_state,
+            "value": "No interfaces configured" if not interfaces else ("Disabled" if not enabled_interfaces else ""),
+            "entries": interface_entries,
             "blocks": not enabled_interfaces,
         },
         {
@@ -1033,28 +1039,15 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "blocks": monitor_check_state == "error",
         },
         {
-            "label": "TX Block",
-            "state": "warn" if not selected_interface_row else ("warn" if selected_interface_tx_blocked else "ok"),
-            "value": "Not selected" if not selected_interface_row else ("On" if selected_interface_tx_blocked else "Off"),
-            "blocks": bool(selected_interface_row) and selected_interface_tx_blocked,
-        },
-        {
-            "label": "TX Enabled",
-            "state": "ok" if bool(station_settings.get("tx_enabled")) else "warn",
-            "value": "On" if bool(station_settings.get("tx_enabled")) else "Off",
-            "blocks": False,
-        },
-        {
-            "label": "APRS Status enabled",
-            "state": "ok" if bool(station_settings.get("status_enabled")) else "warn",
-            "value": "On" if bool(station_settings.get("status_enabled")) else "Off",
-            "blocks": False,
-        },
-        {
-            "label": "Last station TX",
-            "state": latest_station_tx_state,
-            "value": latest_station_tx_value,
-            "note": latest_station_tx_note,
+            "label": "Enabled services",
+            "state": "ok",
+            "value": "",
+            "entries": [
+                {"name": "Beacon enabled", "status": "Yes" if bool(station_settings.get("tx_enabled")) else "No"},
+                {"name": "Status enabled", "status": "Yes" if bool(station_settings.get("status_enabled")) else "No"},
+                {"name": "WX enabled", "status": "Yes" if bool(wx_config.get("enabled")) else "No"},
+                {"name": "iGate enabled", "status": "Yes" if igate_enabled else "No"},
+            ],
             "blocks": False,
         },
     ]
@@ -1105,9 +1098,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         "checks": checks,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,
-        "station_callsign": callsign or "Not set",
-        "selected_interface_name": selected_interface_name,
-        "latest_activity": latest_activity,
+        "station_callsign": main_callsign or "Not set",
         "band_summary": band_summary,
     }
 
