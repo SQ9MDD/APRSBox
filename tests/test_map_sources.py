@@ -193,6 +193,16 @@ class MapSourcesTests(unittest.TestCase):
             )
             self.assertGreater(source_id, 0)
 
+    def test_validation_accepts_tile_tokens_with_spacing(self) -> None:
+        with temporary_database():
+            source_id = save_map_source(
+                valid_source_payload(
+                    name="Spaced tokens",
+                    url_template="https://tiles.example/{ z }/{ x }/{ y }.png",
+                )
+            )
+            self.assertGreater(source_id, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1178,8 +1178,13 @@
             } catch (_error) {
                 decoded = text;
             }
-            const normalized = decoded.replaceAll("%7b", "{").replaceAll("%7d", "}");
-            return normalized.includes("{z}") && normalized.includes("{x}") && normalized.includes("{y}");
+            const normalized = decoded
+                .replaceAll("%7b", "{")
+                .replaceAll("%7d", "}")
+                .replaceAll("&#123;", "{")
+                .replaceAll("&#125;", "}")
+                .replace(/[\u200B-\u200D\uFEFF]/g, "");
+            return /\{\s*z\s*\}/.test(normalized) && /\{\s*x\s*\}/.test(normalized) && /\{\s*y\s*\}/.test(normalized);
         };
 
         const validateBeforeSubmit = () => {

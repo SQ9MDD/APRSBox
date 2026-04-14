@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.content import build_station_detail_href, get_station_settings, get_visible_station_snapshots, parse_tnc2_frame
@@ -500,8 +500,19 @@ def _has_required_tile_tokens(url_template: str) -> bool:
     normalized = str(url_template or "").strip().lower()
     if not normalized:
         return False
-    encoded_normalized = normalized.replace("%7b", "{").replace("%7d", "}")
-    return all(token in encoded_normalized for token in MAP_SOURCE_REQUIRED_TILE_TOKENS)
+    try:
+        decoded = unquote(normalized)
+    except Exception:
+        decoded = normalized
+    prepared = (
+        decoded
+        .replace("%7b", "{")
+        .replace("%7d", "}")
+        .replace("&#123;", "{")
+        .replace("&#125;", "}")
+    )
+    prepared = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", prepared)
+    return all(re.search(r"\{\s*" + re.escape(token.strip("{}")) + r"\s*\}", prepared) for token in MAP_SOURCE_REQUIRED_TILE_TOKENS)
 
 
 def _validate_map_sources_state(connection: Any) -> None:
