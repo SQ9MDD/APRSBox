@@ -5,13 +5,15 @@
 ### Added
 - W widoku `Map` dodano osobny widget overlay `Latest packet` w prawym górnym rogu mapy.
 - W toolbarze mapy dodano przełącznik widoczności widgetu (`Show/Hide latest packet widget`) z zapisem stanu w `localStorage`.
-- Widget pokazuje skrócone dane ostatnio odebranego pakietu: `Callsign`, `Distance and azimuth`, `Description`, `QSY`.
+- Widget pokazuje skrócone dane ostatnio odebranego pakietu: `Callsign`, `QSY`, `Distance and azimuth`, `Comment` (komentarz jako ostatni wiersz).
 - Do payloadu `/api/map/stations` dodano pola `qsy_frequency_mhz`, `qsy_tone`, `qsy_offset_khz`, `qsy_callsign`.
 - Dodano nowe tłumaczenia UI (`en`/`pl`) dla etykiet i komunikatów widgetu.
 
 ### Changed
 - Overlay działa jako osobny moduł frontendowy (`map-latest-overlay.js`) i nie wykonuje dodatkowych requestów.
 - Dane widgetu są aktualizowane z istniejącego odświeżenia mapy przez event `aprsbox:map-stations-refreshed`.
+- Ustabilizowano layout widgetu: stała szerokość panelu (z limitem na małych ekranach) oraz zawijanie długich wartości bez zmiany szerokości.
+- Zwiększono typografię i wyróżnienie wartości `Callsign` i `QSY` (większa czcionka + pogrubienie).
 
 ### Fixed
 - Dodano testy regresyjne dla integracji widgetu mapy (template + JS event + toggle).
