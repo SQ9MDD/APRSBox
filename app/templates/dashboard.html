@@ -105,7 +105,7 @@
                                 {% for entry in item.entries %}
                                 <li>
                                     <span>{{ t(entry.name) }}</span>
-                                    <strong>{{ t(entry.status) }}</strong>
+                                    <span class="status-pill dashboard-entry-badge {% if entry.tone == 'ok' %}status-running{% elif entry.tone == 'error' %}status-stopped{% else %}status-unknown{% endif %}">{{ t(entry.status) }}</span>
                                 </li>
                                 {% endfor %}
                             </ul>

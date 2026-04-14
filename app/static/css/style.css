@@ -583,7 +583,11 @@ body {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 0.95fr);
     gap: var(--space-3);
-    align-items: start;
+    align-items: stretch;
+}
+
+.dashboard-overview-grid > .panel {
+    height: 100%;
 }
 
 .dashboard-detail-grid {
@@ -705,12 +709,19 @@ body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.55rem;
-    align-items: baseline;
+    align-items: center;
     color: var(--muted);
 }
 
 .dashboard-check-list li strong {
     color: var(--text);
+}
+
+.dashboard-entry-badge {
+    min-width: 5.1rem;
+    padding: 0.18rem 0.44rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
 }
 
 .dashboard-check-warn {
@@ -769,6 +780,8 @@ body {
 
 .dashboard-band-panel .panel-body {
     gap: var(--space-2);
+    height: 100%;
+    align-content: start;
 }
 
 @media (max-width: 1180px) {

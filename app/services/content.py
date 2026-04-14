@@ -883,11 +883,6 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     traffic = dashboard_traffic_summary()
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
-    selected_interface_id_raw = station_settings.get("beacon_interface_id")
-    try:
-        selected_interface_id = int(selected_interface_id_raw) if selected_interface_id_raw not in {None, ""} else None
-    except (TypeError, ValueError):
-        selected_interface_id = None
 
     runtime_rows = fetch_all(
         """
@@ -903,53 +898,6 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             runtime_by_modem_id[int(row["modem_id"])] = dict(row)
         except (TypeError, ValueError):
             continue
-    selected_runtime = runtime_by_modem_id.get(selected_interface_id) if selected_interface_id is not None else None
-    if selected_runtime is None:
-        for item in enabled_interfaces:
-            try:
-                interface_id = int(item.get("id"))
-            except (TypeError, ValueError):
-                continue
-            selected_runtime = runtime_by_modem_id.get(interface_id)
-            if selected_runtime is not None:
-                break
-    runtime_state_row = fetch_one(
-        """
-        SELECT status, status_detail, last_error
-        FROM traffic_runtime_state
-        WHERE id = 1
-        """
-    )
-
-    monitor_status = str((selected_runtime or {}).get("status") or "").strip().lower()
-    monitor_detail = str((selected_runtime or {}).get("status_detail") or "").strip()
-    monitor_error = str((selected_runtime or {}).get("last_error") or "").strip()
-    if not monitor_status and runtime_state_row:
-        monitor_status = str(runtime_state_row["status"] or "").strip().lower()
-        monitor_detail = str(runtime_state_row["status_detail"] or "").strip()
-        monitor_error = str(runtime_state_row["last_error"] or "").strip()
-
-    if not enabled_interfaces:
-        monitor_check_state = "warn"
-        monitor_check_value = "Disabled"
-    elif monitor_error or monitor_status == "error":
-        monitor_check_state = "error"
-        monitor_check_value = "Error"
-    elif monitor_status in {"connected", "running", "idle"}:
-        monitor_check_state = "ok"
-        monitor_check_value = "Enabled"
-    elif monitor_status == "connecting":
-        monitor_check_state = "warn"
-        monitor_check_value = "Enabled"
-    elif monitor_status in {"disabled", "stopped"}:
-        monitor_check_state = "warn"
-        monitor_check_value = "Disabled"
-    elif monitor_status:
-        monitor_check_state = "warn"
-        monitor_check_value = "Unknown"
-    else:
-        monitor_check_state = "warn"
-        monitor_check_value = "Unknown"
 
     recent_tx_jobs = recent_station_outbound_jobs(limit=1)
     latest_station_tx_display = "Never"
@@ -983,20 +931,27 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         enabled = bool(interface.get("enabled"))
         if not enabled:
             status_label = "Disabled"
+            status_tone = "warn"
         elif runtime_error or runtime_status == "error":
             status_label = "Error"
+            status_tone = "error"
             any_interface_error = True
         elif runtime_status == "connecting":
             status_label = "Connecting"
+            status_tone = "warn"
         elif runtime_status in {"connected", "running", "idle"}:
             status_label = "Enabled"
+            status_tone = "ok"
         elif runtime_status in {"disabled", "stopped"}:
             status_label = "Disabled"
+            status_tone = "warn"
         elif runtime_status:
             status_label = "Unknown"
+            status_tone = "warn"
         else:
             status_label = "Unknown"
-        interface_entries.append({"name": interface_name, "status": status_label})
+            status_tone = "warn"
+        interface_entries.append({"name": interface_name, "status": status_label, "tone": status_tone})
 
     if not interfaces or not enabled_interfaces:
         interface_check_state = "warn"
@@ -1032,21 +987,30 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "blocks": not enabled_interfaces,
         },
         {
-            "label": "Traffic Monitor",
-            "state": monitor_check_state,
-            "value": monitor_check_value,
-            "note": monitor_error or monitor_detail,
-            "blocks": monitor_check_state == "error",
-        },
-        {
             "label": "Enabled services",
             "state": "ok",
             "value": "",
             "entries": [
-                {"name": "Beacon enabled", "status": "Yes" if bool(station_settings.get("tx_enabled")) else "No"},
-                {"name": "Status enabled", "status": "Yes" if bool(station_settings.get("status_enabled")) else "No"},
-                {"name": "WX enabled", "status": "Yes" if bool(wx_config.get("enabled")) else "No"},
-                {"name": "iGate enabled", "status": "Yes" if igate_enabled else "No"},
+                {
+                    "name": "Beacon enabled",
+                    "status": "Enabled" if bool(station_settings.get("tx_enabled")) else "Disabled",
+                    "tone": "ok" if bool(station_settings.get("tx_enabled")) else "warn",
+                },
+                {
+                    "name": "Status enabled",
+                    "status": "Enabled" if bool(station_settings.get("status_enabled")) else "Disabled",
+                    "tone": "ok" if bool(station_settings.get("status_enabled")) else "warn",
+                },
+                {
+                    "name": "WX enabled",
+                    "status": "Enabled" if bool(wx_config.get("enabled")) else "Disabled",
+                    "tone": "ok" if bool(wx_config.get("enabled")) else "warn",
+                },
+                {
+                    "name": "iGate enabled",
+                    "status": "Enabled" if igate_enabled else "Disabled",
+                    "tone": "ok" if igate_enabled else "warn",
+                },
             ],
             "blocks": False,
         },

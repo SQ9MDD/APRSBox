@@ -82,34 +82,19 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(interfaces["Backup TNC"], "Disabled")
 
             services = {entry["name"]: entry["status"] for entry in checks["Enabled services"].get("entries") or []}
-            self.assertEqual(services["Beacon enabled"], "Yes")
-            self.assertEqual(services["Status enabled"], "Yes")
-            self.assertEqual(services["WX enabled"], "No")
-            self.assertEqual(services["iGate enabled"], "No")
+            self.assertEqual(services["Beacon enabled"], "Enabled")
+            self.assertEqual(services["Status enabled"], "Enabled")
+            self.assertEqual(services["WX enabled"], "Disabled")
+            self.assertEqual(services["iGate enabled"], "Disabled")
 
-    def test_dashboard_uses_runtime_error_for_traffic_monitor_check(self) -> None:
+    def test_dashboard_does_not_expose_traffic_monitor_check(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="Error TNC", enabled=1, tx_blocked=0)
             update_station_settings(station_payload(interface_id))
-            execute(
-                """
-                INSERT INTO traffic_runtime_interfaces(
-                    modem_id, modem_name, modem_endpoint, band, status, status_detail,
-                    expose_port_enabled, expose_bind_address, expose_port, expose_active_clients,
-                    last_error, updated_at
-                )
-                VALUES (?, ?, ?, ?, 'error', 'TCP connection failed.', 0, '0.0.0.0', 8002, 0, ?, '2026-01-01T00:00:05+00:00')
-                """,
-                (interface_id, "Error TNC", "127.0.0.1:8001", "2m", "Dial failed"),
-            )
 
             view = dashboard_home_data()
             checks = {item["label"]: item for item in view["checks"]}
-
-            self.assertEqual(checks["Traffic Monitor"]["state"], "error")
-            self.assertEqual(checks["Traffic Monitor"]["value"], "Error")
-            self.assertIn("Dial failed", checks["Traffic Monitor"].get("note") or "")
-            self.assertTrue(any(item["label"] == "Traffic Monitor" for item in view["next_steps"]))
+            self.assertNotIn("Traffic Monitor", checks)
 
     def test_dashboard_exposes_last_station_tx_time_in_stats(self) -> None:
         with temporary_database():
