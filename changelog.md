@@ -5,7 +5,7 @@
 ### Added
 - W `Settings` dodano nowy panel `Map sources` do konfiguracji klasycznych źródeł kafelków Leaflet.
 - Dodano model danych `map_sources` (DB) z polami: `name`, `url_template`, `attribution`, `min_zoom`, `max_zoom`, `subdomains`, `api_key`, `enabled`, `is_default`, `sort_order`, `notes`.
-- Dodano operacje konfiguracji źródeł mapy: dodawanie, edycja, usuwanie i ustawianie źródła domyślnego.
+- Dodano operacje konfiguracji źródeł mapy: dodawanie, edycja, usuwanie, ustawianie źródła domyślnego i zmianę kolejności.
 - Dodano walidacje backendowe i frontendowe dla konfiguracji map (`Name`, `URL template`, tokeny `{z}/{x}/{y}`, zoomy, reguły default/enabled).
 - Dodano testy regresyjne dla nowego modelu map sources i deterministycznego budowania URL kafelków.
 
@@ -13,16 +13,17 @@
 - Bazowa warstwa mapy (`tile layer`) jest teraz pobierana z konfiguracji zapisanej w DB, zamiast z hardcodowanych wartości runtime.
 - Konfiguracja aktywnego źródła mapy jest używana spójnie w widokach `Map`, `Station detail` oraz pickerach lokalizacji (`Station`, `WX`, `Objects/Items`).
 - Rozszerzono payload mapy o `tile_min_zoom`, `tile_max_zoom` i `tile_subdomains`; frontend Leaflet używa tych wartości przy tworzeniu warstwy kafelków.
-- Dodano prosty mechanizm podstawiania klucza API przez placeholder `{apiKey}` w `URL template`.
 - Górny blok podsumowania domyślnego źródła w panelu `Map sources` został usunięty, a sam panel skompaktowany wizualnie.
 - W tabeli `Map sources` usunięto kolumnę `URL template` dla bardziej zwartego widoku listy.
-- W formularzu `Map sources` usunięto pola `Subdomains`, `API key` i ręczny `Sort order`; zmiana kolejności odbywa się teraz strzałkami `góra/dół` w tabeli (jak w innych formularzach).
-- Nowe rekordy źródeł map są dopisywane na końcu listy, a edycja przez uproszczony formularz nie nadpisuje istniejących wartości technicznych (`subdomains`, `api_key`, `sort_order`).
+- Formularz `Map sources` został uproszczony do pól: `Name`, `URL template`, `Attribution`, `Min zoom`, `Max zoom`, `Notes`, `Enabled`, `Set as default`.
+- Usunięto z formularza pola `Subdomains`, `API key` i ręczny `Sort order`; kolejność źródeł jest teraz zmieniana strzałkami `góra/dół` w tabeli.
+- Nowe rekordy źródeł map są dopisywane na końcu listy.
 
 ### Fixed
 - Zabezpieczono migrację `map_sources`, aby po aktualizacji zawsze istniało dokładnie jedno aktywne źródło domyślne.
 - Zachowano ciągłość działania mapy po wdrożeniu: dotychczasowa konfiguracja kafelków jest automatycznie przenoszona jako pierwszy wpis domyślny.
 - Utrzymano deterministyczne URL kafelków (bez cache-bustingu), dzięki czemu wykorzystywana jest standardowa pamięć podręczna HTTP przeglądarki.
+- Edycja przez uproszczony formularz nie nadpisuje istniejących wartości technicznych `subdomains`, `api_key` i `sort_order` w DB.
 
 ### Removed
 - Brak zmian.
