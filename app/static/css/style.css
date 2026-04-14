@@ -2515,6 +2515,11 @@ select:focus-visible,
     border-color: rgba(201, 122, 122, 0.34);
 }
 
+.settings-primary-grid {
+    align-items: start;
+    margin-bottom: var(--space-4);
+}
+
 .danger-zone-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3993,6 +3998,10 @@ button.message-delivery-badge {
     }
 
     .users-management-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-primary-grid {
         grid-template-columns: 1fr;
     }
 }

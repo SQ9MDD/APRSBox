@@ -19,6 +19,8 @@
 - Ujednolicono opisy statusów w checklistach do wspólnego formatu (`Enabled` / `Disabled` / `Connecting` / `Error` / `Unknown`).
 - Wysokość panelu `Band Condition` została wyrównana do wysokości panelu po lewej stronie w górnym rzędzie dashboardu.
 - Skompaktowano bloczek zegara w sidebarze i przeniesiono etykietę `UTC` do tej samej linii co data.
+- W zakładce `Settings` panele `Global Settings` i `Application update` ustawiono obok siebie w układzie 2‑kolumnowym (z responsywnym przejściem do 1 kolumny na mniejszych ekranach).
+- W zakładce `Settings` sekcję `Danger zone` przeniesiono na sam dół strony.
 
 ### Fixed
 - Zaktualizowano testy dashboardu do nowego kontraktu danych checklisty (`entries` dla list statusów i nowe etykiety pól).
