@@ -13,6 +13,12 @@
     const tileUrl = root.dataset.tileUrl || "";
     const tileAttribution = root.dataset.tileAttribution || "";
     const tileSourceName = root.dataset.tileSourceName || "";
+    const tileMinZoom = Number.parseInt(root.dataset.tileMinZoom || "", 10);
+    const tileMaxZoom = Number.parseInt(root.dataset.tileMaxZoom || "", 10);
+    const tileSubdomains = String(root.dataset.tileSubdomains || "")
+        .split(/[,\s]+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0);
 
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
@@ -109,12 +115,19 @@
         zoomControl: true,
     });
 
-    // Keep the tile endpoint configurable from the backend so the frontend can
-    // switch later from the public development tiles to a local cache/proxy.
-    window.L.tileLayer(tileUrl, {
+    const tileLayerOptions = {
         attribution: tileAttribution,
-        maxZoom: 19,
-    }).addTo(map);
+    };
+    if (Number.isInteger(tileMinZoom)) {
+        tileLayerOptions.minZoom = tileMinZoom;
+    }
+    if (Number.isInteger(tileMaxZoom)) {
+        tileLayerOptions.maxZoom = tileMaxZoom;
+    }
+    if (tileSubdomains.length > 0) {
+        tileLayerOptions.subdomains = tileSubdomains;
+    }
+    window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
     stationLayer.addTo(map);
     rulerLayer.addTo(map);
 

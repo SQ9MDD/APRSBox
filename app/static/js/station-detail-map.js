@@ -302,6 +302,59 @@
         }
     }
 
+    function parseTileSubdomains(value) {
+        return String(value || "")
+            .split(/[,\s]+/)
+            .map((token) => token.trim())
+            .filter((token) => token.length > 0);
+    }
+
+    function normalizeTileConfig(mapConfig) {
+        return {
+            tile_url: String(mapConfig.tile_url || ""),
+            tile_attribution: String(mapConfig.tile_attribution || ""),
+            tile_min_zoom: Number.parseInt(String(mapConfig.tile_min_zoom || ""), 10),
+            tile_max_zoom: Number.parseInt(String(mapConfig.tile_max_zoom || ""), 10),
+            tile_subdomains: parseTileSubdomains(mapConfig.tile_subdomains || ""),
+        };
+    }
+
+    function tileConfigMatches(layer, tileConfig) {
+        if (!layer) {
+            return false;
+        }
+        const currentMinZoom = Number.isFinite(Number(layer.options.minZoom)) ? Number(layer.options.minZoom) : null;
+        const currentMaxZoom = Number.isFinite(Number(layer.options.maxZoom)) ? Number(layer.options.maxZoom) : null;
+        const nextMinZoom = Number.isFinite(Number(tileConfig.tile_min_zoom)) ? Number(tileConfig.tile_min_zoom) : null;
+        const nextMaxZoom = Number.isFinite(Number(tileConfig.tile_max_zoom)) ? Number(tileConfig.tile_max_zoom) : null;
+        const currentSubdomains = Array.isArray(layer.options.subdomains)
+            ? layer.options.subdomains
+            : parseTileSubdomains(layer.options.subdomains || "");
+        return (
+            String(layer._url || "") === tileConfig.tile_url
+            && String(layer.options.attribution || "") === tileConfig.tile_attribution
+            && currentMinZoom === nextMinZoom
+            && currentMaxZoom === nextMaxZoom
+            && JSON.stringify(currentSubdomains) === JSON.stringify(tileConfig.tile_subdomains)
+        );
+    }
+
+    function createTileLayer(tileConfig) {
+        const options = {
+            attribution: tileConfig.tile_attribution,
+        };
+        if (Number.isInteger(tileConfig.tile_min_zoom)) {
+            options.minZoom = tileConfig.tile_min_zoom;
+        }
+        if (Number.isInteger(tileConfig.tile_max_zoom)) {
+            options.maxZoom = tileConfig.tile_max_zoom;
+        }
+        if (Array.isArray(tileConfig.tile_subdomains) && tileConfig.tile_subdomains.length > 0) {
+            options.subdomains = tileConfig.tile_subdomains;
+        }
+        return window.L.tileLayer(tileConfig.tile_url, options);
+    }
+
     function ensureMap(station, mapConfig, stationTrack) {
         const hasCoordinates = Number.isFinite(Number(station.latitude_float)) && Number.isFinite(Number(station.longitude_float));
         if (!hasCoordinates) {
@@ -326,9 +379,15 @@
         mapRoot.dataset.longitude = String(station.longitude_float);
         mapRoot.dataset.displayCallsign = station.display_callsign || "";
         mapRoot.dataset.symbolIcon = mapConfig.symbol_icon || "";
+        mapRoot.dataset.tileUrl = mapConfig.tile_url || "";
+        mapRoot.dataset.tileAttribution = mapConfig.tile_attribution || "";
+        mapRoot.dataset.tileMinZoom = String(mapConfig.tile_min_zoom || "");
+        mapRoot.dataset.tileMaxZoom = String(mapConfig.tile_max_zoom || "");
+        mapRoot.dataset.tileSubdomains = String(mapConfig.tile_subdomains || "");
 
         const latLng = [Number(station.latitude_float), Number(station.longitude_float)];
         const symbolIcon = mapConfig.symbol_icon ? `${staticRoot}${mapConfig.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
+        const tileConfig = normalizeTileConfig(mapConfig);
         const icon = window.L.divIcon({
             className: "map-station-icon",
             html: buildIconHtml(station.display_callsign || "", symbolIcon),
@@ -343,10 +402,7 @@
                 zoomControl: true,
                 attributionControl: true,
             });
-            tileLayer = window.L.tileLayer(mapConfig.tile_url || "", {
-                attribution: mapConfig.tile_attribution || "",
-                maxZoom: 19,
-            }).addTo(map);
+            tileLayer = createTileLayer(tileConfig).addTo(map);
             renderTrack(station, stationTrack);
             marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);
             map.whenReady(function () {
@@ -361,8 +417,11 @@
         marker.setIcon(icon);
         renderTrack(station, stationTrack);
         map.setView(latLng, map.getZoom(), { animate: false });
-        if (tileLayer && tileLayer._url !== (mapConfig.tile_url || "")) {
-            tileLayer.setUrl(mapConfig.tile_url || "");
+        if (!tileConfigMatches(tileLayer, tileConfig)) {
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+            }
+            tileLayer = createTileLayer(tileConfig).addTo(map);
         }
     }
 
@@ -397,6 +456,9 @@
         zoom: Number.parseInt(mapRoot.dataset.zoom || "14", 10),
         tile_url: mapRoot.dataset.tileUrl || "",
         tile_attribution: mapRoot.dataset.tileAttribution || "",
+        tile_min_zoom: Number.parseInt(mapRoot.dataset.tileMinZoom || "", 10),
+        tile_max_zoom: Number.parseInt(mapRoot.dataset.tileMaxZoom || "", 10),
+        tile_subdomains: mapRoot.dataset.tileSubdomains || "",
         symbol_icon: mapRoot.dataset.symbolIcon || "",
         track_points: parseTrackPoints(mapRoot.dataset.trackPoints || ""),
     } : {};

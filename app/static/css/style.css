@@ -2546,6 +2546,43 @@ select:focus-visible,
     flex-wrap: wrap;
 }
 
+.settings-map-sources-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(22rem, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+}
+
+.map-source-default-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.14rem 0.46rem;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid rgba(109, 189, 128, 0.24);
+    font-size: 0.72rem;
+}
+
+.map-sources-table {
+    table-layout: auto;
+}
+
+.map-sources-table th:nth-child(1),
+.map-sources-table td:nth-child(1),
+.map-sources-table th:nth-child(4),
+.map-sources-table td:nth-child(4),
+.map-sources-table th:nth-child(5),
+.map-sources-table td:nth-child(5),
+.map-sources-table th:nth-child(6),
+.map-sources-table td:nth-child(6) {
+    white-space: nowrap;
+}
+
+.map-source-form textarea {
+    min-height: 5.5rem;
+}
+
 .update-log-preview {
     margin: 0;
     max-height: 20rem;
@@ -4002,6 +4039,10 @@ button.message-delivery-badge {
     }
 
     .settings-primary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-map-sources-grid {
         grid-template-columns: 1fr;
     }
 }

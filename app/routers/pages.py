@@ -93,8 +93,14 @@ from app.services.aprs_device_identification import (
 )
 from app.services.core_client import restart_core_traffic_monitor
 from app.services.map_service import (
+    get_default_map_source,
+    get_map_source,
+    list_map_sources,
     get_map_page_config,
     get_map_station_payload,
+    safe_delete_map_source,
+    safe_save_map_source,
+    safe_set_default_map_source,
     get_station_detail_map_config,
     get_station_detail_track_payload,
 )
@@ -373,6 +379,62 @@ def _wx_page_context(
     )
 
 
+def _map_source_checkbox(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "on", "yes"}
+
+
+def _empty_map_source_form() -> dict[str, Any]:
+    return {
+        "record_id": None,
+        "name": "",
+        "url_template": "",
+        "attribution": "",
+        "min_zoom": 0,
+        "max_zoom": 19,
+        "subdomains": "",
+        "api_key": "",
+        "enabled": True,
+        "is_default": False,
+        "sort_order": 0,
+        "notes": "",
+    }
+
+
+def _map_source_form_from_source(source: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "record_id": int(source.get("id") or 0),
+        "name": str(source.get("name") or ""),
+        "url_template": str(source.get("url_template") or ""),
+        "attribution": str(source.get("attribution") or ""),
+        "min_zoom": int(source.get("min_zoom") or 0),
+        "max_zoom": int(source.get("max_zoom") or 19),
+        "subdomains": str(source.get("subdomains") or ""),
+        "api_key": str(source.get("api_key") or ""),
+        "enabled": bool(source.get("enabled")),
+        "is_default": bool(source.get("is_default")),
+        "sort_order": int(source.get("sort_order") or 0),
+        "notes": str(source.get("notes") or ""),
+    }
+
+
+def _map_source_form_from_payload(payload: dict[str, Any], *, record_id: int | None) -> dict[str, Any]:
+    return {
+        "record_id": record_id,
+        "name": str(payload.get("name") or "").strip(),
+        "url_template": str(payload.get("url_template") or "").strip(),
+        "attribution": str(payload.get("attribution") or "").strip(),
+        "min_zoom": str(payload.get("min_zoom") or "").strip() or "0",
+        "max_zoom": str(payload.get("max_zoom") or "").strip() or "19",
+        "subdomains": str(payload.get("subdomains") or "").strip(),
+        "api_key": str(payload.get("api_key") or "").strip(),
+        "enabled": _map_source_checkbox(payload.get("enabled")),
+        "is_default": _map_source_checkbox(payload.get("is_default")),
+        "sort_order": str(payload.get("sort_order") or "").strip() or "0",
+        "notes": str(payload.get("notes") or "").strip(),
+    }
+
+
 def _settings_page_context(
     request: Request,
     current_user: UserIdentity,
@@ -382,9 +444,19 @@ def _settings_page_context(
     flash_success: bool = True,
     current_language: str | None = None,
     current_default_units: str | None = None,
+    map_source_edit_id: int | None = None,
+    map_source_form: dict[str, Any] | None = None,
 ) -> dict:
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
+    map_sources = list_map_sources()
+    default_map_source = get_default_map_source()
+    map_source_edit = get_map_source(map_source_edit_id) if map_source_edit_id is not None else None
+    resolved_map_source_form = (
+        map_source_form
+        if map_source_form is not None
+        else (_map_source_form_from_source(map_source_edit) if map_source_edit is not None else _empty_map_source_form())
+    )
     update_channels = list_update_channels()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
@@ -422,6 +494,11 @@ def _settings_page_context(
         update_log_content=str(update_log_snapshot.get("content") or ""),
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
+        map_sources=map_sources,
+        default_map_source=default_map_source,
+        map_source_form=resolved_map_source_form,
+        map_source_edit_id=resolved_map_source_form.get("record_id"),
+        can_manage_map_sources=current_user.role in {"admin", "operator"},
     )
 
 
@@ -716,9 +793,10 @@ def servers_page(
 def settings_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    edit_map_source: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    context = _settings_page_context(request, current_user)
+    context = _settings_page_context(request, current_user, map_source_edit_id=edit_map_source)
     return templates.TemplateResponse("settings.html", context)
 
 
@@ -934,6 +1012,94 @@ def settings_update_global(
             "reload": True,
         }
     )
+
+
+@router.post("/settings/map-sources")
+def settings_map_sources_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    record_id: int | None = Form(None),
+    name: str = Form(""),
+    url_template: str = Form(""),
+    attribution: str = Form(""),
+    min_zoom: str = Form("0"),
+    max_zoom: str = Form("19"),
+    subdomains: str = Form(""),
+    api_key: str = Form(""),
+    enabled: str | None = Form(None),
+    is_default: str | None = Form(None),
+    sort_order: str = Form("0"),
+    notes: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "name": name.strip(),
+        "url_template": url_template.strip(),
+        "attribution": attribution.strip(),
+        "min_zoom": min_zoom.strip(),
+        "max_zoom": max_zoom.strip(),
+        "subdomains": subdomains.strip(),
+        "api_key": api_key.strip(),
+        "enabled": enabled,
+        "is_default": is_default,
+        "sort_order": sort_order.strip(),
+        "notes": notes.strip(),
+    }
+    success, error, saved_id = safe_save_map_source(payload, source_id=record_id)
+    if not success:
+        context = _settings_page_context(
+            request,
+            current_user,
+            flash=error or "Failed to save map source.",
+            flash_success=False,
+            map_source_edit_id=record_id,
+            map_source_form=_map_source_form_from_payload(payload, record_id=record_id),
+        )
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Map source saved.",
+        flash_success=True,
+        map_source_edit_id=saved_id if record_id is not None else None,
+    )
+    return templates.TemplateResponse("settings.html", context)
+
+
+@router.post("/settings/map-sources/{source_id}/default")
+def settings_map_sources_set_default(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_set_default_map_source(source_id)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Default map source updated." if success else (error or "Failed to change default map source."),
+        flash_success=success,
+        map_source_edit_id=source_id if success else None,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/settings/map-sources/{source_id}/delete")
+def settings_map_sources_delete(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_delete_map_source(source_id)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Map source deleted." if success else (error or "Failed to delete map source."),
+        flash_success=success,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.post("/settings/language")

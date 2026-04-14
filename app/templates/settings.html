@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% if flash %}
+<div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
+{% endif %}
 <div class="grid two settings-primary-grid">
 <section class="panel">
     <div class="panel-body">
@@ -119,6 +122,151 @@
     </div>
 </section>
 </div>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Map sources") }}</h2>
+                <p class="section-lead">{{ t("Configure Leaflet-compatible tile providers. Use {z}, {x}, {y} in URL template and optional {apiKey} placeholder.") }}</p>
+            </div>
+        </div>
+        {% if default_map_source %}
+        <dl class="details-grid">
+            <dt>{{ t("Default source") }}</dt>
+            <dd><strong>{{ default_map_source.name }}</strong></dd>
+            <dt>{{ t("URL template") }}</dt>
+            <dd><code>{{ default_map_source.url_template }}</code></dd>
+            <dt>{{ t("Zoom range") }}</dt>
+            <dd>{{ default_map_source.min_zoom }} - {{ default_map_source.max_zoom }}</dd>
+            <dt>{{ t("Subdomains") }}</dt>
+            <dd>{{ default_map_source.subdomains or "-" }}</dd>
+        </dl>
+        {% endif %}
+
+        <div class="settings-map-sources-grid">
+            <div class="table-wrap">
+                <table class="data-table compact-table map-sources-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t("Order") }}</th>
+                            <th>{{ t("Name") }}</th>
+                            <th>{{ t("URL template") }}</th>
+                            <th>{{ t("Zoom") }}</th>
+                            <th>{{ t("Enabled") }}</th>
+                            <th>{{ t("Default") }}</th>
+                            {% if can_manage_map_sources %}
+                            <th>{{ t("Actions") }}</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for source in map_sources %}
+                        <tr data-map-source-row data-source-id="{{ source.id }}" data-source-enabled="{{ 1 if source.enabled else 0 }}" data-source-default="{{ 1 if source.is_default else 0 }}">
+                            <td>{{ source.sort_order }}</td>
+                            <td>{{ source.name }}</td>
+                            <td><code>{{ source.url_template }}</code></td>
+                            <td>{{ source.min_zoom }} - {{ source.max_zoom }}</td>
+                            <td>{{ t("Yes") if source.enabled else t("No") }}</td>
+                            <td>
+                                {% if source.is_default %}
+                                <span class="map-source-default-pill">{{ t("Default") }}</span>
+                                {% else %}
+                                <span class="muted">-</span>
+                                {% endif %}
+                            </td>
+                            {% if can_manage_map_sources %}
+                            <td>
+                                <div class="table-actions table-actions-start">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/default" class="table-action-form">
+                                        <button type="submit" class="table-icon-button" {% if source.is_default or not source.enabled %}disabled{% endif %} title="{{ t('Set as default') }}" aria-label="{{ t('Set as default') }}">
+                                            <img src="{{ request.scope.root_path }}/static/icons/star-outline.svg" alt="">
+                                        </button>
+                                    </form>
+                                    <a href="{{ request.scope.root_path }}/settings?edit_map_source={{ source.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
+                                    </a>
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/delete" class="table-action-form">
+                                        <button type="submit" class="table-icon-button table-icon-button-danger" {% if map_sources|length <= 1 or source.is_default %}disabled{% endif %} title="{{ t('Delete') }}" aria-label="{{ t('Delete') }}">
+                                            <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 7 if can_manage_map_sources else 6 }}">{{ t("No records yet.") }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if can_manage_map_sources %}
+            <form method="post" action="{{ request.scope.root_path }}/settings/map-sources" class="form-grid map-source-form" id="map-source-form">
+                {% if map_source_form.record_id %}
+                <input type="hidden" name="record_id" value="{{ map_source_form.record_id }}">
+                {% endif %}
+                <label>
+                    <span>{{ t("Name") }}</span>
+                    <input type="text" name="name" value="{{ map_source_form.name }}" required>
+                </label>
+                <label>
+                    <span>{{ t("URL template") }}</span>
+                    <input type="text" name="url_template" value="{{ map_source_form.url_template }}" required placeholder="https://server/{z}/{x}/{y}.png">
+                </label>
+                <label class="full">
+                    <span>{{ t("Attribution") }}</span>
+                    <input type="text" name="attribution" value="{{ map_source_form.attribution }}">
+                </label>
+                <label>
+                    <span>{{ t("Min zoom") }}</span>
+                    <input type="number" name="min_zoom" value="{{ map_source_form.min_zoom }}" min="0" max="30">
+                </label>
+                <label>
+                    <span>{{ t("Max zoom") }}</span>
+                    <input type="number" name="max_zoom" value="{{ map_source_form.max_zoom }}" min="0" max="30">
+                </label>
+                <label>
+                    <span>{{ t("Subdomains") }}</span>
+                    <input type="text" name="subdomains" value="{{ map_source_form.subdomains }}" placeholder="a,b,c">
+                </label>
+                <label>
+                    <span>{{ t("API key") }}</span>
+                    <input type="text" name="api_key" value="{{ map_source_form.api_key }}">
+                </label>
+                <label>
+                    <span>{{ t("Sort order") }}</span>
+                    <input type="number" name="sort_order" value="{{ map_source_form.sort_order }}">
+                </label>
+                <label class="full">
+                    <span>{{ t("Notes") }}</span>
+                    <textarea name="notes">{{ map_source_form.notes }}</textarea>
+                </label>
+                <label class="full checkbox-row">
+                    <input type="checkbox" name="enabled" value="1" {% if map_source_form.enabled %}checked{% endif %}>
+                    <span>{{ t("Enabled") }}</span>
+                </label>
+                <label class="full checkbox-row">
+                    <input type="checkbox" name="is_default" value="1" {% if map_source_form.is_default %}checked{% endif %}>
+                    <span>{{ t("Set as default") }}</span>
+                </label>
+                <p class="muted full">{{ t("Only standard Leaflet tile providers are supported in this panel.") }}</p>
+                <div class="form-actions">
+                    <button type="submit" class="button">{{ t("Save map source") }}</button>
+                    {% if map_source_form.record_id %}
+                    <a href="{{ request.scope.root_path }}/settings" class="button button-secondary">{{ t("Cancel") }}</a>
+                    {% endif %}
+                </div>
+            </form>
+            {% else %}
+            <p class="muted">{{ t("Your role can view map source configuration but cannot change it.") }}</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
 
 <section class="panel">
     <div class="panel-body">
@@ -1008,6 +1156,82 @@
         }
 
         resumeActiveJob();
+    })();
+</script>
+<script>
+    (() => {
+        const form = document.getElementById("map-source-form");
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+
+        const urlInput = form.querySelector('input[name="url_template"]');
+        const enabledInput = form.querySelector('input[name="enabled"]');
+        const defaultInput = form.querySelector('input[name="is_default"]');
+        const recordInput = form.querySelector('input[name="record_id"]');
+        const validation = {
+            missingTemplateTokens: {{ t("Map URL template must include {z}, {x} and {y}.")|tojson }},
+            disabledDefault: {{ t("Disabled map source cannot be default.")|tojson }},
+            multipleDefault: {{ t("Only one map source can be set as default.")|tojson }},
+            missingActiveDefault: {{ t("One enabled map source must be set as default.")|tojson }},
+        };
+
+        const readRows = () => Array.from(document.querySelectorAll("[data-map-source-row]")).map((row) => ({
+            id: Number.parseInt(row.getAttribute("data-source-id") || "0", 10),
+            enabled: row.getAttribute("data-source-enabled") === "1",
+            isDefault: row.getAttribute("data-source-default") === "1",
+        }));
+
+        const validateBeforeSubmit = () => {
+            if (!(urlInput instanceof HTMLInputElement)) {
+                return null;
+            }
+            const template = String(urlInput.value || "").trim();
+            if (!(template.includes("{z}") && template.includes("{x}") && template.includes("{y}"))) {
+                return validation.missingTemplateTokens;
+            }
+            const enabled = enabledInput instanceof HTMLInputElement ? enabledInput.checked : false;
+            const isDefault = defaultInput instanceof HTMLInputElement ? defaultInput.checked : false;
+            if (!enabled && isDefault) {
+                return validation.disabledDefault;
+            }
+
+            const rows = readRows();
+            const recordId = recordInput instanceof HTMLInputElement
+                ? Number.parseInt(recordInput.value || "0", 10)
+                : NaN;
+
+            const draftRows = rows.filter((row) => !(Number.isInteger(recordId) && row.id === recordId));
+            draftRows.push({
+                id: Number.isInteger(recordId) ? recordId : -1,
+                enabled,
+                isDefault,
+            });
+
+            const defaultCount = draftRows.filter((row) => row.isDefault).length;
+            if (defaultCount > 1) {
+                return validation.multipleDefault;
+            }
+            const activeDefaultCount = draftRows.filter((row) => row.isDefault && row.enabled).length;
+            if (activeDefaultCount === 0) {
+                return validation.missingActiveDefault;
+            }
+            return null;
+        };
+
+        form.addEventListener("submit", (event) => {
+            if (!(urlInput instanceof HTMLInputElement)) {
+                return;
+            }
+            urlInput.setCustomValidity("");
+            const error = validateBeforeSubmit();
+            if (!error) {
+                return;
+            }
+            event.preventDefault();
+            urlInput.setCustomValidity(error);
+            urlInput.reportValidity();
+        });
     })();
 </script>
 {% endblock %}

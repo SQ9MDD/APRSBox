@@ -362,6 +362,9 @@
                     aria-labelledby="{{ section.slug }}-location-picker-title"
                     data-tile-url="{{ map_picker_config.tile_url }}"
                     data-tile-attribution="{{ map_picker_config.tile_attribution }}"
+                    data-tile-min-zoom="{{ map_picker_config.tile_min_zoom }}"
+                    data-tile-max-zoom="{{ map_picker_config.tile_max_zoom }}"
+                    data-tile-subdomains="{{ map_picker_config.tile_subdomains }}"
                     data-default-latitude="{{ map_picker_config.station_latitude }}"
                     data-default-longitude="{{ map_picker_config.station_longitude }}"
                     data-default-zoom="{{ map_picker_config.default_zoom }}"
@@ -686,10 +689,25 @@
                     zoom: initialView.zoom,
                     zoomControl: true,
                 });
-                window.L.tileLayer(dialog.dataset.tileUrl || "", {
+                const tileSubdomains = String(dialog.dataset.tileSubdomains || "")
+                    .split(/[,\s]+/)
+                    .map((token) => token.trim())
+                    .filter((token) => token.length > 0);
+                const tileLayerOptions = {
                     attribution: dialog.dataset.tileAttribution || "",
-                    maxZoom: 19,
-                }).addTo(map);
+                };
+                const tileMinZoom = Number.parseInt(dialog.dataset.tileMinZoom || "", 10);
+                const tileMaxZoom = Number.parseInt(dialog.dataset.tileMaxZoom || "", 10);
+                if (Number.isInteger(tileMinZoom)) {
+                    tileLayerOptions.minZoom = tileMinZoom;
+                }
+                if (Number.isInteger(tileMaxZoom)) {
+                    tileLayerOptions.maxZoom = tileMaxZoom;
+                }
+                if (tileSubdomains.length > 0) {
+                    tileLayerOptions.subdomains = tileSubdomains;
+                }
+                window.L.tileLayer(dialog.dataset.tileUrl || "", tileLayerOptions).addTo(map);
                 map.on("move zoom", syncCenter);
                 syncCenter();
             };
