@@ -33,10 +33,18 @@
             data-i18n-packet-type="{{ t('Packet type') }}"
             data-i18n-comment="{{ t('Comment') }}"
             data-i18n-reset-view="{{ t('Reset view') }}"
+            data-i18n-callsign="{{ t('Callsign') }}"
+            data-i18n-latest-packet="{{ t('Latest packet') }}"
+            data-i18n-distance-azimuth="{{ t('Distance and azimuth') }}"
+            data-i18n-description="{{ t('Description') }}"
+            data-i18n-qsy="{{ t('QSY') }}"
+            data-i18n-no-stations="{{ t('No decoded APRS stations available yet.') }}"
             data-i18n-show-tracks="{{ t('Show tracks') }}"
             data-i18n-hide-tracks="{{ t('Hide tracks') }}"
             data-i18n-show-coverage="{{ t('Show coverage') }}"
             data-i18n-hide-coverage="{{ t('Hide coverage') }}"
+            data-i18n-show-latest-overlay="{{ t('Show latest packet widget') }}"
+            data-i18n-hide-latest-overlay="{{ t('Hide latest packet widget') }}"
             data-i18n-show-ruler="{{ t('Show ruler') }}"
             data-i18n-hide-ruler="{{ t('Hide ruler') }}"
         >
@@ -72,6 +80,15 @@
                     <button
                         type="button"
                         class="button button-secondary button-icon"
+                        id="map-toggle-latest-overlay"
+                        aria-label="{{ t('Hide latest packet widget') }}"
+                        title="{{ t('Hide latest packet widget') }}"
+                    >
+                        <img id="map-toggle-latest-overlay-icon" src="{{ request.scope.root_path }}/static/icons/message-alert.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
                         id="map-toggle-ruler"
                         aria-label="{{ t('Hide ruler') }}"
                         title="{{ t('Hide ruler') }}"
@@ -95,6 +112,7 @@
             <div id="map-stage" class="map-stage">
                 <div id="map-canvas" class="map-canvas" aria-label="{{ t('Map viewer') }}"></div>
                 <div id="map-mask" class="map-mask" aria-hidden="true"></div>
+                <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>
             </div>
         </div>
     </div>
@@ -103,5 +121,6 @@
 
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}"></script>
 {% endblock %}

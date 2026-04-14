@@ -65,6 +65,10 @@ def get_map_station_payload() -> dict[str, Any]:
                 "phg_gain_dbi": _float_value(station["data_raw"].get("phg_gain_dbi")),
                 "phg_direction": station["data_raw"].get("phg_direction"),
                 "phg_range_km": _phg_range_km(station["data_raw"]),
+                "qsy_frequency_mhz": _float_value(station["data_raw"].get("qsy_frequency_mhz")),
+                "qsy_tone": _string_or_none(station["data_raw"].get("qsy_tone")),
+                "qsy_offset_khz": _integer_value(station["data_raw"].get("qsy_offset_khz")),
+                "qsy_callsign": _string_or_none(station["data_raw"].get("qsy_callsign")),
                 "destination": station["destination"],
                 "packet_type": station["frame_type"],
                 "stale": bool((station["last_heard_age_s"] or 0) >= STALE_AFTER_SECONDS),
@@ -153,6 +157,13 @@ def _float_value(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
 
 
 def _phg_range_km(metrics: dict[str, Any]) -> float | None:

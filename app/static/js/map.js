@@ -58,6 +58,7 @@
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
+    const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
@@ -843,6 +844,14 @@
             const mobileTracks = payload.mobile_tracks || [];
             latestStations = stations;
             latestMobileTracks = mobileTracks;
+            root.dispatchEvent(new window.CustomEvent(mapStationsRefreshEventName, {
+                detail: {
+                    stations,
+                    mobileTracks,
+                    stationLatitude: defaultView.latitude,
+                    stationLongitude: defaultView.longitude,
+                },
+            }));
             const nextSignature = `${stationsSignature(stations)}|${mobileTracksSignature(mobileTracks)}`;
             if (nextSignature === lastStationsSignature) {
                 return;
