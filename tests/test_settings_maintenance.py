@@ -4,9 +4,11 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import execute, init_db
 from app.services.content import has_enabled_modem_interface
+from app.services.system import save_update_channel, start_application_update_job
 
 
 @contextlib.contextmanager
@@ -118,6 +120,21 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("actionId: 'restart-services'", template_source)
         self.assertIn("lockTimeoutMs: 45000", template_source)
         self.assertIn("reloadDelayMs: 7000", template_source)
+
+    def test_update_job_passes_selected_channel_as_cli_argument(self) -> None:
+        with temporary_database(), patch("app.services.system._start_background_script", return_value={"ok": True}) as runner:
+            save_update_channel("dev")
+            result = start_application_update_job(job_id=123)
+
+            self.assertTrue(result["ok"])
+            kwargs = runner.call_args.kwargs
+            self.assertEqual(kwargs.get("extra_args"), ["--git-branch", "dev"])
+
+    def test_update_script_accepts_git_branch_argument(self) -> None:
+        script_source = Path("scripts/update.sh").read_text(encoding="utf-8")
+        self.assertIn("parse_args()", script_source)
+        self.assertIn("--git-branch", script_source)
+        self.assertIn('update_channel_source="argument"', script_source)
 
 
 if __name__ == "__main__":
