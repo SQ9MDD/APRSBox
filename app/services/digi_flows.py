@@ -324,6 +324,7 @@ STEP_TYPE_TO_REF_FIELD = {
     "action_drop": "note",
     "action_log": "log_tag",
 }
+FLOW_LIST_ORDER_BY = "sort_order ASC, updated_at DESC, id DESC"
 
 
 def _t(message: object) -> str:
@@ -754,6 +755,7 @@ def _serialize_step_row(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
 def _serialize_flow_row(row: sqlite3.Row | dict[str, Any], steps: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     flow = dict(row)
     flow["enabled"] = int(flow.get("enabled") or 0)
+    flow["sort_order"] = int(flow.get("sort_order") or 0)
     if steps is None:
         steps = get_digi_flow_steps(int(flow["id"]))
     flow["steps"] = steps
@@ -772,17 +774,17 @@ def _flow_endpoint_display(kind: Any, ref: Any) -> str:
         return _t("Black Hole")
     if normalized_kind == "action_drop" and normalized_ref == "drop":
         return _t("Drop")
-    if normalized_kind and normalized_ref:
-        return f"{normalized_kind}: {normalized_ref}"
+    if normalized_ref:
+        return normalized_ref
     return normalized_kind or normalized_ref or "-"
 
 
 def list_digi_flows() -> list[dict[str, Any]]:
     rows = fetch_all(
         """
-        SELECT id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+        SELECT id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
         FROM digi_flows
-        ORDER BY updated_at DESC, id DESC
+        ORDER BY sort_order ASC, updated_at DESC, id DESC
         """
     )
     return [_serialize_flow_row(row, steps=get_digi_flow_steps(int(row["id"]))) for row in rows]
@@ -790,7 +792,7 @@ def list_digi_flows() -> list[dict[str, Any]]:
 
 def list_enabled_digi_flows(*, source_kind: str | None = None, source_ref: str | None = None) -> list[dict[str, Any]]:
     query = """
-        SELECT id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+        SELECT id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
         FROM digi_flows
         WHERE enabled = 1
     """
@@ -822,7 +824,7 @@ def get_digi_flow_steps(flow_id: int) -> list[dict[str, Any]]:
 def get_digi_flow(flow_id: int) -> dict[str, Any] | None:
     row = fetch_one(
         """
-        SELECT id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+        SELECT id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
         FROM digi_flows
         WHERE id = ?
         """,
@@ -1077,12 +1079,14 @@ def create_digi_flow(payload: dict[str, Any]) -> int:
     normalized = normalize_digi_flow_payload(payload)
     timestamp = utc_now()
     with get_connection() as connection:
+        sort_order_row = connection.execute("SELECT COALESCE(MIN(sort_order), 0) - 1 AS next_sort_order FROM digi_flows").fetchone()
+        sort_order = int(sort_order_row["next_sort_order"]) if sort_order_row is not None else 0
         cursor = connection.execute(
             """
             INSERT INTO digi_flows (
-                name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+                name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 normalized["name"],
@@ -1092,6 +1096,7 @@ def create_digi_flow(payload: dict[str, Any]) -> int:
                 normalized["target_kind"],
                 normalized["target_ref"],
                 normalized["enabled"],
+                sort_order,
                 timestamp,
                 timestamp,
             ),
@@ -1313,6 +1318,42 @@ def safe_update_digi_flow(flow_id: int, payload: dict[str, Any]) -> str | None:
     except sqlite3.IntegrityError as exc:
         message = str(exc).strip()
         return _tf("Failed to update DIGI Flow: {message}.", {"message": message or _t("database integrity error")})
+    return None
+
+
+def move_digi_flow(flow_id: int, direction: str) -> None:
+    normalized_direction = _normalize_text(direction).lower()
+    if normalized_direction not in {"up", "down"}:
+        raise ValueError(_t("Invalid move direction."))
+    with get_connection() as connection:
+        rows = connection.execute(f"SELECT id FROM digi_flows ORDER BY {FLOW_LIST_ORDER_BY}").fetchall()
+        ordered_ids = [int(row["id"]) for row in rows]
+        if not ordered_ids:
+            raise ValueError(_t("DIGI Flow not found."))
+        if flow_id not in ordered_ids:
+            raise ValueError(_t("DIGI Flow not found."))
+        index = ordered_ids.index(flow_id)
+        swap_index = index - 1 if normalized_direction == "up" else index + 1
+        if swap_index < 0 or swap_index >= len(ordered_ids):
+            return
+        ordered_ids[index], ordered_ids[swap_index] = ordered_ids[swap_index], ordered_ids[index]
+        for sort_order, current_flow_id in enumerate(ordered_ids, start=1):
+            connection.execute(
+                """
+                UPDATE digi_flows
+                SET sort_order = ?
+                WHERE id = ?
+                """,
+                (sort_order, current_flow_id),
+            )
+    log_event("INFO", "config", f"Moved DIGI Flow #{flow_id} {normalized_direction}")
+
+
+def safe_move_digi_flow(flow_id: int, direction: str) -> str | None:
+    try:
+        move_digi_flow(flow_id, direction)
+    except ValueError as exc:
+        return str(exc)
     return None
 
 

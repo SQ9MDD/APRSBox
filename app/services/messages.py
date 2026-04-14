@@ -24,6 +24,7 @@ MESSAGE_DIRECTION_TX = "tx"
 MESSAGE_STATUS_QUEUED = "queued"
 MESSAGE_STATUS_SENT = "sent"
 MESSAGE_STATUS_ACKED = "acked"
+MESSAGE_STATUS_REJECTED = "rejected"
 MESSAGE_STATUS_FAILED = "failed"
 MESSAGE_STATUS_RECEIVED = "received"
 DIRECT_MESSAGE_KIND = "direct_message"
@@ -383,7 +384,10 @@ def register_outbound_job_link(message_id: int, job_id: int) -> None:
 
 def _register_outbound_message_transmission(message_id: int, job_id: int, *, allow_retry: bool) -> None:
     message = get_message(message_id)
-    if message is None or str(message.get("status")) == MESSAGE_STATUS_ACKED:
+    if message is None:
+        return
+    current_status = str(message.get("status") or "")
+    if current_status not in {MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT}:
         return
     now = utc_now()
     next_attempt = int(message.get("tx_attempt_count") or 0) + 1
@@ -429,9 +433,17 @@ def mark_message_failed(message_id: int, reason: str) -> None:
             """
             UPDATE aprs_messages
             SET status = ?, failed_at = ?, failure_reason = ?, updated_at = ?
-            WHERE id = ? AND status <> ?
+            WHERE id = ? AND status NOT IN (?, ?)
             """,
-            (MESSAGE_STATUS_FAILED, now, str(reason or "").strip()[:500], now, message_id, MESSAGE_STATUS_ACKED),
+            (
+                MESSAGE_STATUS_FAILED,
+                now,
+                str(reason or "").strip()[:500],
+                now,
+                message_id,
+                MESSAGE_STATUS_ACKED,
+                MESSAGE_STATUS_REJECTED,
+            ),
         )
 
 
@@ -507,7 +519,7 @@ def cancel_pending_message_jobs(message_id: int) -> None:
 
 def schedule_message_retry(message_id: int, delay_seconds: int) -> None:
     message = get_message(message_id)
-    if message is None or str(message.get("status")) in {MESSAGE_STATUS_ACKED, MESSAGE_STATUS_FAILED}:
+    if message is None or str(message.get("status")) in {MESSAGE_STATUS_ACKED, MESSAGE_STATUS_REJECTED, MESSAGE_STATUS_FAILED}:
         return
     existing = fetch_one(
         """
@@ -843,8 +855,15 @@ def reject_outgoing_message(*, sender: str, addressee: str, message_number: str,
             SET status = ?, failed_at = ?, failure_reason = ?, updated_at = ?
             WHERE id = ?
             """,
-            (MESSAGE_STATUS_FAILED, timestamp, f"Remote station {sender} rejected APRS message.", timestamp, message_id),
+            (
+                MESSAGE_STATUS_REJECTED,
+                timestamp,
+                f"Remote station {sender} rejected APRS message (REJ).",
+                timestamp,
+                message_id,
+            ),
         )
+    log_event("INFO", "messages", f"REJ received for APRS message #{message_id} ({message_number}) from {sender}")
 
 
 def store_incoming_message(

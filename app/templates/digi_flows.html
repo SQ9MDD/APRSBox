@@ -20,6 +20,7 @@
             <table class="data-table compact-table digi-flows-table">
                 <thead>
                     <tr>
+                        <th class="digi-flows-col-order">{{ t("Rule") }}</th>
                         <th class="digi-flows-col-name">{{ t("Name") }}</th>
                         <th class="digi-flows-col-description">{{ t("Description") }}</th>
                         <th class="digi-flows-col-source">{{ t("Source") }}</th>
@@ -33,6 +34,7 @@
                 <tbody>
                         {% for flow in flows %}
                         <tr>
+                        <td class="digi-flows-col-order">{{ loop.index }}</td>
                         <td class="digi-flows-col-name"><strong>{{ flow.name }}</strong></td>
                         <td class="digi-flows-col-description">{{ flow.description or "-" }}</td>
                         <td class="digi-flows-col-source">{{ flow.source_display or "-" }}</td>
@@ -46,6 +48,40 @@
                         {% if can_edit %}
                         <td class="digi-flows-col-actions">
                             <div class="digi-flows-actions">
+                            <form
+                                method="post"
+                                action="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}/move"
+                                class="table-action-form"
+                                onsubmit="return true;"
+                            >
+                                <input type="hidden" name="direction" value="up">
+                                <button
+                                    type="submit"
+                                    class="table-icon-button"
+                                    title="{{ t('Move routing flow up') }}"
+                                    aria-label="{{ t('Move routing flow up') }} {{ flow.name }}"
+                                    {% if loop.first %}disabled{% endif %}
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/arrow-up.svg" alt="">
+                                </button>
+                            </form>
+                            <form
+                                method="post"
+                                action="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}/move"
+                                class="table-action-form"
+                                onsubmit="return true;"
+                            >
+                                <input type="hidden" name="direction" value="down">
+                                <button
+                                    type="submit"
+                                    class="table-icon-button"
+                                    title="{{ t('Move routing flow down') }}"
+                                    aria-label="{{ t('Move routing flow down') }} {{ flow.name }}"
+                                    {% if loop.last %}disabled{% endif %}
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/arrow-down.svg" alt="">
+                                </button>
+                            </form>
                             <a
                                 href="{{ request.scope.root_path }}/digi-flows/{{ flow.id }}"
                                 class="table-icon-button"
@@ -99,7 +135,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 6 if can_edit else 5 }}">{{ t("No Packet Routing flows configured yet.") }}</td>
+                        <td colspan="{{ 7 if can_edit else 6 }}">{{ t("No Packet Routing flows configured yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

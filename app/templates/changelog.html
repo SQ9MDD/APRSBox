@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <div class="panel-header">
+        <div class="panel-header-copy">
+            <h2>{{ t("Changelog") }}</h2>
+        </div>
+    </div>
+    <div class="panel-body">
+        <article id="changelog-markdown" class="changelog-markdown"></article>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (() => {
+        const markdownSource = {{ changelog_markdown|tojson }};
+        const noDataMessage = {{ t("No records yet.")|tojson }};
+        const errorMessage = {{ t("Error")|tojson }};
+        const target = document.getElementById("changelog-markdown");
+        if (!(target instanceof HTMLElement)) return;
+
+        const escapeHtml = (value) => String(value || "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;")
+            .replaceAll("'", "&#39;");
+
+        const renderInline = (value) => {
+            let html = escapeHtml(value);
+            html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+            html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+            html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+            return html;
+        };
+
+        const renderMarkdown = (source) => {
+            const lines = String(source || "").replaceAll("\r\n", "\n").split("\n");
+            const html = [];
+            let paragraphLines = [];
+            let listItems = [];
+            let codeLines = [];
+            let inCodeBlock = false;
+
+            const flushParagraph = () => {
+                if (!paragraphLines.length) return;
+                html.push(`<p>${renderInline(paragraphLines.join(" "))}</p>`);
+                paragraphLines = [];
+            };
+
+            const flushList = () => {
+                if (!listItems.length) return;
+                html.push("<ul>");
+                for (const item of listItems) {
+                    html.push(`<li>${renderInline(item)}</li>`);
+                }
+                html.push("</ul>");
+                listItems = [];
+            };
+
+            const flushCodeBlock = () => {
+                html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+                codeLines = [];
+            };
+
+            for (const rawLine of lines) {
+                const trimmed = rawLine.trim();
+
+                if (rawLine.trimStart().startsWith("```")) {
+                    if (inCodeBlock) {
+                        flushCodeBlock();
+                        inCodeBlock = false;
+                    } else {
+                        flushParagraph();
+                        flushList();
+                        inCodeBlock = true;
+                        codeLines = [];
+                    }
+                    continue;
+                }
+
+                if (inCodeBlock) {
+                    codeLines.push(rawLine);
+                    continue;
+                }
+
+                if (!trimmed) {
+                    flushParagraph();
+                    flushList();
+                    continue;
+                }
+
+                const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+                if (headingMatch) {
+                    flushParagraph();
+                    flushList();
+                    const level = headingMatch[1].length;
+                    const body = headingMatch[2].trim();
+                    html.push(`<h${level}>${renderInline(body)}</h${level}>`);
+                    continue;
+                }
+
+                const listMatch = trimmed.match(/^-\s+(.+)$/);
+                if (listMatch) {
+                    flushParagraph();
+                    listItems.push(listMatch[1].trim());
+                    continue;
+                }
+
+                paragraphLines.push(trimmed);
+            }
+
+            flushParagraph();
+            flushList();
+
+            if (inCodeBlock) {
+                flushCodeBlock();
+            }
+
+            if (!html.length) {
+                return `<p class="muted">${escapeHtml(noDataMessage)}</p>`;
+            }
+
+            return html.join("\n");
+        };
+
+        try {
+            target.innerHTML = renderMarkdown(markdownSource);
+        } catch (_) {
+            target.innerHTML = `<p class="muted">${escapeHtml(errorMessage)}</p>`;
+        }
+    })();
+</script>
+{% endblock %}

@@ -66,11 +66,13 @@
                 </form>
             </div>
         </div>
-        <div class="sidebar-utc-clock" id="sidebar-utc-clock">
-            <div class="sidebar-utc-clock-label">{{ t("UTC") }}</div>
+        <div class="sidebar-utc-clock" id="sidebar-utc-clock" role="button" tabindex="0">
             <div class="sidebar-utc-clock-value">
                 <span class="sidebar-utc-clock-time" id="sidebar-utc-clock-time">00:00:00</span>
-                <span class="sidebar-utc-clock-date" id="sidebar-utc-clock-date">0000.00.00</span>
+                <span class="sidebar-utc-clock-date-row">
+                    <span class="sidebar-utc-clock-date" id="sidebar-utc-clock-date">0000.00.00</span>
+                    <span class="sidebar-utc-clock-label-inline" id="sidebar-utc-clock-zone">{{ t("UTC") }}</span>
+                </span>
             </div>
         </div>
         <nav class="nav-list">
@@ -182,34 +184,79 @@
             });
         })();
         (() => {
+            const utcClockRoot = document.getElementById("sidebar-utc-clock");
             const utcClockTime = document.getElementById("sidebar-utc-clock-time");
             const utcClockDate = document.getElementById("sidebar-utc-clock-date");
-            if (!(utcClockTime instanceof HTMLElement) || !(utcClockDate instanceof HTMLElement)) return;
+            const utcClockZone = document.getElementById("sidebar-utc-clock-zone");
+            if (
+                !(utcClockRoot instanceof HTMLElement)
+                || !(utcClockTime instanceof HTMLElement)
+                || !(utcClockDate instanceof HTMLElement)
+                || !(utcClockZone instanceof HTMLElement)
+            ) return;
 
             const pad = (value) => String(value).padStart(2, "0");
+            const clockModeStorageKey = "aprsbox-clock-mode";
+            const normalizeClockMode = (value) => (value === "local" ? "local" : "utc");
+            const readClockMode = () => {
+                try {
+                    return normalizeClockMode(window.localStorage.getItem(clockModeStorageKey) || "utc");
+                } catch (_) {
+                    return "utc";
+                }
+            };
+            const saveClockMode = (mode) => {
+                try {
+                    window.localStorage.setItem(clockModeStorageKey, mode);
+                } catch (_) {
+                    return;
+                }
+            };
+
+            let clockMode = readClockMode();
             let timerId = null;
 
-            const renderUtcClock = () => {
+            const renderClock = () => {
                 const now = new Date();
-                const year = now.getUTCFullYear();
-                const month = pad(now.getUTCMonth() + 1);
-                const day = pad(now.getUTCDate());
-                const hour = pad(now.getUTCHours());
-                const minute = pad(now.getUTCMinutes());
-                const second = pad(now.getUTCSeconds());
+                const useUtc = clockMode === "utc";
+                const year = useUtc ? now.getUTCFullYear() : now.getFullYear();
+                const month = pad(useUtc ? now.getUTCMonth() + 1 : now.getMonth() + 1);
+                const day = pad(useUtc ? now.getUTCDate() : now.getDate());
+                const hour = pad(useUtc ? now.getUTCHours() : now.getHours());
+                const minute = pad(useUtc ? now.getUTCMinutes() : now.getMinutes());
+                const second = pad(useUtc ? now.getUTCSeconds() : now.getSeconds());
                 utcClockTime.textContent = `${hour}:${minute}:${second}`;
                 utcClockDate.textContent = `${year}.${month}.${day}`;
+                utcClockZone.textContent = useUtc ? "UTC" : "LT";
+                utcClockRoot.setAttribute("title", useUtc ? "UTC (click for LT)" : "LT (click for UTC)");
+                utcClockRoot.setAttribute("aria-label", useUtc ? "UTC clock mode" : "Local time clock mode");
+            };
+
+            const toggleClockMode = () => {
+                clockMode = clockMode === "utc" ? "local" : "utc";
+                saveClockMode(clockMode);
+                renderClock();
             };
 
             const scheduleNextTick = () => {
                 const delayMs = 1000 - (Date.now() % 1000);
                 timerId = window.setTimeout(() => {
-                    renderUtcClock();
+                    renderClock();
                     scheduleNextTick();
                 }, delayMs);
             };
 
-            renderUtcClock();
+            utcClockRoot.addEventListener("click", () => {
+                toggleClockMode();
+            });
+            utcClockRoot.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleClockMode();
+                }
+            });
+
+            renderClock();
             scheduleNextTick();
             window.addEventListener("beforeunload", () => {
                 if (timerId !== null) {

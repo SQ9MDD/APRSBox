@@ -9,6 +9,7 @@ DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
 LOG_DIR="${APRSBOX_LOG_DIR:-$INSTALL_ROOT/logs}"
 GIT_URL="${APRSBOX_GIT_URL:-https://github.com/SQ9MDD/APRSBox.git}"
 GIT_BRANCH="${APRSBOX_GIT_BRANCH:-}"
+GIT_BRANCH_CLI=""
 JOB_ID="${APRSBOX_JOB_ID:-}"
 WORKDIR="$(mktemp -d)"
 CHECKOUT_DIR="$WORKDIR/repo"
@@ -186,6 +187,10 @@ backup_database() {
 
 resolve_update_channel() {
     update_channel_source="environment"
+    if [ -n "$GIT_BRANCH_CLI" ]; then
+        GIT_BRANCH="$GIT_BRANCH_CLI"
+        update_channel_source="argument"
+    fi
     if [ -z "$GIT_BRANCH" ] && [ -f "$DB_PATH" ] && command -v sqlite3 >/dev/null 2>&1; then
         stored_branch="$(sqlite3 "$DB_PATH" "SELECT value FROM app_settings WHERE key = '$UPDATE_CHANNEL_SETTING_KEY' LIMIT 1;" 2>/dev/null | tr -d '\r' | head -n 1)"
         if [ -n "$stored_branch" ]; then
@@ -205,6 +210,28 @@ resolve_update_channel() {
     log "Using update channel '$GIT_BRANCH' (source: $update_channel_source)"
 }
 
+parse_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --git-branch)
+                if [ "$#" -lt 2 ]; then
+                    fail "Missing value for --git-branch"
+                fi
+                GIT_BRANCH_CLI="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                fail "Unknown argument: $1"
+                ;;
+        esac
+    done
+}
+
+parse_args "$@"
 resolve_update_channel
 log "Starting application update from $GIT_URL ($GIT_BRANCH)"
 job_update "running" "Application update started." ""

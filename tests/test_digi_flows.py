@@ -11,6 +11,8 @@ from app.services.digi_flows import (
     get_digi_flow,
     get_digi_flow_endpoint_options,
     get_digi_flow_type_meta,
+    list_digi_flows,
+    move_digi_flow,
     normalize_digi_flow_payload,
     set_digi_flow_enabled,
     update_digi_flow,
@@ -246,6 +248,34 @@ class DigiFlowsTests(unittest.TestCase):
 
             assert flow is not None
             self.assertEqual(flow["target_display"], "Black Hole")
+
+    def test_get_digi_flow_displays_rf_source_and_target_without_kind_prefix(self) -> None:
+        with temporary_database():
+            flow_id = create_digi_flow(
+                sample_rf_flow_payload(
+                    name="RF relay",
+                    source_ref="tnc-seriall",
+                    target_ref="tnc-rf-out",
+                )
+            )
+            flow = get_digi_flow(flow_id)
+            assert flow is not None
+            self.assertEqual(flow["source_display"], "tnc-seriall")
+            self.assertEqual(flow["target_display"], "tnc-rf-out")
+
+    def test_move_digi_flow_persists_manual_order(self) -> None:
+        with temporary_database():
+            first_id = create_digi_flow(sample_rf_flow_payload(name="Flow A", source_ref="A-1", target_ref="A-2"))
+            second_id = create_digi_flow(sample_rf_flow_payload(name="Flow B", source_ref="B-1", target_ref="B-2"))
+            third_id = create_digi_flow(sample_rf_flow_payload(name="Flow C", source_ref="C-1", target_ref="C-2"))
+
+            self.assertEqual([int(flow["id"]) for flow in list_digi_flows()], [third_id, second_id, first_id])
+
+            move_digi_flow(second_id, "up")
+            self.assertEqual([int(flow["id"]) for flow in list_digi_flows()], [second_id, third_id, first_id])
+
+            move_digi_flow(first_id, "up")
+            self.assertEqual([int(flow["id"]) for flow in list_digi_flows()], [second_id, first_id, third_id])
 
     def test_endpoint_options_hide_drop_target_unless_current_flow_uses_it(self) -> None:
         with temporary_database():

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="grid two settings-primary-grid">
 <section class="panel">
     <div class="panel-body">
         <div class="panel-header">
@@ -117,67 +118,7 @@
         </div>
     </div>
 </section>
-
-<section class="panel danger-zone-panel">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Danger zone") }}</h2>
-                <p class="section-lead">{{ t("Administrative operations that can interrupt service or shut down the host.") }}</p>
-            </div>
-        </div>
-        {% if can_manage_updates %}
-        <div class="danger-zone-actions">
-            <div class="danger-zone-item">
-                <h3>{{ t("Restart services") }}</h3>
-                <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
-                <form
-                    method="post"
-                    action="{{ request.scope.root_path }}/settings/restart-services"
-                    class="form-stack"
-                    data-settings-action-id="restart-services"
-                    data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true, reloadDelayMs: 7000});"
-                >
-                    <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
-                </form>
-            </div>
-            <div class="danger-zone-item">
-                <h3>{{ t("Reboot host") }}</h3>
-                <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
-                <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
-                <form
-                    method="post"
-                    action="{{ request.scope.root_path }}/settings/reboot-host"
-                    class="form-stack"
-                    data-settings-action-id="reboot-host"
-                    data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson|forceescape }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
-                >
-                    <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
-                </form>
-            </div>
-            <div class="danger-zone-item">
-                <h3>{{ t("Power off host") }}</h3>
-                <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
-                <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
-                <form
-                    method="post"
-                    action="{{ request.scope.root_path }}/settings/poweroff-host"
-                    class="form-stack"
-                    data-settings-action-id="poweroff-host"
-                    data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson|forceescape }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
-                >
-                    <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
-                </form>
-            </div>
-        </div>
-        {% else %}
-        <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
-        {% endif %}
-    </div>
-</section>
+</div>
 
 <section class="panel">
     <div class="panel-body">
@@ -257,6 +198,67 @@
         </form>
         {% else %}
         <p class="muted">{{ t("Your role can view database maintenance status but cannot start maintenance actions.") }}</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel danger-zone-panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Danger zone") }}</h2>
+                <p class="section-lead">{{ t("Administrative operations that can interrupt service or shut down the host.") }}</p>
+            </div>
+        </div>
+        {% if can_manage_updates %}
+        <div class="danger-zone-actions">
+            <div class="danger-zone-item">
+                <h3>{{ t("Restart services") }}</h3>
+                <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/restart-services"
+                    class="form-stack"
+                    data-settings-action-id="restart-services"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true, reloadDelayMs: 7000});"
+                >
+                    <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
+                </form>
+            </div>
+            <div class="danger-zone-item">
+                <h3>{{ t("Reboot host") }}</h3>
+                <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
+                <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/reboot-host"
+                    class="form-stack"
+                    data-settings-action-id="reboot-host"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson|forceescape }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
+                >
+                    <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
+                </form>
+            </div>
+            <div class="danger-zone-item">
+                <h3>{{ t("Power off host") }}</h3>
+                <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
+                <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
+                <form
+                    method="post"
+                    action="{{ request.scope.root_path }}/settings/poweroff-host"
+                    class="form-stack"
+                    data-settings-action-id="poweroff-host"
+                    data-settings-action-group="danger-actions"
+                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson|forceescape }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
+                >
+                    <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
         {% endif %}
     </div>
 </section>

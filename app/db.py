@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS aprs_messages (
     message_text TEXT NOT NULL,
     path TEXT NOT NULL DEFAULT '',
     message_number TEXT,
-    status TEXT NOT NULL CHECK (status IN ('queued', 'sent', 'acked', 'failed', 'received')),
+    status TEXT NOT NULL CHECK (status IN ('queued', 'sent', 'acked', 'rejected', 'failed', 'received')),
     tx_attempt_count INTEGER NOT NULL DEFAULT 0,
     is_unread INTEGER NOT NULL DEFAULT 0 CHECK (is_unread IN (0, 1)),
     outbound_job_id INTEGER,
@@ -275,6 +275,7 @@ CREATE TABLE IF NOT EXISTS digi_flows (
     target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
     target_ref TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -571,6 +572,7 @@ def init_db() -> None:
         connection.executescript(SCHEMA)
         _migrate_system_jobs_table(connection)
         _migrate_entity_interval_constraints(connection)
+        _migrate_aprs_messages_table(connection)
         _migrate_bulletin_table(connection)
         _migrate_digi_flows_table(connection)
         _migrate_digi_flow_steps_table(connection)
@@ -585,6 +587,7 @@ def init_db() -> None:
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
+        digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -723,6 +726,13 @@ def init_db() -> None:
                 """
                 ALTER TABLE outbound_jobs
                 ADD COLUMN aprs_message_id INTEGER
+                """
+            )
+        if "sort_order" not in digi_flow_columns:
+            connection.execute(
+                """
+                ALTER TABLE digi_flows
+                ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0
                 """
             )
         if "interface_id" not in traffic_frame_columns:
@@ -1023,6 +1033,101 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
         )
 
 
+def _migrate_aprs_messages_table(connection: sqlite3.Connection) -> None:
+    messages_sql = _table_sql(connection, "aprs_messages")
+    if not messages_sql:
+        return
+    if "status IN ('queued', 'sent', 'acked', 'rejected', 'failed', 'received')" in messages_sql:
+        return
+    old_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(aprs_messages)").fetchall()}
+    connection.executescript(
+        """
+        ALTER TABLE aprs_messages RENAME TO aprs_messages_old;
+        CREATE TABLE aprs_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL,
+            direction TEXT NOT NULL CHECK (direction IN ('rx', 'tx')),
+            sender TEXT NOT NULL,
+            addressee TEXT NOT NULL,
+            message_text TEXT NOT NULL,
+            path TEXT NOT NULL DEFAULT '',
+            message_number TEXT,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'sent', 'acked', 'rejected', 'failed', 'received')),
+            tx_attempt_count INTEGER NOT NULL DEFAULT 0,
+            is_unread INTEGER NOT NULL DEFAULT 0 CHECK (is_unread IN (0, 1)),
+            outbound_job_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sent_at TEXT,
+            acked_at TEXT,
+            last_attempt_at TEXT,
+            failed_at TEXT,
+            failure_reason TEXT,
+            FOREIGN KEY (conversation_id) REFERENCES aprs_message_conversations(id) ON DELETE CASCADE,
+            FOREIGN KEY (outbound_job_id) REFERENCES outbound_jobs(id) ON DELETE SET NULL
+        );
+        """
+    )
+    if "created_at" in old_columns and "updated_at" in old_columns:
+        created_at_expr = "COALESCE(created_at, updated_at, '1970-01-01T00:00:00+00:00')"
+        updated_at_expr = "COALESCE(updated_at, created_at, '1970-01-01T00:00:00+00:00')"
+    elif "created_at" in old_columns:
+        created_at_expr = "COALESCE(created_at, '1970-01-01T00:00:00+00:00')"
+        updated_at_expr = "COALESCE(created_at, '1970-01-01T00:00:00+00:00')"
+    elif "updated_at" in old_columns:
+        created_at_expr = "COALESCE(updated_at, '1970-01-01T00:00:00+00:00')"
+        updated_at_expr = "COALESCE(updated_at, '1970-01-01T00:00:00+00:00')"
+    else:
+        created_at_expr = "'1970-01-01T00:00:00+00:00'"
+        updated_at_expr = "'1970-01-01T00:00:00+00:00'"
+
+    direction_expr = "CASE WHEN direction IN ('rx', 'tx') THEN direction ELSE 'rx' END" if "direction" in old_columns else "'rx'"
+    status_expr = (
+        "CASE WHEN status IN ('queued', 'sent', 'acked', 'rejected', 'failed', 'received') THEN status ELSE 'failed' END"
+        if "status" in old_columns
+        else "'failed'"
+    )
+    is_unread_expr = "CASE WHEN is_unread IN (0, 1) THEN is_unread ELSE 0 END" if "is_unread" in old_columns else "0"
+
+    connection.execute(
+        f"""
+        INSERT INTO aprs_messages(
+            id, conversation_id, direction, sender, addressee, message_text, path, message_number,
+            status, tx_attempt_count, is_unread, outbound_job_id, created_at, updated_at,
+            sent_at, acked_at, last_attempt_at, failed_at, failure_reason
+        )
+        SELECT
+            {'id' if 'id' in old_columns else 'NULL'},
+            {'conversation_id' if 'conversation_id' in old_columns else '0'},
+            {direction_expr},
+            {'sender' if 'sender' in old_columns else "''"},
+            {'addressee' if 'addressee' in old_columns else "''"},
+            {'message_text' if 'message_text' in old_columns else "''"},
+            {'COALESCE(path, \'\')' if 'path' in old_columns else "''"},
+            {'message_number' if 'message_number' in old_columns else 'NULL'},
+            {status_expr},
+            {'COALESCE(tx_attempt_count, 0)' if 'tx_attempt_count' in old_columns else '0'},
+            {is_unread_expr},
+            {'outbound_job_id' if 'outbound_job_id' in old_columns else 'NULL'},
+            {created_at_expr},
+            {updated_at_expr},
+            {'sent_at' if 'sent_at' in old_columns else 'NULL'},
+            {'acked_at' if 'acked_at' in old_columns else 'NULL'},
+            {'last_attempt_at' if 'last_attempt_at' in old_columns else 'NULL'},
+            {'failed_at' if 'failed_at' in old_columns else 'NULL'},
+            {'failure_reason' if 'failure_reason' in old_columns else 'NULL'}
+        FROM aprs_messages_old
+        """
+    )
+    connection.executescript(
+        """
+        DROP TABLE aprs_messages_old;
+        CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
+        CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
+        """
+    )
+
+
 def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
     bulletins_sql = _table_sql(connection, "bulletins")
     bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
@@ -1163,11 +1268,12 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
             target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
             target_ref TEXT NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            sort_order INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
         INSERT INTO digi_flows (
-            id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+            id, name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
         )
         SELECT
             id,
@@ -1187,6 +1293,7 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
                 WHEN enabled IN (0, 1) THEN enabled
                 ELSE 0
             END,
+            0,
             COALESCE(created_at, updated_at, '1970-01-01T00:00:00+00:00'),
             COALESCE(updated_at, created_at, '1970-01-01T00:00:00+00:00')
         FROM digi_flows_old;

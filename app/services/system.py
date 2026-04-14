@@ -220,6 +220,7 @@ def _start_background_script(
     script_name: str,
     log_filename: str,
     extra_env: dict[str, str] | None = None,
+    extra_args: list[str] | None = None,
     job_id: int | None = None,
 ) -> dict[str, Any]:
     script_path = settings.repo_root / "scripts" / script_name
@@ -231,6 +232,8 @@ def _start_background_script(
 
     log_handle = log_file.open("a", encoding="utf-8")
     command = _script_command(script_path)
+    if extra_args:
+        command = [*command, *[str(arg) for arg in extra_args]]
     try:
         process = subprocess.Popen(
             command,
@@ -256,25 +259,29 @@ def _start_background_script(
 
 
 def start_application_update() -> dict[str, Any]:
+    update_channel = current_update_channel()
     return _start_background_script(
         script_name="update.sh",
         log_filename=UPDATE_LOG_FILE_NAME,
         extra_env={
             "APRSBOX_GIT_URL": settings.gui_update_url,
-            "APRSBOX_GIT_BRANCH": current_update_channel(),
+            "APRSBOX_GIT_BRANCH": update_channel,
         },
+        extra_args=["--git-branch", update_channel],
     )
 
 
 def start_application_update_job(*, job_id: int) -> dict[str, Any]:
+    update_channel = current_update_channel()
     return _start_background_script(
         script_name="update.sh",
         log_filename=UPDATE_LOG_FILE_NAME,
         job_id=job_id,
         extra_env={
             "APRSBOX_GIT_URL": settings.gui_update_url,
-            "APRSBOX_GIT_BRANCH": current_update_channel(),
+            "APRSBOX_GIT_BRANCH": update_channel,
         },
+        extra_args=["--git-branch", update_channel],
     )
 
 
