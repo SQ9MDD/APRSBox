@@ -97,6 +97,7 @@ from app.services.map_service import (
     list_map_sources,
     get_map_page_config,
     get_map_station_payload,
+    safe_move_map_source,
     safe_delete_map_source,
     safe_save_map_source,
     safe_set_default_map_source,
@@ -391,11 +392,8 @@ def _empty_map_source_form() -> dict[str, Any]:
         "attribution": "",
         "min_zoom": 0,
         "max_zoom": 19,
-        "subdomains": "",
-        "api_key": "",
         "enabled": True,
         "is_default": False,
-        "sort_order": 0,
         "notes": "",
     }
 
@@ -408,11 +406,8 @@ def _map_source_form_from_source(source: dict[str, Any]) -> dict[str, Any]:
         "attribution": str(source.get("attribution") or ""),
         "min_zoom": int(source.get("min_zoom") or 0),
         "max_zoom": int(source.get("max_zoom") or 19),
-        "subdomains": str(source.get("subdomains") or ""),
-        "api_key": str(source.get("api_key") or ""),
         "enabled": bool(source.get("enabled")),
         "is_default": bool(source.get("is_default")),
-        "sort_order": int(source.get("sort_order") or 0),
         "notes": str(source.get("notes") or ""),
     }
 
@@ -425,11 +420,8 @@ def _map_source_form_from_payload(payload: dict[str, Any], *, record_id: int | N
         "attribution": str(payload.get("attribution") or "").strip(),
         "min_zoom": str(payload.get("min_zoom") or "").strip() or "0",
         "max_zoom": str(payload.get("max_zoom") or "").strip() or "19",
-        "subdomains": str(payload.get("subdomains") or "").strip(),
-        "api_key": str(payload.get("api_key") or "").strip(),
         "enabled": _map_source_checkbox(payload.get("enabled")),
         "is_default": _map_source_checkbox(payload.get("is_default")),
-        "sort_order": str(payload.get("sort_order") or "").strip() or "0",
         "notes": str(payload.get("notes") or "").strip(),
     }
 
@@ -1021,11 +1013,8 @@ def settings_map_sources_save(
     attribution: str = Form(""),
     min_zoom: str = Form("0"),
     max_zoom: str = Form("19"),
-    subdomains: str = Form(""),
-    api_key: str = Form(""),
     enabled: str | None = Form(None),
     is_default: str | None = Form(None),
-    sort_order: str = Form("0"),
     notes: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
@@ -1035,11 +1024,8 @@ def settings_map_sources_save(
         "attribution": attribution.strip(),
         "min_zoom": min_zoom.strip(),
         "max_zoom": max_zoom.strip(),
-        "subdomains": subdomains.strip(),
-        "api_key": api_key.strip(),
         "enabled": enabled,
         "is_default": is_default,
-        "sort_order": sort_order.strip(),
         "notes": notes.strip(),
     }
     success, error, saved_id = safe_save_map_source(payload, source_id=record_id)
@@ -1078,6 +1064,24 @@ def settings_map_sources_set_default(
         flash="Default map source updated." if success else (error or "Failed to change default map source."),
         flash_success=success,
         map_source_edit_id=source_id if success else None,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/settings/map-sources/{source_id}/move")
+def settings_map_sources_move(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    direction: str = Form(...),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_move_map_source(source_id, direction)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash=None if success else (error or "Failed to reorder map source."),
+        flash_success=success,
     )
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
 

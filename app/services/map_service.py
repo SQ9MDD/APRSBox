@@ -40,7 +40,7 @@ def list_map_sources() -> list[dict[str, Any]]:
             created_at,
             updated_at
         FROM map_sources
-        ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC
+        ORDER BY sort_order ASC, id ASC
         """
     )
     return [_normalize_map_source_row(dict(row)) for row in rows]
@@ -83,13 +83,37 @@ def safe_save_map_source(payload: dict[str, Any], *, source_id: int | None = Non
 
 
 def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) -> int:
-    values = normalize_map_source_payload(payload)
     timestamp = utc_now()
+    values_payload = dict(payload)
     with get_connection() as connection:
+        existing_row = None
         if source_id is not None:
-            existing = connection.execute("SELECT id FROM map_sources WHERE id = ?", (int(source_id),)).fetchone()
-            if existing is None:
+            existing_row = connection.execute(
+                "SELECT id, subdomains, api_key, sort_order FROM map_sources WHERE id = ?",
+                (int(source_id),),
+            ).fetchone()
+            if existing_row is None:
                 raise ValueError("Map source not found.")
+            if "subdomains" not in values_payload:
+                values_payload["subdomains"] = str(existing_row["subdomains"] or "")
+            if "api_key" not in values_payload:
+                values_payload["api_key"] = str(existing_row["api_key"] or "")
+            raw_sort_order = values_payload.get("sort_order")
+            if "sort_order" not in values_payload or str(raw_sort_order or "").strip() == "":
+                values_payload["sort_order"] = int(existing_row["sort_order"] or MAP_SOURCE_SORT_ORDER_DEFAULT)
+        else:
+            raw_sort_order = values_payload.get("sort_order")
+            if "sort_order" not in values_payload or str(raw_sort_order or "").strip() == "":
+                next_sort_order_row = connection.execute(
+                    "SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM map_sources"
+                ).fetchone()
+                values_payload["sort_order"] = (
+                    int(next_sort_order_row["next_sort_order"])
+                    if next_sort_order_row is not None
+                    else MAP_SOURCE_SORT_ORDER_DEFAULT
+                )
+
+        values = normalize_map_source_payload(values_payload)
         row_count = connection.execute("SELECT COUNT(*) AS total FROM map_sources").fetchone()
         is_first_record = int(row_count["total"]) == 0 if row_count is not None else False
         if is_first_record:
@@ -266,6 +290,59 @@ def set_default_map_source(source_id: int) -> None:
         _validate_map_sources_state(connection)
 
     log_event("INFO", "config", f"Set default map source to {source_id}")
+
+
+def safe_move_map_source(source_id: int, direction: str) -> tuple[bool, str | None]:
+    try:
+        move_map_source(source_id, direction)
+    except ValueError as exc:
+        return False, str(exc)
+    return True, None
+
+
+def move_map_source(source_id: int, direction: str) -> None:
+    normalized_direction = str(direction or "").strip().lower()
+    if normalized_direction not in {"up", "down"}:
+        raise ValueError("Invalid move direction.")
+
+    with get_connection() as connection:
+        rows = list(
+            connection.execute(
+                """
+                SELECT id
+                FROM map_sources
+                ORDER BY sort_order ASC, id ASC
+                """
+            ).fetchall()
+        )
+        if not rows:
+            raise ValueError("No map sources available.")
+
+        ordered_ids = [int(row["id"]) for row in rows]
+        if int(source_id) not in ordered_ids:
+            raise ValueError("Map source not found.")
+
+        index = ordered_ids.index(int(source_id))
+        swap_index = index - 1 if normalized_direction == "up" else index + 1
+        if swap_index < 0 or swap_index >= len(ordered_ids):
+            return
+
+        ordered_ids[index], ordered_ids[swap_index] = ordered_ids[swap_index], ordered_ids[index]
+
+        timestamp = utc_now()
+        for sort_order, current_source_id in enumerate(ordered_ids, start=1):
+            connection.execute(
+                """
+                UPDATE map_sources
+                SET sort_order = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (sort_order, timestamp, current_source_id),
+            )
+        _validate_map_sources_state(connection)
+
+    log_event("INFO", "config", f"Moved map source {source_id} {normalized_direction}")
 
 
 def normalize_map_source_payload(payload: dict[str, Any]) -> dict[str, Any]:

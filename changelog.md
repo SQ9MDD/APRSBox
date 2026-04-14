@@ -16,6 +16,8 @@
 - Dodano prosty mechanizm podstawiania klucza API przez placeholder `{apiKey}` w `URL template`.
 - Górny blok podsumowania domyślnego źródła w panelu `Map sources` został usunięty, a sam panel skompaktowany wizualnie.
 - W tabeli `Map sources` usunięto kolumnę `URL template` dla bardziej zwartego widoku listy.
+- W formularzu `Map sources` usunięto pola `Subdomains`, `API key` i ręczny `Sort order`; zmiana kolejności odbywa się teraz strzałkami `góra/dół` w tabeli (jak w innych formularzach).
+- Nowe rekordy źródeł map są dopisywane na końcu listy, a edycja przez uproszczony formularz nie nadpisuje istniejących wartości technicznych (`subdomains`, `api_key`, `sort_order`).
 
 ### Fixed
 - Zabezpieczono migrację `map_sources`, aby po aktualizacji zawsze istniało dokładnie jedno aktywne źródło domyślne.

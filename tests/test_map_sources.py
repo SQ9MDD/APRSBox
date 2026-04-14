@@ -8,6 +8,7 @@ from app.db import init_db
 from app.services.map_service import (
     delete_map_source,
     list_map_sources,
+    move_map_source,
     resolve_active_tile_layer,
     save_map_source,
     set_default_map_source,
@@ -102,6 +103,54 @@ class MapSourcesTests(unittest.TestCase):
             second_row = next(item for item in sources if int(item["id"]) == int(second_id))
             self.assertFalse(first_row["is_default"])
             self.assertTrue(second_row["is_default"])
+
+    def test_create_without_sort_order_appends_source_to_end(self) -> None:
+        with temporary_database():
+            first = list_map_sources()[0]
+            second_payload = valid_source_payload(name="Second source")
+            second_payload.pop("sort_order")
+            second_id = save_map_source(second_payload)
+            third_payload = valid_source_payload(name="Third source")
+            third_payload.pop("sort_order")
+            third_id = save_map_source(third_payload)
+
+            ordered_ids = [int(item["id"]) for item in list_map_sources()]
+            self.assertEqual(ordered_ids, [int(first["id"]), int(second_id), int(third_id)])
+
+    def test_update_without_sort_order_or_credentials_preserves_existing_values(self) -> None:
+        with temporary_database():
+            source_id = save_map_source(
+                valid_source_payload(
+                    name="Preserve fields",
+                    subdomains="a,b,c",
+                    api_key="SECRET",
+                    sort_order="42",
+                )
+            )
+            update_payload = valid_source_payload(
+                name="Preserve fields updated",
+                url_template="https://tiles.example/{z}/{x}/{y}.png?apikey={apiKey}",
+            )
+            update_payload.pop("subdomains")
+            update_payload.pop("api_key")
+            update_payload.pop("sort_order")
+            save_map_source(update_payload, source_id=source_id)
+
+            updated = next(item for item in list_map_sources() if int(item["id"]) == int(source_id))
+            self.assertEqual(updated["subdomains"], "a,b,c")
+            self.assertEqual(updated["api_key"], "SECRET")
+            self.assertEqual(updated["sort_order"], 42)
+
+    def test_move_map_source_persists_manual_order(self) -> None:
+        with temporary_database():
+            first = list_map_sources()[0]
+            second_id = save_map_source(valid_source_payload(name="Second source", sort_order="10"))
+            third_id = save_map_source(valid_source_payload(name="Third source", sort_order="20"))
+
+            move_map_source(second_id, "up")
+
+            ordered_ids = [int(item["id"]) for item in list_map_sources()]
+            self.assertEqual(ordered_ids, [int(second_id), int(first["id"]), int(third_id)])
 
     def test_runtime_tile_config_applies_api_key_placeholder(self) -> None:
         with temporary_database():

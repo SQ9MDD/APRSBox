@@ -128,7 +128,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Map sources") }}</h2>
-                <p class="section-lead">{{ t("Configure Leaflet-compatible tile providers. Use {z}, {x}, {y} in URL template and optional {apiKey} placeholder.") }}</p>
+                <p class="section-lead">{{ t("Configure Leaflet-compatible tile providers. URL template must include {z}, {x}, and {y}.") }}</p>
             </div>
         </div>
         <div class="settings-map-sources-grid">
@@ -149,7 +149,7 @@
                     <tbody>
                         {% for source in map_sources %}
                         <tr data-map-source-row data-source-id="{{ source.id }}" data-source-enabled="{{ 1 if source.enabled else 0 }}" data-source-default="{{ 1 if source.is_default else 0 }}">
-                            <td>{{ source.sort_order }}</td>
+                            <td>{{ loop.index }}</td>
                             <td>{{ source.name }}</td>
                             <td>{{ source.min_zoom }} - {{ source.max_zoom }}</td>
                             <td>{{ t("Yes") if source.enabled else t("No") }}</td>
@@ -163,6 +163,18 @@
                             {% if can_manage_map_sources %}
                             <td>
                                 <div class="table-actions table-actions-start">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form">
+                                        <input type="hidden" name="direction" value="up">
+                                        <button type="submit" class="table-icon-button" {% if loop.first %}disabled{% endif %} title="{{ t('Move map source up') }}" aria-label="{{ t('Move map source up') }} {{ source.name }}">
+                                            <img src="{{ request.scope.root_path }}/static/icons/arrow-up.svg" alt="">
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form">
+                                        <input type="hidden" name="direction" value="down">
+                                        <button type="submit" class="table-icon-button" {% if loop.last %}disabled{% endif %} title="{{ t('Move map source down') }}" aria-label="{{ t('Move map source down') }} {{ source.name }}">
+                                            <img src="{{ request.scope.root_path }}/static/icons/arrow-down.svg" alt="">
+                                        </button>
+                                    </form>
                                     <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/default" class="table-action-form">
                                         <button type="submit" class="table-icon-button" {% if source.is_default or not source.enabled %}disabled{% endif %} title="{{ t('Set as default') }}" aria-label="{{ t('Set as default') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/star-outline.svg" alt="">
@@ -214,18 +226,6 @@
                     <span>{{ t("Max zoom") }}</span>
                     <input type="number" name="max_zoom" value="{{ map_source_form.max_zoom }}" min="0" max="30">
                 </label>
-                <label>
-                    <span>{{ t("Subdomains") }}</span>
-                    <input type="text" name="subdomains" value="{{ map_source_form.subdomains }}" placeholder="a,b,c">
-                </label>
-                <label>
-                    <span>{{ t("API key") }}</span>
-                    <input type="text" name="api_key" value="{{ map_source_form.api_key }}">
-                </label>
-                <label>
-                    <span>{{ t("Sort order") }}</span>
-                    <input type="number" name="sort_order" value="{{ map_source_form.sort_order }}">
-                </label>
                 <label class="full">
                     <span>{{ t("Notes") }}</span>
                     <textarea name="notes">{{ map_source_form.notes }}</textarea>
@@ -238,7 +238,7 @@
                     <input type="checkbox" name="is_default" value="1" {% if map_source_form.is_default %}checked{% endif %}>
                     <span>{{ t("Set as default") }}</span>
                 </label>
-                <p class="muted full">{{ t("Only standard Leaflet tile providers are supported in this panel.") }}</p>
+                <p class="muted full">{{ t("Only standard Leaflet tile providers are supported in this panel. Example: https://server/{z}/{x}/{y}.png") }}</p>
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save map source") }}</button>
                     {% if map_source_form.record_id %}
