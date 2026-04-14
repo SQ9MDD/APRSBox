@@ -875,6 +875,20 @@ def recent_alert_logs(limit: int = 5) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def has_enabled_digi_rf_to_rf_flow() -> bool:
+    row = fetch_one(
+        """
+        SELECT 1
+        FROM digi_flows
+        WHERE enabled = 1
+          AND source_kind = 'receiver_rf'
+          AND target_kind = 'tx_rf'
+        LIMIT 1
+        """
+    )
+    return row is not None
+
+
 def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[str, Any]:
     from app.services.aprsis import has_enabled_aprsis_target_flow
     from app.services.wx import get_wx_config
@@ -914,6 +928,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
 
     wx_config = get_wx_config()
     wx_callsign = str(wx_config.get("full_callsign") or "").strip().upper()
+    digi_routine_enabled = has_enabled_digi_rf_to_rf_flow()
     igate_enabled = has_enabled_aprsis_target_flow()
     location_configured = bool(station_settings.get("latitude")) and bool(station_settings.get("longitude"))
 
@@ -1005,6 +1020,11 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
                     "name": "WX enabled",
                     "status": "Enabled" if bool(wx_config.get("enabled")) else "Disabled",
                     "tone": "ok" if bool(wx_config.get("enabled")) else "warn",
+                },
+                {
+                    "name": "Digi routine",
+                    "status": "Enabled" if digi_routine_enabled else "Disabled",
+                    "tone": "ok" if digi_routine_enabled else "warn",
                 },
                 {
                     "name": "iGate enabled",

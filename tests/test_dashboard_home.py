@@ -40,6 +40,25 @@ def insert_modem(*, name: str, enabled: int = 1, tx_blocked: int = 0) -> int:
     return int(row["id"])
 
 
+def insert_digi_flow(
+    *,
+    name: str,
+    source_ref: str,
+    target_kind: str,
+    target_ref: str,
+    enabled: int = 1,
+) -> None:
+    execute(
+        """
+        INSERT INTO digi_flows(
+            name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
+        )
+        VALUES (?, '', 'receiver_rf', ?, ?, ?, ?, 0, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        """,
+        (name, source_ref, target_kind, target_ref, enabled),
+    )
+
+
 def station_payload(interface_id: int) -> dict[str, str]:
     return {
         "callsign": "SQ9MDD",
@@ -85,7 +104,10 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(services["Beacon enabled"], "Enabled")
             self.assertEqual(services["Status enabled"], "Enabled")
             self.assertEqual(services["WX enabled"], "Disabled")
+            self.assertEqual(services["Digi routine"], "Disabled")
             self.assertEqual(services["iGate enabled"], "Disabled")
+            service_names = [entry["name"] for entry in checks["Enabled services"].get("entries") or []]
+            self.assertLess(service_names.index("Digi routine"), service_names.index("iGate enabled"))
 
     def test_dashboard_does_not_expose_traffic_monitor_check(self) -> None:
         with temporary_database():
@@ -129,6 +151,36 @@ class DashboardHomeTests(unittest.TestCase):
             stats = {item["label"]: item for item in view["stats"]}
 
             self.assertNotEqual(stats["Last station TX"]["value"], "Never")
+
+    def test_dashboard_digi_routine_ignores_black_hole_and_checks_tnc_to_tnc(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="Main TNC", enabled=1, tx_blocked=0)
+            insert_modem(name="Relay TNC", enabled=1, tx_blocked=0)
+            update_station_settings(station_payload(interface_id))
+
+            insert_digi_flow(
+                name="Blackhole flow",
+                source_ref="Main TNC",
+                target_kind="action_log",
+                target_ref="log-only",
+                enabled=1,
+            )
+            view_with_blackhole = dashboard_home_data()
+            checks_blackhole = {item["label"]: item for item in view_with_blackhole["checks"]}
+            services_blackhole = {entry["name"]: entry["status"] for entry in checks_blackhole["Enabled services"].get("entries") or []}
+            self.assertEqual(services_blackhole["Digi routine"], "Disabled")
+
+            insert_digi_flow(
+                name="RF relay",
+                source_ref="Main TNC",
+                target_kind="tx_rf",
+                target_ref="Relay TNC",
+                enabled=1,
+            )
+            view_with_rf = dashboard_home_data()
+            checks_rf = {item["label"]: item for item in view_with_rf["checks"]}
+            services_rf = {entry["name"]: entry["status"] for entry in checks_rf["Enabled services"].get("entries") or []}
+            self.assertEqual(services_rf["Digi routine"], "Enabled")
 
 
 if __name__ == "__main__":

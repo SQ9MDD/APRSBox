@@ -5,7 +5,7 @@
 ### Added
 - W `Station Readiness` dodano pozycję `WX callsign`.
 - W `Station Readiness` dodano listę `Active interfaces` z per‑interfejsowym statusem (`Enabled` / `Disabled` / `Connecting` / `Error` / `Unknown`).
-- W `Station Readiness` dodano sekcję `Enabled services` ze statusami (`Enabled` / `Disabled`) dla: `Beacon enabled`, `Status enabled`, `WX enabled`, `iGate enabled`.
+- W `Station Readiness` dodano sekcję `Enabled services` ze statusami (`Enabled` / `Disabled`) dla: `Beacon enabled`, `Status enabled`, `WX enabled`, `Digi routine`, `iGate enabled`.
 - Dodano nowe tłumaczenia UI dla etykiet dashboardu związanych z nową checklistą.
 - Dodano przełączanie zegara w sidebarze między `UTC` i `LT` po kliknięciu (oraz klawiszami `Enter`/`Space`) z zapamiętaniem trybu w `localStorage`.
 - Dla przełączanego zegara w sidebarze dodano semantykę kontrolki klikalnej (`role="button"`, `tabindex="0"`) oraz obsługę focus/hover.
@@ -15,6 +15,7 @@
 - W pierwszym bloczku statusu pozostawiono tylko podsumowanie stacji (usunięto skróty `Interface` i `Last traffic`).
 - W `Station Readiness` `Callsign` zastąpiono polem `Main callsign` z dołączanym `SSID` (gdy ustawiony).
 - W listach `Active interfaces` i `Enabled services` wprowadzono kolorowe badge statusów.
+- W `Enabled services` pozycję `Digi routine` umieszczono przed `iGate enabled`.
 - Ujednolicono opisy statusów w checklistach do wspólnego formatu (`Enabled` / `Disabled` / `Connecting` / `Error` / `Unknown`).
 - Wysokość panelu `Band Condition` została wyrównana do wysokości panelu po lewej stronie w górnym rzędzie dashboardu.
 - Skompaktowano bloczek zegara w sidebarze i przeniesiono etykietę `UTC` do tej samej linii co data.
@@ -22,6 +23,7 @@
 ### Fixed
 - Zaktualizowano testy dashboardu do nowego kontraktu danych checklisty (`entries` dla list statusów i nowe etykiety pól).
 - Poprawiono wybór kanału aktualizacji aplikacji z GUI: `update.sh` otrzymuje teraz jawnie wybrany kanał jako argument `--git-branch`, co eliminuje sporadyczny fallback do `main` przy uruchomieniu przez `sudo`/`doas` bez przekazanego środowiska.
+- Poprawiono logikę statusu `Digi routine`: jest `Enabled` tylko gdy istnieje co najmniej jeden aktywny flow `receiver_rf -> tx_rf`; flow `Black Hole` (`action_log`) nie wpływają na ten status i nie mieszają się z `iGate enabled`.
 
 ### Removed
 - Z `Station Readiness` usunięto: `Beacon interface`, `TX Block`, `TX Enabled`, `APRS Status enabled`, `Last station TX`, `Traffic Monitor`.
