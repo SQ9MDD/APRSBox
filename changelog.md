@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.69 - 14.04.2026
+
+### Stable release
+- Wersja została wydana do linii stable jako milestone zbierający wcześniejsze iteracje rozwojowe.
+
+### Included development snapshots
+- 1.4.67.DEV
+- 1.4.68.DEV
+
+### Highlights
+- Rozbudowano `Station Readiness` (m.in. `WX callsign`, `Active interfaces`, `Enabled services`) oraz ujednolicono statusy i badge.
+- Dodano stronę `Changelog` w GUI oraz pozycję `Changelog` w sidebarze.
+- Usprawniono konfigurację routingu pakietów (numeracja reguł, zmiana kolejności, dopracowanie widoku tabeli).
+- Uzupełniono obsługę i prezentację statusu `REJ` dla wiadomości APRS.
+- Poprawiono przekazywanie wybranego kanału aktualizacji do `update.sh` (`--git-branch`).
+
 ## 1.4.68.DEV - 14.04.2026
 
 ### Added
