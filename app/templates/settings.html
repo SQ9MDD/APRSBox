@@ -151,7 +151,6 @@
                         <tr>
                             <th>{{ t("Order") }}</th>
                             <th>{{ t("Name") }}</th>
-                            <th>{{ t("URL template") }}</th>
                             <th>{{ t("Zoom") }}</th>
                             <th>{{ t("Enabled") }}</th>
                             <th>{{ t("Default") }}</th>
@@ -165,7 +164,6 @@
                         <tr data-map-source-row data-source-id="{{ source.id }}" data-source-enabled="{{ 1 if source.enabled else 0 }}" data-source-default="{{ 1 if source.is_default else 0 }}">
                             <td>{{ source.sort_order }}</td>
                             <td>{{ source.name }}</td>
-                            <td><code>{{ source.url_template }}</code></td>
                             <td>{{ source.min_zoom }} - {{ source.max_zoom }}</td>
                             <td>{{ t("Yes") if source.enabled else t("No") }}</td>
                             <td>
@@ -197,7 +195,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ 7 if can_manage_map_sources else 6 }}">{{ t("No records yet.") }}</td>
+                            <td colspan="{{ 6 if can_manage_map_sources else 5 }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -2570,12 +2570,12 @@ select:focus-visible,
 
 .map-sources-table th:nth-child(1),
 .map-sources-table td:nth-child(1),
+.map-sources-table th:nth-child(3),
+.map-sources-table td:nth-child(3),
 .map-sources-table th:nth-child(4),
 .map-sources-table td:nth-child(4),
 .map-sources-table th:nth-child(5),
-.map-sources-table td:nth-child(5),
-.map-sources-table th:nth-child(6),
-.map-sources-table td:nth-child(6) {
+.map-sources-table td:nth-child(5) {
     white-space: nowrap;
 }
 
