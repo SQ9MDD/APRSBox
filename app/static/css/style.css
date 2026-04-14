@@ -187,6 +187,19 @@ body {
     background: var(--panel-alt);
     justify-items: center;
     text-align: center;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.sidebar-utc-clock:hover {
+    border-color: var(--border-hover);
+}
+
+.sidebar-utc-clock:focus-visible {
+    outline: 0;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .sidebar-utc-clock-value {

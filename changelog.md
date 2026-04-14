@@ -7,6 +7,8 @@
 - W `Station Readiness` dodano listę `Active interfaces` z per‑interfejsowym statusem (`Enabled` / `Disabled` / `Connecting` / `Error` / `Unknown`).
 - W `Station Readiness` dodano sekcję `Enabled services` ze statusami (`Enabled` / `Disabled`) dla: `Beacon enabled`, `Status enabled`, `WX enabled`, `iGate enabled`.
 - Dodano nowe tłumaczenia UI dla etykiet dashboardu związanych z nową checklistą.
+- Dodano przełączanie zegara w sidebarze między `UTC` i `LT` po kliknięciu (oraz klawiszami `Enter`/`Space`) z zapamiętaniem trybu w `localStorage`.
+- Dla przełączanego zegara w sidebarze dodano semantykę kontrolki klikalnej (`role="button"`, `tabindex="0"`) oraz obsługę focus/hover.
 
 ### Changed
 - Dashboard został skompaktowany wizualnie (mniejsze odstępy, paddingi i wysokości kart), aby więcej treści było widoczne bez przewijania.
@@ -15,6 +17,7 @@
 - W listach `Active interfaces` i `Enabled services` wprowadzono kolorowe badge statusów.
 - Ujednolicono opisy statusów w checklistach do wspólnego formatu (`Enabled` / `Disabled` / `Connecting` / `Error` / `Unknown`).
 - Wysokość panelu `Band Condition` została wyrównana do wysokości panelu po lewej stronie w górnym rzędzie dashboardu.
+- Skompaktowano bloczek zegara w sidebarze i przeniesiono etykietę `UTC` do tej samej linii co data.
 
 ### Fixed
 - Zaktualizowano testy dashboardu do nowego kontraktu danych checklisty (`entries` dla list statusów i nowe etykiety pól).

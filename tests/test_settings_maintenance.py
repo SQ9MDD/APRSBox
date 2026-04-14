@@ -136,6 +136,14 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("--git-branch", script_source)
         self.assertIn('update_channel_source="argument"', script_source)
 
+    def test_base_template_supports_clock_mode_toggle_persistence(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        self.assertIn('id="sidebar-utc-clock"', base_source)
+        self.assertIn('id="sidebar-utc-clock-zone"', base_source)
+        self.assertIn('clockModeStorageKey = "aprsbox-clock-mode"', base_source)
+        self.assertIn("localStorage.setItem(clockModeStorageKey", base_source)
+        self.assertIn('utcClockRoot.addEventListener("click"', base_source)
+
 
 if __name__ == "__main__":
     unittest.main()
