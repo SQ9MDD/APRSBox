@@ -93,7 +93,6 @@ from app.services.aprs_device_identification import (
 )
 from app.services.core_client import restart_core_traffic_monitor
 from app.services.map_service import (
-    get_default_map_source,
     get_map_source,
     list_map_sources,
     get_map_page_config,
@@ -450,7 +449,6 @@ def _settings_page_context(
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
     map_sources = list_map_sources()
-    default_map_source = get_default_map_source()
     map_source_edit = get_map_source(map_source_edit_id) if map_source_edit_id is not None else None
     resolved_map_source_form = (
         map_source_form
@@ -495,7 +493,6 @@ def _settings_page_context(
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
         map_sources=map_sources,
-        default_map_source=default_map_source,
         map_source_form=resolved_map_source_form,
         map_source_edit_id=resolved_map_source_form.get("record_id"),
         can_manage_map_sources=current_user.role in {"admin", "operator"},

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.4.71.DEV - 14.04.2026
+
+### Added
+- W `Settings` dodano nowy panel `Map sources` do konfiguracji klasycznych źródeł kafelków Leaflet.
+- Dodano model danych `map_sources` (DB) z polami: `name`, `url_template`, `attribution`, `min_zoom`, `max_zoom`, `subdomains`, `api_key`, `enabled`, `is_default`, `sort_order`, `notes`.
+- Dodano operacje konfiguracji źródeł mapy: dodawanie, edycja, usuwanie i ustawianie źródła domyślnego.
+- Dodano walidacje backendowe i frontendowe dla konfiguracji map (`Name`, `URL template`, tokeny `{z}/{x}/{y}`, zoomy, reguły default/enabled).
+- Dodano testy regresyjne dla nowego modelu map sources i deterministycznego budowania URL kafelków.
+
+### Changed
+- Bazowa warstwa mapy (`tile layer`) jest teraz pobierana z konfiguracji zapisanej w DB, zamiast z hardcodowanych wartości runtime.
+- Konfiguracja aktywnego źródła mapy jest używana spójnie w widokach `Map`, `Station detail` oraz pickerach lokalizacji (`Station`, `WX`, `Objects/Items`).
+- Rozszerzono payload mapy o `tile_min_zoom`, `tile_max_zoom` i `tile_subdomains`; frontend Leaflet używa tych wartości przy tworzeniu warstwy kafelków.
+- Dodano prosty mechanizm podstawiania klucza API przez placeholder `{apiKey}` w `URL template`.
+- Górny blok podsumowania domyślnego źródła w panelu `Map sources` został usunięty, a sam panel skompaktowany wizualnie.
+- W tabeli `Map sources` usunięto kolumnę `URL template` dla bardziej zwartego widoku listy.
+
+### Fixed
+- Zabezpieczono migrację `map_sources`, aby po aktualizacji zawsze istniało dokładnie jedno aktywne źródło domyślne.
+- Zachowano ciągłość działania mapy po wdrożeniu: dotychczasowa konfiguracja kafelków jest automatycznie przenoszona jako pierwszy wpis domyślny.
+- Utrzymano deterministyczne URL kafelków (bez cache-bustingu), dzięki czemu wykorzystywana jest standardowa pamięć podręczna HTTP przeglądarki.
+
+### Removed
+- Brak zmian.
+
 ## 1.4.70.DEV - 14.04.2026
 
 ### Added

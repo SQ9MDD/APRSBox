@@ -117,6 +117,23 @@ class MapSourcesTests(unittest.TestCase):
             self.assertEqual(tile_layer["tile_source_name"], "API source")
             self.assertIn("key=A%20B", tile_layer["tile_url"])
 
+    def test_runtime_tile_url_is_deterministic_without_cache_busting(self) -> None:
+        with temporary_database():
+            save_map_source(
+                valid_source_payload(
+                    name="Deterministic source",
+                    url_template="https://tiles.example/{z}/{x}/{y}.png?apikey={apiKey}",
+                    api_key="CONST_KEY",
+                    is_default="1",
+                )
+            )
+            first = resolve_active_tile_layer()["tile_url"]
+            second = resolve_active_tile_layer()["tile_url"]
+            self.assertEqual(first, second)
+            self.assertEqual(first, "https://tiles.example/{z}/{x}/{y}.png?apikey=CONST_KEY")
+            self.assertNotIn("_=", first)
+            self.assertNotIn("timestamp=", first)
+
     def test_validation_accepts_url_encoded_tile_tokens(self) -> None:
         with temporary_database():
             source_id = save_map_source(

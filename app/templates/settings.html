@@ -123,7 +123,7 @@
 </section>
 </div>
 
-<section class="panel">
+<section class="panel map-sources-panel">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -131,19 +131,6 @@
                 <p class="section-lead">{{ t("Configure Leaflet-compatible tile providers. Use {z}, {x}, {y} in URL template and optional {apiKey} placeholder.") }}</p>
             </div>
         </div>
-        {% if default_map_source %}
-        <dl class="details-grid">
-            <dt>{{ t("Default source") }}</dt>
-            <dd><strong>{{ default_map_source.name }}</strong></dd>
-            <dt>{{ t("URL template") }}</dt>
-            <dd><code>{{ default_map_source.url_template }}</code></dd>
-            <dt>{{ t("Zoom range") }}</dt>
-            <dd>{{ default_map_source.min_zoom }} - {{ default_map_source.max_zoom }}</dd>
-            <dt>{{ t("Subdomains") }}</dt>
-            <dd>{{ default_map_source.subdomains or "-" }}</dd>
-        </dl>
-        {% endif %}
-
         <div class="settings-map-sources-grid">
             <div class="table-wrap">
                 <table class="data-table compact-table map-sources-table">

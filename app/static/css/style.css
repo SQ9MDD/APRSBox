@@ -2553,6 +2553,14 @@ select:focus-visible,
     align-items: start;
 }
 
+.map-sources-panel .panel-body {
+    gap: var(--space-3);
+}
+
+.map-sources-panel .section-lead {
+    max-width: 62ch;
+}
+
 .map-source-default-pill {
     display: inline-flex;
     align-items: center;
@@ -2581,6 +2589,10 @@ select:focus-visible,
 
 .map-source-form textarea {
     min-height: 5.5rem;
+}
+
+.map-source-form {
+    gap: var(--space-2);
 }
 
 .update-log-preview {
