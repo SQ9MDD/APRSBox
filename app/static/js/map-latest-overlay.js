@@ -15,7 +15,6 @@
         callsign: root.dataset.i18nCallsign || "Callsign",
         latestPacket: root.dataset.i18nLatestPacket || "Latest packet",
         distanceAzimuth: root.dataset.i18nDistanceAzimuth || "Distance and azimuth",
-        description: root.dataset.i18nDescription || "Description",
         qsy: root.dataset.i18nQsy || "QSY",
         noStations: root.dataset.i18nNoStations || "No decoded APRS stations available yet.",
         showOverlay: root.dataset.i18nShowLatestOverlay || "Show latest packet widget",
@@ -142,26 +141,20 @@
         }
 
         const displayCallsign = String(station.display_callsign || station.callsign || "-").trim() || "-";
-        const description = String(station.comment || "").trim() || "-";
-
         overlay.innerHTML = `
             <h3 class="map-latest-overlay-title">${escapeHtml(i18n.latestPacket)}</h3>
             <dl class="map-latest-overlay-grid">
                 <div class="map-latest-overlay-row">
                     <dt>${escapeHtml(i18n.callsign)}</dt>
-                    <dd>${escapeHtml(displayCallsign)}</dd>
+                    <dd class="map-latest-overlay-value-emphasis">${escapeHtml(displayCallsign)}</dd>
+                </div>
+                <div class="map-latest-overlay-row">
+                    <dt>${escapeHtml(i18n.qsy)}</dt>
+                    <dd class="map-latest-overlay-value-emphasis">${escapeHtml(formatQsy(station))}</dd>
                 </div>
                 <div class="map-latest-overlay-row">
                     <dt>${escapeHtml(i18n.distanceAzimuth)}</dt>
                     <dd>${escapeHtml(formatDistanceAndAzimuth(station))}</dd>
-                </div>
-                <div class="map-latest-overlay-row">
-                    <dt>${escapeHtml(i18n.description)}</dt>
-                    <dd>${escapeHtml(description)}</dd>
-                </div>
-                <div class="map-latest-overlay-row">
-                    <dt>${escapeHtml(i18n.qsy)}</dt>
-                    <dd>${escapeHtml(formatQsy(station))}</dd>
                 </div>
             </dl>
         `;
