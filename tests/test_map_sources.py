@@ -117,6 +117,16 @@ class MapSourcesTests(unittest.TestCase):
             self.assertEqual(tile_layer["tile_source_name"], "API source")
             self.assertIn("key=A%20B", tile_layer["tile_url"])
 
+    def test_validation_accepts_url_encoded_tile_tokens(self) -> None:
+        with temporary_database():
+            source_id = save_map_source(
+                valid_source_payload(
+                    name="Encoded tokens",
+                    url_template="https://tiles.example/%7BZ%7D/%7BX%7D/%7BY%7D.png",
+                )
+            )
+            self.assertGreater(source_id, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1182,12 +1182,27 @@
             isDefault: row.getAttribute("data-source-default") === "1",
         }));
 
+        const hasRequiredTileTokens = (value) => {
+            const text = String(value || "").trim().toLowerCase();
+            if (!text) {
+                return false;
+            }
+            let decoded = text;
+            try {
+                decoded = decodeURIComponent(text);
+            } catch (_error) {
+                decoded = text;
+            }
+            const normalized = decoded.replaceAll("%7b", "{").replaceAll("%7d", "}");
+            return normalized.includes("{z}") && normalized.includes("{x}") && normalized.includes("{y}");
+        };
+
         const validateBeforeSubmit = () => {
             if (!(urlInput instanceof HTMLInputElement)) {
                 return null;
             }
             const template = String(urlInput.value || "").trim();
-            if (!(template.includes("{z}") && template.includes("{x}") && template.includes("{y}"))) {
+            if (!hasRequiredTileTokens(template)) {
                 return validation.missingTemplateTokens;
             }
             const enabled = enabledInput instanceof HTMLInputElement ? enabledInput.checked : false;

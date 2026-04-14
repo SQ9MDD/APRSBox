@@ -276,7 +276,7 @@ def normalize_map_source_payload(payload: dict[str, Any]) -> dict[str, Any]:
     url_template = str(payload.get("url_template") or "").strip()
     if not url_template:
         raise ValueError("Map URL template is required.")
-    if not all(token in url_template for token in MAP_SOURCE_REQUIRED_TILE_TOKENS):
+    if not _has_required_tile_tokens(url_template):
         raise ValueError("Map URL template must include {z}, {x}, and {y}.")
 
     min_zoom = _normalize_zoom(payload.get("min_zoom"), default=MAP_SOURCE_MIN_ZOOM_DEFAULT, label="Min zoom")
@@ -417,6 +417,14 @@ def _normalize_subdomains(value: Any) -> str:
         return ""
     tokens = [token for token in re.split(r"[,\s]+", text) if token]
     return ",".join(tokens)
+
+
+def _has_required_tile_tokens(url_template: str) -> bool:
+    normalized = str(url_template or "").strip().lower()
+    if not normalized:
+        return False
+    encoded_normalized = normalized.replace("%7b", "{").replace("%7d", "}")
+    return all(token in encoded_normalized for token in MAP_SOURCE_REQUIRED_TILE_TOKENS)
 
 
 def _validate_map_sources_state(connection: Any) -> None:
