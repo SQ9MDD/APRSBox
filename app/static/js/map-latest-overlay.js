@@ -15,6 +15,7 @@
         callsign: root.dataset.i18nCallsign || "Callsign",
         latestPacket: root.dataset.i18nLatestPacket || "Latest packet",
         distanceAzimuth: root.dataset.i18nDistanceAzimuth || "Distance and azimuth",
+        comment: root.dataset.i18nComment || "Comment",
         qsy: root.dataset.i18nQsy || "QSY",
         noStations: root.dataset.i18nNoStations || "No decoded APRS stations available yet.",
         showOverlay: root.dataset.i18nShowLatestOverlay || "Show latest packet widget",
@@ -141,6 +142,7 @@
         }
 
         const displayCallsign = String(station.display_callsign || station.callsign || "-").trim() || "-";
+        const comment = String(station.comment || "").trim() || "-";
         overlay.innerHTML = `
             <h3 class="map-latest-overlay-title">${escapeHtml(i18n.latestPacket)}</h3>
             <dl class="map-latest-overlay-grid">
@@ -155,6 +157,10 @@
                 <div class="map-latest-overlay-row">
                     <dt>${escapeHtml(i18n.distanceAzimuth)}</dt>
                     <dd>${escapeHtml(formatDistanceAndAzimuth(station))}</dd>
+                </div>
+                <div class="map-latest-overlay-row">
+                    <dt>${escapeHtml(i18n.comment)}</dt>
+                    <dd>${escapeHtml(comment)}</dd>
                 </div>
             </dl>
         `;
