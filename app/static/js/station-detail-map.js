@@ -41,6 +41,7 @@
         timestamp: pageRoot.dataset.i18nTimestamp || "Timestamp",
         destination: pageRoot.dataset.i18nDestination || "Destination",
         rawPacket: pageRoot.dataset.i18nRawPacket || "Raw packet",
+        latestRawPacket: pageRoot.dataset.i18nLatestRawPacket || "Latest raw packet",
     });
     let map = null;
     let marker = null;
@@ -94,7 +95,7 @@
         if (!fields) return;
         fields.innerHTML = (station.fields || []).map((field) => `
             <dt>${escapeHtml(field.label)}</dt>
-            <dd>${field.label === "Latest raw packet" ? `<code>${escapeHtml(field.value)}</code>` : escapeHtml(field.value)}</dd>
+            <dd>${field.label === i18n.latestRawPacket ? `<code>${escapeHtml(field.value)}</code>` : escapeHtml(field.value)}</dd>
         `).join("");
     }
 

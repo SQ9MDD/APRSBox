@@ -414,6 +414,11 @@
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};
         const fallbackCloseLabel = {{ t("OK")|tojson }};
+        const fallbackTitleLabel = {{ t("Please wait")|tojson }};
+        const fallbackWorkingLabel = {{ t("Working...")|tojson }};
+        const fallbackReconnectLabel = {{ t("Connection lost. Retrying...")|tojson }};
+        const fallbackFailedLabel = {{ t("Operation failed.")|tojson }};
+        const fallbackDoneLabel = {{ t("Done.")|tojson }};
         let fallbackDismissed = false;
 
         const ensureFallbackBackdrop = () => {
@@ -461,10 +466,10 @@
             const titleNode = backdrop.querySelector(".settings-progress-title");
             const messageNode = backdrop.querySelector(".settings-progress-message");
             if (titleNode instanceof HTMLElement) {
-                titleNode.textContent = "Please wait";
+                titleNode.textContent = fallbackTitleLabel;
             }
             if (messageNode instanceof HTMLElement) {
-                messageNode.textContent = String(message || "Working...");
+                messageNode.textContent = String(message || fallbackWorkingLabel);
             }
             backdrop.hidden = false;
         };
@@ -500,7 +505,7 @@
                     const job = payload && payload.job ? payload.job : null;
                     const status = job && job.status ? String(job.status) : "";
                     const message = job && job.message ? String(job.message) : "";
-                    fallbackShow(message || "Working...");
+                    fallbackShow(message || fallbackWorkingLabel);
                     if (status === "success") {
                         window.setTimeout(() => window.location.reload(), 1200);
                         return;
@@ -509,7 +514,7 @@
                         return;
                     }
                 } catch (_error) {
-                    fallbackShow("Connection lost. Retrying...");
+                    fallbackShow(fallbackReconnectLabel);
                 }
                 window.setTimeout(pollOnce, 3000);
             };
@@ -519,7 +524,7 @@
         const fallbackSubmit = async (form, options = {}) => {
             fallbackDismissed = false;
             fallbackDisableControls(form);
-            const message = String(options.message || "Working...");
+            const message = String(options.message || fallbackWorkingLabel);
             fallbackShow(message);
             const startedAt = Date.now();
             const minSpinnerMs = Math.max(0, Number(options.minSpinnerMs || 500));
@@ -551,16 +556,16 @@
 
                 if (!response.ok || !payload || payload.ok !== true) {
                     const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
-                    fallbackShow(`Operation failed. ${detail}`);
+                    fallbackShow(`${fallbackFailedLabel} ${detail}`);
                     return;
                 }
 
-                fallbackShow(payload.message || "Done.");
+                fallbackShow(payload.message || fallbackDoneLabel);
                 if (payload.reload || options.reloadOnSuccess) {
                     window.setTimeout(() => window.location.reload(), 1200);
                 }
             } catch (error) {
-                fallbackShow(`Operation failed. ${error && error.message ? error.message : ""}`.trim());
+                fallbackShow(`${fallbackFailedLabel} ${error && error.message ? error.message : ""}`.trim());
             }
         };
 
@@ -594,6 +599,7 @@
             versionUpToDate: {{ t("Up to date")|tojson }},
             versionUpdateAvailable: {{ t("Update available")|tojson }},
             closeButton: {{ t("OK")|tojson }},
+            unsupportedActionMode: {{ t("Unsupported action mode.")|tojson }},
         };
 
         const activeJobStorageKey = "aprsbox-settings-active-job-v1";
@@ -1088,7 +1094,7 @@
                 return false;
             }
 
-            finishAction(`${labels.requestFailed} Unsupported action mode.`, { reload: false });
+            finishAction(`${labels.requestFailed} ${labels.unsupportedActionMode}`, { reload: false });
             return false;
         };
 

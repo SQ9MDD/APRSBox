@@ -31,6 +31,7 @@
     data-i18n-timestamp="{{ t('Timestamp') }}"
     data-i18n-destination="{{ t('Destination') }}"
     data-i18n-raw-packet="{{ t('Raw packet') }}"
+    data-i18n-latest-raw-packet="{{ t('Latest raw packet') }}"
 >
 <section class="panel">
     <div class="panel-body">
@@ -68,7 +69,7 @@
                 {% for field in station.fields %}
                 <dt>{{ field.label }}</dt>
                 <dd>
-                    {% if field.label == "Latest raw packet" %}
+                    {% if field.label == t("Latest raw packet") %}
                     <code>{{ field.value }}</code>
                     {% else %}
                     {{ field.value }}

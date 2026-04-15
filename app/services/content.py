@@ -1849,51 +1849,51 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
     fields: list[dict[str, str]] = []
     display_callsign = snapshot.get("display_callsign")
     if display_callsign:
-        fields.append({"label": "Display callsign", "value": str(display_callsign)})
+        fields.append({"label": _t("Display callsign"), "value": str(display_callsign)})
     if snapshot.get("callsign"):
-        fields.append({"label": "Base callsign", "value": str(snapshot["callsign"])})
+        fields.append({"label": _t("Base callsign"), "value": str(snapshot["callsign"])})
     if snapshot.get("ssid"):
-        fields.append({"label": "SSID", "value": str(snapshot["ssid"])})
+        fields.append({"label": _t("SSID"), "value": str(snapshot["ssid"])})
     if snapshot.get("source"):
-        fields.append({"label": "Source", "value": str(snapshot["source"])})
+        fields.append({"label": _t("Source"), "value": str(snapshot["source"])})
     if snapshot.get("destination"):
-        fields.append({"label": "Destination", "value": str(snapshot["destination"])})
+        fields.append({"label": _t("Destination"), "value": str(snapshot["destination"])})
     if snapshot.get("last_heard_date"):
         fields.append({"label": str(snapshot.get("activity_label") or _t("Last heard")), "value": str(snapshot["last_heard_date"])})
     if snapshot.get("last_heard_relative"):
         fields.append({"label": str(snapshot.get("activity_age_label") or _t("Last heard age")), "value": str(snapshot["last_heard_relative"])})
     if snapshot.get("latitude"):
-        fields.append({"label": "Latitude", "value": str(snapshot["latitude"])})
+        fields.append({"label": _t("Latitude"), "value": str(snapshot["latitude"])})
     if snapshot.get("longitude"):
-        fields.append({"label": "Longitude", "value": str(snapshot["longitude"])})
+        fields.append({"label": _t("Longitude"), "value": str(snapshot["longitude"])})
     if snapshot.get("symbol_table"):
-        fields.append({"label": "Symbol table", "value": str(snapshot["symbol_table"])})
+        fields.append({"label": _t("Symbol table"), "value": str(snapshot["symbol_table"])})
     if snapshot.get("symbol_code"):
-        fields.append({"label": "Symbol code", "value": str(snapshot["symbol_code"])})
+        fields.append({"label": _t("Symbol code"), "value": str(snapshot["symbol_code"])})
     if snapshot.get("comment"):
-        fields.append({"label": "Comment", "value": str(snapshot["comment"])})
+        fields.append({"label": _t("Comment"), "value": str(snapshot["comment"])})
     if snapshot.get("path"):
-        fields.append({"label": "Path", "value": str(snapshot["path"])})
+        fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
     if snapshot.get("frame_type"):
-        fields.append({"label": "Packet type", "value": str(snapshot["frame_type"])})
+        fields.append({"label": _t("Packet type"), "value": str(snapshot["frame_type"])})
 
     speed_knots = metrics.get("speed_knots")
     if speed_knots is not None:
         speed_value = f"{int(round(float(speed_knots) * 1.15078))} mph" if unit_system == "imperial" else f"{int(round(float(speed_knots) * 1.852))} km/h"
-        fields.append({"label": "Speed", "value": speed_value})
+        fields.append({"label": _t("Speed"), "value": speed_value})
     course_deg = metrics.get("course_deg")
     if course_deg is not None:
-        fields.append({"label": "Course", "value": f"{int(course_deg)}°"})
+        fields.append({"label": _t("Course"), "value": f"{int(course_deg)}°"})
     altitude_ft = metrics.get("altitude_ft")
     if altitude_ft is not None:
         altitude_value = f"{int(altitude_ft)} ft" if unit_system == "imperial" else f"{int(round(float(altitude_ft) * 0.3048))} m"
-        fields.append({"label": "Altitude", "value": altitude_value})
+        fields.append({"label": _t("Altitude"), "value": altitude_value})
 
     messaging_capable = _messaging_capable(snapshot)
     if messaging_capable is not None:
-        fields.append({"label": "Messaging capability", "value": "Yes" if messaging_capable else "No"})
+        fields.append({"label": _t("Messaging capability"), "value": _t("Yes") if messaging_capable else _t("No")})
     if snapshot.get("raw_text"):
-        fields.append({"label": "Latest raw packet", "value": str(snapshot["raw_text"])})
+        fields.append({"label": _t("Latest raw packet"), "value": str(snapshot["raw_text"])})
 
     for item in _format_decoded_data_for_display(metrics, unit_system):
         if item.get("value"):
