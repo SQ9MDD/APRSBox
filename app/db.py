@@ -920,6 +920,15 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
             )
         connection.execute(
             """
+            UPDATE modems
+            SET modem_type = 'SERIALL',
+                updated_at = ?
+            WHERE UPPER(TRIM(COALESCE(modem_type, ''))) = 'SERIAL'
+            """,
+            (utc_now(),),
+        )
+        connection.execute(
+            """
             INSERT INTO station_settings (
                 id, callsign, ssid, beacon_interface_id, beacon_comment, beacon_interval_minutes, beacon_path,
                 status_enabled, status_text, status_interval_minutes, latitude, longitude,

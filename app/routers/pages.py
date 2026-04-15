@@ -750,6 +750,8 @@ def modems_create(
 ) -> object:
     templates = request.app.state.templates
     normalized_modem_type = modem_type.strip().upper()
+    if normalized_modem_type == "SERIAL":
+        normalized_modem_type = "SERIALL"
     if normalized_modem_type not in {"SERIALL", "TCP"}:
         context = _section_template_context(request, current_user, "modems", flash="Unsupported TNC type.")
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)

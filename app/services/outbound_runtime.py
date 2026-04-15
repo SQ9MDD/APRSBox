@@ -78,6 +78,8 @@ class OutboundService:
         job_id = int(job["id"])
         try:
             modem_type = str(job.get("modem_type") or "").strip().upper()
+            if modem_type == "SERIAL":
+                modem_type = "SERIALL"
             interface_name = str(job.get("interface_name") or f"interface-{job.get('interface_id') or 'unknown'}")
             device_path = str(job.get("device_path") or "").strip()
             interface_id = job.get("interface_id")
@@ -182,6 +184,12 @@ class OutboundService:
                             register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
                         log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
                         return
+                    self._log_monitor_fallback(
+                        job_id=job_id,
+                        kind=kind,
+                        interface_name=interface_name,
+                        transport="TCP",
+                    )
                 endpoint = self._parse_endpoint(device_path)
                 if endpoint is None:
                     raise ValueError(f"Interface {interface_name} has invalid TCP endpoint.")
@@ -197,7 +205,7 @@ class OutboundService:
                     except OSError:
                         pass
                     _ = reader
-            elif modem_type == "SERIALL":
+            elif modem_type in {"SERIALL", "SERIAL"}:
                 if self._traffic_monitor is not None:
                     sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
                         interface_id=normalized_interface_id,
@@ -222,6 +230,12 @@ class OutboundService:
                             register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
                         log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
                         return
+                    self._log_monitor_fallback(
+                        job_id=job_id,
+                        kind=kind,
+                        interface_name=interface_name,
+                        transport="serial",
+                    )
                 serial_path = normalize_serial_device_path(device_path)
                 baud_rate = normalize_serial_baud_rate(job.get("baud_rate"))
                 serial_fd = await asyncio.to_thread(open_serial_device, serial_path, baud_rate)
@@ -289,6 +303,14 @@ class OutboundService:
             return bool(int(row["tx_blocked"]))
         except (TypeError, ValueError, KeyError):
             return False
+
+    def _log_monitor_fallback(self, *, job_id: int, kind: str, interface_name: str, transport: str) -> None:
+        message = (
+            f"Traffic monitor could not send {kind} outbound job #{job_id} via {interface_name}; "
+            f"using direct {transport} fallback."
+        )
+        log_event("WARNING", "outbound", message)
+        log_event("WARNING", "system", message)
 
 
 def _skip_reason_for_expired_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:

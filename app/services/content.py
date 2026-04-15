@@ -218,7 +218,7 @@ def has_enabled_modem_interface() -> bool:
         """
         SELECT 1
         FROM modems
-        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
         LIMIT 1
         """
     )
@@ -2941,6 +2941,8 @@ def _normalize_section_payload(slug: str, payload: dict[str, Any]) -> dict[str, 
 def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
     modem_type = str(payload.get("modem_type") or "").strip().upper()
+    if modem_type == "SERIAL":
+        modem_type = "SERIALL"
     expose_port_enabled = int(bool(payload.get("expose_port_enabled")))
     expose_bind_address = _normalize_ipv4_address(
         payload.get("expose_bind_address"),

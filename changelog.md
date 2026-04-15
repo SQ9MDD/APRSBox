@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.73.DEV - 16.04.2026
+
+### Added
+- Dodano watchdog RX dla interfejsów serial TNC: przy braku danych przez 150s runtime oznacza błąd i wymusza reconnect.
+- Dodano wpisy do głównego logu (`system`) dla krytycznych zdarzeń TNC (błędy serial connect/read, timeout ciszy RX, fallback TX).
+
+### Changed
+- Rozszerzono kompatybilność typów modemu o `SERIAL` i `SERIALL` w runtime oraz walidacji GUI.
+- Rozszerzono filtry aktywnych modemów (`TCP`, `SERIALL`, `SERIAL`) w ścieżkach monitoringu i statusów.
+
+### Fixed
+- Dodano migrację normalizującą stare rekordy `modems.modem_type='SERIAL'` do `SERIALL`, aby po aktualizacji nie tracić aktywnego TNC.
+- Dla TX dodano czytelne logowanie przypadku, gdy wysyłka przez monitor ruchu się nie powiedzie i używany jest bezpośredni fallback.
+
+### Removed
+- Brak zmian.
+
 ## 1.4.72.DEV - 15.04.2026
 
 ### Added
