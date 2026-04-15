@@ -411,6 +411,54 @@
         </div>
     </div>
 </section>
+{% if section.slug in ['objects', 'bulletins'] %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t('Objects TX Log' if section.slug == 'objects' else 'Bulletins TX Log') }}</h2>
+                <p class="section-lead">{{ t('Recent object jobs with delivery state and transmitted frame preview.' if section.slug == 'objects' else 'Recent bulletin jobs with delivery state and transmitted frame preview.') }}</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table station-packets-table beacon-log-table">
+                <thead>
+                    <tr>
+                        <th>{{ t("Time") }}</th>
+                        <th>{{ t("Type") }}</th>
+                        <th>{{ t("Status") }}</th>
+                        <th>{{ t("Interface") }}</th>
+                        <th>{{ t("Attempts") }}</th>
+                        <th>{{ t("Error") }}</th>
+                        <th>{{ t("Frame") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in section_tx_log_rows or [] %}
+                    <tr{% if row.is_tx_skipped %} class="tx-log-row-skipped"{% endif %}>
+                        <td>{{ format_datetime(row.display_time, use_utc=True) if row.display_time else '-' }}</td>
+                        <td>{{ t(row.display_kind or row.kind) }}</td>
+                        <td>
+                            <span class="status-pill {% if row.status == 'sent' %}status-running{% elif row.status == 'failed' %}status-stopped{% else %}status-unknown{% endif %}">
+                                {{ t(row.status) }}
+                            </span>
+                        </td>
+                        <td>{{ row.interface_name }}</td>
+                        <td>{{ row.attempt_count }}</td>
+                        <td>{{ row.last_error or '-' }}</td>
+                        <td><code>{{ row.line or '-' }}</code></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7">{{ t('No object outbound jobs yet.' if section.slug == 'objects' else 'No bulletin outbound jobs yet.') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endif %}
 {% if section.slug in ['objects', 'items'] %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 {% endif %}

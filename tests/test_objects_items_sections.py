@@ -191,6 +191,8 @@ class ObjectAndItemFormTests(unittest.TestCase):
         self.assertIn('id="objects-comment-text"', template_source)
         self.assertIn('id="objects-comment-count"', template_source)
         self.assertIn('id="objects-comment-error"', template_source)
+        self.assertIn("Objects TX Log", template_source)
+        self.assertIn("No object outbound jobs yet.", template_source)
         self.assertIn("data-clear-date-target", template_source)
         self.assertIn("Leave empty to keep sending until manually disabled.", template_source)
         self.assertIn("National characters are blocked.", template_source)
@@ -541,6 +543,8 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         self.assertIn('id="bulletins-message-count"', template_source)
         self.assertIn('id="bulletins-message-error"', template_source)
+        self.assertIn("Bulletins TX Log", template_source)
+        self.assertIn("No bulletin outbound jobs yet.", template_source)
 
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         self.assertNotIn("['igate']", base_source)

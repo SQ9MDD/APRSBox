@@ -6,18 +6,21 @@
 - W formularzach `Objects` i `Bulletins / Announcements` dodano pole `Valid until (UTC)` jako date picker z przyciskiem czyszczenia daty.
 - Dodano nowe pole danych `valid_until_utc` w tabelach `aprs_objects` i `bulletins` (schema + migracja dla istniejących instalacji).
 - Dodano walidację backendu dla daty ważności w formacie `YYYY-MM-DD`.
+- W zakładkach `Objects` i `Bulletins / Announcements` dodano sekcje `TX Log` z historią wysyłek z kolejki outbound (czas, typ, status, interfejs, próby, błąd, ramka).
 
 ### Changed
 - Scheduler obiektów i biuletynów sprawdza teraz `valid_until_utc` w UTC i automatycznie wyłącza rekord (`is_enabled = 0`) po przekroczeniu daty.
 - Runtime outbound przed wysyłką dodatkowo sprawdza datę ważności dla już zakolejkowanych zadań (`object`/`bulletin`) i pomija wysyłkę, jeżeli rekord wygasł.
 - Gdy `valid_until_utc` jest puste, działanie pozostaje bez zmian (dotychczasowy tryb pracy bez ograniczenia datą).
 - W głównym widoku `Logs` ukryto wpisy kategorii `digi_flow_runtime` na poziomie `INFO`, aby odseparować techniczny szum ruchowy od zdarzeń administracyjnych i konfiguracyjnych.
+- W głównym widoku `Logs` ukryto wszystkie dotychczasowe zdarzenia kategorii ruchu radiowego (`outbound`, `digi_flow_runtime`, `traffic`, `aprsis`, `aprs`, `messages`), aby log ogólny pozostał operacyjno‑administracyjny.
 
 ### Fixed
 - Zabezpieczono przypadek opóźnionej wysyłki: rekord może zostać wyłączony również na etapie worker-a TX, nie tylko na etapie harmonogramu.
 - Uzupełniono tłumaczenia (`en`/`pl`/`tlh`) dla nowych etykiet i komunikatów związanych z datą ważności.
 - Ujednolicono logowanie nieudanych prób logowania: do `event_logs` trafiają teraz również próby z pustym loginem i/lub hasłem.
-- Dodano test regresyjny potwierdzający, że główny `Logs` pomija `digi_flow_runtime INFO`, ale nadal pokazuje wpisy ostrzegawcze (`WARNING`) i zdarzenia `auth`.
+- Dodano test regresyjny potwierdzający, że główny `Logs` pomija wpisy kategorii ruchu radiowego, a nadal pokazuje zdarzenia `auth`.
+- Zaktualizowano test regresyjny filtrowania logów, aby obejmował pełny zestaw ukrywanych kategorii ruchu radiowego.
 
 ### Removed
 - Brak zmian.

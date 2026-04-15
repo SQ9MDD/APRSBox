@@ -325,10 +325,7 @@ def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
         """
         SELECT id, level, category, message, created_at
         FROM event_logs
-        WHERE NOT (
-            category = 'digi_flow_runtime'
-            AND level = 'INFO'
-        )
+        WHERE category NOT IN ('outbound', 'digi_flow_runtime', 'traffic', 'aprsis', 'aprs', 'messages')
         ORDER BY id DESC
         LIMIT ?
         """,
@@ -378,6 +375,94 @@ def recent_station_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
     return recent_station_outbound_jobs(limit=limit)
+
+
+def recent_object_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        rows = fetch_all(
+            """
+            SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
+                   j.kind, m.name AS interface_name, j.payload_json
+            FROM outbound_jobs j
+            LEFT JOIN modems m ON m.id = j.interface_id
+            WHERE j.kind = 'object'
+            ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    except sqlite3.OperationalError:
+        return []
+    jobs: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload_json = item.pop("payload_json", "") or "{}"
+        try:
+            payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            payload = {}
+        if payload:
+            try:
+                item["line"] = build_object_tnc2(payload)
+            except Exception:
+                item["line"] = ""
+        else:
+            item["line"] = ""
+        item["display_kind"] = "Object"
+        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        skip_reason = str(item.get("last_error") or "").strip()
+        item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
+        item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
+        jobs.append(item)
+    return jobs
+
+
+def recent_bulletin_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        rows = fetch_all(
+            """
+            SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
+                   j.kind, m.name AS interface_name, j.payload_json
+            FROM outbound_jobs j
+            LEFT JOIN modems m ON m.id = j.interface_id
+            WHERE j.kind = 'message'
+              AND j.payload_json LIKE '%"message_id"%'
+            ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    except sqlite3.OperationalError:
+        return []
+    jobs: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload_json = item.pop("payload_json", "") or "{}"
+        try:
+            payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            payload = {}
+        if not isinstance(payload, dict) or payload.get("message_id") is None:
+            continue
+        if payload:
+            try:
+                item["line"] = build_message_tnc2(payload)
+            except Exception:
+                item["line"] = ""
+        else:
+            item["line"] = ""
+        message_kind = str(payload.get("message_kind") or "").strip().lower()
+        item["display_kind"] = {
+            "bulletin": "Bulletin",
+            "announcement": "Announcement",
+            "group_bulletin": "Group Bulletin",
+        }.get(message_kind, "Bulletin")
+        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        skip_reason = str(item.get("last_error") or "").strip()
+        item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
+        item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
+        jobs.append(item)
+    return jobs
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:

@@ -36,6 +36,8 @@ from app.services.content import (
     get_related_ssids,
     get_visible_station_snapshots,
     recent_station_outbound_jobs,
+    recent_object_outbound_jobs,
+    recent_bulletin_outbound_jobs,
     get_station_detail,
     get_station_settings,
     recent_event_logs,
@@ -175,6 +177,10 @@ def _section_template_context(
                 ],
             }
         )
+    if slug == "objects":
+        context["section_tx_log_rows"] = recent_object_outbound_jobs(limit=20)
+    elif slug == "bulletins":
+        context["section_tx_log_rows"] = recent_bulletin_outbound_jobs(limit=20)
     return context
 
 

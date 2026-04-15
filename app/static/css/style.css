@@ -3607,6 +3607,12 @@ body.modal-open {
     width: 100%;
 }
 
+.tx-log-row-skipped td {
+    text-decoration: line-through;
+    text-decoration-thickness: 1.3px;
+    opacity: 0.82;
+}
+
 .users-action-cell {
     display: flex;
     align-items: center;

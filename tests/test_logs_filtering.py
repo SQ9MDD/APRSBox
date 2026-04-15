@@ -25,7 +25,7 @@ def temporary_database() -> Path:
 
 
 class LogsFilteringTests(unittest.TestCase):
-    def test_main_logs_hide_digi_flow_runtime_info_entries(self) -> None:
+    def test_main_logs_hide_radio_runtime_categories(self) -> None:
         with temporary_database():
             execute(
                 """
@@ -42,6 +42,12 @@ class LogsFilteringTests(unittest.TestCase):
             execute(
                 """
                 INSERT INTO event_logs(level, category, message, created_at)
+                VALUES ('INFO', 'outbound', 'Sent object outbound job #15 via TNC-1', '2026-04-15T10:01:30+00:00')
+                """
+            )
+            execute(
+                """
+                INSERT INTO event_logs(level, category, message, created_at)
                 VALUES ('WARNING', 'auth', 'Failed login attempt for test from 127.0.0.1', '2026-04-15T10:02:00+00:00')
                 """
             )
@@ -50,9 +56,10 @@ class LogsFilteringTests(unittest.TestCase):
             categories_and_levels = {(str(row["category"]), str(row["level"])) for row in rows}
             messages = [str(row["message"]) for row in rows]
 
-            self.assertIn(("digi_flow_runtime", "WARNING"), categories_and_levels)
             self.assertIn(("auth", "WARNING"), categories_and_levels)
             self.assertFalse(any("Enqueued DIGI Flow frame" in message for message in messages))
+            self.assertFalse(any(category == "digi_flow_runtime" for category, _level in categories_and_levels))
+            self.assertFalse(any(category == "outbound" for category, _level in categories_and_levels))
 
 
 if __name__ == "__main__":
