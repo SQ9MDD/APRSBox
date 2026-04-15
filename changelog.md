@@ -11,10 +11,13 @@
 - Scheduler obiektów i biuletynów sprawdza teraz `valid_until_utc` w UTC i automatycznie wyłącza rekord (`is_enabled = 0`) po przekroczeniu daty.
 - Runtime outbound przed wysyłką dodatkowo sprawdza datę ważności dla już zakolejkowanych zadań (`object`/`bulletin`) i pomija wysyłkę, jeżeli rekord wygasł.
 - Gdy `valid_until_utc` jest puste, działanie pozostaje bez zmian (dotychczasowy tryb pracy bez ograniczenia datą).
+- W głównym widoku `Logs` ukryto wpisy kategorii `digi_flow_runtime` na poziomie `INFO`, aby odseparować techniczny szum ruchowy od zdarzeń administracyjnych i konfiguracyjnych.
 
 ### Fixed
 - Zabezpieczono przypadek opóźnionej wysyłki: rekord może zostać wyłączony również na etapie worker-a TX, nie tylko na etapie harmonogramu.
 - Uzupełniono tłumaczenia (`en`/`pl`/`tlh`) dla nowych etykiet i komunikatów związanych z datą ważności.
+- Ujednolicono logowanie nieudanych prób logowania: do `event_logs` trafiają teraz również próby z pustym loginem i/lub hasłem.
+- Dodano test regresyjny potwierdzający, że główny `Logs` pomija `digi_flow_runtime INFO`, ale nadal pokazuje wpisy ostrzegawcze (`WARNING`) i zdarzenia `auth`.
 
 ### Removed
 - Brak zmian.

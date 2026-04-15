@@ -322,7 +322,16 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
 
 def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
     rows = fetch_all(
-        "SELECT id, level, category, message, created_at FROM event_logs ORDER BY id DESC LIMIT ?",
+        """
+        SELECT id, level, category, message, created_at
+        FROM event_logs
+        WHERE NOT (
+            category = 'digi_flow_runtime'
+            AND level = 'INFO'
+        )
+        ORDER BY id DESC
+        LIMIT ?
+        """,
         (limit,),
     )
     return [dict(row) for row in rows]

@@ -41,19 +41,30 @@ def login_page(request: Request) -> object:
 @router.post("/login")
 def login_submit(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
+    username: str = Form(""),
+    password: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
     client_ip = request.app.state.get_client_ip(request)
-    user = authenticate_user(username=username.strip(), password=password)
+    normalized_username = username.strip()
+    if not normalized_username or not password:
+        context = build_template_context(
+            request,
+            page_title="Login",
+            login_error="Invalid username or password.",
+        )
+        attempted_username = normalized_username if normalized_username else "<empty>"
+        log_event("WARNING", "auth", f"Failed login attempt for {attempted_username} from {client_ip}")
+        return templates.TemplateResponse("login.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    user = authenticate_user(username=normalized_username, password=password)
     if not user:
         context = build_template_context(
             request,
             page_title="Login",
             login_error="Invalid username or password.",
         )
-        log_event("WARNING", "auth", f"Failed login attempt for {username.strip()} from {client_ip}")
+        log_event("WARNING", "auth", f"Failed login attempt for {normalized_username} from {client_ip}")
         return templates.TemplateResponse("login.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     request.session["user_id"] = user.id
