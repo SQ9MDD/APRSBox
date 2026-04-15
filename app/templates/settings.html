@@ -238,7 +238,18 @@
                     <input type="checkbox" name="is_default" value="1" {% if map_source_form.is_default %}checked{% endif %}>
                     <span>{{ t("Set as default") }}</span>
                 </label>
-                <p class="muted full">{{ t("Only standard Leaflet tile providers are supported in this panel. Example: https://server/{z}/{x}/{y}.png") }}</p>
+                <p class="muted full map-source-help-text">
+                    <span>{{ t("Only standard Leaflet tile providers are supported in this panel. Example: https://server/{z}/{x}/{y}.png") }}</span>
+                    <a
+                        href="https://switch2osm.org/providers/#Allows-free-usage"
+                        class="map-source-help-link"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <span>{{ t("List of free providers you can see here") }}</span>
+                        <img src="{{ request.scope.root_path }}/static/icons/open-in-new.svg" alt="">
+                    </a>
+                </p>
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save map source") }}</button>
                     {% if map_source_form.record_id %}
