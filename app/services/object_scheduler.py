@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from app.db import fetch_all, get_app_setting, set_app_setting
+from app.db import execute, fetch_all, get_app_setting, log_event, set_app_setting, utc_now
 from app.services.content import get_station_settings
 from app.services.outbound import enqueue_object_job, latest_object_dispatch_at
 
@@ -50,13 +50,16 @@ class ObjectSchedulerService:
         due_objects = []
         for row in fetch_all(
             """
-            SELECT id, name, lifetime, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, path, comment, updated_at
+            SELECT id, name, lifetime, state, is_enabled, interval_minutes, valid_until_utc, latitude, longitude, symbol_table, symbol_code, path, comment, updated_at
             FROM aprs_objects
             WHERE is_enabled = 1
             ORDER BY id ASC
             """
         ):
             obj = dict(row)
+            if _is_expired_utc_date(obj.get("valid_until_utc"), now):
+                _disable_expired_object(int(obj["id"]), str(obj.get("valid_until_utc") or ""))
+                continue
             interval_minutes = int(obj.get("interval_minutes") or 30)
             last_enqueued = _parse_timestamp(get_app_setting(f"{OBJECT_LAST_ENQUEUED_KEY_PREFIX}{obj['id']}"))
             if last_enqueued is not None and (now - last_enqueued).total_seconds() < interval_minutes * 60:
@@ -94,3 +97,38 @@ def _parse_timestamp(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _parse_utc_date(value: str | None) -> date | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _is_expired_utc_date(value: str | None, now: datetime) -> bool:
+    parsed = _parse_utc_date(value)
+    if parsed is None:
+        return False
+    return now.date() > parsed
+
+
+def _disable_expired_object(object_id: int, valid_until_utc: str) -> None:
+    execute(
+        """
+        UPDATE aprs_objects
+        SET is_enabled = 0,
+            updated_at = ?
+        WHERE id = ?
+          AND is_enabled = 1
+        """,
+        (utc_now(), object_id),
+    )
+    log_event(
+        "INFO",
+        "outbound",
+        f"Auto-disabled object #{object_id}: validity date {valid_until_utc} UTC has passed.",
+    )

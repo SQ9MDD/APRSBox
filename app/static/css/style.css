@@ -952,6 +952,19 @@ body {
     grid-column: 1 / -1;
 }
 
+.field-inline-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.field-inline-actions .button-inline-control {
+    grid-column: auto;
+    min-height: var(--control-height);
+    white-space: nowrap;
+}
+
 .station-settings-group {
     padding: var(--space-3);
     border: 1px solid var(--border);
@@ -4215,6 +4228,12 @@ button.message-delivery-badge {
     .sidebar-user-panel {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+@media (max-width: 640px) {
+    .field-inline-actions {
+        grid-template-columns: 1fr;
     }
 }
 

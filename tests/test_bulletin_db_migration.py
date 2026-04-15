@@ -55,10 +55,14 @@ class BulletinMigrationTests(unittest.TestCase):
             try:
                 columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
                 self.assertIn("path", columns)
-                row = connection.execute("SELECT message_kind, bulletin_code, path, message_text FROM bulletins").fetchone()
+                self.assertIn("valid_until_utc", columns)
+                row = connection.execute(
+                    "SELECT message_kind, bulletin_code, valid_until_utc, path, message_text FROM bulletins"
+                ).fetchone()
                 assert row is not None
                 self.assertEqual(row["message_kind"], "announcement")
                 self.assertEqual(row["bulletin_code"], "A")
+                self.assertIsNone(row["valid_until_utc"])
                 self.assertIsNone(row["path"])
                 self.assertEqual(row["message_text"], "Test bulletin")
             finally:

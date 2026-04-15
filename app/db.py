@@ -351,6 +351,7 @@ CREATE TABLE IF NOT EXISTS aprs_objects (
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+    valid_until_utc TEXT,
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -383,6 +384,7 @@ CREATE TABLE IF NOT EXISTS bulletins (
     group_name TEXT,
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+    valid_until_utc TEXT,
     path TEXT,
     message_text TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -604,6 +606,7 @@ def init_db() -> None:
         wx_columns = {row["name"] for row in connection.execute("PRAGMA table_info(wx_config)").fetchall()}
         object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
+        bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
@@ -878,6 +881,13 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60))
                 """
             )
+        if "valid_until_utc" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN valid_until_utc TEXT
+                """
+            )
         if "state" not in item_columns:
             connection.execute(
                 """
@@ -899,6 +909,13 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 ALTER TABLE aprs_items
                 ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 30
                 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60))
+                """
+            )
+        if "valid_until_utc" not in bulletin_columns:
+            connection.execute(
+                """
+                ALTER TABLE bulletins
+                ADD COLUMN valid_until_utc TEXT
                 """
             )
         connection.execute(

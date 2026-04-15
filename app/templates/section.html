@@ -259,6 +259,20 @@
                         </option>
                         {% endfor %}
                     </select>
+                    {% elif field.type == 'date' %}
+                    <span>{{ t(field.label) }}</span>
+                    <div class="field-inline-actions">
+                        <input
+                            type="date"
+                            id="{{ section.slug }}-{{ field.name }}"
+                            name="{{ field.name }}"
+                            value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
+                            {% if field.required %}required{% endif %}
+                        >
+                        <button type="button" class="button button-secondary button-inline-control" data-clear-date-target="{{ section.slug }}-{{ field.name }}">
+                            {{ t("Clear date") }}
+                        </button>
+                    </div>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'symbol_code' %}
                     <span>{{ t(field.label) }}</span>
                     <div class="station-symbol-picker">
@@ -320,6 +334,8 @@
                     <small class="muted">{{ t("Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
                     <small class="muted">{{ t("Uses the same outbound queue and scheduler path as beacon, status and objects.") }}</small>
+                    {% elif section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}
+                    <small class="muted">{{ t("Leave empty to keep sending until manually disabled.") }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
@@ -407,6 +423,19 @@
                 if (href) {
                     window.location.href = href;
                 }
+            });
+        }
+
+        const clearDateButtons = document.querySelectorAll("[data-clear-date-target]");
+        for (const button of clearDateButtons) {
+            button.addEventListener("click", () => {
+                const targetId = button.getAttribute("data-clear-date-target");
+                if (!targetId) return;
+                const input = document.getElementById(targetId);
+                if (!(input instanceof HTMLInputElement)) return;
+                input.value = "";
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
             });
         }
 

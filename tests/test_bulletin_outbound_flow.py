@@ -43,13 +43,13 @@ def insert_modem(*, name: str = "Test TNC", device_path: str = "127.0.0.1:9011")
     return int(row["id"])
 
 
-def insert_message_record(*, message_kind: str = "group_bulletin") -> int:
+def insert_message_record(*, message_kind: str = "group_bulletin", valid_until_utc: str | None = None) -> int:
     execute(
         """
-        INSERT INTO bulletins(message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, path, message_text, updated_at)
-        VALUES (?, '', '1', 'WX', 1, 30, 'WIDE2-1', 'Wind 15 km/h', '2026-01-01T00:00:00+00:00')
+        INSERT INTO bulletins(message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at)
+        VALUES (?, '', '1', 'WX', 1, 30, ?, 'WIDE2-1', 'Wind 15 km/h', '2026-01-01T00:00:00+00:00')
         """,
-        (message_kind,),
+        (message_kind, valid_until_utc),
     )
     row = fetch_one("SELECT id FROM bulletins ORDER BY id DESC LIMIT 1")
     assert row is not None
@@ -184,6 +184,75 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             row = fetch_one("SELECT path FROM bulletins ORDER BY id DESC LIMIT 1")
             assert row is not None
             self.assertEqual(row["path"], "WIDE2-2")
+
+    async def test_bulletin_scheduler_disables_expired_row_without_queueing(self) -> None:
+        with temporary_database():
+            insert_modem()
+            bulletin_id = insert_message_record(valid_until_utc="2000-01-01")
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            scheduler = BulletinSchedulerService()
+            scheduler._tick()
+
+            queued_job = fetch_one("SELECT id FROM outbound_jobs WHERE kind = 'message' ORDER BY id DESC LIMIT 1")
+            self.assertIsNone(queued_job)
+            row = fetch_one("SELECT is_enabled FROM bulletins WHERE id = ?", (bulletin_id,))
+            assert row is not None
+            self.assertEqual(int(row["is_enabled"]), 0)
+
+    async def test_outbound_runtime_skips_expired_bulletin_job_and_disables_source(self) -> None:
+        with temporary_database():
+            insert_modem(device_path="127.0.0.1:9015")
+            bulletin_id = insert_message_record(message_kind="announcement", valid_until_utc="2099-12-31")
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            scheduler = BulletinSchedulerService()
+            scheduler._tick()
+            job = claim_next_outbound_job()
+            assert job is not None
+            execute("UPDATE bulletins SET valid_until_utc = '2000-01-01', is_enabled = 1 WHERE id = ?", (bulletin_id,))
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
+                await outbound_service._process_job(job)
+
+            open_connection_mock.assert_not_called()
+            job_row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert job_row is not None
+            self.assertEqual(job_row["status"], "sent")
+            self.assertIn("expired on 2000-01-01 UTC", str(job_row["last_error"]))
+            source_row = fetch_one("SELECT is_enabled FROM bulletins WHERE id = ?", (bulletin_id,))
+            assert source_row is not None
+            self.assertEqual(int(source_row["is_enabled"]), 0)
 
 
 if __name__ == "__main__":

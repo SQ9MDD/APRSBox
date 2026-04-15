@@ -2922,6 +2922,7 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
     if interval_minutes not in {5, 10, 15, 30, 45, 60}:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
     normalized["interval_minutes"] = interval_minutes
+    normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -2968,6 +2969,8 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.") from exc
     if interval_minutes not in {5, 10, 15, 30, 45, 60}:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
+
+    normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -3036,6 +3039,17 @@ def _normalize_station_interval(value: Any, *, label: str) -> int:
     if interval_minutes not in {15, 30, 45, 60}:
         raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.")
     return interval_minutes
+
+
+def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.strptime(text, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError(f"{label} must use YYYY-MM-DD format.") from exc
+    return parsed.strftime("%Y-%m-%d")
 
 
 def _normalize_ipv4_address(value: Any, *, default: str, label: str) -> str:

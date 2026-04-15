@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.72.DEV - 15.04.2026
+
+### Added
+- W formularzach `Objects` i `Bulletins / Announcements` dodano pole `Valid until (UTC)` jako date picker z przyciskiem czyszczenia daty.
+- Dodano nowe pole danych `valid_until_utc` w tabelach `aprs_objects` i `bulletins` (schema + migracja dla istniejących instalacji).
+- Dodano walidację backendu dla daty ważności w formacie `YYYY-MM-DD`.
+
+### Changed
+- Scheduler obiektów i biuletynów sprawdza teraz `valid_until_utc` w UTC i automatycznie wyłącza rekord (`is_enabled = 0`) po przekroczeniu daty.
+- Runtime outbound przed wysyłką dodatkowo sprawdza datę ważności dla już zakolejkowanych zadań (`object`/`bulletin`) i pomija wysyłkę, jeżeli rekord wygasł.
+- Gdy `valid_until_utc` jest puste, działanie pozostaje bez zmian (dotychczasowy tryb pracy bez ograniczenia datą).
+
+### Fixed
+- Zabezpieczono przypadek opóźnionej wysyłki: rekord może zostać wyłączony również na etapie worker-a TX, nie tylko na etapie harmonogramu.
+- Uzupełniono tłumaczenia (`en`/`pl`/`tlh`) dla nowych etykiet i komunikatów związanych z datą ważności.
+
+### Removed
+- Brak zmian.
+
 ## 1.4.71.DEV - 14.04.2026
 
 ### Added

@@ -43,16 +43,16 @@ def insert_modem(*, name: str = "Test TNC", device_path: str = "127.0.0.1:9001")
     return int(row["id"])
 
 
-def insert_object(*, lifetime: str = "temporary", interval_minutes: int = 30) -> int:
+def insert_object(*, lifetime: str = "temporary", interval_minutes: int = 30, valid_until_utc: str | None = None) -> int:
     execute(
         """
         INSERT INTO aprs_objects(
             name, lifetime, state, is_enabled, interval_minutes, latitude, longitude,
-            symbol_table, symbol_code, path, comment, updated_at
+            valid_until_utc, symbol_table, symbol_code, path, comment, updated_at
         )
-        VALUES (?, ?, 'live', 1, ?, '52.2501', '20.9268', '/', 'I', 'WIDE2-2', 'http://hamspirit.pl:14501 Server T2', '2026-01-01T00:00:00+00:00')
+        VALUES (?, ?, 'live', 1, ?, '52.2501', '20.9268', ?, '/', 'I', 'WIDE2-2', 'http://hamspirit.pl:14501 Server T2', '2026-01-01T00:00:00+00:00')
         """,
-        ("T2WARSPL", lifetime, interval_minutes),
+        ("T2WARSPL", lifetime, interval_minutes, valid_until_utc),
     )
     row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("T2WARSPL",))
     assert row is not None
@@ -166,6 +166,75 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
             assert traffic_row is not None
             self.assertIn(";T2WARSPL *111111z", traffic_row["line"])
+
+    async def test_object_scheduler_disables_expired_object_without_queueing(self) -> None:
+        with temporary_database():
+            object_id = insert_object(valid_until_utc="2000-01-01")
+            insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            scheduler = ObjectSchedulerService()
+            scheduler._tick()
+
+            queued_job = fetch_one("SELECT id FROM outbound_jobs WHERE kind = 'object' ORDER BY id DESC LIMIT 1")
+            self.assertIsNone(queued_job)
+            row = fetch_one("SELECT is_enabled FROM aprs_objects WHERE id = ?", (object_id,))
+            assert row is not None
+            self.assertEqual(int(row["is_enabled"]), 0)
+
+    async def test_outbound_runtime_skips_expired_object_job_and_disables_source(self) -> None:
+        with temporary_database():
+            insert_modem(device_path="127.0.0.1:9003")
+            object_id = insert_object(lifetime="permanent", interval_minutes=30, valid_until_utc="2099-12-31")
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            scheduler = ObjectSchedulerService()
+            scheduler._tick()
+            job = claim_next_outbound_job()
+            assert job is not None
+            execute("UPDATE aprs_objects SET valid_until_utc = '2000-01-01', is_enabled = 1 WHERE id = ?", (object_id,))
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
+                await outbound_service._process_job(job)
+
+            open_connection_mock.assert_not_called()
+            job_row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert job_row is not None
+            self.assertEqual(job_row["status"], "sent")
+            self.assertIn("expired on 2000-01-01 UTC", str(job_row["last_error"]))
+            source_row = fetch_one("SELECT is_enabled FROM aprs_objects WHERE id = ?", (object_id,))
+            assert source_row is not None
+            self.assertEqual(int(source_row["is_enabled"]), 0)
 
 
 if __name__ == "__main__":
