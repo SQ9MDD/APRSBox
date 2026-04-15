@@ -1018,6 +1018,8 @@
   "Host shutdown started. Please wait...": "Host shutdown taghpu'. loS...",
   "List of free providers you can see here": "naDev providermey gratis DaleghlaH",
   "Map URL template must include {z}, {x} and {y}.": "Map URL templateDaq {z}, {x}, {y} tu'lu'nIS.",
+  "Tile provider recovered": "tile provider Dotlhqa'chu'",
+  "Tile provider unavailable": "tile provider tu'lu'be'",
   "Map sources": "Map sourcemey",
   "Max zoom": "zoom tInqu'",
   "Min zoom": "zoom machqu'",

@@ -1026,6 +1026,8 @@
   "Host shutdown started. Please wait...": "Rozpoczęto wyłączanie hosta. Proszę czekać...",
   "List of free providers you can see here": "Listę darmowych dostawców znajdziesz tutaj",
   "Map URL template must include {z}, {x} and {y}.": "Szablon URL mapy musi zawierać {z}, {x} i {y}.",
+  "Tile provider recovered": "Źródło kafelków odzyskało dostępność",
+  "Tile provider unavailable": "Źródło kafelków jest niedostępne",
   "Map sources": "Źródła map",
   "Max zoom": "Maks. zoom",
   "Min zoom": "Min. zoom",

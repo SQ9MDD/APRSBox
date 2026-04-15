@@ -1023,6 +1023,8 @@
   "Host shutdown started. Please wait...": "Host shutdown started. Please wait...",
   "List of free providers you can see here": "List of free providers you can see here",
   "Map URL template must include {z}, {x} and {y}.": "Map URL template must include {z}, {x} and {y}.",
+  "Tile provider recovered": "Tile provider recovered",
+  "Tile provider unavailable": "Tile provider unavailable",
   "Map sources": "Map sources",
   "Max zoom": "Max zoom",
   "Min zoom": "Min zoom",

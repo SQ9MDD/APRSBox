@@ -14,6 +14,7 @@ from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
     create_system_job,
     fetch_system_job,
+    log_event,
     mark_system_job_error,
     mark_system_job_running,
     set_app_setting,
@@ -199,6 +200,14 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
+
+
+def _safe_positive_int(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed >= 0 else 0
 
 
 def _read_changelog_markdown() -> str:
@@ -1676,6 +1685,7 @@ def map_page(
         active_nav="map",
         map_config=get_map_page_config(),
         map_stations_endpoint=_path(request, "/api/map/stations"),
+        map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
     )
     return templates.TemplateResponse("map.html", context)
 
@@ -1685,6 +1695,41 @@ def map_stations(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_map_station_payload())
+
+
+@router.post("/api/map/tile-events")
+async def map_tile_events(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON payload."}, status_code=status.HTTP_400_BAD_REQUEST)
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": "Invalid JSON payload."}, status_code=status.HTTP_400_BAD_REQUEST)
+
+    event_type = str(payload.get("event_type") or "").strip().lower()
+    if event_type not in {"tile_error", "tile_recovered"}:
+        return JSONResponse({"error": "Unsupported event type."}, status_code=status.HTTP_400_BAD_REQUEST)
+
+    source_name = str(payload.get("source_name") or "").strip()[:120]
+    provider_url = str(payload.get("provider_url") or "").strip()[:512]
+    tile_url = str(payload.get("tile_url") or "").strip()[:512]
+    error_count = _safe_positive_int(payload.get("error_count"))
+    load_count = _safe_positive_int(payload.get("load_count"))
+
+    message = (
+        f"tile_event={event_type}"
+        f", source={source_name or '-'}"
+        f", provider={provider_url or '-'}"
+        f", tile={tile_url or '-'}"
+        f", errors={error_count}"
+        f", loads={load_count}"
+        f", user={current_user.username}"
+    )
+    log_event("WARNING" if event_type == "tile_error" else "INFO", "map", message)
+    return JSONResponse({"ok": True})
 
 
 @router.get("/wx")

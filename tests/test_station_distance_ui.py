@@ -29,6 +29,10 @@ class StationDistanceUiTests(unittest.TestCase):
 
     def test_map_template_renders_track_toggle_button(self) -> None:
         template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+        self.assertIn("data-map-tile-events-endpoint", template_source)
+        self.assertIn('id="map-tile-status"', template_source)
+        self.assertIn("data-i18n-tile-provider-unavailable", template_source)
+        self.assertIn("data-i18n-tile-provider-recovered", template_source)
         self.assertIn('id="map-toggle-tracks"', template_source)
         self.assertIn('id="map-toggle-tracks-icon"', template_source)
         self.assertIn("data-i18n-show-tracks", template_source)
@@ -53,6 +57,12 @@ class StationDistanceUiTests(unittest.TestCase):
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("mapTileEventsEndpoint", script_source)
+        self.assertIn("tileerror", script_source)
+        self.assertIn("tileload", script_source)
+        self.assertIn("function reportTileEvent(eventType)", script_source)
+        self.assertIn("tileProviderUnavailable", script_source)
+        self.assertIn("tileProviderRecovered", script_source)
         self.assertIn("mapTracksVisibleStorageKey", script_source)
         self.assertIn("function resolveTracksVisible()", script_source)
         self.assertIn("function applyTracksToggleState(visible)", script_source)

@@ -15,6 +15,7 @@
             data-station-longitude="{{ map_config.station_longitude }}"
             data-default-zoom="{{ map_config.default_zoom }}"
             data-stations-endpoint="{{ map_stations_endpoint }}"
+            data-map-tile-events-endpoint="{{ map_tile_events_endpoint }}"
             data-tile-url="{{ map_config.tile_url }}"
             data-tile-attribution="{{ map_config.tile_attribution }}"
             data-tile-source-name="{{ map_config.tile_source_name }}"
@@ -49,6 +50,8 @@
             data-i18n-hide-latest-overlay="{{ t('Hide latest packet widget') }}"
             data-i18n-show-ruler="{{ t('Show ruler') }}"
             data-i18n-hide-ruler="{{ t('Hide ruler') }}"
+            data-i18n-tile-provider-unavailable="{{ t('Tile provider unavailable') }}"
+            data-i18n-tile-provider-recovered="{{ t('Tile provider recovered') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -106,7 +109,11 @@
                     </label>
                 </div>
                 <div class="map-info-strip" aria-live="polite">
-                    <span><strong>{{ t("Tiles") }}:</strong> <span id="map-tile-source">{{ map_config.tile_source_name }}</span></span>
+                    <span>
+                        <strong>{{ t("Tiles") }}:</strong>
+                        <span id="map-tile-source">{{ map_config.tile_source_name }}</span>
+                        <span id="map-tile-status" class="muted"></span>
+                    </span>
                     <span><strong>{{ t("Center") }}:</strong> <span id="map-center">--</span></span>
                     <span><strong>{{ t("Zoom") }}:</strong> <span id="map-zoom">--</span></span>
                 </div>
