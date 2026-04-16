@@ -97,8 +97,8 @@
                 </div>
                 <div class="dashboard-checks">
                     {% for item in dashboard_home.checks %}
-                    <div class="dashboard-check dashboard-check-{{ item.state }}">
-                        <div>
+                    <div class="dashboard-check dashboard-check-{{ item.state }}{% if item.show_state_badge is defined and not item.show_state_badge %} dashboard-check-no-summary-badge{% endif %}">
+                        <div class="dashboard-check-body">
                             <strong>{{ t(item.label) }}</strong>
                             {% if item.entries %}
                             <ul class="dashboard-check-list">
@@ -116,6 +116,7 @@
                             <p class="dashboard-check-note">{{ t(item.note) }}</p>
                             {% endif %}
                         </div>
+                        {% if item.show_state_badge is not defined or item.show_state_badge %}
                         <span class="status-pill {% if item.state == 'ok' %}status-running{% elif item.state == 'error' %}status-stopped{% else %}status-unknown{% endif %}">
                             {% if item.state == "ok" %}
                             {{ t("OK") }}
@@ -125,6 +126,7 @@
                             {{ t("Needs attention") }}
                             {% endif %}
                         </span>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>

@@ -6,7 +6,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ page_title }}</h2>
-                <p class="section-lead">This section is part of the APRSBox skeleton. The GUI route and navigation are ready, but runtime APRS features behind this page are intentionally deferred.</p>
+                <p class="section-lead">{{ t("This section is part of the APRSBox skeleton. The GUI route and navigation are ready, but runtime APRS features behind this page are intentionally deferred.") }}</p>
             </div>
         </div>
     </div>
@@ -16,13 +16,13 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Planned Direction</h2>
+                    <h2>{{ t("Planned Direction") }}</h2>
                 </div>
             </div>
             <ul class="simple-list">
-                <li>Expose live APRS engine state once the core process exists.</li>
-                <li>Keep this web UI independent from transport-specific implementation details.</li>
-                <li>Add read-only diagnostics first, then editing controls where it makes sense.</li>
+                <li>{{ t("Expose live APRS engine state once the core process exists.") }}</li>
+                <li>{{ t("Keep this web UI independent from transport-specific implementation details.") }}</li>
+                <li>{{ t("Add read-only diagnostics first, then editing controls where it makes sense.") }}</li>
             </ul>
         </div>
     </div>
@@ -30,10 +30,10 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>Status</h2>
+                    <h2>{{ t("Status") }}</h2>
                 </div>
             </div>
-            <div class="notice">Coming later: live APRS traffic, map rendering, and engine-backed telemetry.</div>
+            <div class="notice">{{ t("Coming later: live APRS traffic, map rendering, and engine-backed telemetry.") }}</div>
         </div>
     </div>
 </section>

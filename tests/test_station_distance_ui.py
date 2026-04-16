@@ -29,6 +29,10 @@ class StationDistanceUiTests(unittest.TestCase):
 
     def test_map_template_renders_track_toggle_button(self) -> None:
         template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+        self.assertIn("data-map-tile-events-endpoint", template_source)
+        self.assertIn('id="map-tile-status"', template_source)
+        self.assertIn("data-i18n-tile-provider-unavailable", template_source)
+        self.assertIn("data-i18n-tile-provider-recovered", template_source)
         self.assertIn('id="map-toggle-tracks"', template_source)
         self.assertIn('id="map-toggle-tracks-icon"', template_source)
         self.assertIn("data-i18n-show-tracks", template_source)
@@ -41,9 +45,24 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('id="map-toggle-ruler-icon"', template_source)
         self.assertIn("data-i18n-show-ruler", template_source)
         self.assertIn("data-i18n-hide-ruler", template_source)
+        self.assertIn('id="map-toggle-latest-overlay"', template_source)
+        self.assertIn('id="map-toggle-latest-overlay-icon"', template_source)
+        self.assertIn("data-i18n-show-latest-overlay", template_source)
+        self.assertIn("data-i18n-hide-latest-overlay", template_source)
+        self.assertIn('id="map-latest-overlay"', template_source)
+        self.assertIn("data-i18n-distance-azimuth", template_source)
+        self.assertIn("data-i18n-qsy", template_source)
+        self.assertIn("data-i18n-latest-packet", template_source)
+        self.assertIn("/static/js/map-latest-overlay.js", template_source)
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("mapTileEventsEndpoint", script_source)
+        self.assertIn("tileerror", script_source)
+        self.assertIn("tileload", script_source)
+        self.assertIn("function reportTileEvent(eventType)", script_source)
+        self.assertIn("tileProviderUnavailable", script_source)
+        self.assertIn("tileProviderRecovered", script_source)
         self.assertIn("mapTracksVisibleStorageKey", script_source)
         self.assertIn("function resolveTracksVisible()", script_source)
         self.assertIn("function applyTracksToggleState(visible)", script_source)
@@ -79,6 +98,19 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("color: \"#0078ff\"", script_source)
         self.assertIn("map.containerPointToLatLng(", script_source)
         self.assertIn("map-ruler-tooltip", script_source)
+
+    def test_map_script_emits_refresh_event_for_overlay_widget(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("const mapStationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)
+        self.assertIn("root.dispatchEvent(new window.CustomEvent(mapStationsRefreshEventName", script_source)
+
+    def test_map_latest_overlay_script_handles_overlay_toggle_and_qsy(self) -> None:
+        script_source = Path("app/static/js/map-latest-overlay.js").read_text(encoding="utf-8")
+        self.assertIn("const stationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)
+        self.assertIn("map-toggle-latest-overlay", script_source)
+        self.assertIn("formatQsy(station)", script_source)
+        self.assertIn("qsy_frequency_mhz", script_source)
+        self.assertIn("map-latest-overlay-visible", script_source)
 
     def test_station_detail_template_exposes_initial_track_points(self) -> None:
         template_source = Path("app/templates/station_detail.html").read_text(encoding="utf-8")

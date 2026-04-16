@@ -33,7 +33,7 @@
                 <select name="ssid">
                     {% for option in wx_config.ssid_options %}
                     <option value="{{ option.value }}" {% if wx_config.ssid == option.value %}selected{% endif %} {% if option.disabled %}disabled{% endif %}>
-                        {{ option.label }}{% if option.reason %} - {{ t(option.reason) }}{% endif %}
+                        {{ t(option.label) }}{% if option.reason %} - {{ t(option.reason) }}{% endif %}
                     </option>
                     {% endfor %}
                 </select>
@@ -110,6 +110,9 @@
                 aria-labelledby="wx-location-picker-title"
                 data-tile-url="{{ map_picker_config.tile_url }}"
                 data-tile-attribution="{{ map_picker_config.tile_attribution }}"
+                data-tile-min-zoom="{{ map_picker_config.tile_min_zoom }}"
+                data-tile-max-zoom="{{ map_picker_config.tile_max_zoom }}"
+                data-tile-subdomains="{{ map_picker_config.tile_subdomains }}"
                 data-default-latitude="{{ map_picker_config.station_latitude }}"
                 data-default-longitude="{{ map_picker_config.station_longitude }}"
                 data-default-zoom="{{ map_picker_config.default_zoom }}"
@@ -182,7 +185,7 @@
                                     <td>
                                         <select name="source_id__{{ row.parameter_name }}">
                                             {% for option in row.source_options %}
-                                            <option value="{{ option.value }}" {% if row.source_id|string == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                            <option value="{{ option.value }}" {% if row.source_id|string == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                                             {% endfor %}
                                         </select>
                                     </td>
@@ -191,7 +194,7 @@
                                         <div class="wx-selector-stack">
                                             <select name="selector_kind__{{ row.parameter_name }}">
                                                 {% for option in wx_selector_kind_options %}
-                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                                                 {% endfor %}
                                             </select>
                                             <input type="text" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}" placeholder="{{ t('Name / path') }}">
@@ -258,7 +261,7 @@
                                     <td>
                                         <select name="source_id__{{ row.parameter_name }}">
                                             {% for option in row.source_options %}
-                                            <option value="{{ option.value }}" {% if row.source_id|string == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                            <option value="{{ option.value }}" {% if row.source_id|string == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                                             {% endfor %}
                                         </select>
                                     </td>
@@ -267,7 +270,7 @@
                                         <div class="wx-selector-stack">
                                             <select name="selector_kind__{{ row.parameter_name }}">
                                                 {% for option in wx_selector_kind_options %}
-                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                                                 {% endfor %}
                                             </select>
                                             <input type="text" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}" placeholder="{{ t('Name / path') }}">
@@ -373,7 +376,7 @@
                     {% for source in wx_sources %}
                     <tr>
                         <td>{{ source.name }}</td>
-                        <td>{{ source.source_type_label }}</td>
+                        <td>{{ t(source.source_type_label) }}</td>
                         <td><code>{{ source.base_url }}</code></td>
                         <td>{{ source.auth_type }}</td>
                         <td>{{ source.timeout_s }}s</td>
@@ -442,7 +445,7 @@
                 <span>{{ t("Source type") }}</span>
                 <select name="source_type" id="wx-source-type">
                     {% for option in wx_source_type_options %}
-                    <option value="{{ option.value }}" {% if wx_source_form.source_type == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    <option value="{{ option.value }}" {% if wx_source_form.source_type == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -454,7 +457,7 @@
                 <span>{{ t("Auth type") }}</span>
                 <select name="auth_type" id="wx-auth-type">
                     {% for option in wx_auth_type_options %}
-                    <option value="{{ option.value }}" {% if wx_source_form.auth_type == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    <option value="{{ option.value }}" {% if wx_source_form.auth_type == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
             </label>
@@ -658,10 +661,25 @@
                 zoom: initialView.zoom,
                 zoomControl: true,
             });
-            window.L.tileLayer(dialog.dataset.tileUrl || "", {
+            const tileSubdomains = String(dialog.dataset.tileSubdomains || "")
+                .split(/[,\s]+/)
+                .map((token) => token.trim())
+                .filter((token) => token.length > 0);
+            const tileLayerOptions = {
                 attribution: dialog.dataset.tileAttribution || "",
-                maxZoom: 19,
-            }).addTo(map);
+            };
+            const tileMinZoom = Number.parseInt(dialog.dataset.tileMinZoom || "", 10);
+            const tileMaxZoom = Number.parseInt(dialog.dataset.tileMaxZoom || "", 10);
+            if (Number.isInteger(tileMinZoom)) {
+                tileLayerOptions.minZoom = tileMinZoom;
+            }
+            if (Number.isInteger(tileMaxZoom)) {
+                tileLayerOptions.maxZoom = tileMaxZoom;
+            }
+            if (tileSubdomains.length > 0) {
+                tileLayerOptions.subdomains = tileSubdomains;
+            }
+            window.L.tileLayer(dialog.dataset.tileUrl || "", tileLayerOptions).addTo(map);
             map.on("move zoom", syncCenter);
             syncCenter();
         };

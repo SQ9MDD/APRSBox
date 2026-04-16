@@ -259,6 +259,20 @@
                         </option>
                         {% endfor %}
                     </select>
+                    {% elif field.type == 'date' %}
+                    <span>{{ t(field.label) }}</span>
+                    <div class="field-inline-actions">
+                        <input
+                            type="date"
+                            id="{{ section.slug }}-{{ field.name }}"
+                            name="{{ field.name }}"
+                            value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
+                            {% if field.required %}required{% endif %}
+                        >
+                        <button type="button" class="button button-secondary button-inline-control" data-clear-date-target="{{ section.slug }}-{{ field.name }}">
+                            {{ t("Clear date") }}
+                        </button>
+                    </div>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'symbol_code' %}
                     <span>{{ t(field.label) }}</span>
                     <div class="station-symbol-picker">
@@ -320,6 +334,8 @@
                     <small class="muted">{{ t("Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
                     <small class="muted">{{ t("Uses the same outbound queue and scheduler path as beacon, status and objects.") }}</small>
+                    {% elif section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}
+                    <small class="muted">{{ t("Leave empty to keep sending until manually disabled.") }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
@@ -362,6 +378,9 @@
                     aria-labelledby="{{ section.slug }}-location-picker-title"
                     data-tile-url="{{ map_picker_config.tile_url }}"
                     data-tile-attribution="{{ map_picker_config.tile_attribution }}"
+                    data-tile-min-zoom="{{ map_picker_config.tile_min_zoom }}"
+                    data-tile-max-zoom="{{ map_picker_config.tile_max_zoom }}"
+                    data-tile-subdomains="{{ map_picker_config.tile_subdomains }}"
                     data-default-latitude="{{ map_picker_config.station_latitude }}"
                     data-default-longitude="{{ map_picker_config.station_longitude }}"
                     data-default-zoom="{{ map_picker_config.default_zoom }}"
@@ -392,6 +411,54 @@
         </div>
     </div>
 </section>
+{% if section.slug in ['objects', 'bulletins'] %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t('Objects TX Log' if section.slug == 'objects' else 'Bulletins TX Log') }}</h2>
+                <p class="section-lead">{{ t('Recent object jobs with delivery state and transmitted frame preview.' if section.slug == 'objects' else 'Recent bulletin jobs with delivery state and transmitted frame preview.') }}</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table station-packets-table beacon-log-table">
+                <thead>
+                    <tr>
+                        <th>{{ t("Time") }}</th>
+                        <th>{{ t("Type") }}</th>
+                        <th>{{ t("Status") }}</th>
+                        <th>{{ t("Interface") }}</th>
+                        <th>{{ t("Attempts") }}</th>
+                        <th>{{ t("Error") }}</th>
+                        <th>{{ t("Frame") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in section_tx_log_rows or [] %}
+                    <tr{% if row.is_tx_skipped %} class="tx-log-row-skipped"{% endif %}>
+                        <td>{{ format_datetime(row.display_time, use_utc=True) if row.display_time else '-' }}</td>
+                        <td>{{ t(row.display_kind or row.kind) }}</td>
+                        <td>
+                            <span class="status-pill {% if row.status == 'sent' %}status-running{% elif row.status == 'failed' %}status-stopped{% else %}status-unknown{% endif %}">
+                                {{ t(row.status) }}
+                            </span>
+                        </td>
+                        <td>{{ row.interface_name }}</td>
+                        <td>{{ row.attempt_count }}</td>
+                        <td>{{ row.last_error or '-' }}</td>
+                        <td><code>{{ row.line or '-' }}</code></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7">{{ t('No object outbound jobs yet.' if section.slug == 'objects' else 'No bulletin outbound jobs yet.') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endif %}
 {% if section.slug in ['objects', 'items'] %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 {% endif %}
@@ -404,6 +471,19 @@
                 if (href) {
                     window.location.href = href;
                 }
+            });
+        }
+
+        const clearDateButtons = document.querySelectorAll("[data-clear-date-target]");
+        for (const button of clearDateButtons) {
+            button.addEventListener("click", () => {
+                const targetId = button.getAttribute("data-clear-date-target");
+                if (!targetId) return;
+                const input = document.getElementById(targetId);
+                if (!(input instanceof HTMLInputElement)) return;
+                input.value = "";
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
             });
         }
 
@@ -686,10 +766,25 @@
                     zoom: initialView.zoom,
                     zoomControl: true,
                 });
-                window.L.tileLayer(dialog.dataset.tileUrl || "", {
+                const tileSubdomains = String(dialog.dataset.tileSubdomains || "")
+                    .split(/[,\s]+/)
+                    .map((token) => token.trim())
+                    .filter((token) => token.length > 0);
+                const tileLayerOptions = {
                     attribution: dialog.dataset.tileAttribution || "",
-                    maxZoom: 19,
-                }).addTo(map);
+                };
+                const tileMinZoom = Number.parseInt(dialog.dataset.tileMinZoom || "", 10);
+                const tileMaxZoom = Number.parseInt(dialog.dataset.tileMaxZoom || "", 10);
+                if (Number.isInteger(tileMinZoom)) {
+                    tileLayerOptions.minZoom = tileMinZoom;
+                }
+                if (Number.isInteger(tileMaxZoom)) {
+                    tileLayerOptions.maxZoom = tileMaxZoom;
+                }
+                if (tileSubdomains.length > 0) {
+                    tileLayerOptions.subdomains = tileSubdomains;
+                }
+                window.L.tileLayer(dialog.dataset.tileUrl || "", tileLayerOptions).addTo(map);
                 map.on("move zoom", syncCenter);
                 syncCenter();
             };

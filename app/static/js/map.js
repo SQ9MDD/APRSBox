@@ -10,13 +10,21 @@
         zoom: Number.parseInt(root.dataset.defaultZoom || "", 10),
     };
     const stationsEndpoint = root.dataset.stationsEndpoint || "/api/map/stations";
+    const mapTileEventsEndpoint = root.dataset.mapTileEventsEndpoint || "";
     const tileUrl = root.dataset.tileUrl || "";
     const tileAttribution = root.dataset.tileAttribution || "";
     const tileSourceName = root.dataset.tileSourceName || "";
+    const tileMinZoom = Number.parseInt(root.dataset.tileMinZoom || "", 10);
+    const tileMaxZoom = Number.parseInt(root.dataset.tileMaxZoom || "", 10);
+    const tileSubdomains = String(root.dataset.tileSubdomains || "")
+        .split(/[,\s]+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0);
 
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
+    const tileStatusOutput = document.getElementById("map-tile-status");
     const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
     const toggleTracksButton = document.getElementById("map-toggle-tracks");
@@ -51,6 +59,8 @@
         hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
         showRuler: root.dataset.i18nShowRuler || "Show ruler",
         hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
+        tileProviderUnavailable: root.dataset.i18nTileProviderUnavailable || "Tile provider unavailable",
+        tileProviderRecovered: root.dataset.i18nTileProviderRecovered || "Tile provider recovered",
     });
     const stationLayer = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
@@ -58,6 +68,7 @@
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
+    const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
@@ -68,6 +79,15 @@
     let latestStations = [];
     let latestMobileTracks = [];
     let rulerState = null;
+    let tileErrorActive = false;
+    let tileErrorCount = 0;
+    let tileLoadCount = 0;
+    let consecutiveTileErrors = 0;
+    let lastTileErrorUrl = "";
+    let tileStatusClearTimer = null;
+    let lastTileErrorReportedAt = 0;
+    let lastTileRecoveryReportedAt = 0;
+    const tileEventReportIntervalMs = 120000;
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -108,18 +128,106 @@
         zoomControl: true,
     });
 
-    // Keep the tile endpoint configurable from the backend so the frontend can
-    // switch later from the public development tiles to a local cache/proxy.
-    window.L.tileLayer(tileUrl, {
+    const tileLayerOptions = {
         attribution: tileAttribution,
-        maxZoom: 19,
-    }).addTo(map);
+    };
+    if (Number.isInteger(tileMinZoom)) {
+        tileLayerOptions.minZoom = tileMinZoom;
+    }
+    if (Number.isInteger(tileMaxZoom)) {
+        tileLayerOptions.maxZoom = tileMaxZoom;
+    }
+    if (tileSubdomains.length > 0) {
+        tileLayerOptions.subdomains = tileSubdomains;
+    }
+    const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
     stationLayer.addTo(map);
     rulerLayer.addTo(map);
 
     if (tileSourceOutput) {
         tileSourceOutput.textContent = tileSourceName;
     }
+    if (tileStatusOutput) {
+        tileStatusOutput.textContent = "";
+    }
+
+    function setTileStatusOutput(message, { clearAfterMs = 0 } = {}) {
+        if (!tileStatusOutput) {
+            return;
+        }
+        if (tileStatusClearTimer) {
+            window.clearTimeout(tileStatusClearTimer);
+            tileStatusClearTimer = null;
+        }
+        tileStatusOutput.textContent = message ? `(${message})` : "";
+        if (clearAfterMs > 0) {
+            tileStatusClearTimer = window.setTimeout(function () {
+                tileStatusOutput.textContent = "";
+                tileStatusClearTimer = null;
+            }, clearAfterMs);
+        }
+    }
+
+    async function reportTileEvent(eventType) {
+        if (!mapTileEventsEndpoint) {
+            return;
+        }
+        try {
+            await fetch(mapTileEventsEndpoint, {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    event_type: eventType,
+                    source_name: tileSourceName,
+                    provider_url: tileUrl,
+                    tile_url: lastTileErrorUrl,
+                    error_count: tileErrorCount,
+                    load_count: tileLoadCount,
+                }),
+            });
+        } catch (_error) {
+        }
+    }
+
+    function handleTileError(tileSourceUrl) {
+        tileErrorCount += 1;
+        consecutiveTileErrors += 1;
+        lastTileErrorUrl = String(tileSourceUrl || "").trim();
+        if (!tileErrorActive && consecutiveTileErrors >= 5) {
+            tileErrorActive = true;
+            setTileStatusOutput(i18n.tileProviderUnavailable);
+            const now = Date.now();
+            if ((now - lastTileErrorReportedAt) >= tileEventReportIntervalMs) {
+                lastTileErrorReportedAt = now;
+                void reportTileEvent("tile_error");
+            }
+        }
+    }
+
+    function handleTileLoad() {
+        tileLoadCount += 1;
+        consecutiveTileErrors = 0;
+        if (!tileErrorActive) {
+            return;
+        }
+        tileErrorActive = false;
+        setTileStatusOutput(i18n.tileProviderRecovered, { clearAfterMs: 8000 });
+        const now = Date.now();
+        if ((now - lastTileRecoveryReportedAt) >= tileEventReportIntervalMs) {
+            lastTileRecoveryReportedAt = now;
+            void reportTileEvent("tile_recovered");
+        }
+    }
+
+    tileLayer.on("tileerror", function (event) {
+        handleTileError(event?.tile?.src || event?.url || "");
+    });
+    tileLayer.on("tileload", function () {
+        handleTileLoad();
+    });
 
     function resolveDefaultMaskOpacity() {
         const storedOpacity = Number.parseInt(window.localStorage.getItem(maskOpacityStorageKey()) || "", 10);
@@ -843,6 +951,14 @@
             const mobileTracks = payload.mobile_tracks || [];
             latestStations = stations;
             latestMobileTracks = mobileTracks;
+            root.dispatchEvent(new window.CustomEvent(mapStationsRefreshEventName, {
+                detail: {
+                    stations,
+                    mobileTracks,
+                    stationLatitude: defaultView.latitude,
+                    stationLongitude: defaultView.longitude,
+                },
+            }));
             const nextSignature = `${stationsSignature(stations)}|${mobileTracksSignature(mobileTracks)}`;
             if (nextSignature === lastStationsSignature) {
                 return;

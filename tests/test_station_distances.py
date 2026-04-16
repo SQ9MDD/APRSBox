@@ -178,6 +178,23 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(station["phg_direction"], "omni")
             self.assertAlmostEqual(float(station["phg_range_km"]), 12.79, places=2)
 
+    def test_map_payload_exposes_qsy_fields_when_present(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload(latitude="53.2297", longitude="21.0122"))
+            insert_position_frame(
+                "SP8ABC-9>APRS:!5218.37N\\02104.87E>145.575MHz C103 +060 R30k SR9ABC",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+
+            map_payload = get_map_station_payload()
+            self.assertEqual(len(map_payload["stations"]), 1)
+            station = map_payload["stations"][0]
+            self.assertEqual(station["display_callsign"], "SP8ABC-9")
+            self.assertEqual(station["qsy_frequency_mhz"], 145.575)
+            self.assertEqual(station["qsy_tone"], "C103")
+            self.assertEqual(station["qsy_offset_khz"], 60)
+            self.assertEqual(station["qsy_callsign"], "SR9ABC")
+
     def test_station_detail_track_payload_returns_track_for_selected_mobile_station(self) -> None:
         with temporary_database():
             update_station_settings(station_payload())

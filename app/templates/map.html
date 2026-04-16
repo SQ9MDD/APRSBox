@@ -15,9 +15,13 @@
             data-station-longitude="{{ map_config.station_longitude }}"
             data-default-zoom="{{ map_config.default_zoom }}"
             data-stations-endpoint="{{ map_stations_endpoint }}"
+            data-map-tile-events-endpoint="{{ map_tile_events_endpoint }}"
             data-tile-url="{{ map_config.tile_url }}"
             data-tile-attribution="{{ map_config.tile_attribution }}"
             data-tile-source-name="{{ map_config.tile_source_name }}"
+            data-tile-min-zoom="{{ map_config.tile_min_zoom }}"
+            data-tile-max-zoom="{{ map_config.tile_max_zoom }}"
+            data-tile-subdomains="{{ map_config.tile_subdomains }}"
             data-static-root="{{ request.scope.root_path }}/static/"
             data-root-path="{{ request.scope.root_path }}"
             data-i18n-aprs-client="{{ t('APRS client') }}"
@@ -33,12 +37,21 @@
             data-i18n-packet-type="{{ t('Packet type') }}"
             data-i18n-comment="{{ t('Comment') }}"
             data-i18n-reset-view="{{ t('Reset view') }}"
+            data-i18n-callsign="{{ t('Callsign') }}"
+            data-i18n-latest-packet="{{ t('Latest packet') }}"
+            data-i18n-distance-azimuth="{{ t('Distance and azimuth') }}"
+            data-i18n-qsy="{{ t('QSY') }}"
+            data-i18n-no-stations="{{ t('No decoded APRS stations available yet.') }}"
             data-i18n-show-tracks="{{ t('Show tracks') }}"
             data-i18n-hide-tracks="{{ t('Hide tracks') }}"
             data-i18n-show-coverage="{{ t('Show coverage') }}"
             data-i18n-hide-coverage="{{ t('Hide coverage') }}"
+            data-i18n-show-latest-overlay="{{ t('Show latest packet widget') }}"
+            data-i18n-hide-latest-overlay="{{ t('Hide latest packet widget') }}"
             data-i18n-show-ruler="{{ t('Show ruler') }}"
             data-i18n-hide-ruler="{{ t('Hide ruler') }}"
+            data-i18n-tile-provider-unavailable="{{ t('Tile provider unavailable') }}"
+            data-i18n-tile-provider-recovered="{{ t('Tile provider recovered') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -72,6 +85,15 @@
                     <button
                         type="button"
                         class="button button-secondary button-icon"
+                        id="map-toggle-latest-overlay"
+                        aria-label="{{ t('Hide latest packet widget') }}"
+                        title="{{ t('Hide latest packet widget') }}"
+                    >
+                        <img id="map-toggle-latest-overlay-icon" src="{{ request.scope.root_path }}/static/icons/message-alert.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
                         id="map-toggle-ruler"
                         aria-label="{{ t('Hide ruler') }}"
                         title="{{ t('Hide ruler') }}"
@@ -87,7 +109,11 @@
                     </label>
                 </div>
                 <div class="map-info-strip" aria-live="polite">
-                    <span><strong>{{ t("Tiles") }}:</strong> <span id="map-tile-source">{{ map_config.tile_source_name }}</span></span>
+                    <span>
+                        <strong>{{ t("Tiles") }}:</strong>
+                        <span id="map-tile-source">{{ map_config.tile_source_name }}</span>
+                        <span id="map-tile-status" class="muted"></span>
+                    </span>
                     <span><strong>{{ t("Center") }}:</strong> <span id="map-center">--</span></span>
                     <span><strong>{{ t("Zoom") }}:</strong> <span id="map-zoom">--</span></span>
                 </div>
@@ -95,6 +121,7 @@
             <div id="map-stage" class="map-stage">
                 <div id="map-canvas" class="map-canvas" aria-label="{{ t('Map viewer') }}"></div>
                 <div id="map-mask" class="map-mask" aria-hidden="true"></div>
+                <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>
             </div>
         </div>
     </div>
@@ -103,5 +130,6 @@
 
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}"></script>
 {% endblock %}

@@ -14,12 +14,13 @@ from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
     create_system_job,
     fetch_system_job,
+    log_event,
     mark_system_job_error,
     mark_system_job_running,
     set_app_setting,
     vacuum_database,
 )
-from app.i18n import get_app_language, normalize_language, SUPPORTED_LANGUAGE_CODES
+from app.i18n import get_app_language, get_translator, normalize_language, SUPPORTED_LANGUAGE_CODES
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
@@ -35,6 +36,8 @@ from app.services.content import (
     get_related_ssids,
     get_visible_station_snapshots,
     recent_station_outbound_jobs,
+    recent_object_outbound_jobs,
+    recent_bulletin_outbound_jobs,
     get_station_detail,
     get_station_settings,
     recent_event_logs,
@@ -93,8 +96,14 @@ from app.services.aprs_device_identification import (
 )
 from app.services.core_client import restart_core_traffic_monitor
 from app.services.map_service import (
+    get_map_source,
+    list_map_sources,
     get_map_page_config,
     get_map_station_payload,
+    safe_move_map_source,
+    safe_delete_map_source,
+    safe_save_map_source,
+    safe_set_default_map_source,
     get_station_detail_map_config,
     get_station_detail_track_payload,
 )
@@ -128,6 +137,10 @@ from app.services.wx import (
 router = APIRouter()
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
 _CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
+
+
+def _translate(message: object) -> str:
+    return get_translator(get_app_language())(message)
 
 
 def _section_template_context(
@@ -168,6 +181,10 @@ def _section_template_context(
                 ],
             }
         )
+    if slug == "objects":
+        context["section_tx_log_rows"] = recent_object_outbound_jobs(limit=20)
+    elif slug == "bulletins":
+        context["section_tx_log_rows"] = recent_bulletin_outbound_jobs(limit=20)
     return context
 
 
@@ -193,6 +210,14 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
+
+
+def _safe_positive_int(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed >= 0 else 0
 
 
 def _read_changelog_markdown() -> str:
@@ -373,6 +398,53 @@ def _wx_page_context(
     )
 
 
+def _map_source_checkbox(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "on", "yes"}
+
+
+def _empty_map_source_form() -> dict[str, Any]:
+    return {
+        "record_id": None,
+        "name": "",
+        "url_template": "",
+        "attribution": "",
+        "min_zoom": 0,
+        "max_zoom": 19,
+        "enabled": True,
+        "is_default": False,
+        "notes": "",
+    }
+
+
+def _map_source_form_from_source(source: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "record_id": int(source.get("id") or 0),
+        "name": str(source.get("name") or ""),
+        "url_template": str(source.get("url_template") or ""),
+        "attribution": str(source.get("attribution") or ""),
+        "min_zoom": int(source.get("min_zoom") or 0),
+        "max_zoom": int(source.get("max_zoom") or 19),
+        "enabled": bool(source.get("enabled")),
+        "is_default": bool(source.get("is_default")),
+        "notes": str(source.get("notes") or ""),
+    }
+
+
+def _map_source_form_from_payload(payload: dict[str, Any], *, record_id: int | None) -> dict[str, Any]:
+    return {
+        "record_id": record_id,
+        "name": str(payload.get("name") or "").strip(),
+        "url_template": str(payload.get("url_template") or "").strip(),
+        "attribution": str(payload.get("attribution") or "").strip(),
+        "min_zoom": str(payload.get("min_zoom") or "").strip() or "0",
+        "max_zoom": str(payload.get("max_zoom") or "").strip() or "19",
+        "enabled": _map_source_checkbox(payload.get("enabled")),
+        "is_default": _map_source_checkbox(payload.get("is_default")),
+        "notes": str(payload.get("notes") or "").strip(),
+    }
+
+
 def _settings_page_context(
     request: Request,
     current_user: UserIdentity,
@@ -382,9 +454,18 @@ def _settings_page_context(
     flash_success: bool = True,
     current_language: str | None = None,
     current_default_units: str | None = None,
+    map_source_edit_id: int | None = None,
+    map_source_form: dict[str, Any] | None = None,
 ) -> dict:
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
+    map_sources = list_map_sources()
+    map_source_edit = get_map_source(map_source_edit_id) if map_source_edit_id is not None else None
+    resolved_map_source_form = (
+        map_source_form
+        if map_source_form is not None
+        else (_map_source_form_from_source(map_source_edit) if map_source_edit is not None else _empty_map_source_form())
+    )
     update_channels = list_update_channels()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
@@ -422,6 +503,10 @@ def _settings_page_context(
         update_log_content=str(update_log_snapshot.get("content") or ""),
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
+        map_sources=map_sources,
+        map_source_form=resolved_map_source_form,
+        map_source_edit_id=resolved_map_source_form.get("record_id"),
+        can_manage_map_sources=current_user.role in {"admin", "operator"},
     )
 
 
@@ -665,6 +750,8 @@ def modems_create(
 ) -> object:
     templates = request.app.state.templates
     normalized_modem_type = modem_type.strip().upper()
+    if normalized_modem_type == "SERIAL":
+        normalized_modem_type = "SERIALL"
     if normalized_modem_type not in {"SERIALL", "TCP"}:
         context = _section_template_context(request, current_user, "modems", flash="Unsupported TNC type.")
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
@@ -716,9 +803,10 @@ def servers_page(
 def settings_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
+    edit_map_source: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    context = _settings_page_context(request, current_user)
+    context = _settings_page_context(request, current_user, map_source_edit_id=edit_map_source)
     return templates.TemplateResponse("settings.html", context)
 
 
@@ -728,7 +816,8 @@ def settings_check_gui_version(
 ) -> object:
     result = latest_gui_version()
     if not result.get("ok"):
-        return JSONResponse({"ok": False, "error": result.get("error") or "Version check failed."}, status_code=status.HTTP_502_BAD_GATEWAY)
+        error_text = str(result.get("error") or "Version check failed.")
+        return JSONResponse({"ok": False, "error": _translate(error_text)}, status_code=status.HTTP_502_BAD_GATEWAY)
     return JSONResponse({"ok": True, "result": result})
 
 @router.post("/settings/update-channel")
@@ -740,7 +829,7 @@ def settings_update_channel(
     try:
         selected = save_update_channel(update_channel)
     except ValueError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse({"ok": False, "error": _translate(str(exc))}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse({"ok": True, "channel": selected})
 
 
@@ -749,16 +838,19 @@ def settings_update_application(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    job_id = create_system_job("update-application", message="Queued.")
+    job_id = create_system_job("update-application", message=_translate("Queued."))
     result = start_application_update_job(job_id=job_id)
     if not result.get("ok"):
-        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start update script."))
-        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start update."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        mark_system_job_error(job_id, message=_translate(str(result.get("error") or "Failed to start update script.")))
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(result.get("error") or "Failed to start update."))},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     mark_system_job_running(
         job_id,
         pid=int(result.get("pid") or 0) or None,
         log_file=str(result.get("log_file") or "") or None,
-        message="Running.",
+        message=_translate("Running."),
     )
     return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
@@ -793,7 +885,7 @@ async def settings_update_channel_set_api(
     try:
         selected = save_update_channel(str(payload.get("channel") or ""))
     except ValueError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse({"ok": False, "error": _translate(str(exc))}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse({"ok": True, "channel": selected})
 
 
@@ -820,16 +912,19 @@ def settings_restart_services(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    job_id = create_system_job("restart-services", message="Queued.")
+    job_id = create_system_job("restart-services", message=_translate("Queued."))
     result = start_service_restart_job(job_id=job_id)
     if not result.get("ok"):
-        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start restart script."))
-        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start service restart."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        mark_system_job_error(job_id, message=_translate(str(result.get("error") or "Failed to start restart script.")))
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(result.get("error") or "Failed to start service restart."))},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     mark_system_job_running(
         job_id,
         pid=int(result.get("pid") or 0) or None,
         log_file=str(result.get("log_file") or "") or None,
-        message="Running.",
+        message=_translate("Running."),
     )
     return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
@@ -839,16 +934,19 @@ def settings_reboot_host(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    job_id = create_system_job("reboot-host", message="Queued.")
+    job_id = create_system_job("reboot-host", message=_translate("Queued."))
     result = start_host_reboot_job(job_id=job_id)
     if not result.get("ok"):
-        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start reboot script."))
-        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start host reboot."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        mark_system_job_error(job_id, message=_translate(str(result.get("error") or "Failed to start reboot script.")))
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(result.get("error") or "Failed to start host reboot."))},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     mark_system_job_running(
         job_id,
         pid=int(result.get("pid") or 0) or None,
         log_file=str(result.get("log_file") or "") or None,
-        message="Running.",
+        message=_translate("Running."),
     )
     return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
@@ -858,16 +956,19 @@ def settings_poweroff_host(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    job_id = create_system_job("poweroff-host", message="Queued.")
+    job_id = create_system_job("poweroff-host", message=_translate("Queued."))
     result = start_host_poweroff_job(job_id=job_id)
     if not result.get("ok"):
-        mark_system_job_error(job_id, message=str(result.get("error") or "Failed to start poweroff script."))
-        return JSONResponse({"ok": False, "error": result.get("error") or "Failed to start host power off."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        mark_system_job_error(job_id, message=_translate(str(result.get("error") or "Failed to start poweroff script.")))
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(result.get("error") or "Failed to start host power off."))},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     mark_system_job_running(
         job_id,
         pid=int(result.get("pid") or 0) or None,
         log_file=str(result.get("log_file") or "") or None,
-        message="Running.",
+        message=_translate("Running."),
     )
     return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
@@ -879,11 +980,12 @@ def settings_update_aprs_device_identification(
 ) -> object:
     result = refresh_aprs_device_identification_cache()
     if not result.get("ok"):
+        error_text = str(result.get("error") or "APRS device identification database update failed.")
         return JSONResponse(
-            {"ok": False, "error": result.get("error") or "APRS device identification database update failed."},
+            {"ok": False, "error": _translate(error_text)},
             status_code=status.HTTP_502_BAD_GATEWAY,
         )
-    return JSONResponse({"ok": True, "message": "APRS device identification database updated."})
+    return JSONResponse({"ok": True, "message": _translate("APRS device identification database updated.")})
 
 
 @router.post("/settings/vacuum-db")
@@ -893,12 +995,12 @@ def settings_vacuum_db(
 ) -> object:
     if has_enabled_modem_interface():
         return JSONResponse(
-            {"ok": False, "error": "Disable all TNC interfaces before running database vacuum."},
+            {"ok": False, "error": _translate("Disable all TNC interfaces before running database vacuum.")},
             status_code=status.HTTP_409_CONFLICT,
         )
 
     vacuum_database()
-    return JSONResponse({"ok": True, "message": "Database vacuum completed."})
+    return JSONResponse({"ok": True, "message": _translate("Database vacuum completed.")})
 
 
 @router.post("/settings/global")
@@ -914,26 +1016,129 @@ def settings_update_global(
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
-        return JSONResponse({"ok": False, "error": "Unsupported language selection."}, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse({"ok": False, "error": _translate("Unsupported language selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if selected_default_units not in {"metric", "imperial"}:
-        return JSONResponse({"ok": False, "error": "Unsupported unit selection."}, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse({"ok": False, "error": _translate("Unsupported unit selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
     success, error = safe_update_station_settings(station_payload)
     if not success:
-        return JSONResponse({"ok": False, "error": error or "Failed to update global settings."}, status_code=status.HTTP_400_BAD_REQUEST)
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(error or "Failed to update global settings."))},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     set_app_setting("app_language", selected_language)
     return JSONResponse(
         {
             "ok": True,
-            "message": "Global settings updated.",
+            "message": _translate("Global settings updated."),
             "current_language": selected_language,
             "current_default_units": selected_default_units,
             "reload": True,
         }
     )
+
+
+@router.post("/settings/map-sources")
+def settings_map_sources_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    record_id: int | None = Form(None),
+    name: str = Form(""),
+    url_template: str = Form(""),
+    attribution: str = Form(""),
+    min_zoom: str = Form("0"),
+    max_zoom: str = Form("19"),
+    enabled: str | None = Form(None),
+    is_default: str | None = Form(None),
+    notes: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "name": name.strip(),
+        "url_template": url_template.strip(),
+        "attribution": attribution.strip(),
+        "min_zoom": min_zoom.strip(),
+        "max_zoom": max_zoom.strip(),
+        "enabled": enabled,
+        "is_default": is_default,
+        "notes": notes.strip(),
+    }
+    success, error, saved_id = safe_save_map_source(payload, source_id=record_id)
+    if not success:
+        context = _settings_page_context(
+            request,
+            current_user,
+            flash=error or "Failed to save map source.",
+            flash_success=False,
+            map_source_edit_id=record_id,
+            map_source_form=_map_source_form_from_payload(payload, record_id=record_id),
+        )
+        return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Map source saved.",
+        flash_success=True,
+        map_source_edit_id=saved_id if record_id is not None else None,
+    )
+    return templates.TemplateResponse("settings.html", context)
+
+
+@router.post("/settings/map-sources/{source_id}/default")
+def settings_map_sources_set_default(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_set_default_map_source(source_id)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Default map source updated." if success else (error or "Failed to change default map source."),
+        flash_success=success,
+        map_source_edit_id=source_id if success else None,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/settings/map-sources/{source_id}/move")
+def settings_map_sources_move(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    direction: str = Form(...),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_move_map_source(source_id, direction)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash=None if success else (error or "Failed to reorder map source."),
+        flash_success=success,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/settings/map-sources/{source_id}/delete")
+def settings_map_sources_delete(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_delete_map_source(source_id)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Map source deleted." if success else (error or "Failed to delete map source."),
+        flash_success=success,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.post("/settings/language")
@@ -1330,6 +1535,7 @@ def objects_create(
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
     interval_minutes: str = Form("30"),
+    valid_until_utc: str = Form(""),
     path: str = Form(""),
     is_enabled: str | None = Form(None),
     comment: str = Form(""),
@@ -1344,6 +1550,7 @@ def objects_create(
         "symbol_table": symbol_table.strip(),
         "symbol_code": symbol_code.strip(),
         "interval_minutes": interval_minutes.strip(),
+        "valid_until_utc": valid_until_utc.strip(),
         "path": path.strip(),
         "is_enabled": is_enabled,
         "comment": comment.strip(),
@@ -1448,6 +1655,7 @@ def bulletins_create(
     bulletin_code: str = Form(""),
     group_name: str = Form(""),
     interval_minutes: str = Form("30"),
+    valid_until_utc: str = Form(""),
     path: str = Form(""),
     is_enabled: str | None = Form(None),
     message_text: str = Form(...),
@@ -1458,6 +1666,7 @@ def bulletins_create(
         "bulletin_code": bulletin_code.strip(),
         "group_name": group_name.strip(),
         "interval_minutes": interval_minutes.strip(),
+        "valid_until_utc": valid_until_utc.strip(),
         "path": path.strip(),
         "is_enabled": is_enabled,
         "message_text": message_text.strip(),
@@ -1505,6 +1714,7 @@ def map_page(
         active_nav="map",
         map_config=get_map_page_config(),
         map_stations_endpoint=_path(request, "/api/map/stations"),
+        map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
     )
     return templates.TemplateResponse("map.html", context)
 
@@ -1514,6 +1724,41 @@ def map_stations(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_map_station_payload())
+
+
+@router.post("/api/map/tile-events")
+async def map_tile_events(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": _translate("Invalid JSON payload.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if not isinstance(payload, dict):
+        return JSONResponse({"error": _translate("Invalid JSON payload.")}, status_code=status.HTTP_400_BAD_REQUEST)
+
+    event_type = str(payload.get("event_type") or "").strip().lower()
+    if event_type not in {"tile_error", "tile_recovered"}:
+        return JSONResponse({"error": _translate("Unsupported event type.")}, status_code=status.HTTP_400_BAD_REQUEST)
+
+    source_name = str(payload.get("source_name") or "").strip()[:120]
+    provider_url = str(payload.get("provider_url") or "").strip()[:512]
+    tile_url = str(payload.get("tile_url") or "").strip()[:512]
+    error_count = _safe_positive_int(payload.get("error_count"))
+    load_count = _safe_positive_int(payload.get("load_count"))
+
+    message = (
+        f"tile_event={event_type}"
+        f", source={source_name or '-'}"
+        f", provider={provider_url or '-'}"
+        f", tile={tile_url or '-'}"
+        f", errors={error_count}"
+        f", loads={load_count}"
+        f", user={current_user.username}"
+    )
+    log_event("WARNING" if event_type == "tile_error" else "INFO", "map", message)
+    return JSONResponse({"ok": True})
 
 
 @router.get("/wx")

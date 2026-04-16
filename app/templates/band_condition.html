@@ -172,7 +172,7 @@
                                 <td>{{ ref.current_frame_count }}</td>
                                 <td>
                                     {% if ref.baseline_heard_ratio is none %}
-                                    <span class="muted">n/a</span>
+                                    <span class="muted">{{ t("n/a") }}</span>
                                     {% else %}
                                     {{ "%.2f"|format(ref.baseline_heard_ratio) }}
                                     {% endif %}

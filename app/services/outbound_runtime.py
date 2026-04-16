@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime, timezone
 from typing import Any
 
-from app.db import fetch_one, log_event
+from app.db import execute, fetch_one, log_event, utc_now
 from app.services.messages import (
     QUERY_MESSAGE_KIND,
     expire_direct_message_timeouts,
@@ -77,6 +78,8 @@ class OutboundService:
         job_id = int(job["id"])
         try:
             modem_type = str(job.get("modem_type") or "").strip().upper()
+            if modem_type == "SERIAL":
+                modem_type = "SERIALL"
             interface_name = str(job.get("interface_name") or f"interface-{job.get('interface_id') or 'unknown'}")
             device_path = str(job.get("device_path") or "").strip()
             interface_id = job.get("interface_id")
@@ -86,18 +89,24 @@ class OutboundService:
                 normalized_interface_id = None
 
             kind = str(job.get("kind") or "").strip()
+            payload = job.get("payload") or {}
+            skip_reason = _skip_reason_for_expired_aprs_content(kind=kind, payload=payload, now=datetime.now(timezone.utc))
+            if skip_reason:
+                mark_outbound_job_skipped(job_id, skip_reason)
+                log_event("INFO", "outbound", f"Skipped {kind} outbound job #{job_id}: {skip_reason}")
+                return
             if kind == "beacon":
-                tnc2_line = build_beacon_tnc2(job.get("payload") or {})
+                tnc2_line = build_beacon_tnc2(payload)
             elif kind == "status":
-                tnc2_line = build_status_tnc2(job.get("payload") or {})
+                tnc2_line = build_status_tnc2(payload)
             elif kind == "object":
-                tnc2_line = build_object_tnc2(job.get("payload") or {})
+                tnc2_line = build_object_tnc2(payload)
             elif kind == "message":
-                tnc2_line = build_message_tnc2(job.get("payload") or {})
+                tnc2_line = build_message_tnc2(payload)
             elif kind == "wx":
-                tnc2_line = build_wx_tnc2(job.get("payload") or {})
+                tnc2_line = build_wx_tnc2(payload)
             elif kind == OUTBOUND_KIND_DIGI_TX:
-                tnc2_line = str((job.get("payload") or {}).get("line") or "").strip()
+                tnc2_line = str(payload.get("line") or "").strip()
                 if not tnc2_line:
                     raise ValueError("DIGI TX outbound job is missing packet line.")
             else:
@@ -115,7 +124,6 @@ class OutboundService:
                     command="TX-SKIP",
                     payload_hex=frame.hex(" ").upper(),
                 )
-                payload = job.get("payload") or {}
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:
                     if message_kind == "direct_message":
@@ -137,7 +145,6 @@ class OutboundService:
                     command="TX-SKIP",
                     payload_hex=frame.hex(" ").upper(),
                 )
-                payload = job.get("payload") or {}
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:
                     if message_kind == "direct_message":
@@ -167,7 +174,6 @@ class OutboundService:
                             payload_hex=frame.hex(" ").upper(),
                         )
                         mark_outbound_job_sent(job_id)
-                        payload = job.get("payload") or {}
                         message_kind = str(payload.get("message_kind") or "").strip()
                         if kind == "message" and payload.get("aprs_message_id") is not None:
                             if message_kind == "direct_message":
@@ -178,6 +184,12 @@ class OutboundService:
                             register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
                         log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
                         return
+                    self._log_monitor_fallback(
+                        job_id=job_id,
+                        kind=kind,
+                        interface_name=interface_name,
+                        transport="TCP",
+                    )
                 endpoint = self._parse_endpoint(device_path)
                 if endpoint is None:
                     raise ValueError(f"Interface {interface_name} has invalid TCP endpoint.")
@@ -193,7 +205,7 @@ class OutboundService:
                     except OSError:
                         pass
                     _ = reader
-            elif modem_type == "SERIALL":
+            elif modem_type in {"SERIALL", "SERIAL"}:
                 if self._traffic_monitor is not None:
                     sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
                         interface_id=normalized_interface_id,
@@ -208,7 +220,6 @@ class OutboundService:
                             payload_hex=frame.hex(" ").upper(),
                         )
                         mark_outbound_job_sent(job_id)
-                        payload = job.get("payload") or {}
                         message_kind = str(payload.get("message_kind") or "").strip()
                         if kind == "message" and payload.get("aprs_message_id") is not None:
                             if message_kind == "direct_message":
@@ -219,6 +230,12 @@ class OutboundService:
                             register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
                         log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
                         return
+                    self._log_monitor_fallback(
+                        job_id=job_id,
+                        kind=kind,
+                        interface_name=interface_name,
+                        transport="serial",
+                    )
                 serial_path = normalize_serial_device_path(device_path)
                 baud_rate = normalize_serial_baud_rate(job.get("baud_rate"))
                 serial_fd = await asyncio.to_thread(open_serial_device, serial_path, baud_rate)
@@ -237,7 +254,6 @@ class OutboundService:
                 payload_hex=frame.hex(" ").upper(),
             )
             mark_outbound_job_sent(job_id)
-            payload = job.get("payload") or {}
             message_kind = str(payload.get("message_kind") or "").strip()
             if kind == "message" and payload.get("aprs_message_id") is not None:
                 if message_kind == "direct_message":
@@ -287,3 +303,83 @@ class OutboundService:
             return bool(int(row["tx_blocked"]))
         except (TypeError, ValueError, KeyError):
             return False
+
+    def _log_monitor_fallback(self, *, job_id: int, kind: str, interface_name: str, transport: str) -> None:
+        message = (
+            f"Traffic monitor could not send {kind} outbound job #{job_id} via {interface_name}; "
+            f"using direct {transport} fallback."
+        )
+        log_event("WARNING", "outbound", message)
+        log_event("WARNING", "system", message)
+
+
+def _skip_reason_for_expired_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:
+    if kind == "object":
+        object_id = _normalize_payload_id(payload.get("object_id"))
+        if object_id is None:
+            return None
+        row = fetch_one("SELECT valid_until_utc FROM aprs_objects WHERE id = ?", (object_id,))
+        if row is None:
+            return None
+        valid_until_utc = str(row["valid_until_utc"] or "").strip()
+        if not _is_expired_utc_date(valid_until_utc, now):
+            return None
+        execute(
+            """
+            UPDATE aprs_objects
+            SET is_enabled = 0,
+                updated_at = ?
+            WHERE id = ?
+              AND is_enabled = 1
+            """,
+            (utc_now(), object_id),
+        )
+        return f"TX skipped: object #{object_id} expired on {valid_until_utc} UTC."
+
+    if kind == "message":
+        message_id = _normalize_payload_id(payload.get("message_id"))
+        if message_id is None:
+            return None
+        row = fetch_one("SELECT valid_until_utc FROM bulletins WHERE id = ?", (message_id,))
+        if row is None:
+            return None
+        valid_until_utc = str(row["valid_until_utc"] or "").strip()
+        if not _is_expired_utc_date(valid_until_utc, now):
+            return None
+        execute(
+            """
+            UPDATE bulletins
+            SET is_enabled = 0,
+                updated_at = ?
+            WHERE id = ?
+              AND is_enabled = 1
+            """,
+            (utc_now(), message_id),
+        )
+        return f"TX skipped: bulletin #{message_id} expired on {valid_until_utc} UTC."
+
+    return None
+
+
+def _normalize_payload_id(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_utc_date(value: str | None) -> date | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _is_expired_utc_date(value: str | None, now: datetime) -> bool:
+    valid_until = _parse_utc_date(value)
+    if valid_until is None:
+        return False
+    return now.date() > valid_until

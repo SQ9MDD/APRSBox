@@ -100,6 +100,52 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["is_enabled"], 1)
 
+    def test_object_record_accepts_optional_valid_until_utc(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "45",
+                    "valid_until_utc": "2026-12-31",
+                    "path": "WIDE2-2",
+                    "is_enabled": "1",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT valid_until_utc FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+            self.assertEqual(row["valid_until_utc"], "2026-12-31")
+
+    def test_object_valid_until_utc_requires_yyyy_mm_dd_format(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "30",
+                    "valid_until_utc": "31-12-2026",
+                    "path": "",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "Valid until date must use YYYY-MM-DD format.")
+
     def test_object_name_longer_than_nine_characters_is_rejected(self) -> None:
         with temporary_database():
             success, error = safe_create_section_row(
@@ -145,6 +191,10 @@ class ObjectAndItemFormTests(unittest.TestCase):
         self.assertIn('id="objects-comment-text"', template_source)
         self.assertIn('id="objects-comment-count"', template_source)
         self.assertIn('id="objects-comment-error"', template_source)
+        self.assertIn("Objects TX Log", template_source)
+        self.assertIn("No object outbound jobs yet.", template_source)
+        self.assertIn("data-clear-date-target", template_source)
+        self.assertIn("Leave empty to keep sending until manually disabled.", template_source)
         self.assertIn("National characters are blocked.", template_source)
         self.assertIn(
             "Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.",
@@ -452,10 +502,49 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             self.assertTrue(success)
             self.assertIsNone(error)
 
+    def test_bulletin_record_accepts_optional_valid_until_utc(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "bulletin",
+                    "bulletin_code": "1",
+                    "group_name": "",
+                    "interval_minutes": "30",
+                    "valid_until_utc": "2026-12-31",
+                    "path": "",
+                    "message_text": "Wind 15 km/h",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT valid_until_utc FROM bulletins ORDER BY id DESC LIMIT 1")
+            assert row is not None
+            self.assertEqual(row["valid_until_utc"], "2026-12-31")
+
+    def test_bulletin_valid_until_utc_requires_yyyy_mm_dd_format(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "bulletin",
+                    "bulletin_code": "1",
+                    "group_name": "",
+                    "interval_minutes": "30",
+                    "valid_until_utc": "31-12-2026",
+                    "path": "",
+                    "message_text": "Wind 15 km/h",
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "Valid until date must use YYYY-MM-DD format.")
+
     def test_bulletins_template_includes_counter_and_menu_label(self) -> None:
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         self.assertIn('id="bulletins-message-count"', template_source)
         self.assertIn('id="bulletins-message-error"', template_source)
+        self.assertIn("Bulletins TX Log", template_source)
+        self.assertIn("No bulletin outbound jobs yet.", template_source)
 
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         self.assertNotIn("['igate']", base_source)

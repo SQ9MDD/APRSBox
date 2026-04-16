@@ -218,7 +218,7 @@ def has_enabled_modem_interface() -> bool:
         """
         SELECT 1
         FROM modems
-        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
         LIMIT 1
         """
     )
@@ -322,7 +322,13 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
 
 def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
     rows = fetch_all(
-        "SELECT id, level, category, message, created_at FROM event_logs ORDER BY id DESC LIMIT ?",
+        """
+        SELECT id, level, category, message, created_at
+        FROM event_logs
+        WHERE category NOT IN ('outbound', 'digi_flow_runtime', 'traffic', 'aprsis', 'aprs', 'messages')
+        ORDER BY id DESC
+        LIMIT ?
+        """,
         (limit,),
     )
     return [dict(row) for row in rows]
@@ -369,6 +375,94 @@ def recent_station_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
     return recent_station_outbound_jobs(limit=limit)
+
+
+def recent_object_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        rows = fetch_all(
+            """
+            SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
+                   j.kind, m.name AS interface_name, j.payload_json
+            FROM outbound_jobs j
+            LEFT JOIN modems m ON m.id = j.interface_id
+            WHERE j.kind = 'object'
+            ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    except sqlite3.OperationalError:
+        return []
+    jobs: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload_json = item.pop("payload_json", "") or "{}"
+        try:
+            payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            payload = {}
+        if payload:
+            try:
+                item["line"] = build_object_tnc2(payload)
+            except Exception:
+                item["line"] = ""
+        else:
+            item["line"] = ""
+        item["display_kind"] = "Object"
+        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        skip_reason = str(item.get("last_error") or "").strip()
+        item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
+        item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
+        jobs.append(item)
+    return jobs
+
+
+def recent_bulletin_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        rows = fetch_all(
+            """
+            SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
+                   j.kind, m.name AS interface_name, j.payload_json
+            FROM outbound_jobs j
+            LEFT JOIN modems m ON m.id = j.interface_id
+            WHERE j.kind = 'message'
+              AND j.payload_json LIKE '%"message_id"%'
+            ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    except sqlite3.OperationalError:
+        return []
+    jobs: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        payload_json = item.pop("payload_json", "") or "{}"
+        try:
+            payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            payload = {}
+        if not isinstance(payload, dict) or payload.get("message_id") is None:
+            continue
+        if payload:
+            try:
+                item["line"] = build_message_tnc2(payload)
+            except Exception:
+                item["line"] = ""
+        else:
+            item["line"] = ""
+        message_kind = str(payload.get("message_kind") or "").strip().lower()
+        item["display_kind"] = {
+            "bulletin": "Bulletin",
+            "announcement": "Announcement",
+            "group_bulletin": "Group Bulletin",
+        }.get(message_kind, "Bulletin")
+        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        skip_reason = str(item.get("last_error") or "").strip()
+        item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
+        item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
+        jobs.append(item)
+    return jobs
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
@@ -999,6 +1093,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "state": interface_check_state,
             "value": "No interfaces configured" if not interfaces else ("Disabled" if not enabled_interfaces else ""),
             "entries": interface_entries,
+            "show_state_badge": False,
             "blocks": not enabled_interfaces,
         },
         {
@@ -1032,6 +1127,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
                     "tone": "ok" if igate_enabled else "warn",
                 },
             ],
+            "show_state_badge": False,
             "blocks": False,
         },
     ]
@@ -1755,51 +1851,51 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
     fields: list[dict[str, str]] = []
     display_callsign = snapshot.get("display_callsign")
     if display_callsign:
-        fields.append({"label": "Display callsign", "value": str(display_callsign)})
+        fields.append({"label": _t("Display callsign"), "value": str(display_callsign)})
     if snapshot.get("callsign"):
-        fields.append({"label": "Base callsign", "value": str(snapshot["callsign"])})
+        fields.append({"label": _t("Base callsign"), "value": str(snapshot["callsign"])})
     if snapshot.get("ssid"):
-        fields.append({"label": "SSID", "value": str(snapshot["ssid"])})
+        fields.append({"label": _t("SSID"), "value": str(snapshot["ssid"])})
     if snapshot.get("source"):
-        fields.append({"label": "Source", "value": str(snapshot["source"])})
+        fields.append({"label": _t("Source"), "value": str(snapshot["source"])})
     if snapshot.get("destination"):
-        fields.append({"label": "Destination", "value": str(snapshot["destination"])})
+        fields.append({"label": _t("Destination"), "value": str(snapshot["destination"])})
     if snapshot.get("last_heard_date"):
         fields.append({"label": str(snapshot.get("activity_label") or _t("Last heard")), "value": str(snapshot["last_heard_date"])})
     if snapshot.get("last_heard_relative"):
         fields.append({"label": str(snapshot.get("activity_age_label") or _t("Last heard age")), "value": str(snapshot["last_heard_relative"])})
     if snapshot.get("latitude"):
-        fields.append({"label": "Latitude", "value": str(snapshot["latitude"])})
+        fields.append({"label": _t("Latitude"), "value": str(snapshot["latitude"])})
     if snapshot.get("longitude"):
-        fields.append({"label": "Longitude", "value": str(snapshot["longitude"])})
+        fields.append({"label": _t("Longitude"), "value": str(snapshot["longitude"])})
     if snapshot.get("symbol_table"):
-        fields.append({"label": "Symbol table", "value": str(snapshot["symbol_table"])})
+        fields.append({"label": _t("Symbol table"), "value": str(snapshot["symbol_table"])})
     if snapshot.get("symbol_code"):
-        fields.append({"label": "Symbol code", "value": str(snapshot["symbol_code"])})
+        fields.append({"label": _t("Symbol code"), "value": str(snapshot["symbol_code"])})
     if snapshot.get("comment"):
-        fields.append({"label": "Comment", "value": str(snapshot["comment"])})
+        fields.append({"label": _t("Comment"), "value": str(snapshot["comment"])})
     if snapshot.get("path"):
-        fields.append({"label": "Path", "value": str(snapshot["path"])})
+        fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
     if snapshot.get("frame_type"):
-        fields.append({"label": "Packet type", "value": str(snapshot["frame_type"])})
+        fields.append({"label": _t("Packet type"), "value": str(snapshot["frame_type"])})
 
     speed_knots = metrics.get("speed_knots")
     if speed_knots is not None:
         speed_value = f"{int(round(float(speed_knots) * 1.15078))} mph" if unit_system == "imperial" else f"{int(round(float(speed_knots) * 1.852))} km/h"
-        fields.append({"label": "Speed", "value": speed_value})
+        fields.append({"label": _t("Speed"), "value": speed_value})
     course_deg = metrics.get("course_deg")
     if course_deg is not None:
-        fields.append({"label": "Course", "value": f"{int(course_deg)}°"})
+        fields.append({"label": _t("Course"), "value": f"{int(course_deg)}°"})
     altitude_ft = metrics.get("altitude_ft")
     if altitude_ft is not None:
         altitude_value = f"{int(altitude_ft)} ft" if unit_system == "imperial" else f"{int(round(float(altitude_ft) * 0.3048))} m"
-        fields.append({"label": "Altitude", "value": altitude_value})
+        fields.append({"label": _t("Altitude"), "value": altitude_value})
 
     messaging_capable = _messaging_capable(snapshot)
     if messaging_capable is not None:
-        fields.append({"label": "Messaging capability", "value": "Yes" if messaging_capable else "No"})
+        fields.append({"label": _t("Messaging capability"), "value": _t("Yes") if messaging_capable else _t("No")})
     if snapshot.get("raw_text"):
-        fields.append({"label": "Latest raw packet", "value": str(snapshot["raw_text"])})
+        fields.append({"label": _t("Latest raw packet"), "value": str(snapshot["raw_text"])})
 
     for item in _format_decoded_data_for_display(metrics, unit_system):
         if item.get("value"):
@@ -2847,6 +2943,8 @@ def _normalize_section_payload(slug: str, payload: dict[str, Any]) -> dict[str, 
 def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
     modem_type = str(payload.get("modem_type") or "").strip().upper()
+    if modem_type == "SERIAL":
+        modem_type = "SERIALL"
     expose_port_enabled = int(bool(payload.get("expose_port_enabled")))
     expose_bind_address = _normalize_ipv4_address(
         payload.get("expose_bind_address"),
@@ -2922,6 +3020,7 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
     if interval_minutes not in {5, 10, 15, 30, 45, 60}:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
     normalized["interval_minutes"] = interval_minutes
+    normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -2968,6 +3067,8 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.") from exc
     if interval_minutes not in {5, 10, 15, 30, 45, 60}:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
+
+    normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -3036,6 +3137,17 @@ def _normalize_station_interval(value: Any, *, label: str) -> int:
     if interval_minutes not in {15, 30, 45, 60}:
         raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.")
     return interval_minutes
+
+
+def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.strptime(text, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError(f"{label} must use YYYY-MM-DD format.") from exc
+    return parsed.strftime("%Y-%m-%d")
 
 
 def _normalize_ipv4_address(value: Any, *, default: str, label: str) -> str:

@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import Request
 
+from app.db import fetch_one
 from app import get_version
 from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
@@ -33,6 +34,33 @@ PRIMARY_NAV = [
 ]
 
 
+def _normalize_station_callsign(value: object) -> str:
+    callsign = str(value or "").strip().upper()
+    return callsign or "N0CALL"
+
+
+def _normalize_station_ssid(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if not text.isdigit():
+        return ""
+    parsed = int(text)
+    if parsed <= 0 or parsed > 15:
+        return ""
+    return str(parsed)
+
+
+def _resolve_station_identity() -> str:
+    try:
+        row = fetch_one("SELECT callsign, ssid FROM station_settings WHERE id = 1")
+    except Exception:
+        row = None
+    callsign = _normalize_station_callsign(row["callsign"] if row else "")
+    ssid = _normalize_station_ssid(row["ssid"] if row else "")
+    return f"{callsign}-{ssid}" if ssid else callsign
+
+
 def build_template_context(
     request: Request,
     *,
@@ -44,6 +72,7 @@ def build_template_context(
     app_language = get_app_language()
     translate = get_translator(app_language)
     translate_format = get_format_translator(app_language)
+    station_identity = _resolve_station_identity()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
@@ -62,6 +91,8 @@ def build_template_context(
         "request": request,
         "page_title": translate(page_title),
         "page_title_raw": page_title,
+        "station_identity": station_identity,
+        "browser_title": f"APRSBox: {station_identity}",
         "app_version": get_version(),
         "app_language": app_language,
         "app_languages": get_supported_languages(),

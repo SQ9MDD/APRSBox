@@ -25,6 +25,15 @@ KISS_TFESC = 0xDD
 AX25_CONTROL_UI = 0x03
 AX25_PID_NO_LAYER3 = 0xF0
 EXPOSE_PORT_MAX_CONNECTIONS = 3
+SERIAL_RX_SILENCE_RECONNECT_SECONDS = 150.0
+SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
+
+
+def _normalize_modem_type(value: Any) -> str:
+    modem_type = str(value or "").strip().upper()
+    if modem_type == "SERIAL":
+        return "SERIALL"
+    return modem_type
 
 
 class _TrafficModemRuntime:
@@ -197,17 +206,18 @@ class _TrafficModemRuntime:
                 await self._sleep(self._reconnect_delay)
                 continue
 
-            modem_type = str(modem.get("modem_type") or "").strip().upper()
+            modem_type = _normalize_modem_type(modem.get("modem_type"))
             if modem_type == "TCP":
                 await self._run_tcp_modem(modem)
                 continue
-            if modem_type == "SERIALL":
+            if modem_type in SUPPORTED_SERIAL_MODEM_TYPES:
                 await self._run_serial_modem(modem)
                 continue
 
             message = f"TNC {modem.get('name') or modem.get('id') or 'unknown'} uses unsupported modem type {modem_type or '-'}."
             self._set_state(status="error", detail=message, modem=modem, error=message)
             log_event("WARNING", "traffic", message)
+            log_event("WARNING", "system", message)
             await self._sleep(self._reconnect_delay)
 
     async def _run_tcp_modem(self, modem: dict[str, Any]) -> None:
@@ -287,6 +297,7 @@ class _TrafficModemRuntime:
             message = f"Serial connection to {device_path} at {baud_rate} baud failed: {exc}"
             self._set_state(status="error", detail=message, modem=modem, error=str(exc))
             log_event("WARNING", "traffic", message)
+            log_event("WARNING", "system", message)
             await self._sleep(self._reconnect_delay)
             return
 
@@ -353,6 +364,8 @@ class _TrafficModemRuntime:
         device_path: str,
         baud_rate: int,
     ) -> None:
+        loop = asyncio.get_running_loop()
+        last_rx_at = loop.time()
         while not self._stop_event.is_set():
             current_modem = self._load_active_modem()
             if current_modem != modem:
@@ -371,12 +384,26 @@ class _TrafficModemRuntime:
                 message = f"Read from serial TNC {device_path} at {baud_rate} baud failed: {exc}"
                 self._set_state(status="error", detail=message, modem=modem, error=str(exc))
                 log_event("WARNING", "traffic", message)
+                log_event("WARNING", "system", message)
                 await self._sleep(self._reconnect_delay)
                 return
 
             if not chunk:
+                silence_seconds = loop.time() - last_rx_at
+                if silence_seconds >= SERIAL_RX_SILENCE_RECONNECT_SECONDS:
+                    timeout_seconds = int(SERIAL_RX_SILENCE_RECONNECT_SECONDS)
+                    message = (
+                        f"No RX data from serial TNC {device_path} at {baud_rate} baud "
+                        f"for {timeout_seconds}s. Forcing reconnect."
+                    )
+                    self._set_state(status="error", detail=message, modem=modem, error=message)
+                    log_event("WARNING", "traffic", message)
+                    log_event("WARNING", "system", message)
+                    await self._sleep(self._reconnect_delay)
+                    return
                 continue
 
+            last_rx_at = loop.time()
             await self._broadcast_proxy_chunk(chunk)
             self._consume_kiss_chunk(chunk)
 
@@ -963,7 +990,7 @@ class _TrafficModemRuntime:
                     created_at,
                     updated_at
                 FROM modems
-                WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+                WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
                 ORDER BY id ASC
                 LIMIT 1
             """
@@ -985,7 +1012,7 @@ class _TrafficModemRuntime:
                     created_at,
                     updated_at
                 FROM modems
-                WHERE id = ? AND enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+                WHERE id = ? AND enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
                 LIMIT 1
             """
             params = (self._modem_id,)
@@ -1154,7 +1181,7 @@ class TrafficMonitorService:
                 created_at,
                 updated_at
             FROM modems
-            WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL')
+            WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
             ORDER BY id ASC
             """
         )
@@ -1165,7 +1192,7 @@ class TrafficMonitorService:
             int(modem["id"]),
             str(modem.get("name") or "").strip(),
             str(modem.get("band") or "").strip(),
-            str(modem.get("modem_type") or "").strip(),
+            _normalize_modem_type(modem.get("modem_type")),
             str(modem.get("device_path") or "").strip(),
             modem.get("baud_rate"),
             int(bool(modem.get("expose_port_enabled"))),

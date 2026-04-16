@@ -64,6 +64,25 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS map_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    url_template TEXT NOT NULL,
+    attribution TEXT NOT NULL DEFAULT '',
+    min_zoom INTEGER NOT NULL DEFAULT 0 CHECK (min_zoom BETWEEN 0 AND 30),
+    max_zoom INTEGER NOT NULL DEFAULT 19 CHECK (max_zoom BETWEEN 0 AND 30),
+    subdomains TEXT NOT NULL DEFAULT '',
+    api_key TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (min_zoom <= max_zoom),
+    CHECK (NOT (enabled = 0 AND is_default = 1))
+);
+
 CREATE TABLE IF NOT EXISTS system_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,
@@ -332,6 +351,7 @@ CREATE TABLE IF NOT EXISTS aprs_objects (
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+    valid_until_utc TEXT,
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -364,6 +384,7 @@ CREATE TABLE IF NOT EXISTS bulletins (
     group_name TEXT,
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+    valid_until_utc TEXT,
     path TEXT,
     message_text TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -546,6 +567,7 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(creat
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_map_sources_enabled_sort ON map_sources(enabled DESC, sort_order ASC, id ASC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
 CREATE INDEX IF NOT EXISTS idx_digi_flows_route_pair ON digi_flows(source_kind, source_ref, target_kind, target_ref);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
@@ -584,6 +606,7 @@ def init_db() -> None:
         wx_columns = {row["name"] for row in connection.execute("PRAGMA table_info(wx_config)").fetchall()}
         object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
+        bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
@@ -858,6 +881,13 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60))
                 """
             )
+        if "valid_until_utc" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN valid_until_utc TEXT
+                """
+            )
         if "state" not in item_columns:
             connection.execute(
                 """
@@ -881,6 +911,22 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60))
                 """
             )
+        if "valid_until_utc" not in bulletin_columns:
+            connection.execute(
+                """
+                ALTER TABLE bulletins
+                ADD COLUMN valid_until_utc TEXT
+                """
+            )
+        connection.execute(
+            """
+            UPDATE modems
+            SET modem_type = 'SERIALL',
+                updated_at = ?
+            WHERE UPPER(TRIM(COALESCE(modem_type, ''))) = 'SERIAL'
+            """,
+            (utc_now(),),
+        )
         connection.execute(
             """
             INSERT INTO station_settings (
@@ -916,6 +962,83 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
             """,
             (utc_now(), utc_now()),
         )
+        connection.execute(
+            """
+            INSERT INTO map_sources (
+                name, url_template, attribution, min_zoom, max_zoom,
+                subdomains, api_key, enabled, is_default, sort_order, notes, created_at, updated_at
+            )
+            SELECT ?, ?, ?, 0, 19, '', '', 1, 1, 0, '', ?, ?
+            WHERE NOT EXISTS (SELECT 1 FROM map_sources)
+            """,
+            (
+                settings.map_tile_source_name,
+                settings.map_tile_url,
+                settings.map_tile_attribution,
+                utc_now(),
+                utc_now(),
+            ),
+        )
+        _normalize_map_sources_table(connection)
+
+
+def _normalize_map_sources_table(connection: sqlite3.Connection) -> None:
+    rows = list(
+        connection.execute(
+            """
+            SELECT id, enabled, is_default
+            FROM map_sources
+            ORDER BY sort_order ASC, id ASC
+            """
+        ).fetchall()
+    )
+    if not rows:
+        return
+
+    now = utc_now()
+    default_rows = [row for row in rows if int(row["is_default"] or 0) == 1]
+    if len(default_rows) > 1:
+        keep_id = int(default_rows[0]["id"])
+        connection.execute(
+            """
+            UPDATE map_sources
+            SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END,
+                updated_at = ?
+            WHERE is_default = 1
+            """,
+            (keep_id, now),
+        )
+    elif len(default_rows) == 0:
+        first_enabled = next((row for row in rows if int(row["enabled"] or 0) == 1), rows[0])
+        keep_id = int(first_enabled["id"])
+        connection.execute(
+            """
+            UPDATE map_sources
+            SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END,
+                enabled = CASE WHEN id = ? THEN 1 ELSE enabled END,
+                updated_at = ?
+            """,
+            (keep_id, keep_id, now),
+        )
+    else:
+        default_id = int(default_rows[0]["id"])
+        if int(default_rows[0]["enabled"] or 0) != 1:
+            connection.execute(
+                """
+                UPDATE map_sources
+                SET enabled = 1,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, default_id),
+            )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_map_sources_single_default
+            ON map_sources(is_default)
+            WHERE is_default = 1
+        """
+    )
 
 
 def _migrate_system_jobs_table(connection: sqlite3.Connection) -> None:
