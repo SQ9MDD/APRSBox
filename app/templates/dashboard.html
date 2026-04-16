@@ -97,8 +97,8 @@
                 </div>
                 <div class="dashboard-checks">
                     {% for item in dashboard_home.checks %}
-                    <div class="dashboard-check dashboard-check-{{ item.state }}">
-                        <div>
+                    <div class="dashboard-check dashboard-check-{{ item.state }}{% if item.show_state_badge is defined and not item.show_state_badge %} dashboard-check-no-summary-badge{% endif %}">
+                        <div class="dashboard-check-body">
                             <strong>{{ t(item.label) }}</strong>
                             {% if item.entries %}
                             <ul class="dashboard-check-list">

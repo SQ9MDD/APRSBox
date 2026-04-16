@@ -712,6 +712,14 @@ body {
     background: var(--panel-alt);
 }
 
+.dashboard-check-body {
+    min-width: 0;
+}
+
+.dashboard-check-no-summary-badge .dashboard-check-body {
+    width: 100%;
+}
+
 .dashboard-check p {
     margin: 0.12rem 0 0;
     color: var(--muted);
