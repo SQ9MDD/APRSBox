@@ -842,6 +842,55 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             response_job = next(job for job in jobs if '"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"' in str(job["payload_json"]))
             self.assertGreater(str(response_job["scheduled_at"]), str(ack_now_job["scheduled_at"]))
 
+    def test_duplicate_numbered_query_acknowledges_retry_without_second_auto_response(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SQ9MDD-7>APK005,RFONLY::SQ9MDD-4 :?VER{80"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:05+00:00")
+
+            rows = fetch_all(
+                """
+                SELECT direction, message_text, message_number
+                FROM aprs_messages
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["direction"], "rx")
+            self.assertEqual(rows[0]["message_text"], "?VER")
+            self.assertEqual(rows[0]["message_number"], "80")
+            self.assertEqual(rows[1]["direction"], "tx")
+            self.assertEqual(rows[1]["message_text"], f"APRSBox {get_version()}")
+
+            response_jobs = fetch_all(
+                """
+                SELECT id
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"APRSBox%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(response_jobs), 1)
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack80"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 3)
+            payloads = [str(row["payload_json"]) for row in ack_jobs]
+            self.assertTrue(any('"trigger":"ack-now"' in payload for payload in payloads))
+            self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
+            self.assertTrue(any('"trigger":"ack-duplicate"' in payload for payload in payloads))
+
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
@@ -1185,6 +1234,29 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             view = get_messages_page_data()
             self.assertEqual(len(view["conversations"]), 1)
             self.assertEqual(view["conversations"][0]["callsign"], "DL1XYZ-9")
+
+    def test_process_incoming_tnc2_message_ignores_invalid_sender_callsign(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            raw_line = "BAD*SRC>APRS::SQ9MDD-4 :Hello{AA"
+            with patch("app.services.messages.log_event") as log_event_mock:
+                process_incoming_tnc2_message(
+                    raw_line,
+                    timestamp="2026-01-01T00:00:00+00:00",
+                )
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert row is not None
+            self.assertEqual(int(row["total"]), 0)
+            self.assertGreaterEqual(log_event_mock.call_count, 1)
+            logged_messages = [str(call.args[2]) for call in log_event_mock.call_args_list if len(call.args) >= 3]
+            matching_logs = [
+                message for message in logged_messages if "invalid sender callsign" in message and "BAD*SRC" in message
+            ]
+            self.assertTrue(matching_logs)
+            self.assertTrue(any(raw_line in message for message in matching_logs))
 
 
 if __name__ == "__main__":

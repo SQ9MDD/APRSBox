@@ -39,7 +39,7 @@ MAX_TX_ATTEMPTS = 1 + len(RETRY_DELAYS_SECONDS)
 FINAL_ACK_WAIT_SECONDS = 30
 HEARD_FRESH_SECONDS = 10 * 60
 HEARD_WARN_SECONDS = 30 * 60
-QUERY_RESPONSE_DELAY_SECONDS = 3
+QUERY_RESPONSE_DELAY_SECONDS = 5
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -612,7 +612,15 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
     if not addressee or not text_field:
         return
 
-    sender = normalize_aprs_destination_callsign(parsed["source"])
+    try:
+        sender = normalize_aprs_destination_callsign(parsed["source"])
+    except ValueError:
+        _log_invalid_message_frame(
+            reason="invalid sender callsign",
+            source=str(parsed.get("source") or ""),
+            line=line,
+        )
+        return
     if addressee.upper().startswith("BLN"):
         store_incoming_bulletin(
             sender=sender,
@@ -634,7 +642,7 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         query_text, query_number = _parse_query_text(text_field)
         if not query_text:
             return
-        store_incoming_query(
+        is_new_query = store_incoming_query(
             sender=sender,
             addressee=addressee.upper(),
             query_text=query_text,
@@ -642,7 +650,8 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
             path=parsed["path"],
             timestamp=received_at,
         )
-        _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
+        if is_new_query:
+            _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
         return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
@@ -951,7 +960,7 @@ def store_incoming_query(
     query_number: str | None,
     path: str,
     timestamp: str,
-) -> None:
+) -> bool:
     conversation = create_or_update_conversation(sender, path=path)
     existing = None
     if query_number:
@@ -969,7 +978,9 @@ def store_incoming_query(
             (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, query_number),
         )
     if existing is not None:
-        return
+        station_settings = _get_station_settings()
+        enqueue_ack_job(sender, query_number, station_settings, trigger="ack-duplicate")
+        return False
     with get_connection() as connection:
         connection.execute(
             """
@@ -995,7 +1006,7 @@ def store_incoming_query(
         )
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
     if not query_number:
-        return
+        return True
     station_settings = _get_station_settings()
     enqueue_ack_job(sender, query_number, station_settings, trigger="ack-now")
     enqueue_ack_job(
@@ -1005,6 +1016,7 @@ def store_incoming_query(
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
     )
+    return True
 
 
 def store_incoming_bulletin(
@@ -1206,7 +1218,11 @@ def _parse_effective_incoming_tnc2_line(line: str, *, log_invalid_third_party: b
         return embedded
     if log_invalid_third_party:
         outer_source = str(parsed.get("source") or "").strip() or "unknown"
-        log_event("WARNING", "messages", f"Ignored malformed third-party APRS message frame from {outer_source}.")
+        _log_invalid_message_frame(
+            reason="malformed third-party APRS message frame",
+            source=outer_source,
+            line=line,
+        )
     return None
 
 
@@ -1386,3 +1402,24 @@ def _safe_messages_warning(message: str) -> None:
     except Exception:
         # Skip secondary logging failures so message UI can still render.
         return
+
+
+def _frame_log_snippet(line: str, *, limit: int = 220) -> str:
+    normalized = str(line or "").replace("\r", " ").replace("\n", " ").strip()
+    if not normalized:
+        return "<empty>"
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit]}..."
+
+
+def _log_invalid_message_frame(*, reason: str, source: str, line: str) -> None:
+    normalized_reason = str(reason or "").strip() or "invalid APRS message frame"
+    normalized_source = str(source or "").strip() or "unknown"
+    snippet = _frame_log_snippet(line)
+    message = (
+        f"Ignored APRS message frame ({normalized_reason}); "
+        f"source='{normalized_source}'; frame='{snippet}'"
+    )
+    log_event("WARNING", "messages", message)
+    log_event("WARNING", "system", message)

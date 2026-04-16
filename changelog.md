@@ -6,11 +6,13 @@
 - Dodano automatyczne przywracanie pozycji przewinięcia na stronie `WX` po operacjach `POST` (zapis konfiguracji/mapowań/źródeł, testy, odświeżenie, wysyłka), tak aby widok wracał do ostatnio edytowanego obszaru.
 
 ### Changed
-- Brak zmian.
+- Doprecyzowano logowanie wadliwych ramek APRS w module `messages`: wpis zawiera teraz powód odrzucenia, `source` oraz fragment surowej ramki, aby łatwiej diagnozować błędy danych wejściowych.
 
 ### Fixed
 - Wzmocniono odporność `Messages` na błędy SQLite podczas renderowania widoku (`/messages`) i pobierania statusu nieprzeczytanych: zamiast `500` zwracany jest bezpieczny fallback.
 - Dodano defensywne logowanie ostrzeżeń w module `messages`, aby wtórny błąd zapisu logu nie przerywał renderowania strony.
+- Naprawiono scenariusz, w którym pojedyncza ramka APRS z niepoprawnym `source` mogła wywołać wyjątek i zrestartować pętlę `traffic runtime`; takie ramki są teraz jawnie odrzucane i logowane.
+- Naprawiono scenariusz, w którym historyczna ramka `TNC2` z niepoprawnym `source` mogła powodować `Internal Server Error` przy wejściu na `Messages`; rekord jest teraz pomijany podczas budowy `heard snapshot`.
 
 ### Removed
 - Brak zmian.
