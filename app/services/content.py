@@ -1093,6 +1093,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "state": interface_check_state,
             "value": "No interfaces configured" if not interfaces else ("Disabled" if not enabled_interfaces else ""),
             "entries": interface_entries,
+            "show_state_badge": False,
             "blocks": not enabled_interfaces,
         },
         {
@@ -1126,6 +1127,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
                     "tone": "ok" if igate_enabled else "warn",
                 },
             ],
+            "show_state_badge": False,
             "blocks": False,
         },
     ]

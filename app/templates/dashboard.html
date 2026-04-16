@@ -116,6 +116,7 @@
                             <p class="dashboard-check-note">{{ t(item.note) }}</p>
                             {% endif %}
                         </div>
+                        {% if item.show_state_badge is not defined or item.show_state_badge %}
                         <span class="status-pill {% if item.state == 'ok' %}status-running{% elif item.state == 'error' %}status-stopped{% else %}status-unknown{% endif %}">
                             {% if item.state == "ok" %}
                             {{ t("OK") }}
@@ -125,6 +126,7 @@
                             {{ t("Needs attention") }}
                             {% endif %}
                         </span>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
