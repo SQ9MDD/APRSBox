@@ -9,10 +9,13 @@
 ### Changed
 - Rozszerzono kompatybilność typów modemu o `SERIAL` i `SERIALL` w runtime oraz walidacji GUI.
 - Rozszerzono filtry aktywnych modemów (`TCP`, `SERIALL`, `SERIAL`) w ścieżkach monitoringu i statusów.
+- Ujednolicono tytuł kart przeglądarki w całym GUI do formatu `APRSBox: ZNAK-SSID` (z fallbackiem `N0CALL`; SSID dodawane tylko gdy `> 0`).
+- W `Dashboard -> Gotowość stacji` usunięto prawe badge podsumowania dla sekcji `Aktywne interfejsy` i `Włączone usługi`, a badge statusów wpisów w tych sekcjach dosunięto do prawej krawędzi bloku.
 
 ### Fixed
 - Dodano migrację normalizującą stare rekordy `modems.modem_type='SERIAL'` do `SERIALL`, aby po aktualizacji nie tracić aktywnego TNC.
 - Dla TX dodano czytelne logowanie przypadku, gdy wysyłka przez monitor ruchu się nie powiedzie i używany jest bezpośredni fallback.
+- W `Logs` poprawiono czytelność długich komunikatów: kolumna `Message` zawija teraz tekst i długie URL zamiast obcinać je w jednej linii.
 
 ### Removed
 - Brak zmian.
