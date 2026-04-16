@@ -1163,6 +1163,29 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             with patch("app.services.messages.fetch_all", side_effect=sqlite3.OperationalError("locked")):
                 self.assertEqual(get_unread_inbox_count(), 0)
 
+    def test_messages_page_data_ignores_invalid_heard_source_callsign(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="QSL", path="")
+
+            execute(
+                """
+                INSERT INTO traffic_frames(source, format, line, port, command, length, hex, created_at)
+                VALUES (?, 'TNC2', ?, '', '', ?, '', ?)
+                """,
+                (
+                    "BAD*SRC",
+                    "BAD*SRC>APRS:>status",
+                    len("BAD*SRC>APRS:>status"),
+                    "2026-01-01T00:00:00+00:00",
+                ),
+            )
+
+            view = get_messages_page_data()
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(view["conversations"][0]["callsign"], "DL1XYZ-9")
+
 
 if __name__ == "__main__":
     unittest.main()

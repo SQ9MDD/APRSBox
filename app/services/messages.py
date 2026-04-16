@@ -1254,7 +1254,11 @@ def _heard_station_lookup() -> dict[str, dict[str, Any]]:
         parsed = _parse_effective_incoming_tnc2_line(str(row["line"] or ""))
         if parsed is None:
             continue
-        source = normalize_aprs_destination_callsign(parsed["source"])
+        try:
+            source = normalize_aprs_destination_callsign(parsed["source"])
+        except ValueError:
+            # Ignore malformed source callsigns in historical traffic rows.
+            continue
         if source.casefold() in snapshots:
             continue
         base_callsign, ssid = split_callsign_ssid(source)
