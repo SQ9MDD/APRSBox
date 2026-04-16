@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.5.0 - 16.04.2026
+
+### Stable release
+- Wersja została wydana do linii stable jako podsumowanie zmian rozwijanych na gałęzi `dev`.
+
+### Included development snapshots
+- 1.4.70.DEV
+- 1.4.71.DEV
+- 1.4.72.DEV
+- 1.4.73.DEV
+
+### Highlights
+- Rozszerzono i uporządkowano konfigurację map: źródła kafelków są zarządzane w `Settings`, a mapa bazowa działa na konfiguracji zapisanej w DB.
+- Dodano obsługę daty ważności (`Valid until (UTC)`) dla obiektów i biuletynów wraz z automatycznym wyłączaniem rekordów po wygaśnięciu.
+- Wzmocniono niezawodność obsługi TNC serial: watchdog ciszy RX (150s), kompatybilność `SERIAL/SERIALL` i bezpieczny fallback TX.
+- Uporządkowano logowanie i czytelność GUI: krytyczne zdarzenia TNC trafiają do logu głównego, a długie komunikaty w `Logs` zawijają się poprawnie.
+- Dopracowano dashboard `Gotowość stacji` (spójniejsze badge/statusy) oraz ujednolicono tytuł kart przeglądarki do formatu `APRSBox: ZNAK-SSID` (fallback `N0CALL`).
+
 ## 1.4.73.DEV - 16.04.2026
 
 ### Added
