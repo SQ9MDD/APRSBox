@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -239,15 +240,26 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
 
 
 def get_messages_page_data() -> dict[str, Any]:
-    expire_direct_message_timeouts()
-    heard_by_key = _heard_station_lookup()
-    conversation_rows = fetch_all(
-        """
-        SELECT c.id, c.remote_callsign, c.remote_ssid, c.path, c.created_at, c.updated_at
-        FROM aprs_message_conversations c
-        ORDER BY c.updated_at DESC, c.id DESC
-        """
-    )
+    try:
+        expire_direct_message_timeouts()
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to expire direct message timeouts: {exc}")
+    try:
+        heard_by_key = _heard_station_lookup()
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load heard station snapshot: {exc}")
+        heard_by_key = {}
+    try:
+        conversation_rows = fetch_all(
+            """
+            SELECT c.id, c.remote_callsign, c.remote_ssid, c.path, c.created_at, c.updated_at
+            FROM aprs_message_conversations c
+            ORDER BY c.updated_at DESC, c.id DESC
+            """
+        )
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load APRS message conversations: {exc}")
+        conversation_rows = []
     conversations: list[dict[str, Any]] = []
     active_conversation_id: str | None = None
     local_sender = _local_station_identity()
@@ -315,16 +327,20 @@ def get_messages_page_data() -> dict[str, Any]:
 
 
 def get_unread_inbox_count() -> int:
-    rows = fetch_all(
-        """
-        SELECT c.remote_callsign, c.remote_ssid, COUNT(m.id) AS unread_count
-        FROM aprs_message_conversations c
-        JOIN aprs_messages m ON m.conversation_id = c.id
-        WHERE m.direction = ? AND m.is_unread = 1
-        GROUP BY c.id, c.remote_callsign, c.remote_ssid
-        """,
-        (MESSAGE_DIRECTION_RX,),
-    )
+    try:
+        rows = fetch_all(
+            """
+            SELECT c.remote_callsign, c.remote_ssid, COUNT(m.id) AS unread_count
+            FROM aprs_message_conversations c
+            JOIN aprs_messages m ON m.conversation_id = c.id
+            WHERE m.direction = ? AND m.is_unread = 1
+            GROUP BY c.id, c.remote_callsign, c.remote_ssid
+            """,
+            (MESSAGE_DIRECTION_RX,),
+        )
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load unread inbox count: {exc}")
+        return 0
     local_sender = _local_station_identity()
     unread_total = 0
     for row in rows:
@@ -1358,3 +1374,11 @@ def _callsign_identity_matches(left: str, right: str) -> bool:
     if not left_canonical or not right_canonical:
         return False
     return left_canonical == right_canonical
+
+
+def _safe_messages_warning(message: str) -> None:
+    try:
+        log_event("WARNING", "messages", str(message or "").strip())
+    except Exception:
+        # Skip secondary logging failures so message UI can still render.
+        return

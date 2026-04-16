@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -1123,6 +1124,44 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             assert queued_job is not None
             self.assertEqual(queued_job["status"], "queued")
+
+    def test_messages_page_data_ignores_timeout_expire_db_error(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="QSL", path="")
+
+            with patch("app.services.messages.expire_direct_message_timeouts", side_effect=sqlite3.OperationalError("readonly")):
+                view = get_messages_page_data()
+
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(view["conversations"][0]["callsign"], "DL1XYZ-9")
+
+    def test_messages_page_data_returns_empty_when_conversation_query_fails(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="QSL", path="")
+
+            from app.services import messages as messages_service
+
+            original_fetch_all = messages_service.fetch_all
+
+            def failing_fetch_all(sql: str, params: tuple[object, ...] = ()) -> list[object]:
+                if "FROM aprs_message_conversations c" in sql:
+                    raise sqlite3.OperationalError("no such table: aprs_message_conversations")
+                return original_fetch_all(sql, params)
+
+            with patch("app.services.messages.fetch_all", side_effect=failing_fetch_all):
+                view = get_messages_page_data()
+
+            self.assertEqual(view["conversations"], [])
+            self.assertIsNone(view["active_conversation_id"])
+
+    def test_unread_inbox_count_returns_zero_when_query_fails(self) -> None:
+        with temporary_database():
+            with patch("app.services.messages.fetch_all", side_effect=sqlite3.OperationalError("locked")):
+                self.assertEqual(get_unread_inbox_count(), 0)
 
 
 if __name__ == "__main__":

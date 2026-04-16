@@ -577,6 +577,119 @@
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
+        const rootPath = String({{ request.scope.root_path|tojson }} || "");
+        const scrollStateStorageKey = "aprsbox-wx-scroll-restore-v1";
+
+        const isWxPath = (pathname) => {
+            const normalizedPath = String(pathname || "");
+            const wxRootPath = `${rootPath}/wx`;
+            return normalizedPath === wxRootPath || normalizedPath.startsWith(`${wxRootPath}/`);
+        };
+
+        const persistScrollState = (form, submitter) => {
+            if (!(form instanceof HTMLFormElement)) {
+                return;
+            }
+            if (String(form.method || "get").toLowerCase() !== "post") {
+                return;
+            }
+            if (!isWxPath(window.location.pathname)) {
+                return;
+            }
+
+            const panels = Array.from(document.querySelectorAll("section.panel"));
+            let anchor = null;
+            if (submitter instanceof HTMLElement && form.contains(submitter)) {
+                anchor = submitter;
+            } else if (document.activeElement instanceof HTMLElement && form.contains(document.activeElement)) {
+                anchor = document.activeElement;
+            } else {
+                anchor = form;
+            }
+
+            const panel = anchor.closest("section.panel") || form.closest("section.panel");
+            const payload = {
+                savedAtMs: Date.now(),
+                scrollY: Number(window.scrollY || 0),
+            };
+
+            if (panel instanceof HTMLElement) {
+                const panelIndex = panels.indexOf(panel);
+                if (panelIndex >= 0) {
+                    payload.panelIndex = panelIndex;
+                }
+                const panelTop = panel.getBoundingClientRect().top + Number(window.scrollY || 0);
+                payload.offsetWithinPanel = Number(window.scrollY || 0) - panelTop;
+            }
+
+            try {
+                window.sessionStorage.setItem(scrollStateStorageKey, JSON.stringify(payload));
+            } catch (_error) {
+                // Ignore storage failures.
+            }
+        };
+
+        const restoreScrollState = () => {
+            if (!isWxPath(window.location.pathname) || window.location.hash) {
+                return;
+            }
+
+            let parsed = null;
+            try {
+                const raw = window.sessionStorage.getItem(scrollStateStorageKey);
+                parsed = raw ? JSON.parse(raw) : null;
+            } catch (_error) {
+                parsed = null;
+            }
+            if (!parsed || typeof parsed !== "object") {
+                return;
+            }
+
+            const ageMs = Date.now() - Number(parsed.savedAtMs || 0);
+            if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 120000) {
+                window.sessionStorage.removeItem(scrollStateStorageKey);
+                return;
+            }
+
+            let targetY = Number(parsed.scrollY || 0);
+            const panelIndex = Number(parsed.panelIndex);
+            const offsetWithinPanel = Number(parsed.offsetWithinPanel || 0);
+            if (Number.isInteger(panelIndex) && panelIndex >= 0) {
+                const panels = Array.from(document.querySelectorAll("section.panel"));
+                const panel = panels[panelIndex];
+                if (panel instanceof HTMLElement) {
+                    const panelTop = panel.getBoundingClientRect().top + Number(window.scrollY || 0);
+                    targetY = panelTop + offsetWithinPanel;
+                }
+            }
+
+            const resolvedTargetY = Math.max(0, Math.round(Number.isFinite(targetY) ? targetY : 0));
+            window.scrollTo(0, resolvedTargetY);
+            window.setTimeout(() => {
+                window.scrollTo(0, resolvedTargetY);
+            }, 40);
+
+            window.sessionStorage.removeItem(scrollStateStorageKey);
+        };
+
+        document.addEventListener(
+            "submit",
+            (event) => {
+                if (!(event.target instanceof HTMLFormElement)) {
+                    return;
+                }
+                const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+                persistScrollState(event.target, submitter);
+            },
+            true
+        );
+
+        window.requestAnimationFrame(() => {
+            restoreScrollState();
+        });
+    })();
+
+    (() => {
         const sourceType = document.getElementById("wx-source-type");
         const authType = document.getElementById("wx-auth-type");
         const tokenField = document.querySelector(".wx-auth-field-token");

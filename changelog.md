@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.5.4.dev - 16.04.2026
+
+### Added
+- Dodano automatyczne przywracanie pozycji przewinięcia na stronie `WX` po operacjach `POST` (zapis konfiguracji/mapowań/źródeł, testy, odświeżenie, wysyłka), tak aby widok wracał do ostatnio edytowanego obszaru.
+
+### Changed
+- Brak zmian.
+
+### Fixed
+- Wzmocniono odporność `Messages` na błędy SQLite podczas renderowania widoku (`/messages`) i pobierania statusu nieprzeczytanych: zamiast `500` zwracany jest bezpieczny fallback.
+- Dodano defensywne logowanie ostrzeżeń w module `messages`, aby wtórny błąd zapisu logu nie przerywał renderowania strony.
+
+### Removed
+- Brak zmian.
+
+## 1.5.3.dev - 16.04.2026
+
+### Added
+- Dodano mechanizm autorecovery runtime TNC: manager odtwarza runtime modemu, jeżeli jego task zakończył się nieoczekiwanie.
+- Dodano pomocnicze etykiety runtime/modemu w logach diagnostycznych, aby łatwiej identyfikować który interfejs wszedł w błąd/reconnect.
+
+### Changed
+- Wzmocniono obsługę wyjątków w pętlach monitora ruchu i runtime TNC: niespodziewane błędy nie zatrzymują już trwale tasków backgroundowych, tylko przechodzą do kontrolowanego retry po `reconnect_delay`.
+- Uporządkowano ścieżkę zatrzymania (`stop`) runtime i managera tak, aby cleanup był wykonywany także wtedy, gdy task wcześniej zakończył się wyjątkiem.
+
+### Fixed
+- Naprawiono scenariusz, w którym błąd TX (`OSError`) nie wymuszał reconnectu i system mógł pozostać logicznie „connected” mimo uszkodzonego linku do TNC.
+- Przy błędzie TX runtime zamyka teraz aktywny writer/FD, czyści bufory KISS i przechodzi w stan błędu wymuszający zdrowe odtworzenie połączenia.
+- Usunięto ryzyko trwałego zaniku RX/TX po awarii pojedynczego tasku runtime bez automatycznego restartu.
+
+### Removed
+- Brak zmian.
+
 ## 1.5.1.dev - 16.04.2026
 
 ### Added
