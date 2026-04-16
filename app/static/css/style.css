@@ -1875,7 +1875,12 @@ select:focus-visible,
 }
 
 .logs-table td:nth-child(5) {
-    white-space: nowrap;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
 }
 
 .digi-flow-debug-table {
