@@ -648,8 +648,6 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
     message_text = suffix_match.group("text") or ""
     message_number = _normalize_message_number(suffix_match.group("number"))
-    if not message_number:
-        return
     store_incoming_message(
         sender=sender,
         addressee=addressee.upper(),
@@ -871,24 +869,26 @@ def store_incoming_message(
     sender: str,
     addressee: str,
     message_text: str,
-    message_number: str,
+    message_number: str | None,
     path: str,
     timestamp: str,
 ) -> None:
     conversation = create_or_update_conversation(sender)
-    existing = fetch_one(
-        """
-        SELECT id
-        FROM aprs_messages
-        WHERE conversation_id = ?
-          AND direction = ?
-          AND sender = ?
-          AND message_number = ?
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, message_number),
-    )
+    existing = None
+    if message_number:
+        existing = fetch_one(
+            """
+            SELECT id
+            FROM aprs_messages
+            WHERE conversation_id = ?
+              AND direction = ?
+              AND sender = ?
+              AND message_number = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, message_number),
+        )
     if existing is None:
         with get_connection() as connection:
             connection.execute(
@@ -914,6 +914,8 @@ def store_incoming_message(
                 ),
             )
         log_event("INFO", "messages", f"Stored incoming APRS message from {sender} to {addressee}")
+    if not message_number:
+        return
     station_settings = _get_station_settings()
     enqueue_ack_job(sender, message_number, station_settings, trigger="ack-now")
     enqueue_ack_job(

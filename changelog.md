@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.1.dev - 16.04.2026
+
+### Added
+- Dodano test regresyjny dla przychodzącej wiadomości APRS bez numeru (`{NN}`), aby potwierdzić zapis do rozmowy i brak generowania ACK dla nienumerowanej ramki.
+
+### Changed
+- Brak zmian.
+
+### Fixed
+- W `Messages` naprawiono obsługę przychodzących wiadomości APRS bez numeru wiadomości: są teraz zapisywane i widoczne w panelu rozmów zamiast być ignorowane.
+- Dla nienumerowanych wiadomości przychodzących nie jest wysyłany `ACK`, ponieważ protokół ACK wymaga numeru referencyjnego.
+
+### Removed
+- Brak zmian.
+
 ## 1.5.0 - 16.04.2026
 
 ### Stable release

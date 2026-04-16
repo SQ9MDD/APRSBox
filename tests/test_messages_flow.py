@@ -640,6 +640,43 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(ack_jobs), 2)
 
+    def test_incoming_unnumbered_message_is_visible_without_ack_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id, ssid="15"))
+
+            inbound_line = "SQ9SIM-3>APBOX0,SP9INZ-10*::SQ9MDD-15:Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-04-16T15:02:00+00:00")
+
+            row = fetch_one(
+                """
+                SELECT m.direction, m.sender, m.addressee, m.message_text, m.message_number, m.status,
+                       c.remote_callsign, c.remote_ssid
+                FROM aprs_messages m
+                JOIN aprs_message_conversations c ON c.id = m.conversation_id
+                ORDER BY m.id DESC
+                LIMIT 1
+                """
+            )
+            assert row is not None
+            self.assertEqual(row["direction"], "rx")
+            self.assertEqual(row["sender"], "SQ9SIM-3")
+            self.assertEqual(row["addressee"], "SQ9MDD-15")
+            self.assertEqual(row["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(row["message_number"], None)
+            self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
+            self.assertEqual(row["remote_callsign"], "SQ9SIM")
+            self.assertEqual(row["remote_ssid"], "3")
+
+            jobs = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")
+            assert jobs is not None
+            self.assertEqual(int(jobs["total"]), 0)
+
+            view = get_messages_page_data()
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(view["conversations"][0]["callsign"], "SQ9SIM-3")
+            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
     def test_incoming_message_to_other_local_ssid_is_ignored(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
