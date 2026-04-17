@@ -58,6 +58,8 @@ def enqueue_beacon_job(
     longitude = _parse_coordinate(station_settings.get("longitude"))
     if latitude is None or longitude is None:
         return False, "Latitude and longitude must be valid decimal coordinates."
+    symbol_table = _normalize_symbol_table(station_settings.get("symbol_table"))
+    symbol_overlay = _normalize_symbol_overlay(station_settings.get("symbol_overlay"), symbol_table=symbol_table)
 
     payload = {
         "aprs_message_id": aprs_message_id,
@@ -65,8 +67,9 @@ def enqueue_beacon_job(
         "ssid": ssid,
         "latitude": latitude,
         "longitude": longitude,
-        "symbol_table": _normalize_symbol_table(station_settings.get("symbol_table")),
+        "symbol_table": symbol_table,
         "symbol_code": _normalize_symbol_code(station_settings.get("symbol_code")),
+        "symbol_overlay": symbol_overlay,
         "beacon_comment": str(station_settings.get("beacon_comment") or "").strip(),
         "beacon_path": str(station_settings.get("beacon_path") or "").strip(),
         "trigger": str(trigger or "manual").strip() or "manual",
@@ -834,9 +837,11 @@ def _build_beacon_info(payload: dict[str, Any]) -> str:
     latitude = _format_aprs_latitude(float(payload["latitude"]))
     longitude = _format_aprs_longitude(float(payload["longitude"]))
     symbol_table = _normalize_symbol_table(payload.get("symbol_table"))
+    symbol_overlay = _normalize_symbol_overlay(payload.get("symbol_overlay"), symbol_table=symbol_table)
+    symbol_table_for_frame = symbol_overlay or symbol_table
     symbol_code = _normalize_symbol_code(payload.get("symbol_code"))
     comment = str(payload.get("beacon_comment") or "").strip()
-    return f"={latitude}{symbol_table}{longitude}{symbol_code}{comment}"
+    return f"={latitude}{symbol_table_for_frame}{longitude}{symbol_code}{comment}"
 
 
 def _build_object_info(payload: dict[str, Any]) -> str:

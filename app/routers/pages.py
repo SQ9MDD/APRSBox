@@ -340,6 +340,11 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
             {"value": "/", "label": "Primary (/)"},
             {"value": "\\", "label": "Alternate (\\)"},
         ],
+        "symbol_overlay_options": (
+            [{"value": "", "label": "None"}]
+            + [{"value": str(value), "label": str(value)} for value in range(10)]
+            + [{"value": chr(code), "label": chr(code)} for code in range(ord("A"), ord("Z") + 1)]
+        ),
         "symbol_code_options": [
             {
                 "value": chr(code),
@@ -2096,6 +2101,7 @@ def station_update(
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
+    symbol_overlay: str = Form(""),
     default_units: str | None = Form(None),
     tx_enabled: str | None = Form(None),
 ) -> object:
@@ -2115,6 +2121,7 @@ def station_update(
         "longitude": longitude.strip(),
         "symbol_table": symbol_table.strip(),
         "symbol_code": symbol_code.strip(),
+        "symbol_overlay": symbol_overlay.strip(),
         "default_units": default_units.strip() if default_units is not None else current_default_units,
         "tx_enabled": tx_enabled,
     }
@@ -2143,6 +2150,7 @@ def station_send_beacon(
     longitude: str = Form(""),
     symbol_table: str = Form("/"),
     symbol_code: str = Form(">"),
+    symbol_overlay: str = Form(""),
     default_units: str | None = Form(None),
     tx_enabled: str | None = Form(None),
 ) -> object:
@@ -2162,6 +2170,7 @@ def station_send_beacon(
         "longitude": longitude.strip(),
         "symbol_table": symbol_table.strip(),
         "symbol_code": symbol_code.strip(),
+        "symbol_overlay": symbol_overlay.strip(),
         "default_units": default_units.strip() if default_units is not None else current_default_units,
         "tx_enabled": tx_enabled,
     }

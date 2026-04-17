@@ -199,6 +199,7 @@ def get_station_settings() -> dict[str, Any]:
     result.setdefault("status_enabled", 0)
     result.setdefault("status_text", "")
     result.setdefault("status_interval_minutes", 30)
+    result.setdefault("symbol_overlay", None)
     return result
 
 
@@ -244,6 +245,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
                 longitude = :longitude,
                 symbol_table = :symbol_table,
                 symbol_code = :symbol_code,
+                symbol_overlay = :symbol_overlay,
                 default_units = :default_units,
                 tx_enabled = :tx_enabled,
                 updated_at = :updated_at
@@ -300,6 +302,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
     symbol_code = str(payload.get("symbol_code", ">") or ">").strip()[:1]
     if len(symbol_code) != 1 or not (33 <= ord(symbol_code) <= 126):
         symbol_code = ">"
+    symbol_overlay = _normalize_station_symbol_overlay_value(payload.get("symbol_overlay"), symbol_table=symbol_table)
     return {
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
@@ -314,10 +317,20 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "longitude": payload.get("longitude", ""),
         "symbol_table": symbol_table,
         "symbol_code": symbol_code,
+        "symbol_overlay": symbol_overlay,
         "default_units": default_units,
         "tx_enabled": int(bool(payload.get("tx_enabled"))),
         "updated_at": utc_now(),
     }
+
+
+def _normalize_station_symbol_overlay_value(value: Any, *, symbol_table: str) -> str | None:
+    if symbol_table != "\\":
+        return None
+    text = str(value or "").strip().upper()
+    if len(text) == 1 and ("0" <= text <= "9" or "A" <= text <= "Z"):
+        return text
+    return None
 
 
 def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:

@@ -214,6 +214,14 @@
                             {% endfor %}
                         </select>
                     </label>
+                    <label>
+                        <span>{{ t("Overlay") }}</span>
+                        <select name="symbol_overlay" id="station-symbol-overlay" {% if station.symbol_table != '\\' %}disabled{% endif %}>
+                            {% for option in symbol_overlay_options %}
+                            <option value="{{ option.value }}" {% if (station.symbol_overlay or '') == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
                     <label class="station-symbol-field">
                         <span>{{ t("Symbol Code") }}</span>
                         <div class="station-symbol-picker">
@@ -396,6 +404,7 @@
             <dt>{{ t("Latitude") }}</dt><dd>{{ station.latitude }}</dd>
             <dt>{{ t("Longitude") }}</dt><dd>{{ station.longitude }}</dd>
             <dt>{{ t("Symbol") }}</dt><dd>{{ station.symbol_table }}{{ station.symbol_code }}</dd>
+            <dt>{{ t("Overlay") }}</dt><dd>{{ station.symbol_overlay or '-' }}</dd>
             <dt>{{ t("TX Enabled") }}</dt><dd>{{ station.tx_enabled }}</dd>
         </dl>
         {% endif %}
@@ -456,6 +465,7 @@
     (() => {
         const initSymbolPicker = () => {
             const symbolTable = document.getElementById("station-symbol-table");
+            const symbolOverlay = document.getElementById("station-symbol-overlay");
             const symbolCode = document.getElementById("station-symbol-code");
             const symbolDropdown = document.getElementById("station-symbol-dropdown");
             const symbolTrigger = document.getElementById("station-symbol-trigger");
@@ -503,6 +513,17 @@
                 }
             };
 
+            const syncOverlay = () => {
+                if (!(symbolOverlay instanceof HTMLSelectElement)) {
+                    return;
+                }
+                const isAlternateTable = symbolTable.value === "\\";
+                if (!isAlternateTable) {
+                    symbolOverlay.value = "";
+                }
+                symbolOverlay.disabled = !isAlternateTable;
+            };
+
             symbolTrigger.addEventListener("click", () => {
                 if (symbolDropdown.classList.contains("open")) {
                     closeMenu();
@@ -519,7 +540,10 @@
                 });
             });
 
-            symbolTable.addEventListener("change", syncPreview);
+            symbolTable.addEventListener("change", () => {
+                syncPreview();
+                syncOverlay();
+            });
 
             document.addEventListener("click", (event) => {
                 if (!symbolDropdown.contains(event.target)) {
@@ -534,6 +558,7 @@
             });
 
             syncPreview();
+            syncOverlay();
         };
 
         const initLengthCounters = () => {

@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS station_settings (
     longitude TEXT,
     symbol_table TEXT,
     symbol_code TEXT,
+    symbol_overlay TEXT,
     default_units TEXT NOT NULL DEFAULT 'metric' CHECK (default_units IN ('metric', 'imperial')),
     tx_enabled INTEGER NOT NULL DEFAULT 0 CHECK (tx_enabled IN (0, 1)),
     updated_at TEXT NOT NULL
@@ -677,6 +678,13 @@ def init_db() -> None:
                 ADD COLUMN beacon_interface_id INTEGER
                 """
             )
+        if "symbol_overlay" not in station_columns:
+            connection.execute(
+                """
+                ALTER TABLE station_settings
+                ADD COLUMN symbol_overlay TEXT
+                """
+            )
         if "beacon_interface_id" not in wx_columns:
             connection.execute(
                 """
@@ -976,9 +984,9 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
             INSERT INTO station_settings (
                 id, callsign, ssid, beacon_interface_id, beacon_comment, beacon_interval_minutes, beacon_path,
                 status_enabled, status_text, status_interval_minutes, latitude, longitude,
-                symbol_table, symbol_code, default_units, tx_enabled, updated_at
+                symbol_table, symbol_code, symbol_overlay, default_units, tx_enabled, updated_at
             )
-            VALUES (1, '', '', NULL, '', 30, '', 0, '', 30, '', '', '/', '>', 'metric', 0, ?)
+            VALUES (1, '', '', NULL, '', 30, '', 0, '', 30, '', '', '/', '>', NULL, 'metric', 0, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),
