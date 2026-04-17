@@ -1203,6 +1203,8 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "frame_type_label": snapshot["frame_type_label"],
                 "symbol": snapshot["symbol"],
                 "symbol_icon": snapshot["symbol_icon"],
+                "symbol_table": snapshot["symbol_table"],
+                "symbol_code": snapshot["symbol_code"],
                 "comment": snapshot["comment"],
                 "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
                 "latitude": snapshot["latitude"],
