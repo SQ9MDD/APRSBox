@@ -4,17 +4,20 @@
 
 ### Added
 - W zakładce `Stations` dodano filtrowanie listy stacji przez klikane kafelki podsumowania: `All stations`, `Fixed stations`, `Mobile stations`, `Objects`, `Weather stations`.
+- Dodano licznik `Weather stations` w górnym pasku podsumowania `Stations`.
+- W tabeli `Stations` dodano sortowanie po kolumnach `Callsign`, `Last activity` i `Distance` (klikane nagłówki).
+- Dodano tłumaczenia etykiety `Weather stations` w `en/pl/tlh`.
 
 ### Changed
 - Kafelki podsumowania w górnym bloku `Stations` działają teraz jako przyciski filtrów i wskazują aktywny filtr (stan wizualny + `aria-pressed`).
 - Renderowanie tabeli stacji uwzględnia aktywny filtr także po automatycznym odświeżeniu danych z `/api/stations`.
-- W widoku `Stations` filtr `Fixed stations` pomija stacje pogodowe (te są dostępne wyłącznie pod filtrem `Weather stations`).
+- W widoku `Stations` filtr `Fixed stations` pomija stacje pogodowe (te są dostępne wyłącznie pod filtrem `Weather stations`), a licznik `Fixed stations` został dostosowany do tej samej reguły.
 - Zwężono i skompaktowano kafelki filtrów w górnym pasku `Stations`, aby wszystkie pięć (`All`, `Mobile`, `Fixed`, `Objects`, `Weather`) mieściło się w jednym rzędzie na desktopie.
-- W tabeli `Stations` dodano sortowanie po kolumnach `Callsign`, `Last activity` i `Distance`; domyślnie aktywne jest sortowanie po `Last activity` malejąco (najnowsze na górze).
+- Domyślnie aktywne jest sortowanie tabeli po `Last activity` malejąco (najnowsze na górze); sortowanie działa łącznie z aktywnymi filtrami i odświeżaniem danych.
 
 ### Fixed
-- Dodano test regresyjny UI dla filtrowania kafelkami w widoku `Stations`, aby zabezpieczyć działanie filtrów i oznaczania aktywnego stanu.
 - Poprawiono klasyfikację stacji w parserze APRS: pozycje z symbolem pogodowym (`_`) nie są już oznaczane jako `mobile` tylko dlatego, że komentarz zawiera wzorzec `ddd/ddd` (np. kierunek/prędkość wiatru).
+- Rozszerzono testy regresyjne UI dla widoku `Stations` (filtry + pogodowe + sortowanie) oraz test parsera APRS dla przypadku pogodowego.
 
 ### Removed
 - Brak zmian.
