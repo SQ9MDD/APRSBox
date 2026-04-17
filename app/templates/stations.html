@@ -220,7 +220,15 @@
         return stations.filter((station) => isWeatherStation(station)).length;
     }
 
-    function updateWeatherSummary(stations) {
+    function stationaryWithoutWeatherCount(stations) {
+        if (!Array.isArray(stations) || !stations.length) return 0;
+        return stations.filter((station) => normalizeEntityClass(station) === "stationary" && !isWeatherStation(station)).length;
+    }
+
+    function updateDerivedSummaries(stations) {
+        if (summaryStationary) {
+            summaryStationary.textContent = String(stationaryWithoutWeatherCount(stations));
+        }
         if (!summaryWeather) return;
         summaryWeather.textContent = String(weatherStationsCount(stations));
     }
@@ -228,6 +236,9 @@
     function filteredStations(stations, filter) {
         if (!Array.isArray(stations) || !stations.length) return [];
         if (filter === "all") return stations;
+        if (filter === "stationary") {
+            return stations.filter((station) => normalizeEntityClass(station) === "stationary" && !isWeatherStation(station));
+        }
         if (filter === "weather") return stations.filter((station) => isWeatherStation(station));
         return stations.filter((station) => normalizeEntityClass(station) === filter);
     }
@@ -300,15 +311,15 @@
             if (nextStationsSignature !== lastStationsSignature) {
                 lastStationsSignature = nextStationsSignature;
                 latestStations = stations;
-                updateWeatherSummary(latestStations);
+                updateDerivedSummaries(latestStations);
                 renderRows(filteredStations(latestStations, activeStationFilter));
             }
             if (nextSummarySignature !== lastSummarySignature) {
                 lastSummarySignature = nextSummarySignature;
                 if (summaryTotal) summaryTotal.textContent = String(summary.total ?? 0);
-                if (summaryStationary) summaryStationary.textContent = String(summary.stationary ?? 0);
                 if (summaryMobile) summaryMobile.textContent = String(summary.mobile ?? 0);
                 if (summaryObjects) summaryObjects.textContent = String(summary.objects ?? 0);
+                updateDerivedSummaries(latestStations);
             }
         } catch (_error) {
         }
@@ -322,7 +333,7 @@
     }
 
     lastStationsSignature = stationsSignature(latestStations);
-    updateWeatherSummary(latestStations);
+    updateDerivedSummaries(latestStations);
     renderRows(filteredStations(latestStations, activeStationFilter));
     updateFilterCardState();
 
