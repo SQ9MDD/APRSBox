@@ -14,6 +14,7 @@
 - W widoku `Stations` filtr `Fixed stations` pomija stacje pogodowe (te są dostępne wyłącznie pod filtrem `Weather stations`), a licznik `Fixed stations` został dostosowany do tej samej reguły.
 - Zwężono i skompaktowano kafelki filtrów w górnym pasku `Stations`, aby wszystkie pięć (`All`, `Mobile`, `Fixed`, `Objects`, `Weather`) mieściło się w jednym rzędzie na desktopie.
 - Domyślnie aktywne jest sortowanie tabeli po `Last activity` malejąco (najnowsze na górze); sortowanie działa łącznie z aktywnymi filtrami i odświeżaniem danych.
+- W kolumnie `Comment` w tabeli `Stations` wymuszono zawijanie długich treści, aby ograniczyć rozszerzanie tabeli i ryzyko poziomego scrolla od komentarzy.
 
 ### Fixed
 - Poprawiono klasyfikację stacji w parserze APRS: pozycje z symbolem pogodowym (`_`) nie są już oznaczane jako `mobile` tylko dlatego, że komentarz zawiera wzorzec `ddd/ddd` (np. kierunek/prędkość wiatru).

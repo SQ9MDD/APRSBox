@@ -126,7 +126,7 @@
                             <span class="muted">-</span>
                             {% endif %}
                         </td>
-                        <td>{{ row.comment or "-" }}</td>
+                        <td class="stations-comment-cell"><span class="stations-comment-text">{{ row.comment or "-" }}</span></td>
                     </tr>
                     {% else %}
                     <tr>
@@ -405,7 +405,7 @@
                 <td>${escapeHtml(row.longitude || "-")}</td>
                 <td title="${escapeHtml(distanceLabel)}">${renderDistance(row.distance_km)}</td>
                 <td>${renderWeather(row.data || [])}</td>
-                <td>${escapeHtml(row.comment || "-")}</td>
+                <td class="stations-comment-cell"><span class="stations-comment-text">${escapeHtml(row.comment || "-")}</span></td>
             </tr>
         `).join("");
     }

@@ -9,6 +9,14 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("row.distance_km", template_source)
         self.assertIn('colspan="9"', template_source)
 
+    def test_stations_template_wraps_comment_column(self) -> None:
+        template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn("stations-comment-cell", template_source)
+        self.assertIn("stations-comment-text", template_source)
+        self.assertIn(".stations-comment-text", stylesheet_source)
+        self.assertIn("overflow-wrap: anywhere;", stylesheet_source)
+
     def test_map_tooltip_renders_distance_when_available(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("function formatDistance(distanceKm)", script_source)

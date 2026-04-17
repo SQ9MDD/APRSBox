@@ -2002,8 +2002,20 @@ select:focus-visible,
 
 .stations-table th:nth-child(9),
 .stations-table td:nth-child(9) {
+    width: 18rem;
     min-width: 12rem;
+}
+
+.stations-comment-cell {
+    white-space: normal;
+}
+
+.stations-comment-text {
+    display: block;
+    max-width: 100%;
+    white-space: normal;
     overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .callsign-cell {
