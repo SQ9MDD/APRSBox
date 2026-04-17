@@ -50,7 +50,7 @@ class ObjectSchedulerService:
         due_objects = []
         for row in fetch_all(
             """
-            SELECT id, name, lifetime, state, is_enabled, interval_minutes, valid_until_utc, latitude, longitude, symbol_table, symbol_code, path, comment, updated_at
+            SELECT id, name, lifetime, state, is_enabled, interval_minutes, valid_until_utc, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
             FROM aprs_objects
             WHERE is_enabled = 1
             ORDER BY id ASC

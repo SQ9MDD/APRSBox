@@ -3065,6 +3065,7 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
 
     symbol_code = _normalize_symbol_code_value(payload.get("symbol_code"))
     normalized["symbol_code"] = symbol_code
+    normalized["symbol_overlay"] = _normalize_symbol_overlay_value(payload.get("symbol_overlay"), symbol_table=symbol_table)
 
     try:
         interval_minutes = int(str(payload.get("interval_minutes") or "30").strip())
@@ -3147,6 +3148,26 @@ def _normalize_symbol_code_value(value: Any) -> str:
     if codepoint < 33 or codepoint > 126:
         raise ValueError("Symbol code must be a single printable ASCII character.")
     return text
+
+
+def _normalize_symbol_overlay_value(value: Any, *, symbol_table: str) -> str | None:
+    if symbol_table != "\\":
+        return None
+    text = str(value or "").strip().upper()
+    if not text or text == "NONE":
+        return None
+    if len(text) != 1 or not ("0" <= text <= "9" or "A" <= text <= "Z"):
+        raise ValueError("Symbol overlay must be one of: None, 0-9, A-Z.")
+    return text
+
+
+def _coerce_symbol_overlay_value(value: Any, *, symbol_table: str) -> str:
+    if symbol_table != "\\":
+        return ""
+    text = str(value or "").strip().upper()
+    if len(text) == 1 and ("0" <= text <= "9" or "A" <= text <= "Z"):
+        return text
+    return ""
 
 
 def _normalize_printable_ascii(value: str) -> str:
@@ -3269,7 +3290,11 @@ def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: s
 
 def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
     result = dict(row)
-    symbol_table = str(result.get("symbol_table") or "/")
+    symbol_table = str(result.get("symbol_table") or "/").strip()
+    if symbol_table not in {"/", "\\"}:
+        symbol_table = "/"
+    result["symbol_table"] = symbol_table
+    result["symbol_overlay"] = _coerce_symbol_overlay_value(result.get("symbol_overlay"), symbol_table=symbol_table)
     symbol_code = str(result.get("symbol_code") or ">")
     result["symbol_icon"] = get_aprs_symbol_icon_path(f"{symbol_table}{symbol_code}")
     result["raw_frame_preview"] = _build_aprs_entity_preview(slug, result)
@@ -3306,11 +3331,12 @@ def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
             "longitude": longitude,
             "symbol_table": payload.get("symbol_table"),
             "symbol_code": payload.get("symbol_code"),
+            "symbol_overlay": payload.get("symbol_overlay"),
             "comment": payload.get("comment"),
             "path": payload.get("path"),
         }
         return build_object_tnc2(preview_payload)
-    symbol_table = str(payload.get("symbol_table") or "/")
+    symbol_table = _resolve_symbol_table_for_frame(payload.get("symbol_table"), payload.get("symbol_overlay"))
     symbol_code = str(payload.get("symbol_code") or ">")
     comment = str(payload.get("comment") or "").strip()
     path = str(payload.get("path") or "").strip()
@@ -3367,3 +3393,11 @@ def _format_aprs_longitude(value: float) -> str:
     degrees = int(absolute)
     minutes = (absolute - degrees) * 60
     return f"{degrees:03d}{minutes:05.2f}{hemisphere}"
+
+
+def _resolve_symbol_table_for_frame(symbol_table: Any, symbol_overlay: Any) -> str:
+    normalized_table = str(symbol_table or "/").strip()
+    if normalized_table not in {"/", "\\"}:
+        normalized_table = "/"
+    normalized_overlay = _coerce_symbol_overlay_value(symbol_overlay, symbol_table=normalized_table)
+    return normalized_overlay or normalized_table

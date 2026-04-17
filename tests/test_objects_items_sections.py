@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.db import fetch_one, init_db
+from app.db import execute, fetch_one, init_db
 from app.services.content import get_section_row, safe_create_section_row, safe_update_section_row, update_station_settings
 
 
@@ -99,6 +99,52 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertEqual(row["interval_minutes"], 45)
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["is_enabled"], 1)
+
+    def test_object_preview_uses_overlay_for_alternate_symbol_table(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "9",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "\\",
+                    "symbol_code": "r",
+                    "symbol_overlay": "9",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id, symbol_overlay FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+            self.assertEqual(row["symbol_overlay"], "9")
+            decorated = get_section_row("objects", int(row["id"]))
+            assert decorated is not None
+            self.assertRegex(
+                decorated["raw_frame_preview"],
+                r"^SQ9XYZ-9>APBOX0:;VOICE {4}\*[0-9]{6}z5213\.78N902100\.73ErLocal voice repeater$",
+            )
 
     def test_object_record_accepts_optional_valid_until_utc(self) -> None:
         with temporary_database():
@@ -305,6 +351,122 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertEqual(updated["path"], "WIDE1-1,WIDE2-1")
             self.assertEqual(updated["symbol_table"], "\\")
             self.assertEqual(updated["is_enabled"], 1)
+
+    def test_switching_item_symbol_table_to_primary_clears_overlay(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "9",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            created, error = safe_create_section_row(
+                "items",
+                {
+                    "name": "AID01",
+                    "state": "live",
+                    "latitude": "52.0",
+                    "longitude": "21.0",
+                    "symbol_table": "\\",
+                    "symbol_code": "A",
+                    "symbol_overlay": "B",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "comment": "Aid station",
+                },
+            )
+            self.assertTrue(created)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id FROM aprs_items WHERE name = ?", ("AID01",))
+            assert row is not None
+
+            success, update_error = safe_update_section_row(
+                "items",
+                int(row["id"]),
+                {
+                    "name": "AID01",
+                    "state": "live",
+                    "latitude": "52.0",
+                    "longitude": "21.0",
+                    "symbol_table": "/",
+                    "symbol_code": "A",
+                    "symbol_overlay": "C",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "comment": "Aid station",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(update_error)
+            updated_row = fetch_one("SELECT symbol_table, symbol_overlay FROM aprs_items WHERE id = ?", (int(row["id"]),))
+            assert updated_row is not None
+            self.assertEqual(updated_row["symbol_table"], "/")
+            self.assertIsNone(updated_row["symbol_overlay"])
+
+    def test_item_without_overlay_remains_valid_alternate_symbol(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "9",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            execute(
+                """
+                INSERT INTO aprs_items(
+                    name, state, is_enabled, interval_minutes, latitude, longitude,
+                    symbol_table, symbol_code, path, comment, updated_at
+                )
+                VALUES (?, 'live', 1, 30, '52.0', '21.0', '\\', 'A', '', 'Aid station', '2026-01-01T00:00:00+00:00')
+                """,
+                ("AID01",),
+            )
+            row = fetch_one("SELECT id FROM aprs_items WHERE name = ?", ("AID01",))
+            assert row is not None
+            decorated = get_section_row("items", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["symbol_overlay"], "")
+            self.assertIn("5200.00N\\02100.00EA", decorated["raw_frame_preview"])
+
+    def test_overlay_rejects_invalid_character_for_alternate_table(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "items",
+                {
+                    "name": "AID01",
+                    "state": "live",
+                    "latitude": "52.0",
+                    "longitude": "21.0",
+                    "symbol_table": "\\",
+                    "symbol_code": "A",
+                    "symbol_overlay": "*",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "comment": "Aid station",
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "Symbol overlay must be one of: None, 0-9, A-Z.")
 
     def test_invalid_interval_is_rejected(self) -> None:
         with temporary_database():

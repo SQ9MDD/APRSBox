@@ -359,6 +359,7 @@ CREATE TABLE IF NOT EXISTS aprs_objects (
     longitude TEXT,
     symbol_table TEXT,
     symbol_code TEXT,
+    symbol_overlay TEXT,
     path TEXT,
     comment TEXT,
     updated_at TEXT NOT NULL
@@ -374,6 +375,7 @@ CREATE TABLE IF NOT EXISTS aprs_items (
     longitude TEXT,
     symbol_table TEXT,
     symbol_code TEXT,
+    symbol_overlay TEXT,
     path TEXT,
     comment TEXT,
     updated_at TEXT NOT NULL
@@ -916,6 +918,13 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 ADD COLUMN valid_until_utc TEXT
                 """
             )
+        if "symbol_overlay" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN symbol_overlay TEXT
+                """
+            )
         if "state" not in item_columns:
             connection.execute(
                 """
@@ -937,6 +946,13 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 ALTER TABLE aprs_items
                 ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 30
                 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60))
+                """
+            )
+        if "symbol_overlay" not in item_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_items
+                ADD COLUMN symbol_overlay TEXT
                 """
             )
         if "valid_until_utc" not in bulletin_columns:
@@ -1107,8 +1123,10 @@ def _migrate_system_jobs_table(connection: sqlite3.Connection) -> None:
 def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None:
     objects_sql = _table_sql(connection, "aprs_objects")
     if objects_sql and "interval_minutes IN (5, 10, 15, 30, 45, 60)" not in objects_sql:
+        object_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
+        object_overlay_select = "symbol_overlay" if "symbol_overlay" in object_columns else "NULL"
         connection.executescript(
-            """
+            f"""
             ALTER TABLE aprs_objects RENAME TO aprs_objects_old;
             CREATE TABLE aprs_objects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1121,12 +1139,13 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 longitude TEXT,
                 symbol_table TEXT,
                 symbol_code TEXT,
+                symbol_overlay TEXT,
                 path TEXT,
                 comment TEXT,
                 updated_at TEXT NOT NULL
             );
             INSERT INTO aprs_objects (
-                id, name, lifetime, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, path, comment, updated_at
+                id, name, lifetime, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
             )
             SELECT
                 id,
@@ -1142,6 +1161,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 longitude,
                 symbol_table,
                 symbol_code,
+                {object_overlay_select},
                 path,
                 comment,
                 updated_at
@@ -1151,8 +1171,10 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
         )
     items_sql = _table_sql(connection, "aprs_items")
     if items_sql and "interval_minutes IN (5, 10, 15, 30, 45, 60)" not in items_sql:
+        item_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
+        item_overlay_select = "symbol_overlay" if "symbol_overlay" in item_columns else "NULL"
         connection.executescript(
-            """
+            f"""
             ALTER TABLE aprs_items RENAME TO aprs_items_old;
             CREATE TABLE aprs_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1164,12 +1186,13 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 longitude TEXT,
                 symbol_table TEXT,
                 symbol_code TEXT,
+                symbol_overlay TEXT,
                 path TEXT,
                 comment TEXT,
                 updated_at TEXT NOT NULL
             );
             INSERT INTO aprs_items (
-                id, name, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, path, comment, updated_at
+                id, name, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
             )
             SELECT
                 id,
@@ -1184,6 +1207,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 longitude,
                 symbol_table,
                 symbol_code,
+                {item_overlay_select},
                 path,
                 comment,
                 updated_at

@@ -143,6 +143,18 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             },
             {"name": "symbol_code", "label": "Symbol Code", "type": "text", "required": True, "maxlength": 1, "placeholder": "r"},
             {
+                "name": "symbol_overlay",
+                "label": "Overlay",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "", "label": "None"},
+                    *[{"value": str(value), "label": str(value)} for value in range(10)],
+                    *[{"value": chr(code), "label": chr(code)} for code in range(ord("A"), ord("Z") + 1)],
+                ],
+                "default": "",
+            },
+            {
                 "name": "interval_minutes",
                 "label": "Send Interval",
                 "type": "select",
@@ -200,6 +212,18 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
             },
             {"name": "symbol_code", "label": "Symbol Code", "type": "text", "required": True, "maxlength": 1, "placeholder": "A"},
+            {
+                "name": "symbol_overlay",
+                "label": "Overlay",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "", "label": "None"},
+                    *[{"value": str(value), "label": str(value)} for value in range(10)],
+                    *[{"value": chr(code), "label": chr(code)} for code in range(ord("A"), ord("Z") + 1)],
+                ],
+                "default": "",
+            },
             {
                 "name": "interval_minutes",
                 "label": "Send Interval",
