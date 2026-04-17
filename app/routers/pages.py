@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
 from app.db import (
@@ -107,6 +107,7 @@ from app.services.map_service import (
     get_station_detail_map_config,
     get_station_detail_track_payload,
 )
+from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job
 from app.services.system import (
     current_update_channel,
@@ -165,7 +166,7 @@ def _section_template_context(
     if slug in {"objects", "items"}:
         context.update(
             {
-                "map_picker_config": get_map_page_config(),
+                "map_picker_config": get_map_page_config(root_path=request.scope.get("root_path", "")),
                 "symbol_table_options": [
                     {"value": "/", "label": "Primary (/)"},
                     {"value": "\\", "label": "Alternate (\\)"},
@@ -188,7 +189,7 @@ def _section_template_context(
     return context
 
 
-def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
+def _station_detail_context(callsign: str, unit_system: str, *, root_path: str = "") -> dict | None:
     snapshots = get_visible_station_snapshots()
     detail = get_station_detail(callsign, unit_system=unit_system, snapshots=snapshots)
     if detail is None:
@@ -197,7 +198,7 @@ def _station_detail_context(callsign: str, unit_system: str) -> dict | None:
     for item in related_ssids:
         item["is_current"] = item["display_callsign"].casefold() == detail["display_callsign"].casefold()
     station_track = get_station_detail_track_payload(detail["display_callsign"])
-    station_map_config = get_station_detail_map_config(detail)
+    station_map_config = get_station_detail_map_config(detail, root_path=root_path)
     station_map_config["track_points"] = station_track.get("points", [])
     return {
         "station": detail,
@@ -370,7 +371,7 @@ def _station_page_context(
         flash=flash,
         flash_success=flash_success,
         beacon_log_rows=recent_station_outbound_jobs(limit=20),
-        map_picker_config=get_map_page_config(),
+        map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         **_station_form_options(),
     )
 
@@ -392,7 +393,7 @@ def _wx_page_context(
         flash=flash,
         flash_success=flash_success,
         can_edit=current_user.role in {"admin", "operator"},
-        map_picker_config=get_map_page_config(),
+        map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         interface_options=_station_form_options()["interface_options"],
         **get_wx_page_data(edit_source_id=edit_source_id, source_discovery=source_discovery),
     )
@@ -412,6 +413,7 @@ def _empty_map_source_form() -> dict[str, Any]:
         "min_zoom": 0,
         "max_zoom": 19,
         "enabled": True,
+        "local_cache_enabled": False,
         "is_default": False,
         "notes": "",
     }
@@ -426,6 +428,7 @@ def _map_source_form_from_source(source: dict[str, Any]) -> dict[str, Any]:
         "min_zoom": int(source.get("min_zoom") or 0),
         "max_zoom": int(source.get("max_zoom") or 19),
         "enabled": bool(source.get("enabled")),
+        "local_cache_enabled": bool(source.get("local_cache_enabled")),
         "is_default": bool(source.get("is_default")),
         "notes": str(source.get("notes") or ""),
     }
@@ -440,6 +443,7 @@ def _map_source_form_from_payload(payload: dict[str, Any], *, record_id: int | N
         "min_zoom": str(payload.get("min_zoom") or "").strip() or "0",
         "max_zoom": str(payload.get("max_zoom") or "").strip() or "19",
         "enabled": _map_source_checkbox(payload.get("enabled")),
+        "local_cache_enabled": _map_source_checkbox(payload.get("local_cache_enabled")),
         "is_default": _map_source_checkbox(payload.get("is_default")),
         "notes": str(payload.get("notes") or "").strip(),
     }
@@ -640,7 +644,11 @@ def station_detail_page(
 ) -> object:
     templates = request.app.state.templates
     station_settings = get_station_settings()
-    station_context = _station_detail_context(callsign, station_settings.get("default_units", "metric"))
+    station_context = _station_detail_context(
+        callsign,
+        station_settings.get("default_units", "metric"),
+        root_path=request.scope.get("root_path", ""),
+    )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
     context = build_template_context(
@@ -669,7 +677,11 @@ def station_detail_message(
 ) -> object:
     templates = request.app.state.templates
     station_settings = get_station_settings()
-    station_context = _station_detail_context(callsign, station_settings.get("default_units", "metric"))
+    station_context = _station_detail_context(
+        callsign,
+        station_settings.get("default_units", "metric"),
+        root_path=request.scope.get("root_path", ""),
+    )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
     message_flash = "APRS message transmit is not implemented yet. The form is present as UI scaffolding only."
@@ -695,10 +707,15 @@ def station_detail_message(
 @router.get("/api/stations/{callsign:path}")
 def station_detail_snapshot(
     callsign: str,
+    request: Request,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     station_settings = get_station_settings()
-    station_context = _station_detail_context(callsign, station_settings.get("default_units", "metric"))
+    station_context = _station_detail_context(
+        callsign,
+        station_settings.get("default_units", "metric"),
+        root_path=request.scope.get("root_path", ""),
+    )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
     return JSONResponse(station_context)
@@ -1052,6 +1069,7 @@ def settings_map_sources_save(
     min_zoom: str = Form("0"),
     max_zoom: str = Form("19"),
     enabled: str | None = Form(None),
+    local_cache_enabled: str | None = Form(None),
     is_default: str | None = Form(None),
     notes: str = Form(""),
 ) -> object:
@@ -1063,6 +1081,7 @@ def settings_map_sources_save(
         "min_zoom": min_zoom.strip(),
         "max_zoom": max_zoom.strip(),
         "enabled": enabled,
+        "local_cache_enabled": local_cache_enabled,
         "is_default": is_default,
         "notes": notes.strip(),
     }
@@ -1137,6 +1156,24 @@ def settings_map_sources_delete(
         current_user,
         flash="Map source deleted." if success else (error or "Failed to delete map source."),
         flash_success=success,
+    )
+    return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/settings/map-sources/{source_id}/cache/clear")
+def settings_map_sources_clear_cache(
+    source_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_clear_map_source_cache(source_id)
+    context = _settings_page_context(
+        request,
+        current_user,
+        flash="Map source cache cleared." if success else (error or "Failed to clear map source cache."),
+        flash_success=success,
+        map_source_edit_id=source_id if success else None,
     )
     return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
 
@@ -1712,7 +1749,7 @@ def map_page(
         page_title="Map",
         current_user=current_user,
         active_nav="map",
-        map_config=get_map_page_config(),
+        map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_stations_endpoint=_path(request, "/api/map/stations"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
     )
@@ -1724,6 +1761,32 @@ def map_stations(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_map_station_payload())
+
+
+@router.get("/api/map/tiles/{source_id}/{z}/{x}/{y}")
+def map_tiles_proxy(
+    source_id: int,
+    z: int,
+    x: int,
+    y: int,
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> Response:
+    requested_subdomain = str(request.query_params.get("s") or "").strip()
+    try:
+        result = resolve_map_tile(
+            source_id=source_id,
+            z=z,
+            x=x,
+            y=y,
+            requested_subdomain=requested_subdomain,
+        )
+    except MapTileProxyError as exc:
+        return Response(content=exc.message, status_code=exc.status_code, media_type="text/plain")
+
+    if result.cache_hit and result.cache_path is not None:
+        return FileResponse(path=result.cache_path)
+    return Response(content=result.body or b"", media_type=result.media_type or "application/octet-stream")
 
 
 @router.post("/api/map/tile-events")

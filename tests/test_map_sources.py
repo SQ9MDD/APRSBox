@@ -4,9 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.db import init_db
+from app.config import settings
+from app.db import execute, init_db
+from app.services.map_tile_proxy import clear_map_source_cache
 from app.services.map_service import (
     delete_map_source,
+    get_map_source,
     list_map_sources,
     move_map_source,
     resolve_active_tile_layer,
@@ -40,6 +43,7 @@ def valid_source_payload(
     max_zoom: str = "19",
     subdomains: str = "",
     api_key: str = "",
+    local_cache_enabled: str | None = None,
     enabled: str | None = "1",
     is_default: str | None = None,
     sort_order: str = "10",
@@ -53,6 +57,7 @@ def valid_source_payload(
         "max_zoom": max_zoom,
         "subdomains": subdomains,
         "api_key": api_key,
+        "local_cache_enabled": local_cache_enabled,
         "enabled": enabled,
         "is_default": is_default,
         "sort_order": sort_order,
@@ -67,6 +72,9 @@ class MapSourcesTests(unittest.TestCase):
             self.assertEqual(len(sources), 1)
             self.assertTrue(sources[0]["enabled"])
             self.assertTrue(sources[0]["is_default"])
+            self.assertFalse(sources[0]["local_cache_enabled"])
+            self.assertEqual(sources[0]["cache_tile_count"], 0)
+            self.assertEqual(sources[0]["cache_size_bytes"], 0)
             self.assertIn("{z}", sources[0]["url_template"])
             self.assertIn("{x}", sources[0]["url_template"])
             self.assertIn("{y}", sources[0]["url_template"])
@@ -124,6 +132,7 @@ class MapSourcesTests(unittest.TestCase):
                     name="Preserve fields",
                     subdomains="a,b,c",
                     api_key="SECRET",
+                    local_cache_enabled="1",
                     sort_order="42",
                 )
             )
@@ -133,12 +142,14 @@ class MapSourcesTests(unittest.TestCase):
             )
             update_payload.pop("subdomains")
             update_payload.pop("api_key")
+            update_payload.pop("local_cache_enabled")
             update_payload.pop("sort_order")
             save_map_source(update_payload, source_id=source_id)
 
             updated = next(item for item in list_map_sources() if int(item["id"]) == int(source_id))
             self.assertEqual(updated["subdomains"], "a,b,c")
             self.assertEqual(updated["api_key"], "SECRET")
+            self.assertTrue(updated["local_cache_enabled"])
             self.assertEqual(updated["sort_order"], 42)
 
     def test_move_map_source_persists_manual_order(self) -> None:
@@ -182,6 +193,62 @@ class MapSourcesTests(unittest.TestCase):
             self.assertEqual(first, "https://tiles.example/{z}/{x}/{y}.png?apikey=CONST_KEY")
             self.assertNotIn("_=", first)
             self.assertNotIn("timestamp=", first)
+
+    def test_runtime_tile_url_uses_local_proxy_when_cache_enabled(self) -> None:
+        with temporary_database():
+            source_id = save_map_source(
+                valid_source_payload(
+                    name="Cached source",
+                    url_template="https://tiles.example/{z}/{x}/{y}.png",
+                    local_cache_enabled="1",
+                    is_default="1",
+                )
+            )
+            tile_layer = resolve_active_tile_layer(root_path="/aprsbox")
+            self.assertEqual(tile_layer["tile_url"], f"/aprsbox/api/map/tiles/{source_id}/{{z}}/{{x}}/{{y}}")
+
+    def test_runtime_tile_url_stays_upstream_when_local_cache_disabled(self) -> None:
+        with temporary_database():
+            save_map_source(
+                valid_source_payload(
+                    name="No cache source",
+                    url_template="https://tiles.example/{z}/{x}/{y}.png",
+                    local_cache_enabled=None,
+                    is_default="1",
+                )
+            )
+            tile_layer = resolve_active_tile_layer(root_path="/aprsbox")
+            self.assertEqual(tile_layer["tile_url"], "https://tiles.example/{z}/{x}/{y}.png")
+
+    def test_clear_map_source_cache_removes_files_and_resets_stats(self) -> None:
+        with temporary_database():
+            source_id = save_map_source(
+                valid_source_payload(
+                    name="Cached source",
+                    local_cache_enabled="1",
+                )
+            )
+            cache_file = settings.cache_dir / "map-tiles" / str(source_id) / "1" / "2" / "3.png"
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            cache_file.write_bytes(b"abc")
+            execute(
+                """
+                UPDATE map_sources
+                SET cache_tile_count = 10,
+                    cache_size_bytes = 1234
+                WHERE id = ?
+                """,
+                (source_id,),
+            )
+
+            clear_map_source_cache(source_id)
+
+            source = get_map_source(source_id)
+            self.assertIsNotNone(source)
+            assert source is not None
+            self.assertEqual(source["cache_tile_count"], 0)
+            self.assertEqual(source["cache_size_bytes"], 0)
+            self.assertFalse(cache_file.exists())
 
     def test_validation_accepts_url_encoded_tile_tokens(self) -> None:
         with temporary_database():
