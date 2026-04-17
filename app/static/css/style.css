@@ -1921,6 +1921,38 @@ select:focus-visible,
     table-layout: auto;
 }
 
+.stations-sort-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.28rem;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.stations-sort-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+.stations-sort-indicator {
+    color: var(--muted);
+    font-size: 0.74rem;
+    line-height: 1;
+}
+
+.stations-sort-button.is-active .stations-sort-indicator {
+    color: var(--accent);
+}
+
 .stations-table th:nth-child(1),
 .stations-table td:nth-child(1) {
     width: 5.5rem;
@@ -1970,8 +2002,20 @@ select:focus-visible,
 
 .stations-table th:nth-child(9),
 .stations-table td:nth-child(9) {
+    width: 18rem;
     min-width: 12rem;
+}
+
+.stations-comment-cell {
+    white-space: normal;
+}
+
+.stations-comment-text {
+    display: block;
+    max-width: 100%;
+    white-space: normal;
     overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .callsign-cell {
@@ -2156,8 +2200,8 @@ select:focus-visible,
 
 .stations-summary {
     display: grid;
-    grid-template-columns: repeat(4, minmax(9rem, 1fr));
-    gap: var(--space-3);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: var(--space-2);
     flex: 1;
     min-width: 0;
 }
@@ -2174,7 +2218,7 @@ select:focus-visible,
     align-items: stretch;
     gap: var(--space-3);
     min-width: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .stations-summary-header h2 {
@@ -2189,8 +2233,8 @@ select:focus-visible,
     align-items: stretch;
     gap: 0.32rem;
     line-height: 1.1;
-    min-width: 6rem;
-    padding: 0.56rem 0.62rem;
+    min-width: 5.25rem;
+    padding: 0.44rem 0.52rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
@@ -2205,11 +2249,34 @@ select:focus-visible,
 }
 
 .stations-summary-panel .metric-card {
-    padding: 0.56rem 0.62rem;
+    padding: 0.42rem 0.5rem;
 }
 
 .stations-summary-panel .metric-value {
-    font-size: 1.12rem;
+    font-size: 1rem;
+}
+
+.stations-filter-card {
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.stations-filter-card:hover {
+    border-color: var(--border-hover);
+}
+
+.stations-filter-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.stations-filter-card.is-active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow-soft);
+    background: linear-gradient(180deg, var(--accent-soft), var(--panel-soft));
 }
 
 .band-condition-grid {

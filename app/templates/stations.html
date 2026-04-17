@@ -12,22 +12,26 @@
             </div>
             <div class="stations-summary-toolbar">
                 <div class="stations-summary" id="stations-summary">
-                    <div class="metric-card">
+                    <button type="button" class="metric-card stations-filter-card is-active" data-station-filter="all" aria-pressed="true">
                         <span class="metric-value" id="summary-total">{{ station_summary.total }}</span>
                         <span class="metric-label">{{ t("All stations") }}</span>
-                    </div>
-                    <div class="metric-card">
+                    </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="mobile" aria-pressed="false">
                         <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
                         <span class="metric-label">{{ t("Mobile stations") }}</span>
-                    </div>
-                    <div class="metric-card">
+                    </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="stationary" aria-pressed="false">
                         <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
                         <span class="metric-label">{{ t("Fixed stations") }}</span>
-                    </div>
-                    <div class="metric-card">
+                    </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="object" aria-pressed="false">
                         <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
                         <span class="metric-label">{{ t("Objects") }}</span>
-                    </div>
+                    </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="weather" aria-pressed="false">
+                        <span class="metric-value" id="summary-weather">0</span>
+                        <span class="metric-label">{{ t("Weather stations") }}</span>
+                    </button>
                 </div>
                 <label class="stations-refresh-control">
                     <span class="muted">{{ t("Refresh rate") }}</span>
@@ -50,13 +54,28 @@
             <table class="data-table compact-table stations-table">
                 <thead>
                     <tr>
-                        <th>{{ t("Callsign") }}</th>
+                        <th data-sort-column="callsign" aria-sort="none">
+                            <button type="button" class="stations-sort-button" data-stations-sort="callsign">
+                                <span>{{ t("Callsign") }}</span>
+                                <span class="stations-sort-indicator" aria-hidden="true">↕</span>
+                            </button>
+                        </th>
                         <th>{{ t("Type") }}</th>
-                        <th>{{ t("Last activity") }}</th>
+                        <th data-sort-column="last_heard" aria-sort="descending">
+                            <button type="button" class="stations-sort-button" data-stations-sort="last_heard">
+                                <span>{{ t("Last activity") }}</span>
+                                <span class="stations-sort-indicator" aria-hidden="true">↓</span>
+                            </button>
+                        </th>
                         <th>{{ t("APRS Icon") }}</th>
                         <th title="{{ t('Latitude') }}">{{ t("Lat.") }}</th>
                         <th title="{{ t('Longitude') }}">{{ t("Lon.") }}</th>
-                        <th>{{ t("Distance") }}</th>
+                        <th data-sort-column="distance" aria-sort="none">
+                            <button type="button" class="stations-sort-button" data-stations-sort="distance">
+                                <span>{{ t("Distance") }}</span>
+                                <span class="stations-sort-indicator" aria-hidden="true">↕</span>
+                            </button>
+                        </th>
                         <th>{{ t("Data") }}</th>
                         <th>{{ t("Comment") }}</th>
                     </tr>
@@ -107,7 +126,7 @@
                             <span class="muted">-</span>
                             {% endif %}
                         </td>
-                        <td>{{ row.comment or "-" }}</td>
+                        <td class="stations-comment-cell"><span class="stations-comment-text">{{ row.comment or "-" }}</span></td>
                     </tr>
                     {% else %}
                     <tr>
@@ -127,16 +146,32 @@
     const stationsSnapshotUrl = {{ stations_snapshot_url|tojson }};
     const staticRoot = {{ static_root|tojson }};
     const rootPath = {{ root_path|tojson }};
+    const initialStations = {{ stations|tojson }};
 
     const summaryTotal = document.getElementById("summary-total");
     const summaryStationary = document.getElementById("summary-stationary");
     const summaryMobile = document.getElementById("summary-mobile");
     const summaryObjects = document.getElementById("summary-objects");
+    const summaryWeather = document.getElementById("summary-weather");
+    const stationFilterCards = Array.from(document.querySelectorAll("[data-station-filter]"));
+    const stationsSortButtons = Array.from(document.querySelectorAll("[data-stations-sort]"));
+    const stationsSortHeaders = Array.from(document.querySelectorAll("[data-sort-column]"));
     const refreshSelect = document.getElementById("stations-refresh-rate");
     const refreshStorageKey = "aprsbox-stations-refresh-ms";
     const noStationsText = {{ t("No decoded APRS stations available yet.")|tojson }};
     const aprsClientLabel = {{ t("APRS client")|tojson }};
     const distanceLabel = {{ t("Distance")|tojson }};
+    const stationFilters = new Set(["all", "stationary", "mobile", "object", "weather"]);
+    const stationsSortKeys = new Set(["last_heard", "callsign", "distance"]);
+    const stationsSortDefaults = {
+        last_heard: "desc",
+        callsign: "asc",
+        distance: "asc",
+    };
+    let activeStationFilter = "all";
+    let activeStationsSortKey = "last_heard";
+    let activeStationsSortDirection = "desc";
+    let latestStations = Array.isArray(initialStations) ? initialStations : [];
     let refreshTimer = null;
     let lastStationsSignature = "";
     let lastSummarySignature = "";
@@ -193,6 +228,159 @@
         ]);
     }
 
+    function normalizeEntityClass(station) {
+        const entityClass = String(station?.entity_class || "").trim().toLowerCase();
+        if (entityClass === "mobile" || entityClass === "object") return entityClass;
+        return "stationary";
+    }
+
+    function isWeatherStation(station) {
+        const frameType = String(station?.frame_type || "").trim().toUpperCase();
+        const symbol = String(station?.symbol || "").trim();
+        return frameType === "W" || symbol.endsWith("_");
+    }
+
+    function weatherStationsCount(stations) {
+        if (!Array.isArray(stations) || !stations.length) return 0;
+        return stations.filter((station) => isWeatherStation(station)).length;
+    }
+
+    function stationaryWithoutWeatherCount(stations) {
+        if (!Array.isArray(stations) || !stations.length) return 0;
+        return stations.filter((station) => normalizeEntityClass(station) === "stationary" && !isWeatherStation(station)).length;
+    }
+
+    function updateDerivedSummaries(stations) {
+        if (summaryStationary) {
+            summaryStationary.textContent = String(stationaryWithoutWeatherCount(stations));
+        }
+        if (!summaryWeather) return;
+        summaryWeather.textContent = String(weatherStationsCount(stations));
+    }
+
+    function filteredStations(stations, filter) {
+        if (!Array.isArray(stations) || !stations.length) return [];
+        if (filter === "all") return stations;
+        if (filter === "stationary") {
+            return stations.filter((station) => normalizeEntityClass(station) === "stationary" && !isWeatherStation(station));
+        }
+        if (filter === "weather") return stations.filter((station) => isWeatherStation(station));
+        return stations.filter((station) => normalizeEntityClass(station) === filter);
+    }
+
+    function stationDisplayCallsign(station) {
+        return String(station?.display_callsign || station?.callsign || "").trim();
+    }
+
+    function compareCallsign(a, b, direction) {
+        const left = stationDisplayCallsign(a);
+        const right = stationDisplayCallsign(b);
+        if (!left && right) return 1;
+        if (left && !right) return -1;
+        const order = left.localeCompare(right, undefined, { sensitivity: "base", numeric: true });
+        if (order === 0) return 0;
+        return direction === "asc" ? order : -order;
+    }
+
+    function compareLastHeard(a, b, direction) {
+        const left = String(a?.last_heard_at || "").trim();
+        const right = String(b?.last_heard_at || "").trim();
+        if (!left && right) return 1;
+        if (left && !right) return -1;
+        const order = left.localeCompare(right);
+        if (order === 0) return 0;
+        return direction === "asc" ? order : -order;
+    }
+
+    function compareDistance(a, b, direction) {
+        const leftRaw = a?.distance_km;
+        const rightRaw = b?.distance_km;
+        const left = Number.isFinite(leftRaw) ? Number(leftRaw) : null;
+        const right = Number.isFinite(rightRaw) ? Number(rightRaw) : null;
+        if (left === null && right !== null) return 1;
+        if (left !== null && right === null) return -1;
+        if (left === null && right === null) return 0;
+        if (left === right) return 0;
+        return direction === "asc" ? left - right : right - left;
+    }
+
+    function sortStations(stations, sortKey, sortDirection) {
+        const sorted = Array.isArray(stations) ? [...stations] : [];
+        sorted.sort((left, right) => {
+            let order = 0;
+            if (sortKey === "callsign") {
+                order = compareCallsign(left, right, sortDirection);
+                if (order !== 0) return order;
+                return compareLastHeard(left, right, "desc");
+            }
+            if (sortKey === "distance") {
+                order = compareDistance(left, right, sortDirection);
+                if (order !== 0) return order;
+                return compareLastHeard(left, right, "desc");
+            }
+            order = compareLastHeard(left, right, sortDirection);
+            if (order !== 0) return order;
+            return compareCallsign(left, right, "asc");
+        });
+        return sorted;
+    }
+
+    function updateSortState() {
+        for (const header of stationsSortHeaders) {
+            const sortColumn = header.dataset.sortColumn || "";
+            const active = sortColumn === activeStationsSortKey;
+            if (!active) {
+                header.setAttribute("aria-sort", "none");
+                continue;
+            }
+            header.setAttribute("aria-sort", activeStationsSortDirection === "asc" ? "ascending" : "descending");
+        }
+        for (const button of stationsSortButtons) {
+            const sortColumn = button.dataset.stationsSort || "";
+            const active = sortColumn === activeStationsSortKey;
+            button.classList.toggle("is-active", active);
+            button.setAttribute("aria-pressed", active ? "true" : "false");
+            const indicator = button.querySelector(".stations-sort-indicator");
+            if (!indicator) continue;
+            indicator.textContent = active ? (activeStationsSortDirection === "asc" ? "↑" : "↓") : "↕";
+        }
+    }
+
+    function setStationsSort(sortKey) {
+        if (!stationsSortKeys.has(sortKey)) return;
+        if (sortKey === activeStationsSortKey) {
+            activeStationsSortDirection = activeStationsSortDirection === "asc" ? "desc" : "asc";
+        } else {
+            activeStationsSortKey = sortKey;
+            activeStationsSortDirection = stationsSortDefaults[sortKey] || "asc";
+        }
+        updateSortState();
+        applyStationsView();
+    }
+
+    function applyStationsView() {
+        const filtered = filteredStations(latestStations, activeStationFilter);
+        const sorted = sortStations(filtered, activeStationsSortKey, activeStationsSortDirection);
+        renderRows(sorted);
+    }
+
+    function updateFilterCardState() {
+        for (const card of stationFilterCards) {
+            const filter = card.dataset.stationFilter || "all";
+            const active = filter === activeStationFilter;
+            card.classList.toggle("is-active", active);
+            card.setAttribute("aria-pressed", active ? "true" : "false");
+        }
+    }
+
+    function setStationFilter(filter) {
+        const nextFilter = stationFilters.has(filter) ? filter : "all";
+        if (nextFilter === activeStationFilter) return;
+        activeStationFilter = nextFilter;
+        updateFilterCardState();
+        applyStationsView();
+    }
+
     function renderRows(stations) {
         if (!stations.length) {
             tbody.innerHTML = `<tr><td colspan="9" class="muted">${noStationsText}</td></tr>`;
@@ -217,7 +405,7 @@
                 <td>${escapeHtml(row.longitude || "-")}</td>
                 <td title="${escapeHtml(distanceLabel)}">${renderDistance(row.distance_km)}</td>
                 <td>${renderWeather(row.data || [])}</td>
-                <td>${escapeHtml(row.comment || "-")}</td>
+                <td class="stations-comment-cell"><span class="stations-comment-text">${escapeHtml(row.comment || "-")}</span></td>
             </tr>
         `).join("");
     }
@@ -243,14 +431,16 @@
             const nextSummarySignature = summarySignature(summary);
             if (nextStationsSignature !== lastStationsSignature) {
                 lastStationsSignature = nextStationsSignature;
-                renderRows(stations);
+                latestStations = stations;
+                updateDerivedSummaries(latestStations);
+                applyStationsView();
             }
             if (nextSummarySignature !== lastSummarySignature) {
                 lastSummarySignature = nextSummarySignature;
                 if (summaryTotal) summaryTotal.textContent = String(summary.total ?? 0);
-                if (summaryStationary) summaryStationary.textContent = String(summary.stationary ?? 0);
                 if (summaryMobile) summaryMobile.textContent = String(summary.mobile ?? 0);
                 if (summaryObjects) summaryObjects.textContent = String(summary.objects ?? 0);
+                updateDerivedSummaries(latestStations);
             }
         } catch (_error) {
         }
@@ -261,6 +451,24 @@
             window.clearInterval(refreshTimer);
         }
         refreshTimer = window.setInterval(refreshStations, intervalMs);
+    }
+
+    lastStationsSignature = stationsSignature(latestStations);
+    updateDerivedSummaries(latestStations);
+    applyStationsView();
+    updateFilterCardState();
+    updateSortState();
+
+    for (const card of stationFilterCards) {
+        card.addEventListener("click", () => {
+            setStationFilter(card.dataset.stationFilter || "all");
+        });
+    }
+
+    for (const button of stationsSortButtons) {
+        button.addEventListener("click", () => {
+            setStationsSort(button.dataset.stationsSort || "last_heard");
+        });
     }
 
     const savedRefreshRate = window.localStorage.getItem(refreshStorageKey);

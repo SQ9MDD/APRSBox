@@ -90,6 +90,15 @@ class _TrafficModemRuntime:
             await self._task
         except asyncio.CancelledError:
             pass
+        except Exception as exc:
+            log_event(
+                "WARNING",
+                "traffic",
+                (
+                    f"Traffic runtime stop observed task failure on "
+                    f"{self._runtime_label()}: {exc}"
+                ),
+            )
         self._task = None
         if self._tnc_serial_fd is not None:
             await asyncio.to_thread(close_serial_device, self._tnc_serial_fd)
@@ -110,9 +119,16 @@ class _TrafficModemRuntime:
             return False
         try:
             await self._forward_client_chunk_to_tnc(frame)
-        except (OSError, RuntimeError):
+        except OSError as exc:
+            await self._recover_from_tx_error(modem=modem, exc=exc)
+            return False
+        except RuntimeError:
             return False
         return True
+
+    def is_running(self) -> bool:
+        task = self._task
+        return task is not None and not task.done()
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -193,32 +209,53 @@ class _TrafficModemRuntime:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            modem = self._load_active_modem()
-            if modem is None:
-                self._clear_kiss_buffers()
-                await self._stop_proxy_server()
-                self._set_state(
-                    status="idle",
-                    detail="No enabled TNC is configured.",
-                    modem=None,
-                    error=None,
-                )
+            try:
+                modem = self._load_active_modem()
+                if modem is None:
+                    self._clear_kiss_buffers()
+                    await self._stop_proxy_server()
+                    self._set_state(
+                        status="idle",
+                        detail="No enabled TNC is configured.",
+                        modem=None,
+                        error=None,
+                    )
+                    await self._sleep(self._reconnect_delay)
+                    continue
+
+                modem_type = _normalize_modem_type(modem.get("modem_type"))
+                if modem_type == "TCP":
+                    await self._run_tcp_modem(modem)
+                    continue
+                if modem_type in SUPPORTED_SERIAL_MODEM_TYPES:
+                    await self._run_serial_modem(modem)
+                    continue
+
+                message = f"TNC {modem.get('name') or modem.get('id') or 'unknown'} uses unsupported modem type {modem_type or '-'}."
+                self._set_state(status="error", detail=message, modem=modem, error=message)
+                log_event("WARNING", "traffic", message)
+                log_event("WARNING", "system", message)
                 await self._sleep(self._reconnect_delay)
-                continue
-
-            modem_type = _normalize_modem_type(modem.get("modem_type"))
-            if modem_type == "TCP":
-                await self._run_tcp_modem(modem)
-                continue
-            if modem_type in SUPPORTED_SERIAL_MODEM_TYPES:
-                await self._run_serial_modem(modem)
-                continue
-
-            message = f"TNC {modem.get('name') or modem.get('id') or 'unknown'} uses unsupported modem type {modem_type or '-'}."
-            self._set_state(status="error", detail=message, modem=modem, error=message)
-            log_event("WARNING", "traffic", message)
-            log_event("WARNING", "system", message)
-            await self._sleep(self._reconnect_delay)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                try:
+                    current_modem = self._load_active_modem()
+                except Exception:
+                    current_modem = None
+                message = (
+                    f"Traffic runtime loop crashed on {self._runtime_label(modem=current_modem)}: {exc}. "
+                    "Retrying."
+                )
+                self._set_state(
+                    status="error",
+                    detail=message,
+                    modem=current_modem,
+                    error=str(exc),
+                )
+                log_event("WARNING", "traffic", message)
+                log_event("WARNING", "system", message)
+                await self._sleep(self._reconnect_delay)
 
     async def _run_tcp_modem(self, modem: dict[str, Any]) -> None:
         endpoint = self._parse_endpoint(modem.get("device_path") or "")
@@ -768,6 +805,36 @@ class _TrafficModemRuntime:
                 return
             raise RuntimeError("TNC connection is not available.")
 
+    async def _recover_from_tx_error(self, *, modem: dict[str, Any] | None, exc: OSError) -> None:
+        message = (
+            f"Transmit to {self._runtime_label(modem=modem)} failed: {exc}. "
+            "Closing current link and reconnecting."
+        )
+        async with self._tnc_write_lock:
+            writer = self._tnc_writer
+            serial_fd = self._tnc_serial_fd
+            self._tnc_writer = None
+            self._tnc_serial_fd = None
+
+        if writer is not None:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+        if serial_fd is not None:
+            await asyncio.to_thread(close_serial_device, serial_fd)
+
+        self._clear_kiss_buffers()
+        self._set_state(
+            status="error",
+            detail=message,
+            modem=modem,
+            error=str(exc),
+        )
+        log_event("WARNING", "traffic", message)
+        log_event("WARNING", "system", message)
+
     async def _close_proxy_client(self, writer: asyncio.StreamWriter) -> None:
         writer.close()
         try:
@@ -925,6 +992,24 @@ class _TrafficModemRuntime:
             return "TNC"
         return str(modem.get("name") or "TNC").strip()
 
+    def _runtime_label(self, *, modem: dict[str, Any] | None = None) -> str:
+        target = modem
+        if target is None:
+            with self._lock:
+                target = dict(self._active_modem) if self._active_modem else None
+        if target:
+            name = str(target.get("name") or "").strip()
+            modem_id = target.get("id")
+            if name and modem_id not in {None, ""}:
+                return f"{name} (id={modem_id})"
+            if name:
+                return name
+            if modem_id not in {None, ""}:
+                return f"id={modem_id}"
+        if self._modem_id is not None:
+            return f"id={self._modem_id}"
+        return "unknown modem"
+
     def _persist_frame(self, entry: dict[str, str], timestamp: str) -> None:
         cutoff = traffic_retention_cutoff()
         active_band = ""
@@ -1071,6 +1156,8 @@ class TrafficMonitorService:
                 await self._task
             except asyncio.CancelledError:
                 pass
+            except Exception as exc:
+                log_event("WARNING", "traffic", f"Traffic monitor manager stop observed task failure: {exc}")
             self._task = None
         runtimes = self._runtime_instances()
         for runtime in runtimes:
@@ -1124,9 +1211,15 @@ class TrafficMonitorService:
     async def _run(self) -> None:
         try:
             while not self._stop_event.is_set():
-                await self._sync_runtimes()
-                self._persist_summary_state()
-                await self._sleep(1.0)
+                try:
+                    await self._sync_runtimes()
+                    self._persist_summary_state()
+                    await self._sleep(1.0)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    log_event("WARNING", "traffic", f"Traffic monitor manager loop failed: {exc}. Retrying.")
+                    await self._sleep(self._reconnect_delay)
         finally:
             self._persist_summary_state()
 
@@ -1146,8 +1239,18 @@ class TrafficMonitorService:
             modem_id = int(modem["id"])
             signature = self._runtime_signature(modem)
             current_signature = self._runtime_signatures.get(modem_id)
-            if current_signature == signature and self._runtime_for_interface(modem_id) is not None:
-                continue
+            current_runtime = self._runtime_for_interface(modem_id)
+            if current_signature == signature and current_runtime is not None:
+                if current_runtime.is_running():
+                    continue
+                log_event(
+                    "WARNING",
+                    "traffic",
+                    (
+                        f"Traffic runtime for modem {modem.get('name') or modem_id} stopped unexpectedly. "
+                        "Recreating runtime."
+                    ),
+                )
             runtime = self._pop_runtime(modem_id)
             if runtime is not None:
                 await runtime.stop()

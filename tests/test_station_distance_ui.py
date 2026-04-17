@@ -9,6 +9,14 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("row.distance_km", template_source)
         self.assertIn('colspan="9"', template_source)
 
+    def test_stations_template_wraps_comment_column(self) -> None:
+        template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn("stations-comment-cell", template_source)
+        self.assertIn("stations-comment-text", template_source)
+        self.assertIn(".stations-comment-text", stylesheet_source)
+        self.assertIn("overflow-wrap: anywhere;", stylesheet_source)
+
     def test_map_tooltip_renders_distance_when_available(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("function formatDistance(distanceKm)", script_source)
@@ -123,6 +131,36 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("let lastSummarySignature = \"\";", template_source)
         self.assertIn("function stationsSignature(stations)", template_source)
         self.assertIn("if (nextStationsSignature !== lastStationsSignature)", template_source)
+
+    def test_stations_page_supports_metric_card_filtering(self) -> None:
+        template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
+        self.assertIn('data-station-filter="all"', template_source)
+        self.assertIn('data-station-filter="stationary"', template_source)
+        self.assertIn('data-station-filter="mobile"', template_source)
+        self.assertIn('data-station-filter="object"', template_source)
+        self.assertIn('data-station-filter="weather"', template_source)
+        self.assertIn('id="summary-weather"', template_source)
+        self.assertIn("function filteredStations(stations, filter)", template_source)
+        self.assertIn("function isWeatherStation(station)", template_source)
+        self.assertIn("function updateDerivedSummaries(stations)", template_source)
+        self.assertIn('filter === "stationary"', template_source)
+        self.assertIn("!isWeatherStation(station)", template_source)
+        self.assertIn("normalizeEntityClass(station)", template_source)
+        self.assertIn("updateFilterCardState()", template_source)
+        self.assertIn("classList.toggle(\"is-active\", active)", template_source)
+
+    def test_stations_page_supports_table_sorting(self) -> None:
+        template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
+        self.assertIn('data-stations-sort="callsign"', template_source)
+        self.assertIn('data-stations-sort="last_heard"', template_source)
+        self.assertIn('data-stations-sort="distance"', template_source)
+        self.assertIn('let activeStationsSortKey = "last_heard";', template_source)
+        self.assertIn('let activeStationsSortDirection = "desc";', template_source)
+        self.assertIn("function sortStations(stations, sortKey, sortDirection)", template_source)
+        self.assertIn("function setStationsSort(sortKey)", template_source)
+        self.assertIn("function applyStationsView()", template_source)
+        self.assertIn("updateSortState()", template_source)
+        self.assertIn('setStationsSort(button.dataset.stationsSort || "last_heard")', template_source)
 
 
 if __name__ == "__main__":

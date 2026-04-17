@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -38,7 +39,7 @@ MAX_TX_ATTEMPTS = 1 + len(RETRY_DELAYS_SECONDS)
 FINAL_ACK_WAIT_SECONDS = 30
 HEARD_FRESH_SECONDS = 10 * 60
 HEARD_WARN_SECONDS = 30 * 60
-QUERY_RESPONSE_DELAY_SECONDS = 3
+QUERY_RESPONSE_DELAY_SECONDS = 5
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -157,6 +158,39 @@ def update_conversation_path(conversation_id: int, path: str) -> None:
         )
 
 
+def _get_conversation(callsign: str) -> dict[str, Any] | None:
+    remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
+    row = fetch_one(
+        """
+        SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+        FROM aprs_message_conversations
+        WHERE remote_callsign = ? AND remote_ssid = ?
+        LIMIT 1
+        """,
+        (remote_callsign, remote_ssid),
+    )
+    return dict(row) if row else None
+
+
+def _resolve_auto_ack_path(*, sender: str, station_settings: dict[str, Any]) -> str:
+    default_path = ""
+    try:
+        default_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    except ValueError:
+        default_path = ""
+    try:
+        existing_conversation = _get_conversation(sender)
+    except ValueError:
+        existing_conversation = None
+    if existing_conversation is None:
+        return default_path
+    try:
+        conversation_path = normalize_aprs_path(str(existing_conversation.get("path") or ""))
+    except ValueError:
+        return default_path
+    return conversation_path or default_path
+
+
 def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") -> dict[str, Any]:
     normalized_callsign = normalize_aprs_destination_callsign(callsign)
     normalized_text = normalize_aprs_message_text(message_text)
@@ -239,15 +273,26 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
 
 
 def get_messages_page_data() -> dict[str, Any]:
-    expire_direct_message_timeouts()
-    heard_by_key = _heard_station_lookup()
-    conversation_rows = fetch_all(
-        """
-        SELECT c.id, c.remote_callsign, c.remote_ssid, c.path, c.created_at, c.updated_at
-        FROM aprs_message_conversations c
-        ORDER BY c.updated_at DESC, c.id DESC
-        """
-    )
+    try:
+        expire_direct_message_timeouts()
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to expire direct message timeouts: {exc}")
+    try:
+        heard_by_key = _heard_station_lookup()
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load heard station snapshot: {exc}")
+        heard_by_key = {}
+    try:
+        conversation_rows = fetch_all(
+            """
+            SELECT c.id, c.remote_callsign, c.remote_ssid, c.path, c.created_at, c.updated_at
+            FROM aprs_message_conversations c
+            ORDER BY c.updated_at DESC, c.id DESC
+            """
+        )
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load APRS message conversations: {exc}")
+        conversation_rows = []
     conversations: list[dict[str, Any]] = []
     active_conversation_id: str | None = None
     local_sender = _local_station_identity()
@@ -315,16 +360,20 @@ def get_messages_page_data() -> dict[str, Any]:
 
 
 def get_unread_inbox_count() -> int:
-    rows = fetch_all(
-        """
-        SELECT c.remote_callsign, c.remote_ssid, COUNT(m.id) AS unread_count
-        FROM aprs_message_conversations c
-        JOIN aprs_messages m ON m.conversation_id = c.id
-        WHERE m.direction = ? AND m.is_unread = 1
-        GROUP BY c.id, c.remote_callsign, c.remote_ssid
-        """,
-        (MESSAGE_DIRECTION_RX,),
-    )
+    try:
+        rows = fetch_all(
+            """
+            SELECT c.remote_callsign, c.remote_ssid, COUNT(m.id) AS unread_count
+            FROM aprs_message_conversations c
+            JOIN aprs_messages m ON m.conversation_id = c.id
+            WHERE m.direction = ? AND m.is_unread = 1
+            GROUP BY c.id, c.remote_callsign, c.remote_ssid
+            """,
+            (MESSAGE_DIRECTION_RX,),
+        )
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load unread inbox count: {exc}")
+        return 0
     local_sender = _local_station_identity()
     unread_total = 0
     for row in rows:
@@ -596,7 +645,15 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
     if not addressee or not text_field:
         return
 
-    sender = normalize_aprs_destination_callsign(parsed["source"])
+    try:
+        sender = normalize_aprs_destination_callsign(parsed["source"])
+    except ValueError:
+        _log_invalid_message_frame(
+            reason="invalid sender callsign",
+            source=str(parsed.get("source") or ""),
+            line=line,
+        )
+        return
     if addressee.upper().startswith("BLN"):
         store_incoming_bulletin(
             sender=sender,
@@ -618,7 +675,7 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         query_text, query_number = _parse_query_text(text_field)
         if not query_text:
             return
-        store_incoming_query(
+        is_new_query = store_incoming_query(
             sender=sender,
             addressee=addressee.upper(),
             query_text=query_text,
@@ -626,7 +683,8 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
             path=parsed["path"],
             timestamp=received_at,
         )
-        _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
+        if is_new_query:
+            _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
         return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
@@ -648,8 +706,6 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
     message_text = suffix_match.group("text") or ""
     message_number = _normalize_message_number(suffix_match.group("number"))
-    if not message_number:
-        return
     store_incoming_message(
         sender=sender,
         addressee=addressee.upper(),
@@ -871,24 +927,28 @@ def store_incoming_message(
     sender: str,
     addressee: str,
     message_text: str,
-    message_number: str,
+    message_number: str | None,
     path: str,
     timestamp: str,
 ) -> None:
+    station_settings = _get_station_settings()
+    ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
     conversation = create_or_update_conversation(sender)
-    existing = fetch_one(
-        """
-        SELECT id
-        FROM aprs_messages
-        WHERE conversation_id = ?
-          AND direction = ?
-          AND sender = ?
-          AND message_number = ?
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, message_number),
-    )
+    existing = None
+    if message_number:
+        existing = fetch_one(
+            """
+            SELECT id
+            FROM aprs_messages
+            WHERE conversation_id = ?
+              AND direction = ?
+              AND sender = ?
+              AND message_number = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, message_number),
+        )
     if existing is None:
         with get_connection() as connection:
             connection.execute(
@@ -914,12 +974,14 @@ def store_incoming_message(
                 ),
             )
         log_event("INFO", "messages", f"Stored incoming APRS message from {sender} to {addressee}")
-    station_settings = _get_station_settings()
-    enqueue_ack_job(sender, message_number, station_settings, trigger="ack-now")
+    if not message_number:
+        return
+    enqueue_ack_job(sender, message_number, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(
         sender,
         message_number,
         station_settings,
+        path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
     )
@@ -933,8 +995,10 @@ def store_incoming_query(
     query_number: str | None,
     path: str,
     timestamp: str,
-) -> None:
-    conversation = create_or_update_conversation(sender, path=path)
+) -> bool:
+    station_settings = _get_station_settings()
+    ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
+    conversation = create_or_update_conversation(sender)
     existing = None
     if query_number:
         existing = fetch_one(
@@ -951,7 +1015,8 @@ def store_incoming_query(
             (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, query_number),
         )
     if existing is not None:
-        return
+        enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-duplicate")
+        return False
     with get_connection() as connection:
         connection.execute(
             """
@@ -977,16 +1042,17 @@ def store_incoming_query(
         )
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
     if not query_number:
-        return
-    station_settings = _get_station_settings()
-    enqueue_ack_job(sender, query_number, station_settings, trigger="ack-now")
+        return True
+    enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(
         sender,
         query_number,
         station_settings,
+        path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
     )
+    return True
 
 
 def store_incoming_bulletin(
@@ -997,7 +1063,7 @@ def store_incoming_bulletin(
     path: str,
     timestamp: str,
 ) -> None:
-    conversation = create_or_update_conversation(sender, path=path)
+    conversation = create_or_update_conversation(sender)
     display_text = _format_bulletin_display_text(addressee, message_text)
     existing = fetch_one(
         """
@@ -1044,7 +1110,7 @@ def create_automatic_query_response(*, sender: str, message_text: str, path: str
     local_sender = _local_station_identity()
     if not local_sender:
         raise ValueError(_t("Local station callsign is required."))
-    conversation = create_or_update_conversation(sender, path=path)
+    conversation = create_or_update_conversation(sender)
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -1188,7 +1254,11 @@ def _parse_effective_incoming_tnc2_line(line: str, *, log_invalid_third_party: b
         return embedded
     if log_invalid_third_party:
         outer_source = str(parsed.get("source") or "").strip() or "unknown"
-        log_event("WARNING", "messages", f"Ignored malformed third-party APRS message frame from {outer_source}.")
+        _log_invalid_message_frame(
+            reason="malformed third-party APRS message frame",
+            source=outer_source,
+            line=line,
+        )
     return None
 
 
@@ -1236,7 +1306,11 @@ def _heard_station_lookup() -> dict[str, dict[str, Any]]:
         parsed = _parse_effective_incoming_tnc2_line(str(row["line"] or ""))
         if parsed is None:
             continue
-        source = normalize_aprs_destination_callsign(parsed["source"])
+        try:
+            source = normalize_aprs_destination_callsign(parsed["source"])
+        except ValueError:
+            # Ignore malformed source callsigns in historical traffic rows.
+            continue
         if source.casefold() in snapshots:
             continue
         base_callsign, ssid = split_callsign_ssid(source)
@@ -1356,3 +1430,32 @@ def _callsign_identity_matches(left: str, right: str) -> bool:
     if not left_canonical or not right_canonical:
         return False
     return left_canonical == right_canonical
+
+
+def _safe_messages_warning(message: str) -> None:
+    try:
+        log_event("WARNING", "messages", str(message or "").strip())
+    except Exception:
+        # Skip secondary logging failures so message UI can still render.
+        return
+
+
+def _frame_log_snippet(line: str, *, limit: int = 220) -> str:
+    normalized = str(line or "").replace("\r", " ").replace("\n", " ").strip()
+    if not normalized:
+        return "<empty>"
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit]}..."
+
+
+def _log_invalid_message_frame(*, reason: str, source: str, line: str) -> None:
+    normalized_reason = str(reason or "").strip() or "invalid APRS message frame"
+    normalized_source = str(source or "").strip() or "unknown"
+    snippet = _frame_log_snippet(line)
+    message = (
+        f"Ignored APRS message frame ({normalized_reason}); "
+        f"source='{normalized_source}'; frame='{snippet}'"
+    )
+    log_event("WARNING", "messages", message)
+    log_event("WARNING", "system", message)

@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -420,6 +421,28 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(ack_jobs), 2)
             self.assertTrue(all('"message_text":"ack02"' in str(job["payload_json"]) for job in ack_jobs))
+            self.assertTrue(all('"path":"WIDE2-1"' in str(job["payload_json"]) for job in ack_jobs))
+
+    def test_incoming_message_ack_uses_existing_conversation_path_when_available(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            queue_outgoing_message(callsign="SP8ABC", message_text="Hello", path="WIDE2-2")
+            inbound_line = "SP8ABC>APRS::SQ9MDD-4 :roger{44"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack44"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"path":"WIDE2-2"' in str(job["payload_json"]) for job in ack_jobs))
 
     def test_incoming_message_with_single_char_suffix_number_is_normalized_and_acked(self) -> None:
         with temporary_database():
@@ -640,6 +663,43 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(ack_jobs), 2)
 
+    def test_incoming_unnumbered_message_is_visible_without_ack_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id, ssid="15"))
+
+            inbound_line = "SQ9SIM-3>APBOX0,SP9INZ-10*::SQ9MDD-15:Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-04-16T15:02:00+00:00")
+
+            row = fetch_one(
+                """
+                SELECT m.direction, m.sender, m.addressee, m.message_text, m.message_number, m.status,
+                       c.remote_callsign, c.remote_ssid
+                FROM aprs_messages m
+                JOIN aprs_message_conversations c ON c.id = m.conversation_id
+                ORDER BY m.id DESC
+                LIMIT 1
+                """
+            )
+            assert row is not None
+            self.assertEqual(row["direction"], "rx")
+            self.assertEqual(row["sender"], "SQ9SIM-3")
+            self.assertEqual(row["addressee"], "SQ9MDD-15")
+            self.assertEqual(row["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(row["message_number"], None)
+            self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
+            self.assertEqual(row["remote_callsign"], "SQ9SIM")
+            self.assertEqual(row["remote_ssid"], "3")
+
+            jobs = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")
+            assert jobs is not None
+            self.assertEqual(int(jobs["total"]), 0)
+
+            view = get_messages_page_data()
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(view["conversations"][0]["callsign"], "SQ9SIM-3")
+            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
     def test_incoming_message_to_other_local_ssid_is_ignored(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
@@ -803,6 +863,88 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             ack_now_job = next(job for job in jobs if '"message_text":"ack49"' in str(job["payload_json"]) and '"trigger":"ack-now"' in str(job["payload_json"]))
             response_job = next(job for job in jobs if '"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"' in str(job["payload_json"]))
             self.assertGreater(str(response_job["scheduled_at"]), str(ack_now_job["scheduled_at"]))
+
+    def test_incoming_numbered_query_preserves_existing_manual_conversation_path_for_ack(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            queue_outgoing_message(callsign="SP8ABC", message_text="Ping", path="WIDE2-2")
+            inbound_line = "SP8ABC>APK005,RFONLY::SQ9MDD-4 :?APRS{49"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            conversation_row = fetch_one(
+                """
+                SELECT path
+                FROM aprs_message_conversations
+                WHERE remote_callsign = ? AND remote_ssid = ?
+                LIMIT 1
+                """,
+                ("SP8ABC", ""),
+            )
+            assert conversation_row is not None
+            self.assertEqual(str(conversation_row["path"]), "WIDE2-2")
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack49"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"path":"WIDE2-2"' in str(job["payload_json"]) for job in ack_jobs))
+
+    def test_duplicate_numbered_query_acknowledges_retry_without_second_auto_response(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SQ9MDD-7>APK005,RFONLY::SQ9MDD-4 :?VER{80"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:05+00:00")
+
+            rows = fetch_all(
+                """
+                SELECT direction, message_text, message_number
+                FROM aprs_messages
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["direction"], "rx")
+            self.assertEqual(rows[0]["message_text"], "?VER")
+            self.assertEqual(rows[0]["message_number"], "80")
+            self.assertEqual(rows[1]["direction"], "tx")
+            self.assertEqual(rows[1]["message_text"], f"APRSBox {get_version()}")
+
+            response_jobs = fetch_all(
+                """
+                SELECT id
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"APRSBox%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(response_jobs), 1)
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack80"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 3)
+            payloads = [str(row["payload_json"]) for row in ack_jobs]
+            self.assertTrue(any('"trigger":"ack-now"' in payload for payload in payloads))
+            self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
+            self.assertTrue(any('"trigger":"ack-duplicate"' in payload for payload in payloads))
 
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():
@@ -1086,6 +1228,90 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             assert queued_job is not None
             self.assertEqual(queued_job["status"], "queued")
+
+    def test_messages_page_data_ignores_timeout_expire_db_error(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="QSL", path="")
+
+            with patch("app.services.messages.expire_direct_message_timeouts", side_effect=sqlite3.OperationalError("readonly")):
+                view = get_messages_page_data()
+
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(view["conversations"][0]["callsign"], "DL1XYZ-9")
+
+    def test_messages_page_data_returns_empty_when_conversation_query_fails(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="QSL", path="")
+
+            from app.services import messages as messages_service
+
+            original_fetch_all = messages_service.fetch_all
+
+            def failing_fetch_all(sql: str, params: tuple[object, ...] = ()) -> list[object]:
+                if "FROM aprs_message_conversations c" in sql:
+                    raise sqlite3.OperationalError("no such table: aprs_message_conversations")
+                return original_fetch_all(sql, params)
+
+            with patch("app.services.messages.fetch_all", side_effect=failing_fetch_all):
+                view = get_messages_page_data()
+
+            self.assertEqual(view["conversations"], [])
+            self.assertIsNone(view["active_conversation_id"])
+
+    def test_unread_inbox_count_returns_zero_when_query_fails(self) -> None:
+        with temporary_database():
+            with patch("app.services.messages.fetch_all", side_effect=sqlite3.OperationalError("locked")):
+                self.assertEqual(get_unread_inbox_count(), 0)
+
+    def test_messages_page_data_ignores_invalid_heard_source_callsign(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="QSL", path="")
+
+            execute(
+                """
+                INSERT INTO traffic_frames(source, format, line, port, command, length, hex, created_at)
+                VALUES (?, 'TNC2', ?, '', '', ?, '', ?)
+                """,
+                (
+                    "BAD*SRC",
+                    "BAD*SRC>APRS:>status",
+                    len("BAD*SRC>APRS:>status"),
+                    "2026-01-01T00:00:00+00:00",
+                ),
+            )
+
+            view = get_messages_page_data()
+            self.assertEqual(len(view["conversations"]), 1)
+            self.assertEqual(view["conversations"][0]["callsign"], "DL1XYZ-9")
+
+    def test_process_incoming_tnc2_message_ignores_invalid_sender_callsign(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            raw_line = "BAD*SRC>APRS::SQ9MDD-4 :Hello{AA"
+            with patch("app.services.messages.log_event") as log_event_mock:
+                process_incoming_tnc2_message(
+                    raw_line,
+                    timestamp="2026-01-01T00:00:00+00:00",
+                )
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert row is not None
+            self.assertEqual(int(row["total"]), 0)
+            self.assertGreaterEqual(log_event_mock.call_count, 1)
+            logged_messages = [str(call.args[2]) for call in log_event_mock.call_args_list if len(call.args) >= 3]
+            matching_logs = [
+                message for message in logged_messages if "invalid sender callsign" in message and "BAD*SRC" in message
+            ]
+            self.assertTrue(matching_logs)
+            self.assertTrue(any(raw_line in message for message in matching_logs))
 
 
 if __name__ == "__main__":

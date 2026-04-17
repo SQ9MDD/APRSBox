@@ -1,5 +1,115 @@
 # Changelog
 
+## 1.6.0 - 17.04.2026
+
+### Stable release
+- Wersja została przygotowana do merge z linii `dev` na gałąź stabilną.
+
+### Included development snapshots
+- 1.5.1.dev
+- 1.5.3.dev
+- 1.5.4.dev
+- 1.5.7.dev
+- 1.5.8.dev
+
+### Highlights
+- Usprawniono `Messages`: dopracowano obsługę `ACK/REJ`, odporność na błędy oraz zgodność zachowania dla wiadomości numerowanych i nienumerowanych.
+- Wprowadzono kontekstowy wybór ścieżki dla automatycznych `ACK` (istniejąca rozmowa: ścieżka rozmowy; brak rozmowy: `beacon_path` z `My Station`) i usunięto nadpisywanie ręcznie ustawionej ścieżki rozmowy przez ruch przychodzący.
+- Wzmocniono niezawodność runtime TNC (autorecovery tasków, lepsza obsługa wyjątków i reconnect po błędach TX).
+- Rozbudowano widok `Stations` o filtry kafelkowe, licznik stacji pogodowych oraz sortowanie po `Callsign`, `Last activity` i `Distance`.
+- Dodano usprawnienia UX i utrzymaniowe, w tym przywracanie pozycji przewijania na stronie `WX` po operacjach `POST`.
+- Rozszerzono testy regresyjne dla messagingu, parsera APRS i UI, aby zmniejszyć ryzyko regresji przy wydaniu stable.
+
+## 1.5.8.dev - 17.04.2026
+
+### Added
+- Dodano test regresyjny potwierdzający, że `ACK` dla przychodzącej wiadomości używa ścieżki rozmowy, jeżeli była wcześniej ustawiona ręcznie.
+- Rozszerzono testy wiadomości o walidację ścieżki `ACK` dla fallbacku do `My Station` (`beacon_path`) oraz dla zapamiętanej ścieżki rozmowy.
+
+### Changed
+- W module `messages` wybór ścieżki dla automatycznych `ACK` działa teraz kontekstowo: dla istniejącej rozmowy używana jest jej zapisana ścieżka, a gdy rozmowy brak — fallback do `beacon_path` ze stacji lokalnej.
+- `enqueue_ack_job` przyjmuje teraz jawnie ścieżkę dla ramek `ACK`, zamiast wymuszać pusty path.
+
+### Fixed
+- Naprawiono nadpisywanie ręcznie ustawionej ścieżki rozmowy przez ruch przychodzący (`query`/`bulletin`) oraz przez automatyczne odpowiedzi na query.
+- Utrzymano spójność rozmowy: manualnie ustawiona ścieżka pozostaje preferowana dla kolejnych `ACK` i nie jest kasowana przez przypadkowe ramki przychodzące.
+
+### Removed
+- Brak zmian.
+
+## 1.5.7.dev - 17.04.2026
+
+### Added
+- W zakładce `Stations` dodano filtrowanie listy stacji przez klikane kafelki podsumowania: `All stations`, `Fixed stations`, `Mobile stations`, `Objects`, `Weather stations`.
+- Dodano licznik `Weather stations` w górnym pasku podsumowania `Stations`.
+- W tabeli `Stations` dodano sortowanie po kolumnach `Callsign`, `Last activity` i `Distance` (klikane nagłówki).
+- Dodano tłumaczenia etykiety `Weather stations` w `en/pl/tlh`.
+
+### Changed
+- Kafelki podsumowania w górnym bloku `Stations` działają teraz jako przyciski filtrów i wskazują aktywny filtr (stan wizualny + `aria-pressed`).
+- Renderowanie tabeli stacji uwzględnia aktywny filtr także po automatycznym odświeżeniu danych z `/api/stations`.
+- W widoku `Stations` filtr `Fixed stations` pomija stacje pogodowe (te są dostępne wyłącznie pod filtrem `Weather stations`), a licznik `Fixed stations` został dostosowany do tej samej reguły.
+- Zwężono i skompaktowano kafelki filtrów w górnym pasku `Stations`, aby wszystkie pięć (`All`, `Mobile`, `Fixed`, `Objects`, `Weather`) mieściło się w jednym rzędzie na desktopie.
+- Domyślnie aktywne jest sortowanie tabeli po `Last activity` malejąco (najnowsze na górze); sortowanie działa łącznie z aktywnymi filtrami i odświeżaniem danych.
+- W kolumnie `Comment` w tabeli `Stations` wymuszono zawijanie długich treści, aby ograniczyć rozszerzanie tabeli i ryzyko poziomego scrolla od komentarzy.
+
+### Fixed
+- Poprawiono klasyfikację stacji w parserze APRS: pozycje z symbolem pogodowym (`_`) nie są już oznaczane jako `mobile` tylko dlatego, że komentarz zawiera wzorzec `ddd/ddd` (np. kierunek/prędkość wiatru).
+- Rozszerzono testy regresyjne UI dla widoku `Stations` (filtry + pogodowe + sortowanie) oraz test parsera APRS dla przypadku pogodowego.
+
+### Removed
+- Brak zmian.
+
+## 1.5.4.dev - 16.04.2026
+
+### Added
+- Dodano automatyczne przywracanie pozycji przewinięcia na stronie `WX` po operacjach `POST` (zapis konfiguracji/mapowań/źródeł, testy, odświeżenie, wysyłka), tak aby widok wracał do ostatnio edytowanego obszaru.
+
+### Changed
+- Doprecyzowano logowanie wadliwych ramek APRS w module `messages`: wpis zawiera teraz powód odrzucenia, `source` oraz fragment surowej ramki, aby łatwiej diagnozować błędy danych wejściowych.
+
+### Fixed
+- Wzmocniono odporność `Messages` na błędy SQLite podczas renderowania widoku (`/messages`) i pobierania statusu nieprzeczytanych: zamiast `500` zwracany jest bezpieczny fallback.
+- Dodano defensywne logowanie ostrzeżeń w module `messages`, aby wtórny błąd zapisu logu nie przerywał renderowania strony.
+- Naprawiono scenariusz, w którym pojedyncza ramka APRS z niepoprawnym `source` mogła wywołać wyjątek i zrestartować pętlę `traffic runtime`; takie ramki są teraz jawnie odrzucane i logowane.
+- Naprawiono scenariusz, w którym historyczna ramka `TNC2` z niepoprawnym `source` mogła powodować `Internal Server Error` przy wejściu na `Messages`; rekord jest teraz pomijany podczas budowy `heard snapshot`.
+
+### Removed
+- Brak zmian.
+
+## 1.5.3.dev - 16.04.2026
+
+### Added
+- Dodano mechanizm autorecovery runtime TNC: manager odtwarza runtime modemu, jeżeli jego task zakończył się nieoczekiwanie.
+- Dodano pomocnicze etykiety runtime/modemu w logach diagnostycznych, aby łatwiej identyfikować który interfejs wszedł w błąd/reconnect.
+
+### Changed
+- Wzmocniono obsługę wyjątków w pętlach monitora ruchu i runtime TNC: niespodziewane błędy nie zatrzymują już trwale tasków backgroundowych, tylko przechodzą do kontrolowanego retry po `reconnect_delay`.
+- Uporządkowano ścieżkę zatrzymania (`stop`) runtime i managera tak, aby cleanup był wykonywany także wtedy, gdy task wcześniej zakończył się wyjątkiem.
+
+### Fixed
+- Naprawiono scenariusz, w którym błąd TX (`OSError`) nie wymuszał reconnectu i system mógł pozostać logicznie „connected” mimo uszkodzonego linku do TNC.
+- Przy błędzie TX runtime zamyka teraz aktywny writer/FD, czyści bufory KISS i przechodzi w stan błędu wymuszający zdrowe odtworzenie połączenia.
+- Usunięto ryzyko trwałego zaniku RX/TX po awarii pojedynczego tasku runtime bez automatycznego restartu.
+
+### Removed
+- Brak zmian.
+
+## 1.5.1.dev - 16.04.2026
+
+### Added
+- Dodano test regresyjny dla przychodzącej wiadomości APRS bez numeru (`{NN}`), aby potwierdzić zapis do rozmowy i brak generowania ACK dla nienumerowanej ramki.
+
+### Changed
+- Brak zmian.
+
+### Fixed
+- W `Messages` naprawiono obsługę przychodzących wiadomości APRS bez numeru wiadomości: są teraz zapisywane i widoczne w panelu rozmów zamiast być ignorowane.
+- Dla nienumerowanych wiadomości przychodzących nie jest wysyłany `ACK`, ponieważ protokół ACK wymaga numeru referencyjnego.
+
+### Removed
+- Brak zmian.
+
 ## 1.5.0 - 16.04.2026
 
 ### Stable release

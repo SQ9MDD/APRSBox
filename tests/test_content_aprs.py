@@ -83,6 +83,14 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("latitude"), "52.30617")
         self.assertEqual(aprs_data.get("longitude"), "21.08117")
 
+    def test_parse_tnc2_frame_does_not_mark_weather_symbol_position_as_mobile(self) -> None:
+        parsed = parse_tnc2_frame("SP8WX-1>APRS:!5218.37N/02104.87E_090/010g015t020r000p000P000h50b10150")
+        self.assertIsNotNone(parsed)
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("entity_class"), "stationary")
+        self.assertEqual(aprs_data.get("frame_type"), "S")
+        self.assertEqual((parsed or {}).get("classification"), "fixed")
+
     def test_parse_tnc2_frame_decodes_mic_e_position(self) -> None:
         parsed = parse_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!')
         aprs_data = (parsed or {}).get("aprs_data") or {}
