@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.2.dev - 17.04.2026
+
+### Added
+- Dodano testy regresyjne parsera APRS dla pozycji `compressed` z alfanumerycznym overlayem w `symbol table` (w tym przypadek `L...` oraz legacy mapowanie `a-j -> 0-9`).
+
+### Changed
+- Rozszerzono rozpoznawanie pozycji `compressed` w parserze APRS: `symbol table` akceptuje teraz overlaye (`0-9`, `A-Z`) oraz legacy zapis `a-j` mapowany do cyfr.
+- Dodano defensyjną walidację pola `c/s/T` i doprecyzowano detekcję przypadków niejednoznacznych, aby poprawnie preferować format nieskompresowany tam, gdzie ramka spełnia jego pełny układ.
+
+### Fixed
+- Naprawiono odrzucanie legalnych ramek APRS `compressed` z overlayem w `symbol table` (np. `!L...`), które wcześniej kończyły jako nierozpoznane (`aprs_data=None`).Thanx M0IGA
+
+### Removed
+- Brak zmian.
+
 ## 1.6.1.dev - 17.04.2026
 
 ### Added

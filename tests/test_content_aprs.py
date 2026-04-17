@@ -25,6 +25,34 @@ class AprsContentParsingTests(unittest.TestCase):
         lon_value = int(round(190463 * (180 + longitude)))
         return f"!/{cls._encode_base91(lat_value)}{cls._encode_base91(lon_value)}> sT"
 
+    @classmethod
+    def _build_compressed_packet_with_symbol_table(
+        cls,
+        latitude: float,
+        longitude: float,
+        *,
+        symbol_table: str,
+        symbol_code: str = ">",
+        cst: str = " sT",
+    ) -> str:
+        lat_value = int(round(380926 * (90 - latitude)))
+        lon_value = int(round(190463 * (180 + longitude)))
+        return f"!{symbol_table}{cls._encode_base91(lat_value)}{cls._encode_base91(lon_value)}{symbol_code}{cst}"
+
+    @classmethod
+    def _build_timestamped_compressed_packet_with_symbol_table(
+        cls,
+        latitude: float,
+        longitude: float,
+        *,
+        symbol_table: str,
+        symbol_code: str = ">",
+        cst: str = " sT",
+    ) -> str:
+        lat_value = int(round(380926 * (90 - latitude)))
+        lon_value = int(round(190463 * (180 + longitude)))
+        return f"@010203z{symbol_table}{cls._encode_base91(lat_value)}{cls._encode_base91(lon_value)}{symbol_code}{cst}"
+
     def test_clean_decoded_tokens_removes_compressed_telemetry_and_dao(self) -> None:
         cleaned = _clean_decoded_tokens("|!!!!| Test beacon !w12!")
         self.assertEqual(cleaned, "Test beacon")
@@ -59,6 +87,40 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertEqual(parsed["latitude"], "52.22970")
         self.assertEqual(parsed["longitude"], "21.01220")
+
+    def test_parse_tnc2_frame_decodes_compressed_position_with_alpha_overlay_symbol_table(self) -> None:
+        parsed = parse_tnc2_frame("M0IGA-9 > APLRFT , WIDE1-1,WIDE2-1:!L2efTN.PAv:HQLoRa APRS 1200")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "position_compressed")
+        self.assertEqual(aprs_data.get("latitude"), "54.87469")
+        self.assertEqual(aprs_data.get("longitude"), "-1.36868")
+        self.assertEqual(aprs_data.get("symbol"), "Lv")
+
+    def test_parse_tnc2_frame_decodes_timestamped_compressed_position_with_alpha_overlay_symbol_table(self) -> None:
+        compressed_info = self._build_timestamped_compressed_packet_with_symbol_table(
+            52.2297,
+            21.0122,
+            symbol_table="L",
+        )
+        parsed = parse_tnc2_frame(f"SP8ABC-9>APRS:{compressed_info}")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "position_compressed_timestamped")
+        self.assertEqual(aprs_data.get("latitude"), "52.22970")
+        self.assertEqual(aprs_data.get("longitude"), "21.01220")
+        self.assertEqual(aprs_data.get("symbol"), "L>")
+
+    def test_parse_tnc2_frame_decodes_compressed_position_with_legacy_lowercase_overlay_digit(self) -> None:
+        compressed_info = self._build_compressed_packet_with_symbol_table(
+            52.2297,
+            21.0122,
+            symbol_table="a",
+        )
+        parsed = parse_tnc2_frame(f"SP8ABC-9>APRS:{compressed_info}")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "position_compressed")
+        self.assertEqual(aprs_data.get("latitude"), "52.22970")
+        self.assertEqual(aprs_data.get("longitude"), "21.01220")
+        self.assertEqual(aprs_data.get("symbol"), "0>")
 
     def test_parse_tnc2_frame_decodes_compressed_position_when_cst_is_spaces(self) -> None:
         compressed_info = self._build_compressed_packet(52.2297, 21.0122)[:-3] + "   "

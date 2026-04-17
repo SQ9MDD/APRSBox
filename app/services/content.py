@@ -2064,6 +2064,7 @@ def _looks_like_compressed_position(info: str, *, with_timestamp: bool) -> bool:
         lat_block = info[9:13]
         lon_block = info[13:17]
         symbol_code = info[17]
+        cst_block = info[18:21]
     else:
         if len(info) < 14:
             return False
@@ -2071,23 +2072,44 @@ def _looks_like_compressed_position(info: str, *, with_timestamp: bool) -> bool:
         lat_block = info[2:6]
         lon_block = info[6:10]
         symbol_code = info[10]
+        cst_block = info[11:14]
 
-    if symbol_table not in {"/", "\\"}:
+    if not _is_valid_compressed_symbol_table(symbol_table):
         return False
+    normalized_symbol_table = _normalize_compressed_symbol_table(symbol_table)
+    if "0" <= normalized_symbol_table <= "9":
+        if with_timestamp:
+            if (
+                len(info) >= 27
+                and _parse_latitude(info[8:16]) is not None
+                and _parse_longitude(info[17:26]) is not None
+                and 33 <= ord(info[26]) <= 126
+            ):
+                return False
+        else:
+            if (
+                len(info) >= 20
+                and _parse_latitude(info[1:9]) is not None
+                and _parse_longitude(info[10:19]) is not None
+                and 33 <= ord(info[19]) <= 126
+            ):
+                return False
     if not _is_base91_block(lat_block) or not _is_base91_block(lon_block):
+        return False
+    if not _is_valid_compressed_cst_block(cst_block):
         return False
     return 33 <= ord(symbol_code) <= 126
 
 
 def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, Any] | None:
     if with_timestamp:
-        symbol_table = info[8]
+        symbol_table = _normalize_compressed_symbol_table(info[8])
         lat_block = info[9:13]
         lon_block = info[13:17]
         symbol_code = info[17]
         comment = info[21:].strip() if len(info) > 21 else ""
     else:
-        symbol_table = info[1]
+        symbol_table = _normalize_compressed_symbol_table(info[1])
         lat_block = info[2:6]
         lon_block = info[6:10]
         symbol_code = info[10]
@@ -2787,6 +2809,33 @@ def _match_group(text: str, pattern: str) -> str:
 
 def _is_base91_block(value: str) -> bool:
     return len(value) == 4 and all(33 <= ord(char) <= 123 for char in value)
+
+
+def _normalize_compressed_symbol_table(symbol_table: str) -> str:
+    if len(symbol_table) == 1 and "a" <= symbol_table <= "j":
+        return chr(ord(symbol_table) - 49)
+    return symbol_table
+
+
+def _is_valid_compressed_symbol_table(symbol_table: str) -> bool:
+    normalized = _normalize_compressed_symbol_table(symbol_table)
+    if normalized in {"/", "\\"}:
+        return True
+    if len(normalized) != 1:
+        return False
+    return ("0" <= normalized <= "9") or ("A" <= normalized <= "Z")
+
+
+def _is_valid_compressed_cst_block(cst_block: str) -> bool:
+    if len(cst_block) != 3:
+        return False
+    for char in cst_block:
+        code = ord(char)
+        if code == 32:
+            continue
+        if code < 33 or code > 123:
+            return False
+    return True
 
 
 def _base91_value(value: str) -> int:
