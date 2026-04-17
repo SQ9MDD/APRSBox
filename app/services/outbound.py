@@ -528,6 +528,7 @@ def enqueue_ack_job(
     ack_number: str,
     station_settings: dict[str, Any],
     *,
+    path: str = "",
     trigger: str = "ack",
     scheduled_for: datetime | None = None,
 ) -> tuple[bool, str]:
@@ -536,7 +537,7 @@ def enqueue_ack_job(
         "ssid": str(station_settings.get("ssid") or "").strip(),
         "message_kind": "ack",
         "addressee": str(addressee or "").strip().upper(),
-        "path": "",
+        "path": str(path or "").strip(),
         "message_text": f"ack{str(ack_number or '').strip().upper()}",
         "trigger": str(trigger or "ack").strip() or "ack",
     }

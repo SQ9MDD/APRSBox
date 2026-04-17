@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.8.dev - 17.04.2026
+
+### Added
+- Dodano test regresyjny potwierdzający, że `ACK` dla przychodzącej wiadomości używa ścieżki rozmowy, jeżeli była wcześniej ustawiona ręcznie.
+- Rozszerzono testy wiadomości o walidację ścieżki `ACK` dla fallbacku do `My Station` (`beacon_path`) oraz dla zapamiętanej ścieżki rozmowy.
+
+### Changed
+- W module `messages` wybór ścieżki dla automatycznych `ACK` działa teraz kontekstowo: dla istniejącej rozmowy używana jest jej zapisana ścieżka, a gdy rozmowy brak — fallback do `beacon_path` ze stacji lokalnej.
+- `enqueue_ack_job` przyjmuje teraz jawnie ścieżkę dla ramek `ACK`, zamiast wymuszać pusty path.
+
+### Fixed
+- Naprawiono nadpisywanie ręcznie ustawionej ścieżki rozmowy przez ruch przychodzący (`query`/`bulletin`) oraz przez automatyczne odpowiedzi na query.
+- Utrzymano spójność rozmowy: manualnie ustawiona ścieżka pozostaje preferowana dla kolejnych `ACK` i nie jest kasowana przez przypadkowe ramki przychodzące.
+
+### Removed
+- Brak zmian.
+
 ## 1.5.7.dev - 17.04.2026
 
 ### Added

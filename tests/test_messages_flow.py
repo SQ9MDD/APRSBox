@@ -421,6 +421,28 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(ack_jobs), 2)
             self.assertTrue(all('"message_text":"ack02"' in str(job["payload_json"]) for job in ack_jobs))
+            self.assertTrue(all('"path":"WIDE2-1"' in str(job["payload_json"]) for job in ack_jobs))
+
+    def test_incoming_message_ack_uses_existing_conversation_path_when_available(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            queue_outgoing_message(callsign="SP8ABC", message_text="Hello", path="WIDE2-2")
+            inbound_line = "SP8ABC>APRS::SQ9MDD-4 :roger{44"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack44"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"path":"WIDE2-2"' in str(job["payload_json"]) for job in ack_jobs))
 
     def test_incoming_message_with_single_char_suffix_number_is_normalized_and_acked(self) -> None:
         with temporary_database():
@@ -841,6 +863,39 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             ack_now_job = next(job for job in jobs if '"message_text":"ack49"' in str(job["payload_json"]) and '"trigger":"ack-now"' in str(job["payload_json"]))
             response_job = next(job for job in jobs if '"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"' in str(job["payload_json"]))
             self.assertGreater(str(response_job["scheduled_at"]), str(ack_now_job["scheduled_at"]))
+
+    def test_incoming_numbered_query_preserves_existing_manual_conversation_path_for_ack(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            queue_outgoing_message(callsign="SP8ABC", message_text="Ping", path="WIDE2-2")
+            inbound_line = "SP8ABC>APK005,RFONLY::SQ9MDD-4 :?APRS{49"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            conversation_row = fetch_one(
+                """
+                SELECT path
+                FROM aprs_message_conversations
+                WHERE remote_callsign = ? AND remote_ssid = ?
+                LIMIT 1
+                """,
+                ("SP8ABC", ""),
+            )
+            assert conversation_row is not None
+            self.assertEqual(str(conversation_row["path"]), "WIDE2-2")
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack49"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"path":"WIDE2-2"' in str(job["payload_json"]) for job in ack_jobs))
 
     def test_duplicate_numbered_query_acknowledges_retry_without_second_auto_response(self) -> None:
         with temporary_database():

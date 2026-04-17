@@ -158,6 +158,39 @@ def update_conversation_path(conversation_id: int, path: str) -> None:
         )
 
 
+def _get_conversation(callsign: str) -> dict[str, Any] | None:
+    remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
+    row = fetch_one(
+        """
+        SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+        FROM aprs_message_conversations
+        WHERE remote_callsign = ? AND remote_ssid = ?
+        LIMIT 1
+        """,
+        (remote_callsign, remote_ssid),
+    )
+    return dict(row) if row else None
+
+
+def _resolve_auto_ack_path(*, sender: str, station_settings: dict[str, Any]) -> str:
+    default_path = ""
+    try:
+        default_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    except ValueError:
+        default_path = ""
+    try:
+        existing_conversation = _get_conversation(sender)
+    except ValueError:
+        existing_conversation = None
+    if existing_conversation is None:
+        return default_path
+    try:
+        conversation_path = normalize_aprs_path(str(existing_conversation.get("path") or ""))
+    except ValueError:
+        return default_path
+    return conversation_path or default_path
+
+
 def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") -> dict[str, Any]:
     normalized_callsign = normalize_aprs_destination_callsign(callsign)
     normalized_text = normalize_aprs_message_text(message_text)
@@ -898,6 +931,8 @@ def store_incoming_message(
     path: str,
     timestamp: str,
 ) -> None:
+    station_settings = _get_station_settings()
+    ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
     conversation = create_or_update_conversation(sender)
     existing = None
     if message_number:
@@ -941,12 +976,12 @@ def store_incoming_message(
         log_event("INFO", "messages", f"Stored incoming APRS message from {sender} to {addressee}")
     if not message_number:
         return
-    station_settings = _get_station_settings()
-    enqueue_ack_job(sender, message_number, station_settings, trigger="ack-now")
+    enqueue_ack_job(sender, message_number, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(
         sender,
         message_number,
         station_settings,
+        path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
     )
@@ -961,7 +996,9 @@ def store_incoming_query(
     path: str,
     timestamp: str,
 ) -> bool:
-    conversation = create_or_update_conversation(sender, path=path)
+    station_settings = _get_station_settings()
+    ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
+    conversation = create_or_update_conversation(sender)
     existing = None
     if query_number:
         existing = fetch_one(
@@ -978,8 +1015,7 @@ def store_incoming_query(
             (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, query_number),
         )
     if existing is not None:
-        station_settings = _get_station_settings()
-        enqueue_ack_job(sender, query_number, station_settings, trigger="ack-duplicate")
+        enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-duplicate")
         return False
     with get_connection() as connection:
         connection.execute(
@@ -1007,12 +1043,12 @@ def store_incoming_query(
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
     if not query_number:
         return True
-    station_settings = _get_station_settings()
-    enqueue_ack_job(sender, query_number, station_settings, trigger="ack-now")
+    enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(
         sender,
         query_number,
         station_settings,
+        path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
     )
@@ -1027,7 +1063,7 @@ def store_incoming_bulletin(
     path: str,
     timestamp: str,
 ) -> None:
-    conversation = create_or_update_conversation(sender, path=path)
+    conversation = create_or_update_conversation(sender)
     display_text = _format_bulletin_display_text(addressee, message_text)
     existing = fetch_one(
         """
@@ -1074,7 +1110,7 @@ def create_automatic_query_response(*, sender: str, message_text: str, path: str
     local_sender = _local_station_identity()
     if not local_sender:
         raise ValueError(_t("Local station callsign is required."))
-    conversation = create_or_update_conversation(sender, path=path)
+    conversation = create_or_update_conversation(sender)
     with get_connection() as connection:
         cursor = connection.execute(
             """
