@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.7.dev - 17.04.2026
+
+### Added
+- W zakładce `Stations` dodano filtrowanie listy stacji przez klikane kafelki podsumowania: `All stations`, `Fixed stations`, `Mobile stations`, `Objects`.
+
+### Changed
+- Kafelki podsumowania w górnym bloku `Stations` działają teraz jako przyciski filtrów i wskazują aktywny filtr (stan wizualny + `aria-pressed`).
+- Renderowanie tabeli stacji uwzględnia aktywny filtr także po automatycznym odświeżeniu danych z `/api/stations`.
+
+### Fixed
+- Dodano test regresyjny UI dla filtrowania kafelkami w widoku `Stations`, aby zabezpieczyć działanie filtrów i oznaczania aktywnego stanu.
+
+### Removed
+- Brak zmian.
+
 ## 1.5.4.dev - 16.04.2026
 
 ### Added

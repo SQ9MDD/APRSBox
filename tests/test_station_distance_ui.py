@@ -124,6 +124,17 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function stationsSignature(stations)", template_source)
         self.assertIn("if (nextStationsSignature !== lastStationsSignature)", template_source)
 
+    def test_stations_page_supports_metric_card_filtering(self) -> None:
+        template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
+        self.assertIn('data-station-filter="all"', template_source)
+        self.assertIn('data-station-filter="stationary"', template_source)
+        self.assertIn('data-station-filter="mobile"', template_source)
+        self.assertIn('data-station-filter="object"', template_source)
+        self.assertIn("function filteredStations(stations, filter)", template_source)
+        self.assertIn("normalizeEntityClass(station)", template_source)
+        self.assertIn("updateFilterCardState()", template_source)
+        self.assertIn("classList.toggle(\"is-active\", active)", template_source)
+
 
 if __name__ == "__main__":
     unittest.main()

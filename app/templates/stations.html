@@ -12,22 +12,22 @@
             </div>
             <div class="stations-summary-toolbar">
                 <div class="stations-summary" id="stations-summary">
-                    <div class="metric-card">
+                    <button type="button" class="metric-card stations-filter-card is-active" data-station-filter="all" aria-pressed="true">
                         <span class="metric-value" id="summary-total">{{ station_summary.total }}</span>
                         <span class="metric-label">{{ t("All stations") }}</span>
-                    </div>
-                    <div class="metric-card">
+                    </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="mobile" aria-pressed="false">
                         <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
                         <span class="metric-label">{{ t("Mobile stations") }}</span>
-                    </div>
-                    <div class="metric-card">
+                    </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="stationary" aria-pressed="false">
                         <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
                         <span class="metric-label">{{ t("Fixed stations") }}</span>
-                    </div>
-                    <div class="metric-card">
+                    </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="object" aria-pressed="false">
                         <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
                         <span class="metric-label">{{ t("Objects") }}</span>
-                    </div>
+                    </button>
                 </div>
                 <label class="stations-refresh-control">
                     <span class="muted">{{ t("Refresh rate") }}</span>
@@ -127,16 +127,21 @@
     const stationsSnapshotUrl = {{ stations_snapshot_url|tojson }};
     const staticRoot = {{ static_root|tojson }};
     const rootPath = {{ root_path|tojson }};
+    const initialStations = {{ stations|tojson }};
 
     const summaryTotal = document.getElementById("summary-total");
     const summaryStationary = document.getElementById("summary-stationary");
     const summaryMobile = document.getElementById("summary-mobile");
     const summaryObjects = document.getElementById("summary-objects");
+    const stationFilterCards = Array.from(document.querySelectorAll("[data-station-filter]"));
     const refreshSelect = document.getElementById("stations-refresh-rate");
     const refreshStorageKey = "aprsbox-stations-refresh-ms";
     const noStationsText = {{ t("No decoded APRS stations available yet.")|tojson }};
     const aprsClientLabel = {{ t("APRS client")|tojson }};
     const distanceLabel = {{ t("Distance")|tojson }};
+    const stationFilters = new Set(["all", "stationary", "mobile", "object"]);
+    let activeStationFilter = "all";
+    let latestStations = Array.isArray(initialStations) ? initialStations : [];
     let refreshTimer = null;
     let lastStationsSignature = "";
     let lastSummarySignature = "";
@@ -193,6 +198,35 @@
         ]);
     }
 
+    function normalizeEntityClass(station) {
+        const entityClass = String(station?.entity_class || "").trim().toLowerCase();
+        if (entityClass === "mobile" || entityClass === "object") return entityClass;
+        return "stationary";
+    }
+
+    function filteredStations(stations, filter) {
+        if (!Array.isArray(stations) || !stations.length) return [];
+        if (filter === "all") return stations;
+        return stations.filter((station) => normalizeEntityClass(station) === filter);
+    }
+
+    function updateFilterCardState() {
+        for (const card of stationFilterCards) {
+            const filter = card.dataset.stationFilter || "all";
+            const active = filter === activeStationFilter;
+            card.classList.toggle("is-active", active);
+            card.setAttribute("aria-pressed", active ? "true" : "false");
+        }
+    }
+
+    function setStationFilter(filter) {
+        const nextFilter = stationFilters.has(filter) ? filter : "all";
+        if (nextFilter === activeStationFilter) return;
+        activeStationFilter = nextFilter;
+        updateFilterCardState();
+        renderRows(filteredStations(latestStations, activeStationFilter));
+    }
+
     function renderRows(stations) {
         if (!stations.length) {
             tbody.innerHTML = `<tr><td colspan="9" class="muted">${noStationsText}</td></tr>`;
@@ -243,7 +277,8 @@
             const nextSummarySignature = summarySignature(summary);
             if (nextStationsSignature !== lastStationsSignature) {
                 lastStationsSignature = nextStationsSignature;
-                renderRows(stations);
+                latestStations = stations;
+                renderRows(filteredStations(latestStations, activeStationFilter));
             }
             if (nextSummarySignature !== lastSummarySignature) {
                 lastSummarySignature = nextSummarySignature;
@@ -261,6 +296,16 @@
             window.clearInterval(refreshTimer);
         }
         refreshTimer = window.setInterval(refreshStations, intervalMs);
+    }
+
+    lastStationsSignature = stationsSignature(latestStations);
+    renderRows(filteredStations(latestStations, activeStationFilter));
+    updateFilterCardState();
+
+    for (const card of stationFilterCards) {
+        card.addEventListener("click", () => {
+            setStationFilter(card.dataset.stationFilter || "all");
+        });
     }
 
     const savedRefreshRate = window.localStorage.getItem(refreshStorageKey);
