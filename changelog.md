@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.6.0 - 17.04.2026
+
+### Stable release
+- Wersja została przygotowana do merge z linii `dev` na gałąź stabilną.
+
+### Included development snapshots
+- 1.5.1.dev
+- 1.5.3.dev
+- 1.5.4.dev
+- 1.5.7.dev
+- 1.5.8.dev
+
+### Highlights
+- Usprawniono `Messages`: dopracowano obsługę `ACK/REJ`, odporność na błędy oraz zgodność zachowania dla wiadomości numerowanych i nienumerowanych.
+- Wprowadzono kontekstowy wybór ścieżki dla automatycznych `ACK` (istniejąca rozmowa: ścieżka rozmowy; brak rozmowy: `beacon_path` z `My Station`) i usunięto nadpisywanie ręcznie ustawionej ścieżki rozmowy przez ruch przychodzący.
+- Wzmocniono niezawodność runtime TNC (autorecovery tasków, lepsza obsługa wyjątków i reconnect po błędach TX).
+- Rozbudowano widok `Stations` o filtry kafelkowe, licznik stacji pogodowych oraz sortowanie po `Callsign`, `Last activity` i `Distance`.
+- Dodano usprawnienia UX i utrzymaniowe, w tym przywracanie pozycji przewijania na stronie `WX` po operacjach `POST`.
+- Rozszerzono testy regresyjne dla messagingu, parsera APRS i UI, aby zmniejszyć ryzyko regresji przy wydaniu stable.
+
 ## 1.5.8.dev - 17.04.2026
 
 ### Added
