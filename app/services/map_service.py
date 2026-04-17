@@ -726,6 +726,8 @@ def get_station_detail_map_config(station: dict[str, Any], *, root_path: str = "
         "tile_subdomains": tile_layer["tile_subdomains"],
         "display_callsign": station.get("display_callsign", ""),
         "symbol_icon": station.get("symbol_icon", "icons/verG/x.gif"),
+        "symbol_table": station.get("symbol_table", ""),
+        "symbol_code": station.get("symbol_code", ""),
         "detail_href": station.get("detail_href", ""),
     }
 

@@ -199,9 +199,19 @@
         `;
     }
 
-    function buildIconHtml(displayCallsign, symbolIcon) {
+    function resolveSymbolOverlay(symbolTable) {
+        const normalized = String(symbolTable || "").trim();
+        if (!normalized || normalized === "/" || normalized === "\\") {
+            return "";
+        }
+        return normalized.charAt(0);
+    }
+
+    function buildIconHtml(displayCallsign, symbolIcon, symbolTable) {
+        const overlay = resolveSymbolOverlay(symbolTable);
         return `
             <img class="map-station-aprs-icon" src="${escapeHtml(symbolIcon)}" alt="">
+            ${overlay ? `<span class="map-station-aprs-overlay" aria-hidden="true">${escapeHtml(overlay)}</span>` : ""}
             <span class="map-station-label">${escapeHtml(displayCallsign)}</span>
         `;
     }
@@ -380,6 +390,8 @@
         mapRoot.dataset.longitude = String(station.longitude_float);
         mapRoot.dataset.displayCallsign = station.display_callsign || "";
         mapRoot.dataset.symbolIcon = mapConfig.symbol_icon || "";
+        mapRoot.dataset.symbolTable = mapConfig.symbol_table || "";
+        mapRoot.dataset.symbolCode = mapConfig.symbol_code || "";
         mapRoot.dataset.tileUrl = mapConfig.tile_url || "";
         mapRoot.dataset.tileAttribution = mapConfig.tile_attribution || "";
         mapRoot.dataset.tileMinZoom = String(mapConfig.tile_min_zoom || "");
@@ -388,10 +400,11 @@
 
         const latLng = [Number(station.latitude_float), Number(station.longitude_float)];
         const symbolIcon = mapConfig.symbol_icon ? `${staticRoot}${mapConfig.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
+        const symbolTable = mapConfig.symbol_table || station.symbol_table || "";
         const tileConfig = normalizeTileConfig(mapConfig);
         const icon = window.L.divIcon({
             className: "map-station-icon",
-            html: buildIconHtml(station.display_callsign || "", symbolIcon),
+            html: buildIconHtml(station.display_callsign || "", symbolIcon, symbolTable),
             iconSize: aprsIconSize,
             iconAnchor: aprsIconAnchor,
         });
@@ -461,6 +474,8 @@
         tile_max_zoom: Number.parseInt(mapRoot.dataset.tileMaxZoom || "", 10),
         tile_subdomains: mapRoot.dataset.tileSubdomains || "",
         symbol_icon: mapRoot.dataset.symbolIcon || "",
+        symbol_table: mapRoot.dataset.symbolTable || "",
+        symbol_code: mapRoot.dataset.symbolCode || "",
         track_points: parseTrackPoints(mapRoot.dataset.trackPoints || ""),
     } : {};
     const initialStationTrack = { points: initialMapConfig.track_points || [] };

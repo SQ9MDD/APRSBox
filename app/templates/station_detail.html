@@ -100,6 +100,8 @@
                 data-tile-subdomains="{{ station_map_config.tile_subdomains }}"
                 data-display-callsign="{{ station_map_config.display_callsign }}"
                 data-symbol-icon="{{ station_map_config.symbol_icon }}"
+                data-symbol-table="{{ station_map_config.symbol_table }}"
+                data-symbol-code="{{ station_map_config.symbol_code }}"
                 data-track-points='{{ station_map_config.track_points|tojson }}'
                 {% if station.latitude_float is none or station.longitude_float is none %}hidden{% endif %}
             >

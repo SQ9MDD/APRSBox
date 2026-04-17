@@ -2153,11 +2153,45 @@ select:focus-visible,
     font-size: 0.78rem;
 }
 
+.aprs-symbol-icon-stack {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: 0 0 auto;
+}
+
 .aprs-symbol-icon {
     width: 1.5rem;
     height: 1.5rem;
     image-rendering: pixelated;
     flex: 0 0 auto;
+}
+
+.aprs-symbol-overlay {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -55%);
+    min-width: 0.62rem;
+    height: 0.62rem;
+    padding: 0 0.07rem;
+    border-radius: 0.18rem;
+    background: rgba(12, 14, 16, 0.86);
+    color: #f5f8fb;
+    font-size: 0.5rem;
+    font-weight: 800;
+    line-height: 0.62rem;
+    text-align: center;
+    pointer-events: none;
+}
+
+:root[data-theme="light"] .aprs-symbol-overlay {
+    background: rgba(246, 248, 251, 0.92);
+    color: #1b2329;
+    box-shadow: 0 0 0 1px rgba(30, 35, 40, 0.2);
 }
 
 .frame-type-badge {

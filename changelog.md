@@ -8,9 +8,10 @@
 ### Changed
 - Rozszerzono rozpoznawanie pozycji `compressed` w parserze APRS: `symbol table` akceptuje teraz overlaye (`0-9`, `A-Z`) oraz legacy zapis `a-j` mapowany do cyfr.
 - Dodano defensyjną walidację pola `c/s/T` i doprecyzowano detekcję przypadków niejednoznacznych, aby poprawnie preferować format nieskompresowany tam, gdzie ramka spełnia jego pełny układ.
+- Dodano wizualne renderowanie znaku overlay na ikonach APRS w widoku mapy, mapie szczegółów stacji oraz w tabeli `Stations`.
 
 ### Fixed
-- Naprawiono odrzucanie legalnych ramek APRS `compressed` z overlayem w `symbol table` (np. `!L...`), które wcześniej kończyły jako nierozpoznane (`aprs_data=None`).Thanx M0IGA
+- Naprawiono odrzucanie legalnych ramek APRS `compressed` z overlayem w `symbol table` (np. `!L...`), które wcześniej kończyły jako nierozpoznane (`aprs_data=None`).
 
 ### Removed
 - Brak zmian.

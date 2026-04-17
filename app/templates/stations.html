@@ -104,7 +104,12 @@
                         </td>
                         <td>
                             {% if row.symbol %}
-                            <img class="aprs-symbol-icon" src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol }}">
+                            <span class="aprs-symbol-icon-stack">
+                                <img class="aprs-symbol-icon" src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol }}">
+                                {% if row.symbol_table and row.symbol_table not in ["/", "\\"] %}
+                                <span class="aprs-symbol-overlay" aria-hidden="true">{{ row.symbol_table }}</span>
+                                {% endif %}
+                            </span>
                             {% else %}
                             <span class="muted">-</span>
                             {% endif %}
@@ -205,12 +210,36 @@
         return Number.isFinite(value) ? `${escapeHtml(value)} km` : "-";
     }
 
+    function resolveSymbolOverlay(symbolTable) {
+        const normalized = String(symbolTable ?? "").trim();
+        if (!normalized || normalized === "/" || normalized === "\\") {
+            return "";
+        }
+        return normalized.charAt(0);
+    }
+
+    function renderSymbol(row) {
+        if (!row || !row.symbol) {
+            return '<span class="muted">-</span>';
+        }
+        const overlay = resolveSymbolOverlay(row.symbol_table);
+        return `
+            <span class="aprs-symbol-icon-stack">
+                <img class="aprs-symbol-icon" src="${staticRoot}${escapeHtml(row.symbol_icon || "icons/verG/x.gif")}" alt="${escapeHtml(row.symbol)}">
+                ${overlay ? `<span class="aprs-symbol-overlay" aria-hidden="true">${escapeHtml(overlay)}</span>` : ""}
+            </span>
+        `;
+    }
+
     function stationsSignature(stations) {
         return JSON.stringify((stations || []).map((row) => ([
             row.display_callsign || row.callsign || "",
             row.last_heard_at || "",
             row.latitude || "",
             row.longitude || "",
+            row.symbol_table || "",
+            row.symbol_code || "",
+            row.symbol_icon || "",
             row.distance_km,
             row.comment || "",
             row.frame_type || "",
@@ -400,7 +429,7 @@
                         <span class="muted">${escapeHtml(row.last_heard_relative || "")}</span>
                     </div>
                 </td>
-                <td>${row.symbol ? `<img class="aprs-symbol-icon" src="${staticRoot}${escapeHtml(row.symbol_icon)}" alt="${escapeHtml(row.symbol)}">` : '<span class="muted">-</span>'}</td>
+                <td>${renderSymbol(row)}</td>
                 <td>${escapeHtml(row.latitude || "-")}</td>
                 <td>${escapeHtml(row.longitude || "-")}</td>
                 <td title="${escapeHtml(distanceLabel)}">${renderDistance(row.distance_km)}</td>
