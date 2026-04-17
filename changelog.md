@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.6.1.dev - 17.04.2026
+
+### Added
+- Dodano lekki lokalny proxy/cache kafelków map dla skonfigurowanych źródeł (`map_sources`) bez zewnętrznych usług i bez nowych ciężkich zależności.
+- Dodano stały endpoint backendu `GET /api/map/tiles/{source_id}/{z}/{x}/{y}` obsługujący standardowy przepływ Leaflet:
+  - cache hit: serwowanie kafelka z dysku,
+  - cache miss: pobranie z upstream, zapis lokalny, zwrot odpowiedzi.
+- Dodano per‑źródło mapy przełącznik `Enable local cache/proxy` w panelu `Settings -> Map sources`.
+- Dodano statystyki cache per źródło mapy: liczba zapisanych kafelków i łączny rozmiar cache.
+- Dodano akcję `Clear cache` per źródło mapy, która usuwa cały cache źródła i resetuje statystyki do zera.
+- Dodano nowy moduł serwisowy `app/services/map_tile_proxy.py` z walidacją parametrów kafelków i bezpiecznym budowaniem URL upstream wyłącznie z konfiguracji źródła.
+- Dodano testy regresyjne dla map sources/proxy-cache (w tym: przełączenie URL proxy on/off oraz reset cache/statystyk).
+
+### Changed
+- Rozszerzono model `map_sources` o pola:
+  - `local_cache_enabled`,
+  - `cache_tile_count`,
+  - `cache_size_bytes`,
+  wraz z migracją dla istniejących instalacji.
+- Aktywna konfiguracja warstwy mapy przełącza `tile_url` dynamicznie:
+  - `local_cache_enabled=1` -> lokalny endpoint proxy,
+  - `local_cache_enabled=0` -> oryginalny URL providera.
+- Uporządkowano przekazywanie `root_path` do konfiguracji mapy (Map / Station detail / map pickery), aby URL proxy działał poprawnie także za prefiksem reverse proxy.
+- W tabeli `Map sources` zmieniono etykietę kolumny kolejności z `Order` na `Lp.` i zwężono pierwszą kolumnę dla bardziej zwartego układu.
+
+### Fixed
+- Zabezpieczono logikę proxy przed otwartym przekazywaniem arbitralnych URL: upstream jest wyliczany wyłącznie z zapisanej konfiguracji źródła mapy.
+- Ograniczono koszt aktualizacji statystyk cache: brak skanowania całego katalogu cache przy zwykłym renderze strony (statystyki aktualizowane inkrementalnie oraz przy jawnej operacji resetu).
+
+### Removed
+- Brak zmian.
+
 ## 1.6.0 - 17.04.2026
 
 ### Stable release
