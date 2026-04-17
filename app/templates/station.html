@@ -214,14 +214,6 @@
                             {% endfor %}
                         </select>
                     </label>
-                    <label>
-                        <span>{{ t("Overlay") }}</span>
-                        <select name="symbol_overlay" id="station-symbol-overlay" {% if station.symbol_table != '\\' %}disabled{% endif %}>
-                            {% for option in symbol_overlay_options %}
-                            <option value="{{ option.value }}" {% if (station.symbol_overlay or '') == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
                     <label class="station-symbol-field">
                         <span>{{ t("Symbol Code") }}</span>
                         <div class="station-symbol-picker">
@@ -253,6 +245,14 @@
                                 </div>
                             </div>
                         </div>
+                    </label>
+                    <label>
+                        <span>{{ t("Overlay") }}</span>
+                        <select name="symbol_overlay" id="station-symbol-overlay" {% if station.symbol_table != '\\' %}disabled{% endif %}>
+                            {% for option in symbol_overlay_options %}
+                            <option value="{{ option.value }}" {% if (station.symbol_overlay or '') == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                            {% endfor %}
+                        </select>
                     </label>
                     <label class="checkbox-row">
                         <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
