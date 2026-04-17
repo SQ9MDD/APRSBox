@@ -3,7 +3,7 @@
 ## 1.5.7.dev - 17.04.2026
 
 ### Added
-- W zakładce `Stations` dodano filtrowanie listy stacji przez klikane kafelki podsumowania: `All stations`, `Fixed stations`, `Mobile stations`, `Objects`.
+- W zakładce `Stations` dodano filtrowanie listy stacji przez klikane kafelki podsumowania: `All stations`, `Fixed stations`, `Mobile stations`, `Objects`, `Weather stations`.
 
 ### Changed
 - Kafelki podsumowania w górnym bloku `Stations` działają teraz jako przyciski filtrów i wskazują aktywny filtr (stan wizualny + `aria-pressed`).

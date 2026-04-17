@@ -2156,7 +2156,7 @@ select:focus-visible,
 
 .stations-summary {
     display: grid;
-    grid-template-columns: repeat(4, minmax(9rem, 1fr));
+    grid-template-columns: repeat(5, minmax(8rem, 1fr));
     gap: var(--space-3);
     flex: 1;
     min-width: 0;

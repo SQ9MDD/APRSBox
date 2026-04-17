@@ -28,6 +28,10 @@
                         <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
                         <span class="metric-label">{{ t("Objects") }}</span>
                     </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="weather" aria-pressed="false">
+                        <span class="metric-value" id="summary-weather">0</span>
+                        <span class="metric-label">{{ t("Weather stations") }}</span>
+                    </button>
                 </div>
                 <label class="stations-refresh-control">
                     <span class="muted">{{ t("Refresh rate") }}</span>
@@ -133,13 +137,14 @@
     const summaryStationary = document.getElementById("summary-stationary");
     const summaryMobile = document.getElementById("summary-mobile");
     const summaryObjects = document.getElementById("summary-objects");
+    const summaryWeather = document.getElementById("summary-weather");
     const stationFilterCards = Array.from(document.querySelectorAll("[data-station-filter]"));
     const refreshSelect = document.getElementById("stations-refresh-rate");
     const refreshStorageKey = "aprsbox-stations-refresh-ms";
     const noStationsText = {{ t("No decoded APRS stations available yet.")|tojson }};
     const aprsClientLabel = {{ t("APRS client")|tojson }};
     const distanceLabel = {{ t("Distance")|tojson }};
-    const stationFilters = new Set(["all", "stationary", "mobile", "object"]);
+    const stationFilters = new Set(["all", "stationary", "mobile", "object", "weather"]);
     let activeStationFilter = "all";
     let latestStations = Array.isArray(initialStations) ? initialStations : [];
     let refreshTimer = null;
@@ -204,9 +209,26 @@
         return "stationary";
     }
 
+    function isWeatherStation(station) {
+        const frameType = String(station?.frame_type || "").trim().toUpperCase();
+        const symbol = String(station?.symbol || "").trim();
+        return frameType === "W" || symbol.endsWith("_");
+    }
+
+    function weatherStationsCount(stations) {
+        if (!Array.isArray(stations) || !stations.length) return 0;
+        return stations.filter((station) => isWeatherStation(station)).length;
+    }
+
+    function updateWeatherSummary(stations) {
+        if (!summaryWeather) return;
+        summaryWeather.textContent = String(weatherStationsCount(stations));
+    }
+
     function filteredStations(stations, filter) {
         if (!Array.isArray(stations) || !stations.length) return [];
         if (filter === "all") return stations;
+        if (filter === "weather") return stations.filter((station) => isWeatherStation(station));
         return stations.filter((station) => normalizeEntityClass(station) === filter);
     }
 
@@ -278,6 +300,7 @@
             if (nextStationsSignature !== lastStationsSignature) {
                 lastStationsSignature = nextStationsSignature;
                 latestStations = stations;
+                updateWeatherSummary(latestStations);
                 renderRows(filteredStations(latestStations, activeStationFilter));
             }
             if (nextSummarySignature !== lastSummarySignature) {
@@ -299,6 +322,7 @@
     }
 
     lastStationsSignature = stationsSignature(latestStations);
+    updateWeatherSummary(latestStations);
     renderRows(filteredStations(latestStations, activeStationFilter));
     updateFilterCardState();
 
