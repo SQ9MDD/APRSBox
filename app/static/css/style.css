@@ -2670,7 +2670,12 @@ select:focus-visible,
 }
 
 .map-sources-table th:nth-child(1),
-.map-sources-table td:nth-child(1),
+.map-sources-table td:nth-child(1) {
+    width: 3.1rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
 .map-sources-table th:nth-child(3),
 .map-sources-table td:nth-child(3),
 .map-sources-table th:nth-child(4),
