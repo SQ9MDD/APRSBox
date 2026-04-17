@@ -10,6 +10,7 @@
 - Renderowanie tabeli stacji uwzględnia aktywny filtr także po automatycznym odświeżeniu danych z `/api/stations`.
 - W widoku `Stations` filtr `Fixed stations` pomija stacje pogodowe (te są dostępne wyłącznie pod filtrem `Weather stations`).
 - Zwężono i skompaktowano kafelki filtrów w górnym pasku `Stations`, aby wszystkie pięć (`All`, `Mobile`, `Fixed`, `Objects`, `Weather`) mieściło się w jednym rzędzie na desktopie.
+- W tabeli `Stations` dodano sortowanie po kolumnach `Callsign`, `Last activity` i `Distance`; domyślnie aktywne jest sortowanie po `Last activity` malejąco (najnowsze na górze).
 
 ### Fixed
 - Dodano test regresyjny UI dla filtrowania kafelkami w widoku `Stations`, aby zabezpieczyć działanie filtrów i oznaczania aktywnego stanu.

@@ -141,6 +141,19 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("updateFilterCardState()", template_source)
         self.assertIn("classList.toggle(\"is-active\", active)", template_source)
 
+    def test_stations_page_supports_table_sorting(self) -> None:
+        template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
+        self.assertIn('data-stations-sort="callsign"', template_source)
+        self.assertIn('data-stations-sort="last_heard"', template_source)
+        self.assertIn('data-stations-sort="distance"', template_source)
+        self.assertIn('let activeStationsSortKey = "last_heard";', template_source)
+        self.assertIn('let activeStationsSortDirection = "desc";', template_source)
+        self.assertIn("function sortStations(stations, sortKey, sortDirection)", template_source)
+        self.assertIn("function setStationsSort(sortKey)", template_source)
+        self.assertIn("function applyStationsView()", template_source)
+        self.assertIn("updateSortState()", template_source)
+        self.assertIn('setStationsSort(button.dataset.stationsSort || "last_heard")', template_source)
+
 
 if __name__ == "__main__":
     unittest.main()
