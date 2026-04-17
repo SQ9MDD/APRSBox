@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.5.dev - 18.04.2026
+
+### Changed
+- Dodano pełną obsługę APRS `symbol overlay` (`None`, `0-9`, `A-Z`) dla `Objects/Items` i `My Settings` w całym przepływie: GUI, walidacja, zapis/odczyt, edycja i generowanie ramek.
+- Overlay działa wyłącznie dla tablicy `Alternate (\)`; przy `Primary (/)` jest automatycznie czyszczony i ignorowany.
+
 ## 1.6.2.dev - 17.04.2026
 
 ### Added
