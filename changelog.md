@@ -11,6 +11,7 @@
 
 ### Fixed
 - Dodano test regresyjny UI dla filtrowania kafelkami w widoku `Stations`, aby zabezpieczyć działanie filtrów i oznaczania aktywnego stanu.
+- Poprawiono klasyfikację stacji w parserze APRS: pozycje z symbolem pogodowym (`_`) nie są już oznaczane jako `mobile` tylko dlatego, że komentarz zawiera wzorzec `ddd/ddd` (np. kierunek/prędkość wiatru).
 
 ### Removed
 - Brak zmian.

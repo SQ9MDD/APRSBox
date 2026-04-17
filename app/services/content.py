@@ -2478,6 +2478,7 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     comment = result.get("comment", "") or ""
     data: dict[str, Any] = dict(result.get("data", {}) or {})
     preserve_qsy_callsign_in_comment = False
+    is_weather_context = bool(result.get("packet_group") == "weather" or result.get("symbol", "").endswith("_"))
     if result.get("symbol", "").endswith("_"):
         weather = _parse_weather_fields(comment)
         if weather:
@@ -2487,12 +2488,13 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     if phg:
         data.update(phg)
 
-    movement = _parse_course_speed_fields(comment)
-    if movement:
-        data.update(movement)
-        result["entity_class"] = "mobile"
-        result["frame_type"] = "M"
-        result["frame_type_label"] = "M - ruch"
+    if not is_weather_context:
+        movement = _parse_course_speed_fields(comment)
+        if movement:
+            data.update(movement)
+            result["entity_class"] = "mobile"
+            result["frame_type"] = "M"
+            result["frame_type_label"] = "M - ruch"
 
     altitude = _parse_altitude_fields(comment)
     if altitude:
