@@ -398,7 +398,8 @@
             return normalized;
         };
 
-        const normalizeDistanceZones = (zones) => {
+        const normalizeDistanceZones = (zones, options = {}) => {
+            const keepEmpty = options.keepEmpty === true;
             if (!Array.isArray(zones)) {
                 return [];
             }
@@ -410,7 +411,7 @@
                 const latitude = String(zone.latitude ?? "").trim();
                 const longitude = String(zone.longitude ?? "").trim();
                 const radiusKm = String(zone.radius_km ?? "").trim();
-                if (!latitude && !longitude && !radiusKm) {
+                if (!keepEmpty && !latitude && !longitude && !radiusKm) {
                     continue;
                 }
                 normalized.push({
@@ -430,7 +431,7 @@
                 step.config = {};
             }
             const legacyRadius = String(step.config.max_km ?? "").trim();
-            let zones = normalizeDistanceZones(step.config.zones);
+            let zones = normalizeDistanceZones(step.config.zones, { keepEmpty: true });
             if (!zones.length && legacyRadius) {
                 zones = [{ latitude: "", longitude: "", radius_km: legacyRadius }];
             }
