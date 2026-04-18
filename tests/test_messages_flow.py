@@ -221,6 +221,45 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
 
+    def test_late_ack_marks_failed_direct_message_as_acked(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Late ACK", path="WIDE1-1")
+            execute(
+                """
+                UPDATE aprs_messages
+                SET status = ?, failed_at = ?, failure_reason = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MESSAGE_STATUS_FAILED,
+                    "2026-01-01T00:01:00+00:00",
+                    "No ACK received after APRS retry window.",
+                    "2026-01-01T00:01:00+00:00",
+                    int(message["id"]),
+                ),
+            )
+
+            ack_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "ack",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": f"ack{message['message_number']}",
+                }
+            )
+            process_incoming_tnc2_message(ack_line, timestamp="2026-01-01T00:01:30+00:00")
+
+            row = fetch_one("SELECT status, acked_at, failed_at, failure_reason FROM aprs_messages WHERE id = ?", (int(message["id"]),))
+            assert row is not None
+            self.assertEqual(row["status"], MESSAGE_STATUS_ACKED)
+            self.assertEqual(row["acked_at"], "2026-01-01T00:01:30+00:00")
+            self.assertIsNone(row["failed_at"])
+            self.assertEqual(str(row["failure_reason"] or ""), "")
+
     async def test_queue_send_and_rej_direct_message_marks_rejected_and_cancels_retry(self) -> None:
         with temporary_database():
             interface_id = insert_modem()

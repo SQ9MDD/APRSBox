@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.1.dev - 18.04.2026
+
+### Added
+- Dodano test regresyjny dla scenariusza, w którym `ACK` przychodzi po przejściu wiadomości outbound do statusu `failed`.
+
+### Fixed
+- W module `Messages` późny `ACK` (`ackNN`) może teraz poprawnie domknąć wiadomość outbound oznaczoną wcześniej jako `failed` po timeout/retry window.
+- Po takim `ACK` wiadomość dostaje status `acked`, zapisywany jest `acked_at`, a pola błędu (`failed_at`, `failure_reason`) są czyszczone.
+
 ## 1.7.0 - 18.04.2026
 
 ### Stable release

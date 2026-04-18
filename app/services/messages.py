@@ -863,12 +863,20 @@ def acknowledge_outgoing_message(*, sender: str, addressee: str, message_number:
         FROM aprs_messages
         WHERE direction = ?
           AND message_number = ?
-          AND status IN (?, ?)
+          AND status IN (?, ?, ?)
           AND (addressee = ? OR sender = ?)
         ORDER BY id DESC
         LIMIT 1
         """,
-        (MESSAGE_DIRECTION_TX, message_number, MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT, sender, sender),
+        (
+            MESSAGE_DIRECTION_TX,
+            message_number,
+            MESSAGE_STATUS_QUEUED,
+            MESSAGE_STATUS_SENT,
+            MESSAGE_STATUS_FAILED,
+            sender,
+            sender,
+        ),
     )
     if row is None:
         return
@@ -878,7 +886,7 @@ def acknowledge_outgoing_message(*, sender: str, addressee: str, message_number:
         connection.execute(
             """
             UPDATE aprs_messages
-            SET status = ?, acked_at = ?, updated_at = ?, failure_reason = NULL
+            SET status = ?, acked_at = ?, failed_at = NULL, updated_at = ?, failure_reason = NULL
             WHERE id = ?
             """,
             (MESSAGE_STATUS_ACKED, timestamp, timestamp, message_id),
