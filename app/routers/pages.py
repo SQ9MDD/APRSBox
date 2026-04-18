@@ -285,6 +285,7 @@ def _digi_flow_editor_context(
         filter_step_types=FILTER_STEP_TYPES,
         target_step_types=TARGET_STEP_TYPES,
         flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=10) if flow_id is not None else [],
+        map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         symbol_table_options=station_form_options["symbol_table_options"],
         symbol_code_options=station_form_options["symbol_code_options"],
         flash=flash,

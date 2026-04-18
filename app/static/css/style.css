@@ -1654,12 +1654,72 @@ select:focus-visible,
     padding: 0;
 }
 
+.digi-distance-zones {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.digi-distance-zone-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--panel-soft);
+    padding: var(--space-3);
+    display: grid;
+    gap: var(--space-3);
+}
+
+.digi-distance-zone-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.digi-distance-zone-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.digi-distance-zone-grid {
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.digi-distance-zone-grid label {
+    display: grid;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.digi-distance-add-zone {
+    justify-self: start;
+}
+
 @media (max-width: 780px) {
     .digi-icon-filter-controls {
         grid-template-columns: 1fr;
     }
 
     .digi-icon-filter-add-button {
+        width: 100%;
+    }
+
+    .digi-distance-zone-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .digi-distance-zone-actions {
+        justify-content: space-between;
+    }
+
+    .digi-distance-zone-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .digi-distance-add-zone {
         width: 100%;
     }
 }

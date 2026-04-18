@@ -249,6 +249,142 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(any("duplicate window expired" in row["message"] for row in rows if row["event_type"] == "filter_dupe"))
                 self.assertFalse(any(row["event_type"] == "filter_dupe" and row["decision"] == "rejected" for row in rows))
 
+    async def test_distance_filter_passes_packet_inside_configured_zone(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Distance allow",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_distance",
+                            "title": "Distance Filter",
+                            "enabled": 1,
+                            "config": {
+                                "zones": [
+                                    {"latitude": 50.05000, "longitude": 19.93330, "radius_km": 1.0},
+                                ]
+                            },
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                frame = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:!5003.00N/01956.00E-In zone",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = event_rows_for_frame(str(frame["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_distance" and row["decision"] == "passed" for row in rows))
+            self.assertTrue(any("matched zone #1" in row["message"] for row in rows if row["event_type"] == "filter_distance"))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
+
+    async def test_distance_filter_drops_packet_outside_all_zones(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Distance drop",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_distance",
+                            "title": "Distance Filter",
+                            "enabled": 1,
+                            "config": {
+                                "zones": [
+                                    {"latitude": 52.22977, "longitude": 21.01178, "radius_km": 1.0},
+                                    {"latitude": 51.10788, "longitude": 17.03854, "radius_km": 1.0},
+                                ]
+                            },
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                frame = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:!5003.00N/01956.00E-Out of zone",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = event_rows_for_frame(str(frame["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_distance" and row["decision"] == "rejected" for row in rows))
+            self.assertTrue(any("outside all zones" in row["message"] for row in rows if row["event_type"] == "filter_distance"))
+            self.assertFalse(any(row["event_type"] == "output_action" for row in rows))
+            self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rows))
+
+    async def test_distance_filter_skips_frames_without_position(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Distance skip",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_distance",
+                            "title": "Distance Filter",
+                            "enabled": 1,
+                            "config": {
+                                "zones": [
+                                    {"latitude": 50.05000, "longitude": 19.93330, "radius_km": 1.0},
+                                    {"latitude": 52.22977, "longitude": 21.01178, "radius_km": 2.0},
+                                    {"latitude": 51.10788, "longitude": 17.03854, "radius_km": 3.0},
+                                ]
+                            },
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                frame = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>No position data",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = event_rows_for_frame(str(frame["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "filter_distance" and row["decision"] == "skipped" for row in rows))
+            self.assertTrue(any("no position, skipped" in row["message"] for row in rows if row["event_type"] == "filter_distance"))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows))
+
     async def test_callsign_filter_logs_pass_and_reject(self) -> None:
         with temporary_database():
             create_flow(
