@@ -1,5 +1,99 @@
 # Changelog
 
+## 1.7.0 - 18.04.2026
+
+### Stable release
+- Wersja została przygotowana do merge z linii `dev` na gałąź stabilną.
+
+### Included development snapshots
+- 1.6.1.dev
+- 1.6.2.dev
+- 1.6.5.dev
+- 1.6.6.dev
+
+### Highlights
+- Dodano lokalny proxy/cache kafelków map z endpointem backendowym, przełącznikiem per źródło mapy, statystykami cache i akcją `Clear cache`.
+- Rozszerzono parser APRS o obsługę pozycji `compressed` z overlayem (`0-9`, `A-Z`, legacy `a-j`) oraz dodano render overlayu ikon w widokach mapy i tabeli `Stations`.
+- Wdrożono pełny `Distance filter` w `DIGI Flow` (GUI + backend + runtime), z konfiguracją 1-3 stref i logiką OR między strefami.
+- Wzmocniono walidację i zasady flow dla `Distance filter` (maks. 1 filtr na flow, kompletność stref, zakresy lat/lon, promień > 0) oraz dodano logi runtime decyzji i testy regresyjne.
+- Utrzymano kompatybilność istniejących ekranów i mechanizmów flow, bez przebudowy architektury pipeline.
+
+## 1.6.6.dev - 18.04.2026
+
+### Added
+- Dodano pełną implementację `Distance filter` w `DIGI Flow` (GUI + backend + runtime) jako standardowy krok pipeline, bez zmian architektury flow.
+- Dodano konfigurację `Distance filter` dla 1-3 stref (`latitude`, `longitude`, `radius_km`) z logiką dopasowania OR między strefami.
+- Dodano logi runtime dla `Distance filter` z czytelnym powodem decyzji (`matched zone`, `outside all zones`, `no position, skipped`).
+- Dodano testy backendowe `Distance filter` dla przypadków: pozycja w strefie, poza strefami, brak pozycji, konfiguracje 1/2/3 stref i błędna walidacja.
+
+### Changed
+- `Distance filter` może wystąpić w jednym flow maksymalnie raz (walidacja backend + blokada w GUI).
+- Walidacja konfiguracji `Distance filter` wymusza kompletne strefy i poprawne zakresy:
+  - `radius_km > 0`,
+  - dla wartości `< 1 km` krok `0.1 km`,
+  - `latitude` i `longitude` jako poprawne wartości numeryczne w prawidłowym zakresie.
+- Pakiety bez pozycji geograficznej są traktowane jako `skipped/pass` (nie są odrzucane przez `Distance filter`).
+
+### Fixed
+- Naprawiono edytor flow: przycisk `Add zone` w `Distance filter` działa poprawnie i nie traci nowo dodanej pustej strefy podczas renderowania formularza.
+
+### Removed
+- Brak zmian.
+
+## 1.6.5.dev - 18.04.2026
+
+### Changed
+- Dodano pełną obsługę APRS `symbol overlay` (`None`, `0-9`, `A-Z`) dla `Objects/Items` i `My Settings` w całym przepływie: GUI, walidacja, zapis/odczyt, edycja i generowanie ramek.
+- Overlay działa wyłącznie dla tablicy `Alternate (\)`; przy `Primary (/)` jest automatycznie czyszczony i ignorowany.
+
+## 1.6.2.dev - 17.04.2026
+
+### Added
+- Dodano testy regresyjne parsera APRS dla pozycji `compressed` z alfanumerycznym overlayem w `symbol table` (w tym przypadek `L...` oraz legacy mapowanie `a-j -> 0-9`).
+
+### Changed
+- Rozszerzono rozpoznawanie pozycji `compressed` w parserze APRS: `symbol table` akceptuje teraz overlaye (`0-9`, `A-Z`) oraz legacy zapis `a-j` mapowany do cyfr.
+- Dodano defensyjną walidację pola `c/s/T` i doprecyzowano detekcję przypadków niejednoznacznych, aby poprawnie preferować format nieskompresowany tam, gdzie ramka spełnia jego pełny układ.
+- Dodano wizualne renderowanie znaku overlay na ikonach APRS w widoku mapy, mapie szczegółów stacji oraz w tabeli `Stations`.
+
+### Fixed
+- Naprawiono odrzucanie legalnych ramek APRS `compressed` z overlayem w `symbol table` (np. `!L...`), które wcześniej kończyły jako nierozpoznane (`aprs_data=None`).
+
+### Removed
+- Brak zmian.
+
+## 1.6.1.dev - 17.04.2026
+
+### Added
+- Dodano lekki lokalny proxy/cache kafelków map dla skonfigurowanych źródeł (`map_sources`) bez zewnętrznych usług i bez nowych ciężkich zależności.
+- Dodano stały endpoint backendu `GET /api/map/tiles/{source_id}/{z}/{x}/{y}` obsługujący standardowy przepływ Leaflet:
+  - cache hit: serwowanie kafelka z dysku,
+  - cache miss: pobranie z upstream, zapis lokalny, zwrot odpowiedzi.
+- Dodano per‑źródło mapy przełącznik `Enable local cache/proxy` w panelu `Settings -> Map sources`.
+- Dodano statystyki cache per źródło mapy: liczba zapisanych kafelków i łączny rozmiar cache.
+- Dodano akcję `Clear cache` per źródło mapy, która usuwa cały cache źródła i resetuje statystyki do zera.
+- Dodano nowy moduł serwisowy `app/services/map_tile_proxy.py` z walidacją parametrów kafelków i bezpiecznym budowaniem URL upstream wyłącznie z konfiguracji źródła.
+- Dodano testy regresyjne dla map sources/proxy-cache (w tym: przełączenie URL proxy on/off oraz reset cache/statystyk).
+
+### Changed
+- Rozszerzono model `map_sources` o pola:
+  - `local_cache_enabled`,
+  - `cache_tile_count`,
+  - `cache_size_bytes`,
+  wraz z migracją dla istniejących instalacji.
+- Aktywna konfiguracja warstwy mapy przełącza `tile_url` dynamicznie:
+  - `local_cache_enabled=1` -> lokalny endpoint proxy,
+  - `local_cache_enabled=0` -> oryginalny URL providera.
+- Uporządkowano przekazywanie `root_path` do konfiguracji mapy (Map / Station detail / map pickery), aby URL proxy działał poprawnie także za prefiksem reverse proxy.
+- W tabeli `Map sources` zmieniono etykietę kolumny kolejności z `Order` na `Lp.` i zwężono pierwszą kolumnę dla bardziej zwartego układu.
+
+### Fixed
+- Zabezpieczono logikę proxy przed otwartym przekazywaniem arbitralnych URL: upstream jest wyliczany wyłącznie z zapisanej konfiguracji źródła mapy.
+- Ograniczono koszt aktualizacji statystyk cache: brak skanowania całego katalogu cache przy zwykłym renderze strony (statystyki aktualizowane inkrementalnie oraz przy jawnej operacji resetu).
+
+### Removed
+- Brak zmian.
+
 ## 1.6.0 - 17.04.2026
 
 ### Stable release

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import math
 import re
 import time
 import uuid
@@ -295,6 +296,8 @@ class DigiFlowRuntimeService:
             return self._execute_packet_type_filter(context, step)
         if step_type == "filter_icon":
             return self._execute_icon_filter(context, step)
+        if step_type == "filter_distance":
+            return self._execute_distance_filter(context, step)
         if step_type == "action_log":
             return self._execute_log_only(context, step)
         if step_type == "action_drop":
@@ -979,6 +982,70 @@ class DigiFlowRuntimeService:
         )
         return {"decision": decision}
 
+    def _execute_distance_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        config = dict(step.get("config") or {})
+        zones = _distance_filter_zones(config)
+        if not zones:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_distance",
+                decision="skipped",
+                message=_t("distance_filter: no zones configured, skipped"),
+            )
+            return {"decision": "continue"}
+
+        position = _parsed_aprs_position(context.get("parsed"))
+        if position is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_distance",
+                decision="skipped",
+                message=_t("distance_filter: no position, skipped"),
+            )
+            return {"decision": "continue"}
+
+        latitude, longitude = position
+        for zone_index, zone in enumerate(zones, start=1):
+            distance_km = _distance_km_between_points(
+                latitude,
+                longitude,
+                float(zone["latitude"]),
+                float(zone["longitude"]),
+            )
+            if distance_km <= float(zone["radius_km"]):
+                log_digi_flow_event(
+                    frame_uid=context["frame_uid"],
+                    flow_id=flow_id,
+                    step_id=step_id,
+                    event_type="filter_distance",
+                    decision="passed",
+                    message=_tf(
+                        "distance_filter: matched zone #{zone_index}, distance {distance_km} km <= {radius_km} km",
+                        {
+                            "zone_index": zone_index,
+                            "distance_km": _format_distance_km(distance_km),
+                            "radius_km": _format_distance_km(float(zone["radius_km"])),
+                        },
+                    ),
+                )
+                return {"decision": "continue"}
+
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="filter_distance",
+            decision="rejected",
+            message=_t("distance_filter: outside all zones, dropped"),
+        )
+        return {"decision": "drop"}
+
     def _execute_log_only(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         config = dict(step.get("config") or {})
         tag = str(config.get("log_tag") or "").strip()
@@ -1348,6 +1415,81 @@ def _local_station_identity() -> str:
         return ""
     ssid = str(station_settings.get("ssid") or "").strip()
     return f"{callsign}-{ssid}" if ssid else callsign
+
+
+def _parse_coordinate(value: Any) -> float | None:
+    if value in {None, ""}:
+        return None
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _distance_filter_zones(config: dict[str, Any]) -> list[dict[str, float]]:
+    raw_zones = config.get("zones")
+    if not isinstance(raw_zones, list):
+        return []
+    normalized: list[dict[str, float]] = []
+    for zone in raw_zones:
+        if not isinstance(zone, dict):
+            continue
+        latitude = _parse_coordinate(zone.get("latitude"))
+        longitude = _parse_coordinate(zone.get("longitude"))
+        radius_km = _parse_coordinate(zone.get("radius_km"))
+        if latitude is None or longitude is None or radius_km is None:
+            continue
+        if latitude < -90.0 or latitude > 90.0:
+            continue
+        if longitude < -180.0 or longitude > 180.0:
+            continue
+        if radius_km <= 0.0:
+            continue
+        normalized.append({"latitude": latitude, "longitude": longitude, "radius_km": radius_km})
+    return normalized
+
+
+def _parsed_aprs_position(parsed: dict[str, Any] | None) -> tuple[float, float] | None:
+    aprs_data = dict((parsed or {}).get("aprs_data") or {})
+    latitude = _parse_coordinate(aprs_data.get("latitude"))
+    longitude = _parse_coordinate(aprs_data.get("longitude"))
+    if latitude is None or longitude is None:
+        return None
+    if latitude < -90.0 or latitude > 90.0:
+        return None
+    if longitude < -180.0 or longitude > 180.0:
+        return None
+    return latitude, longitude
+
+
+def _distance_km_between_points(
+    latitude_a: float,
+    longitude_a: float,
+    latitude_b: float,
+    longitude_b: float,
+) -> float:
+    earth_radius_km = 6371.0
+    phi_1 = math.radians(latitude_a)
+    phi_2 = math.radians(latitude_b)
+    delta_phi = math.radians(latitude_b - latitude_a)
+    delta_lambda = math.radians(longitude_b - longitude_a)
+    haversine = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi_1) * math.cos(phi_2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    arc = 2.0 * math.atan2(math.sqrt(haversine), math.sqrt(1.0 - haversine))
+    return earth_radius_km * arc
+
+
+def _format_distance_km(value: float) -> str:
+    if value < 1:
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+    if value < 10:
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+    return f"{value:.1f}".rstrip("0").rstrip(".")
 
 
 def _parsed_aprs_packet_type(parsed: dict[str, Any] | None) -> str:

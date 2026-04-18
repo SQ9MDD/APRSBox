@@ -46,7 +46,14 @@ def insert_modem(*, name: str = "Test TNC", device_path: str = "127.0.0.1:8001")
     return int(row["id"])
 
 
-def station_payload(interface_id: int, *, tx_enabled: str | None) -> dict[str, str]:
+def station_payload(
+    interface_id: int,
+    *,
+    tx_enabled: str | None,
+    symbol_table: str = "/",
+    symbol_code: str = ">",
+    symbol_overlay: str = "",
+) -> dict[str, str]:
     payload = {
         "callsign": "sq9xyz",
         "ssid": "9",
@@ -58,8 +65,9 @@ def station_payload(interface_id: int, *, tx_enabled: str | None) -> dict[str, s
         "status_interval_minutes": "30",
         "latitude": "52.2297",
         "longitude": "21.0122",
-        "symbol_table": "/",
-        "symbol_code": ">",
+        "symbol_table": symbol_table,
+        "symbol_code": symbol_code,
+        "symbol_overlay": symbol_overlay,
         "default_units": "metric",
     }
     if tx_enabled is not None:
@@ -88,6 +96,52 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             self.assertIn("Status is sent as a separate APRS frame", template_source)
             self.assertIn('id="station-phg-gain-input"', template_source)
             self.assertIn('id="station-phg-direction-input"', template_source)
+            self.assertIn('name="symbol_overlay"', template_source)
+            self.assertIn('id="station-symbol-overlay"', template_source)
+
+    def test_station_overlay_is_saved_for_alternate_and_cleared_for_primary(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(
+                station_payload(
+                    interface_id,
+                    tx_enabled="1",
+                    symbol_table="\\",
+                    symbol_code="A",
+                    symbol_overlay="7",
+                )
+            )
+            station_settings = get_station_settings()
+            self.assertEqual(station_settings["symbol_table"], "\\")
+            self.assertEqual(station_settings["symbol_overlay"], "7")
+
+            update_station_settings(
+                station_payload(
+                    interface_id,
+                    tx_enabled="1",
+                    symbol_table="/",
+                    symbol_code="A",
+                    symbol_overlay="9",
+                )
+            )
+            station_settings = get_station_settings()
+            self.assertEqual(station_settings["symbol_table"], "/")
+            self.assertIsNone(station_settings["symbol_overlay"])
+
+    def test_beacon_frame_uses_station_overlay_for_alternate_table(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(
+                station_payload(
+                    interface_id,
+                    tx_enabled="1",
+                    symbol_table="\\",
+                    symbol_code="A",
+                    symbol_overlay="2",
+                )
+            )
+            frame = build_beacon_tnc2(get_station_settings())
+            self.assertIn("=5213.78N202100.73EA", frame)
 
     def test_status_validation_rejects_enabled_empty_text(self) -> None:
         with temporary_database():

@@ -19,6 +19,7 @@ MAP_SOURCE_SORT_ORDER_DEFAULT = 0
 MAP_SOURCE_ZOOM_MIN = 0
 MAP_SOURCE_ZOOM_MAX = 30
 MAP_SOURCE_REQUIRED_TILE_TOKENS = ("{z}", "{x}", "{y}")
+MAP_TILE_PROXY_ENDPOINT = "/api/map/tiles"
 
 
 def list_map_sources() -> list[dict[str, Any]]:
@@ -33,6 +34,9 @@ def list_map_sources() -> list[dict[str, Any]]:
             max_zoom,
             subdomains,
             api_key,
+            local_cache_enabled,
+            cache_tile_count,
+            cache_size_bytes,
             enabled,
             is_default,
             sort_order,
@@ -58,6 +62,9 @@ def get_map_source(source_id: int) -> dict[str, Any] | None:
             max_zoom,
             subdomains,
             api_key,
+            local_cache_enabled,
+            cache_tile_count,
+            cache_size_bytes,
             enabled,
             is_default,
             sort_order,
@@ -89,7 +96,7 @@ def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) ->
         existing_row = None
         if source_id is not None:
             existing_row = connection.execute(
-                "SELECT id, subdomains, api_key, sort_order FROM map_sources WHERE id = ?",
+                "SELECT id, subdomains, api_key, local_cache_enabled, sort_order FROM map_sources WHERE id = ?",
                 (int(source_id),),
             ).fetchone()
             if existing_row is None:
@@ -98,6 +105,8 @@ def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) ->
                 values_payload["subdomains"] = str(existing_row["subdomains"] or "")
             if "api_key" not in values_payload:
                 values_payload["api_key"] = str(existing_row["api_key"] or "")
+            if "local_cache_enabled" not in values_payload:
+                values_payload["local_cache_enabled"] = int(existing_row["local_cache_enabled"] or 0)
             raw_sort_order = values_payload.get("sort_order")
             if "sort_order" not in values_payload or str(raw_sort_order or "").strip() == "":
                 values_payload["sort_order"] = int(existing_row["sort_order"] or MAP_SOURCE_SORT_ORDER_DEFAULT)
@@ -142,6 +151,9 @@ def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) ->
                     max_zoom,
                     subdomains,
                     api_key,
+                    local_cache_enabled,
+                    cache_tile_count,
+                    cache_size_bytes,
                     enabled,
                     is_default,
                     sort_order,
@@ -149,7 +161,7 @@ def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) ->
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     values["name"],
@@ -159,6 +171,9 @@ def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) ->
                     values["max_zoom"],
                     values["subdomains"],
                     values["api_key"],
+                    values["local_cache_enabled"],
+                    0,
+                    0,
                     values["enabled"],
                     values["is_default"],
                     values["sort_order"],
@@ -180,6 +195,7 @@ def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) ->
                     max_zoom = ?,
                     subdomains = ?,
                     api_key = ?,
+                    local_cache_enabled = ?,
                     enabled = ?,
                     is_default = ?,
                     sort_order = ?,
@@ -195,6 +211,7 @@ def save_map_source(payload: dict[str, Any], *, source_id: int | None = None) ->
                     values["max_zoom"],
                     values["subdomains"],
                     values["api_key"],
+                    values["local_cache_enabled"],
                     values["enabled"],
                     values["is_default"],
                     values["sort_order"],
@@ -345,6 +362,42 @@ def move_map_source(source_id: int, direction: str) -> None:
     log_event("INFO", "config", f"Moved map source {source_id} {normalized_direction}")
 
 
+def increment_map_source_cache_stats(source_id: int, *, tile_size_bytes: int) -> None:
+    safe_size = _safe_int(tile_size_bytes, default=0)
+    if safe_size <= 0:
+        return
+    timestamp = utc_now()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            UPDATE map_sources
+            SET cache_tile_count = cache_tile_count + 1,
+                cache_size_bytes = cache_size_bytes + ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (safe_size, timestamp, int(source_id)),
+        )
+
+
+def reset_map_source_cache_stats(source_id: int) -> None:
+    timestamp = utc_now()
+    with get_connection() as connection:
+        row = connection.execute("SELECT id FROM map_sources WHERE id = ?", (int(source_id),)).fetchone()
+        if row is None:
+            raise ValueError("Map source not found.")
+        connection.execute(
+            """
+            UPDATE map_sources
+            SET cache_tile_count = 0,
+                cache_size_bytes = 0,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (timestamp, int(source_id)),
+        )
+
+
 def normalize_map_source_payload(payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name") or "").strip()
     if not name:
@@ -374,6 +427,7 @@ def normalize_map_source_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "max_zoom": max_zoom,
         "subdomains": _normalize_subdomains(payload.get("subdomains")),
         "api_key": str(payload.get("api_key") or "").strip(),
+        "local_cache_enabled": _normalize_checkbox(payload.get("local_cache_enabled")),
         "enabled": enabled,
         "is_default": is_default,
         "sort_order": _normalize_sort_order(payload.get("sort_order")),
@@ -395,7 +449,7 @@ def get_default_map_source() -> dict[str, Any] | None:
     return dict(preferred)
 
 
-def resolve_active_tile_layer() -> dict[str, Any]:
+def resolve_active_tile_layer(*, root_path: str = "") -> dict[str, Any]:
     source = get_default_map_source()
     if source is None:
         return {
@@ -409,6 +463,12 @@ def resolve_active_tile_layer() -> dict[str, Any]:
     url_template = str(source.get("url_template") or "")
     api_key = str(source.get("api_key") or "")
     resolved_url = url_template.replace("{apiKey}", quote(api_key, safe=""))
+    if bool(source.get("local_cache_enabled")):
+        resolved_url = build_local_tile_proxy_url_template(
+            int(source.get("id") or 0),
+            root_path=root_path,
+            include_subdomain=_has_tile_token(url_template, "s"),
+        )
     return {
         "tile_url": resolved_url,
         "tile_attribution": str(source.get("attribution") or ""),
@@ -420,6 +480,8 @@ def resolve_active_tile_layer() -> dict[str, Any]:
 
 
 def _normalize_map_source_row(row: dict[str, Any]) -> dict[str, Any]:
+    cache_tile_count = _normalize_cache_counter(row.get("cache_tile_count"))
+    cache_size_bytes = _normalize_cache_counter(row.get("cache_size_bytes"))
     return {
         "id": int(row.get("id") or 0),
         "name": str(row.get("name") or "").strip(),
@@ -429,6 +491,10 @@ def _normalize_map_source_row(row: dict[str, Any]) -> dict[str, Any]:
         "max_zoom": _coerce_zoom_value(row.get("max_zoom"), default=MAP_SOURCE_MAX_ZOOM_DEFAULT),
         "subdomains": _normalize_subdomains(row.get("subdomains")),
         "api_key": str(row.get("api_key") or "").strip(),
+        "local_cache_enabled": bool(int(row.get("local_cache_enabled") or 0)),
+        "cache_tile_count": cache_tile_count,
+        "cache_size_bytes": cache_size_bytes,
+        "cache_size_label": _format_size_bytes(cache_size_bytes),
         "enabled": bool(int(row.get("enabled") or 0)),
         "is_default": bool(int(row.get("is_default") or 0)),
         "sort_order": _normalize_sort_order(row.get("sort_order")),
@@ -496,8 +562,45 @@ def _normalize_subdomains(value: Any) -> str:
     return ",".join(tokens)
 
 
-def _has_required_tile_tokens(url_template: str) -> bool:
-    normalized = str(url_template or "").strip().lower()
+def _normalize_cache_counter(value: Any) -> int:
+    parsed = _safe_int(value, default=0)
+    return parsed if parsed >= 0 else 0
+
+
+def _normalize_root_path(root_path: str) -> str:
+    text = str(root_path or "").strip()
+    if not text:
+        return ""
+    if not text.startswith("/"):
+        text = f"/{text}"
+    return text.rstrip("/")
+
+
+def build_local_tile_proxy_url_template(
+    source_id: int,
+    *,
+    root_path: str = "",
+    include_subdomain: bool = False,
+) -> str:
+    normalized_root_path = _normalize_root_path(root_path)
+    suffix = "?s={s}" if include_subdomain else ""
+    return f"{normalized_root_path}{MAP_TILE_PROXY_ENDPOINT}/{int(source_id)}/{{z}}/{{x}}/{{y}}{suffix}"
+
+
+def _format_size_bytes(size_bytes: int) -> str:
+    value = float(size_bytes if size_bytes >= 0 else 0)
+    units = ("B", "KB", "MB", "GB", "TB")
+    unit_index = 0
+    while value >= 1024.0 and unit_index < len(units) - 1:
+        value /= 1024.0
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+    return f"{value:.1f} {units[unit_index]}"
+
+
+def _has_tile_token(url_template: str, token: str) -> bool:
+    normalized = str(url_template or "").strip()
     if not normalized:
         return False
     try:
@@ -512,7 +615,11 @@ def _has_required_tile_tokens(url_template: str) -> bool:
         .replace("&#125;", "}")
     )
     prepared = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", prepared)
-    return all(re.search(r"\{\s*" + re.escape(token.strip("{}")) + r"\s*\}", prepared) for token in MAP_SOURCE_REQUIRED_TILE_TOKENS)
+    return re.search(r"\{\s*" + re.escape(token) + r"\s*\}", prepared, flags=re.IGNORECASE) is not None
+
+
+def _has_required_tile_tokens(url_template: str) -> bool:
+    return all(_has_tile_token(url_template, token.strip("{}")) for token in MAP_SOURCE_REQUIRED_TILE_TOKENS)
 
 
 def _validate_map_sources_state(connection: Any) -> None:
@@ -537,10 +644,10 @@ def _validate_map_sources_state(connection: Any) -> None:
         raise ValueError("Default map source must be enabled.")
 
 
-def get_map_page_config() -> dict[str, Any]:
+def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
     station_settings = get_station_settings()
     default_view = _resolve_default_view(station_settings)
-    tile_layer = resolve_active_tile_layer()
+    tile_layer = resolve_active_tile_layer(root_path=root_path)
     return {
         "station_latitude": default_view["latitude"],
         "station_longitude": default_view["longitude"],
@@ -605,8 +712,8 @@ def get_map_station_payload() -> dict[str, Any]:
     }
 
 
-def get_station_detail_map_config(station: dict[str, Any]) -> dict[str, Any]:
-    tile_layer = resolve_active_tile_layer()
+def get_station_detail_map_config(station: dict[str, Any], *, root_path: str = "") -> dict[str, Any]:
+    tile_layer = resolve_active_tile_layer(root_path=root_path)
     return {
         "latitude": station.get("latitude_float"),
         "longitude": station.get("longitude_float"),
@@ -619,6 +726,8 @@ def get_station_detail_map_config(station: dict[str, Any]) -> dict[str, Any]:
         "tile_subdomains": tile_layer["tile_subdomains"],
         "display_callsign": station.get("display_callsign", ""),
         "symbol_icon": station.get("symbol_icon", "icons/verG/x.gif"),
+        "symbol_table": station.get("symbol_table", ""),
+        "symbol_code": station.get("symbol_code", ""),
         "detail_href": station.get("detail_href", ""),
     }
 

@@ -199,6 +199,7 @@ def get_station_settings() -> dict[str, Any]:
     result.setdefault("status_enabled", 0)
     result.setdefault("status_text", "")
     result.setdefault("status_interval_minutes", 30)
+    result.setdefault("symbol_overlay", None)
     return result
 
 
@@ -244,6 +245,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
                 longitude = :longitude,
                 symbol_table = :symbol_table,
                 symbol_code = :symbol_code,
+                symbol_overlay = :symbol_overlay,
                 default_units = :default_units,
                 tx_enabled = :tx_enabled,
                 updated_at = :updated_at
@@ -300,6 +302,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
     symbol_code = str(payload.get("symbol_code", ">") or ">").strip()[:1]
     if len(symbol_code) != 1 or not (33 <= ord(symbol_code) <= 126):
         symbol_code = ">"
+    symbol_overlay = _normalize_station_symbol_overlay_value(payload.get("symbol_overlay"), symbol_table=symbol_table)
     return {
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
@@ -314,10 +317,20 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "longitude": payload.get("longitude", ""),
         "symbol_table": symbol_table,
         "symbol_code": symbol_code,
+        "symbol_overlay": symbol_overlay,
         "default_units": default_units,
         "tx_enabled": int(bool(payload.get("tx_enabled"))),
         "updated_at": utc_now(),
     }
+
+
+def _normalize_station_symbol_overlay_value(value: Any, *, symbol_table: str) -> str | None:
+    if symbol_table != "\\":
+        return None
+    text = str(value or "").strip().upper()
+    if len(text) == 1 and ("0" <= text <= "9" or "A" <= text <= "Z"):
+        return text
+    return None
 
 
 def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
@@ -1203,6 +1216,8 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "frame_type_label": snapshot["frame_type_label"],
                 "symbol": snapshot["symbol"],
                 "symbol_icon": snapshot["symbol_icon"],
+                "symbol_table": snapshot["symbol_table"],
+                "symbol_code": snapshot["symbol_code"],
                 "comment": snapshot["comment"],
                 "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
                 "latitude": snapshot["latitude"],
@@ -2064,6 +2079,7 @@ def _looks_like_compressed_position(info: str, *, with_timestamp: bool) -> bool:
         lat_block = info[9:13]
         lon_block = info[13:17]
         symbol_code = info[17]
+        cst_block = info[18:21]
     else:
         if len(info) < 14:
             return False
@@ -2071,23 +2087,44 @@ def _looks_like_compressed_position(info: str, *, with_timestamp: bool) -> bool:
         lat_block = info[2:6]
         lon_block = info[6:10]
         symbol_code = info[10]
+        cst_block = info[11:14]
 
-    if symbol_table not in {"/", "\\"}:
+    if not _is_valid_compressed_symbol_table(symbol_table):
         return False
+    normalized_symbol_table = _normalize_compressed_symbol_table(symbol_table)
+    if "0" <= normalized_symbol_table <= "9":
+        if with_timestamp:
+            if (
+                len(info) >= 27
+                and _parse_latitude(info[8:16]) is not None
+                and _parse_longitude(info[17:26]) is not None
+                and 33 <= ord(info[26]) <= 126
+            ):
+                return False
+        else:
+            if (
+                len(info) >= 20
+                and _parse_latitude(info[1:9]) is not None
+                and _parse_longitude(info[10:19]) is not None
+                and 33 <= ord(info[19]) <= 126
+            ):
+                return False
     if not _is_base91_block(lat_block) or not _is_base91_block(lon_block):
+        return False
+    if not _is_valid_compressed_cst_block(cst_block):
         return False
     return 33 <= ord(symbol_code) <= 126
 
 
 def _parse_compressed_position(info: str, *, with_timestamp: bool) -> dict[str, Any] | None:
     if with_timestamp:
-        symbol_table = info[8]
+        symbol_table = _normalize_compressed_symbol_table(info[8])
         lat_block = info[9:13]
         lon_block = info[13:17]
         symbol_code = info[17]
         comment = info[21:].strip() if len(info) > 21 else ""
     else:
-        symbol_table = info[1]
+        symbol_table = _normalize_compressed_symbol_table(info[1])
         lat_block = info[2:6]
         lon_block = info[6:10]
         symbol_code = info[10]
@@ -2789,6 +2826,33 @@ def _is_base91_block(value: str) -> bool:
     return len(value) == 4 and all(33 <= ord(char) <= 123 for char in value)
 
 
+def _normalize_compressed_symbol_table(symbol_table: str) -> str:
+    if len(symbol_table) == 1 and "a" <= symbol_table <= "j":
+        return chr(ord(symbol_table) - 49)
+    return symbol_table
+
+
+def _is_valid_compressed_symbol_table(symbol_table: str) -> bool:
+    normalized = _normalize_compressed_symbol_table(symbol_table)
+    if normalized in {"/", "\\"}:
+        return True
+    if len(normalized) != 1:
+        return False
+    return ("0" <= normalized <= "9") or ("A" <= normalized <= "Z")
+
+
+def _is_valid_compressed_cst_block(cst_block: str) -> bool:
+    if len(cst_block) != 3:
+        return False
+    for char in cst_block:
+        code = ord(char)
+        if code == 32:
+            continue
+        if code < 33 or code > 123:
+            return False
+    return True
+
+
 def _base91_value(value: str) -> int:
     total = 0
     for char in value:
@@ -3014,6 +3078,7 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
 
     symbol_code = _normalize_symbol_code_value(payload.get("symbol_code"))
     normalized["symbol_code"] = symbol_code
+    normalized["symbol_overlay"] = _normalize_symbol_overlay_value(payload.get("symbol_overlay"), symbol_table=symbol_table)
 
     try:
         interval_minutes = int(str(payload.get("interval_minutes") or "30").strip())
@@ -3096,6 +3161,26 @@ def _normalize_symbol_code_value(value: Any) -> str:
     if codepoint < 33 or codepoint > 126:
         raise ValueError("Symbol code must be a single printable ASCII character.")
     return text
+
+
+def _normalize_symbol_overlay_value(value: Any, *, symbol_table: str) -> str | None:
+    if symbol_table != "\\":
+        return None
+    text = str(value or "").strip().upper()
+    if not text or text == "NONE":
+        return None
+    if len(text) != 1 or not ("0" <= text <= "9" or "A" <= text <= "Z"):
+        raise ValueError("Symbol overlay must be one of: None, 0-9, A-Z.")
+    return text
+
+
+def _coerce_symbol_overlay_value(value: Any, *, symbol_table: str) -> str:
+    if symbol_table != "\\":
+        return ""
+    text = str(value or "").strip().upper()
+    if len(text) == 1 and ("0" <= text <= "9" or "A" <= text <= "Z"):
+        return text
+    return ""
 
 
 def _normalize_printable_ascii(value: str) -> str:
@@ -3218,7 +3303,11 @@ def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: s
 
 def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
     result = dict(row)
-    symbol_table = str(result.get("symbol_table") or "/")
+    symbol_table = str(result.get("symbol_table") or "/").strip()
+    if symbol_table not in {"/", "\\"}:
+        symbol_table = "/"
+    result["symbol_table"] = symbol_table
+    result["symbol_overlay"] = _coerce_symbol_overlay_value(result.get("symbol_overlay"), symbol_table=symbol_table)
     symbol_code = str(result.get("symbol_code") or ">")
     result["symbol_icon"] = get_aprs_symbol_icon_path(f"{symbol_table}{symbol_code}")
     result["raw_frame_preview"] = _build_aprs_entity_preview(slug, result)
@@ -3255,11 +3344,12 @@ def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
             "longitude": longitude,
             "symbol_table": payload.get("symbol_table"),
             "symbol_code": payload.get("symbol_code"),
+            "symbol_overlay": payload.get("symbol_overlay"),
             "comment": payload.get("comment"),
             "path": payload.get("path"),
         }
         return build_object_tnc2(preview_payload)
-    symbol_table = str(payload.get("symbol_table") or "/")
+    symbol_table = _resolve_symbol_table_for_frame(payload.get("symbol_table"), payload.get("symbol_overlay"))
     symbol_code = str(payload.get("symbol_code") or ">")
     comment = str(payload.get("comment") or "").strip()
     path = str(payload.get("path") or "").strip()
@@ -3316,3 +3406,11 @@ def _format_aprs_longitude(value: float) -> str:
     degrees = int(absolute)
     minutes = (absolute - degrees) * 60
     return f"{degrees:03d}{minutes:05.2f}{hemisphere}"
+
+
+def _resolve_symbol_table_for_frame(symbol_table: Any, symbol_overlay: Any) -> str:
+    normalized_table = str(symbol_table or "/").strip()
+    if normalized_table not in {"/", "\\"}:
+        normalized_table = "/"
+    normalized_overlay = _coerce_symbol_overlay_value(symbol_overlay, symbol_table=normalized_table)
+    return normalized_overlay or normalized_table

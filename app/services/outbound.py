@@ -58,6 +58,8 @@ def enqueue_beacon_job(
     longitude = _parse_coordinate(station_settings.get("longitude"))
     if latitude is None or longitude is None:
         return False, "Latitude and longitude must be valid decimal coordinates."
+    symbol_table = _normalize_symbol_table(station_settings.get("symbol_table"))
+    symbol_overlay = _normalize_symbol_overlay(station_settings.get("symbol_overlay"), symbol_table=symbol_table)
 
     payload = {
         "aprs_message_id": aprs_message_id,
@@ -65,8 +67,9 @@ def enqueue_beacon_job(
         "ssid": ssid,
         "latitude": latitude,
         "longitude": longitude,
-        "symbol_table": _normalize_symbol_table(station_settings.get("symbol_table")),
+        "symbol_table": symbol_table,
         "symbol_code": _normalize_symbol_code(station_settings.get("symbol_code")),
+        "symbol_overlay": symbol_overlay,
         "beacon_comment": str(station_settings.get("beacon_comment") or "").strip(),
         "beacon_path": str(station_settings.get("beacon_path") or "").strip(),
         "trigger": str(trigger or "manual").strip() or "manual",
@@ -220,6 +223,8 @@ def enqueue_object_job(
     longitude = _parse_coordinate(obj.get("longitude"))
     if latitude is None or longitude is None:
         return False, "Object latitude and longitude must be valid decimal coordinates."
+    symbol_table = _normalize_symbol_table(obj.get("symbol_table"))
+    symbol_overlay = _normalize_symbol_overlay(obj.get("symbol_overlay"), symbol_table=symbol_table)
 
     payload = {
         "object_id": int(obj["id"]),
@@ -230,8 +235,9 @@ def enqueue_object_job(
         "state": str(obj.get("state") or "live"),
         "latitude": latitude,
         "longitude": longitude,
-        "symbol_table": _normalize_symbol_table(obj.get("symbol_table")),
+        "symbol_table": symbol_table,
         "symbol_code": _normalize_symbol_code(obj.get("symbol_code")),
+        "symbol_overlay": symbol_overlay,
         "comment": str(obj.get("comment") or "").strip(),
         "path": str(obj.get("path") or "").strip(),
         "object_timestamp": _object_timestamp(str(obj.get("lifetime") or "temporary")),
@@ -810,6 +816,15 @@ def _normalize_symbol_code(value: Any) -> str:
     return symbol_code
 
 
+def _normalize_symbol_overlay(value: Any, *, symbol_table: str) -> str | None:
+    if symbol_table != "\\":
+        return None
+    text = str(value or "").strip().upper()
+    if len(text) == 1 and ("0" <= text <= "9" or "A" <= text <= "Z"):
+        return text
+    return None
+
+
 def _format_station_callsign(callsign: Any, ssid: Any) -> str:
     base = str(callsign or "").strip().upper()
     ssid_text = str(ssid or "").strip()
@@ -822,9 +837,11 @@ def _build_beacon_info(payload: dict[str, Any]) -> str:
     latitude = _format_aprs_latitude(float(payload["latitude"]))
     longitude = _format_aprs_longitude(float(payload["longitude"]))
     symbol_table = _normalize_symbol_table(payload.get("symbol_table"))
+    symbol_overlay = _normalize_symbol_overlay(payload.get("symbol_overlay"), symbol_table=symbol_table)
+    symbol_table_for_frame = symbol_overlay or symbol_table
     symbol_code = _normalize_symbol_code(payload.get("symbol_code"))
     comment = str(payload.get("beacon_comment") or "").strip()
-    return f"={latitude}{symbol_table}{longitude}{symbol_code}{comment}"
+    return f"={latitude}{symbol_table_for_frame}{longitude}{symbol_code}{comment}"
 
 
 def _build_object_info(payload: dict[str, Any]) -> str:
@@ -834,9 +851,11 @@ def _build_object_info(payload: dict[str, Any]) -> str:
     latitude = _format_aprs_latitude(float(payload["latitude"]))
     longitude = _format_aprs_longitude(float(payload["longitude"]))
     symbol_table = _normalize_symbol_table(payload.get("symbol_table"))
+    symbol_overlay = _normalize_symbol_overlay(payload.get("symbol_overlay"), symbol_table=symbol_table)
+    symbol_table_for_frame = symbol_overlay or symbol_table
     symbol_code = _normalize_symbol_code(payload.get("symbol_code"))
     comment = str(payload.get("comment") or "").strip()
-    return f";{name}{state_marker}{timestamp}{latitude}{symbol_table}{longitude}{symbol_code}{comment}"
+    return f";{name}{state_marker}{timestamp}{latitude}{symbol_table_for_frame}{longitude}{symbol_code}{comment}"
 
 
 def _build_status_info(payload: dict[str, Any]) -> str:

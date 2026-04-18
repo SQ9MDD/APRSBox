@@ -332,6 +332,8 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_digi"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_dupe"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_dupe"]["runtime_label"], "Runtime")
+            self.assertEqual(type_meta["filter_distance"]["runtime_status"], "implemented")
+            self.assertEqual(type_meta["filter_distance"]["runtime_label"], "Runtime")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():
@@ -554,6 +556,116 @@ class DigiFlowsTests(unittest.TestCase):
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["steps"][1]["config"]["trace_paths"], ["TRACE2-2", "WIDE1-1"])
             self.assertEqual(normalized["steps"][1]["config"]["no_trace_paths"], ["TCPIP", "NOGATE"])
+
+    def test_distance_filter_accepts_configurations_with_one_two_and_three_zones(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+
+        def _build_zones(count: int) -> list[dict[str, object]]:
+            base = [
+                {"latitude": 50.06143, "longitude": 19.93658, "radius_km": 0.5},
+                {"latitude": 52.22977, "longitude": 21.01178, "radius_km": 3},
+                {"latitude": 51.10788, "longitude": 17.03854, "radius_km": 15},
+            ]
+            return base[:count]
+
+        with temporary_database():
+            for zone_count in (1, 2, 3):
+                payload["steps"] = [
+                    payload["steps"][0],
+                    {
+                        "step_type": "filter_distance",
+                        "title": "Distance Filter",
+                        "enabled": 1,
+                        "config": {"zones": _build_zones(zone_count)},
+                    },
+                    {
+                        "step_type": "action_log",
+                        "title": "Log Only",
+                        "enabled": 1,
+                        "config": {"log_tag": "log-only", "note": ""},
+                    },
+                ]
+                normalized = normalize_digi_flow_payload(payload)
+                zones = normalized["steps"][1]["config"]["zones"]
+                self.assertEqual(len(zones), zone_count)
+                self.assertTrue(all(float(zone["radius_km"]) > 0 for zone in zones))
+
+    def test_distance_filter_rejects_invalid_zone_configurations(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+
+        with temporary_database():
+            payload["steps"] = [
+                payload["steps"][0],
+                {
+                    "step_type": "filter_distance",
+                    "title": "Distance Filter",
+                    "enabled": 1,
+                    "config": {"zones": [{"latitude": "", "longitude": "19.9", "radius_km": "1"}]},
+                },
+                {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+            ]
+            with self.assertRaisesRegex(ValueError, "requires latitude, longitude and radius"):
+                normalize_digi_flow_payload(payload)
+
+            payload["steps"][1]["config"] = {"zones": [{"latitude": "95", "longitude": "19.9", "radius_km": "1"}]}
+            with self.assertRaisesRegex(ValueError, "latitude must be between -90 and 90"):
+                normalize_digi_flow_payload(payload)
+
+            payload["steps"][1]["config"] = {"zones": [{"latitude": "50", "longitude": "190", "radius_km": "1"}]}
+            with self.assertRaisesRegex(ValueError, "longitude must be between -180 and 180"):
+                normalize_digi_flow_payload(payload)
+
+            payload["steps"][1]["config"] = {"zones": [{"latitude": "50", "longitude": "19.9", "radius_km": "0"}]}
+            with self.assertRaisesRegex(ValueError, "radius must be greater than 0 km"):
+                normalize_digi_flow_payload(payload)
+
+            payload["steps"][1]["config"] = {"zones": [{"latitude": "50", "longitude": "19.9", "radius_km": "0.25"}]}
+            with self.assertRaisesRegex(ValueError, "radius below 1 km must use 0.1 km steps"):
+                normalize_digi_flow_payload(payload)
+
+            payload["steps"][1]["config"] = {
+                "zones": [
+                    {"latitude": "50.0", "longitude": "19.9", "radius_km": "1"},
+                    {"latitude": "51.0", "longitude": "20.9", "radius_km": "1"},
+                    {"latitude": "52.0", "longitude": "21.9", "radius_km": "1"},
+                    {"latitude": "53.0", "longitude": "22.9", "radius_km": "1"},
+                ]
+            }
+            with self.assertRaisesRegex(ValueError, "supports at most 3 zones"):
+                normalize_digi_flow_payload(payload)
+
+    def test_distance_filter_can_be_used_only_once_in_flow(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_distance",
+                "title": "Distance Filter",
+                "enabled": 1,
+                "config": {"zones": [{"latitude": 50.0, "longitude": 19.9, "radius_km": 1}]},
+            },
+            {
+                "step_type": "filter_distance",
+                "title": "Distance Filter",
+                "enabled": 1,
+                "config": {"zones": [{"latitude": 52.0, "longitude": 21.0, "radius_km": 2}]},
+            },
+            {
+                "step_type": "action_log",
+                "title": "Log Only",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "Distance filter can be used only once in a flow"):
+                normalize_digi_flow_payload(payload)
 
     def test_rf_target_requires_path_filter(self) -> None:
         payload = sample_flow_payload()

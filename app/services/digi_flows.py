@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
@@ -37,6 +38,7 @@ PACKET_TYPE_FILTER_GROUPS = (
 PACKET_TYPE_FILTER_LEGACY_CODES = {"M", "S", "O", "W"}
 DUPLICATE_FILTER_WINDOW_SECONDS = (2, 3, 4, 5, 6, 7)
 DUPLICATE_FILTER_DEFAULT_WINDOW_SEC = 5
+DISTANCE_FILTER_MAX_ZONES = 3
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_rf",
@@ -48,6 +50,7 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "filter_callsign",
     "filter_packet_type",
     "filter_icon",
+    "filter_distance",
     "tx_rf",
     "tx_aprsis",
     "action_drop",
@@ -249,9 +252,22 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Distance Filter",
         "badge": "Filter",
-        "description": "Stores a maximum packet distance.",
+        "description": "Allows packets only when decoded position is inside at least one configured zone.",
+        "editor_help_lines": (
+            "This filter checks only packets where APRS position can be decoded from the current frame.",
+            "The packet passes when it falls inside at least one configured zone.",
+            "Packets without decoded position are not dropped by this filter.",
+            "Distance zones are evaluated with OR logic (any matching zone passes).",
+            "This filter can be used only once in a flow.",
+        ),
         "config_fields": (
-            {"name": "max_km", "label": "Max Distance (km)", "type": "number", "required": True},
+            {
+                "name": "zones",
+                "label": "Distance zones",
+                "type": "distance_zones",
+                "required": True,
+                "help_text": "Define 1 to 3 center+radius zones. Radius below 1 km supports 0.1 km steps.",
+            },
         ),
     },
     "filter_rate_limit": {
@@ -378,6 +394,71 @@ def _normalize_number(value: Any, *, label: str, minimum: int = 0) -> int:
     if parsed < minimum:
         raise ValueError(_tf("{label} must be at least {minimum}.", {"label": _t(label), "minimum": minimum}))
     return parsed
+
+
+def _normalize_decimal(value: Any, *, label: str) -> float:
+    text = _normalize_text(value)
+    if not text:
+        raise ValueError(_tf("{label} is required.", {"label": _t(label)}))
+    try:
+        parsed = float(text)
+    except ValueError as exc:
+        raise ValueError(_tf("{label} must be a number.", {"label": _t(label)})) from exc
+    if not math.isfinite(parsed):
+        raise ValueError(_tf("{label} must be a finite number.", {"label": _t(label)}))
+    return parsed
+
+
+def _normalize_distance_filter_zones(raw_zones: Any) -> list[dict[str, float]]:
+    if not isinstance(raw_zones, list):
+        raise ValueError(_t("Distance filter requires at least one zone."))
+    if not raw_zones:
+        raise ValueError(_t("Distance filter requires at least one zone."))
+    if len(raw_zones) > DISTANCE_FILTER_MAX_ZONES:
+        raise ValueError(_tf("Distance filter supports at most {count} zones.", {"count": DISTANCE_FILTER_MAX_ZONES}))
+
+    normalized_zones: list[dict[str, float]] = []
+    for index, raw_zone in enumerate(raw_zones, start=1):
+        if not isinstance(raw_zone, dict):
+            raise ValueError(_tf("Distance zone #{index} is invalid.", {"index": index}))
+        latitude_text = _normalize_text(raw_zone.get("latitude"))
+        longitude_text = _normalize_text(raw_zone.get("longitude"))
+        radius_text = _normalize_text(raw_zone.get("radius_km"))
+        any_value_present = bool(latitude_text or longitude_text or radius_text)
+        if not any_value_present:
+            raise ValueError(_tf("Distance zone #{index} cannot be empty.", {"index": index}))
+        if not (latitude_text and longitude_text and radius_text):
+            raise ValueError(
+                _tf(
+                    "Distance zone #{index} requires latitude, longitude and radius.",
+                    {"index": index},
+                )
+            )
+
+        latitude = _normalize_decimal(latitude_text, label="Latitude")
+        longitude = _normalize_decimal(longitude_text, label="Longitude")
+        radius_km = _normalize_decimal(radius_text, label="Radius km")
+        if latitude < -90.0 or latitude > 90.0:
+            raise ValueError(_tf("Distance zone #{index} latitude must be between -90 and 90.", {"index": index}))
+        if longitude < -180.0 or longitude > 180.0:
+            raise ValueError(_tf("Distance zone #{index} longitude must be between -180 and 180.", {"index": index}))
+        if radius_km <= 0.0:
+            raise ValueError(_tf("Distance zone #{index} radius must be greater than 0 km.", {"index": index}))
+        if radius_km < 1.0:
+            distance_100m_units = radius_km * 10.0
+            if abs(distance_100m_units - round(distance_100m_units)) > 1e-9:
+                raise ValueError(_tf("Distance zone #{index} radius below 1 km must use 0.1 km steps.", {"index": index}))
+        normalized_zones.append(
+            {
+                "latitude": round(latitude, 5),
+                "longitude": round(longitude, 5),
+                "radius_km": round(radius_km, 3),
+            }
+        )
+
+    if not normalized_zones:
+        raise ValueError(_t("Distance filter requires at least one zone."))
+    return normalized_zones
 
 
 def _normalize_step_id(value: Any) -> int | None:
@@ -509,7 +590,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "filter_icon":
         return {"mode": "allow", "icons": []}
     if step_type == "filter_distance":
-        return {"max_km": 50}
+        return {"zones": [{"latitude": "", "longitude": "", "radius_km": ""}]}
     if step_type == "filter_rate_limit":
         return {"packets_per_minute": 60}
     if step_type == "filter_rate_limit_per_callsign":
@@ -590,7 +671,7 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
             raise ValueError(_t("Icon filter mode must be allow or deny."))
         return {"mode": mode, "icons": _normalize_multiline_list(config.get("icons"))}
     if step_type == "filter_distance":
-        return {"max_km": _normalize_number(config.get("max_km"), label="Max distance", minimum=1)}
+        return {"zones": _normalize_distance_filter_zones(config.get("zones"))}
     if step_type == "filter_rate_limit":
         return {"packets_per_minute": _normalize_number(config.get("packets_per_minute"), label="Packets per minute", minimum=1)}
     if step_type == "filter_rate_limit_per_callsign":
@@ -650,7 +731,8 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         icons = config.get("icons") or []
         return f"Mode: {config.get('mode', 'allow')}, icons: {', '.join(icons) if icons else 'none'}"
     if step_type == "filter_distance":
-        return f"Max distance: {config.get('max_km', '-')!s} km"
+        zones = config.get("zones") or []
+        return _tf("Distance zones: {count}.", {"count": len(zones)})
     if step_type == "filter_rate_limit":
         return f"Rate: {config.get('packets_per_minute', '-')!s} pkt/min"
     if step_type == "filter_rate_limit_per_callsign":
@@ -956,6 +1038,9 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Duplicate filter (viscous-delay) can be used only once in a flow."))
     if duplicate_filter_positions and duplicate_filter_positions[0] != 1:
         raise ValueError(_t("Duplicate filter (viscous-delay) must be the first filter step in the flow."))
+    distance_filter_count = sum(1 for step in normalized_steps if step["step_type"] == "filter_distance")
+    if distance_filter_count > 1:
+        raise ValueError(_t("Distance filter can be used only once in a flow."))
     has_strict_filter = any(step["step_type"] == "filter_strict" for step in normalized_steps[1:-1])
     if target_kind != "tx_aprsis" and has_strict_filter:
         raise ValueError(_t("Strict APRS-IS guard can be used only in APRS-IS target flows."))
@@ -1509,7 +1594,17 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
             if event_type == "source_step":
                 step_state["status"] = "passed"
                 step_state["description"] = _t("Source matched and packet entered the flow.")
-            elif event_type in {"filter_callsign", "filter_digi", "filter_dupe", "direct_only", "path_rule", "strict_filter", "filter_packet_type", "filter_icon"}:
+            elif event_type in {
+                "filter_callsign",
+                "filter_digi",
+                "filter_dupe",
+                "direct_only",
+                "path_rule",
+                "strict_filter",
+                "filter_packet_type",
+                "filter_icon",
+                "filter_distance",
+            }:
                 step_state["status"] = "rejected" if decision == "rejected" else "passed"
                 step_state["description"] = message
             elif event_type == "output_action":
@@ -1631,6 +1726,8 @@ def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -
         return "filter_packet_type"
     if event_type == "filter_icon":
         return "filter_icon"
+    if event_type == "filter_distance":
+        return "filter_distance"
     if event_type == "output_action":
         return str(flow.get("target_kind") or "")
     if event_type == "step_stub":

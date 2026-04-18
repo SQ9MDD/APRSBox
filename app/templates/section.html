@@ -252,7 +252,14 @@
                     <span>{% if section.slug == 'modems' and field.name == 'tx_blocked' %}{{ t("Block TX on this interface") }}{% else %}{{ t(field.label) }}{% endif %}</span>
                     {% elif field.type == 'select' %}
                     <span>{{ t(field.label) }}</span>
-                    <select name="{{ field.name }}" {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}{% if section.slug == 'bulletins' and field.name == 'message_kind' %} id="bulletins-message-kind"{% endif %} {% if field.required %}required{% endif %}>
+                    <select
+                        name="{{ field.name }}"
+                        {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
+                        {% if section.slug in ['objects', 'items'] and field.name == 'symbol_overlay' %}id="{{ section.slug }}-symbol-overlay"{% endif %}
+                        {% if section.slug == 'bulletins' and field.name == 'message_kind' %}id="bulletins-message-kind"{% endif %}
+                        {% if section.slug in ['objects', 'items'] and field.name == 'symbol_overlay' and not (edit_row and edit_row.symbol_table == '\\') %}disabled{% endif %}
+                        {% if field.required %}required{% endif %}
+                    >
                         {% for option in field.options %}
                         <option value="{{ option.value }}" {% if (edit_row and edit_row[field.name]|string == option.value|string) or (not edit_row and ((field.default is defined and field.default|string == option.value|string) or (field.default is not defined and loop.first))) %}selected{% endif %}>
                             {{ t(option.label) }}
@@ -521,6 +528,7 @@
         for (const slug of ["objects", "items"]) {
             const symbolTable = document.getElementById(`${slug}-symbol-table`);
             const symbolCode = document.getElementById(`${slug}-symbol-code`);
+            const symbolOverlay = document.getElementById(`${slug}-symbol-overlay`);
             const symbolDropdown = document.getElementById(`${slug}-symbol-dropdown`);
             const symbolTrigger = document.getElementById(`${slug}-symbol-trigger`);
             const symbolTriggerImage = document.getElementById(`${slug}-symbol-trigger-image`);
@@ -560,6 +568,17 @@
                 }
             };
 
+            const syncOverlay = () => {
+                if (!(symbolOverlay instanceof HTMLSelectElement)) {
+                    return;
+                }
+                const isAlternateTable = symbolTable.value === "\\";
+                if (!isAlternateTable) {
+                    symbolOverlay.value = "";
+                }
+                symbolOverlay.disabled = !isAlternateTable;
+            };
+
             symbolTrigger.addEventListener("click", () => {
                 if (symbolDropdown.classList.contains("open")) {
                     closeMenu();
@@ -577,13 +596,17 @@
                 });
             });
 
-            symbolTable.addEventListener("change", syncPreview);
+            symbolTable.addEventListener("change", () => {
+                syncPreview();
+                syncOverlay();
+            });
             document.addEventListener("click", (event) => {
                 if (!symbolDropdown.contains(event.target)) {
                     closeMenu();
                 }
             });
             syncPreview();
+            syncOverlay();
         }
 
         const allowedTextPattern = /^[\x20-\x7E]*$/;

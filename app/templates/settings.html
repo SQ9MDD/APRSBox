@@ -136,11 +136,12 @@
                 <table class="data-table compact-table map-sources-table">
                     <thead>
                         <tr>
-                            <th>{{ t("Order") }}</th>
+                            <th>{{ t("Lp.") }}</th>
                             <th>{{ t("Name") }}</th>
                             <th>{{ t("Zoom") }}</th>
                             <th>{{ t("Enabled") }}</th>
                             <th>{{ t("Default") }}</th>
+                            <th>{{ t("Cache") }}</th>
                             {% if can_manage_map_sources %}
                             <th>{{ t("Actions") }}</th>
                             {% endif %}
@@ -156,6 +157,14 @@
                             <td>
                                 {% if source.is_default %}
                                 <span class="map-source-default-pill">{{ t("Default") }}</span>
+                                {% else %}
+                                <span class="muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if source.local_cache_enabled %}
+                                <span>{{ tf("{count} tiles", {"count": source.cache_tile_count}) }}</span>
+                                <span class="muted">({{ source.cache_size_label }})</span>
                                 {% else %}
                                 <span class="muted">-</span>
                                 {% endif %}
@@ -188,13 +197,18 @@
                                             <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                         </button>
                                     </form>
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/cache/clear" class="table-action-form">
+                                        <button type="submit" class="table-icon-button" title="{{ t('Clear cache') }}" aria-label="{{ t('Clear cache') }} {{ source.name }}" onclick="return confirm({{ t('Clear local tile cache for this map source?')|tojson|forceescape }});">
+                                            <img src="{{ request.scope.root_path }}/static/icons/broom.svg" alt="">
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
                             {% endif %}
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ 6 if can_manage_map_sources else 5 }}">{{ t("No records yet.") }}</td>
+                            <td colspan="{{ 7 if can_manage_map_sources else 6 }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -233,6 +247,10 @@
                 <label class="full checkbox-row">
                     <input type="checkbox" name="enabled" value="1" {% if map_source_form.enabled %}checked{% endif %}>
                     <span>{{ t("Enabled") }}</span>
+                </label>
+                <label class="full checkbox-row">
+                    <input type="checkbox" name="local_cache_enabled" value="1" {% if map_source_form.local_cache_enabled %}checked{% endif %}>
+                    <span>{{ t("Enable local cache/proxy") }}</span>
                 </label>
                 <label class="full checkbox-row">
                     <input type="checkbox" name="is_default" value="1" {% if map_source_form.is_default %}checked{% endif %}>

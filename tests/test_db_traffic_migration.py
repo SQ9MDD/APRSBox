@@ -317,6 +317,12 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 self.assertIn("band", columns)
                 modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
                 self.assertIn("tx_blocked", modem_columns)
+                station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
+                self.assertIn("symbol_overlay", station_columns)
+                object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
+                item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
+                self.assertIn("symbol_overlay", object_columns)
+                self.assertIn("symbol_overlay", item_columns)
                 index_row = connection.execute(
                     """
                     SELECT name

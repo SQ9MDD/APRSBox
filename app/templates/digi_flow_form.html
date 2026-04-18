@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 <section class="panel">
     <div class="panel-body">
@@ -211,12 +216,49 @@
 </section>
 {% endif %}
 
+<div class="location-picker-modal" id="digi-flow-location-picker" hidden>
+    <div class="location-picker-backdrop" data-close-location-picker></div>
+    <div
+        class="location-picker-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="digi-flow-location-picker-title"
+        data-tile-url="{{ map_picker_config.tile_url }}"
+        data-tile-attribution="{{ map_picker_config.tile_attribution }}"
+        data-tile-min-zoom="{{ map_picker_config.tile_min_zoom }}"
+        data-tile-max-zoom="{{ map_picker_config.tile_max_zoom }}"
+        data-tile-subdomains="{{ map_picker_config.tile_subdomains }}"
+        data-default-latitude="{{ map_picker_config.station_latitude }}"
+        data-default-longitude="{{ map_picker_config.station_longitude }}"
+        data-default-zoom="{{ map_picker_config.default_zoom }}"
+    >
+        <div class="location-picker-header">
+            <h3 id="digi-flow-location-picker-title">{{ t("Get location") }}</h3>
+            <button type="button" class="sidebar-action-button" data-close-location-picker aria-label="{{ t('Close location picker') }}" title="{{ t('Close location picker') }}">
+                <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+            </button>
+        </div>
+        <div class="location-picker-map-wrap">
+            <div class="location-picker-map" id="digi-flow-location-picker-map"></div>
+            <div class="location-picker-crosshair" aria-hidden="true"></div>
+        </div>
+        <div class="location-picker-footer">
+            <div class="muted small" id="digi-flow-location-picker-center">--</div>
+            <div class="location-picker-actions">
+                <button type="button" class="button button-secondary" data-close-location-picker>{{ t("Cancel") }}</button>
+                <button type="button" class="button" id="digi-flow-apply-location-picker">{{ t("Get coordinates") }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <template id="digi-step-config-template">
     <div class="digi-step-editor"></div>
 </template>
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
         const form = document.getElementById("digi-flow-form");
@@ -238,6 +280,7 @@
         const filterTypes = {{ filter_step_types|tojson }};
         const symbolTableOptions = {{ symbol_table_options|tojson }};
         const symbolCodeOptions = {{ symbol_code_options|tojson }};
+        const mapPickerConfig = {{ map_picker_config|tojson }};
         const rootPath = {{ request.scope.root_path|tojson }};
         const i18n = Object.freeze({
             add: {{ t("Add")|tojson }},
@@ -257,7 +300,14 @@
             packetGroups: {{ t("packet groups")|tojson }},
             none: {{ t("none")|tojson }},
             icons: {{ t("icons")|tojson }},
-            maxDistance: {{ t("Max distance")|tojson }},
+            distanceZones: {{ t("Distance zones")|tojson }},
+            radiusKm: {{ t("Radius (km)")|tojson }},
+            zone: {{ t("Zone")|tojson }},
+            removeZone: {{ t("Remove zone")|tojson }},
+            addZone: {{ t("Add zone")|tojson }},
+            getLocation: {{ t("Get location")|tojson }},
+            getCoordinates: {{ t("Get coordinates")|tojson }},
+            noMapPickerRuntime: {{ t("Map picker runtime is unavailable in this view.")|tojson }},
             rate: {{ t("Rate")|tojson }},
             perCallsign: {{ t("Per callsign")|tojson }},
             pktPerMin: {{ t("pkt/min")|tojson }},
@@ -304,6 +354,9 @@
             symbolCode: {{ t("Symbol Code")|tojson }},
             symbolTable: {{ t("Symbol Table")|tojson }},
             duplicateFilterUsed: {{ t("Duplicate filter (viscous-delay) is already used in this flow.")|tojson }},
+            distanceFilterUsed: {{ t("Distance filter is already used in this flow.")|tojson }},
+            latitude: {{ t("Latitude")|tojson }},
+            longitude: {{ t("Longitude")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
@@ -345,6 +398,50 @@
             return normalized;
         };
 
+        const normalizeDistanceZones = (zones, options = {}) => {
+            const keepEmpty = options.keepEmpty === true;
+            if (!Array.isArray(zones)) {
+                return [];
+            }
+            const normalized = [];
+            for (const zone of zones) {
+                if (!zone || typeof zone !== "object") {
+                    continue;
+                }
+                const latitude = String(zone.latitude ?? "").trim();
+                const longitude = String(zone.longitude ?? "").trim();
+                const radiusKm = String(zone.radius_km ?? "").trim();
+                if (!keepEmpty && !latitude && !longitude && !radiusKm) {
+                    continue;
+                }
+                normalized.push({
+                    latitude,
+                    longitude,
+                    radius_km: radiusKm,
+                });
+                if (normalized.length >= 3) {
+                    break;
+                }
+            }
+            return normalized;
+        };
+
+        const ensureDistanceFilterConfig = (step) => {
+            if (!step.config || typeof step.config !== "object") {
+                step.config = {};
+            }
+            const legacyRadius = String(step.config.max_km ?? "").trim();
+            let zones = normalizeDistanceZones(step.config.zones, { keepEmpty: true });
+            if (!zones.length && legacyRadius) {
+                zones = [{ latitude: "", longitude: "", radius_km: legacyRadius }];
+            }
+            if (!zones.length) {
+                zones = [{ latitude: "", longitude: "", radius_km: "" }];
+            }
+            step.config = { zones };
+            return zones;
+        };
+
         const defaultConfig = (stepType, refValue = "") => {
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
@@ -355,8 +452,9 @@
             if (stepType === "filter_callsign") return { mode: "allow", callsigns: [] };
             if (stepType === "filter_packet_type") return { mode: "allow", packet_types: [] };
             if (stepType === "filter_icon") return { mode: "allow", icons: [] };
-            if (stepType === "filter_distance") return { max_km: 50 };
+            if (stepType === "filter_distance") return { zones: [{ latitude: "", longitude: "", radius_km: "" }] };
             if (stepType === "filter_rate_limit") return { packets_per_minute: 60 };
+            if (stepType === "filter_rate_limit_per_callsign") return { packets_per_minute: 30 };
             if (stepType === "tx_rf") return { rf_target: refValue || "" };
             if (stepType === "tx_aprsis") return { aprsis_target: refValue || "" };
             if (stepType === "action_drop") return { note: "" };
@@ -416,8 +514,9 @@
                 return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.packetGroups}: ${labels.join(", ") || i18n.none}`;
             }
             if (step.step_type === "filter_icon") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.icons}: ${(config.icons || []).join(", ") || i18n.none}`;
-            if (step.step_type === "filter_distance") return `${i18n.maxDistance}: ${config.max_km || "-"} km`;
+            if (step.step_type === "filter_distance") return `${i18n.distanceZones}: ${normalizeDistanceZones(config.zones).length}`;
             if (step.step_type === "filter_rate_limit") return `${i18n.rate}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
+            if (step.step_type === "filter_rate_limit_per_callsign") return `${i18n.perCallsign}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
             if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
             if (step.step_type === "tx_aprsis") return `${i18n.aprsisTarget}: ${config.aprsis_target || "-"}`;
             if (step.step_type === "action_drop") return config.note || i18n.dropPacket;
@@ -454,9 +553,13 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
+        const isDistanceFilterStepType = (stepType) => stepType === "filter_distance";
         const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
         const hasViscousDelayStep = () => steps.some(
             (step, index) => index > 0 && index < steps.length - 1 && isViscousDelayStepType(step.step_type),
+        );
+        const hasDistanceFilterStep = () => steps.some(
+            (step, index) => index > 0 && index < steps.length - 1 && isDistanceFilterStepType(step.step_type),
         );
         const iconPath = (name) => `${rootPath}/static/icons/${name}`;
 
@@ -489,6 +592,7 @@
 
         const syncPaletteState = () => {
             const hasViscous = hasViscousDelayStep();
+            const hasDistanceFilter = hasDistanceFilterStep();
             const aprsisTarget = isAprsisTargetFlow();
             for (const button of paletteButtons) {
                 const stepType = button.dataset.stepType || "";
@@ -504,22 +608,156 @@
                     button.setAttribute("aria-label", i18n.strictGuardSystemManaged);
                     continue;
                 }
-                if (!isViscousDelayStepType(stepType)) {
-                    button.disabled = false;
-                    button.removeAttribute("title");
-                    button.removeAttribute("aria-label");
+                if (isViscousDelayStepType(stepType)) {
+                    button.disabled = hasViscous;
+                    if (hasViscous) {
+                        button.title = i18n.duplicateFilterUsed;
+                        button.setAttribute("aria-label", i18n.duplicateFilterUsed);
+                    } else {
+                        button.removeAttribute("title");
+                        button.removeAttribute("aria-label");
+                    }
                     continue;
                 }
-                button.disabled = hasViscous;
-                if (hasViscous) {
-                    button.title = i18n.duplicateFilterUsed;
-                    button.setAttribute("aria-label", i18n.duplicateFilterUsed);
-                } else {
-                    button.removeAttribute("title");
-                    button.removeAttribute("aria-label");
+                if (isDistanceFilterStepType(stepType)) {
+                    button.disabled = hasDistanceFilter;
+                    if (hasDistanceFilter) {
+                        button.title = i18n.distanceFilterUsed;
+                        button.setAttribute("aria-label", i18n.distanceFilterUsed);
+                    } else {
+                        button.removeAttribute("title");
+                        button.removeAttribute("aria-label");
+                    }
+                    continue;
                 }
+                button.disabled = false;
+                button.removeAttribute("title");
+                button.removeAttribute("aria-label");
             }
         };
+
+        const locationPickerModal = document.getElementById("digi-flow-location-picker");
+        const locationPickerDialog = locationPickerModal ? locationPickerModal.querySelector(".location-picker-dialog") : null;
+        const locationPickerMapNode = document.getElementById("digi-flow-location-picker-map");
+        const locationPickerCenterOutput = document.getElementById("digi-flow-location-picker-center");
+        const locationPickerApplyButton = document.getElementById("digi-flow-apply-location-picker");
+        const locationPickerCloseButtons = locationPickerModal ? locationPickerModal.querySelectorAll("[data-close-location-picker]") : [];
+        const locationPickerState = {
+            targetStep: null,
+            targetZoneIndex: -1,
+            map: null,
+            tileLayer: null,
+        };
+
+        const closeLocationPicker = () => {
+            if (!locationPickerModal) {
+                return;
+            }
+            locationPickerModal.hidden = true;
+            document.body.classList.remove("modal-open");
+        };
+
+        const locationPickerInitialView = (step, zoneIndex) => {
+            const zones = ensureDistanceFilterConfig(step);
+            const zone = zones[zoneIndex] || {};
+            const latitude = Number.parseFloat(zone.latitude || "");
+            const longitude = Number.parseFloat(zone.longitude || "");
+            const fallbackLatitude = Number.parseFloat(String(mapPickerConfig.station_latitude || ""));
+            const fallbackLongitude = Number.parseFloat(String(mapPickerConfig.station_longitude || ""));
+            const fallbackZoom = Number.parseInt(String(mapPickerConfig.default_zoom || "6"), 10);
+            return {
+                latitude: Number.isFinite(latitude) ? latitude : (Number.isFinite(fallbackLatitude) ? fallbackLatitude : 52.0),
+                longitude: Number.isFinite(longitude) ? longitude : (Number.isFinite(fallbackLongitude) ? fallbackLongitude : 19.0),
+                zoom: Number.isFinite(fallbackZoom) ? fallbackZoom : 6,
+            };
+        };
+
+        const updateLocationPickerCenterLabel = () => {
+            if (!locationPickerState.map || !locationPickerCenterOutput) {
+                return;
+            }
+            const center = locationPickerState.map.getCenter();
+            locationPickerCenterOutput.textContent = `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`;
+        };
+
+        const ensureLocationPickerMap = (initialView) => {
+            if (!locationPickerDialog || !locationPickerMapNode || !locationPickerCenterOutput) {
+                return;
+            }
+            if (!window.L) {
+                window.alert(i18n.noMapPickerRuntime);
+                return;
+            }
+            if (!locationPickerState.map) {
+                const minZoom = Number.parseInt(locationPickerDialog.dataset.tileMinZoom || "0", 10);
+                const maxZoom = Number.parseInt(locationPickerDialog.dataset.tileMaxZoom || "19", 10);
+                locationPickerState.map = window.L.map(locationPickerMapNode, {
+                    center: [initialView.latitude, initialView.longitude],
+                    zoom: initialView.zoom,
+                    zoomControl: true,
+                    minZoom: Number.isFinite(minZoom) ? minZoom : 0,
+                    maxZoom: Number.isFinite(maxZoom) ? maxZoom : 19,
+                });
+                const tileUrl = locationPickerDialog.dataset.tileUrl || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+                const attribution = locationPickerDialog.dataset.tileAttribution || "&copy; OpenStreetMap contributors";
+                const subdomains = String(locationPickerDialog.dataset.tileSubdomains || "").trim();
+                const tileOptions = {
+                    attribution,
+                };
+                if (subdomains) {
+                    tileOptions.subdomains = subdomains;
+                }
+                locationPickerState.tileLayer = window.L.tileLayer(tileUrl, tileOptions).addTo(locationPickerState.map);
+                locationPickerState.map.on("move", updateLocationPickerCenterLabel);
+            }
+            locationPickerState.map.setView([initialView.latitude, initialView.longitude], locationPickerState.map.getZoom() || initialView.zoom);
+            window.setTimeout(() => {
+                locationPickerState.map.invalidateSize();
+                updateLocationPickerCenterLabel();
+            }, 0);
+        };
+
+        const openDistanceZoneLocationPicker = (step, zoneIndex) => {
+            if (!locationPickerModal || !locationPickerDialog || !locationPickerMapNode || !locationPickerCenterOutput || !locationPickerApplyButton) {
+                return;
+            }
+            locationPickerState.targetStep = step;
+            locationPickerState.targetZoneIndex = zoneIndex;
+            const initialView = locationPickerInitialView(step, zoneIndex);
+            ensureLocationPickerMap(initialView);
+            locationPickerModal.hidden = false;
+            document.body.classList.add("modal-open");
+            updateLocationPickerCenterLabel();
+        };
+
+        if (locationPickerApplyButton) {
+            locationPickerApplyButton.addEventListener("click", () => {
+                if (!locationPickerState.map || !locationPickerState.targetStep || locationPickerState.targetZoneIndex < 0) {
+                    closeLocationPicker();
+                    return;
+                }
+                const zones = ensureDistanceFilterConfig(locationPickerState.targetStep);
+                const zone = zones[locationPickerState.targetZoneIndex];
+                if (!zone) {
+                    closeLocationPicker();
+                    return;
+                }
+                const center = locationPickerState.map.getCenter();
+                zone.latitude = center.lat.toFixed(5);
+                zone.longitude = center.lng.toFixed(5);
+                closeLocationPicker();
+                render();
+            });
+        }
+
+        for (const closeButton of locationPickerCloseButtons) {
+            closeButton.addEventListener("click", closeLocationPicker);
+        }
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && locationPickerModal && !locationPickerModal.hidden) {
+                closeLocationPicker();
+            }
+        });
 
         const ensureIconPickerState = (step) => {
             if (!step.__iconPicker || typeof step.__iconPicker !== "object") {
@@ -651,6 +889,125 @@
                     wrapper.appendChild(hint);
                 }
             };
+
+            if (step.step_type === "filter_distance" && field.name === "zones" && field.type === "distance_zones") {
+                wrapper.className = "full";
+                const zones = ensureDistanceFilterConfig(step);
+                const zonesContainer = document.createElement("div");
+                zonesContainer.className = "digi-distance-zones";
+
+                for (let index = 0; index < zones.length; index += 1) {
+                    const zone = zones[index];
+                    const zoneCard = document.createElement("div");
+                    zoneCard.className = "digi-distance-zone-card";
+
+                    const zoneHeader = document.createElement("div");
+                    zoneHeader.className = "digi-distance-zone-header";
+                    const zoneTitle = document.createElement("strong");
+                    zoneTitle.textContent = `${i18n.zone} #${index + 1}`;
+                    zoneHeader.appendChild(zoneTitle);
+
+                    const zoneActions = document.createElement("div");
+                    zoneActions.className = "digi-distance-zone-actions";
+
+                    const getLocationButton = document.createElement("button");
+                    getLocationButton.type = "button";
+                    getLocationButton.className = "button button-secondary location-picker-button";
+                    getLocationButton.textContent = i18n.getLocation;
+                    getLocationButton.addEventListener("click", () => {
+                        openDistanceZoneLocationPicker(step, index);
+                    });
+                    zoneActions.appendChild(getLocationButton);
+
+                    if (zones.length > 1) {
+                        const removeButton = document.createElement("button");
+                        removeButton.type = "button";
+                        removeButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
+                        removeButton.title = i18n.removeZone;
+                        removeButton.setAttribute("aria-label", `${i18n.removeZone} #${index + 1}`);
+                        const removeIcon = document.createElement("img");
+                        removeIcon.src = iconPath("delete-outline.svg");
+                        removeIcon.alt = "";
+                        removeButton.appendChild(removeIcon);
+                        removeButton.addEventListener("click", () => {
+                            step.config.zones = zones.filter((_, currentIndex) => currentIndex !== index);
+                            render();
+                        });
+                        zoneActions.appendChild(removeButton);
+                    }
+                    zoneHeader.appendChild(zoneActions);
+                    zoneCard.appendChild(zoneHeader);
+
+                    const zoneGrid = document.createElement("div");
+                    zoneGrid.className = "digi-distance-zone-grid";
+
+                    const latitudeField = document.createElement("label");
+                    const latitudeCaption = document.createElement("span");
+                    latitudeCaption.textContent = i18n.latitude;
+                    const latitudeInput = document.createElement("input");
+                    latitudeInput.type = "number";
+                    latitudeInput.step = "any";
+                    latitudeInput.min = "-90";
+                    latitudeInput.max = "90";
+                    latitudeInput.value = String(zone.latitude || "");
+                    latitudeInput.addEventListener("input", () => {
+                        zone.latitude = latitudeInput.value;
+                    });
+                    latitudeField.appendChild(latitudeCaption);
+                    latitudeField.appendChild(latitudeInput);
+                    zoneGrid.appendChild(latitudeField);
+
+                    const longitudeField = document.createElement("label");
+                    const longitudeCaption = document.createElement("span");
+                    longitudeCaption.textContent = i18n.longitude;
+                    const longitudeInput = document.createElement("input");
+                    longitudeInput.type = "number";
+                    longitudeInput.step = "any";
+                    longitudeInput.min = "-180";
+                    longitudeInput.max = "180";
+                    longitudeInput.value = String(zone.longitude || "");
+                    longitudeInput.addEventListener("input", () => {
+                        zone.longitude = longitudeInput.value;
+                    });
+                    longitudeField.appendChild(longitudeCaption);
+                    longitudeField.appendChild(longitudeInput);
+                    zoneGrid.appendChild(longitudeField);
+
+                    const radiusField = document.createElement("label");
+                    const radiusCaption = document.createElement("span");
+                    radiusCaption.textContent = i18n.radiusKm;
+                    const radiusInput = document.createElement("input");
+                    radiusInput.type = "number";
+                    radiusInput.min = "0.1";
+                    radiusInput.step = "0.1";
+                    radiusInput.value = String(zone.radius_km || "");
+                    radiusInput.addEventListener("input", () => {
+                        zone.radius_km = radiusInput.value;
+                    });
+                    radiusField.appendChild(radiusCaption);
+                    radiusField.appendChild(radiusInput);
+                    zoneGrid.appendChild(radiusField);
+
+                    zoneCard.appendChild(zoneGrid);
+                    zonesContainer.appendChild(zoneCard);
+                }
+
+                if (zones.length < 3) {
+                    const addZoneButton = document.createElement("button");
+                    addZoneButton.type = "button";
+                    addZoneButton.className = "button button-secondary digi-distance-add-zone";
+                    addZoneButton.textContent = i18n.addZone;
+                    addZoneButton.addEventListener("click", () => {
+                        step.config.zones = [...zones, { latitude: "", longitude: "", radius_km: "" }];
+                        render();
+                    });
+                    zonesContainer.appendChild(addZoneButton);
+                }
+
+                wrapper.appendChild(zonesContainer);
+                appendFieldHelp();
+                return wrapper;
+            }
 
             if (step.step_type === "filter_icon" && field.name === "icons" && field.type === "textarea") {
                 const pickerState = ensureIconPickerState(step);
@@ -905,6 +1262,9 @@
             stepsChain.innerHTML = "";
 
             steps.forEach((step, index) => {
+                if (step.step_type === "filter_distance") {
+                    ensureDistanceFilterConfig(step);
+                }
                 const stepCard = document.createElement("article");
                 stepCard.className = `digi-step-card digi-step-card-${stepCategory(step.step_type)}`;
 
@@ -1142,10 +1502,17 @@
             });
         };
 
-        steps = steps.map((step) => ({
-            ...step,
-            title: normalizedStepTitle(step),
-        }));
+        steps = steps.map((step) => {
+            const normalized = {
+                ...step,
+                title: normalizedStepTitle(step),
+                config: step.config || {},
+            };
+            if (normalized.step_type === "filter_distance") {
+                ensureDistanceFilterConfig(normalized);
+            }
+            return normalized;
+        });
 
         paletteButtons.forEach((button) => {
             button.addEventListener("click", () => {
@@ -1157,6 +1524,9 @@
                     return;
                 }
                 if (isViscousDelayStepType(stepType) && hasViscousDelayStep()) {
+                    return;
+                }
+                if (isDistanceFilterStepType(stepType) && hasDistanceFilterStep()) {
                     return;
                 }
                 const insertIndex = isViscousDelayStepType(stepType) ? 1 : steps.length - 1;
@@ -1195,6 +1565,11 @@
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
             syncBoundarySteps();
+            for (const step of steps) {
+                if (step.step_type === "filter_distance") {
+                    step.config = { zones: normalizeDistanceZones((step.config || {}).zones) };
+                }
+            }
             stepsJsonInput.value = JSON.stringify(steps.map((step) => ({
                 id: step.id || null,
                 step_type: step.step_type,

@@ -1654,12 +1654,72 @@ select:focus-visible,
     padding: 0;
 }
 
+.digi-distance-zones {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.digi-distance-zone-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--panel-soft);
+    padding: var(--space-3);
+    display: grid;
+    gap: var(--space-3);
+}
+
+.digi-distance-zone-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.digi-distance-zone-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.digi-distance-zone-grid {
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.digi-distance-zone-grid label {
+    display: grid;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.digi-distance-add-zone {
+    justify-self: start;
+}
+
 @media (max-width: 780px) {
     .digi-icon-filter-controls {
         grid-template-columns: 1fr;
     }
 
     .digi-icon-filter-add-button {
+        width: 100%;
+    }
+
+    .digi-distance-zone-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .digi-distance-zone-actions {
+        justify-content: space-between;
+    }
+
+    .digi-distance-zone-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .digi-distance-add-zone {
         width: 100%;
     }
 }
@@ -2153,11 +2213,45 @@ select:focus-visible,
     font-size: 0.78rem;
 }
 
+.aprs-symbol-icon-stack {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: 0 0 auto;
+}
+
 .aprs-symbol-icon {
     width: 1.5rem;
     height: 1.5rem;
     image-rendering: pixelated;
     flex: 0 0 auto;
+}
+
+.aprs-symbol-overlay {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -55%);
+    min-width: 0.62rem;
+    height: 0.62rem;
+    padding: 0 0.07rem;
+    border-radius: 0.18rem;
+    background: rgba(12, 14, 16, 0.86);
+    color: #f5f8fb;
+    font-size: 0.5rem;
+    font-weight: 800;
+    line-height: 0.62rem;
+    text-align: center;
+    pointer-events: none;
+}
+
+:root[data-theme="light"] .aprs-symbol-overlay {
+    background: rgba(246, 248, 251, 0.92);
+    color: #1b2329;
+    box-shadow: 0 0 0 1px rgba(30, 35, 40, 0.2);
 }
 
 .frame-type-badge {
@@ -2670,7 +2764,12 @@ select:focus-visible,
 }
 
 .map-sources-table th:nth-child(1),
-.map-sources-table td:nth-child(1),
+.map-sources-table td:nth-child(1) {
+    width: 3.1rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
 .map-sources-table th:nth-child(3),
 .map-sources-table td:nth-child(3),
 .map-sources-table th:nth-child(4),

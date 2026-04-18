@@ -690,14 +690,24 @@
         return `<div class="map-station-tooltip">${lines.join("")}</div>`;
     }
 
+    function resolveSymbolOverlay(symbolTable) {
+        const normalized = String(symbolTable || "").trim();
+        if (!normalized || normalized === "/" || normalized === "\\") {
+            return "";
+        }
+        return normalized.charAt(0);
+    }
+
     function buildStationIcon(station) {
         const staleClass = station.stale ? " map-station-icon-stale" : "";
         const iconPath = station.symbol_icon ? `${staticRoot}${station.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
         const iconAlt = station.symbol_table || station.symbol_code ? `${station.symbol_table || ""}${station.symbol_code || ""}` : "";
+        const overlay = resolveSymbolOverlay(station.symbol_table);
         return window.L.divIcon({
             className: `map-station-icon${staleClass}`,
             html: `
                 <img class="map-station-aprs-icon" src="${escapeHtml(iconPath)}" alt="${escapeHtml(iconAlt)}">
+                ${overlay ? `<span class="map-station-aprs-overlay" aria-hidden="true">${escapeHtml(overlay)}</span>` : ""}
                 <span class="map-station-label">${escapeHtml(station.display_callsign || station.callsign || "")}</span>
             `,
             iconSize: aprsIconSize,
@@ -713,6 +723,8 @@
             station.latitude,
             station.longitude,
             station.symbol_icon || "",
+            station.symbol_table || "",
+            station.symbol_code || "",
             station.comment || "",
             station.distance_km,
             station.stale,
