@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.0 - 18.04.2026
+
+### Stable release
+- Wersja została przygotowana do merge z linii `dev` na gałąź stabilną.
+
+### Included development snapshots
+- 1.6.1.dev
+- 1.6.2.dev
+- 1.6.5.dev
+- 1.6.6.dev
+
+### Highlights
+- Dodano lokalny proxy/cache kafelków map z endpointem backendowym, przełącznikiem per źródło mapy, statystykami cache i akcją `Clear cache`.
+- Rozszerzono parser APRS o obsługę pozycji `compressed` z overlayem (`0-9`, `A-Z`, legacy `a-j`) oraz dodano render overlayu ikon w widokach mapy i tabeli `Stations`.
+- Wdrożono pełny `Distance filter` w `DIGI Flow` (GUI + backend + runtime), z konfiguracją 1-3 stref i logiką OR między strefami.
+- Wzmocniono walidację i zasady flow dla `Distance filter` (maks. 1 filtr na flow, kompletność stref, zakresy lat/lon, promień > 0) oraz dodano logi runtime decyzji i testy regresyjne.
+- Utrzymano kompatybilność istniejących ekranów i mechanizmów flow, bez przebudowy architektury pipeline.
+
 ## 1.6.6.dev - 18.04.2026
 
 ### Added
