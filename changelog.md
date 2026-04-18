@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.6.6.dev - 18.04.2026
+
+### Added
+- Dodano pełną implementację `Distance filter` w `DIGI Flow` (GUI + backend + runtime) jako standardowy krok pipeline, bez zmian architektury flow.
+- Dodano konfigurację `Distance filter` dla 1-3 stref (`latitude`, `longitude`, `radius_km`) z logiką dopasowania OR między strefami.
+- Dodano logi runtime dla `Distance filter` z czytelnym powodem decyzji (`matched zone`, `outside all zones`, `no position, skipped`).
+- Dodano testy backendowe `Distance filter` dla przypadków: pozycja w strefie, poza strefami, brak pozycji, konfiguracje 1/2/3 stref i błędna walidacja.
+
+### Changed
+- `Distance filter` może wystąpić w jednym flow maksymalnie raz (walidacja backend + blokada w GUI).
+- Walidacja konfiguracji `Distance filter` wymusza kompletne strefy i poprawne zakresy:
+  - `radius_km > 0`,
+  - dla wartości `< 1 km` krok `0.1 km`,
+  - `latitude` i `longitude` jako poprawne wartości numeryczne w prawidłowym zakresie.
+- Pakiety bez pozycji geograficznej są traktowane jako `skipped/pass` (nie są odrzucane przez `Distance filter`).
+
+### Fixed
+- Naprawiono edytor flow: przycisk `Add zone` w `Distance filter` działa poprawnie i nie traci nowo dodanej pustej strefy podczas renderowania formularza.
+
+### Removed
+- Brak zmian.
+
 ## 1.6.5.dev - 18.04.2026
 
 ### Changed
