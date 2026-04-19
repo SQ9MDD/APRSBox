@@ -1023,7 +1023,11 @@ def store_incoming_query(
             (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, query_number),
         )
     if existing is not None:
-        enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-duplicate")
+        # Duplicate bursts for the same query number can appear when a frame is heard
+        # multiple times through nearby digipeaters. Limit duplicate ACKs to one short-window
+        # transmission per sender/query-number pair to keep TX serialization predictable.
+        if not _has_recent_duplicate_ack(sender=sender, query_number=query_number):
+            enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-duplicate")
         return False
     with get_connection() as connection:
         connection.execute(
@@ -1177,6 +1181,34 @@ def _normalize_message_number(value: str | None) -> str | None:
     if len(normalized) == 1:
         return f"0{normalized}"
     return normalized
+
+
+def _has_recent_duplicate_ack(*, sender: str, query_number: str, window_seconds: int = QUERY_RESPONSE_DELAY_SECONDS) -> bool:
+    normalized_sender = str(sender or "").strip().upper()
+    normalized_number = _normalize_message_number(query_number)
+    if not normalized_sender or not normalized_number:
+        return False
+    window_start = (datetime.now(timezone.utc) - timedelta(seconds=max(1, int(window_seconds)))).replace(microsecond=0).isoformat()
+    row = fetch_one(
+        """
+        SELECT id
+        FROM outbound_jobs
+        WHERE kind = 'message'
+          AND created_at >= ?
+          AND payload_json LIKE '%"message_kind":"ack"%'
+          AND payload_json LIKE '%"trigger":"ack-duplicate"%'
+          AND payload_json LIKE ?
+          AND payload_json LIKE ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (
+            window_start,
+            f'%\"addressee\":\"{normalized_sender}\"%',
+            f'%\"message_text\":\"ack{normalized_number}\"%',
+        ),
+    )
+    return row is not None
 
 
 def _build_query_position_text(station_settings: dict[str, Any]) -> str:

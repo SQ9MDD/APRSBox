@@ -985,6 +985,44 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
             self.assertTrue(any('"trigger":"ack-duplicate"' in payload for payload in payloads))
 
+    def test_duplicate_numbered_query_via_consumed_hops_is_ack_throttled(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_direct = "SQ9MDD-7>APK005,WIDE1-1,WIDE2-1::SQ9MDD-4 :?VER{80"
+            inbound_relayed_1 = "SQ9MDD-7>APK005,SP2DIGI*,WIDE2-1::SQ9MDD-4 :?VER{80"
+            inbound_relayed_2 = "SQ9MDD-7>APK005,SP3DIGI*,WIDE2-1::SQ9MDD-4 :?VER{80"
+            process_incoming_tnc2_message(inbound_direct, timestamp="2026-01-01T00:01:00+00:00")
+            process_incoming_tnc2_message(inbound_relayed_1, timestamp="2026-01-01T00:01:02+00:00")
+            process_incoming_tnc2_message(inbound_relayed_2, timestamp="2026-01-01T00:01:03+00:00")
+
+            response_jobs = fetch_all(
+                """
+                SELECT id
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"APRSBox%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(response_jobs), 1)
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack80"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 3)
+            payloads = [str(row["payload_json"]) for row in ack_jobs]
+            self.assertTrue(any('"trigger":"ack-now"' in payload for payload in payloads))
+            self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
+            self.assertEqual(sum(1 for payload in payloads if '"trigger":"ack-duplicate"' in payload), 1)
+
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
