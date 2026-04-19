@@ -2735,7 +2735,7 @@ select:focus-visible,
 
 .settings-map-sources-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(22rem, 1fr);
+    grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 1fr);
     gap: var(--space-3);
     align-items: start;
 }
@@ -2766,36 +2766,51 @@ select:focus-visible,
 .map-sources-table th,
 .map-sources-table td {
     min-width: 0;
+    padding: 0.32rem 0.34rem;
 }
 
 .map-sources-table th:nth-child(1),
 .map-sources-table td:nth-child(1) {
-    width: 3.1rem;
+    width: 2.7rem;
     text-align: center;
+    white-space: nowrap;
+}
+
+.map-sources-table th:nth-child(2),
+.map-sources-table td:nth-child(2) {
+    width: auto;
     white-space: nowrap;
 }
 
 .map-sources-table th:nth-child(3),
 .map-sources-table td:nth-child(3),
 .map-sources-table th:nth-child(4),
-.map-sources-table td:nth-child(4) {
+.map-sources-table td:nth-child(4),
+.map-sources-table th:nth-child(5),
+.map-sources-table td:nth-child(5) {
     white-space: nowrap;
 }
 
-.map-sources-table th:nth-child(2),
-.map-sources-table td:nth-child(2) {
-    white-space: normal;
-    overflow-wrap: anywhere;
-}
-
 .map-sources-actions-cell {
-    width: 9.8rem;
-    min-width: 9.8rem;
+    width: 9rem;
+    min-width: 9rem;
 }
 
 .map-sources-actions-cell .table-actions {
-    flex-wrap: wrap;
-    gap: 0.26rem;
+    flex-wrap: nowrap;
+    gap: 0.16rem;
+}
+
+.map-sources-table .table-icon-button {
+    width: 1.46rem;
+    min-width: 1.46rem;
+    height: 1.46rem;
+    min-height: 1.46rem;
+}
+
+.map-sources-table .table-icon-button img {
+    width: 0.76rem;
+    height: 0.76rem;
 }
 
 .map-source-form textarea {
