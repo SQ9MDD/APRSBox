@@ -2763,6 +2763,11 @@ select:focus-visible,
     table-layout: auto;
 }
 
+.map-sources-table th,
+.map-sources-table td {
+    min-width: 0;
+}
+
 .map-sources-table th:nth-child(1),
 .map-sources-table td:nth-child(1) {
     width: 3.1rem;
@@ -2773,10 +2778,24 @@ select:focus-visible,
 .map-sources-table th:nth-child(3),
 .map-sources-table td:nth-child(3),
 .map-sources-table th:nth-child(4),
-.map-sources-table td:nth-child(4),
-.map-sources-table th:nth-child(5),
-.map-sources-table td:nth-child(5) {
+.map-sources-table td:nth-child(4) {
     white-space: nowrap;
+}
+
+.map-sources-table th:nth-child(2),
+.map-sources-table td:nth-child(2) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.map-sources-actions-cell {
+    width: 9.8rem;
+    min-width: 9.8rem;
+}
+
+.map-sources-actions-cell .table-actions {
+    flex-wrap: wrap;
+    gap: 0.26rem;
 }
 
 .map-source-form textarea {
