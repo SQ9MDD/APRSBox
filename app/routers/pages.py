@@ -108,7 +108,7 @@ from app.services.map_service import (
     get_station_detail_track_payload,
 )
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
-from app.services.outbound import enqueue_beacon_job
+from app.services.outbound import enqueue_beacon_job, enqueue_status_job
 from app.services.system import (
     current_update_channel,
     current_gui_version,
@@ -2183,6 +2183,57 @@ def station_send_beacon(
         return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     station_settings = get_station_settings()
     success, flash = enqueue_beacon_job(station_settings)
+    context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)
+    return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/station/send-status")
+def station_send_status(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    callsign: str = Form(""),
+    ssid: str = Form(""),
+    beacon_interface_id: str = Form(""),
+    beacon_comment: str = Form(""),
+    beacon_interval_minutes: str = Form("30"),
+    beacon_path: str = Form(""),
+    status_enabled: str | None = Form(None),
+    status_text: str = Form(""),
+    status_interval_minutes: str = Form("30"),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
+    symbol_table: str = Form("/"),
+    symbol_code: str = Form(">"),
+    symbol_overlay: str = Form(""),
+    default_units: str | None = Form(None),
+    tx_enabled: str | None = Form(None),
+) -> object:
+    templates = request.app.state.templates
+    current_default_units = get_station_settings().get("default_units", "metric")
+    payload = {
+        "callsign": callsign.strip(),
+        "ssid": ssid.strip(),
+        "beacon_interface_id": beacon_interface_id.strip(),
+        "beacon_comment": beacon_comment.strip(),
+        "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_path": beacon_path.strip(),
+        "status_enabled": status_enabled,
+        "status_text": status_text.strip(),
+        "status_interval_minutes": status_interval_minutes.strip(),
+        "latitude": latitude.strip(),
+        "longitude": longitude.strip(),
+        "symbol_table": symbol_table.strip(),
+        "symbol_code": symbol_code.strip(),
+        "symbol_overlay": symbol_overlay.strip(),
+        "default_units": default_units.strip() if default_units is not None else current_default_units,
+        "tx_enabled": tx_enabled,
+    }
+    success, error = safe_update_station_settings(payload)
+    if not success:
+        context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
+        return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    station_settings = get_station_settings()
+    success, flash = enqueue_status_job(station_settings)
     context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 

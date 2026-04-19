@@ -297,6 +297,7 @@
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save Station Settings") }}</button>
                 <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/station/send-beacon">{{ t("Send beacon") }}</button>
+                <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/station/send-status">{{ t("Send status") }}</button>
             </div>
         </form>
         <div class="location-picker-modal" id="station-location-picker" hidden>

@@ -682,6 +682,7 @@
   "Selector": "Selector",
   "Send": "yIlI'",
   "Send beacon": "beacon yIlI'",
+  "Send status": "status yIlI'",
   "Send now": "Send now",
   "Sends packets to an APRS-IS output identifier.": "APRS-IS output identifierDaq packetmey lI'.",
   "Sends packets to an RF output identifier.": "RF output identifierDaq packetmey lI'.",
