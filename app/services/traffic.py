@@ -25,7 +25,8 @@ KISS_TFESC = 0xDD
 AX25_CONTROL_UI = 0x03
 AX25_PID_NO_LAYER3 = 0xF0
 EXPOSE_PORT_MAX_CONNECTIONS = 3
-SERIAL_RX_SILENCE_RECONNECT_SECONDS = 150.0
+SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS = 150
+SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS = set(range(0, 601, 30))
 SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
 
 
@@ -34,6 +35,19 @@ def _normalize_modem_type(value: Any) -> str:
     if modem_type == "SERIAL":
         return "SERIALL"
     return modem_type
+
+
+def _normalize_serial_rx_silence_reconnect_seconds(value: Any) -> int:
+    raw = str(value if value is not None else SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS).strip()
+    if not raw:
+        return SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS
+    try:
+        timeout_seconds = int(raw)
+    except ValueError:
+        return SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS
+    if timeout_seconds not in SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS:
+        return SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS
+    return timeout_seconds
 
 
 class _TrafficModemRuntime:
@@ -338,6 +352,9 @@ class _TrafficModemRuntime:
             await self._sleep(self._reconnect_delay)
             return
 
+        silence_reconnect_timeout_seconds = _normalize_serial_rx_silence_reconnect_seconds(
+            modem.get("serial_rx_silence_reconnect_seconds")
+        )
         self._clear_kiss_buffers()
         self._tnc_serial_fd = serial_fd
         connect_message = f"Connected to serial TNC {modem['name']} at {device_path} ({baud_rate} baud)"
@@ -346,7 +363,13 @@ class _TrafficModemRuntime:
         log_event("INFO", "traffic", connect_message)
 
         try:
-            await self._consume_serial_device(serial_fd, modem, device_path, baud_rate)
+            await self._consume_serial_device(
+                serial_fd,
+                modem,
+                device_path,
+                baud_rate,
+                silence_reconnect_timeout_seconds,
+            )
         finally:
             if self._tnc_serial_fd == serial_fd:
                 self._tnc_serial_fd = None
@@ -400,6 +423,7 @@ class _TrafficModemRuntime:
         modem: dict[str, Any],
         device_path: str,
         baud_rate: int,
+        silence_reconnect_timeout_seconds: int,
     ) -> None:
         loop = asyncio.get_running_loop()
         last_rx_at = loop.time()
@@ -427,8 +451,8 @@ class _TrafficModemRuntime:
 
             if not chunk:
                 silence_seconds = loop.time() - last_rx_at
-                if silence_seconds >= SERIAL_RX_SILENCE_RECONNECT_SECONDS:
-                    timeout_seconds = int(SERIAL_RX_SILENCE_RECONNECT_SECONDS)
+                if silence_reconnect_timeout_seconds > 0 and silence_seconds >= silence_reconnect_timeout_seconds:
+                    timeout_seconds = silence_reconnect_timeout_seconds
                     message = (
                         f"No RX data from serial TNC {device_path} at {baud_rate} baud "
                         f"for {timeout_seconds}s. Forcing reconnect."
@@ -1066,6 +1090,7 @@ class _TrafficModemRuntime:
                     modem_type,
                     device_path,
                     baud_rate,
+                    serial_rx_silence_reconnect_seconds,
                     enabled,
                     expose_port_enabled,
                     expose_bind_address,
@@ -1088,6 +1113,7 @@ class _TrafficModemRuntime:
                     modem_type,
                     device_path,
                     baud_rate,
+                    serial_rx_silence_reconnect_seconds,
                     enabled,
                     expose_port_enabled,
                     expose_bind_address,
@@ -1275,6 +1301,7 @@ class TrafficMonitorService:
                 modem_type,
                 device_path,
                 baud_rate,
+                serial_rx_silence_reconnect_seconds,
                 enabled,
                 expose_port_enabled,
                 expose_bind_address,
@@ -1298,6 +1325,7 @@ class TrafficMonitorService:
             _normalize_modem_type(modem.get("modem_type")),
             str(modem.get("device_path") or "").strip(),
             modem.get("baud_rate"),
+            modem.get("serial_rx_silence_reconnect_seconds"),
             int(bool(modem.get("expose_port_enabled"))),
             str(modem.get("expose_bind_address") or "").strip(),
             int(modem.get("expose_port") or 0),

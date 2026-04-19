@@ -317,6 +317,7 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 self.assertIn("band", columns)
                 modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
                 self.assertIn("tx_blocked", modem_columns)
+                self.assertIn("serial_rx_silence_reconnect_seconds", modem_columns)
                 station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
                 self.assertIn("symbol_overlay", station_columns)
                 object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}

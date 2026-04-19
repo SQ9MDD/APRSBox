@@ -3,6 +3,12 @@ from __future__ import annotations
 from app.models import SectionDefinition
 
 
+SERIAL_RX_SILENCE_TIMEOUT_OPTIONS = [
+    {"value": str(seconds), "label": str(seconds)}
+    for seconds in range(0, 601, 30)
+]
+
+
 SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
     "modems": SectionDefinition(
         slug="modems",
@@ -41,6 +47,14 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             },
             {"name": "device_path", "label": "Path / Adress", "type": "text", "required": False},
             {"name": "baud_rate", "label": "Baud Rate", "type": "number", "required": False},
+            {
+                "name": "serial_rx_silence_reconnect_seconds",
+                "label": "RX Silence Reconnect Timeout (s)",
+                "type": "select",
+                "required": True,
+                "default": "150",
+                "options": SERIAL_RX_SILENCE_TIMEOUT_OPTIONS,
+            },
             {"name": "enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "tx_blocked", "label": "Block TX on this interface", "type": "checkbox", "required": False},
             {"name": "expose_port_enabled", "label": "Expose Port", "type": "checkbox", "required": False},

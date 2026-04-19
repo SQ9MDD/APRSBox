@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.2.dev - 19.04.2026
+
+### Najważniejsze zmiany
+- `TNC (SERIALL)`: dodano per‑interfejs ustawienie timeoutu watchdog RX (`0-600s`, krok `30s`).
+- Wartość `0` wyłącza wymuszony reconnect po ciszy RX.
+- Timeout jest stosowany przez runtime per TNC i respektowany po zmianie konfiguracji.
+
 ## 1.7.1.dev - 18.04.2026
 
 ### Najważniejsze zmiany

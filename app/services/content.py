@@ -40,6 +40,8 @@ WORKER_DEFINITIONS = (
 STATION_SNAPSHOT_ROW_LIMIT_FACTOR = 40
 STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
 _STATION_SNAPSHOT_CACHE: dict[tuple[int, int | None, str, str], list[dict[str, Any]]] = {}
+SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS = 150
+SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
 
 
 def _t(message: object) -> str:
@@ -3033,6 +3035,9 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         normalized["device_path"] = str(payload.get("device_path") or "").strip()
         normalized["baud_rate"] = None
+    normalized["serial_rx_silence_reconnect_seconds"] = _normalize_serial_rx_silence_timeout_seconds(
+        payload.get("serial_rx_silence_reconnect_seconds")
+    )
     normalized["notes"] = str(payload.get("notes") or "").strip()
     return normalized
 
@@ -3224,6 +3229,19 @@ def _normalize_station_interval(value: Any, *, label: str) -> int:
     if interval_minutes not in {15, 30, 45, 60}:
         raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.")
     return interval_minutes
+
+
+def _normalize_serial_rx_silence_timeout_seconds(value: Any) -> int:
+    raw = str(value if value is not None else SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS).strip()
+    if not raw:
+        return SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS
+    try:
+        seconds = int(raw)
+    except ValueError as exc:
+        raise ValueError("RX silence reconnect timeout must be one of: 0, 30, 60, 90, 120, 150, ..., 600 seconds.") from exc
+    if seconds not in SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS:
+        raise ValueError("RX silence reconnect timeout must be one of: 0, 30, 60, 90, 120, 150, ..., 600 seconds.")
+    return seconds
 
 
 def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:

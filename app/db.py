@@ -107,6 +107,8 @@ CREATE TABLE IF NOT EXISTS modems (
     band TEXT NOT NULL DEFAULT '',
     device_path TEXT,
     baud_rate INTEGER,
+    serial_rx_silence_reconnect_seconds INTEGER NOT NULL DEFAULT 150
+        CHECK (serial_rx_silence_reconnect_seconds IN (0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480, 510, 540, 570, 600)),
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
     tx_blocked INTEGER NOT NULL DEFAULT 0 CHECK (tx_blocked IN (0, 1)),
     expose_port_enabled INTEGER NOT NULL DEFAULT 0 CHECK (expose_port_enabled IN (0, 1)),
@@ -726,6 +728,14 @@ def init_db() -> None:
                 ALTER TABLE modems
                 ADD COLUMN tx_blocked INTEGER NOT NULL DEFAULT 0
                 CHECK (tx_blocked IN (0, 1))
+                """
+            )
+        if "serial_rx_silence_reconnect_seconds" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN serial_rx_silence_reconnect_seconds INTEGER NOT NULL DEFAULT 150
+                CHECK (serial_rx_silence_reconnect_seconds IN (0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480, 510, 540, 570, 600))
                 """
             )
         if "expose_port_enabled" not in modem_columns:
