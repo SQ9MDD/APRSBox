@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.4.dev - 19.04.2026
+
+### Najważniejsze zmiany
+- `My Settings`: dodano ręczny przycisk `Send status` obok `Send beacon`.
+- Dodano endpoint `POST /station/send-status` z analogicznym przepływem zapisu formularza i kolejkowania outbound (`status`).
+- Uzupełniono tłumaczenia etykiety `Send status` (`en/pl/tlh`) oraz test szablonu `station`.
+- `Settings -> Map sources`: usunięto kolumnę `Enabled` z listy źródeł.
+- `Map sources`: dopracowano kompaktowy layout tabeli (szerokości kolumn, ikony akcji, spacing), żeby ograniczyć poziomy scroll.
+
 ## 1.7.2.dev - 19.04.2026
 
 ### Najważniejsze zmiany
