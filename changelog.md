@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.5.dev - 19.04.2026
+
+### Najważniejsze zmiany
+- `Messages`: uszczelniono obsługę numerowanych zapytań APRS (w tym `?VER`) przy równoległym ruchu digi.
+- Ograniczono lawinę `ack-duplicate` dla tej samej pary `sender + query_number` w krótkim oknie czasowym, aby nie przeciążać wspólnego kanału TX.
+- Odpowiedź query (`query-version`) nie jest dublowana; pozostaje pojedyncza nawet przy wielu kopiach tej samej ramki po digi.
+- Dodano test regresyjny dla burstu duplikatów query słyszanych przez różne zużyte hop-y (`*`) w path.
+
 ## 1.7.4.dev - 19.04.2026
 
 ### Najważniejsze zmiany
