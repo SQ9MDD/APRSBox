@@ -864,6 +864,23 @@
             }
         };
 
+        const appendHelpLine = (container, line) => {
+            const lineNode = document.createElement("div");
+            const text = String(line ?? "");
+            const parts = text.split(/(\*\*[^*]+\*\*)/g);
+            for (const part of parts) {
+                if (!part) continue;
+                if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+                    const strong = document.createElement("strong");
+                    strong.textContent = part.slice(2, -2);
+                    lineNode.appendChild(strong);
+                    continue;
+                }
+                lineNode.appendChild(document.createTextNode(part));
+            }
+            container.appendChild(lineNode);
+        };
+
         const renderConfigField = (step, field) => {
             const wrapper = document.createElement("label");
             wrapper.className = field.type === "textarea" ? "full" : "";
@@ -876,9 +893,7 @@
                     const hintBlock = document.createElement("div");
                     hintBlock.className = "muted small";
                     for (const line of field.help_lines) {
-                        const hintLine = document.createElement("div");
-                        hintLine.textContent = line;
-                        hintBlock.appendChild(hintLine);
+                        appendHelpLine(hintBlock, line);
                     }
                     wrapper.appendChild(hintBlock);
                 }
@@ -1431,9 +1446,7 @@
                             const lines = document.createElement("div");
                             lines.className = "muted small";
                             for (const line of stepMeta.editor_help_lines) {
-                                const lineNode = document.createElement("div");
-                                lineNode.textContent = line;
-                                lines.appendChild(lineNode);
+                                appendHelpLine(lines, line);
                             }
                             helpBlock.appendChild(lines);
                         }
