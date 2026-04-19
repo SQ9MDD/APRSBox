@@ -81,12 +81,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Duplicate Filter (viscous-delay)",
         "badge": "Filter",
-        "description": "Waits for a short duplicate window and compares source callsign + payload only (path ignored).",
-        "editor_help_lines": (
-            "The fingerprint is built from source callsign and payload (information field).",
-            "Path is ignored for duplicate comparison.",
-            "A frame is released only after the listening window expires without a duplicate.",
-            "This filter can be used only once in a flow and must remain the first step.",
+        "description": (
+            "Opens a short listening window after receiving a frame. During this time it checks whether "
+            "the same frame was already repeated by another digipeater. If yes, the frame is dropped. "
+            "If not, it moves to the next step after the window expires. This filter can be used only once "
+            "and must be the first step in the flow."
         ),
         "config_fields": (
             {
@@ -102,28 +101,29 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Path Rule",
         "badge": "Rule",
-        "description": "Defines which TRACE and NO TRACE paths are repeated and whether packets are traced.",
-        "editor_help_lines": (
-            "This step inspects the first remaining path element that has not been consumed yet.",
-            "TRACE replaces the matched hop with the local digi callsign and keeps N-N continuation when needed.",
-            "NO TRACE marks the matched hop as consumed without inserting the local digi callsign.",
-            "If the first remaining hop matches neither TRACE nor NO TRACE, the packet is rejected.",
+        "description": (
+            "Checks only the first remaining path hop. TRACE (traced) repeats the hop with the local digi callsign "
+            "and keeps N-N continuation when needed. NO TRACE (not traced) consumes the hop without adding the local "
+            "digi callsign. If the first remaining hop matches neither TRACE nor NO TRACE, the packet is dropped."
         ),
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow",)},
             {
                 "name": "trace_paths",
-                "label": "Paths (TRACE)",
+                "label": "Paths (TRACE / traced)",
                 "type": "textarea",
                 "required": False,
                 "help_text": "One path alias or explicit hop per line. Example: WIDE1-1 or TRACE2-2.",
             },
             {
                 "name": "no_trace_paths",
-                "label": "Paths (NO TRACE)",
+                "label": "Paths (NO TRACE / not traced)",
                 "type": "textarea",
                 "required": False,
-                "help_text": "One path alias or explicit hop per line. Matching hops are consumed without inserting the local digi callsign.",
+                "help_text": (
+                    "One path alias or explicit hop per line. Matching hops are consumed without inserting the local "
+                    "digi callsign. Good practice: include your own callsign-SSID from My settings."
+                ),
             },
         ),
     },
@@ -211,23 +211,32 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "required": False,
                 "placeholder": "position\nobject\nitem\nmessage\nstatus\nweather\ntelemetry\nquery",
                 "help_lines": (
-                    "Wpisz dokladnie jedna z tych wartosci w osobnej linii:",
-                    "position, object, item, message, status, weather, telemetry, query",
-                    "Przyklad: jesli chcesz przepuscic tylko pozycje i pogode, wpisz:",
+                    "Dozwolone wartosci (jedna na linii):",
+                    "position",
+                    "object",
+                    "item",
+                    "message",
+                    "status",
+                    "weather",
+                    "telemetry",
+                    "query",
+                    "",
+                    "Przyklad (przepusc tylko pozycje i pogode):",
                     "position",
                     "weather",
                     "",
-                    "position: pozycje zwykle, z timestampem, compressed i Mic-E",
-                    "object: obiekty APRS (;)",
-                    "item: itemy APRS ())",
-                    "message: wiadomosci, ACK/REJ, bulletiny i announcementy",
-                    "status: ramki status (>...)",
-                    "weather: tylko ramki weather-only (_...)",
-                    "Jesli stacja pogodowa nadaje pozycje z danymi pogody, to taka ramka liczy sie jako position, nie weather.",
-                    "telemetry: T# oraz definicje PARM/UNIT/EQNS/BITS",
-                    "query: zapytania APRS zaczynajace sie od ?",
+                    "Opis wartosci:",
+                    "POSITION - wszystkie ramki zawierajace pozycje (takze timestamped, compressed i Mic-E).",
+                    "OBJECT - obiekty APRS (;).",
+                    "ITEM - itemy APRS (zaczynajace sie od ')').",
+                    "MESSAGE - wiadomosci APRS, ACK/REJ, bulletiny i announcementy.",
+                    "STATUS - ramki status (>...).",
+                    "WEATHER - tylko ramki weather-only (_...).",
+                    "Uwaga: pozycja z danymi pogody nadal liczy sie jako position, nie weather.",
+                    "TELEMETRY - T# oraz definicje PARM/UNIT/EQNS/BITS.",
+                    "QUERY - zapytania APRS zaczynajace sie od ?.",
                 ),
-                "help_text": "Starsze konfiguracje z kodami M, S, O, W nadal sa obslugiwane dla zgodnosci wstecznej.",
+                "help_text": "Dla zgodnosci wstecznej nadal dzialaja tez stare kody: M, S, O, W.",
             },
         ),
     },
