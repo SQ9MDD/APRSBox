@@ -672,7 +672,7 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
     received_at = _normalize_timestamp(timestamp)
     if text_field.startswith("?"):
-        query_text, query_number = _parse_query_text(text_field)
+        query_text, query_number, query_ack_number = _parse_query_text(text_field)
         if not query_text:
             return
         is_new_query = store_incoming_query(
@@ -680,6 +680,7 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
             addressee=addressee.upper(),
             query_text=query_text,
             query_number=query_number,
+            ack_number=query_ack_number,
             path=parsed["path"],
             timestamp=received_at,
         )
@@ -705,12 +706,15 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
     if suffix_match is None:
         return
     message_text = suffix_match.group("text") or ""
-    message_number = _normalize_message_number(suffix_match.group("number"))
+    raw_message_number = suffix_match.group("number")
+    message_number = _normalize_message_number(raw_message_number)
+    ack_number = _normalize_ack_number(raw_message_number)
     store_incoming_message(
         sender=sender,
         addressee=addressee.upper(),
         message_text=message_text,
         message_number=message_number,
+        ack_number=ack_number,
         path=parsed["path"],
         timestamp=received_at,
     )
@@ -936,6 +940,7 @@ def store_incoming_message(
     addressee: str,
     message_text: str,
     message_number: str | None,
+    ack_number: str | None = None,
     path: str,
     timestamp: str,
 ) -> None:
@@ -982,12 +987,13 @@ def store_incoming_message(
                 ),
             )
         log_event("INFO", "messages", f"Stored incoming APRS message from {sender} to {addressee}")
-    if not message_number:
+    ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else message_number)
+    if not ack_number_for_tx:
         return
-    enqueue_ack_job(sender, message_number, station_settings, path=ack_path, trigger="ack-now")
+    enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(
         sender,
-        message_number,
+        ack_number_for_tx,
         station_settings,
         path=ack_path,
         trigger="ack-delayed",
@@ -1001,11 +1007,13 @@ def store_incoming_query(
     addressee: str,
     query_text: str,
     query_number: str | None,
+    ack_number: str | None = None,
     path: str,
     timestamp: str,
 ) -> bool:
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
+    ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else query_number)
     conversation = create_or_update_conversation(sender)
     existing = None
     if query_number:
@@ -1026,8 +1034,8 @@ def store_incoming_query(
         # Duplicate bursts for the same query number can appear when a frame is heard
         # multiple times through nearby digipeaters. Limit duplicate ACKs to one short-window
         # transmission per sender/query-number pair to keep TX serialization predictable.
-        if not _has_recent_duplicate_ack(sender=sender, query_number=query_number):
-            enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-duplicate")
+        if ack_number_for_tx and not _has_recent_duplicate_ack(sender=sender, query_number=ack_number_for_tx):
+            enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-duplicate")
         return False
     with get_connection() as connection:
         connection.execute(
@@ -1053,12 +1061,12 @@ def store_incoming_query(
             ),
         )
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
-    if not query_number:
+    if not ack_number_for_tx:
         return True
-    enqueue_ack_job(sender, query_number, station_settings, path=ack_path, trigger="ack-now")
+    enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(
         sender,
-        query_number,
+        ack_number_for_tx,
         station_settings,
         path=ack_path,
         trigger="ack-delayed",
@@ -1163,20 +1171,28 @@ def _link_latest_outbound_job(message_id: int) -> None:
         register_outbound_job_link(message_id, int(queued_job["id"]))
 
 
-def _parse_query_text(text_field: str) -> tuple[str, str | None]:
+def _parse_query_text(text_field: str) -> tuple[str, str | None, str | None]:
     suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
     if suffix_match is None:
-        return "", None
+        return "", None, None
     query_text = str(suffix_match.group("text") or "").strip()
-    message_number = _normalize_message_number(suffix_match.group("number"))
-    return query_text, message_number
+    raw_number = _normalize_ack_number(suffix_match.group("number"))
+    message_number = _normalize_message_number(raw_number)
+    return query_text, message_number, raw_number
 
 
-def _normalize_message_number(value: str | None) -> str | None:
+def _normalize_ack_number(value: str | None) -> str | None:
     normalized = str(value or "").strip().upper()
     if not normalized:
         return None
     if not re.fullmatch(r"[0-9A-Z]{1,2}", normalized):
+        return None
+    return normalized
+
+
+def _normalize_message_number(value: str | None) -> str | None:
+    normalized = _normalize_ack_number(value)
+    if normalized is None:
         return None
     if len(normalized) == 1:
         return f"0{normalized}"
@@ -1185,7 +1201,7 @@ def _normalize_message_number(value: str | None) -> str | None:
 
 def _has_recent_duplicate_ack(*, sender: str, query_number: str, window_seconds: int = QUERY_RESPONSE_DELAY_SECONDS) -> bool:
     normalized_sender = str(sender or "").strip().upper()
-    normalized_number = _normalize_message_number(query_number)
+    normalized_number = _normalize_ack_number(query_number)
     if not normalized_sender or not normalized_number:
         return False
     window_start = (datetime.now(timezone.utc) - timedelta(seconds=max(1, int(window_seconds)))).replace(microsecond=0).isoformat()

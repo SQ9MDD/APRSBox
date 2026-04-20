@@ -516,7 +516,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 """
             )
             self.assertEqual(len(ack_jobs), 2)
-            self.assertTrue(all('"message_text":"ack08"' in str(job["payload_json"]) for job in ack_jobs))
+            self.assertTrue(all('"message_text":"ack8"' in str(job["payload_json"]) for job in ack_jobs))
 
     def test_incoming_third_party_message_uses_inner_sender(self) -> None:
         with temporary_database():
@@ -935,6 +935,40 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(ack_jobs), 2)
             self.assertTrue(all('"path":"WIDE2-2"' in str(job["payload_json"]) for job in ack_jobs))
+
+    def test_incoming_numbered_query_with_single_char_suffix_acks_exact_number(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SQ9MDD-7>APK005,RFONLY::SQ9MDD-4 :?APRS{1"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            rows = fetch_all(
+                """
+                SELECT direction, message_text, message_number
+                FROM aprs_messages
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["direction"], "rx")
+            self.assertEqual(rows[0]["message_text"], "?APRS")
+            self.assertEqual(rows[0]["message_number"], "01")
+            self.assertEqual(rows[1]["direction"], "tx")
+            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack1"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"message_text":"ack1"' in str(job["payload_json"]) for job in ack_jobs))
 
     def test_duplicate_numbered_query_acknowledges_retry_without_second_auto_response(self) -> None:
         with temporary_database():
