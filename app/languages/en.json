@@ -486,7 +486,7 @@
   "Rejected (REJ)": "Rejected (REJ)",
   "No conversations loaded.": "No conversations loaded.",
   "No messages in this conversation yet.": "No messages in this conversation yet.",
-  "No recent heard-station entry": "No recent heard-station entry",
+  "No recent heard-station entry": "Station not heard for over 30 minutes.",
   "No saved conversations yet. Start a new APRS message thread above.": "No saved conversations yet. Start a new APRS message thread above.",
   "Object Activity": "Object Activity",
   "Object Lifetime": "Object Lifetime",

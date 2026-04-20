@@ -2699,6 +2699,25 @@ def _clean_decoded_tokens(text: str, *, preserve_qsy_callsign: bool = False) -> 
     return cleaned.strip(" /|,;:-")
 
 
+def _format_qsy_offset_display(offset_code: Any) -> str | None:
+    try:
+        offset_steps = int(offset_code)
+    except (TypeError, ValueError):
+        return None
+
+    offset_khz = offset_steps * 10
+    if abs(offset_khz) >= 1000:
+        value_mhz = offset_khz / 1000.0
+        value_text = f"{value_mhz:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+        if offset_khz > 0 and not value_text.startswith("+"):
+            value_text = f"+{value_text}"
+        return f"{value_text}MHz"
+
+    if offset_khz > 0:
+        return f"+{offset_khz}kHz"
+    return f"{offset_khz}kHz"
+
+
 def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit_system: str) -> list[dict[str, str]]:
     if not metrics:
         return []
@@ -2791,8 +2810,9 @@ def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit
 
     qsy_offset_khz = metrics.get("qsy_offset_khz")
     if qsy_offset_khz is not None:
-        sign = "+" if int(qsy_offset_khz) > 0 else ""
-        items.append(_weather_item("signal-distance-variant.svg", "Offset", f"{sign}{int(qsy_offset_khz)} kHz"))
+        offset_display = _format_qsy_offset_display(qsy_offset_khz)
+        if offset_display is not None:
+            items.append(_weather_item("signal-distance-variant.svg", "Offset", offset_display))
 
     qsy_range_km = metrics.get("qsy_range_km")
     if qsy_range_km is not None:
