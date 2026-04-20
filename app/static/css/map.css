@@ -178,15 +178,15 @@
     left: 10px;
     top: 10px;
     transform: translate(-50%, -55%);
-    min-width: 0.72rem;
-    height: 0.72rem;
-    padding: 0 0.08rem;
-    border-radius: 0.2rem;
+    min-width: 0.64rem;
+    height: 0.64rem;
+    padding: 0 0.06rem;
+    border-radius: 0.17rem;
     background: rgba(12, 14, 16, 0.86);
     color: #f5f8fb;
     font-size: 0.52rem;
     font-weight: 800;
-    line-height: 0.72rem;
+    line-height: 0.64rem;
     text-align: center;
     pointer-events: none;
 }

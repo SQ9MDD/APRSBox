@@ -2235,15 +2235,15 @@ select:focus-visible,
     left: 50%;
     top: 50%;
     transform: translate(-50%, -55%);
-    min-width: 0.62rem;
-    height: 0.62rem;
-    padding: 0 0.07rem;
-    border-radius: 0.18rem;
+    min-width: 0.56rem;
+    height: 0.56rem;
+    padding: 0 0.05rem;
+    border-radius: 0.16rem;
     background: rgba(12, 14, 16, 0.86);
     color: #f5f8fb;
     font-size: 0.5rem;
     font-weight: 800;
-    line-height: 0.62rem;
+    line-height: 0.56rem;
     text-align: center;
     pointer-events: none;
 }
