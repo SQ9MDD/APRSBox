@@ -1488,6 +1488,8 @@ def _build_station_snapshots_from_rows(
     limit: int,
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
+    station_key_index: dict[str, str] = {}
+    pending_status_by_station_key: dict[str, str] = {}
     device_database = get_aprs_device_identification_database()
 
     for row in rows:
@@ -1497,10 +1499,19 @@ def _build_station_snapshots_from_rows(
 
         callsign = str(parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
         aprs_data = dict(parsed.get("aprs_data") or {})
+        station_key = (aprs_data.get("entity_name") or callsign).strip()
+        station_key_folded = station_key.casefold()
+        packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+        status_comment = str(aprs_data.get("comment") or "").strip()
+        if packet_group == "status" and station_key and status_comment:
+            existing_key = station_key_index.get(station_key_folded)
+            if existing_key is not None and not str(stations[existing_key].get("status_text") or "").strip():
+                stations[existing_key]["status_text"] = status_comment
+            else:
+                pending_status_by_station_key.setdefault(station_key_folded, status_comment)
         if not _aprs_data_has_station_snapshot_fields(aprs_data):
             continue
 
-        station_key = (aprs_data.get("entity_name") or callsign).strip()
         if not station_key:
             continue
 
@@ -1514,8 +1525,13 @@ def _build_station_snapshots_from_rows(
                 row["line"],
                 origin=origin,
             )
+            station_key_index[station_key_folded] = station_key
 
         station = stations[station_key]
+        if not str(station.get("status_text") or "").strip():
+            pending_status = pending_status_by_station_key.pop(station_key_folded, "")
+            if pending_status:
+                station["status_text"] = pending_status
         if not station["aprs_device"] and station_key.casefold() == callsign.casefold():
             device_identification = lookup_aprs_device_identification(
                 destination=str(parsed.get("logical_destination") or parsed.get("destination") or ""),
@@ -1538,6 +1554,12 @@ def _build_station_snapshots_from_rows(
             station["symbol_code"] = symbol_code
         if not station["comment"] and aprs_data.get("comment"):
             station["comment"] = aprs_data["comment"]
+        if (
+            not station.get("status_text")
+            and str(aprs_data.get("packet_group") or "").strip().lower() == "status"
+            and aprs_data.get("comment")
+        ):
+            station["status_text"] = str(aprs_data["comment"])
         if not station["data_raw"] and aprs_data.get("data"):
             station["data_raw"] = dict(aprs_data["data"])
         if not station["latitude"] and aprs_data.get("latitude"):
@@ -1564,6 +1586,7 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
         "longitude",
         "aprs_device",
         "aprs_device_short",
+        "status_text",
     ):
         if not merged.get(field) and secondary.get(field):
             merged[field] = secondary[field]
@@ -1625,6 +1648,7 @@ def _new_station_snapshot(
         "symbol_code": "",
         "symbol_icon": "icons/verG/x.gif",
         "comment": "",
+        "status_text": "",
         "data_raw": {},
         "latitude": "",
         "longitude": "",
@@ -1896,6 +1920,7 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
         fields.append({"label": _t("Symbol code"), "value": str(snapshot["symbol_code"])})
     if snapshot.get("comment"):
         fields.append({"label": _t("Comment"), "value": str(snapshot["comment"])})
+    fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
     if snapshot.get("path"):
         fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
     if snapshot.get("frame_type"):
