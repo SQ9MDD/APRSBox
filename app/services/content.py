@@ -1321,7 +1321,8 @@ def get_recent_station_packets(
         if parsed is None:
             continue
         aprs_data = dict(parsed.get("aprs_data") or {})
-        if not _aprs_data_has_station_snapshot_fields(aprs_data):
+        packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+        if not _aprs_data_has_station_snapshot_fields(aprs_data) and packet_group != "status":
             continue
         row_station_key = str(aprs_data.get("entity_name") or parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
         if row_station_key.casefold() != station_key.casefold():

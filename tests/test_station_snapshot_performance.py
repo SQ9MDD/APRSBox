@@ -6,7 +6,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.db import execute, init_db
-from app.services.content import get_heard_station_snapshots, get_related_ssids, get_station_detail, get_visible_station_snapshots
+from app.services.content import (
+    get_heard_station_snapshots,
+    get_recent_station_packets,
+    get_related_ssids,
+    get_station_detail,
+    get_visible_station_snapshots,
+)
 
 
 @contextlib.contextmanager
@@ -122,6 +128,35 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
             self.assertEqual(station["callsign"], "SQ2IBK")
             self.assertTrue(str(station.get("latitude") or ""))
             self.assertTrue(str(station.get("longitude") or ""))
+
+    def test_recent_station_packets_include_status_frames_for_station(self) -> None:
+        with temporary_database():
+            beacon_line = "SP8ABC-9>APRS:!5222.00N/02100.00E>Beacon"
+            status_line = "SP8ABC-9>APRS:>Station online"
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'tx', '2m', 'TNC2-TX', ?, '0', 'TX', ?, '', ?)
+                """,
+                ("TNC-2m", beacon_line, len(beacon_line), "2026-01-01T00:00:00+00:00"),
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'tx', '2m', 'TNC2-TX', ?, '0', 'TX', ?, '', ?)
+                """,
+                ("TNC-2m", status_line, len(status_line), "2026-01-01T00:01:00+00:00"),
+            )
+
+            packets = get_recent_station_packets("SP8ABC-9", limit=10, snapshot=sample_snapshot())
+            raw_packets = [str(item.get("raw_packet") or "") for item in packets]
+
+            self.assertIn(beacon_line, raw_packets)
+            self.assertIn(status_line, raw_packets)
 
 
 if __name__ == "__main__":
