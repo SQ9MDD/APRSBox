@@ -42,6 +42,9 @@ STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
 _STATION_SNAPSHOT_CACHE: dict[tuple[int, int | None, str, str], list[dict[str, Any]]] = {}
 SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS = 150
 SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
+MODEM_TX_MIN_GAP_SECONDS_DEFAULT = 0.35
+MODEM_TX_MIN_GAP_SECONDS_MIN = 0.2
+MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 
 
 def _t(message: object) -> str:
@@ -135,8 +138,9 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
             values[name] = normalized_payload.get(name)
     if slug == "modems" and values.get("modem_type") == "TCP":
         values["baud_rate"] = None
-    if slug in {"modems", "servers"}:
+    if slug == "servers":
         values.setdefault("notes", "")
+    if slug in {"modems", "servers"}:
         columns = list(values.keys()) + ["created_at", "updated_at"]
         params = list(values.values()) + [timestamp, timestamp]
     else:
@@ -164,7 +168,7 @@ def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
             values[name] = normalized_payload.get(name)
     if slug == "modems" and values.get("modem_type") == "TCP":
         values["baud_rate"] = None
-    if slug in {"modems", "servers"}:
+    if slug == "servers":
         values.setdefault("notes", "")
     values["updated_at"] = utc_now()
     values["id"] = row_id
@@ -3035,10 +3039,10 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         normalized["device_path"] = str(payload.get("device_path") or "").strip()
         normalized["baud_rate"] = None
+    normalized["tx_min_gap_seconds"] = _normalize_modem_tx_min_gap_seconds(payload.get("tx_min_gap_seconds"))
     normalized["serial_rx_silence_reconnect_seconds"] = _normalize_serial_rx_silence_timeout_seconds(
         payload.get("serial_rx_silence_reconnect_seconds")
     )
-    normalized["notes"] = str(payload.get("notes") or "").strip()
     return normalized
 
 
@@ -3242,6 +3246,19 @@ def _normalize_serial_rx_silence_timeout_seconds(value: Any) -> int:
     if seconds not in SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS:
         raise ValueError("RX silence reconnect timeout must be one of: 0, 30, 60, 90, 120, 150, ..., 600 seconds.")
     return seconds
+
+
+def _normalize_modem_tx_min_gap_seconds(value: Any) -> float:
+    raw = str(value if value is not None else MODEM_TX_MIN_GAP_SECONDS_DEFAULT).strip()
+    if not raw:
+        return MODEM_TX_MIN_GAP_SECONDS_DEFAULT
+    try:
+        seconds = float(raw)
+    except ValueError as exc:
+        raise ValueError("TX minimum gap must be a number between 0.2 and 1.2 seconds.") from exc
+    if seconds < MODEM_TX_MIN_GAP_SECONDS_MIN or seconds > MODEM_TX_MIN_GAP_SECONDS_MAX:
+        raise ValueError("TX minimum gap must be between 0.2 and 1.2 seconds.")
+    return round(seconds, 2)
 
 
 def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:

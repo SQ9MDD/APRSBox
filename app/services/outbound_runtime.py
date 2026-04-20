@@ -163,7 +163,8 @@ class OutboundService:
                     f"Skipped {kind} outbound job #{job_id}: TX is blocked on interface {interface_name}",
                 )
                 return
-            await self._wait_for_tx_gap(interface_id=normalized_interface_id)
+            tx_gap_seconds = self._resolve_tx_gap_seconds(job)
+            await self._wait_for_tx_gap(interface_id=normalized_interface_id, gap_seconds=tx_gap_seconds)
             if modem_type == "TCP":
                 if self._traffic_monitor is not None:
                     sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
@@ -288,13 +289,20 @@ class OutboundService:
         except TimeoutError:
             pass
 
-    async def _wait_for_tx_gap(self, *, interface_id: int | None) -> None:
-        if self._min_tx_gap_seconds <= 0 or interface_id is None:
+    def _resolve_tx_gap_seconds(self, job: dict[str, Any]) -> float:
+        try:
+            configured = float(job.get("tx_min_gap_seconds"))
+        except (TypeError, ValueError):
+            configured = self._min_tx_gap_seconds
+        return max(0.0, configured)
+
+    async def _wait_for_tx_gap(self, *, interface_id: int | None, gap_seconds: float) -> None:
+        if gap_seconds <= 0 or interface_id is None:
             return
         previous = self._last_tx_monotonic_by_interface.get(interface_id)
         if previous is None:
             return
-        remaining = self._min_tx_gap_seconds - (time.monotonic() - previous)
+        remaining = gap_seconds - (time.monotonic() - previous)
         if remaining > 0:
             await self._sleep(remaining)
 

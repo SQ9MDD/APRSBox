@@ -199,6 +199,48 @@ class TrafficProxyValidationTests(unittest.TestCase):
             self.assertFalse(success)
             self.assertEqual(error, "RX silence reconnect timeout must be one of: 0, 30, 60, 90, 120, 150, ..., 600 seconds.")
 
+    def test_modem_form_accepts_tx_min_gap_in_configured_range(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "modems",
+                {
+                    "name": "Gap OK",
+                    "band": "2m",
+                    "modem_type": "TCP",
+                    "device_path": "127.0.0.1:9001",
+                    "enabled": "1",
+                    "tx_min_gap_seconds": "0.72",
+                    "expose_port_enabled": "0",
+                    "expose_bind_address": "127.0.0.1",
+                    "expose_port": "8002",
+                    "expose_whitelist": "",
+                },
+            )
+            self.assertTrue(success, error)
+            row = get_section_row("modems", 1)
+            assert row is not None
+            self.assertAlmostEqual(float(row["tx_min_gap_seconds"]), 0.72, places=2)
+
+    def test_modem_form_rejects_tx_min_gap_out_of_range(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "modems",
+                {
+                    "name": "Gap Too Low",
+                    "band": "2m",
+                    "modem_type": "TCP",
+                    "device_path": "127.0.0.1:9001",
+                    "enabled": "1",
+                    "tx_min_gap_seconds": "0.19",
+                    "expose_port_enabled": "0",
+                    "expose_bind_address": "127.0.0.1",
+                    "expose_port": "8002",
+                    "expose_whitelist": "",
+                },
+            )
+            self.assertFalse(success)
+            self.assertEqual(error, "TX minimum gap must be between 0.2 and 1.2 seconds.")
+
 
 class TrafficProxyRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_proxy_relays_tnc_traffic_and_client_writes(self) -> None:

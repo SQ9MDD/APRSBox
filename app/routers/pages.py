@@ -766,11 +766,11 @@ def modems_create(
     serial_rx_silence_reconnect_seconds: int = Form(150),
     enabled: str | None = Form(None),
     tx_blocked: str | None = Form(None),
+    tx_min_gap_seconds: str = Form("0.35"),
     expose_port_enabled: str | None = Form(None),
     expose_bind_address: str = Form("0.0.0.0"),
     expose_port: int | None = Form(8002),
     expose_whitelist: str = Form(""),
-    notes: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
     normalized_modem_type = modem_type.strip().upper()
@@ -788,11 +788,11 @@ def modems_create(
         "serial_rx_silence_reconnect_seconds": serial_rx_silence_reconnect_seconds,
         "enabled": enabled,
         "tx_blocked": tx_blocked,
+        "tx_min_gap_seconds": tx_min_gap_seconds,
         "expose_port_enabled": expose_port_enabled,
         "expose_bind_address": expose_bind_address.strip(),
         "expose_port": expose_port,
         "expose_whitelist": expose_whitelist,
-        "notes": notes.strip(),
     }
     if record_id is None:
         success, error = safe_create_section_row("modems", payload)

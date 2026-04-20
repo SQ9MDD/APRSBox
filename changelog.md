@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.7.dev - 20.04.2026
+
+### Najważniejsze zmiany
+- `TNC`: dodano per‑interfejs parametr `TX Min Gap (s)` (`0.2-1.2`, domyślnie `0.35`) w formularzu add/edit.
+- Outbound respektuje `TX Min Gap` konkretnego TNC, co ogranicza kolizje ramek przy burstach (np. `ACK` vs `DIGI`).
+- `Settings -> TNC`: usunięto pole `Notes`; dodano migrację i walidację `modems.tx_min_gap_seconds` oraz testy regresyjne.
+
 ## 1.7.5.dev - 19.04.2026
 
 ### Najważniejsze zmiany
