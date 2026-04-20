@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.8.dev - 20.04.2026
+
+### Najważniejsze zmiany
+- `Messages`: automatyczne `ACK` zachowuje teraz dokładny numer z odebranej ramki (`{1 -> ack1`, bez wymuszania `ack01`).
+- Znormalizowany numer (`NN`) pozostaje używany wewnętrznie do deduplikacji i dopasowania historii wiadomości.
+- Rozszerzono testy regresyjne dla przypadków jednocyfrowego numeru w `message/query` i generowania `ACK`.
+
 ## 1.7.7.dev - 20.04.2026
 
 ### Najważniejsze zmiany
