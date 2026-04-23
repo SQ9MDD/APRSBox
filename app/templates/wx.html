@@ -165,8 +165,6 @@
                                     <th>{{ t("Parameter") }}</th>
                                     <th>{{ t("Source") }}</th>
                                     <th>{{ t("Identifier") }}</th>
-                                    <th>{{ t("Selector") }}</th>
-                                    <th>{{ t("Unit override") }}</th>
                                     <th>{{ t("Raw value") }}</th>
                                     <th>{{ t("Normalized") }}</th>
                                     <th>{{ t("Status") }}</th>
@@ -189,22 +187,12 @@
                                             {% endfor %}
                                         </select>
                                     </td>
-                                    <td><input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}"></td>
                                     <td>
-                                        <div class="wx-selector-stack">
-                                            <select name="selector_kind__{{ row.parameter_name }}">
-                                                {% for option in wx_selector_kind_options %}
-                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                                                {% endfor %}
-                                            </select>
-                                            <input type="text" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}" placeholder="{{ t('Name / path') }}">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="wx-selector-stack">
-                                            <input type="text" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}" placeholder="{{ row.canonical_unit }}">
-                                            <input type="number" min="1" max="86400" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}" placeholder="{{ wx_config.default_cache_max_age_s }}">
-                                        </div>
+                                        <input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}">
+                                        <input type="hidden" name="selector_kind__{{ row.parameter_name }}" value="{{ row.selector_kind or 'state' }}">
+                                        <input type="hidden" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}">
+                                        <input type="hidden" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}">
+                                        <input type="hidden" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}">
                                     </td>
                                     <td><code>{{ row.raw_value_preview }}</code></td>
                                     <td><code>{{ row.normalized_value_preview }}</code></td>
@@ -241,8 +229,6 @@
                                     <th>{{ t("Parameter") }}</th>
                                     <th>{{ t("Source") }}</th>
                                     <th>{{ t("Identifier") }}</th>
-                                    <th>{{ t("Selector") }}</th>
-                                    <th>{{ t("Unit override") }}</th>
                                     <th>{{ t("Raw value") }}</th>
                                     <th>{{ t("Normalized") }}</th>
                                     <th>{{ t("Status") }}</th>
@@ -265,22 +251,12 @@
                                             {% endfor %}
                                         </select>
                                     </td>
-                                    <td><input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}"></td>
                                     <td>
-                                        <div class="wx-selector-stack">
-                                            <select name="selector_kind__{{ row.parameter_name }}">
-                                                {% for option in wx_selector_kind_options %}
-                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                                                {% endfor %}
-                                            </select>
-                                            <input type="text" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}" placeholder="{{ t('Name / path') }}">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="wx-selector-stack">
-                                            <input type="text" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}" placeholder="{{ row.canonical_unit }}">
-                                            <input type="number" min="1" max="86400" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}" placeholder="{{ wx_config.default_cache_max_age_s }}">
-                                        </div>
+                                        <input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}">
+                                        <input type="hidden" name="selector_kind__{{ row.parameter_name }}" value="{{ row.selector_kind or 'state' }}">
+                                        <input type="hidden" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}">
+                                        <input type="hidden" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}">
+                                        <input type="hidden" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}">
                                     </td>
                                     <td><code>{{ row.raw_value_preview }}</code></td>
                                     <td><code>{{ row.normalized_value_preview }}</code></td>
@@ -322,7 +298,6 @@
                             <th>{{ t("Parameter") }}</th>
                             <th>{{ t("Source") }}</th>
                             <th>{{ t("Identifier") }}</th>
-                            <th>{{ t("Selector") }}</th>
                             <th>{{ t("Raw value") }}</th>
                             <th>{{ t("Normalized") }}</th>
                             <th>{{ t("Status") }}</th>
@@ -335,7 +310,6 @@
                             <td>{{ t(row.label) }}</td>
                             <td>{{ row.source.name if row.source else "-" }}</td>
                             <td>{{ row.identifier or "-" }}</td>
-                            <td>{{ row.selector_kind }}{% if row.selector_name %}:{{ row.selector_name }}{% endif %}</td>
                             <td><code>{{ row.raw_value_preview }}</code></td>
                             <td><code>{{ row.normalized_value_preview }}</code></td>
                             <td><span class="status-pill {{ row.status_class }}">{{ row.status_label }}</span></td>
