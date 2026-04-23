@@ -40,6 +40,11 @@ WORKER_DEFINITIONS = (
 STATION_SNAPSHOT_ROW_LIMIT_FACTOR = 40
 STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
 _STATION_SNAPSHOT_CACHE: dict[tuple[int, int | None, str, str], list[dict[str, Any]]] = {}
+SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS = 150
+SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
+MODEM_TX_MIN_GAP_SECONDS_DEFAULT = 0.35
+MODEM_TX_MIN_GAP_SECONDS_MIN = 0.2
+MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 
 
 def _t(message: object) -> str:
@@ -133,8 +138,9 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
             values[name] = normalized_payload.get(name)
     if slug == "modems" and values.get("modem_type") == "TCP":
         values["baud_rate"] = None
-    if slug in {"modems", "servers"}:
+    if slug == "servers":
         values.setdefault("notes", "")
+    if slug in {"modems", "servers"}:
         columns = list(values.keys()) + ["created_at", "updated_at"]
         params = list(values.values()) + [timestamp, timestamp]
     else:
@@ -162,7 +168,7 @@ def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
             values[name] = normalized_payload.get(name)
     if slug == "modems" and values.get("modem_type") == "TCP":
         values["baud_rate"] = None
-    if slug in {"modems", "servers"}:
+    if slug == "servers":
         values.setdefault("notes", "")
     values["updated_at"] = utc_now()
     values["id"] = row_id
@@ -1315,7 +1321,8 @@ def get_recent_station_packets(
         if parsed is None:
             continue
         aprs_data = dict(parsed.get("aprs_data") or {})
-        if not _aprs_data_has_station_snapshot_fields(aprs_data):
+        packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+        if not _aprs_data_has_station_snapshot_fields(aprs_data) and packet_group != "status":
             continue
         row_station_key = str(aprs_data.get("entity_name") or parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
         if row_station_key.casefold() != station_key.casefold():
@@ -1481,6 +1488,8 @@ def _build_station_snapshots_from_rows(
     limit: int,
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
+    station_key_index: dict[str, str] = {}
+    pending_status_by_station_key: dict[str, str] = {}
     device_database = get_aprs_device_identification_database()
 
     for row in rows:
@@ -1490,10 +1499,19 @@ def _build_station_snapshots_from_rows(
 
         callsign = str(parsed.get("logical_source_key") or parsed.get("source_key") or "").strip()
         aprs_data = dict(parsed.get("aprs_data") or {})
+        station_key = (aprs_data.get("entity_name") or callsign).strip()
+        station_key_folded = station_key.casefold()
+        packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+        status_comment = str(aprs_data.get("comment") or "").strip()
+        if packet_group == "status" and station_key and status_comment:
+            existing_key = station_key_index.get(station_key_folded)
+            if existing_key is not None and not str(stations[existing_key].get("status_text") or "").strip():
+                stations[existing_key]["status_text"] = status_comment
+            else:
+                pending_status_by_station_key.setdefault(station_key_folded, status_comment)
         if not _aprs_data_has_station_snapshot_fields(aprs_data):
             continue
 
-        station_key = (aprs_data.get("entity_name") or callsign).strip()
         if not station_key:
             continue
 
@@ -1507,8 +1525,13 @@ def _build_station_snapshots_from_rows(
                 row["line"],
                 origin=origin,
             )
+            station_key_index[station_key_folded] = station_key
 
         station = stations[station_key]
+        if not str(station.get("status_text") or "").strip():
+            pending_status = pending_status_by_station_key.pop(station_key_folded, "")
+            if pending_status:
+                station["status_text"] = pending_status
         if not station["aprs_device"] and station_key.casefold() == callsign.casefold():
             device_identification = lookup_aprs_device_identification(
                 destination=str(parsed.get("logical_destination") or parsed.get("destination") or ""),
@@ -1531,6 +1554,12 @@ def _build_station_snapshots_from_rows(
             station["symbol_code"] = symbol_code
         if not station["comment"] and aprs_data.get("comment"):
             station["comment"] = aprs_data["comment"]
+        if (
+            not station.get("status_text")
+            and str(aprs_data.get("packet_group") or "").strip().lower() == "status"
+            and aprs_data.get("comment")
+        ):
+            station["status_text"] = str(aprs_data["comment"])
         if not station["data_raw"] and aprs_data.get("data"):
             station["data_raw"] = dict(aprs_data["data"])
         if not station["latitude"] and aprs_data.get("latitude"):
@@ -1557,6 +1586,7 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
         "longitude",
         "aprs_device",
         "aprs_device_short",
+        "status_text",
     ):
         if not merged.get(field) and secondary.get(field):
             merged[field] = secondary[field]
@@ -1618,6 +1648,7 @@ def _new_station_snapshot(
         "symbol_code": "",
         "symbol_icon": "icons/verG/x.gif",
         "comment": "",
+        "status_text": "",
         "data_raw": {},
         "latitude": "",
         "longitude": "",
@@ -1889,6 +1920,7 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
         fields.append({"label": _t("Symbol code"), "value": str(snapshot["symbol_code"])})
     if snapshot.get("comment"):
         fields.append({"label": _t("Comment"), "value": str(snapshot["comment"])})
+    fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
     if snapshot.get("path"):
         fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
     if snapshot.get("frame_type"):
@@ -2693,6 +2725,25 @@ def _clean_decoded_tokens(text: str, *, preserve_qsy_callsign: bool = False) -> 
     return cleaned.strip(" /|,;:-")
 
 
+def _format_qsy_offset_display(offset_code: Any) -> str | None:
+    try:
+        offset_steps = int(offset_code)
+    except (TypeError, ValueError):
+        return None
+
+    offset_khz = offset_steps * 10
+    if abs(offset_khz) >= 1000:
+        value_mhz = offset_khz / 1000.0
+        value_text = f"{value_mhz:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+        if offset_khz > 0 and not value_text.startswith("+"):
+            value_text = f"+{value_text}"
+        return f"{value_text}MHz"
+
+    if offset_khz > 0:
+        return f"+{offset_khz}kHz"
+    return f"{offset_khz}kHz"
+
+
 def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit_system: str) -> list[dict[str, str]]:
     if not metrics:
         return []
@@ -2785,8 +2836,9 @@ def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit
 
     qsy_offset_khz = metrics.get("qsy_offset_khz")
     if qsy_offset_khz is not None:
-        sign = "+" if int(qsy_offset_khz) > 0 else ""
-        items.append(_weather_item("signal-distance-variant.svg", "Offset", f"{sign}{int(qsy_offset_khz)} kHz"))
+        offset_display = _format_qsy_offset_display(qsy_offset_khz)
+        if offset_display is not None:
+            items.append(_weather_item("signal-distance-variant.svg", "Offset", offset_display))
 
     qsy_range_km = metrics.get("qsy_range_km")
     if qsy_range_km is not None:
@@ -3033,7 +3085,10 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         normalized["device_path"] = str(payload.get("device_path") or "").strip()
         normalized["baud_rate"] = None
-    normalized["notes"] = str(payload.get("notes") or "").strip()
+    normalized["tx_min_gap_seconds"] = _normalize_modem_tx_min_gap_seconds(payload.get("tx_min_gap_seconds"))
+    normalized["serial_rx_silence_reconnect_seconds"] = _normalize_serial_rx_silence_timeout_seconds(
+        payload.get("serial_rx_silence_reconnect_seconds")
+    )
     return normalized
 
 
@@ -3224,6 +3279,32 @@ def _normalize_station_interval(value: Any, *, label: str) -> int:
     if interval_minutes not in {15, 30, 45, 60}:
         raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.")
     return interval_minutes
+
+
+def _normalize_serial_rx_silence_timeout_seconds(value: Any) -> int:
+    raw = str(value if value is not None else SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS).strip()
+    if not raw:
+        return SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS
+    try:
+        seconds = int(raw)
+    except ValueError as exc:
+        raise ValueError("RX silence reconnect timeout must be one of: 0, 30, 60, 90, 120, 150, ..., 600 seconds.") from exc
+    if seconds not in SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS:
+        raise ValueError("RX silence reconnect timeout must be one of: 0, 30, 60, 90, 120, 150, ..., 600 seconds.")
+    return seconds
+
+
+def _normalize_modem_tx_min_gap_seconds(value: Any) -> float:
+    raw = str(value if value is not None else MODEM_TX_MIN_GAP_SECONDS_DEFAULT).strip()
+    if not raw:
+        return MODEM_TX_MIN_GAP_SECONDS_DEFAULT
+    try:
+        seconds = float(raw)
+    except ValueError as exc:
+        raise ValueError("TX minimum gap must be a number between 0.2 and 1.2 seconds.") from exc
+    if seconds < MODEM_TX_MIN_GAP_SECONDS_MIN or seconds > MODEM_TX_MIN_GAP_SECONDS_MAX:
+        raise ValueError("TX minimum gap must be between 0.2 and 1.2 seconds.")
+    return round(seconds, 2)
 
 
 def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:

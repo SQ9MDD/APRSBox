@@ -2235,15 +2235,15 @@ select:focus-visible,
     left: 50%;
     top: 50%;
     transform: translate(-50%, -55%);
-    min-width: 0.62rem;
-    height: 0.62rem;
-    padding: 0 0.07rem;
-    border-radius: 0.18rem;
+    min-width: 0.56rem;
+    height: 0.56rem;
+    padding: 0 0.05rem;
+    border-radius: 0.16rem;
     background: rgba(12, 14, 16, 0.86);
     color: #f5f8fb;
     font-size: 0.5rem;
     font-weight: 800;
-    line-height: 0.62rem;
+    line-height: 0.56rem;
     text-align: center;
     pointer-events: none;
 }
@@ -2735,7 +2735,7 @@ select:focus-visible,
 
 .settings-map-sources-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(22rem, 1fr);
+    grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 1fr);
     gap: var(--space-3);
     align-items: start;
 }
@@ -2763,10 +2763,22 @@ select:focus-visible,
     table-layout: auto;
 }
 
+.map-sources-table th,
+.map-sources-table td {
+    min-width: 0;
+    padding: 0.32rem 0.34rem;
+}
+
 .map-sources-table th:nth-child(1),
 .map-sources-table td:nth-child(1) {
-    width: 3.1rem;
+    width: 2.7rem;
     text-align: center;
+    white-space: nowrap;
+}
+
+.map-sources-table th:nth-child(2),
+.map-sources-table td:nth-child(2) {
+    width: auto;
     white-space: nowrap;
 }
 
@@ -2777,6 +2789,28 @@ select:focus-visible,
 .map-sources-table th:nth-child(5),
 .map-sources-table td:nth-child(5) {
     white-space: nowrap;
+}
+
+.map-sources-actions-cell {
+    width: 9rem;
+    min-width: 9rem;
+}
+
+.map-sources-actions-cell .table-actions {
+    flex-wrap: nowrap;
+    gap: 0.16rem;
+}
+
+.map-sources-table .table-icon-button {
+    width: 1.46rem;
+    min-width: 1.46rem;
+    height: 1.46rem;
+    min-height: 1.46rem;
+}
+
+.map-sources-table .table-icon-button img {
+    width: 0.76rem;
+    height: 0.76rem;
 }
 
 .map-source-form textarea {
@@ -3549,6 +3583,51 @@ code {
 
 .wx-mapping-table {
     table-layout: auto;
+}
+
+.wx-mapping-table-edit {
+    table-layout: fixed;
+}
+
+.wx-mapping-table-edit th:nth-child(1),
+.wx-mapping-table-edit td:nth-child(1) {
+    width: 23%;
+}
+
+.wx-mapping-table-edit th:nth-child(2),
+.wx-mapping-table-edit td:nth-child(2) {
+    width: 13%;
+}
+
+.wx-mapping-table-edit th:nth-child(3),
+.wx-mapping-table-edit td:nth-child(3) {
+    width: 14%;
+}
+
+.wx-mapping-table-edit th:nth-child(4),
+.wx-mapping-table-edit td:nth-child(4) {
+    width: 12%;
+}
+
+.wx-mapping-table-edit th:nth-child(5),
+.wx-mapping-table-edit td:nth-child(5) {
+    width: 12%;
+}
+
+.wx-mapping-table-edit th:nth-child(6),
+.wx-mapping-table-edit td:nth-child(6) {
+    width: 9%;
+}
+
+.wx-mapping-table-edit th:nth-child(7),
+.wx-mapping-table-edit td:nth-child(7) {
+    width: 14%;
+}
+
+.wx-mapping-table-edit th:nth-child(8),
+.wx-mapping-table-edit td:nth-child(8) {
+    width: 3.5rem;
+    text-align: center;
 }
 
 .wx-mapping-table td code,

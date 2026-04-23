@@ -109,7 +109,7 @@
                     <thead>
                         <tr>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
+                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'serial_rx_silence_reconnect_seconds', 'tx_min_gap_seconds', 'expose_bind_address', 'expose_port', 'expose_whitelist'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <th>{{ t("Status") }}</th>
                             {% elif section.slug == 'modems' and field.name == 'tx_blocked' %}
@@ -132,7 +132,7 @@
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'expose_bind_address', 'expose_port', 'expose_whitelist', 'notes'] %}
+                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'serial_rx_silence_reconnect_seconds', 'tx_min_gap_seconds', 'expose_bind_address', 'expose_port', 'expose_whitelist'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <td class="modems-summary-icon-cell">
                                 <span
@@ -319,6 +319,7 @@
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-address"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port"{% endif %}
+                        {% if section.slug == 'modems' and field.name == 'tx_min_gap_seconds' %}min="0.2" max="1.2" step="0.01"{% endif %}
                         value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
                         {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
                     >
@@ -352,6 +353,10 @@
                     <small class="muted">{{ t("LAN listen address. Use <code>0.0.0.0</code> for all interfaces.")|safe }}</small>
                     {% elif section.slug == 'modems' and field.name == 'expose_port' %}
                     <small class="muted">{{ t("TCP port exposed by APRSBox for LAN clients. Maximum simultaneous clients: 3.") }}</small>
+                    {% elif section.slug == 'modems' and field.name == 'serial_rx_silence_reconnect_seconds' %}
+                    <small class="muted">{{ t("Serial-only watchdog timeout. 0 disables forced reconnect on RX silence.") }}</small>
+                    {% elif section.slug == 'modems' and field.name == 'tx_min_gap_seconds' %}
+                    <small class="muted">{{ t("Per-TNC TX pacing gap, from 0.2s to 1.2s.") }}</small>
                     {% elif section.slug == 'modems' and field.name == 'expose_whitelist' %}
                     <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}

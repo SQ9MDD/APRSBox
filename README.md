@@ -5,7 +5,7 @@ APRSBox is a lightweight APRS operations application for Raspberry Pi and Linux 
 - `app.main`: the web GUI
 - `app.core_main`: the APRS runtime process responsible for traffic monitoring, outbound queue processing, and periodic schedulers
 
-The project is no longer "GUI only". It already includes a working SQLite-backed configuration model, authenticated GUI, TCP KISS and serial KISS traffic monitoring, outbound APRS transmission for selected packet types, and native installation scripts for OpenRC and systemd hosts.
+The project is no longer "GUI only". It already includes a working SQLite-backed configuration model, authenticated GUI, APRS runtime services, Packet Routing flows, APRS-IS uplink runtime, and native installation scripts for OpenRC and systemd hosts.
 
 <img width="1702" height="1147" alt="APRSBox" src="https://github.com/user-attachments/assets/cfa35f80-3db4-4601-af37-ad8fb9f1f4ce" />
 
@@ -47,27 +47,36 @@ curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install
 Current APRS runtime behavior:
 
 - RX:
-  - connects to an enabled TCP or serial KISS TNC
+  - connects to enabled TCP or serial KISS TNC interfaces
   - reads KISS frames
   - decodes AX.25 UI frames to TNC2 when possible
   - stores frames in SQLite
-  - updates heard-station views and band condition processing
+  - updates heard-station views, band condition processing, and APRS message ingestion
 - TX:
   - queues outbound jobs in SQLite
   - processes jobs from the core worker
-  - currently supports `beacon`, `status`, `object`, APRS messages, and bulletin / announcement frames
+  - supports `beacon`, `status`, `object`, APRS messages (`direct`, `query`, `ack`), bulletins / announcements, WX, and DIGI TX jobs
   - builds TNC2 lines and wraps them into KISS frames
-  - sends them to the configured TCP or serial KISS TNC
+  - sends them via active monitor connection (with direct transport fallback)
+- Packet Routing (DIGI Flows):
+  - source is currently `receiver_rf`
+  - supports filters (`dupe`, `path`, `strict`, `direct_only`, `digi`, `callsign`, `packet_type`, `icon`, `distance`)
+  - supports targets `tx_rf`, `tx_aprsis`, `action_log`, `action_drop`
+- APRS-IS uplink:
+  - managed automatically from enabled Packet Routing flows with `tx_aprsis` target
+  - includes strict guard for blocked path tokens and malformed third-party frames
+  - provides runtime diagnostics and counters in GUI
 - Scheduling:
   - station beacon scheduler
   - station APRS Status scheduler
   - object scheduler with jitter spacing between object transmissions
   - bulletin / announcement scheduler with jitter spacing between message transmissions
+  - WX scheduler
 
 Important current limitation:
 
-- The runtime path uses the interface selected in station settings for station beacon/status/object/message/bulletin TX.
 - Runtime transport supports `TCP` modem definitions with `host:port` and `SERIALL` modem definitions with `device_path` plus `baud_rate`.
+- Packet Routing source runtime is currently limited to `receiver_rf`.
 
 ---
 
@@ -78,7 +87,7 @@ APRSBox to lekka aplikacja APRS dla Raspberry Pi i systemów Linux z natywnym mo
 - `app.main`: web GUI
 - `app.core_main`: proces runtime odpowiedzialny za monitoring ruchu, kolejkę outbound i schedulery okresowe
 
-Projekt nie jest już wyłącznie szkieletem GUI. W repo są już działające elementy runtime: TCP KISS RX, outbound beacon/status/object, kolejka TX w SQLite, mapa, heard stations i band condition.
+Projekt nie jest już wyłącznie szkieletem GUI. W repo są działające elementy runtime APRS: RX/TX KISS, kolejka outbound w SQLite, Packet Routing (DIGI Flows), uplink APRS-IS, wiadomości APRS oraz schedulery beacon/status/object/bulletin/WX.
 
 ## Szybka instalacja
 

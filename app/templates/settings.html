@@ -139,7 +139,6 @@
                             <th>{{ t("Lp.") }}</th>
                             <th>{{ t("Name") }}</th>
                             <th>{{ t("Zoom") }}</th>
-                            <th>{{ t("Enabled") }}</th>
                             <th>{{ t("Default") }}</th>
                             <th>{{ t("Cache") }}</th>
                             {% if can_manage_map_sources %}
@@ -153,7 +152,6 @@
                             <td>{{ loop.index }}</td>
                             <td>{{ source.name }}</td>
                             <td>{{ source.min_zoom }} - {{ source.max_zoom }}</td>
-                            <td>{{ t("Yes") if source.enabled else t("No") }}</td>
                             <td>
                                 {% if source.is_default %}
                                 <span class="map-source-default-pill">{{ t("Default") }}</span>
@@ -170,7 +168,7 @@
                                 {% endif %}
                             </td>
                             {% if can_manage_map_sources %}
-                            <td>
+                            <td class="map-sources-actions-cell">
                                 <div class="table-actions table-actions-start">
                                     <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form">
                                         <input type="hidden" name="direction" value="up">

@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -978,6 +979,51 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert traffic_row is not None
             self.assertEqual(traffic_row["source"], "RF-OUT")
             self.assertEqual(traffic_row["line"], "SQ9MDD-4>APRS,SQ9MDD-4*,WIDE2-1:>DIGI outbound test")
+
+    async def test_outbound_service_enforces_min_tx_gap_on_same_interface(self) -> None:
+        with temporary_database():
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9014")
+            for suffix in ("A", "B"):
+                success, _ = enqueue_digi_tx_job(
+                    interface_name="RF-OUT",
+                    line=f"SQ9MDD-4>APRS,SQ9MDD-4*,WIDE2-1:>DIGI outbound test {suffix}",
+                    flow_id=7,
+                    frame_uid=f"frame-{suffix.lower()}",
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            write_timestamps: list[float] = []
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    write_timestamps.append(time.monotonic())
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9014)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService(min_tx_gap_seconds=0.35)
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await outbound_service._process_job(first_job)
+                await outbound_service._process_job(second_job)
+
+            self.assertEqual(len(write_timestamps), 2)
+            self.assertGreaterEqual(write_timestamps[1] - write_timestamps[0], 0.30)
 
     async def test_digi_filter_allow_matches_consumed_digi_with_wildcards(self) -> None:
         with temporary_database():

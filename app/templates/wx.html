@@ -159,14 +159,12 @@
                 <div class="wx-mapping-group">
                     <h3>{{ t("Required parameters") }}</h3>
                     <div class="table-wrap">
-                        <table class="data-table compact-table wx-mapping-table">
+                        <table class="data-table compact-table wx-mapping-table wx-mapping-table-edit">
                             <thead>
                                 <tr>
                                     <th>{{ t("Parameter") }}</th>
                                     <th>{{ t("Source") }}</th>
                                     <th>{{ t("Identifier") }}</th>
-                                    <th>{{ t("Selector") }}</th>
-                                    <th>{{ t("Unit override") }}</th>
                                     <th>{{ t("Raw value") }}</th>
                                     <th>{{ t("Normalized") }}</th>
                                     <th>{{ t("Status") }}</th>
@@ -189,22 +187,12 @@
                                             {% endfor %}
                                         </select>
                                     </td>
-                                    <td><input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}"></td>
                                     <td>
-                                        <div class="wx-selector-stack">
-                                            <select name="selector_kind__{{ row.parameter_name }}">
-                                                {% for option in wx_selector_kind_options %}
-                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                                                {% endfor %}
-                                            </select>
-                                            <input type="text" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}" placeholder="{{ t('Name / path') }}">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="wx-selector-stack">
-                                            <input type="text" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}" placeholder="{{ row.canonical_unit }}">
-                                            <input type="number" min="1" max="86400" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}" placeholder="{{ wx_config.default_cache_max_age_s }}">
-                                        </div>
+                                        <input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}">
+                                        <input type="hidden" name="selector_kind__{{ row.parameter_name }}" value="{{ row.selector_kind or 'state' }}">
+                                        <input type="hidden" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}">
+                                        <input type="hidden" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}">
+                                        <input type="hidden" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}">
                                     </td>
                                     <td><code>{{ row.raw_value_preview }}</code></td>
                                     <td><code>{{ row.normalized_value_preview }}</code></td>
@@ -235,14 +223,12 @@
                 <div class="wx-mapping-group">
                     <h3>{{ t("Optional parameters") }}</h3>
                     <div class="table-wrap">
-                        <table class="data-table compact-table wx-mapping-table">
+                        <table class="data-table compact-table wx-mapping-table wx-mapping-table-edit">
                             <thead>
                                 <tr>
                                     <th>{{ t("Parameter") }}</th>
                                     <th>{{ t("Source") }}</th>
                                     <th>{{ t("Identifier") }}</th>
-                                    <th>{{ t("Selector") }}</th>
-                                    <th>{{ t("Unit override") }}</th>
                                     <th>{{ t("Raw value") }}</th>
                                     <th>{{ t("Normalized") }}</th>
                                     <th>{{ t("Status") }}</th>
@@ -265,22 +251,12 @@
                                             {% endfor %}
                                         </select>
                                     </td>
-                                    <td><input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}"></td>
                                     <td>
-                                        <div class="wx-selector-stack">
-                                            <select name="selector_kind__{{ row.parameter_name }}">
-                                                {% for option in wx_selector_kind_options %}
-                                                <option value="{{ option.value }}" {% if row.selector_kind == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
-                                                {% endfor %}
-                                            </select>
-                                            <input type="text" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}" placeholder="{{ t('Name / path') }}">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="wx-selector-stack">
-                                            <input type="text" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}" placeholder="{{ row.canonical_unit }}">
-                                            <input type="number" min="1" max="86400" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}" placeholder="{{ wx_config.default_cache_max_age_s }}">
-                                        </div>
+                                        <input type="text" name="identifier__{{ row.parameter_name }}" value="{{ row.identifier or '' }}" placeholder="{{ t('Entity ID / idx') }}">
+                                        <input type="hidden" name="selector_kind__{{ row.parameter_name }}" value="{{ row.selector_kind or 'state' }}">
+                                        <input type="hidden" name="selector_name__{{ row.parameter_name }}" value="{{ row.selector_name or '' }}">
+                                        <input type="hidden" name="unit_override__{{ row.parameter_name }}" value="{{ row.unit_override or '' }}">
+                                        <input type="hidden" name="cache_max_age_s__{{ row.parameter_name }}" value="{{ row.cache_max_age_s or '' }}">
                                     </td>
                                     <td><code>{{ row.raw_value_preview }}</code></td>
                                     <td><code>{{ row.normalized_value_preview }}</code></td>
@@ -322,7 +298,6 @@
                             <th>{{ t("Parameter") }}</th>
                             <th>{{ t("Source") }}</th>
                             <th>{{ t("Identifier") }}</th>
-                            <th>{{ t("Selector") }}</th>
                             <th>{{ t("Raw value") }}</th>
                             <th>{{ t("Normalized") }}</th>
                             <th>{{ t("Status") }}</th>
@@ -335,7 +310,6 @@
                             <td>{{ t(row.label) }}</td>
                             <td>{{ row.source.name if row.source else "-" }}</td>
                             <td>{{ row.identifier or "-" }}</td>
-                            <td>{{ row.selector_kind }}{% if row.selector_name %}:{{ row.selector_name }}{% endif %}</td>
                             <td><code>{{ row.raw_value_preview }}</code></td>
                             <td><code>{{ row.normalized_value_preview }}</code></td>
                             <td><span class="status-pill {{ row.status_class }}">{{ row.status_label }}</span></td>
@@ -579,6 +553,7 @@
     (() => {
         const rootPath = String({{ request.scope.root_path|tojson }} || "");
         const scrollStateStorageKey = "aprsbox-wx-scroll-restore-v1";
+        let scrollStateCapturedForNavigation = false;
 
         const isWxPath = (pathname) => {
             const normalizedPath = String(pathname || "");
@@ -586,14 +561,24 @@
             return normalizedPath === wxRootPath || normalizedPath.startsWith(`${wxRootPath}/`);
         };
 
+        const resolvePathname = (value) => {
+            try {
+                return new URL(String(value || ""), window.location.origin).pathname;
+            } catch (_error) {
+                return "";
+            }
+        };
+
         const persistScrollState = (form, submitter) => {
             if (!(form instanceof HTMLFormElement)) {
                 return;
             }
-            if (String(form.method || "get").toLowerCase() !== "post") {
+            const method = String(form.method || "get").toLowerCase();
+            if (!["get", "post"].includes(method)) {
                 return;
             }
-            if (!isWxPath(window.location.pathname)) {
+            const actionPath = resolvePathname(form.getAttribute("action") || form.action || window.location.pathname);
+            if (!isWxPath(actionPath)) {
                 return;
             }
 
@@ -614,6 +599,9 @@
             };
 
             if (panel instanceof HTMLElement) {
+                if (panel.id) {
+                    payload.panelId = panel.id;
+                }
                 const panelIndex = panels.indexOf(panel);
                 if (panelIndex >= 0) {
                     payload.panelIndex = panelIndex;
@@ -622,6 +610,40 @@
                 payload.offsetWithinPanel = Number(window.scrollY || 0) - panelTop;
             }
 
+            try {
+                window.sessionStorage.setItem(scrollStateStorageKey, JSON.stringify(payload));
+                scrollStateCapturedForNavigation = true;
+            } catch (_error) {
+                // Ignore storage failures.
+            }
+        };
+
+        const persistViewportScrollState = () => {
+            if (!isWxPath(window.location.pathname)) {
+                return;
+            }
+            const panels = Array.from(document.querySelectorAll("section.panel"));
+            const currentY = Number(window.scrollY || 0);
+            const payload = {
+                savedAtMs: Date.now(),
+                scrollY: currentY,
+            };
+            for (const [panelIndex, panel] of panels.entries()) {
+                if (!(panel instanceof HTMLElement)) {
+                    continue;
+                }
+                const panelTop = panel.getBoundingClientRect().top + currentY;
+                const panelBottom = panelTop + panel.offsetHeight;
+                if (currentY < panelTop || currentY >= panelBottom) {
+                    continue;
+                }
+                if (panel.id) {
+                    payload.panelId = panel.id;
+                }
+                payload.panelIndex = panelIndex;
+                payload.offsetWithinPanel = currentY - panelTop;
+                break;
+            }
             try {
                 window.sessionStorage.setItem(scrollStateStorageKey, JSON.stringify(payload));
             } catch (_error) {
@@ -654,7 +676,17 @@
             let targetY = Number(parsed.scrollY || 0);
             const panelIndex = Number(parsed.panelIndex);
             const offsetWithinPanel = Number(parsed.offsetWithinPanel || 0);
-            if (Number.isInteger(panelIndex) && panelIndex >= 0) {
+            const panelId = String(parsed.panelId || "").trim();
+            let restoredFromPanelId = false;
+            if (panelId) {
+                const panelById = document.getElementById(panelId);
+                if (panelById instanceof HTMLElement) {
+                    const panelTop = panelById.getBoundingClientRect().top + Number(window.scrollY || 0);
+                    targetY = panelTop + offsetWithinPanel;
+                    restoredFromPanelId = true;
+                }
+            }
+            if (!restoredFromPanelId && Number.isInteger(panelIndex) && panelIndex >= 0) {
                 const panels = Array.from(document.querySelectorAll("section.panel"));
                 const panel = panels[panelIndex];
                 if (panel instanceof HTMLElement) {
@@ -683,6 +715,13 @@
             },
             true
         );
+
+        window.addEventListener("beforeunload", () => {
+            if (scrollStateCapturedForNavigation) {
+                return;
+            }
+            persistViewportScrollState();
+        });
 
         window.requestAnimationFrame(() => {
             restoreScrollState();

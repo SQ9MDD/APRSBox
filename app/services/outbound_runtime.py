@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -42,9 +43,12 @@ class OutboundService:
         *,
         poll_interval: float = 1.0,
         traffic_monitor: TrafficMonitorService | None = None,
+        min_tx_gap_seconds: float = 0.35,
     ) -> None:
         self._poll_interval = poll_interval
         self._traffic_monitor = traffic_monitor
+        self._min_tx_gap_seconds = max(0.0, float(min_tx_gap_seconds))
+        self._last_tx_monotonic_by_interface: dict[int, float] = {}
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
@@ -159,6 +163,8 @@ class OutboundService:
                     f"Skipped {kind} outbound job #{job_id}: TX is blocked on interface {interface_name}",
                 )
                 return
+            tx_gap_seconds = self._resolve_tx_gap_seconds(job)
+            await self._wait_for_tx_gap(interface_id=normalized_interface_id, gap_seconds=tx_gap_seconds)
             if modem_type == "TCP":
                 if self._traffic_monitor is not None:
                     sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
@@ -174,6 +180,7 @@ class OutboundService:
                             payload_hex=frame.hex(" ").upper(),
                         )
                         mark_outbound_job_sent(job_id)
+                        self._remember_tx_timestamp(interface_id=normalized_interface_id)
                         message_kind = str(payload.get("message_kind") or "").strip()
                         if kind == "message" and payload.get("aprs_message_id") is not None:
                             if message_kind == "direct_message":
@@ -220,6 +227,7 @@ class OutboundService:
                             payload_hex=frame.hex(" ").upper(),
                         )
                         mark_outbound_job_sent(job_id)
+                        self._remember_tx_timestamp(interface_id=normalized_interface_id)
                         message_kind = str(payload.get("message_kind") or "").strip()
                         if kind == "message" and payload.get("aprs_message_id") is not None:
                             if message_kind == "direct_message":
@@ -254,6 +262,7 @@ class OutboundService:
                 payload_hex=frame.hex(" ").upper(),
             )
             mark_outbound_job_sent(job_id)
+            self._remember_tx_timestamp(interface_id=normalized_interface_id)
             message_kind = str(payload.get("message_kind") or "").strip()
             if kind == "message" and payload.get("aprs_message_id") is not None:
                 if message_kind == "direct_message":
@@ -279,6 +288,28 @@ class OutboundService:
             await asyncio.wait_for(self._stop_event.wait(), timeout=delay)
         except TimeoutError:
             pass
+
+    def _resolve_tx_gap_seconds(self, job: dict[str, Any]) -> float:
+        try:
+            configured = float(job.get("tx_min_gap_seconds"))
+        except (TypeError, ValueError):
+            configured = self._min_tx_gap_seconds
+        return max(0.0, configured)
+
+    async def _wait_for_tx_gap(self, *, interface_id: int | None, gap_seconds: float) -> None:
+        if gap_seconds <= 0 or interface_id is None:
+            return
+        previous = self._last_tx_monotonic_by_interface.get(interface_id)
+        if previous is None:
+            return
+        remaining = gap_seconds - (time.monotonic() - previous)
+        if remaining > 0:
+            await self._sleep(remaining)
+
+    def _remember_tx_timestamp(self, *, interface_id: int | None) -> None:
+        if interface_id is None:
+            return
+        self._last_tx_monotonic_by_interface[interface_id] = time.monotonic()
 
     def _parse_endpoint(self, value: str) -> tuple[str, int] | None:
         host, separator, port_text = value.strip().rpartition(":")

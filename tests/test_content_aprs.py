@@ -2,6 +2,7 @@ import unittest
 
 from app.services.content import (
     _clean_decoded_tokens,
+    _format_qsy_offset_display,
     _parse_position_with_timestamp,
     _parse_position_without_timestamp,
     _parse_qsy_fields,
@@ -75,6 +76,12 @@ class AprsContentParsingTests(unittest.TestCase):
         parsed = _parse_qsy_fields("m}145.575Mhz op. Maciek_0")
         self.assertIsNotNone(parsed)
         self.assertEqual(parsed["qsy_frequency_mhz"], 145.575)
+
+    def test_format_qsy_offset_display_formats_sub_mhz_shift_in_khz(self) -> None:
+        self.assertEqual(_format_qsy_offset_display(60), "+600kHz")
+
+    def test_format_qsy_offset_display_formats_large_shift_in_mhz(self) -> None:
+        self.assertEqual(_format_qsy_offset_display(760), "+7,6MHz")
 
     def test_parse_compressed_position_decodes_expected_coordinates(self) -> None:
         parsed = _parse_position_without_timestamp(self._build_compressed_packet(52.2297, 21.0122))

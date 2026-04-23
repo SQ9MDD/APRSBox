@@ -221,6 +221,45 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
 
+    def test_late_ack_marks_failed_direct_message_as_acked(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Late ACK", path="WIDE1-1")
+            execute(
+                """
+                UPDATE aprs_messages
+                SET status = ?, failed_at = ?, failure_reason = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    MESSAGE_STATUS_FAILED,
+                    "2026-01-01T00:01:00+00:00",
+                    "No ACK received after APRS retry window.",
+                    "2026-01-01T00:01:00+00:00",
+                    int(message["id"]),
+                ),
+            )
+
+            ack_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "ack",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": f"ack{message['message_number']}",
+                }
+            )
+            process_incoming_tnc2_message(ack_line, timestamp="2026-01-01T00:01:30+00:00")
+
+            row = fetch_one("SELECT status, acked_at, failed_at, failure_reason FROM aprs_messages WHERE id = ?", (int(message["id"]),))
+            assert row is not None
+            self.assertEqual(row["status"], MESSAGE_STATUS_ACKED)
+            self.assertEqual(row["acked_at"], "2026-01-01T00:01:30+00:00")
+            self.assertIsNone(row["failed_at"])
+            self.assertEqual(str(row["failure_reason"] or ""), "")
+
     async def test_queue_send_and_rej_direct_message_marks_rejected_and_cancels_retry(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
@@ -477,7 +516,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 """
             )
             self.assertEqual(len(ack_jobs), 2)
-            self.assertTrue(all('"message_text":"ack08"' in str(job["payload_json"]) for job in ack_jobs))
+            self.assertTrue(all('"message_text":"ack8"' in str(job["payload_json"]) for job in ack_jobs))
 
     def test_incoming_third_party_message_uses_inner_sender(self) -> None:
         with temporary_database():
@@ -897,6 +936,40 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(ack_jobs), 2)
             self.assertTrue(all('"path":"WIDE2-2"' in str(job["payload_json"]) for job in ack_jobs))
 
+    def test_incoming_numbered_query_with_single_char_suffix_acks_exact_number(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SQ9MDD-7>APK005,RFONLY::SQ9MDD-4 :?APRS{1"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+            rows = fetch_all(
+                """
+                SELECT direction, message_text, message_number
+                FROM aprs_messages
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["direction"], "rx")
+            self.assertEqual(rows[0]["message_text"], "?APRS")
+            self.assertEqual(rows[0]["message_number"], "01")
+            self.assertEqual(rows[1]["direction"], "tx")
+            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack1"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 2)
+            self.assertTrue(all('"message_text":"ack1"' in str(job["payload_json"]) for job in ack_jobs))
+
     def test_duplicate_numbered_query_acknowledges_retry_without_second_auto_response(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
@@ -945,6 +1018,44 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any('"trigger":"ack-now"' in payload for payload in payloads))
             self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
             self.assertTrue(any('"trigger":"ack-duplicate"' in payload for payload in payloads))
+
+    def test_duplicate_numbered_query_via_consumed_hops_is_ack_throttled(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_direct = "SQ9MDD-7>APK005,WIDE1-1,WIDE2-1::SQ9MDD-4 :?VER{80"
+            inbound_relayed_1 = "SQ9MDD-7>APK005,SP2DIGI*,WIDE2-1::SQ9MDD-4 :?VER{80"
+            inbound_relayed_2 = "SQ9MDD-7>APK005,SP3DIGI*,WIDE2-1::SQ9MDD-4 :?VER{80"
+            process_incoming_tnc2_message(inbound_direct, timestamp="2026-01-01T00:01:00+00:00")
+            process_incoming_tnc2_message(inbound_relayed_1, timestamp="2026-01-01T00:01:02+00:00")
+            process_incoming_tnc2_message(inbound_relayed_2, timestamp="2026-01-01T00:01:03+00:00")
+
+            response_jobs = fetch_all(
+                """
+                SELECT id
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"APRSBox%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(response_jobs), 1)
+
+            ack_jobs = fetch_all(
+                """
+                SELECT payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                  AND payload_json LIKE '%"message_text":"ack80"%'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(ack_jobs), 3)
+            payloads = [str(row["payload_json"]) for row in ack_jobs]
+            self.assertTrue(any('"trigger":"ack-now"' in payload for payload in payloads))
+            self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
+            self.assertEqual(sum(1 for payload in payloads if '"trigger":"ack-duplicate"' in payload), 1)
 
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():

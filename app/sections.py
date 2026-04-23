@@ -3,6 +3,12 @@ from __future__ import annotations
 from app.models import SectionDefinition
 
 
+SERIAL_RX_SILENCE_TIMEOUT_OPTIONS = [
+    {"value": str(seconds), "label": str(seconds)}
+    for seconds in range(0, 601, 30)
+]
+
+
 SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
     "modems": SectionDefinition(
         slug="modems",
@@ -41,13 +47,21 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             },
             {"name": "device_path", "label": "Path / Adress", "type": "text", "required": False},
             {"name": "baud_rate", "label": "Baud Rate", "type": "number", "required": False},
+            {
+                "name": "serial_rx_silence_reconnect_seconds",
+                "label": "RX Silence Reconnect Timeout (s)",
+                "type": "select",
+                "required": True,
+                "default": "150",
+                "options": SERIAL_RX_SILENCE_TIMEOUT_OPTIONS,
+            },
             {"name": "enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "tx_blocked", "label": "Block TX on this interface", "type": "checkbox", "required": False},
+            {"name": "tx_min_gap_seconds", "label": "TX Min Gap (s)", "type": "number", "required": True, "default": "0.35"},
             {"name": "expose_port_enabled", "label": "Expose Port", "type": "checkbox", "required": False},
             {"name": "expose_bind_address", "label": "Bind Address", "type": "text", "required": False, "default": "0.0.0.0"},
             {"name": "expose_port", "label": "Port", "type": "number", "required": False, "default": "8002"},
             {"name": "expose_whitelist", "label": "Whitelist", "type": "textarea", "required": False, "placeholder": "192.168.1.10\n192.168.1.0/24"},
-            {"name": "notes", "label": "Notes", "type": "textarea", "required": False},
         ],
     ),
     "servers": SectionDefinition(

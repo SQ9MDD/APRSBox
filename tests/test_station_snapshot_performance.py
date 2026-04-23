@@ -6,7 +6,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.db import execute, init_db
-from app.services.content import get_heard_station_snapshots, get_related_ssids, get_station_detail, get_visible_station_snapshots
+from app.services.content import (
+    get_heard_station_snapshots,
+    get_recent_station_packets,
+    get_related_ssids,
+    get_station_detail,
+    get_visible_station_snapshots,
+)
 
 
 @contextlib.contextmanager
@@ -50,6 +56,7 @@ def sample_snapshot() -> dict[str, object]:
         "symbol_code": ">",
         "symbol_icon": "icons/verG/64.gif",
         "comment": "Test",
+        "status_text": "",
         "data_raw": {},
         "latitude": "52.36667",
         "longitude": "21.00000",
@@ -79,6 +86,22 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
         self.assertEqual(detail["display_callsign"], "SP8ABC-9")
         self.assertEqual(len(related), 1)
         self.assertEqual(related[0]["display_callsign"], "SP8ABC-9")
+
+    def test_station_detail_fields_include_status_even_when_empty(self) -> None:
+        detail = get_station_detail("SP8ABC-9", snapshots=[sample_snapshot()])
+        assert detail is not None
+        status_field = next((item for item in detail["fields"] if item["label"] == "Status"), None)
+        self.assertIsNotNone(status_field)
+        self.assertEqual(status_field["value"], "")
+
+    def test_station_detail_fields_include_latest_status_text(self) -> None:
+        snapshot = sample_snapshot()
+        snapshot["status_text"] = "Station online"
+        detail = get_station_detail("SP8ABC-9", snapshots=[snapshot])
+        assert detail is not None
+        status_field = next((item for item in detail["fields"] if item["label"] == "Status"), None)
+        self.assertIsNotNone(status_field)
+        self.assertEqual(status_field["value"], "Station online")
 
     def test_visible_station_snapshots_uses_cache_when_source_data_is_unchanged(self) -> None:
         snapshots = [sample_snapshot()]
@@ -122,6 +145,65 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
             self.assertEqual(station["callsign"], "SQ2IBK")
             self.assertTrue(str(station.get("latitude") or ""))
             self.assertTrue(str(station.get("longitude") or ""))
+
+    def test_recent_station_packets_include_status_frames_for_station(self) -> None:
+        with temporary_database():
+            beacon_line = "SP8ABC-9>APRS:!5222.00N/02100.00E>Beacon"
+            status_line = "SP8ABC-9>APRS:>Station online"
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'tx', '2m', 'TNC2-TX', ?, '0', 'TX', ?, '', ?)
+                """,
+                ("TNC-2m", beacon_line, len(beacon_line), "2026-01-01T00:00:00+00:00"),
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'tx', '2m', 'TNC2-TX', ?, '0', 'TX', ?, '', ?)
+                """,
+                ("TNC-2m", status_line, len(status_line), "2026-01-01T00:01:00+00:00"),
+            )
+
+            packets = get_recent_station_packets("SP8ABC-9", limit=10, snapshot=sample_snapshot())
+            raw_packets = [str(item.get("raw_packet") or "") for item in packets]
+
+            self.assertIn(beacon_line, raw_packets)
+            self.assertIn(status_line, raw_packets)
+
+    def test_heard_station_snapshot_captures_status_text(self) -> None:
+        with temporary_database():
+            beacon_line = "SP8ABC-9>APRS:!5222.00N/02100.00E>Beacon"
+            status_line = "SP8ABC-9>APRS:>Station online"
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'rx', '2m', 'TNC2', ?, '0', 'RX', ?, '', ?)
+                """,
+                ("TNC-2m", status_line, len(status_line), "2026-01-01T00:01:00+00:00"),
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'rx', '2m', 'TNC2', ?, '0', 'RX', ?, '', ?)
+                """,
+                ("TNC-2m", beacon_line, len(beacon_line), "2026-01-01T00:00:00+00:00"),
+            )
+
+            snapshots = get_heard_station_snapshots(limit=50)
+            detail = get_station_detail("SP8ABC-9", snapshots=snapshots)
+            assert detail is not None
+            status_field = next((item for item in detail["fields"] if item["label"] == "Status"), None)
+            self.assertIsNotNone(status_field)
+            self.assertEqual(status_field["value"], "Station online")
 
 
 if __name__ == "__main__":

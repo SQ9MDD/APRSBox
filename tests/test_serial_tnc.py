@@ -86,6 +86,7 @@ class SerialTncValidationTests(unittest.TestCase):
                     "modem_type": "SERIALL",
                     "device_path": "/dev/ttyACM0",
                     "baud_rate": "9600",
+                    "serial_rx_silence_reconnect_seconds": "0",
                     "enabled": "1",
                     "tx_blocked": "1",
                     "expose_port_enabled": "1",
@@ -100,6 +101,7 @@ class SerialTncValidationTests(unittest.TestCase):
             assert row is not None
             self.assertEqual(row["device_path"], "/dev/ttyACM0")
             self.assertEqual(int(row["baud_rate"]), 9600)
+            self.assertEqual(int(row["serial_rx_silence_reconnect_seconds"]), 0)
             self.assertEqual(int(row["tx_blocked"]), 1)
             self.assertEqual(int(row["expose_port_enabled"]), 1)
 
