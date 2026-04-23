@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.7.12 - 23.04.2026
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- 1.7.1.dev
+- 1.7.2.dev
+- 1.7.4.dev
+- 1.7.5.dev
+- 1.7.7.dev
+- 1.7.8.dev
+- 1.7.11.dev
+
+### Najważniejsze zmiany
+- `WX / Domoticz`: poprawiono kompatybilność API, obsługę `base_url` (`z/bez /json.htm`), komunikaty błędów testu połączenia oraz stabilność testu/discovery/odczytu.
+- `WX UI`: dopracowano przywracanie pozycji przewijania (`Edit`, `Save`, reload), uproszczono tabelę mapowania i ujednolicono szerokości kolumn `Required/Optional`.
+- `Messages`: uszczelniono obsługę zapytań numerowanych i deduplikację `ACK`, utrzymując poprawne mapowanie numerów (`{1 -> ack1`).
+- `TNC`: dodano `TX Min Gap` per interfejs oraz watchdog RX timeout dla `SERIALL` (z walidacją i wsparciem runtime).
+- `My Settings`: dodano ręczny `Send status` wraz z endpointem i testami.
+- `Map sources`: uproszczono widok listy źródeł i dopracowano kompaktowy układ tabel.
+- Rozszerzono testy regresyjne dla obszarów `WX`, `Messages`, `TNC` i UI.
+
 ## 1.7.11.dev - 23.04.2026
 
 ### Najważniejsze zmiany
