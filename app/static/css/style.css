@@ -3585,6 +3585,51 @@ code {
     table-layout: auto;
 }
 
+.wx-mapping-table-edit {
+    table-layout: fixed;
+}
+
+.wx-mapping-table-edit th:nth-child(1),
+.wx-mapping-table-edit td:nth-child(1) {
+    width: 23%;
+}
+
+.wx-mapping-table-edit th:nth-child(2),
+.wx-mapping-table-edit td:nth-child(2) {
+    width: 13%;
+}
+
+.wx-mapping-table-edit th:nth-child(3),
+.wx-mapping-table-edit td:nth-child(3) {
+    width: 14%;
+}
+
+.wx-mapping-table-edit th:nth-child(4),
+.wx-mapping-table-edit td:nth-child(4) {
+    width: 12%;
+}
+
+.wx-mapping-table-edit th:nth-child(5),
+.wx-mapping-table-edit td:nth-child(5) {
+    width: 12%;
+}
+
+.wx-mapping-table-edit th:nth-child(6),
+.wx-mapping-table-edit td:nth-child(6) {
+    width: 9%;
+}
+
+.wx-mapping-table-edit th:nth-child(7),
+.wx-mapping-table-edit td:nth-child(7) {
+    width: 14%;
+}
+
+.wx-mapping-table-edit th:nth-child(8),
+.wx-mapping-table-edit td:nth-child(8) {
+    width: 3.5rem;
+    text-align: center;
+}
+
 .wx-mapping-table td code,
 .wx-discovery-table td code,
 .wx-source-table td code {
