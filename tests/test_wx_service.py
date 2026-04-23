@@ -19,6 +19,7 @@ from app.services.wx import (
     safe_save_wx_config,
     safe_save_wx_source,
     save_wx_mappings,
+    test_wx_source_connection,
 )
 
 
@@ -199,6 +200,39 @@ class WxServiceTests(unittest.TestCase):
                 }
             )
             self.assertTrue(success, error)
+
+    def test_domoticz_connection_test_uses_version_endpoint_without_auth(self) -> None:
+        with temporary_database():
+            success, error, source_id = safe_save_wx_source(
+                {
+                    "name": "Domoticz",
+                    "source_type": "domoticz",
+                    "base_url": "http://domoticz.local:8080",
+                    "auth_type": "none",
+                    "token": "",
+                    "username": "",
+                    "password": "",
+                    "timeout_s": "5",
+                    "verify_tls": "",
+                    "enabled": "1",
+                }
+            )
+            self.assertTrue(success, error)
+            assert source_id is not None
+
+            def domoticz_version_response(request, timeout=0, context=None):  # type: ignore[no-untyped-def]
+                self.assertIn("/json.htm", request.full_url)
+                self.assertIn("param=getversion", request.full_url)
+                return FakeResponse({"status": "OK", "version": "2026.1"})
+
+            with patch("app.services.wx_sources.urlopen", side_effect=domoticz_version_response):
+                result = test_wx_source_connection(source_id)
+
+            self.assertTrue(result.get("ok"))
+            source_row = fetch_one("SELECT last_test_status, last_test_error FROM wx_sources WHERE id = ?", (source_id,))
+            assert source_row is not None
+            self.assertEqual(source_row["last_test_status"], "ok")
+            self.assertEqual(source_row["last_test_error"], "")
 
     def test_wx_refresh_updates_live_cache_and_uses_cached_fallback(self) -> None:
         with temporary_database():

@@ -190,12 +190,15 @@ class DomoticzSourceAdapter(WxSourceAdapter):
     def test_connection(self) -> dict[str, Any]:
         payload = self._request_json(
             "/json.htm",
-            query={"type": "command", "param": "getdevices", "filter": "all", "used": "true", "order": "Name"},
+            query={"type": "command", "param": "getversion"},
         )
         if not isinstance(payload, dict):
             raise WxSourceError("Domoticz connection test returned an unexpected payload.")
+        status = str(payload.get("status") or "").strip().upper()
+        # Some Domoticz builds may omit status for lightweight metadata responses.
+        has_version_marker = bool(str(payload.get("version") or payload.get("DomoticzVersion") or "").strip())
         return {
-            "ok": str(payload.get("status") or "").strip().upper() == "OK",
+            "ok": status == "OK" or has_version_marker,
             "details": payload,
         }
 

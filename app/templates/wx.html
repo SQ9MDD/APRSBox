@@ -614,6 +614,9 @@
             };
 
             if (panel instanceof HTMLElement) {
+                if (panel.id) {
+                    payload.panelId = panel.id;
+                }
                 const panelIndex = panels.indexOf(panel);
                 if (panelIndex >= 0) {
                     payload.panelIndex = panelIndex;
@@ -654,7 +657,17 @@
             let targetY = Number(parsed.scrollY || 0);
             const panelIndex = Number(parsed.panelIndex);
             const offsetWithinPanel = Number(parsed.offsetWithinPanel || 0);
-            if (Number.isInteger(panelIndex) && panelIndex >= 0) {
+            const panelId = String(parsed.panelId || "").trim();
+            let restoredFromPanelId = false;
+            if (panelId) {
+                const panelById = document.getElementById(panelId);
+                if (panelById instanceof HTMLElement) {
+                    const panelTop = panelById.getBoundingClientRect().top + Number(window.scrollY || 0);
+                    targetY = panelTop + offsetWithinPanel;
+                    restoredFromPanelId = true;
+                }
+            }
+            if (!restoredFromPanelId && Number.isInteger(panelIndex) && panelIndex >= 0) {
                 const panels = Array.from(document.querySelectorAll("section.panel"));
                 const panel = panels[panelIndex];
                 if (panel instanceof HTMLElement) {
