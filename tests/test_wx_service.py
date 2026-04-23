@@ -201,7 +201,7 @@ class WxServiceTests(unittest.TestCase):
             )
             self.assertTrue(success, error)
 
-    def test_domoticz_connection_test_uses_version_endpoint_without_auth(self) -> None:
+    def test_domoticz_connection_test_uses_devices_endpoint_without_auth(self) -> None:
         with temporary_database():
             success, error, source_id = safe_save_wx_source(
                 {
@@ -220,12 +220,12 @@ class WxServiceTests(unittest.TestCase):
             self.assertTrue(success, error)
             assert source_id is not None
 
-            def domoticz_version_response(request, timeout=0, context=None):  # type: ignore[no-untyped-def]
+            def domoticz_devices_response(request, timeout=0, context=None):  # type: ignore[no-untyped-def]
                 self.assertIn("/json.htm", request.full_url)
-                self.assertIn("param=getversion", request.full_url)
-                return FakeResponse({"status": "OK", "version": "2026.1"})
+                self.assertIn("type=devices", request.full_url)
+                return FakeResponse({"status": "OK", "result": []})
 
-            with patch("app.services.wx_sources.urlopen", side_effect=domoticz_version_response):
+            with patch("app.services.wx_sources.urlopen", side_effect=domoticz_devices_response):
                 result = test_wx_source_connection(source_id)
 
             self.assertTrue(result.get("ok"))
@@ -233,6 +233,35 @@ class WxServiceTests(unittest.TestCase):
             assert source_row is not None
             self.assertEqual(source_row["last_test_status"], "ok")
             self.assertEqual(source_row["last_test_error"], "")
+
+    def test_domoticz_connection_accepts_base_url_with_json_htm(self) -> None:
+        with temporary_database():
+            success, error, source_id = safe_save_wx_source(
+                {
+                    "name": "Domoticz",
+                    "source_type": "domoticz",
+                    "base_url": "http://domoticz.local:8080/json.htm",
+                    "auth_type": "none",
+                    "token": "",
+                    "username": "",
+                    "password": "",
+                    "timeout_s": "5",
+                    "verify_tls": "",
+                    "enabled": "1",
+                }
+            )
+            self.assertTrue(success, error)
+            assert source_id is not None
+
+            def domoticz_json_htm_response(request, timeout=0, context=None):  # type: ignore[no-untyped-def]
+                self.assertIn("/json.htm?", request.full_url)
+                self.assertNotIn("/json.htm/json.htm", request.full_url)
+                return FakeResponse({"status": "OK", "result": []})
+
+            with patch("app.services.wx_sources.urlopen", side_effect=domoticz_json_htm_response):
+                result = test_wx_source_connection(source_id)
+
+            self.assertTrue(result.get("ok"))
 
     def test_wx_refresh_updates_live_cache_and_uses_cached_fallback(self) -> None:
         with temporary_database():
@@ -306,6 +335,70 @@ class WxServiceTests(unittest.TestCase):
             self.assertEqual(cached_row["normalized_unit"], "F")
             self.assertEqual(cached_row["value_origin"], "cache")
             self.assertIn("Network error", str(cached_row["last_error"] or ""))
+
+    def test_wx_refresh_reads_domoticz_device_value(self) -> None:
+        with temporary_database():
+            success, error, source_id = safe_save_wx_source(
+                {
+                    "name": "Domoticz",
+                    "source_type": "domoticz",
+                    "base_url": "http://domoticz.local:8080",
+                    "auth_type": "none",
+                    "token": "",
+                    "username": "",
+                    "password": "",
+                    "timeout_s": "5",
+                    "verify_tls": "",
+                    "enabled": "1",
+                }
+            )
+            self.assertTrue(success, error)
+            assert source_id is not None
+            save_wx_mappings(
+                {
+                    "temperature_f": {
+                        "source_id": str(source_id),
+                        "identifier": "123",
+                        "selector_kind": "field",
+                        "selector_name": "Temp",
+                        "unit_override": "",
+                        "cache_max_age_s": "600",
+                    }
+                }
+            )
+
+            def domoticz_temperature_response(request, timeout=0, context=None):  # type: ignore[no-untyped-def]
+                self.assertIn("type=devices", request.full_url)
+                self.assertIn("rid=123", request.full_url)
+                return FakeResponse(
+                    {
+                        "status": "OK",
+                        "result": [
+                            {
+                                "idx": "123",
+                                "Name": "Outdoor",
+                                "Temp": "20.0",
+                                "TempUnit": "C",
+                                "LastUpdate": "2026-04-23 18:00:00",
+                                "Type": "Temp",
+                                "SubType": "Temperature",
+                            }
+                        ],
+                    }
+                )
+
+            with patch("app.services.wx_sources.urlopen", side_effect=domoticz_temperature_response):
+                refresh_single_wx_mapping("temperature_f")
+
+            row = fetch_one(
+                "SELECT status, normalized_value, normalized_unit, value_origin FROM wx_runtime_cache WHERE parameter_name = ?",
+                ("temperature_f",),
+            )
+            assert row is not None
+            self.assertEqual(row["status"], "LIVE")
+            self.assertEqual(row["normalized_value"], "68")
+            self.assertEqual(row["normalized_unit"], "F")
+            self.assertEqual(row["value_origin"], "live")
 
     def test_wx_refresh_marks_stale_when_cache_is_too_old(self) -> None:
         with temporary_database():

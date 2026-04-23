@@ -276,7 +276,22 @@ def test_wx_source_connection(source_id: int) -> dict[str, Any]:
     try:
         result = build_wx_source_adapter(source).test_connection()
         ok = bool(result.get("ok"))
-        error = "" if ok else "Connection test failed."
+        if ok:
+            error = ""
+        else:
+            details = result.get("details")
+            detail_error = ""
+            if isinstance(details, dict):
+                for key in ("message", "error", "title"):
+                    candidate = str(details.get(key) or "").strip()
+                    if candidate:
+                        detail_error = candidate
+                        break
+                if not detail_error:
+                    status_text = str(details.get("status") or "").strip()
+                    if status_text and status_text.upper() != "OK":
+                        detail_error = f"Source status: {status_text}"
+            error = detail_error or "Connection test failed."
     except WxSourceError as exc:
         ok = False
         error = str(exc)

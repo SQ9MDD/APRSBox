@@ -6,7 +6,7 @@ import ssl
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from app.services.wx_definitions import WX_SELECTOR_KINDS
@@ -82,10 +82,15 @@ class WxSourceAdapter:
     def _build_url(self, path: str, *, query: dict[str, Any] | None = None) -> str:
         base_url = str(self.source.get("base_url") or "").strip().rstrip("/")
         normalized_path = path if path.startswith("/") else f"/{path}"
-        if not query:
-            return f"{base_url}{normalized_path}"
-        encoded_query = urlencode({key: value for key, value in query.items() if value not in {None, ""}})
-        return f"{base_url}{normalized_path}?{encoded_query}"
+        parsed_base = urlsplit(base_url)
+        base_path = parsed_base.path or ""
+        if base_path.endswith(normalized_path):
+            resolved_path = base_path
+        else:
+            resolved_path = f"{base_path.rstrip('/')}{normalized_path}" if base_path else normalized_path
+        extra_query = urlencode({key: value for key, value in (query or {}).items() if value not in {None, ""}})
+        combined_query = "&".join(part for part in (parsed_base.query, extra_query) if part)
+        return urlunsplit((parsed_base.scheme, parsed_base.netloc, resolved_path, combined_query, ""))
 
     def _auth_headers(self) -> dict[str, str]:
         auth_type = str(self.source.get("auth_type") or "none").strip().lower()
@@ -190,22 +195,23 @@ class DomoticzSourceAdapter(WxSourceAdapter):
     def test_connection(self) -> dict[str, Any]:
         payload = self._request_json(
             "/json.htm",
-            query={"type": "command", "param": "getversion"},
+            query={"type": "devices", "filter": "all", "order": "Name"},
         )
         if not isinstance(payload, dict):
             raise WxSourceError("Domoticz connection test returned an unexpected payload.")
         status = str(payload.get("status") or "").strip().upper()
-        # Some Domoticz builds may omit status for lightweight metadata responses.
+        rows = payload.get("result")
+        has_device_list = isinstance(rows, list)
         has_version_marker = bool(str(payload.get("version") or payload.get("DomoticzVersion") or "").strip())
         return {
-            "ok": status == "OK" or has_version_marker,
+            "ok": status == "OK" or has_device_list or has_version_marker,
             "details": payload,
         }
 
     def discover_items(self) -> list[dict[str, Any]]:
         payload = self._request_json(
             "/json.htm",
-            query={"type": "command", "param": "getdevices", "filter": "all", "used": "true", "order": "Name"},
+            query={"type": "devices", "filter": "all", "order": "Name"},
         )
         if not isinstance(payload, dict):
             raise WxSourceError("Domoticz discovery returned an unexpected payload.")
@@ -242,7 +248,7 @@ class DomoticzSourceAdapter(WxSourceAdapter):
             raise WxSourceError("Domoticz idx is required.")
         payload = self._request_json(
             "/json.htm",
-            query={"type": "command", "param": "getdevices", "rid": identifier},
+            query={"type": "devices", "rid": identifier},
         )
         if not isinstance(payload, dict):
             raise WxSourceError("Domoticz device lookup returned an unexpected payload.")

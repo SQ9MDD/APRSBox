@@ -586,14 +586,24 @@
             return normalizedPath === wxRootPath || normalizedPath.startsWith(`${wxRootPath}/`);
         };
 
+        const resolvePathname = (value) => {
+            try {
+                return new URL(String(value || ""), window.location.origin).pathname;
+            } catch (_error) {
+                return "";
+            }
+        };
+
         const persistScrollState = (form, submitter) => {
             if (!(form instanceof HTMLFormElement)) {
                 return;
             }
-            if (String(form.method || "get").toLowerCase() !== "post") {
+            const method = String(form.method || "get").toLowerCase();
+            if (!["get", "post"].includes(method)) {
                 return;
             }
-            if (!isWxPath(window.location.pathname)) {
+            const actionPath = resolvePathname(form.getAttribute("action") || form.action || window.location.pathname);
+            if (!isWxPath(actionPath)) {
                 return;
             }
 
@@ -625,6 +635,39 @@
                 payload.offsetWithinPanel = Number(window.scrollY || 0) - panelTop;
             }
 
+            try {
+                window.sessionStorage.setItem(scrollStateStorageKey, JSON.stringify(payload));
+            } catch (_error) {
+                // Ignore storage failures.
+            }
+        };
+
+        const persistViewportScrollState = () => {
+            if (!isWxPath(window.location.pathname)) {
+                return;
+            }
+            const panels = Array.from(document.querySelectorAll("section.panel"));
+            const currentY = Number(window.scrollY || 0);
+            const payload = {
+                savedAtMs: Date.now(),
+                scrollY: currentY,
+            };
+            for (const [panelIndex, panel] of panels.entries()) {
+                if (!(panel instanceof HTMLElement)) {
+                    continue;
+                }
+                const panelTop = panel.getBoundingClientRect().top + currentY;
+                const panelBottom = panelTop + panel.offsetHeight;
+                if (currentY < panelTop || currentY >= panelBottom) {
+                    continue;
+                }
+                if (panel.id) {
+                    payload.panelId = panel.id;
+                }
+                payload.panelIndex = panelIndex;
+                payload.offsetWithinPanel = currentY - panelTop;
+                break;
+            }
             try {
                 window.sessionStorage.setItem(scrollStateStorageKey, JSON.stringify(payload));
             } catch (_error) {
@@ -696,6 +739,10 @@
             },
             true
         );
+
+        window.addEventListener("beforeunload", () => {
+            persistViewportScrollState();
+        });
 
         window.requestAnimationFrame(() => {
             restoreScrollState();
