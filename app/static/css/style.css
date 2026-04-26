@@ -95,47 +95,47 @@
 }
 
 :root[data-theme="dark"][data-palette="red-tactic"] {
-    --bg: #160f12;
-    --bg-layer: #21151a;
-    --sidebar: rgba(24, 16, 20, 0.92);
-    --panel: rgba(35, 23, 29, 0.96);
-    --panel-alt: #472834;
-    --panel-soft: #583340;
-    --panel-emphasis: #6a4050;
-    --border: #7a5160;
-    --text: #ecdbe2;
-    --muted: #bfa0aa;
-    --text-muted: #bfa0aa;
-    --surface: #583340;
-    --accent: #ef476f;
-    --accent-strong: #c73457;
-    --accent-soft: rgba(239, 71, 111, 0.17);
-    --focus-ring: rgba(239, 71, 111, 0.24);
-    --hover-layer: rgba(239, 71, 111, 0.1);
-    --border-hover: rgba(239, 71, 111, 0.36);
+    --bg: #180c0c;
+    --bg-layer: #251212;
+    --sidebar: rgba(26, 14, 14, 0.92);
+    --panel: rgba(38, 21, 21, 0.96);
+    --panel-alt: #4b2424;
+    --panel-soft: #5e2e2e;
+    --panel-emphasis: #723a3a;
+    --border: #864747;
+    --text: #f0dddd;
+    --muted: #c3a0a0;
+    --text-muted: #c3a0a0;
+    --surface: #5e2e2e;
+    --accent: #ff3b30;
+    --accent-strong: #d52a21;
+    --accent-soft: rgba(255, 59, 48, 0.18);
+    --focus-ring: rgba(255, 59, 48, 0.25);
+    --hover-layer: rgba(255, 59, 48, 0.11);
+    --border-hover: rgba(255, 59, 48, 0.38);
     --code: rgba(255, 255, 255, 0.06);
 }
 
 :root[data-theme="light"][data-palette="red-tactic"] {
-    --bg: #f1e3e7;
-    --bg-layer: #f7edf0;
-    --sidebar: rgba(239, 227, 233, 0.95);
-    --panel: rgba(250, 242, 246, 0.98);
-    --panel-alt: #ead9df;
-    --panel-soft: #e1cdd5;
-    --panel-emphasis: #d8c1ca;
-    --border: #c5a4b1;
-    --text: #442a33;
-    --muted: #7f5b67;
-    --text-muted: #7f5b67;
-    --surface: #e6d3da;
-    --accent: #b4233c;
-    --accent-strong: #901c30;
-    --accent-soft: rgba(180, 35, 60, 0.12);
-    --focus-ring: rgba(180, 35, 60, 0.18);
-    --hover-layer: rgba(180, 35, 60, 0.06);
-    --border-hover: rgba(180, 35, 60, 0.28);
-    --code: rgba(56, 18, 27, 0.08);
+    --bg: #f3e3e3;
+    --bg-layer: #faeeee;
+    --sidebar: rgba(241, 227, 227, 0.95);
+    --panel: rgba(252, 243, 243, 0.98);
+    --panel-alt: #edd8d8;
+    --panel-soft: #e5cccc;
+    --panel-emphasis: #ddc0c0;
+    --border: #caa3a3;
+    --text: #4a2626;
+    --muted: #845b5b;
+    --text-muted: #845b5b;
+    --surface: #e9d2d2;
+    --accent: #c62828;
+    --accent-strong: #a31f1f;
+    --accent-soft: rgba(198, 40, 40, 0.13);
+    --focus-ring: rgba(198, 40, 40, 0.19);
+    --hover-layer: rgba(198, 40, 40, 0.07);
+    --border-hover: rgba(198, 40, 40, 0.29);
+    --code: rgba(63, 19, 19, 0.08);
 }
 
 :root[data-theme="dark"][data-palette="forest-pine"] {
