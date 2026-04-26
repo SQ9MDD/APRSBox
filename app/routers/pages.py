@@ -14,6 +14,7 @@ from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
     create_system_job,
     fetch_system_job,
+    get_app_setting,
     log_event,
     mark_system_job_error,
     mark_system_job_running,
@@ -122,6 +123,7 @@ from app.services.system import (
     start_service_restart_job,
 )
 from app.template_helpers import build_template_context
+from app.ui_palette import get_ui_palette_label, get_ui_palette_options, is_supported_ui_palette, normalize_ui_palette
 from app.services.wx import (
     delete_wx_source,
     discover_wx_source_items,
@@ -464,6 +466,7 @@ def _settings_page_context(
     flash_success: bool = True,
     current_language: str | None = None,
     current_default_units: str | None = None,
+    current_ui_palette: str | None = None,
     map_source_edit_id: int | None = None,
     map_source_form: dict[str, Any] | None = None,
 ) -> dict:
@@ -477,6 +480,7 @@ def _settings_page_context(
         else (_map_source_form_from_source(map_source_edit) if map_source_edit is not None else _empty_map_source_form())
     )
     update_channels = list_update_channels()
+    resolved_ui_palette = normalize_ui_palette(current_ui_palette if current_ui_palette is not None else get_app_setting("ui_palette"))
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -500,6 +504,9 @@ def _settings_page_context(
         can_manage_database_maintenance=current_user.role in {"admin", "operator"},
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
+        current_ui_palette=resolved_ui_palette,
+        current_ui_palette_label=get_ui_palette_label(resolved_ui_palette),
+        ui_palette_options=get_ui_palette_options(),
         aprs_device_identification_status=get_aprs_device_identification_status(),
         event_log_keep_rows=DEFAULT_EVENT_LOG_KEEP_ROWS,
         database_vacuum_blocked=database_vacuum_blocked,
@@ -1033,17 +1040,22 @@ def settings_update_global(
     request: Request,
     language: str = Form(...),
     default_units: str = Form(...),
+    ui_palette: str = Form(""),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
+    raw_ui_palette = str(ui_palette or "").strip().lower()
     selected_language = normalize_language(language)
     selected_default_units = str(default_units or "").strip().lower()
+    selected_ui_palette = normalize_ui_palette(raw_ui_palette)
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
         return JSONResponse({"ok": False, "error": _translate("Unsupported language selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if selected_default_units not in {"metric", "imperial"}:
         return JSONResponse({"ok": False, "error": _translate("Unsupported unit selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if not is_supported_ui_palette(raw_ui_palette):
+        return JSONResponse({"ok": False, "error": _translate("Unsupported color palette selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
@@ -1055,12 +1067,14 @@ def settings_update_global(
         )
 
     set_app_setting("app_language", selected_language)
+    set_app_setting("ui_palette", selected_ui_palette)
     return JSONResponse(
         {
             "ok": True,
             "message": _translate("Global settings updated."),
             "current_language": selected_language,
             "current_default_units": selected_default_units,
+            "current_ui_palette": selected_ui_palette,
             "reload": True,
         }
     )

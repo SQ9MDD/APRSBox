@@ -7,7 +7,15 @@
     <script>
         (() => {
             const storedTheme = localStorage.getItem("aprsbox-theme");
-            document.documentElement.setAttribute("data-theme", storedTheme || "dark");
+            const serverPalette = {{ current_ui_palette|tojson }};
+            const root = document.documentElement;
+            root.setAttribute("data-theme", storedTheme || "dark");
+            root.setAttribute("data-palette", serverPalette || "green-core");
+            try {
+                localStorage.setItem("aprsbox-palette", serverPalette || "green-core");
+            } catch (_) {
+                return;
+            }
         })();
     </script>
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}">

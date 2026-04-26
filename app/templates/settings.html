@@ -36,6 +36,15 @@
                     <option value="imperial" {% if current_default_units == "imperial" %}selected{% endif %}>{{ t("Imperial") }}</option>
                 </select>
             </label>
+            <label>
+                <span>{{ t("Color palette") }}</span>
+                <select name="ui_palette">
+                    {% for option in ui_palette_options %}
+                    <option value="{{ option.value }}" {% if current_ui_palette == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                    {% endfor %}
+                </select>
+                <span class="muted small">{{ t("Applies globally across the GUI. Green Core is the default palette.") }}</span>
+            </label>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save Global Settings") }}</button>
             </div>
@@ -46,6 +55,8 @@
             <dd><code>{{ current_language }}</code></dd>
             <dt>{{ t("Units") }}</dt>
             <dd>{{ t("Imperial") if current_default_units == "imperial" else t("Metric") }}</dd>
+            <dt>{{ t("Color palette") }}</dt>
+            <dd>{{ t(current_ui_palette_label) }}</dd>
         </dl>
         <p class="muted">{{ t("Your role can view global settings but cannot change them.") }}</p>
         {% endif %}
