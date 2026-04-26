@@ -55,14 +55,10 @@
 }
 
 .map-canvas {
-    --map-pane-opacity: 0.8;
+    --map-pane-opacity: 1;
     position: absolute;
     inset: 0;
-    background: #000;
-}
-
-:root[data-theme="light"] .map-canvas {
-    background: #fff;
+    background: var(--panel-soft);
 }
 
 .map-canvas .leaflet-tile-pane,
@@ -72,7 +68,12 @@
 }
 
 .map-mask {
-    display: none;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--map-mask-color);
+    opacity: var(--map-mask-default-opacity, 0.2);
+    z-index: 450;
 }
 
 .map-latest-overlay {

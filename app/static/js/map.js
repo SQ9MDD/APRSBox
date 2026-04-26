@@ -26,6 +26,7 @@
     const tileSourceOutput = document.getElementById("map-tile-source");
     const tileStatusOutput = document.getElementById("map-tile-status");
     const mapCanvas = document.getElementById("map-canvas");
+    const mapMask = document.getElementById("map-mask");
     const resetButton = document.getElementById("map-reset-view");
     const toggleTracksButton = document.getElementById("map-toggle-tracks");
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
@@ -234,6 +235,13 @@
         if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
             return storedOpacity;
         }
+        const computedDefaultOpacity = Number.parseFloat(
+            window.getComputedStyle(document.documentElement).getPropertyValue("--map-mask-default-opacity") || ""
+        );
+        if (Number.isFinite(computedDefaultOpacity)) {
+            const asPercent = Math.max(0, Math.min(100, Math.round(computedDefaultOpacity * 100)));
+            return asPercent - (asPercent % 10);
+        }
         return 20;
     }
 
@@ -241,8 +249,8 @@
         const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
             ? opacityPercent - (opacityPercent % 10)
             : 20;
-        if (mapCanvas) {
-            mapCanvas.style.setProperty("--map-pane-opacity", String(1 - (normalizedOpacity / 100)));
+        if (mapMask) {
+            mapMask.style.setProperty("opacity", String(normalizedOpacity / 100));
         }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);

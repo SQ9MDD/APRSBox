@@ -4,6 +4,7 @@ DEFAULT_UI_PALETTE = "green-core"
 
 UI_PALETTE_OPTIONS: tuple[dict[str, str], ...] = (
     {"value": "green-core", "label": "Green Core (default)"},
+    {"value": "red-tactic", "label": "Red Tactic"},
     {"value": "forest-pine", "label": "Forest Pine"},
     {"value": "nordic-blue", "label": "Nordic Blue"},
     {"value": "slate-cyan", "label": "Slate Cyan"},

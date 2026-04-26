@@ -258,13 +258,20 @@
         if (Number.isInteger(legacyOpacity) && legacyOpacity >= 0 && legacyOpacity <= 100 && legacyOpacity % 10 === 0) {
             return legacyOpacity;
         }
+        const computedDefaultOpacity = Number.parseFloat(
+            window.getComputedStyle(document.documentElement).getPropertyValue("--map-mask-default-opacity") || ""
+        );
+        if (Number.isFinite(computedDefaultOpacity)) {
+            const asPercent = Math.max(0, Math.min(100, Math.round(computedDefaultOpacity * 100)));
+            return asPercent - (asPercent % 10);
+        }
         return 20;
     }
 
     function applyMaskOpacity() {
-        if (!mapCanvas) return;
+        if (!mapRoot) return;
         const opacityPercent = resolveMaskOpacity();
-        mapCanvas.style.setProperty("--map-pane-opacity", String(1 - (opacityPercent / 100)));
+        mapRoot.style.setProperty("--map-mask-default-opacity", String(opacityPercent / 100));
     }
 
     function renderTrack(station, stationTrack) {

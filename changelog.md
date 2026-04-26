@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.15.dev - 27.04.2026
+
+### Najważniejsze zmiany
+- `Settings -> Global Settings`: dodano globalną paletę kolorów `Red Tactic` (obok istniejących motywów dzień/noc).
+- `Messages`: styl bąbli wiadomości wychodzących (`TX`) został przepięty na tokeny motywu (bez sztywnego, lokalnie osadzonego zielonego RGBA).
+- `Map` i `Station detail map`: sterowanie `Mask opacity` działa teraz przez nakładkę tintowaną kolorem aktywnego tematu/palety, zamiast globalnego przygaszania warstw kafli.
+
 ## 1.7.12 - 23.04.2026
 
 ### Stable release
