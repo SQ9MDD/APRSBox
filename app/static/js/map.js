@@ -25,7 +25,6 @@
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
     const tileStatusOutput = document.getElementById("map-tile-status");
-    const mapCanvas = document.getElementById("map-canvas");
     const mapMask = document.getElementById("map-mask");
     const resetButton = document.getElementById("map-reset-view");
     const toggleTracksButton = document.getElementById("map-toggle-tracks");
@@ -72,6 +71,8 @@
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
+    const mapMaskPaneName = "aprsbox-map-mask-pane";
+    const mapMaskPaneZIndex = "550";
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
@@ -129,8 +130,14 @@
         zoomControl: true,
     });
 
-    if (mapCanvas && mapMask && mapMask.parentElement !== mapCanvas) {
-        mapCanvas.appendChild(mapMask);
+    if (mapMask) {
+        const existingMaskPane = map.getPane(mapMaskPaneName);
+        const maskPane = existingMaskPane || map.createPane(mapMaskPaneName);
+        maskPane.style.zIndex = mapMaskPaneZIndex;
+        maskPane.style.pointerEvents = "none";
+        if (mapMask.parentElement !== maskPane) {
+            maskPane.appendChild(mapMask);
+        }
     }
 
     const tileLayerOptions = {

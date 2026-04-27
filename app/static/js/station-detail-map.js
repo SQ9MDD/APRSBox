@@ -23,6 +23,8 @@
     const legacyMaskOpacityStorageKey = "aprsbox-map-mask-opacity";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
+    const mapMaskPaneName = "aprsbox-map-mask-pane";
+    const mapMaskPaneZIndex = "550";
     const i18n = Object.freeze({
         tocall: pageRoot.dataset.i18nTocall || "TOCALL",
         micE: pageRoot.dataset.i18nMicE || "Mic-E",
@@ -275,6 +277,19 @@
         mapMask.style.setProperty("opacity", String(opacityPercent / 100));
     }
 
+    function attachMapMaskToPane(mapInstance) {
+        if (!mapMask || !mapInstance) {
+            return;
+        }
+        const existingMaskPane = mapInstance.getPane(mapMaskPaneName);
+        const maskPane = existingMaskPane || mapInstance.createPane(mapMaskPaneName);
+        maskPane.style.zIndex = mapMaskPaneZIndex;
+        maskPane.style.pointerEvents = "none";
+        if (mapMask.parentElement !== maskPane) {
+            maskPane.appendChild(mapMask);
+        }
+    }
+
     function renderTrack(station, stationTrack) {
         if (!map) {
             return;
@@ -390,10 +405,6 @@
             return;
         }
 
-        if (mapMask && mapMask.parentElement !== mapCanvas) {
-            mapCanvas.appendChild(mapMask);
-        }
-
         if (mapPlaceholder) {
             mapPlaceholder.hidden = true;
         }
@@ -428,6 +439,7 @@
                 zoomControl: true,
                 attributionControl: true,
             });
+            attachMapMaskToPane(map);
             tileLayer = createTileLayer(tileConfig).addTo(map);
             renderTrack(station, stationTrack);
             marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);
@@ -443,6 +455,7 @@
         marker.setIcon(icon);
         renderTrack(station, stationTrack);
         map.setView(latLng, map.getZoom(), { animate: false });
+        attachMapMaskToPane(map);
         if (!tileConfigMatches(tileLayer, tileConfig)) {
             if (tileLayer) {
                 map.removeLayer(tileLayer);
