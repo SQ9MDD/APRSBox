@@ -153,11 +153,16 @@
             return;
         }
         const size = map.getSize();
-        mapMaskPane.style.width = `${size.x}px`;
-        mapMaskPane.style.height = `${size.y}px`;
+        const bleedX = size.x;
+        const bleedY = size.y;
+        mapMaskPane.style.transform = "";
+        mapMaskPane.style.left = `${-bleedX}px`;
+        mapMaskPane.style.top = `${-bleedY}px`;
+        mapMaskPane.style.width = `${size.x + (bleedX * 2)}px`;
+        mapMaskPane.style.height = `${size.y + (bleedY * 2)}px`;
     }
 
-    function ensureMapMaskLayer(mapInstance, mapCanvasElement) {
+    function ensureMapMaskLayer(mapInstance) {
         mapMaskPane = mapInstance.getPane(mapMaskPaneName);
         if (!mapMaskPane) {
             mapMaskPane = mapInstance.createPane(mapMaskPaneName);
@@ -165,8 +170,9 @@
         mapMaskPane.classList.add("map-mask-pane");
         mapMaskPane.style.zIndex = "300";
         mapMaskPane.style.pointerEvents = "none";
-        if (mapCanvasElement && mapMaskPane.parentElement !== mapCanvasElement) {
-            mapCanvasElement.appendChild(mapMaskPane);
+        const mapPaneElement = mapInstance.getPane("mapPane");
+        if (mapPaneElement && mapMaskPane.parentElement !== mapPaneElement) {
+            mapPaneElement.appendChild(mapMaskPane);
         }
         syncMapMaskLayerViewport();
         let layer = mapMaskPane.querySelector(".map-mask-layer");
@@ -179,7 +185,7 @@
     }
 
     map.on("resize zoom move", syncMapMaskLayerViewport);
-    mapMaskLayer = ensureMapMaskLayer(map, mapCanvas);
+    mapMaskLayer = ensureMapMaskLayer(map);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
     stationLayer.addTo(map);
     rulerLayer.addTo(map);
@@ -290,7 +296,7 @@
             : 20;
         const maskLayerOpacity = maskLayerOpacityForMaskOpacity(normalizedOpacity);
         if (!mapMaskLayer) {
-            mapMaskLayer = ensureMapMaskLayer(map, mapCanvas);
+            mapMaskLayer = ensureMapMaskLayer(map);
         }
         if (mapMaskLayer) {
             mapMaskLayer.style.opacity = String(maskLayerOpacity);
