@@ -55,14 +55,25 @@
 }
 
 .map-canvas {
-    --map-tile-brightness: 1;
+    --map-mask-layer-opacity: 0;
     position: absolute;
     inset: 0;
     background: var(--panel-soft);
 }
 
-.map-canvas .leaflet-tile {
-    filter: brightness(var(--map-tile-brightness));
+.map-canvas .leaflet-tile-pane {
+    width: 100%;
+    height: 100%;
+}
+
+.map-canvas .leaflet-tile-pane::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--map-mask-layer-color);
+    opacity: var(--map-mask-layer-opacity);
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
 }
 
 .map-latest-overlay {

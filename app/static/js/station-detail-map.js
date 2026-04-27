@@ -57,12 +57,12 @@
         return `aprsbox-map-mask-opacity-${currentThemeName()}`;
     }
 
-    function tileBrightnessForMaskOpacity(opacityPercent) {
+    function maskLayerOpacityForMaskOpacity(opacityPercent) {
         const intensity = Math.max(0, Math.min(100, opacityPercent)) / 100;
         if (currentThemeName() === "light") {
-            return 1 + (intensity * 0.35);
+            return intensity * 0.5;
         }
-        return Math.max(0.15, 1 - (intensity * 0.85));
+        return intensity * 0.9;
     }
 
     function escapeHtml(value) {
@@ -279,7 +279,7 @@
     function applyMaskOpacity() {
         if (!mapCanvas) return;
         const opacityPercent = resolveMaskOpacity();
-        mapCanvas.style.setProperty("--map-tile-brightness", String(tileBrightnessForMaskOpacity(opacityPercent)));
+        mapCanvas.style.setProperty("--map-mask-layer-opacity", String(maskLayerOpacityForMaskOpacity(opacityPercent)));
     }
 
     function renderTrack(station, stationTrack) {
