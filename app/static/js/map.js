@@ -165,7 +165,7 @@
         mapMaskPane.classList.add("map-mask-pane");
         mapMaskPane.style.zIndex = "300";
         mapMaskPane.style.pointerEvents = "none";
-        if (mapCanvasElement && !mapCanvasElement.contains(mapMaskPane)) {
+        if (mapCanvasElement && mapMaskPane.parentElement !== mapCanvasElement) {
             mapCanvasElement.appendChild(mapMaskPane);
         }
         syncMapMaskLayerViewport();
