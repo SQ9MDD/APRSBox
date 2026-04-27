@@ -3562,15 +3562,14 @@ select:focus-visible,
     position: relative;
 }
 
-.station-detail-map-root::after {
-    content: "";
+.station-detail-map-mask {
     position: absolute;
     inset: 0;
     pointer-events: none;
     background: var(--map-mask-color);
     opacity: var(--map-mask-default-opacity, 0.2);
     border-radius: var(--radius-sm);
-    z-index: 450;
+    z-index: 350;
 }
 
 .station-detail-map-canvas {
