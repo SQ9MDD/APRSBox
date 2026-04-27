@@ -55,18 +55,14 @@
 }
 
 .map-canvas {
+    --map-tile-brightness: 1;
     position: absolute;
     inset: 0;
     background: var(--panel-soft);
 }
 
-.map-mask {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: var(--map-mask-color);
-    opacity: var(--map-mask-default-opacity, 0.2);
-    z-index: 250;
+.map-canvas .leaflet-tile {
+    filter: brightness(var(--map-tile-brightness));
 }
 
 .map-latest-overlay {

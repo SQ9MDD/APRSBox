@@ -57,7 +57,6 @@
     --message-bubble-tx-bg-top: color-mix(in srgb, var(--accent) 28%, transparent);
     --message-bubble-tx-bg-bottom: color-mix(in srgb, var(--accent) 16%, transparent);
     --message-bubble-tx-border: color-mix(in srgb, var(--accent) 46%, transparent);
-    --map-mask-color: color-mix(in srgb, var(--bg-layer) 78%, var(--accent) 22%);
     --map-mask-default-opacity: 0.2;
 }
 
@@ -90,7 +89,6 @@
     --message-bubble-tx-bg-top: color-mix(in srgb, var(--accent) 19%, transparent);
     --message-bubble-tx-bg-bottom: color-mix(in srgb, var(--accent) 8%, transparent);
     --message-bubble-tx-border: color-mix(in srgb, var(--accent) 33%, transparent);
-    --map-mask-color: color-mix(in srgb, var(--bg-layer) 76%, var(--accent) 24%);
     --map-mask-default-opacity: 0.16;
 }
 
@@ -3562,22 +3560,17 @@ select:focus-visible,
     position: relative;
 }
 
-.station-detail-map-mask {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: var(--map-mask-color);
-    opacity: var(--map-mask-default-opacity, 0.2);
-    border-radius: var(--radius-sm);
-    z-index: 250;
-}
-
 .station-detail-map-canvas {
+    --map-tile-brightness: 1;
     min-height: 22rem;
     border-radius: var(--radius-sm);
     overflow: hidden;
     border: 1px solid var(--border);
     background: var(--panel-soft);
+}
+
+.station-detail-map-canvas .leaflet-tile {
+    filter: brightness(var(--map-tile-brightness));
 }
 
 .station-detail-map-root[hidden],

@@ -25,7 +25,7 @@
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
     const tileStatusOutput = document.getElementById("map-tile-status");
-    const mapMask = document.getElementById("map-mask");
+    const mapCanvas = document.getElementById("map-canvas");
     const resetButton = document.getElementById("map-reset-view");
     const toggleTracksButton = document.getElementById("map-toggle-tracks");
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
@@ -71,8 +71,6 @@
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
-    const mapMaskPaneName = "aprsbox-map-mask-pane";
-    const mapMaskPaneZIndex = "250";
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
@@ -129,22 +127,6 @@
         zoom: initialView.zoom,
         zoomControl: true,
     });
-
-    if (mapMask) {
-        const existingMaskPane = map.getPane(mapMaskPaneName);
-        const maskPane = existingMaskPane || map.createPane(mapMaskPaneName);
-        maskPane.style.zIndex = mapMaskPaneZIndex;
-        maskPane.style.pointerEvents = "none";
-        maskPane.style.left = "0";
-        maskPane.style.top = "0";
-        maskPane.style.right = "0";
-        maskPane.style.bottom = "0";
-        maskPane.style.width = "100%";
-        maskPane.style.height = "100%";
-        if (mapMask.parentElement !== maskPane) {
-            maskPane.appendChild(mapMask);
-        }
-    }
 
     const tileLayerOptions = {
         attribution: tileAttribution,
@@ -266,8 +248,8 @@
         const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
             ? opacityPercent - (opacityPercent % 10)
             : 20;
-        if (mapMask) {
-            mapMask.style.setProperty("opacity", String(normalizedOpacity / 100));
+        if (mapCanvas) {
+            mapCanvas.style.setProperty("--map-tile-brightness", String(1 - (normalizedOpacity / 100)));
         }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);

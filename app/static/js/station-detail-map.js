@@ -2,7 +2,6 @@
     const pageRoot = document.getElementById("station-detail-page");
     const mapRoot = document.getElementById("station-detail-map-root");
     const mapCanvas = document.getElementById("station-detail-map-canvas");
-    const mapMask = document.getElementById("station-detail-map-mask");
     const mapPlaceholder = document.getElementById("station-map-placeholder");
     const title = document.getElementById("station-detail-title");
     const meta = document.getElementById("station-detail-meta");
@@ -23,8 +22,6 @@
     const legacyMaskOpacityStorageKey = "aprsbox-map-mask-opacity";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
-    const mapMaskPaneName = "aprsbox-map-mask-pane";
-    const mapMaskPaneZIndex = "250";
     const i18n = Object.freeze({
         tocall: pageRoot.dataset.i18nTocall || "TOCALL",
         micE: pageRoot.dataset.i18nMicE || "Mic-E",
@@ -272,28 +269,9 @@
     }
 
     function applyMaskOpacity() {
-        if (!mapMask) return;
+        if (!mapCanvas) return;
         const opacityPercent = resolveMaskOpacity();
-        mapMask.style.setProperty("opacity", String(opacityPercent / 100));
-    }
-
-    function attachMapMaskToPane(mapInstance) {
-        if (!mapMask || !mapInstance) {
-            return;
-        }
-        const existingMaskPane = mapInstance.getPane(mapMaskPaneName);
-        const maskPane = existingMaskPane || mapInstance.createPane(mapMaskPaneName);
-        maskPane.style.zIndex = mapMaskPaneZIndex;
-        maskPane.style.pointerEvents = "none";
-        maskPane.style.left = "0";
-        maskPane.style.top = "0";
-        maskPane.style.right = "0";
-        maskPane.style.bottom = "0";
-        maskPane.style.width = "100%";
-        maskPane.style.height = "100%";
-        if (mapMask.parentElement !== maskPane) {
-            maskPane.appendChild(mapMask);
-        }
+        mapCanvas.style.setProperty("--map-tile-brightness", String(1 - (opacityPercent / 100)));
     }
 
     function renderTrack(station, stationTrack) {
@@ -445,7 +423,6 @@
                 zoomControl: true,
                 attributionControl: true,
             });
-            attachMapMaskToPane(map);
             tileLayer = createTileLayer(tileConfig).addTo(map);
             renderTrack(station, stationTrack);
             marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);
@@ -461,7 +438,6 @@
         marker.setIcon(icon);
         renderTrack(station, stationTrack);
         map.setView(latLng, map.getZoom(), { animate: false });
-        attachMapMaskToPane(map);
         if (!tileConfigMatches(tileLayer, tileConfig)) {
             if (tileLayer) {
                 map.removeLayer(tileLayer);

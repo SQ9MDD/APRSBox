@@ -106,7 +106,6 @@
                 {% if station.latitude_float is none or station.longitude_float is none %}hidden{% endif %}
             >
                 <div id="station-detail-map-canvas" class="station-detail-map-canvas" aria-label="{{ t('Station detail map') }}"></div>
-                <div id="station-detail-map-mask" class="station-detail-map-mask" aria-hidden="true"></div>
             </div>
             <div class="station-map-placeholder" id="station-map-placeholder" {% if station.latitude_float is not none and station.longitude_float is not none %}hidden{% endif %}>
                 <strong>{{ t("No position available") }}</strong>
