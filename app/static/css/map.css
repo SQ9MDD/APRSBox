@@ -55,16 +55,9 @@
 }
 
 .map-canvas {
-    --map-pane-opacity: 1;
     position: absolute;
     inset: 0;
     background: var(--panel-soft);
-}
-
-.map-canvas .leaflet-tile-pane,
-.map-canvas .leaflet-overlay-pane,
-.map-canvas .leaflet-shadow-pane {
-    opacity: var(--map-pane-opacity);
 }
 
 .map-mask {
@@ -73,7 +66,7 @@
     pointer-events: none;
     background: var(--map-mask-color);
     opacity: var(--map-mask-default-opacity, 0.2);
-    z-index: 550;
+    z-index: 250;
 }
 
 .map-latest-overlay {

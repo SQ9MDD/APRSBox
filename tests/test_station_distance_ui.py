@@ -112,6 +112,23 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("const mapStationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)
         self.assertIn("root.dispatchEvent(new window.CustomEvent(mapStationsRefreshEventName", script_source)
 
+    def test_map_mask_stays_below_leaflet_overlays_and_markers(self) -> None:
+        map_script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        detail_script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")
+        map_stylesheet_source = Path("app/static/css/map.css").read_text(encoding="utf-8")
+        app_stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn('const mapMaskPaneZIndex = "250";', map_script_source)
+        self.assertIn('const mapMaskPaneZIndex = "250";', detail_script_source)
+        self.assertIn("pointerEvents = \"none\"", map_script_source)
+        self.assertIn("pointerEvents = \"none\"", detail_script_source)
+        self.assertIn("z-index: 250;", map_stylesheet_source)
+        self.assertIn("z-index: 250;", app_stylesheet_source)
+        self.assertNotIn("--map-pane-opacity", map_stylesheet_source)
+        self.assertNotIn("--map-pane-opacity", app_stylesheet_source)
+        self.assertNotIn(".map-canvas .leaflet-overlay-pane", map_stylesheet_source)
+        self.assertNotIn(".station-detail-map-canvas .leaflet-overlay-pane", app_stylesheet_source)
+
     def test_map_latest_overlay_script_handles_overlay_toggle_and_qsy(self) -> None:
         script_source = Path("app/static/js/map-latest-overlay.js").read_text(encoding="utf-8")
         self.assertIn("const stationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)

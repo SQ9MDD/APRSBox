@@ -72,7 +72,7 @@
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     const mapMaskPaneName = "aprsbox-map-mask-pane";
-    const mapMaskPaneZIndex = "550";
+    const mapMaskPaneZIndex = "250";
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;

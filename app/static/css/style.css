@@ -3569,22 +3569,15 @@ select:focus-visible,
     background: var(--map-mask-color);
     opacity: var(--map-mask-default-opacity, 0.2);
     border-radius: var(--radius-sm);
-    z-index: 550;
+    z-index: 250;
 }
 
 .station-detail-map-canvas {
-    --map-pane-opacity: 1;
     min-height: 22rem;
     border-radius: var(--radius-sm);
     overflow: hidden;
     border: 1px solid var(--border);
     background: var(--panel-soft);
-}
-
-.station-detail-map-canvas .leaflet-tile-pane,
-.station-detail-map-canvas .leaflet-overlay-pane,
-.station-detail-map-canvas .leaflet-shadow-pane {
-    opacity: var(--map-pane-opacity);
 }
 
 .station-detail-map-root[hidden],
