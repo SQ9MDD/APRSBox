@@ -49,6 +49,8 @@
     let trackPolyline = null;
     let trackDots = [];
     const mapMaskPaneName = "map-mask-pane";
+    let mapMaskPane = null;
+    let mapMaskLayer = null;
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -59,11 +61,7 @@
     }
 
     function maskLayerOpacityForMaskOpacity(opacityPercent) {
-        const intensity = Math.max(0, Math.min(100, opacityPercent)) / 100;
-        if (currentThemeName() === "light") {
-            return intensity * 0.5;
-        }
-        return intensity * 0.9;
+        return Math.max(0, Math.min(100, opacityPercent)) / 100;
     }
 
     function escapeHtml(value) {
@@ -280,7 +278,14 @@
     function applyMaskOpacity() {
         if (!mapCanvas) return;
         const opacityPercent = resolveMaskOpacity();
-        mapCanvas.style.setProperty("--map-mask-layer-opacity", String(maskLayerOpacityForMaskOpacity(opacityPercent)));
+        const maskLayerOpacity = maskLayerOpacityForMaskOpacity(opacityPercent);
+        if (!mapMaskLayer && map) {
+            mapMaskLayer = ensureMapMaskLayer(map, mapCanvas);
+        }
+        if (mapMaskLayer) {
+            mapMaskLayer.style.opacity = String(maskLayerOpacity);
+        }
+        mapCanvas.style.setProperty("--map-mask-layer-opacity", String(maskLayerOpacity));
     }
 
     function renderTrack(station, stationTrack) {
@@ -382,18 +387,34 @@
         return window.L.tileLayer(tileConfig.tile_url, options);
     }
 
-    function ensureMapMaskPane(mapInstance) {
-        let pane = mapInstance.getPane(mapMaskPaneName);
-        if (!pane) {
-            pane = mapInstance.createPane(mapMaskPaneName);
+    function syncMapMaskLayerViewport() {
+        if (!mapMaskPane || !map) {
+            return;
         }
-        pane.style.zIndex = "300";
-        pane.style.pointerEvents = "none";
-        if (pane.getElementsByClassName("map-mask-layer").length === 0) {
-            const layer = document.createElement("div");
+        const size = map.getSize();
+        mapMaskPane.style.width = `${size.x}px`;
+        mapMaskPane.style.height = `${size.y}px`;
+    }
+
+    function ensureMapMaskLayer(mapInstance, mapCanvasElement) {
+        mapMaskPane = mapInstance.getPane(mapMaskPaneName);
+        if (!mapMaskPane) {
+            mapMaskPane = mapInstance.createPane(mapMaskPaneName);
+        }
+        mapMaskPane.classList.add("map-mask-pane");
+        mapMaskPane.style.zIndex = "300";
+        mapMaskPane.style.pointerEvents = "none";
+        if (mapCanvasElement && !mapCanvasElement.contains(mapMaskPane)) {
+            mapCanvasElement.appendChild(mapMaskPane);
+        }
+        syncMapMaskLayerViewport();
+        let layer = mapMaskPane.querySelector(".map-mask-layer");
+        if (!layer) {
+            layer = document.createElement("div");
             layer.className = "map-mask-layer";
-            pane.appendChild(layer);
+            mapMaskPane.appendChild(layer);
         }
+        return layer;
     }
 
     function ensureMap(station, mapConfig, stationTrack) {
@@ -446,7 +467,9 @@
                 zoomControl: true,
                 attributionControl: true,
             });
-            ensureMapMaskPane(map);
+            map.on("resize zoom move", syncMapMaskLayerViewport);
+            mapMaskLayer = ensureMapMaskLayer(map, mapCanvas);
+            applyMaskOpacity();
             tileLayer = createTileLayer(tileConfig).addTo(map);
             renderTrack(station, stationTrack);
             marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);
@@ -467,6 +490,9 @@
                 map.removeLayer(tileLayer);
             }
             tileLayer = createTileLayer(tileConfig).addTo(map);
+        }
+        if (!mapMaskLayer) {
+            mapMaskLayer = ensureMapMaskLayer(map, mapCanvas);
         }
     }
 

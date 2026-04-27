@@ -98,11 +98,7 @@
     }
 
     function maskLayerOpacityForMaskOpacity(opacityPercent) {
-        const intensity = Math.max(0, Math.min(100, opacityPercent)) / 100;
-        if (currentThemeName() === "light") {
-            return intensity * 0.5;
-        }
-        return intensity * 0.9;
+        return Math.max(0, Math.min(100, opacityPercent)) / 100;
     }
 
     function resolveInitialView() {
@@ -136,6 +132,8 @@
         zoomControl: true,
     });
     const mapMaskPaneName = "map-mask-pane";
+    let mapMaskPane = null;
+    let mapMaskLayer = null;
 
     const tileLayerOptions = {
         attribution: tileAttribution,
@@ -150,21 +148,38 @@
         tileLayerOptions.subdomains = tileSubdomains;
     }
 
-    function ensureMapMaskPane() {
-        let pane = map.getPane(mapMaskPaneName);
-        if (!pane) {
-            pane = map.createPane(mapMaskPaneName);
+    function syncMapMaskLayerViewport() {
+        if (!mapMaskPane) {
+            return;
         }
-        pane.style.zIndex = "300";
-        pane.style.pointerEvents = "none";
-        if (pane.getElementsByClassName("map-mask-layer").length === 0) {
-            const layer = document.createElement("div");
-            layer.className = "map-mask-layer";
-            pane.appendChild(layer);
-        }
+        const size = map.getSize();
+        mapMaskPane.style.width = `${size.x}px`;
+        mapMaskPane.style.height = `${size.y}px`;
     }
 
-    ensureMapMaskPane();
+    function ensureMapMaskLayer(mapInstance, mapCanvasElement) {
+        mapMaskPane = mapInstance.getPane(mapMaskPaneName);
+        if (!mapMaskPane) {
+            mapMaskPane = mapInstance.createPane(mapMaskPaneName);
+        }
+        mapMaskPane.classList.add("map-mask-pane");
+        mapMaskPane.style.zIndex = "300";
+        mapMaskPane.style.pointerEvents = "none";
+        if (mapCanvasElement && !mapCanvasElement.contains(mapMaskPane)) {
+            mapCanvasElement.appendChild(mapMaskPane);
+        }
+        syncMapMaskLayerViewport();
+        let layer = mapMaskPane.querySelector(".map-mask-layer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.className = "map-mask-layer";
+            mapMaskPane.appendChild(layer);
+        }
+        return layer;
+    }
+
+    map.on("resize zoom move", syncMapMaskLayerViewport);
+    mapMaskLayer = ensureMapMaskLayer(map, mapCanvas);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
     stationLayer.addTo(map);
     rulerLayer.addTo(map);
@@ -273,8 +288,15 @@
         const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
             ? opacityPercent - (opacityPercent % 10)
             : 20;
+        const maskLayerOpacity = maskLayerOpacityForMaskOpacity(normalizedOpacity);
+        if (!mapMaskLayer) {
+            mapMaskLayer = ensureMapMaskLayer(map, mapCanvas);
+        }
+        if (mapMaskLayer) {
+            mapMaskLayer.style.opacity = String(maskLayerOpacity);
+        }
         if (mapCanvas) {
-            mapCanvas.style.setProperty("--map-mask-layer-opacity", String(maskLayerOpacityForMaskOpacity(normalizedOpacity)));
+            mapCanvas.style.setProperty("--map-mask-layer-opacity", String(maskLayerOpacity));
         }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);
