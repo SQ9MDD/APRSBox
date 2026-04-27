@@ -2,6 +2,7 @@
     const pageRoot = document.getElementById("station-detail-page");
     const mapRoot = document.getElementById("station-detail-map-root");
     const mapCanvas = document.getElementById("station-detail-map-canvas");
+    const mapMask = document.getElementById("station-detail-map-mask");
     const mapPlaceholder = document.getElementById("station-map-placeholder");
     const title = document.getElementById("station-detail-title");
     const meta = document.getElementById("station-detail-meta");
@@ -269,9 +270,9 @@
     }
 
     function applyMaskOpacity() {
-        if (!mapRoot) return;
+        if (!mapMask) return;
         const opacityPercent = resolveMaskOpacity();
-        mapRoot.style.setProperty("--map-mask-default-opacity", String(opacityPercent / 100));
+        mapMask.style.setProperty("opacity", String(opacityPercent / 100));
     }
 
     function renderTrack(station, stationTrack) {
