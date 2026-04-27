@@ -285,6 +285,12 @@
         const maskPane = existingMaskPane || mapInstance.createPane(mapMaskPaneName);
         maskPane.style.zIndex = mapMaskPaneZIndex;
         maskPane.style.pointerEvents = "none";
+        maskPane.style.left = "0";
+        maskPane.style.top = "0";
+        maskPane.style.right = "0";
+        maskPane.style.bottom = "0";
+        maskPane.style.width = "100%";
+        maskPane.style.height = "100%";
         if (mapMask.parentElement !== maskPane) {
             maskPane.appendChild(mapMask);
         }
