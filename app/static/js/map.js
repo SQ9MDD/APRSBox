@@ -97,6 +97,14 @@
         return `aprsbox-map-mask-opacity-${currentThemeName()}`;
     }
 
+    function tileBrightnessForMaskOpacity(opacityPercent) {
+        const intensity = Math.max(0, Math.min(100, opacityPercent)) / 100;
+        if (currentThemeName() === "light") {
+            return 1 + (intensity * 0.35);
+        }
+        return Math.max(0.15, 1 - (intensity * 0.85));
+    }
+
     function resolveInitialView() {
         try {
             const raw = window.localStorage.getItem(mapViewStorageKey);
@@ -249,7 +257,7 @@
             ? opacityPercent - (opacityPercent % 10)
             : 20;
         if (mapCanvas) {
-            mapCanvas.style.setProperty("--map-tile-brightness", String(1 - (normalizedOpacity / 100)));
+            mapCanvas.style.setProperty("--map-tile-brightness", String(tileBrightnessForMaskOpacity(normalizedOpacity)));
         }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);

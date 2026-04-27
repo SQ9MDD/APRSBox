@@ -122,6 +122,12 @@ class StationDistanceUiTests(unittest.TestCase):
 
         self.assertIn("--map-tile-brightness", map_script_source)
         self.assertIn("--map-tile-brightness", detail_script_source)
+        self.assertIn("function tileBrightnessForMaskOpacity(opacityPercent)", map_script_source)
+        self.assertIn("function tileBrightnessForMaskOpacity(opacityPercent)", detail_script_source)
+        self.assertIn("return 1 + (intensity * 0.35);", map_script_source)
+        self.assertIn("return 1 + (intensity * 0.35);", detail_script_source)
+        self.assertIn("return Math.max(0.15, 1 - (intensity * 0.85));", map_script_source)
+        self.assertIn("return Math.max(0.15, 1 - (intensity * 0.85));", detail_script_source)
         self.assertIn(".map-canvas .leaflet-tile", map_stylesheet_source)
         self.assertIn(".station-detail-map-canvas .leaflet-tile", app_stylesheet_source)
         self.assertIn("filter: brightness(var(--map-tile-brightness));", map_stylesheet_source)
