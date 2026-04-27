@@ -390,6 +390,10 @@
             return;
         }
 
+        if (mapMask && mapMask.parentElement !== mapCanvas) {
+            mapCanvas.appendChild(mapMask);
+        }
+
         if (mapPlaceholder) {
             mapPlaceholder.hidden = true;
         }

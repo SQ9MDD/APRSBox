@@ -129,6 +129,10 @@
         zoomControl: true,
     });
 
+    if (mapCanvas && mapMask && mapMask.parentElement !== mapCanvas) {
+        mapCanvas.appendChild(mapMask);
+    }
+
     const tileLayerOptions = {
         attribution: tileAttribution,
     };
