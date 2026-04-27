@@ -48,6 +48,7 @@
     let tileLayer = null;
     let trackPolyline = null;
     let trackDots = [];
+    const mapMaskPaneName = "map-mask-pane";
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -381,6 +382,20 @@
         return window.L.tileLayer(tileConfig.tile_url, options);
     }
 
+    function ensureMapMaskPane(mapInstance) {
+        let pane = mapInstance.getPane(mapMaskPaneName);
+        if (!pane) {
+            pane = mapInstance.createPane(mapMaskPaneName);
+        }
+        pane.style.zIndex = "300";
+        pane.style.pointerEvents = "none";
+        if (pane.getElementsByClassName("map-mask-layer").length === 0) {
+            const layer = document.createElement("div");
+            layer.className = "map-mask-layer";
+            pane.appendChild(layer);
+        }
+    }
+
     function ensureMap(station, mapConfig, stationTrack) {
         const hasCoordinates = Number.isFinite(Number(station.latitude_float)) && Number.isFinite(Number(station.longitude_float));
         if (!hasCoordinates) {
@@ -431,6 +446,7 @@
                 zoomControl: true,
                 attributionControl: true,
             });
+            ensureMapMaskPane(map);
             tileLayer = createTileLayer(tileConfig).addTo(map);
             renderTrack(station, stationTrack);
             marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);

@@ -135,6 +135,7 @@
         zoom: initialView.zoom,
         zoomControl: true,
     });
+    const mapMaskPaneName = "map-mask-pane";
 
     const tileLayerOptions = {
         attribution: tileAttribution,
@@ -148,6 +149,22 @@
     if (tileSubdomains.length > 0) {
         tileLayerOptions.subdomains = tileSubdomains;
     }
+
+    function ensureMapMaskPane() {
+        let pane = map.getPane(mapMaskPaneName);
+        if (!pane) {
+            pane = map.createPane(mapMaskPaneName);
+        }
+        pane.style.zIndex = "300";
+        pane.style.pointerEvents = "none";
+        if (pane.getElementsByClassName("map-mask-layer").length === 0) {
+            const layer = document.createElement("div");
+            layer.className = "map-mask-layer";
+            pane.appendChild(layer);
+        }
+    }
+
+    ensureMapMaskPane();
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
     stationLayer.addTo(map);
     rulerLayer.addTo(map);
