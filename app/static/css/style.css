@@ -3569,7 +3569,7 @@ select:focus-visible,
     background: var(--map-mask-color);
     opacity: var(--map-mask-default-opacity, 0.2);
     border-radius: var(--radius-sm);
-    z-index: 350;
+    z-index: 550;
 }
 
 .station-detail-map-canvas {
