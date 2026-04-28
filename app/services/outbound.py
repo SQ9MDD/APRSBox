@@ -4,7 +4,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from app.db import fetch_one, get_connection, log_event, utc_now
+from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.services.tx_scope import TX_SCOPE_ALL_ACTIVE, TX_SCOPE_SINGLE, normalize_tx_scope
 
 KISS_FEND = 0xC0
 KISS_FESC = 0xDB
@@ -25,6 +26,133 @@ OUTBOUND_STATUS_SENT = "sent"
 OUTBOUND_STATUS_FAILED = "failed"
 
 
+def _list_active_tnc_modems() -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE enabled = 1
+          AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
+    return [dict(row) for row in rows]
+
+
+def _get_modem_by_id(interface_id: int) -> dict[str, Any] | None:
+    modem = fetch_one(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE id = ?
+        """,
+        (interface_id,),
+    )
+    return dict(modem) if modem is not None else None
+
+
+def _resolve_station_target_modems(station_settings: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    scope = normalize_tx_scope(station_settings.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
+    if scope == TX_SCOPE_ALL_ACTIVE:
+        modems = _list_active_tnc_modems()
+        if not modems:
+            return None, "No active TNC interfaces are available."
+        return modems, None
+
+    beacon_interface_id = station_settings.get("beacon_interface_id")
+    if beacon_interface_id in {None, ""}:
+        return None, "Interface is required."
+    try:
+        interface_id = int(beacon_interface_id)
+    except (TypeError, ValueError):
+        return None, "Selected interface is invalid."
+    modem = _get_modem_by_id(interface_id)
+    if modem is None:
+        return None, "Selected interface does not exist."
+    return [modem], None
+
+
+def _resolve_wx_target_modems(payload: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    scope = normalize_tx_scope(payload.get("tx_scope"), default=TX_SCOPE_SINGLE)
+    if scope == TX_SCOPE_ALL_ACTIVE:
+        interface_ids: list[int] = []
+        for item in payload.get("interface_ids") or []:
+            try:
+                interface_ids.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        if not interface_ids:
+            return None, "No active TNC interfaces are available."
+        modems: list[dict[str, Any]] = []
+        missing = False
+        for interface_id in interface_ids:
+            modem = _get_modem_by_id(interface_id)
+            if modem is None:
+                missing = True
+                continue
+            modems.append(modem)
+        if not modems:
+            return None, "No active TNC interfaces are available."
+        if missing:
+            log_event("WARNING", "outbound", "WX all-active target list contained unavailable interfaces.")
+        return modems, None
+
+    interface_id = payload.get("interface_id")
+    if interface_id in {None, ""}:
+        return None, "WX interface is required."
+    try:
+        normalized_interface_id = int(interface_id)
+    except (TypeError, ValueError):
+        return None, "Selected WX interface is invalid."
+    modem = _get_modem_by_id(normalized_interface_id)
+    if modem is None:
+        return None, "Selected WX interface does not exist."
+    return [modem], None
+
+
+def _enqueue_jobs_for_modems(
+    *,
+    kind: str,
+    payload: dict[str, Any],
+    modems: list[dict[str, Any]],
+    scheduled_at: str,
+    aprs_message_id: int | None = None,
+) -> list[int]:
+    now_text = utc_now()
+    payload_json = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    job_ids: list[int] = []
+    with get_connection() as connection:
+        for modem in modems:
+            cursor = connection.execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, aprs_message_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+                """,
+                (
+                    kind,
+                    int(modem["id"]),
+                    aprs_message_id,
+                    payload_json,
+                    OUTBOUND_STATUS_QUEUED,
+                    scheduled_at,
+                    now_text,
+                    now_text,
+                ),
+            )
+            job_ids.append(int(cursor.lastrowid))
+    return job_ids
+
+
+def _format_queue_result(label: str, job_ids: list[int]) -> str:
+    if len(job_ids) == 1:
+        return f"{label} queued as job #{job_ids[0]}."
+    joined_ids = ", ".join(str(job_id) for job_id in job_ids)
+    return f"{label} queued as jobs #{joined_ids}."
+
+
 def enqueue_beacon_job(
     station_settings: dict[str, Any],
     *,
@@ -34,25 +162,11 @@ def enqueue_beacon_job(
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
-    beacon_interface_id = station_settings.get("beacon_interface_id")
     if not callsign:
         return False, "Callsign is required."
-    if beacon_interface_id in {None, ""}:
-        return False, "Interface is required."
-    try:
-        interface_id = int(beacon_interface_id)
-    except (TypeError, ValueError):
-        return False, "Selected interface is invalid."
-    modem = fetch_one(
-        """
-        SELECT id, name, modem_type, band, device_path, enabled
-        FROM modems
-        WHERE id = ?
-        """,
-        (interface_id,),
-    )
-    if modem is None:
-        return False, "Selected interface does not exist."
+    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    if not target_modems:
+        return False, str(target_error or "Interface is required.")
 
     latitude = _parse_coordinate(station_settings.get("latitude"))
     longitude = _parse_coordinate(station_settings.get("longitude"))
@@ -74,30 +188,19 @@ def enqueue_beacon_job(
         "beacon_path": str(station_settings.get("beacon_path") or "").strip(),
         "trigger": str(trigger or "manual").strip() or "manual",
     }
-    now_text = utc_now()
-    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO outbound_jobs(
-                kind, interface_id, payload_json, status, scheduled_at,
-                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
-            """,
-            (
-                OUTBOUND_KIND_BEACON,
-                int(modem["id"]),
-                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
-                OUTBOUND_STATUS_QUEUED,
-                scheduled_at,
-                now_text,
-                now_text,
-            ),
-        )
-        job_id = cursor.lastrowid
-    log_event("INFO", "outbound", f"Queued {payload['trigger']} beacon job #{job_id} for interface {modem['name']}")
-    return True, f"Beacon queued as job #{job_id}."
+    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()
+    job_ids = _enqueue_jobs_for_modems(
+        kind=OUTBOUND_KIND_BEACON,
+        payload=payload,
+        modems=target_modems,
+        scheduled_at=scheduled_at,
+    )
+    modem_names = ", ".join(str(modem["name"]) for modem in target_modems)
+    if len(job_ids) == 1:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} beacon job #{job_ids[0]} for interface {modem_names}")
+    else:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} beacon jobs {job_ids} for interfaces: {modem_names}")
+    return True, _format_queue_result("Beacon", job_ids)
 
 
 def enqueue_status_job(
@@ -109,28 +212,14 @@ def enqueue_status_job(
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
-    beacon_interface_id = station_settings.get("beacon_interface_id")
     status_text = str(station_settings.get("status_text") or "").strip()
     if not callsign:
         return False, "Callsign is required."
-    if beacon_interface_id in {None, ""}:
-        return False, "Interface is required."
     if not status_text:
         return False, "Status text is required."
-    try:
-        interface_id = int(beacon_interface_id)
-    except (TypeError, ValueError):
-        return False, "Selected interface is invalid."
-    modem = fetch_one(
-        """
-        SELECT id, name, modem_type, band, device_path, enabled
-        FROM modems
-        WHERE id = ?
-        """,
-        (interface_id,),
-    )
-    if modem is None:
-        return False, "Selected interface does not exist."
+    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    if not target_modems:
+        return False, str(target_error or "Interface is required.")
 
     payload = {
         "aprs_message_id": aprs_message_id,
@@ -139,30 +228,19 @@ def enqueue_status_job(
         "status_text": status_text,
         "trigger": str(trigger or "manual").strip() or "manual",
     }
-    now_text = utc_now()
-    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO outbound_jobs(
-                kind, interface_id, payload_json, status, scheduled_at,
-                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
-            """,
-            (
-                OUTBOUND_KIND_STATUS,
-                int(modem["id"]),
-                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
-                OUTBOUND_STATUS_QUEUED,
-                scheduled_at,
-                now_text,
-                now_text,
-            ),
-        )
-        job_id = cursor.lastrowid
-    log_event("INFO", "outbound", f"Queued {payload['trigger']} status job #{job_id} for interface {modem['name']}")
-    return True, f"Status queued as job #{job_id}."
+    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()
+    job_ids = _enqueue_jobs_for_modems(
+        kind=OUTBOUND_KIND_STATUS,
+        payload=payload,
+        modems=target_modems,
+        scheduled_at=scheduled_at,
+    )
+    modem_names = ", ".join(str(modem["name"]) for modem in target_modems)
+    if len(job_ids) == 1:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} status job #{job_ids[0]} for interface {modem_names}")
+    else:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} status jobs {job_ids} for interfaces: {modem_names}")
+    return True, _format_queue_result("Status", job_ids)
 
 
 def pending_beacon_job_count() -> int:
@@ -199,25 +277,11 @@ def enqueue_object_job(
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
-    beacon_interface_id = station_settings.get("beacon_interface_id")
     if not callsign:
         return False, "Callsign is required."
-    if beacon_interface_id in {None, ""}:
-        return False, "Interface is required."
-    try:
-        interface_id = int(beacon_interface_id)
-    except (TypeError, ValueError):
-        return False, "Selected interface is invalid."
-    modem = fetch_one(
-        """
-        SELECT id, name, modem_type, band, device_path, enabled
-        FROM modems
-        WHERE id = ?
-        """,
-        (interface_id,),
-    )
-    if modem is None:
-        return False, "Selected interface does not exist."
+    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    if not target_modems:
+        return False, str(target_error or "Interface is required.")
 
     latitude = _parse_coordinate(obj.get("latitude"))
     longitude = _parse_coordinate(obj.get("longitude"))
@@ -243,30 +307,19 @@ def enqueue_object_job(
         "object_timestamp": _object_timestamp(str(obj.get("lifetime") or "temporary")),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
     }
-    now_text = utc_now()
-    scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text)
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO outbound_jobs(
-                kind, interface_id, payload_json, status, scheduled_at,
-                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
-            """,
-            (
-                OUTBOUND_KIND_OBJECT,
-                int(modem["id"]),
-                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
-                OUTBOUND_STATUS_QUEUED,
-                scheduled_at,
-                now_text,
-                now_text,
-            ),
-        )
-        job_id = cursor.lastrowid
-    log_event("INFO", "outbound", f"Queued {payload['trigger']} object job #{job_id} for interface {modem['name']}")
-    return True, f"Object queued as job #{job_id}."
+    scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now())
+    job_ids = _enqueue_jobs_for_modems(
+        kind=OUTBOUND_KIND_OBJECT,
+        payload=payload,
+        modems=target_modems,
+        scheduled_at=scheduled_at,
+    )
+    modem_names = ", ".join(str(modem["name"]) for modem in target_modems)
+    if len(job_ids) == 1:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} object job #{job_ids[0]} for interface {modem_names}")
+    else:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} object jobs {job_ids} for interfaces: {modem_names}")
+    return True, _format_queue_result("Object", job_ids)
 
 
 def enqueue_message_job(
@@ -278,25 +331,11 @@ def enqueue_message_job(
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
-    beacon_interface_id = station_settings.get("beacon_interface_id")
     if not callsign:
         return False, "Callsign is required."
-    if beacon_interface_id in {None, ""}:
-        return False, "Interface is required."
-    try:
-        interface_id = int(beacon_interface_id)
-    except (TypeError, ValueError):
-        return False, "Selected interface is invalid."
-    modem = fetch_one(
-        """
-        SELECT id, name, modem_type, band, device_path, enabled
-        FROM modems
-        WHERE id = ?
-        """,
-        (interface_id,),
-    )
-    if modem is None:
-        return False, "Selected interface does not exist."
+    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    if not target_modems:
+        return False, str(target_error or "Interface is required.")
 
     payload = {
         "message_id": int(bulletin["id"]),
@@ -309,53 +348,28 @@ def enqueue_message_job(
         "message_text": str(bulletin.get("message_text") or "").strip(),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
     }
-    now_text = utc_now()
-    scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text)
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO outbound_jobs(
-                kind, interface_id, payload_json, status, scheduled_at,
-                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
-            """,
-            (
-                OUTBOUND_KIND_MESSAGE,
-                int(modem["id"]),
-                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
-                OUTBOUND_STATUS_QUEUED,
-                scheduled_at,
-                now_text,
-                now_text,
-            ),
-        )
-        job_id = cursor.lastrowid
-    log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_id} for interface {modem['name']}")
-    return True, f"Message queued as job #{job_id}."
+    scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now())
+    job_ids = _enqueue_jobs_for_modems(
+        kind=OUTBOUND_KIND_MESSAGE,
+        payload=payload,
+        modems=target_modems,
+        scheduled_at=scheduled_at,
+    )
+    modem_names = ", ".join(str(modem["name"]) for modem in target_modems)
+    if len(job_ids) == 1:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_ids[0]} for interface {modem_names}")
+    else:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} message jobs {job_ids} for interfaces: {modem_names}")
+    return True, _format_queue_result("Message", job_ids)
 
 
 def enqueue_wx_job(payload: dict[str, Any]) -> tuple[bool, str]:
     callsign = str(payload.get("callsign") or "").strip().upper()
-    interface_id = payload.get("interface_id")
     if not callsign:
         return False, "WX callsign is required."
-    if interface_id in {None, ""}:
-        return False, "WX interface is required."
-    try:
-        normalized_interface_id = int(interface_id)
-    except (TypeError, ValueError):
-        return False, "Selected WX interface is invalid."
-    modem = fetch_one(
-        """
-        SELECT id, name, modem_type, band, device_path, enabled
-        FROM modems
-        WHERE id = ?
-        """,
-        (normalized_interface_id,),
-    )
-    if modem is None:
-        return False, "Selected WX interface does not exist."
+    target_modems, target_error = _resolve_wx_target_modems(payload)
+    if not target_modems:
+        return False, str(target_error or "WX interface is required.")
     latitude = _parse_coordinate(payload.get("latitude"))
     longitude = _parse_coordinate(payload.get("longitude"))
     if latitude is None or longitude is None:
@@ -365,10 +379,9 @@ def enqueue_wx_job(payload: dict[str, Any]) -> tuple[bool, str]:
     if not isinstance(weather, dict):
         return False, "WX weather payload is invalid."
 
-    stored_payload = {
+    base_payload = {
         "callsign": callsign,
         "ssid": str(payload.get("ssid") or "").strip(),
-        "interface_id": int(modem["id"]),
         "latitude": latitude,
         "longitude": longitude,
         "path": str(payload.get("path") or "").strip(),
@@ -377,28 +390,36 @@ def enqueue_wx_job(payload: dict[str, Any]) -> tuple[bool, str]:
         "generated_at": str(payload.get("generated_at") or utc_now()).strip(),
     }
     now_text = utc_now()
+    job_ids: list[int] = []
     with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO outbound_jobs(
-                kind, interface_id, payload_json, status, scheduled_at,
-                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+        for modem in target_modems:
+            stored_payload = dict(base_payload)
+            stored_payload["interface_id"] = int(modem["id"])
+            cursor = connection.execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+                """,
+                (
+                    OUTBOUND_KIND_WX,
+                    int(modem["id"]),
+                    json.dumps(stored_payload, ensure_ascii=True, separators=(",", ":")),
+                    OUTBOUND_STATUS_QUEUED,
+                    now_text,
+                    now_text,
+                    now_text,
+                ),
             )
-            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
-            """,
-            (
-                OUTBOUND_KIND_WX,
-                int(modem["id"]),
-                json.dumps(stored_payload, ensure_ascii=True, separators=(",", ":")),
-                OUTBOUND_STATUS_QUEUED,
-                now_text,
-                now_text,
-                now_text,
-            ),
-        )
-        job_id = int(cursor.lastrowid)
-    log_event("INFO", "outbound", f"Queued {stored_payload['trigger']} WX job #{job_id} for interface {modem['name']}")
-    return True, f"WX queued as job #{job_id}."
+            job_ids.append(int(cursor.lastrowid))
+    modem_names = ", ".join(str(modem["name"]) for modem in target_modems)
+    if len(job_ids) == 1:
+        log_event("INFO", "outbound", f"Queued {base_payload['trigger']} WX job #{job_ids[0]} for interface {modem_names}")
+    else:
+        log_event("INFO", "outbound", f"Queued {base_payload['trigger']} WX jobs {job_ids} for interfaces: {modem_names}")
+    return True, _format_queue_result("WX", job_ids)
 
 
 def enqueue_digi_tx_job(
@@ -1000,51 +1021,25 @@ def _enqueue_generic_message_payload(
     scheduled_for: datetime | None = None,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
-    beacon_interface_id = station_settings.get("beacon_interface_id")
     if not callsign:
         return False, "Callsign is required."
-    if beacon_interface_id in {None, ""}:
-        return False, "Interface is required."
-    try:
-        interface_id = int(beacon_interface_id)
-    except (TypeError, ValueError):
-        return False, "Selected interface is invalid."
-    modem = fetch_one(
-        """
-        SELECT id, name, modem_type, band, device_path, enabled
-        FROM modems
-        WHERE id = ?
-        """,
-        (interface_id,),
+    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    if not target_modems:
+        return False, str(target_error or "Interface is required.")
+    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()
+    job_ids = _enqueue_jobs_for_modems(
+        kind=OUTBOUND_KIND_MESSAGE,
+        payload=payload,
+        modems=target_modems,
+        scheduled_at=scheduled_at,
+        aprs_message_id=payload.get("aprs_message_id"),
     )
-    if modem is None:
-        return False, "Selected interface does not exist."
-
-    now_text = utc_now()
-    scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else now_text
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO outbound_jobs(
-                kind, interface_id, aprs_message_id, payload_json, status, scheduled_at,
-                locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
-            """,
-            (
-                OUTBOUND_KIND_MESSAGE,
-                int(modem["id"]),
-                payload.get("aprs_message_id"),
-                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
-                OUTBOUND_STATUS_QUEUED,
-                scheduled_at,
-                now_text,
-                now_text,
-            ),
-        )
-        job_id = int(cursor.lastrowid)
-    log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_id} for interface {modem['name']}")
-    return True, f"Message queued as job #{job_id}."
+    modem_names = ", ".join(str(modem["name"]) for modem in target_modems)
+    if len(job_ids) == 1:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} message job #{job_ids[0]} for interface {modem_names}")
+    else:
+        log_event("INFO", "outbound", f"Queued {payload['trigger']} message jobs {job_ids} for interfaces: {modem_names}")
+    return True, _format_queue_result("Message", job_ids)
 
 
 def _coerce_wx_number(value: Any, *, label: str) -> float:

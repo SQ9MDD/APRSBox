@@ -21,6 +21,12 @@ from app.services.aprs_device_identification import (
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_object_tnc2, build_status_tnc2, resolve_message_addressee
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
+from app.services.tx_scope import (
+    ALL_ACTIVE_INTERFACE_OPTION_VALUE,
+    TX_SCOPE_ALL_ACTIVE,
+    TX_SCOPE_SINGLE,
+    normalize_tx_scope,
+)
 from app.sections import SECTION_DEFINITIONS
 
 
@@ -199,6 +205,7 @@ def get_station_settings() -> dict[str, Any]:
         return {}
     result = dict(row)
     result.setdefault("beacon_interface_id", None)
+    result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     result.setdefault("default_units", "metric")
     result.setdefault("beacon_interval_minutes", 30)
     result.setdefault("beacon_path", "")
@@ -214,6 +221,19 @@ def get_configured_modem_interfaces() -> list[dict[str, Any]]:
         """
         SELECT id, name, modem_type, band, device_path, enabled
         FROM modems
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
+    return [dict(row) for row in rows]
+
+
+def get_active_tnc_interfaces() -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT id, name, modem_type, band, device_path, enabled
+        FROM modems
+        WHERE enabled = 1
+          AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
         ORDER BY name COLLATE NOCASE ASC, id ASC
         """
     )
@@ -241,6 +261,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
             SET callsign = :callsign,
                 ssid = :ssid,
                 beacon_interface_id = :beacon_interface_id,
+                beacon_tx_scope = :beacon_tx_scope,
                 beacon_comment = :beacon_comment,
                 beacon_interval_minutes = :beacon_interval_minutes,
                 beacon_path = :beacon_path,
@@ -283,14 +304,21 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
     default_units = payload.get("default_units", "metric")
     if default_units not in {"metric", "imperial"}:
         default_units = "metric"
+    beacon_tx_scope = normalize_tx_scope(payload.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
+    raw_beacon_interface = str(payload.get("beacon_interface_id") or "").strip()
+    if raw_beacon_interface == ALL_ACTIVE_INTERFACE_OPTION_VALUE:
+        beacon_tx_scope = TX_SCOPE_ALL_ACTIVE
+        raw_beacon_interface = ""
     try:
-        beacon_interface_id = int(payload.get("beacon_interface_id")) if payload.get("beacon_interface_id") not in {None, ""} else None
+        beacon_interface_id = int(raw_beacon_interface) if raw_beacon_interface not in {"", None} else None
     except (TypeError, ValueError):
         beacon_interface_id = None
-    if beacon_interface_id is not None:
+    if beacon_interface_id is not None and beacon_tx_scope == TX_SCOPE_SINGLE:
         interface_exists = fetch_one("SELECT id FROM modems WHERE id = ?", (beacon_interface_id,))
         if interface_exists is None:
             beacon_interface_id = None
+    if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
+        beacon_interface_id = None
     beacon_interval_minutes = _normalize_station_interval(payload.get("beacon_interval_minutes"), label="Beacon interval")
     status_interval_minutes = _normalize_station_interval(payload.get("status_interval_minutes"), label="Status interval")
     status_enabled = int(bool(payload.get("status_enabled")))
@@ -313,6 +341,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "callsign": payload.get("callsign", ""),
         "ssid": payload.get("ssid", ""),
         "beacon_interface_id": beacon_interface_id,
+        "beacon_tx_scope": beacon_tx_scope,
         "beacon_comment": beacon_comment,
         "beacon_interval_minutes": beacon_interval_minutes,
         "beacon_path": payload.get("beacon_path", ""),
@@ -328,6 +357,14 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "tx_enabled": int(bool(payload.get("tx_enabled"))),
         "updated_at": utc_now(),
     }
+
+
+def station_has_tx_target(station_settings: dict[str, Any] | None = None) -> bool:
+    resolved_settings = station_settings or get_station_settings()
+    scope = normalize_tx_scope(resolved_settings.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
+    if scope == TX_SCOPE_ALL_ACTIVE:
+        return bool(get_active_tnc_interfaces())
+    return resolved_settings.get("beacon_interface_id") not in {None, ""}
 
 
 def _normalize_station_symbol_overlay_value(value: Any, *, symbol_table: str) -> str | None:
@@ -787,6 +824,7 @@ def monitoring_public_snapshot() -> dict[str, Any]:
             "ssid": normalized_ssid,
             "full_callsign": full_callsign,
             "beacon_interface_id": station_settings.get("beacon_interface_id"),
+            "beacon_tx_scope": normalize_tx_scope(station_settings.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE),
             "tx_enabled": bool(station_settings.get("tx_enabled")),
             "status_enabled": bool(station_settings.get("status_enabled")),
         },
@@ -818,6 +856,7 @@ def monitoring_public_snapshot() -> dict[str, Any]:
             "enabled": bool(wx_config.get("enabled")),
             "ssid": str(wx_config.get("ssid") or "").strip(),
             "beacon_interface_id": wx_config.get("beacon_interface_id"),
+            "beacon_tx_scope": normalize_tx_scope(wx_config.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE),
             "path": str(wx_config.get("path") or "").strip(),
             "latitude": str(wx_config.get("latitude") or "").strip(),
             "longitude": str(wx_config.get("longitude") or "").strip(),

@@ -9,8 +9,14 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
-from app.services.content import get_station_settings
+from app.services.content import get_active_tnc_interfaces, get_station_settings
 from app.services.outbound import build_wx_tnc2, enqueue_wx_job
+from app.services.tx_scope import (
+    ALL_ACTIVE_INTERFACE_OPTION_VALUE,
+    TX_SCOPE_ALL_ACTIVE,
+    TX_SCOPE_SINGLE,
+    normalize_tx_scope,
+)
 from app.services.wx_definitions import (
     WX_AUTH_TYPES,
     WX_PARAMETER_DEFINITIONS,
@@ -103,6 +109,7 @@ def get_wx_config() -> dict[str, Any]:
     result["callsign"] = callsign
     result.setdefault("ssid", "")
     result.setdefault("beacon_interface_id", None)
+    result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     result.setdefault("path", "")
     result.setdefault("latitude", "")
     result.setdefault("longitude", "")
@@ -153,6 +160,7 @@ def save_wx_config(payload: dict[str, Any]) -> None:
                 callsign = :callsign,
                 ssid = :ssid,
                 beacon_interface_id = :beacon_interface_id,
+                beacon_tx_scope = :beacon_tx_scope,
                 path = :path,
                 latitude = :latitude,
                 longitude = :longitude,
@@ -494,8 +502,19 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
         raise WxValidationError("My Settings callsign is required before sending WX.")
     if not str(resolved_config.get("ssid") or "").strip():
         raise WxValidationError("WX SSID is required before sending WX.")
+    beacon_tx_scope = normalize_tx_scope(resolved_config.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     beacon_interface_id = resolved_config.get("beacon_interface_id")
-    if beacon_interface_id in {None, ""}:
+    interface_ids: list[int] | None = None
+    if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
+        interface_ids = []
+        for interface in get_active_tnc_interfaces():
+            try:
+                interface_ids.append(int(interface["id"]))
+            except (TypeError, ValueError):
+                continue
+        if not interface_ids:
+            raise WxValidationError("At least one active TNC interface is required before sending WX.")
+    elif beacon_interface_id in {None, ""}:
         raise WxValidationError("WX interface is required before sending WX.")
     latitude = str(resolved_config.get("latitude") or "").strip()
     longitude = str(resolved_config.get("longitude") or "").strip()
@@ -508,10 +527,10 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
             continue
         weather[str(field["name"])] = float(field["value"])
 
-    return {
+    payload: dict[str, Any] = {
         "callsign": str(resolved_config.get("callsign") or "").strip().upper(),
         "ssid": str(resolved_config.get("ssid") or "").strip(),
-        "interface_id": int(beacon_interface_id),
+        "tx_scope": beacon_tx_scope,
         "path": str(resolved_config.get("path") or "").strip(),
         "latitude": latitude,
         "longitude": longitude,
@@ -519,6 +538,11 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
         "generated_at": utc_now(),
     }
+    if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
+        payload["interface_ids"] = interface_ids or []
+    else:
+        payload["interface_id"] = int(beacon_interface_id)
+    return payload
 
 
 def safe_enqueue_wx_outbound(*, trigger: str = "scheduled") -> tuple[bool, str]:
@@ -622,14 +646,21 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     enabled = int(bool(payload.get("enabled")))
     ssid = str(payload.get("ssid") or "").strip()
+    beacon_tx_scope = normalize_tx_scope(payload.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
+    raw_beacon_interface = str(payload.get("beacon_interface_id") or "").strip()
+    if raw_beacon_interface == ALL_ACTIVE_INTERFACE_OPTION_VALUE:
+        beacon_tx_scope = TX_SCOPE_ALL_ACTIVE
+        raw_beacon_interface = ""
     try:
-        beacon_interface_id = int(payload.get("beacon_interface_id")) if payload.get("beacon_interface_id") not in {None, ""} else None
+        beacon_interface_id = int(raw_beacon_interface) if raw_beacon_interface else None
     except (TypeError, ValueError):
         beacon_interface_id = None
-    if beacon_interface_id is not None:
+    if beacon_interface_id is not None and beacon_tx_scope == TX_SCOPE_SINGLE:
         interface_exists = fetch_one("SELECT id FROM modems WHERE id = ?", (beacon_interface_id,))
         if interface_exists is None:
             beacon_interface_id = None
+    if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
+        beacon_interface_id = None
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
         raise WxValidationError("WX path must be 64 printable ASCII characters or fewer.")
@@ -653,8 +684,10 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise WxValidationError("My Settings callsign is required before enabling WX.")
     if enabled and not ssid:
         raise WxValidationError("WX SSID is required when WX is enabled.")
-    if enabled and beacon_interface_id is None:
+    if enabled and beacon_tx_scope == TX_SCOPE_SINGLE and beacon_interface_id is None:
         raise WxValidationError("WX interface is required when WX is enabled.")
+    if enabled and beacon_tx_scope == TX_SCOPE_ALL_ACTIVE and not get_active_tnc_interfaces():
+        raise WxValidationError("At least one active TNC interface is required when WX is enabled.")
     if enabled and (not latitude or not longitude):
         raise WxValidationError("WX latitude and longitude are required when WX is enabled.")
     if ssid and (not ssid.isdigit() or int(ssid) < 0 or int(ssid) > 15):
@@ -667,6 +700,7 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "callsign": callsign,
         "ssid": ssid,
         "beacon_interface_id": beacon_interface_id,
+        "beacon_tx_scope": beacon_tx_scope,
         "path": path,
         "latitude": latitude,
         "longitude": longitude,

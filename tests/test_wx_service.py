@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
-from app.db import execute, fetch_one, get_app_setting, get_connection, init_db
+from app.db import execute, fetch_all, fetch_one, get_app_setting, get_connection, init_db
 from app.services.content import update_station_settings
 from app.services.outbound import build_wx_tnc2, claim_next_outbound_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
@@ -16,11 +16,13 @@ from app.services.wx_scheduler import WxSchedulerService
 from app.services.wx import (
     ensure_wx_defaults,
     refresh_single_wx_mapping,
+    safe_enqueue_wx_outbound,
     safe_save_wx_config,
     safe_save_wx_source,
     save_wx_mappings,
     test_wx_source_connection,
 )
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, TX_SCOPE_ALL_ACTIVE
 
 
 @contextlib.contextmanager
@@ -163,6 +165,57 @@ class WxServiceTests(unittest.TestCase):
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["latitude"], "52.2297")
             self.assertEqual(row["longitude"], "21.0122")
+
+    def test_wx_all_active_scope_queues_jobs_for_each_active_tnc(self) -> None:
+        with temporary_database():
+            first_modem = insert_modem(name="WX A", device_path="127.0.0.1:8101")
+            second_modem = insert_modem(name="WX B", device_path="127.0.0.1:8102")
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success, error = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": ALL_ACTIVE_INTERFACE_OPTION_VALUE,
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "300",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success, error)
+            row = fetch_one("SELECT beacon_interface_id, beacon_tx_scope FROM wx_config WHERE id = 1")
+            assert row is not None
+            self.assertIsNone(row["beacon_interface_id"])
+            self.assertEqual(row["beacon_tx_scope"], TX_SCOPE_ALL_ACTIVE)
+
+            queued, message = safe_enqueue_wx_outbound(trigger="manual")
+            self.assertTrue(queued, message)
+
+            count_row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'wx'")
+            assert count_row is not None
+            self.assertEqual(int(count_row["total"]), 2)
+            interface_rows = fetch_all("SELECT DISTINCT interface_id FROM outbound_jobs WHERE kind = 'wx'")
+            self.assertEqual({first_modem, second_modem}, {int(item["interface_id"]) for item in interface_rows})
 
     def test_wx_config_can_enable_without_required_mappings(self) -> None:
         with temporary_database():

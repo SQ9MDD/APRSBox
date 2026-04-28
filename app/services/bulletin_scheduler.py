@@ -5,7 +5,7 @@ import random
 from datetime import date, datetime, timedelta, timezone
 
 from app.db import execute, fetch_all, get_app_setting, log_event, set_app_setting, utc_now
-from app.services.content import get_station_settings
+from app.services.content import get_station_settings, station_has_tx_target
 from app.services.outbound import enqueue_message_job, latest_message_dispatch_at
 
 
@@ -43,7 +43,7 @@ class BulletinSchedulerService:
 
     def _tick(self) -> None:
         station_settings = get_station_settings()
-        if not station_settings or not station_settings.get("callsign") or station_settings.get("beacon_interface_id") in {None, ""}:
+        if not station_settings or not station_settings.get("callsign") or not station_has_tx_target(station_settings):
             return
 
         now = datetime.now(timezone.utc)

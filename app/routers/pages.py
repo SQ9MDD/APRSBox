@@ -27,7 +27,7 @@ from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
     dashboard_home_data,
     delete_section_row,
-    get_configured_modem_interfaces,
+    get_active_tnc_interfaces,
     get_aprs_symbol_icon_path,
     get_recent_station_packets,
     heard_stations,
@@ -48,6 +48,7 @@ from app.services.content import (
     safe_create_section_row,
     safe_update_section_row,
 )
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -334,8 +335,9 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
             "value": str(item["id"]),
             "label": f"{item['name']} ({item['modem_type']}, {item['band'] or '-'})",
         }
-        for item in get_configured_modem_interfaces()
+        for item in get_active_tnc_interfaces()
     ]
+    interface_options.append({"value": ALL_ACTIVE_INTERFACE_OPTION_VALUE, "label": "Transmit on all active interfaces"})
     return {
         "interface_options": [{"value": "", "label": "Select interface"}] + interface_options,
         "ssid_options": [{"value": "", "label": "Select SSID"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
