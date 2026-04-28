@@ -1500,7 +1500,7 @@ def _heard_recently_state(age_s: Any) -> str:
 def _get_station_settings() -> dict[str, Any]:
     row = fetch_one(
         """
-        SELECT callsign, ssid, beacon_interface_id, beacon_path,
+        SELECT callsign, ssid, beacon_interface_id, beacon_tx_scope, beacon_path,
                latitude, longitude, symbol_table, symbol_code,
                beacon_comment, status_text
         FROM station_settings

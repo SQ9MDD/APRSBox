@@ -35,6 +35,7 @@ from app.services.messages import (
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
 
 FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
 if FASTAPI_AVAILABLE:
@@ -187,6 +188,30 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(message_row["status"], MESSAGE_STATUS_SENT)
             self.assertEqual(int(message_row["tx_attempt_count"]), 1)
             self.assertTrue(written_frames)
+
+    async def test_queue_outgoing_message_uses_all_active_tx_scope(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="MSG TNC A", device_path="127.0.0.1:9301")
+            second_interface = insert_modem(name="MSG TNC B", device_path="127.0.0.1:9302")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Test all active scope", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+
+            jobs = fetch_all(
+                """
+                SELECT interface_id, status
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                ORDER BY id ASC
+                """,
+                (int(message["id"]),),
+            )
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual({first_interface, second_interface}, {int(row["interface_id"]) for row in jobs})
+            self.assertTrue(all(str(row["status"]) == "queued" for row in jobs))
 
             retry_job = fetch_one(
                 """
