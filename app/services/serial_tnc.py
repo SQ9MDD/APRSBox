@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import array
+import fcntl
 import os
 import select
 import termios
+import time
 
 SUPPORTED_SERIAL_BAUD_RATES: dict[int, int] = {
     value: getattr(termios, f"B{value}")
@@ -70,7 +73,7 @@ def read_serial_chunk(fd: int, *, max_bytes: int = 1024, timeout: float = 1.0) -
         return b""
 
 
-def write_serial_data(fd: int, data: bytes, *, timeout: float = 1.0) -> None:
+def write_serial_data(fd: int, data: bytes, *, timeout: float = 1.0, drain: bool = False) -> None:
     offset = 0
     while offset < len(data):
         _, writable, _ = select.select([], [fd], [], timeout)
@@ -83,3 +86,24 @@ def write_serial_data(fd: int, data: bytes, *, timeout: float = 1.0) -> None:
         if written <= 0:
             raise OSError("Serial write failed.")
         offset += written
+    if drain:
+        _best_effort_drain(fd, timeout=timeout)
+
+
+def _best_effort_drain(fd: int, *, timeout: float) -> None:
+    # Prefer a bounded drain strategy to avoid indefinite blocking on pseudo terminals
+    # and edge-case drivers.
+    tiocoutq = getattr(termios, "TIOCOUTQ", None)
+    if tiocoutq is None:
+        return
+
+    deadline = time.monotonic() + max(0.05, float(timeout))
+    pending = array.array("i", [0])
+    while time.monotonic() < deadline:
+        try:
+            fcntl.ioctl(fd, tiocoutq, pending, True)
+        except OSError:
+            return
+        if pending[0] <= 0:
+            return
+        time.sleep(0.01)

@@ -248,7 +248,7 @@ class OutboundService:
                 baud_rate = normalize_serial_baud_rate(job.get("baud_rate"))
                 serial_fd = await asyncio.to_thread(open_serial_device, serial_path, baud_rate)
                 try:
-                    await asyncio.to_thread(write_serial_data, serial_fd, frame)
+                    await asyncio.to_thread(write_serial_data, serial_fd, frame, drain=True)
                 finally:
                     await asyncio.to_thread(close_serial_device, serial_fd)
             else:
