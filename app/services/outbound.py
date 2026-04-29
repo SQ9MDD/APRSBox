@@ -579,10 +579,16 @@ def claim_next_outbound_job() -> dict[str, Any] | None:
             FROM outbound_jobs
             WHERE status = ?
               AND scheduled_at <= ?
-            ORDER BY scheduled_at ASC, id ASC
+            ORDER BY
+                CASE
+                    WHEN kind = ? THEN 0
+                    ELSE 1
+                END ASC,
+                scheduled_at ASC,
+                id ASC
             LIMIT 1
             """,
-            (OUTBOUND_STATUS_QUEUED, utc_now()),
+            (OUTBOUND_STATUS_QUEUED, utc_now(), OUTBOUND_KIND_DIGI_TX),
         ).fetchone()
         if row is None:
             return None
