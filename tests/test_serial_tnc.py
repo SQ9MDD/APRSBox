@@ -6,6 +6,7 @@ import select
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import execute, fetch_one, init_db
 from app.services.content import get_section_row, safe_create_section_row, update_station_settings
@@ -245,6 +246,79 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                         )["total"] >= 1,
                         timeout=2.0,
                     )
+                finally:
+                    await traffic_monitor.stop()
+
+    async def test_outbound_service_uses_direct_serial_path_when_multiple_interfaces_enabled(self) -> None:
+        with temporary_database():
+            with pseudo_serial_device() as (master_fd, slave_path):
+                interface_id = insert_serial_modem(device_path=slave_path, baud_rate=9600)
+                execute(
+                    """
+                    INSERT INTO modems(
+                        name, modem_type, band, device_path, enabled,
+                        expose_port_enabled, expose_bind_address, expose_port, expose_whitelist,
+                        notes, created_at, updated_at
+                    )
+                    VALUES(
+                        'Aux TCP TNC', 'TCP', '70cm', '127.0.0.1:65534', 1,
+                        0, '127.0.0.1', 8002, '',
+                        '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                    )
+                    """
+                )
+                update_station_settings(
+                    {
+                        "callsign": "sq9xyz",
+                        "ssid": "9",
+                        "beacon_interface_id": str(interface_id),
+                        "beacon_comment": "Test beacon",
+                        "beacon_interval_minutes": "15",
+                        "beacon_path": "WIDE2-2",
+                        "status_text": "Station online",
+                        "status_interval_minutes": "30",
+                        "latitude": "52.2297",
+                        "longitude": "21.0122",
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "default_units": "metric",
+                        "tx_enabled": "1",
+                    }
+                )
+                execute(
+                    """
+                    INSERT INTO outbound_jobs(
+                        kind, interface_id, payload_json, status, scheduled_at,
+                        locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                    )
+                    VALUES (
+                        'beacon', ?, '{"callsign":"SQ9XYZ","ssid":"9","latitude":52.2297,"longitude":21.0122,"symbol_table":"/","symbol_code":">","beacon_comment":"Test beacon","beacon_path":"WIDE2-2","trigger":"manual"}',
+                        'queued', '2026-01-01T00:00:00+00:00',
+                        NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                    )
+                    """,
+                    (interface_id,),
+                )
+
+                traffic_monitor = TrafficMonitorService(reconnect_delay=0.1)
+                try:
+                    await traffic_monitor.start()
+                    await wait_until(lambda: traffic_monitor.snapshot()["connected_interfaces"] >= 1, timeout=3.0)
+
+                    job = claim_next_outbound_job()
+                    assert job is not None
+                    with patch.object(
+                        traffic_monitor,
+                        "send_outbound_frame",
+                        side_effect=AssertionError("serial TX should bypass monitor path in multi-interface mode"),
+                    ):
+                        await OutboundService(traffic_monitor=traffic_monitor)._process_job(job)
+
+                    runtime_job = get_outbound_job(int(job["id"]))
+                    assert runtime_job is not None
+                    expected_line = build_beacon_tnc2(runtime_job["payload"])
+                    expected_frame = build_tnc2_kiss_frame(expected_line)
+                    self.assertEqual(await asyncio.to_thread(read_master_chunk, master_fd, timeout=1.0), expected_frame)
                 finally:
                     await traffic_monitor.stop()
 

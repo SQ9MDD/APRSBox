@@ -213,7 +213,7 @@ class OutboundService:
                         pass
                     _ = reader
             elif modem_type in {"SERIALL", "SERIAL"}:
-                if self._traffic_monitor is not None:
+                if self._traffic_monitor is not None and self._should_use_monitor_for_serial_tx():
                     sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
                         interface_id=normalized_interface_id,
                         frame=frame,
@@ -342,6 +342,25 @@ class OutboundService:
         )
         log_event("WARNING", "outbound", message)
         log_event("WARNING", "system", message)
+
+    def _should_use_monitor_for_serial_tx(self) -> bool:
+        # In multi-interface mode, use the direct serial write path for TX.
+        # This matches legacy single-interface behaviour and avoids relying on
+        # a shared runtime socket/fd for serial transmit acknowledgement.
+        row = fetch_one(
+            """
+            SELECT COUNT(*) AS total
+            FROM modems
+            WHERE enabled = 1
+              AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+            """
+        )
+        if row is None:
+            return True
+        try:
+            return int(row["total"]) <= 1
+        except (TypeError, ValueError, KeyError):
+            return True
 
 
 def _skip_reason_for_expired_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:
