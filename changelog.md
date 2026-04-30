@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.7.19.dev - 30.04.2026
+## 1.7.20.dev - 30.04.2026
 
 ### Najważniejsze zmiany
 - Naprawiono problem, w którym po restarcie `core` beacony mogły przestać się planować z powodu zaległego joba `processing`.
