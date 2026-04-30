@@ -25,6 +25,7 @@ OUTBOUND_STATUS_PROCESSING = "processing"
 OUTBOUND_STATUS_SENT = "sent"
 OUTBOUND_STATUS_FAILED = "failed"
 STALE_BEACON_PROCESSING_REASON = "Beacon was not transmitted: APRSBox core restarted while outbound job was processing."
+STALE_WX_PROCESSING_REASON = "WX frame was not transmitted: APRSBox core restarted while outbound job was processing."
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -304,6 +305,61 @@ def recover_stale_processing_beacon_jobs() -> list[int]:
             if changed and int(changed["total"]) == 1:
                 recovered_ids.append(job_id)
     return recovered_ids
+
+
+def recover_stale_processing_wx_jobs() -> list[int]:
+    recovered_ids: list[int] = []
+    timestamp = utc_now()
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id
+            FROM outbound_jobs
+            WHERE kind = ?
+              AND status = ?
+            ORDER BY id ASC
+            """,
+            (OUTBOUND_KIND_WX, OUTBOUND_STATUS_PROCESSING),
+        ).fetchall()
+        for row in rows:
+            job_id = int(row["id"])
+            connection.execute(
+                """
+                UPDATE outbound_jobs
+                SET status = ?, last_error = ?, updated_at = ?
+                WHERE id = ?
+                  AND status = ?
+                """,
+                (
+                    OUTBOUND_STATUS_FAILED,
+                    STALE_WX_PROCESSING_REASON,
+                    timestamp,
+                    job_id,
+                    OUTBOUND_STATUS_PROCESSING,
+                ),
+            )
+            changed = connection.execute("SELECT changes() AS total").fetchone()
+            if changed and int(changed["total"]) == 1:
+                recovered_ids.append(job_id)
+    return recovered_ids
+
+
+def oldest_pending_outbound_job(kind: str) -> dict[str, Any] | None:
+    row = fetch_one(
+        """
+        SELECT id, status, scheduled_at, started_at
+        FROM outbound_jobs
+        WHERE kind = ?
+          AND status IN (?, ?)
+        ORDER BY
+            CASE status WHEN ? THEN 0 ELSE 1 END ASC,
+            COALESCE(started_at, scheduled_at, created_at) ASC,
+            id ASC
+        LIMIT 1
+        """,
+        (kind, OUTBOUND_STATUS_QUEUED, OUTBOUND_STATUS_PROCESSING, OUTBOUND_STATUS_PROCESSING),
+    )
+    return dict(row) if row is not None else None
 
 
 def enqueue_object_job(

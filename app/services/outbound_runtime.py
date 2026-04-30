@@ -27,6 +27,7 @@ from app.services.outbound import (
     mark_outbound_job_sent,
     persist_outbound_frame,
     recover_stale_processing_beacon_jobs,
+    recover_stale_processing_wx_jobs,
 )
 from app.services.serial_tnc import (
     close_serial_device,
@@ -67,6 +68,14 @@ class OutboundService:
                     "beacon was not transmitted before APRSBox core restart."
                 ),
             )
+        recovered_wx_job_ids = recover_stale_processing_wx_jobs()
+        for job_id in recovered_wx_job_ids:
+            message = (
+                f"Recovered stale WX outbound job #{job_id}: "
+                "WX frame was not transmitted before APRSBox core restart."
+            )
+            log_event("WARNING", "outbound", message)
+            log_event("WARNING", "wx", message)
         self._task = asyncio.create_task(self._run(), name="aprsbox-outbound-worker")
 
     async def stop(self) -> None:
@@ -127,6 +136,8 @@ class OutboundService:
             else:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
             log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
+            if kind == "wx":
+                log_event("INFO", "wx", f"Generating WX frame for outbound job #{job_id}")
             frame = build_tnc2_kiss_frame(tnc2_line)
             if job.get("interface_enabled") in {0, "0", False}:
                 skip_reason = f"TX skipped: interface {interface_name} is disabled in configuration."
@@ -148,6 +159,8 @@ class OutboundService:
                 elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
                     register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
                 log_event("WARNING", "outbound", f"Skipped {kind} outbound job #{job_id}: interface {interface_name} is disabled")
+                if kind == "wx":
+                    log_event("WARNING", "wx", f"Skipped WX outbound job #{job_id}: interface {interface_name} is disabled")
                 return
             if normalized_interface_id is not None and self._is_interface_tx_blocked(normalized_interface_id):
                 skip_reason = f"TX skipped: TX is blocked on interface {interface_name}."
@@ -173,6 +186,8 @@ class OutboundService:
                     "outbound",
                     f"Skipped {kind} outbound job #{job_id}: TX is blocked on interface {interface_name}",
                 )
+                if kind == "wx":
+                    log_event("WARNING", "wx", f"Skipped WX outbound job #{job_id}: TX is blocked on interface {interface_name}")
                 return
             tx_gap_seconds = self._resolve_tx_gap_seconds(job)
             await self._wait_for_tx_gap(interface_id=normalized_interface_id, gap_seconds=tx_gap_seconds)
@@ -201,6 +216,8 @@ class OutboundService:
                         elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
                             register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
                         log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
+                        if kind == "wx":
+                            log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via {interface_name}")
                         return
                     self._log_monitor_fallback(
                         job_id=job_id,
@@ -248,6 +265,8 @@ class OutboundService:
                         elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
                             register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
                         log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
+                        if kind == "wx":
+                            log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via {interface_name}")
                         return
                     self._log_monitor_fallback(
                         job_id=job_id,
@@ -283,6 +302,8 @@ class OutboundService:
             elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
                 register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
             log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
+            if kind == "wx":
+                log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via {interface_name}")
         except Exception as exc:
             error = str(exc).strip() or exc.__class__.__name__
             mark_outbound_job_failed(job_id, error)
@@ -293,6 +314,8 @@ class OutboundService:
             ) and payload.get("aprs_message_id") is not None:
                 mark_message_failed(int(payload["aprs_message_id"]), error)
             log_event("WARNING", "outbound", f"{kind.capitalize()} outbound job #{job_id} failed: {error}")
+            if kind == "wx":
+                log_event("WARNING", "wx", f"WX outbound job #{job_id} failed: {error}")
 
     async def _sleep(self, delay: float) -> None:
         try:
