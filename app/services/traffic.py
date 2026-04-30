@@ -488,6 +488,8 @@ class _TrafficModemRuntime:
             try:
                 end = self._kiss_buffer.index(KISS_FEND, 1)
             except ValueError:
+                if len(self._kiss_buffer) > 8192:
+                    self._kiss_buffer.clear()
                 return
 
             raw_frame = bytes(self._kiss_buffer[1:end])
@@ -518,6 +520,8 @@ class _TrafficModemRuntime:
             try:
                 end = self._proxy_uplink_buffer.index(KISS_FEND, 1)
             except ValueError:
+                if len(self._proxy_uplink_buffer) > 8192:
+                    self._proxy_uplink_buffer.clear()
                 return
 
             raw_frame = bytes(self._proxy_uplink_buffer[1:end])
