@@ -26,6 +26,7 @@ from app.services.outbound import (
     mark_outbound_job_skipped,
     mark_outbound_job_sent,
     persist_outbound_frame,
+    recover_stale_processing_beacon_jobs,
 )
 from app.services.serial_tnc import (
     close_serial_device,
@@ -56,6 +57,16 @@ class OutboundService:
         if self._task is not None:
             return
         self._stop_event.clear()
+        recovered_job_ids = recover_stale_processing_beacon_jobs()
+        for job_id in recovered_job_ids:
+            log_event(
+                "WARNING",
+                "outbound",
+                (
+                    f"Recovered stale beacon outbound job #{job_id}: "
+                    "beacon was not transmitted before APRSBox core restart."
+                ),
+            )
         self._task = asyncio.create_task(self._run(), name="aprsbox-outbound-worker")
 
     async def stop(self) -> None:

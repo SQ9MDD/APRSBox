@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.19.dev - 30.04.2026
+
+### Najważniejsze zmiany
+- Naprawiono problem, w którym po restarcie `core` beacony mogły przestać się planować z powodu zaległego joba `processing`.
+- Dodano bezpieczne odblokowanie takiego joba przy starcie oraz log ostrzegawczy, że beacon nie został nadany.
+
 ## 1.7.16.dev - 28.04.2026
 
 ### Najważniejsze zmiany

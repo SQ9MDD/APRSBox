@@ -24,6 +24,7 @@ OUTBOUND_STATUS_QUEUED = "queued"
 OUTBOUND_STATUS_PROCESSING = "processing"
 OUTBOUND_STATUS_SENT = "sent"
 OUTBOUND_STATUS_FAILED = "failed"
+STALE_BEACON_PROCESSING_REASON = "Beacon was not transmitted: APRSBox core restarted while outbound job was processing."
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -266,6 +267,43 @@ def pending_outbound_job_count(kind: str) -> int:
         (kind, OUTBOUND_STATUS_QUEUED, OUTBOUND_STATUS_PROCESSING),
     )
     return int(row["total"]) if row else 0
+
+
+def recover_stale_processing_beacon_jobs() -> list[int]:
+    recovered_ids: list[int] = []
+    timestamp = utc_now()
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id
+            FROM outbound_jobs
+            WHERE kind = ?
+              AND status = ?
+            ORDER BY id ASC
+            """,
+            (OUTBOUND_KIND_BEACON, OUTBOUND_STATUS_PROCESSING),
+        ).fetchall()
+        for row in rows:
+            job_id = int(row["id"])
+            connection.execute(
+                """
+                UPDATE outbound_jobs
+                SET status = ?, last_error = ?, updated_at = ?
+                WHERE id = ?
+                  AND status = ?
+                """,
+                (
+                    OUTBOUND_STATUS_FAILED,
+                    STALE_BEACON_PROCESSING_REASON,
+                    timestamp,
+                    job_id,
+                    OUTBOUND_STATUS_PROCESSING,
+                ),
+            )
+            changed = connection.execute("SELECT changes() AS total").fetchone()
+            if changed and int(changed["total"]) == 1:
+                recovered_ids.append(job_id)
+    return recovered_ids
 
 
 def enqueue_object_job(

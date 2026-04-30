@@ -489,6 +489,66 @@ class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIsNotNone(log_row)
 
+    async def test_outbound_start_recovers_stale_processing_beacon_job_and_logs_not_transmitted(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(device_path="127.0.0.1:9010")
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES(
+                    'beacon', ?, '{"callsign":"SQ2IBK","ssid":"3","beacon_comment":"test"}',
+                    'processing', '2026-01-01T00:00:00+00:00',
+                    '2026-01-01T00:00:01+00:00', '2026-01-01T00:00:01+00:00', NULL, 1, NULL,
+                    '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:01+00:00'
+                )
+                """,
+                (interface_id,),
+            )
+
+            outbound_service = OutboundService(poll_interval=5.0)
+            await outbound_service.start()
+            await outbound_service.stop()
+
+            recovered = fetch_one(
+                """
+                SELECT status, last_error
+                FROM outbound_jobs
+                WHERE kind = 'beacon'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert recovered is not None
+            self.assertEqual(recovered["status"], "failed")
+            self.assertIn("Beacon was not transmitted", str(recovered["last_error"] or ""))
+
+            pending_row = fetch_one(
+                """
+                SELECT COUNT(*) AS total
+                FROM outbound_jobs
+                WHERE kind = 'beacon'
+                  AND status IN ('queued', 'processing')
+                """
+            )
+            assert pending_row is not None
+            self.assertEqual(int(pending_row["total"]), 0)
+
+            log_row = fetch_one(
+                """
+                SELECT message
+                FROM event_logs
+                WHERE category = 'outbound'
+                  AND level = 'WARNING'
+                  AND message LIKE '%beacon was not transmitted before APRSBox core restart%'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            self.assertIsNotNone(log_row)
+
 
 if __name__ == "__main__":
     unittest.main()
