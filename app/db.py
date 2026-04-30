@@ -1333,7 +1333,7 @@ def _migrate_aprs_messages_table(connection: sqlite3.Connection) -> None:
             {'sender' if 'sender' in old_columns else "''"},
             {'addressee' if 'addressee' in old_columns else "''"},
             {'message_text' if 'message_text' in old_columns else "''"},
-            {'COALESCE(path, \'\')' if 'path' in old_columns else "''"},
+            {"COALESCE(path, '')" if 'path' in old_columns else "''"},
             {'message_number' if 'message_number' in old_columns else 'NULL'},
             {status_expr},
             {'COALESCE(tx_attempt_count, 0)' if 'tx_attempt_count' in old_columns else '0'},
