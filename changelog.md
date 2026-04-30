@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.21.dev - 30.04.2026
+
+### Najważniejsze zmiany
+- `WX TX Log`: ujednolicono widok z logiem TX stacji (status, błędy i podgląd ramki).
+- `WX`: interwał odświeżania/wysyłki zmieniono na listę minut zależną od `path` (z walidacją po stronie backendu).
+
 ## 1.7.20.dev - 30.04.2026
 
 ### Najważniejsze zmiany

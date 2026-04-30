@@ -154,7 +154,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -198,7 +198,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -217,6 +217,111 @@ class WxServiceTests(unittest.TestCase):
             self.assertEqual(int(count_row["total"]), 2)
             interface_rows = fetch_all("SELECT DISTINCT interface_id FROM outbound_jobs WHERE kind = 'wx'")
             self.assertEqual({first_modem, second_modem}, {int(item["interface_id"]) for item in interface_rows})
+
+    def test_wx_config_interval_allows_5m_for_empty_or_rfonly_path(self) -> None:
+        with temporary_database():
+            modem_id = insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success_empty_path, error_empty_path = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "300",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success_empty_path, error_empty_path)
+
+            success_rfonly_path, error_rfonly_path = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "rfonly",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "600",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success_rfonly_path, error_rfonly_path)
+
+    def test_wx_config_interval_restricts_routed_paths_and_accepts_39m(self) -> None:
+        with temporary_database():
+            modem_id = insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success_invalid, error_invalid = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "600",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertFalse(success_invalid)
+            self.assertIn("must be one of", str(error_invalid or ""))
+
+            success_valid, error_valid = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "2340",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success_valid, error_valid)
 
     def test_wx_config_can_enable_without_required_mappings(self) -> None:
         with temporary_database():
@@ -248,7 +353,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -595,7 +700,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -659,7 +764,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -761,7 +866,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -893,7 +998,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
