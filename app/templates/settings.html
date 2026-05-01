@@ -359,7 +359,7 @@
             enctype="multipart/form-data"
             class="form-grid"
             data-settings-action-id="import-config-backup"
-            onsubmit="return confirm({{ t('Import configuration backup now? Current settings will be replaced.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true});"
+            onsubmit="return confirm({{ t('Import configuration backup now? Current settings will be replaced.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true, errorAutoHideMs: 12000});"
         >
             <label class="full">
                 <span>{{ t("Backup file") }}</span>
@@ -751,9 +751,13 @@
             backdrop.hidden = false;
 
             if (!progressLocked) {
-                hideTimer = window.setTimeout(() => {
-                    hideBackdrop(true);
-                }, 2500);
+                const autoHideMsRaw = Number(options.autoHideMs);
+                const autoHideMs = Number.isFinite(autoHideMsRaw) ? autoHideMsRaw : 2500;
+                if (autoHideMs > 0) {
+                    hideTimer = window.setTimeout(() => {
+                        hideBackdrop(true);
+                    }, autoHideMs);
+                }
                 return true;
             }
 
@@ -872,7 +876,7 @@
             stopPolling();
             progressLocked = false;
             restoreControls();
-            showSettingsProgress(message, { locked: false });
+            showSettingsProgress(message, { locked: false, autoHideMs: options.autoHideMs });
             if (options.reload) {
                 const parsedDelay = Number(options.reloadDelayMs);
                 const reloadDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 1200;
@@ -905,6 +909,8 @@
             const startedAt = Date.now();
             const minSpinnerMs = Number(options.minSpinnerMs || 500);
             const reloadOnSuccess = Boolean(options.reloadOnSuccess);
+            const successAutoHideMs = Number(options.successAutoHideMs || 2500);
+            const errorAutoHideMs = Number(options.errorAutoHideMs || 2500);
 
             try {
                 await waitForNextPaint();
@@ -930,7 +936,7 @@
 
                 if (!response.ok || !payload || payload.ok !== true) {
                     const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
-                    finishAction(`${labels.requestFailed} ${detail}`, { reload: false });
+                    finishAction(`${labels.requestFailed} ${detail}`, { reload: false, autoHideMs: errorAutoHideMs });
                     return;
                 }
 
@@ -939,11 +945,14 @@
                 }
 
                 const successMessage = payload.message ? String(payload.message) : labels.done;
-                finishAction(successMessage, { reload: reloadOnSuccess || Boolean(payload.reload) });
+                finishAction(successMessage, {
+                    reload: reloadOnSuccess || Boolean(payload.reload),
+                    autoHideMs: successAutoHideMs,
+                });
             } catch (error) {
                 await ensureMinimumSpinner(startedAt, minSpinnerMs);
                 const detail = error && error.message ? ` ${error.message}` : "";
-                finishAction(`${labels.requestFailed}${detail}`, { reload: false });
+                finishAction(`${labels.requestFailed}${detail}`, { reload: false, autoHideMs: errorAutoHideMs });
             }
         };
 

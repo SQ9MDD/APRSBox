@@ -9,6 +9,7 @@ from app.db import execute, fetch_one, get_app_setting, init_db, set_app_setting
 from app.services.config_backup import (
     CONFIG_BACKUP_FORMAT,
     CONFIG_BACKUP_VERSION,
+    build_configuration_backup_filename,
     export_configuration_backup,
     export_configuration_backup_bytes,
     safe_import_configuration_backup,
@@ -32,6 +33,20 @@ def temporary_database() -> Path:
 
 
 class ConfigBackupTests(unittest.TestCase):
+    def test_filename_contains_station_callsign_and_ssid(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'sp0abc', ssid = '5', updated_at = '2026-01-01T00:00:00+00:00'
+                WHERE id = 1
+                """
+            )
+            filename = build_configuration_backup_filename()
+            self.assertIn("SP0ABC-5", filename)
+            self.assertTrue(filename.startswith("aprsbox-config-backup-"))
+            self.assertTrue(filename.endswith(".json"))
+
     def test_export_contains_config_tables_and_whitelisted_app_settings(self) -> None:
         with temporary_database():
             execute(

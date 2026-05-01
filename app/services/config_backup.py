@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
@@ -10,6 +11,7 @@ from app.db import connect, log_event, utc_now
 
 CONFIG_BACKUP_FORMAT = "aprsbox-config-backup"
 CONFIG_BACKUP_VERSION = 1
+_FILENAME_TOKEN_RE = re.compile(r"[^A-Z0-9_-]+")
 
 CONFIG_BACKUP_TABLES: tuple[str, ...] = (
     "map_sources",
@@ -41,8 +43,9 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
 
 
 def build_configuration_backup_filename() -> str:
+    station_identity = _station_identity_slug()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"aprsbox-config-backup-{timestamp}.json"
+    return f"aprsbox-config-backup-{station_identity}-{timestamp}.json"
 
 
 def export_configuration_backup() -> dict[str, Any]:
@@ -95,8 +98,8 @@ def safe_import_configuration_backup(raw_payload: bytes) -> tuple[bool, str | No
         return True, None
     except ValueError as exc:
         return False, str(exc)
-    except sqlite3.DatabaseError:
-        return False, "Failed to apply configuration backup."
+    except sqlite3.DatabaseError as exc:
+        return False, f"Failed to apply configuration backup: {exc}"
 
 
 def _parse_backup_payload(raw_payload: bytes) -> dict[str, Any]:
@@ -212,3 +215,25 @@ def _replace_table_rows(connection: sqlite3.Connection, table_name: str, rows: l
 
 def _table_columns(connection: sqlite3.Connection, table_name: str) -> list[str]:
     return [str(row["name"]) for row in connection.execute(f'PRAGMA table_info("{table_name}")').fetchall()]
+
+
+def _station_identity_slug() -> str:
+    with connect() as connection:
+        row = connection.execute(
+            """
+            SELECT callsign, ssid
+            FROM station_settings
+            WHERE id = 1
+            """
+        ).fetchone()
+    callsign = _normalize_filename_token(str((row["callsign"] if row else "") or ""), fallback="NOCALL")
+    ssid_raw = str((row["ssid"] if row else "") or "").strip()
+    if ssid_raw:
+        ssid = _normalize_filename_token(ssid_raw, fallback="0")
+        return f"{callsign}-{ssid}"
+    return callsign
+
+
+def _normalize_filename_token(value: str, *, fallback: str) -> str:
+    normalized = _FILENAME_TOKEN_RE.sub("_", value.strip().upper()).strip("_-")
+    return normalized or fallback
