@@ -15,7 +15,8 @@ from app import __version__, get_version
 from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
-from app.services.content import monitoring_public_snapshot
+from app.services.content import monitoring_public_snapshot, traffic_snapshot as get_traffic_snapshot
+from app.services.traffic_stream import TrafficSnapshotBroadcaster
 
 
 class ForwardedPrefixMiddleware:
@@ -39,10 +40,20 @@ def get_client_ip(request: Request) -> str:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     init_db()
+    app.state.traffic_stream_broadcaster = TrafficSnapshotBroadcaster(
+        snapshot_provider=get_traffic_snapshot,
+        tick_seconds=settings.traffic_stream_tick_seconds,
+        heartbeat_seconds=settings.traffic_stream_heartbeat_seconds,
+        max_clients=settings.traffic_stream_max_clients,
+    )
+    await app.state.traffic_stream_broadcaster.start()
     log_event("INFO", "system", "APRSBox web application started")
-    yield
+    try:
+        yield
+    finally:
+        await app.state.traffic_stream_broadcaster.stop()
 
 
 app = FastAPI(title="APRSBox", version=__version__, lifespan=lifespan, root_path=settings.root_path)

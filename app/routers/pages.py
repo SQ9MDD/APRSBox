@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
@@ -14,6 +14,7 @@ from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
     create_system_job,
     fetch_system_job,
+    get_app_setting,
     log_event,
     mark_system_job_error,
     mark_system_job_running,
@@ -26,7 +27,7 @@ from app.sections import SECTION_DEFINITIONS
 from app.services.content import (
     dashboard_home_data,
     delete_section_row,
-    get_configured_modem_interfaces,
+    get_active_tnc_interfaces,
     get_aprs_symbol_icon_path,
     get_recent_station_packets,
     heard_stations,
@@ -47,6 +48,7 @@ from app.services.content import (
     safe_create_section_row,
     safe_update_section_row,
 )
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -95,6 +97,11 @@ from app.services.aprs_device_identification import (
     refresh_aprs_device_identification_cache,
 )
 from app.services.core_client import restart_core_traffic_monitor
+from app.services.config_backup import (
+    build_configuration_backup_filename,
+    export_configuration_backup_bytes,
+    safe_import_configuration_backup,
+)
 from app.services.map_service import (
     get_map_source,
     list_map_sources,
@@ -121,7 +128,9 @@ from app.services.system import (
     start_host_reboot_job,
     start_service_restart_job,
 )
+from app.services.traffic_stream import TrafficSnapshotBroadcaster, TrafficStreamCapacityError
 from app.template_helpers import build_template_context
+from app.ui_palette import get_ui_palette_label, get_ui_palette_options, is_supported_ui_palette, normalize_ui_palette
 from app.services.wx import (
     delete_wx_source,
     discover_wx_source_items,
@@ -138,6 +147,7 @@ from app.services.wx import (
 router = APIRouter()
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
 _CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
+_CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
 
 
 def _translate(message: object) -> str:
@@ -332,8 +342,9 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
             "value": str(item["id"]),
             "label": f"{item['name']} ({item['modem_type']}, {item['band'] or '-'})",
         }
-        for item in get_configured_modem_interfaces()
+        for item in get_active_tnc_interfaces()
     ]
+    interface_options.append({"value": ALL_ACTIVE_INTERFACE_OPTION_VALUE, "label": "Transmit on all active interfaces"})
     return {
         "interface_options": [{"value": "", "label": "Select interface"}] + interface_options,
         "ssid_options": [{"value": "", "label": "Select SSID"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
@@ -464,6 +475,7 @@ def _settings_page_context(
     flash_success: bool = True,
     current_language: str | None = None,
     current_default_units: str | None = None,
+    current_ui_palette: str | None = None,
     map_source_edit_id: int | None = None,
     map_source_form: dict[str, Any] | None = None,
 ) -> dict:
@@ -477,6 +489,7 @@ def _settings_page_context(
         else (_map_source_form_from_source(map_source_edit) if map_source_edit is not None else _empty_map_source_form())
     )
     update_channels = list_update_channels()
+    resolved_ui_palette = normalize_ui_palette(current_ui_palette if current_ui_palette is not None else get_app_setting("ui_palette"))
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -498,8 +511,12 @@ def _settings_page_context(
         can_manage_updates=current_user.role in {"admin", "operator"},
         can_manage_global_settings=current_user.role in {"admin", "operator"},
         can_manage_database_maintenance=current_user.role in {"admin", "operator"},
+        can_manage_config_backup=current_user.role in {"admin", "operator"},
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
+        current_ui_palette=resolved_ui_palette,
+        current_ui_palette_label=get_ui_palette_label(resolved_ui_palette),
+        ui_palette_options=get_ui_palette_options(),
         aprs_device_identification_status=get_aprs_device_identification_status(),
         event_log_keep_rows=DEFAULT_EVENT_LOG_KEEP_ROWS,
         database_vacuum_blocked=database_vacuum_blocked,
@@ -1028,22 +1045,73 @@ def settings_vacuum_db(
     return JSONResponse({"ok": True, "message": _translate("Database vacuum completed.")})
 
 
+@router.get("/settings/config/export")
+def settings_export_configuration_backup(
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> Response:
+    payload = export_configuration_backup_bytes()
+    filename = build_configuration_backup_filename()
+    return Response(
+        content=payload,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/settings/config/import")
+async def settings_import_configuration_backup(
+    backup_file: UploadFile = File(...),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    try:
+        payload = await backup_file.read(_CONFIG_BACKUP_MAX_BYTES + 1)
+    finally:
+        await backup_file.close()
+
+    if not payload:
+        return JSONResponse({"ok": False, "error": _translate("Backup file is empty.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if len(payload) > _CONFIG_BACKUP_MAX_BYTES:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Backup file is too large (limit: 5 MB).")},
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
+    success, error = safe_import_configuration_backup(payload)
+    if not success:
+        return JSONResponse(
+            {"ok": False, "error": _translate(error or "Failed to import configuration backup.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _translate("Configuration backup imported. Restart services to apply runtime changes."),
+            "reload": True,
+        }
+    )
+
+
 @router.post("/settings/global")
 def settings_update_global(
     request: Request,
     language: str = Form(...),
     default_units: str = Form(...),
+    ui_palette: str = Form(""),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
+    raw_ui_palette = str(ui_palette or "").strip().lower()
     selected_language = normalize_language(language)
     selected_default_units = str(default_units or "").strip().lower()
+    selected_ui_palette = normalize_ui_palette(raw_ui_palette)
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
         return JSONResponse({"ok": False, "error": _translate("Unsupported language selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if selected_default_units not in {"metric", "imperial"}:
         return JSONResponse({"ok": False, "error": _translate("Unsupported unit selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if not is_supported_ui_palette(raw_ui_palette):
+        return JSONResponse({"ok": False, "error": _translate("Unsupported color palette selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
@@ -1055,12 +1123,14 @@ def settings_update_global(
         )
 
     set_app_setting("app_language", selected_language)
+    set_app_setting("ui_palette", selected_ui_palette)
     return JSONResponse(
         {
             "ok": True,
             "message": _translate("Global settings updated."),
             "current_language": selected_language,
             "current_default_units": selected_default_units,
+            "current_ui_palette": selected_ui_palette,
             "reload": True,
         }
     )
@@ -2433,19 +2503,35 @@ async def traffic_stream(
     request: Request,
     _: UserIdentity = Depends(get_current_user),
 ) -> StreamingResponse:
-    async def event_generator():
-        previous_payload = ""
-        while True:
-            if await request.is_disconnected():
-                break
-            snapshot = get_traffic_snapshot()
-            payload = json.dumps(snapshot, separators=(",", ":"))
-            if payload != previous_payload:
-                previous_payload = payload
-                yield f"data: {payload}\n\n"
-            await asyncio.sleep(1)
+    broadcaster: TrafficSnapshotBroadcaster | None = getattr(request.app.state, "traffic_stream_broadcaster", None)
+    if broadcaster is None:
+        log_event("ERROR", "traffic", "Traffic SSE stream requested but broadcaster is not initialized.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Traffic stream is unavailable.")
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    try:
+        subscriber_id, queue = await broadcaster.subscribe()
+    except TrafficStreamCapacityError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                yield event
+        finally:
+            await broadcaster.unsubscribe(subscriber_id)
+
+    # Reverse proxy note (nginx): proxy_buffering off; proxy_cache off; proxy_read_timeout sufficiently long.
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 
 @router.get("/map")

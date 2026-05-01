@@ -55,24 +55,26 @@
 }
 
 .map-canvas {
-    --map-pane-opacity: 0.8;
+    --map-mask-layer-opacity: 0;
     position: absolute;
     inset: 0;
-    background: #000;
+    background: var(--panel-soft);
 }
 
-:root[data-theme="light"] .map-canvas {
-    background: #fff;
+.map-canvas .leaflet-pane.map-mask-pane {
+    z-index: 300;
+    pointer-events: none;
+    width: 100%;
+    height: 100%;
 }
 
-.map-canvas .leaflet-tile-pane,
-.map-canvas .leaflet-overlay-pane,
-.map-canvas .leaflet-shadow-pane {
-    opacity: var(--map-pane-opacity);
-}
-
-.map-mask {
-    display: none;
+.map-canvas .map-mask-layer {
+    position: absolute;
+    inset: 0;
+    background: var(--map-mask-layer-color);
+    opacity: var(--map-mask-layer-opacity);
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
 }
 
 .map-latest-overlay {

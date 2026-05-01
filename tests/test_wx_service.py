@@ -8,19 +8,22 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
-from app.db import execute, fetch_one, get_app_setting, get_connection, init_db
+from app.db import execute, fetch_all, fetch_one, get_app_setting, get_connection, init_db, set_app_setting
 from app.services.content import update_station_settings
 from app.services.outbound import build_wx_tnc2, claim_next_outbound_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
 from app.services.wx_scheduler import WxSchedulerService
 from app.services.wx import (
+    WX_REFRESH_LAST_AT_KEY,
     ensure_wx_defaults,
     refresh_single_wx_mapping,
+    safe_enqueue_wx_outbound,
     safe_save_wx_config,
     safe_save_wx_source,
     save_wx_mappings,
     test_wx_source_connection,
 )
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, TX_SCOPE_ALL_ACTIVE
 
 
 @contextlib.contextmanager
@@ -151,7 +154,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -163,6 +166,162 @@ class WxServiceTests(unittest.TestCase):
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["latitude"], "52.2297")
             self.assertEqual(row["longitude"], "21.0122")
+
+    def test_wx_all_active_scope_queues_jobs_for_each_active_tnc(self) -> None:
+        with temporary_database():
+            first_modem = insert_modem(name="WX A", device_path="127.0.0.1:8101")
+            second_modem = insert_modem(name="WX B", device_path="127.0.0.1:8102")
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success, error = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": ALL_ACTIVE_INTERFACE_OPTION_VALUE,
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "900",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success, error)
+            row = fetch_one("SELECT beacon_interface_id, beacon_tx_scope FROM wx_config WHERE id = 1")
+            assert row is not None
+            self.assertIsNone(row["beacon_interface_id"])
+            self.assertEqual(row["beacon_tx_scope"], TX_SCOPE_ALL_ACTIVE)
+
+            queued, message = safe_enqueue_wx_outbound(trigger="manual")
+            self.assertTrue(queued, message)
+
+            count_row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'wx'")
+            assert count_row is not None
+            self.assertEqual(int(count_row["total"]), 2)
+            interface_rows = fetch_all("SELECT DISTINCT interface_id FROM outbound_jobs WHERE kind = 'wx'")
+            self.assertEqual({first_modem, second_modem}, {int(item["interface_id"]) for item in interface_rows})
+
+    def test_wx_config_interval_allows_5m_for_empty_or_rfonly_path(self) -> None:
+        with temporary_database():
+            modem_id = insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success_empty_path, error_empty_path = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "300",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success_empty_path, error_empty_path)
+
+            success_rfonly_path, error_rfonly_path = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "rfonly",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "600",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success_rfonly_path, error_rfonly_path)
+
+    def test_wx_config_interval_restricts_routed_paths_and_accepts_39m(self) -> None:
+        with temporary_database():
+            modem_id = insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success_invalid, error_invalid = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "600",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertFalse(success_invalid)
+            self.assertIn("must be one of", str(error_invalid or ""))
+
+            success_valid, error_valid = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "2340",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success_valid, error_valid)
 
     def test_wx_config_can_enable_without_required_mappings(self) -> None:
         with temporary_database():
@@ -194,7 +353,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -541,7 +700,7 @@ class WxServiceTests(unittest.TestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -574,6 +733,78 @@ class WxServiceTests(unittest.TestCase):
             self.assertEqual(job_row["kind"], "wx")
             self.assertEqual(job_row["status"], "queued")
             self.assertIsNotNone(get_app_setting("scheduler.wx.last_enqueued_at"))
+
+    def test_wx_scheduler_logs_pending_job_details_when_enqueue_is_blocked(self) -> None:
+        with temporary_database():
+            modem_id = insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": "",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "",
+                    "longitude": "",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            success, error = safe_save_wx_config(
+                {
+                    "enabled": "1",
+                    "ssid": "13",
+                    "beacon_interface_id": str(modem_id),
+                    "path": "WIDE2-2",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "refresh_interval_s": "900",
+                    "allow_cache_fallback": "1",
+                    "default_cache_max_age_s": "900",
+                }
+            )
+            self.assertTrue(success, error)
+            set_app_setting(WX_REFRESH_LAST_AT_KEY, "2026-04-30T08:35:00+00:00")
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES(
+                    'wx', ?, '{"trigger":"scheduled"}',
+                    'processing', '2026-04-30T08:33:00+00:00',
+                    '2026-04-30T08:33:01+00:00', '2026-04-30T08:33:01+00:00', NULL, 1, NULL,
+                    '2026-04-30T08:33:00+00:00', '2026-04-30T08:33:01+00:00'
+                )
+                """,
+                (modem_id,),
+            )
+
+            scheduler = WxSchedulerService()
+            scheduler._tick()
+
+            log_row = fetch_one(
+                """
+                SELECT message
+                FROM event_logs
+                WHERE category = 'wx'
+                  AND level = 'INFO'
+                  AND message LIKE '%WX scheduler skipped enqueue because WX job #%'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert log_row is not None
+            message = str(log_row["message"] or "")
+            self.assertIn("status=processing", message)
+            self.assertIn("started_at=2026-04-30T08:33:01+00:00", message)
 
 
 class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -635,7 +866,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -767,7 +998,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     "path": "WIDE2-2",
                     "latitude": "52.2297",
                     "longitude": "21.0122",
-                    "refresh_interval_s": "300",
+                    "refresh_interval_s": "900",
                     "allow_cache_fallback": "1",
                     "default_cache_max_age_s": "900",
                 }
@@ -829,6 +1060,66 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
             traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
             assert traffic_row is not None
             self.assertEqual(traffic_row["line"], expected_line)
+
+    async def test_outbound_start_recovers_stale_processing_wx_job_and_logs_not_transmitted(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(device_path="127.0.0.1:9012")
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES(
+                    'wx', ?, '{"callsign":"SQ9MDD","ssid":"3"}',
+                    'processing', '2026-04-30T08:33:00+00:00',
+                    '2026-04-30T08:33:01+00:00', '2026-04-30T08:33:01+00:00', NULL, 1, NULL,
+                    '2026-04-30T08:33:00+00:00', '2026-04-30T08:33:01+00:00'
+                )
+                """,
+                (interface_id,),
+            )
+
+            outbound_service = OutboundService(poll_interval=5.0)
+            await outbound_service.start()
+            await outbound_service.stop()
+
+            recovered = fetch_one(
+                """
+                SELECT status, last_error
+                FROM outbound_jobs
+                WHERE kind = 'wx'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert recovered is not None
+            self.assertEqual(recovered["status"], "failed")
+            self.assertIn("WX frame was not transmitted", str(recovered["last_error"] or ""))
+
+            pending_row = fetch_one(
+                """
+                SELECT COUNT(*) AS total
+                FROM outbound_jobs
+                WHERE kind = 'wx'
+                  AND status IN ('queued', 'processing')
+                """
+            )
+            assert pending_row is not None
+            self.assertEqual(int(pending_row["total"]), 0)
+
+            wx_log = fetch_one(
+                """
+                SELECT message
+                FROM event_logs
+                WHERE category = 'wx'
+                  AND level = 'WARNING'
+                  AND message LIKE '%WX frame was not transmitted before APRSBox core restart%'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            self.assertIsNotNone(wx_log)
 
 
 if __name__ == "__main__":

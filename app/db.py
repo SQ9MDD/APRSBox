@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS station_settings (
     callsign TEXT,
     ssid TEXT,
     beacon_interface_id INTEGER,
+    beacon_tx_scope TEXT NOT NULL DEFAULT 'single' CHECK (beacon_tx_scope IN ('single', 'all_active')),
     beacon_comment TEXT,
     beacon_interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (beacon_interval_minutes IN (15, 30, 45, 60)),
     beacon_path TEXT,
@@ -161,6 +162,7 @@ CREATE TABLE IF NOT EXISTS wx_config (
     callsign TEXT NOT NULL DEFAULT '',
     ssid TEXT NOT NULL DEFAULT '',
     beacon_interface_id INTEGER,
+    beacon_tx_scope TEXT NOT NULL DEFAULT 'single' CHECK (beacon_tx_scope IN ('single', 'all_active')),
     path TEXT NOT NULL DEFAULT '',
     latitude TEXT NOT NULL DEFAULT '',
     longitude TEXT NOT NULL DEFAULT '',
@@ -682,6 +684,14 @@ def init_db() -> None:
                 ADD COLUMN beacon_interface_id INTEGER
                 """
             )
+        if "beacon_tx_scope" not in station_columns:
+            connection.execute(
+                """
+                ALTER TABLE station_settings
+                ADD COLUMN beacon_tx_scope TEXT NOT NULL DEFAULT 'single'
+                CHECK (beacon_tx_scope IN ('single', 'all_active'))
+                """
+            )
         if "symbol_overlay" not in station_columns:
             connection.execute(
                 """
@@ -694,6 +704,14 @@ def init_db() -> None:
                 """
                 ALTER TABLE wx_config
                 ADD COLUMN beacon_interface_id INTEGER
+                """
+            )
+        if "beacon_tx_scope" not in wx_columns:
+            connection.execute(
+                """
+                ALTER TABLE wx_config
+                ADD COLUMN beacon_tx_scope TEXT NOT NULL DEFAULT 'single'
+                CHECK (beacon_tx_scope IN ('single', 'all_active'))
                 """
             )
         if "path" not in wx_columns:
@@ -1002,11 +1020,11 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
         connection.execute(
             """
             INSERT INTO station_settings (
-                id, callsign, ssid, beacon_interface_id, beacon_comment, beacon_interval_minutes, beacon_path,
+                id, callsign, ssid, beacon_interface_id, beacon_tx_scope, beacon_comment, beacon_interval_minutes, beacon_path,
                 status_enabled, status_text, status_interval_minutes, latitude, longitude,
                 symbol_table, symbol_code, symbol_overlay, default_units, tx_enabled, updated_at
             )
-            VALUES (1, '', '', NULL, '', 30, '', 0, '', 30, '', '', '/', '>', NULL, 'metric', 0, ?)
+            VALUES (1, '', '', NULL, 'single', '', 30, '', 0, '', 30, '', '', '/', '>', NULL, 'metric', 0, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),
@@ -1026,10 +1044,10 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
         connection.execute(
             """
             INSERT INTO wx_config (
-                id, enabled, callsign, ssid, beacon_interface_id, path, latitude, longitude, refresh_interval_s,
+                id, enabled, callsign, ssid, beacon_interface_id, beacon_tx_scope, path, latitude, longitude, refresh_interval_s,
                 allow_cache_fallback, default_cache_max_age_s, created_at, updated_at
             )
-            VALUES (1, 0, '', '', NULL, '', '', '', 300, 1, 900, ?, ?)
+            VALUES (1, 0, '', '', NULL, 'single', '', '', '', 300, 1, 900, ?, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(), utc_now()),
@@ -1315,7 +1333,7 @@ def _migrate_aprs_messages_table(connection: sqlite3.Connection) -> None:
             {'sender' if 'sender' in old_columns else "''"},
             {'addressee' if 'addressee' in old_columns else "''"},
             {'message_text' if 'message_text' in old_columns else "''"},
-            {'COALESCE(path, \'\')' if 'path' in old_columns else "''"},
+            {"COALESCE(path, '')" if 'path' in old_columns else "''"},
             {'message_number' if 'message_number' in old_columns else 'NULL'},
             {status_expr},
             {'COALESCE(tx_attempt_count, 0)' if 'tx_attempt_count' in old_columns else '0'},

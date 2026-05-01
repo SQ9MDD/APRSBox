@@ -9,8 +9,14 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
-from app.services.content import get_station_settings
+from app.services.content import get_active_tnc_interfaces, get_station_settings
 from app.services.outbound import build_wx_tnc2, enqueue_wx_job
+from app.services.tx_scope import (
+    ALL_ACTIVE_INTERFACE_OPTION_VALUE,
+    TX_SCOPE_ALL_ACTIVE,
+    TX_SCOPE_SINGLE,
+    normalize_tx_scope,
+)
 from app.services.wx_definitions import (
     WX_AUTH_TYPES,
     WX_PARAMETER_DEFINITIONS,
@@ -23,6 +29,8 @@ from app.services.wx_sources import WxSourceError, build_wx_source_adapter, pars
 
 WX_REFRESH_LAST_AT_KEY = "scheduler.wx.last_refresh_at"
 WX_REFRESH_LAST_ERROR_KEY = "scheduler.wx.last_refresh_error"
+WX_INTERVAL_OPTIONS_DIRECT_MINUTES = (5, 10, 15, 30, 45, 60)
+WX_INTERVAL_OPTIONS_ROUTED_MINUTES = (15, 39, 45, 60)
 
 
 class WxValidationError(ValueError):
@@ -69,11 +77,17 @@ def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dic
     source_form = _build_source_form(get_wx_source(edit_source_id) if edit_source_id is not None else None)
     return {
         "wx_config": config,
+        "wx_refresh_interval_options": _build_wx_refresh_interval_options(
+            path=str(config.get("path") or ""),
+            selected_interval_s=int(config.get("refresh_interval_s") or 300),
+        ),
+        "wx_refresh_interval_options_direct": _interval_options_from_minutes(WX_INTERVAL_OPTIONS_DIRECT_MINUTES),
+        "wx_refresh_interval_options_routed": _interval_options_from_minutes(WX_INTERVAL_OPTIONS_ROUTED_MINUTES),
         "wx_required_mappings": [row for row in mappings if row["required_flag"]],
         "wx_optional_mappings": [row for row in mappings if not row["required_flag"]],
         "wx_sources": sources,
         "wx_source_form": source_form,
-        "wx_tx_log_rows": list_recent_sent_wx_frames(limit=10),
+        "wx_tx_log_rows": list_recent_sent_wx_frames(limit=20),
         "wx_source_type_options": [
             {"value": "home_assistant", "label": "Home Assistant"},
             {"value": "domoticz", "label": "Domoticz"},
@@ -103,6 +117,7 @@ def get_wx_config() -> dict[str, Any]:
     result["callsign"] = callsign
     result.setdefault("ssid", "")
     result.setdefault("beacon_interface_id", None)
+    result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     result.setdefault("path", "")
     result.setdefault("latitude", "")
     result.setdefault("longitude", "")
@@ -153,6 +168,7 @@ def save_wx_config(payload: dict[str, Any]) -> None:
                 callsign = :callsign,
                 ssid = :ssid,
                 beacon_interface_id = :beacon_interface_id,
+                beacon_tx_scope = :beacon_tx_scope,
                 path = :path,
                 latitude = :latitude,
                 longitude = :longitude,
@@ -494,8 +510,19 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
         raise WxValidationError("My Settings callsign is required before sending WX.")
     if not str(resolved_config.get("ssid") or "").strip():
         raise WxValidationError("WX SSID is required before sending WX.")
+    beacon_tx_scope = normalize_tx_scope(resolved_config.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     beacon_interface_id = resolved_config.get("beacon_interface_id")
-    if beacon_interface_id in {None, ""}:
+    interface_ids: list[int] | None = None
+    if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
+        interface_ids = []
+        for interface in get_active_tnc_interfaces():
+            try:
+                interface_ids.append(int(interface["id"]))
+            except (TypeError, ValueError):
+                continue
+        if not interface_ids:
+            raise WxValidationError("At least one active TNC interface is required before sending WX.")
+    elif beacon_interface_id in {None, ""}:
         raise WxValidationError("WX interface is required before sending WX.")
     latitude = str(resolved_config.get("latitude") or "").strip()
     longitude = str(resolved_config.get("longitude") or "").strip()
@@ -508,10 +535,10 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
             continue
         weather[str(field["name"])] = float(field["value"])
 
-    return {
+    payload: dict[str, Any] = {
         "callsign": str(resolved_config.get("callsign") or "").strip().upper(),
         "ssid": str(resolved_config.get("ssid") or "").strip(),
-        "interface_id": int(beacon_interface_id),
+        "tx_scope": beacon_tx_scope,
         "path": str(resolved_config.get("path") or "").strip(),
         "latitude": latitude,
         "longitude": longitude,
@@ -519,6 +546,11 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
         "generated_at": utc_now(),
     }
+    if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
+        payload["interface_ids"] = interface_ids or []
+    else:
+        payload["interface_id"] = int(beacon_interface_id)
+    return payload
 
 
 def safe_enqueue_wx_outbound(*, trigger: str = "scheduled") -> tuple[bool, str]:
@@ -533,11 +565,10 @@ def list_recent_sent_wx_frames(limit: int = 10) -> list[dict[str, Any]]:
     rows = fetch_all(
         """
         SELECT j.id, j.status, j.scheduled_at, j.started_at, j.sent_at, j.attempt_count, j.last_error,
-               m.name AS interface_name, j.payload_json
+               j.kind, m.name AS interface_name, j.payload_json
         FROM outbound_jobs j
         LEFT JOIN modems m ON m.id = j.interface_id
         WHERE j.kind = 'wx'
-          AND j.status = 'sent'
         ORDER BY COALESCE(j.sent_at, j.started_at, j.scheduled_at, j.created_at) DESC, j.id DESC
         LIMIT ?
         """,
@@ -555,6 +586,8 @@ def list_recent_sent_wx_frames(limit: int = 10) -> list[dict[str, Any]]:
         else:
             item["line"] = ""
         item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        skip_reason = str(item.get("last_error") or "").strip()
+        item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
         display_time = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
         item["display_time"] = display_time
         item["display_time_label"] = _format_human_timestamp(display_time)
@@ -622,14 +655,21 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     enabled = int(bool(payload.get("enabled")))
     ssid = str(payload.get("ssid") or "").strip()
+    beacon_tx_scope = normalize_tx_scope(payload.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
+    raw_beacon_interface = str(payload.get("beacon_interface_id") or "").strip()
+    if raw_beacon_interface == ALL_ACTIVE_INTERFACE_OPTION_VALUE:
+        beacon_tx_scope = TX_SCOPE_ALL_ACTIVE
+        raw_beacon_interface = ""
     try:
-        beacon_interface_id = int(payload.get("beacon_interface_id")) if payload.get("beacon_interface_id") not in {None, ""} else None
+        beacon_interface_id = int(raw_beacon_interface) if raw_beacon_interface else None
     except (TypeError, ValueError):
         beacon_interface_id = None
-    if beacon_interface_id is not None:
+    if beacon_interface_id is not None and beacon_tx_scope == TX_SCOPE_SINGLE:
         interface_exists = fetch_one("SELECT id FROM modems WHERE id = ?", (beacon_interface_id,))
         if interface_exists is None:
             beacon_interface_id = None
+    if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
+        beacon_interface_id = None
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
         raise WxValidationError("WX path must be 64 printable ASCII characters or fewer.")
@@ -641,6 +681,11 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         _validate_coordinate(latitude, minimum=-90.0, maximum=90.0, label="WX latitude")
         _validate_coordinate(longitude, minimum=-180.0, maximum=180.0, label="WX longitude")
     refresh_interval_s = _normalize_positive_int(payload.get("refresh_interval_s"), default=300, minimum=15, maximum=3600, label="Refresh interval")
+    allowed_minutes = _allowed_wx_refresh_interval_minutes(path)
+    allowed_seconds = {minutes * 60 for minutes in allowed_minutes}
+    if refresh_interval_s not in allowed_seconds:
+        allowed_labels = ", ".join(f"{minutes}m" for minutes in allowed_minutes)
+        raise WxValidationError(f"Refresh interval for this path must be one of: {allowed_labels}.")
     default_cache_max_age_s = _normalize_positive_int(
         payload.get("default_cache_max_age_s"),
         default=900,
@@ -653,8 +698,10 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise WxValidationError("My Settings callsign is required before enabling WX.")
     if enabled and not ssid:
         raise WxValidationError("WX SSID is required when WX is enabled.")
-    if enabled and beacon_interface_id is None:
+    if enabled and beacon_tx_scope == TX_SCOPE_SINGLE and beacon_interface_id is None:
         raise WxValidationError("WX interface is required when WX is enabled.")
+    if enabled and beacon_tx_scope == TX_SCOPE_ALL_ACTIVE and not get_active_tnc_interfaces():
+        raise WxValidationError("At least one active TNC interface is required when WX is enabled.")
     if enabled and (not latitude or not longitude):
         raise WxValidationError("WX latitude and longitude are required when WX is enabled.")
     if ssid and (not ssid.isdigit() or int(ssid) < 0 or int(ssid) > 15):
@@ -667,6 +714,7 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "callsign": callsign,
         "ssid": ssid,
         "beacon_interface_id": beacon_interface_id,
+        "beacon_tx_scope": beacon_tx_scope,
         "path": path,
         "latitude": latitude,
         "longitude": longitude,
@@ -675,6 +723,35 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "default_cache_max_age_s": default_cache_max_age_s,
         "updated_at": utc_now(),
     }
+
+
+def _is_direct_wx_path(path: str) -> bool:
+    normalized = str(path or "").strip().upper()
+    return normalized in {"", "RFONLY"}
+
+
+def _allowed_wx_refresh_interval_minutes(path: str) -> tuple[int, ...]:
+    if _is_direct_wx_path(path):
+        return WX_INTERVAL_OPTIONS_DIRECT_MINUTES
+    return WX_INTERVAL_OPTIONS_ROUTED_MINUTES
+
+
+def _interval_options_from_minutes(minutes_list: tuple[int, ...]) -> list[dict[str, Any]]:
+    return [{"value": minutes * 60, "label": f"{minutes}m"} for minutes in minutes_list]
+
+
+def _build_wx_refresh_interval_options(*, path: str, selected_interval_s: int) -> list[dict[str, Any]]:
+    allowed_minutes = _allowed_wx_refresh_interval_minutes(path)
+    options = _interval_options_from_minutes(allowed_minutes)
+    allowed_seconds = {minutes * 60 for minutes in allowed_minutes}
+    if selected_interval_s not in allowed_seconds and selected_interval_s > 0:
+        minutes_float = selected_interval_s / 60
+        if float(minutes_float).is_integer():
+            label = f"{int(minutes_float)}m (current)"
+        else:
+            label = f"{minutes_float:.2f}m (current)"
+        options.insert(0, {"value": selected_interval_s, "label": label})
+    return options
 
 
 def _normalize_wx_source_payload(payload: dict[str, Any]) -> dict[str, Any]:

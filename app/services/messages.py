@@ -40,6 +40,7 @@ FINAL_ACK_WAIT_SECONDS = 30
 HEARD_FRESH_SECONDS = 10 * 60
 HEARD_WARN_SECONDS = 30 * 60
 QUERY_RESPONSE_DELAY_SECONDS = 5
+INCOMING_UNNUMBERED_DUPLICATE_WINDOW_SECONDS = 30
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -947,6 +948,15 @@ def store_incoming_message(
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
     conversation = create_or_update_conversation(sender)
+    duplicate_unnumbered = (
+        not message_number
+        and _has_recent_unnumbered_incoming_message_duplicate(
+            sender=sender,
+            addressee=addressee,
+            message_text=message_text,
+            timestamp=timestamp,
+        )
+    )
     existing = None
     if message_number:
         existing = fetch_one(
@@ -962,7 +972,7 @@ def store_incoming_message(
             """,
             (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, message_number),
         )
-    if existing is None:
+    if existing is None and not duplicate_unnumbered:
         with get_connection() as connection:
             connection.execute(
                 """
@@ -1227,6 +1237,49 @@ def _has_recent_duplicate_ack(*, sender: str, query_number: str, window_seconds:
     return row is not None
 
 
+def _has_recent_unnumbered_incoming_message_duplicate(
+    *,
+    sender: str,
+    addressee: str,
+    message_text: str,
+    timestamp: str,
+    window_seconds: int = INCOMING_UNNUMBERED_DUPLICATE_WINDOW_SECONDS,
+) -> bool:
+    normalized_sender = str(sender or "").strip().upper()
+    normalized_addressee = str(addressee or "").strip().upper()
+    normalized_text = str(message_text or "")
+    if not normalized_sender or not normalized_addressee or not normalized_text:
+        return False
+    reference_timestamp = _parse_iso_timestamp_utc(timestamp) or datetime.now(timezone.utc)
+    window_seconds = max(1, int(window_seconds))
+    window_start = (reference_timestamp - timedelta(seconds=window_seconds)).replace(microsecond=0).isoformat()
+    window_end = reference_timestamp.replace(microsecond=0).isoformat()
+    row = fetch_one(
+        """
+        SELECT id
+        FROM aprs_messages
+        WHERE direction = ?
+          AND sender = ?
+          AND addressee = ?
+          AND message_number IS NULL
+          AND message_text = ?
+          AND created_at >= ?
+          AND created_at <= ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (
+            MESSAGE_DIRECTION_RX,
+            normalized_sender,
+            normalized_addressee,
+            normalized_text,
+            window_start,
+            window_end,
+        ),
+    )
+    return row is not None
+
+
 def _build_query_position_text(station_settings: dict[str, Any]) -> str:
     latitude = float(station_settings["latitude"])
     longitude = float(station_settings["longitude"])
@@ -1447,7 +1500,7 @@ def _heard_recently_state(age_s: Any) -> str:
 def _get_station_settings() -> dict[str, Any]:
     row = fetch_one(
         """
-        SELECT callsign, ssid, beacon_interface_id, beacon_path,
+        SELECT callsign, ssid, beacon_interface_id, beacon_tx_scope, beacon_path,
                latitude, longitude, symbol_table, symbol_code,
                beacon_comment, status_text
         FROM station_settings

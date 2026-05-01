@@ -1025,6 +1025,37 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(write_timestamps), 2)
             self.assertGreaterEqual(write_timestamps[1] - write_timestamps[0], 0.30)
 
+    def test_claim_next_outbound_job_prioritizes_digi_tx_over_non_digi_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9015")
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES(
+                    'beacon', ?, '{"callsign":"SQ9MDD","ssid":"4"}', 'queued', '2026-01-01T00:00:00+00:00',
+                    NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                )
+                """,
+                (interface_id,),
+            )
+            success, _detail = enqueue_digi_tx_job(
+                interface_name="RF-OUT",
+                line="SQ9MDD-4>APRS,WIDE1-1:>Priority test",
+                flow_id=9,
+                frame_uid="frame-priority",
+            )
+            self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+            self.assertEqual(first_job["kind"], "digi_tx")
+            self.assertEqual(second_job["kind"], "beacon")
+
     async def test_digi_filter_allow_matches_consumed_digi_with_wildcards(self) -> None:
         with temporary_database():
             flow_id = create_flow(

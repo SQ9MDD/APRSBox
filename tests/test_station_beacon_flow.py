@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.db import execute, fetch_one, get_app_setting, init_db, set_app_setting
+from app.db import execute, fetch_all, fetch_one, get_app_setting, init_db, set_app_setting
 from app.services.beacon_scheduler import (
     BeaconSchedulerService,
     LAST_SCHEDULED_BEACON_AT_KEY,
@@ -15,6 +15,7 @@ from app.services.beacon_scheduler import (
 from app.services.content import get_station_settings, safe_update_station_settings, update_station_settings
 from app.services.outbound import build_beacon_tnc2, build_status_tnc2, claim_next_outbound_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, TX_SCOPE_ALL_ACTIVE
 
 
 @contextlib.contextmanager
@@ -245,6 +246,44 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             self.assertIsNotNone(get_app_setting(LAST_SCHEDULED_BEACON_AT_KEY))
             self.assertIsNotNone(get_app_setting(LAST_SCHEDULED_STATUS_AT_KEY))
 
+    def test_all_active_scope_enqueues_jobs_for_each_active_tnc(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="TNC A", device_path="127.0.0.1:9101")
+            second_interface = insert_modem(name="TNC B", device_path="127.0.0.1:9102")
+            payload = station_payload(first_interface, tx_enabled="1")
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            payload["status_enabled"] = "1"
+            payload["status_interval_minutes"] = "15"
+            update_station_settings(payload)
+
+            station_settings = get_station_settings()
+            self.assertEqual(station_settings.get("beacon_tx_scope"), TX_SCOPE_ALL_ACTIVE)
+            self.assertIsNone(station_settings.get("beacon_interface_id"))
+
+            scheduler = BeaconSchedulerService()
+            scheduler._tick()
+
+            beacon_row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'beacon'")
+            status_row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'status'")
+            assert beacon_row is not None
+            assert status_row is not None
+            self.assertEqual(int(beacon_row["total"]), 2)
+            self.assertEqual(int(status_row["total"]), 2)
+
+            interfaces = fetch_one(
+                """
+                SELECT COUNT(DISTINCT interface_id) AS total
+                FROM outbound_jobs
+                WHERE kind IN ('beacon', 'status')
+                """
+            )
+            assert interfaces is not None
+            self.assertEqual(int(interfaces["total"]), 2)
+            self.assertEqual({first_interface, second_interface}, {
+                int(row["interface_id"])
+                for row in fetch_all("SELECT interface_id FROM outbound_jobs WHERE kind IN ('beacon', 'status')")
+            })
+
 
 class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_scheduled_beacon_flows_from_saved_flag_to_runtime_send(self) -> None:
@@ -444,6 +483,66 @@ class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 WHERE category = 'outbound'
                   AND level = 'WARNING'
                   AND message LIKE '%is disabled%'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            self.assertIsNotNone(log_row)
+
+    async def test_outbound_start_recovers_stale_processing_beacon_job_and_logs_not_transmitted(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(device_path="127.0.0.1:9010")
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES(
+                    'beacon', ?, '{"callsign":"SQ2IBK","ssid":"3","beacon_comment":"test"}',
+                    'processing', '2026-01-01T00:00:00+00:00',
+                    '2026-01-01T00:00:01+00:00', '2026-01-01T00:00:01+00:00', NULL, 1, NULL,
+                    '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:01+00:00'
+                )
+                """,
+                (interface_id,),
+            )
+
+            outbound_service = OutboundService(poll_interval=5.0)
+            await outbound_service.start()
+            await outbound_service.stop()
+
+            recovered = fetch_one(
+                """
+                SELECT status, last_error
+                FROM outbound_jobs
+                WHERE kind = 'beacon'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert recovered is not None
+            self.assertEqual(recovered["status"], "failed")
+            self.assertIn("Beacon was not transmitted", str(recovered["last_error"] or ""))
+
+            pending_row = fetch_one(
+                """
+                SELECT COUNT(*) AS total
+                FROM outbound_jobs
+                WHERE kind = 'beacon'
+                  AND status IN ('queued', 'processing')
+                """
+            )
+            assert pending_row is not None
+            self.assertEqual(int(pending_row["total"]), 0)
+
+            log_row = fetch_one(
+                """
+                SELECT message
+                FROM event_logs
+                WHERE category = 'outbound'
+                  AND level = 'WARNING'
+                  AND message LIKE '%beacon was not transmitted before APRSBox core restart%'
                 ORDER BY id DESC
                 LIMIT 1
                 """

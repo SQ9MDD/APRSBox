@@ -4,10 +4,11 @@ from typing import Any
 
 from fastapi import Request
 
-from app.db import fetch_one
+from app.db import fetch_one, get_app_setting
 from app import get_version
 from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
+from app.ui_palette import normalize_ui_palette
 from app.services.messages import get_unread_inbox_count
 
 
@@ -73,6 +74,7 @@ def build_template_context(
     translate = get_translator(app_language)
     translate_format = get_format_translator(app_language)
     station_identity = _resolve_station_identity()
+    current_ui_palette = normalize_ui_palette(get_app_setting("ui_palette"))
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
@@ -102,5 +104,6 @@ def build_template_context(
         "t": translate,
         "tf": translate_format,
         "format_datetime": format_display_datetime,
+        "current_ui_palette": current_ui_palette,
         **extra,
     }

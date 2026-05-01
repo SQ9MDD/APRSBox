@@ -35,6 +35,7 @@ from app.services.messages import (
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
 
 FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
 if FASTAPI_AVAILABLE:
@@ -187,6 +188,30 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(message_row["status"], MESSAGE_STATUS_SENT)
             self.assertEqual(int(message_row["tx_attempt_count"]), 1)
             self.assertTrue(written_frames)
+
+    async def test_queue_outgoing_message_uses_all_active_tx_scope(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="MSG TNC A", device_path="127.0.0.1:9301")
+            second_interface = insert_modem(name="MSG TNC B", device_path="127.0.0.1:9302")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Test all active scope", path="WIDE1-1")
+            self.assertEqual(message["status"], "queued")
+
+            jobs = fetch_all(
+                """
+                SELECT interface_id, status
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                ORDER BY id ASC
+                """,
+                (int(message["id"]),),
+            )
+            self.assertEqual(len(jobs), 2)
+            self.assertEqual({first_interface, second_interface}, {int(row["interface_id"]) for row in jobs})
+            self.assertTrue(all(str(row["status"]) == "queued" for row in jobs))
 
             retry_job = fetch_one(
                 """
@@ -738,6 +763,47 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(view["conversations"]), 1)
             self.assertEqual(view["conversations"][0]["callsign"], "SQ9SIM-3")
             self.assertEqual(view["conversations"][0]["messages"][0]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+
+    def test_incoming_unnumbered_message_duplicate_via_consumed_hops_is_stored_once(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_direct = "SQ2IBK-15>APBOX0,WIDE2*::SQ9MDD-4 :APRSBox 1.7.12"
+            inbound_relayed = "SQ2IBK-15>APBOX0,WIDE2-1::SQ9MDD-4 :APRSBox 1.7.12"
+            process_incoming_tnc2_message(inbound_direct, timestamp="2026-04-24T21:41:00+00:00")
+            process_incoming_tnc2_message(inbound_relayed, timestamp="2026-04-24T21:41:02+00:00")
+
+            rows = fetch_all(
+                """
+                SELECT sender, addressee, message_text, path, message_number
+                FROM aprs_messages
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["sender"], "SQ2IBK-15")
+            self.assertEqual(rows[0]["addressee"], "SQ9MDD-4")
+            self.assertEqual(rows[0]["message_text"], "APRSBox 1.7.12")
+            self.assertEqual(rows[0]["path"], "WIDE2*")
+            self.assertIsNone(rows[0]["message_number"])
+
+            jobs = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")
+            assert jobs is not None
+            self.assertEqual(int(jobs["total"]), 0)
+
+    def test_incoming_unnumbered_message_duplicate_after_window_is_stored_again(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            inbound_line = "SQ2IBK-15>APBOX0,WIDE2*::SQ9MDD-4 :APRSBox 1.7.12"
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-04-24T21:41:00+00:00")
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-04-24T21:41:31+00:00")
+
+            row = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert row is not None
+            self.assertEqual(int(row["total"]), 2)
 
     def test_incoming_message_to_other_local_ssid_is_ignored(self) -> None:
         with temporary_database():

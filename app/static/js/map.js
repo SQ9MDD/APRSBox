@@ -97,6 +97,10 @@
         return `aprsbox-map-mask-opacity-${currentThemeName()}`;
     }
 
+    function maskLayerOpacityForMaskOpacity(opacityPercent) {
+        return Math.max(0, Math.min(100, opacityPercent)) / 100;
+    }
+
     function resolveInitialView() {
         try {
             const raw = window.localStorage.getItem(mapViewStorageKey);
@@ -127,6 +131,9 @@
         zoom: initialView.zoom,
         zoomControl: true,
     });
+    const mapMaskPaneName = "map-mask-pane";
+    let mapMaskPane = null;
+    let mapMaskLayer = null;
 
     const tileLayerOptions = {
         attribution: tileAttribution,
@@ -140,6 +147,45 @@
     if (tileSubdomains.length > 0) {
         tileLayerOptions.subdomains = tileSubdomains;
     }
+
+    function syncMapMaskLayerViewport() {
+        if (!mapMaskPane) {
+            return;
+        }
+        const size = map.getSize();
+        const bleedX = size.x;
+        const bleedY = size.y;
+        mapMaskPane.style.transform = "";
+        mapMaskPane.style.left = `${-bleedX}px`;
+        mapMaskPane.style.top = `${-bleedY}px`;
+        mapMaskPane.style.width = `${size.x + (bleedX * 2)}px`;
+        mapMaskPane.style.height = `${size.y + (bleedY * 2)}px`;
+    }
+
+    function ensureMapMaskLayer(mapInstance) {
+        mapMaskPane = mapInstance.getPane(mapMaskPaneName);
+        if (!mapMaskPane) {
+            mapMaskPane = mapInstance.createPane(mapMaskPaneName);
+        }
+        mapMaskPane.classList.add("map-mask-pane");
+        mapMaskPane.style.zIndex = "300";
+        mapMaskPane.style.pointerEvents = "none";
+        const mapPaneElement = mapInstance.getPane("mapPane");
+        if (mapPaneElement && mapMaskPane.parentElement !== mapPaneElement) {
+            mapPaneElement.appendChild(mapMaskPane);
+        }
+        syncMapMaskLayerViewport();
+        let layer = mapMaskPane.querySelector(".map-mask-layer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.className = "map-mask-layer";
+            mapMaskPane.appendChild(layer);
+        }
+        return layer;
+    }
+
+    map.on("resize zoom move", syncMapMaskLayerViewport);
+    mapMaskLayer = ensureMapMaskLayer(map);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
     stationLayer.addTo(map);
     rulerLayer.addTo(map);
@@ -234,6 +280,13 @@
         if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
             return storedOpacity;
         }
+        const computedDefaultOpacity = Number.parseFloat(
+            window.getComputedStyle(document.documentElement).getPropertyValue("--map-mask-default-opacity") || ""
+        );
+        if (Number.isFinite(computedDefaultOpacity)) {
+            const asPercent = Math.max(0, Math.min(100, Math.round(computedDefaultOpacity * 100)));
+            return asPercent - (asPercent % 10);
+        }
         return 20;
     }
 
@@ -241,8 +294,15 @@
         const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
             ? opacityPercent - (opacityPercent % 10)
             : 20;
+        const maskLayerOpacity = maskLayerOpacityForMaskOpacity(normalizedOpacity);
+        if (!mapMaskLayer) {
+            mapMaskLayer = ensureMapMaskLayer(map);
+        }
+        if (mapMaskLayer) {
+            mapMaskLayer.style.opacity = String(maskLayerOpacity);
+        }
         if (mapCanvas) {
-            mapCanvas.style.setProperty("--map-pane-opacity", String(1 - (normalizedOpacity / 100)));
+            mapCanvas.style.setProperty("--map-mask-layer-opacity", String(maskLayerOpacity));
         }
         if (maskOpacitySelect) {
             maskOpacitySelect.value = String(normalizedOpacity);

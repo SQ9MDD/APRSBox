@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from app.db import get_app_setting, log_event, set_app_setting
-from app.services.outbound import pending_wx_job_count
+from app.services.outbound import oldest_pending_outbound_job, pending_wx_job_count
 from app.services.wx import WX_REFRESH_LAST_AT_KEY, get_wx_config, refresh_wx_runtime, safe_enqueue_wx_outbound
 
 
@@ -53,7 +53,21 @@ class WxSchedulerService:
                 log_event("WARNING", "wx", f"WX scheduler refresh failed: {exc}")
                 return
         if pending_wx_job_count() > 0:
-            log_event("INFO", "wx", "WX scheduler skipped enqueue because a WX job is already pending")
+            pending = oldest_pending_outbound_job("wx")
+            if pending is None:
+                log_event("INFO", "wx", "WX scheduler skipped enqueue because a WX job is already pending")
+            else:
+                job_id = int(pending["id"])
+                status = str(pending.get("status") or "").strip() or "unknown"
+                started_at = str(pending.get("started_at") or "").strip() or "-"
+                log_event(
+                    "INFO",
+                    "wx",
+                    (
+                        f"WX scheduler skipped enqueue because WX job #{job_id} is still pending "
+                        f"(status={status}, started_at={started_at})"
+                    ),
+                )
             return
         last_enqueued_at = _parse_timestamp(get_app_setting(LAST_SCHEDULED_WX_AT_KEY))
         if last_enqueued_at is not None and int((now - last_enqueued_at).total_seconds()) < interval_seconds:

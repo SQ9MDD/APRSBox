@@ -48,6 +48,9 @@
     let tileLayer = null;
     let trackPolyline = null;
     let trackDots = [];
+    const mapMaskPaneName = "map-mask-pane";
+    let mapMaskPane = null;
+    let mapMaskLayer = null;
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -55,6 +58,10 @@
 
     function maskOpacityStorageKey() {
         return `aprsbox-map-mask-opacity-${currentThemeName()}`;
+    }
+
+    function maskLayerOpacityForMaskOpacity(opacityPercent) {
+        return Math.max(0, Math.min(100, opacityPercent)) / 100;
     }
 
     function escapeHtml(value) {
@@ -258,13 +265,27 @@
         if (Number.isInteger(legacyOpacity) && legacyOpacity >= 0 && legacyOpacity <= 100 && legacyOpacity % 10 === 0) {
             return legacyOpacity;
         }
+        const computedDefaultOpacity = Number.parseFloat(
+            window.getComputedStyle(document.documentElement).getPropertyValue("--map-mask-default-opacity") || ""
+        );
+        if (Number.isFinite(computedDefaultOpacity)) {
+            const asPercent = Math.max(0, Math.min(100, Math.round(computedDefaultOpacity * 100)));
+            return asPercent - (asPercent % 10);
+        }
         return 20;
     }
 
     function applyMaskOpacity() {
         if (!mapCanvas) return;
         const opacityPercent = resolveMaskOpacity();
-        mapCanvas.style.setProperty("--map-pane-opacity", String(1 - (opacityPercent / 100)));
+        const maskLayerOpacity = maskLayerOpacityForMaskOpacity(opacityPercent);
+        if (!mapMaskLayer && map) {
+            mapMaskLayer = ensureMapMaskLayer(map);
+        }
+        if (mapMaskLayer) {
+            mapMaskLayer.style.opacity = String(maskLayerOpacity);
+        }
+        mapCanvas.style.setProperty("--map-mask-layer-opacity", String(maskLayerOpacity));
     }
 
     function renderTrack(station, stationTrack) {
@@ -366,6 +387,42 @@
         return window.L.tileLayer(tileConfig.tile_url, options);
     }
 
+    function syncMapMaskLayerViewport() {
+        if (!mapMaskPane || !map) {
+            return;
+        }
+        const size = map.getSize();
+        const bleedX = size.x;
+        const bleedY = size.y;
+        mapMaskPane.style.transform = "";
+        mapMaskPane.style.left = `${-bleedX}px`;
+        mapMaskPane.style.top = `${-bleedY}px`;
+        mapMaskPane.style.width = `${size.x + (bleedX * 2)}px`;
+        mapMaskPane.style.height = `${size.y + (bleedY * 2)}px`;
+    }
+
+    function ensureMapMaskLayer(mapInstance) {
+        mapMaskPane = mapInstance.getPane(mapMaskPaneName);
+        if (!mapMaskPane) {
+            mapMaskPane = mapInstance.createPane(mapMaskPaneName);
+        }
+        mapMaskPane.classList.add("map-mask-pane");
+        mapMaskPane.style.zIndex = "300";
+        mapMaskPane.style.pointerEvents = "none";
+        const mapPaneElement = mapInstance.getPane("mapPane");
+        if (mapPaneElement && mapMaskPane.parentElement !== mapPaneElement) {
+            mapPaneElement.appendChild(mapMaskPane);
+        }
+        syncMapMaskLayerViewport();
+        let layer = mapMaskPane.querySelector(".map-mask-layer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.className = "map-mask-layer";
+            mapMaskPane.appendChild(layer);
+        }
+        return layer;
+    }
+
     function ensureMap(station, mapConfig, stationTrack) {
         const hasCoordinates = Number.isFinite(Number(station.latitude_float)) && Number.isFinite(Number(station.longitude_float));
         if (!hasCoordinates) {
@@ -416,6 +473,9 @@
                 zoomControl: true,
                 attributionControl: true,
             });
+            map.on("resize zoom move", syncMapMaskLayerViewport);
+            mapMaskLayer = ensureMapMaskLayer(map);
+            applyMaskOpacity();
             tileLayer = createTileLayer(tileConfig).addTo(map);
             renderTrack(station, stationTrack);
             marker = window.L.marker(latLng, { icon, keyboard: false }).addTo(map);
@@ -436,6 +496,9 @@
                 map.removeLayer(tileLayer);
             }
             tileLayer = createTileLayer(tileConfig).addTo(map);
+        }
+        if (!mapMaskLayer) {
+            mapMaskLayer = ensureMapMaskLayer(map);
         }
     }
 

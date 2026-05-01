@@ -1,5 +1,92 @@
 # Changelog
 
+## 1.7.29 - 01.05.2026
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- 1.7.15.dev
+- 1.7.16.dev
+- 1.7.20.dev
+- 1.7.21.dev
+- 1.7.24.dev
+- 1.7.26.dev
+- 1.7.27.dev
+
+### Najważniejsze zmiany
+- `Settings -> Configuration backup`: dodano eksport/import snapshotu konfiguracji GUI (`JSON`) wraz z walidacją formatu/wersji, limitem rozmiaru i atomowym restore w transakcji.
+- `Configuration backup restore`: import odtwarza wyłącznie dane konfiguracyjne, weryfikuje relacje (`foreign_key_check`) i obsługuje przenoszenie konfiguracji między instancjami.
+- `Traffic Monitor SSE`: przebudowano strumień na wspólnego producera/broadcastera (mniejsze obciążenie CPU przy wielu klientach), z heartbeatem, limitem klientów i parametrami `ENV`.
+- `TNC/Outbound (SERIALL/KISS)`: ustabilizowano ścieżkę TX/RX dla trybów multi-interface; usunięto ryzykowny bypass TX i doprecyzowano diagnostykę/logowanie runtime.
+- `Beacon/WX schedulers`: dodano odzyskiwanie zaległych jobów `processing` po restarcie `core`, aby nie blokować kolejnych wysyłek.
+- `TX scope`: dodano tryb `Transmit on all active interfaces` dla beaconów stacji i `WX` (GUI + runtime + walidacja + testy).
+- `UI/Theming`: dodano paletę `Red Tactic`; `Map mask opacity` i style wiadomości `TX` korzystają z tokenów motywu zamiast sztywnych kolorów.
+- `WX`: ujednolicono `WX TX Log` i zmieniono interwał odświeżania/wysyłki na listę minut zależną od `path` (z walidacją backendową).
+- `Testy`: rozszerzono testy regresyjne dla backupu konfiguracji, SSE, TNC/outbound, schedulerów beacon/WX i nowych akcji w `Settings`.
+
+## 1.7.27.dev - 01.05.2026
+
+### Najważniejsze zmiany
+- `Settings -> Configuration backup`: dodano nową sekcję do eksportu i importu snapshotu konfiguracji GUI.
+- `Export konfiguracji`: dodano endpoint `GET /settings/config/export`, który generuje plik JSON z konfiguracją (`station`, `TNC`, `APRS-IS`, `WX`, `DIGI flows`, `objects/items/bulletins`, źródła map i wybrane ustawienia globalne).
+- `Import konfiguracji`: dodano endpoint `POST /settings/config/import` z walidacją formatu/wersji backupu, limitem rozmiaru pliku (`5 MB`) i atomowym restore w transakcji SQLite.
+- `Import konfiguracji`: naprawiono restore między instancjami z danymi runtime (zachowana spójność FK podczas podmiany tabel konfiguracyjnych).
+- `Plik backupu`: nazwa eksportowanego pliku zawiera teraz `CALLSIGN-SSID` z `My Settings` (gdy SSID jest ustawione).
+- `UX importu`: komunikaty błędów importu są prezentowane dłużej w modalu `Settings`, aby łatwiej odczytać szczegóły.
+- `Integralność danych`: import odtwarza tylko tabele konfiguracyjne i whitelistę kluczy `app_settings`, a następnie wykonuje kontrolę relacji (`foreign_key_check`) przed zatwierdzeniem.
+- `Testy`: dodano testy regresyjne backupu (`tests/test_config_backup.py`) oraz testy obecności nowych akcji w `Settings` (`tests/test_settings_maintenance.py`).
+
+## 1.7.26.dev - 01.05.2026
+
+### Najważniejsze zmiany
+- `Traffic Monitor SSE`: zastąpiono pętlę per-klient jednym wspólnym producerem/broadcasterem snapshotów na proces.
+- `SSE wydajność`: `get_traffic_snapshot()` wykonywane jest maksymalnie raz na tick (domyślnie `1s`) niezależnie od liczby klientów.
+- `SSE payload`: zachowano kompatybilny format `data: <json>`; pełny event nie jest wysyłany, gdy payload się nie zmienił.
+- `SSE heartbeat`: dodano lekki keepalive `: ping` (domyślnie co `25s`) dla stabilności połączeń za proxy.
+- `SSE stabilność`: dodano limit klientów (`APRSBOX_TRAFFIC_STREAM_MAX_CLIENTS`, domyślnie `20`) z czytelnym logiem przy przekroczeniu.
+- `SSE/NGINX`: endpoint zwraca nagłówki `text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no` oraz notatkę konfiguracyjną dot. `proxy_buffering/proxy_cache/proxy_read_timeout`.
+- `Konfiguracja`: dodano parametry `APRSBOX_TRAFFIC_STREAM_TICK_SECONDS`, `APRSBOX_TRAFFIC_STREAM_HEARTBEAT_SECONDS`, `APRSBOX_TRAFFIC_STREAM_MAX_CLIENTS`.
+- `Testy`: dodano testy jednostkowe broadcastera (fanout wielu klientów, brak emisji przy niezmienionym payloadzie, heartbeat, limit klientów, unsubscribe/cleanup).
+
+## 1.7.24.dev - 01.05.2026
+
+### Najważniejsze zmiany
+- `TNC (SERIALL/KISS)`: usunięto ryzykowny bypass TX w trybie multi-interface; wysyłka serial przechodzi przez aktywny runtime monitora, co zapobiega kolizjom z pętlą RX.
+- `Serial TX`: direct fallback przy aktywnym monitorze jest blokowany kontrolowanym błędem i czytelnym logiem (zamiast równoległego otwierania portu).
+- `Serial port`: otwarcie używane przez direct TX nie czyści już bufora wejściowego (`flush_buffers=False`), aby TX nie kasował ramek RX.
+- `Diagnostyka`: dodano logi start/stop readera RX, start/koniec TX z długością ramki oraz log błędu przetwarzania RX z wymuszonym reconnectem.
+- `Testy`: rozszerzono testy regresyjne o KISS escape w TX, serializację równoległych TX, brak flush input buffer oraz scenariusz TX error -> reconnect -> dalszy RX.
+
+## 1.7.21.dev - 30.04.2026
+
+### Najważniejsze zmiany
+- `WX TX Log`: ujednolicono widok z logiem TX stacji (status, błędy i podgląd ramki).
+- `WX`: interwał odświeżania/wysyłki zmieniono na listę minut zależną od `path` (z walidacją po stronie backendu).
+
+## 1.7.20.dev - 30.04.2026
+
+### Najważniejsze zmiany
+- Naprawiono problem, w którym po restarcie `core` beacony mogły przestać się planować z powodu zaległego joba `processing`.
+- Dodano bezpieczne odblokowanie takiego joba przy starcie oraz log ostrzegawczy, że beacon nie został nadany.
+- Zastosowano analogiczne zabezpieczenie dla `WX` (odzyskanie zaległego `processing` po restarcie i ostrzeżenie, że ramka nie została nadana).
+- Uzupełniono diagnostykę `WX scheduler`, aby w logu było widać, który zaległy job blokuje kolejne enqueue.
+
+## 1.7.16.dev - 28.04.2026
+
+### Najważniejsze zmiany
+- `My Settings` i `WX`: lista interfejsów nadajnika pokazuje tylko aktywne TNC i zawiera nową opcję `Transmit on all active interfaces`.
+- Dodano tryb TX `single/all_active` dla konfiguracji stacji i WX (z migracją bazy: `station_settings.beacon_tx_scope`, `wx_config.beacon_tx_scope`).
+- Outbound dla `beacon/status/object/message/WX` obsługuje `all_active` przez kolejkowanie osobnego joba na każdy aktywny interfejs.
+- Schedulery `object` i `bulletin` uwzględniają nowy tryb targetu TX; dodano testy regresyjne dla trybu `all_active`.
+
+## 1.7.15.dev - 27.04.2026
+
+### Najważniejsze zmiany
+- `Settings -> Global Settings`: dodano globalną paletę kolorów `Red Tactic` (obok istniejących motywów dzień/noc).
+- `Messages`: styl bąbli wiadomości wychodzących (`TX`) został przepięty na tokeny motywu (bez sztywnego, lokalnie osadzonego zielonego RGBA).
+- `Map` i `Station detail map`: sterowanie `Mask opacity` działa teraz przez nakładkę tintowaną kolorem aktywnego tematu/palety, zamiast globalnego przygaszania warstw kafli.
+
 ## 1.7.12 - 23.04.2026
 
 ### Stable release
