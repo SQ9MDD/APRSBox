@@ -60,6 +60,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("Disable all TNC interfaces before running database vacuum.", router_source)
         self.assertIn("status.HTTP_409_CONFLICT", router_source)
 
+    def test_settings_template_contains_configuration_backup_actions(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('{{ t("Configuration backup") }}', template_source)
+        self.assertIn('href="{{ request.scope.root_path }}/settings/config/export"', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/config/import"', template_source)
+        self.assertIn('name="backup_file"', template_source)
+
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('{{ t("Danger zone") }}', template_source)
@@ -94,6 +101,9 @@ class SettingsMaintenanceTests(unittest.TestCase):
 
     def test_settings_router_contains_danger_zone_endpoints(self) -> None:
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        self.assertIn('@router.get("/settings/config/export")', router_source)
+        self.assertIn('@router.post("/settings/config/import")', router_source)
+        self.assertIn("_CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024", router_source)
         self.assertIn('@router.post("/settings/update-application")', router_source)
         self.assertIn('@router.post("/settings/update-channel")', router_source)
         self.assertIn('@router.post("/settings/restart-services")', router_source)

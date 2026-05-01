@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from app.dependencies import get_current_user, require_roles
@@ -97,6 +97,11 @@ from app.services.aprs_device_identification import (
     refresh_aprs_device_identification_cache,
 )
 from app.services.core_client import restart_core_traffic_monitor
+from app.services.config_backup import (
+    build_configuration_backup_filename,
+    export_configuration_backup_bytes,
+    safe_import_configuration_backup,
+)
 from app.services.map_service import (
     get_map_source,
     list_map_sources,
@@ -142,6 +147,7 @@ from app.services.wx import (
 router = APIRouter()
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
 _CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
+_CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
 
 
 def _translate(message: object) -> str:
@@ -505,6 +511,7 @@ def _settings_page_context(
         can_manage_updates=current_user.role in {"admin", "operator"},
         can_manage_global_settings=current_user.role in {"admin", "operator"},
         can_manage_database_maintenance=current_user.role in {"admin", "operator"},
+        can_manage_config_backup=current_user.role in {"admin", "operator"},
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
         current_ui_palette=resolved_ui_palette,
@@ -1036,6 +1043,52 @@ def settings_vacuum_db(
 
     vacuum_database()
     return JSONResponse({"ok": True, "message": _translate("Database vacuum completed.")})
+
+
+@router.get("/settings/config/export")
+def settings_export_configuration_backup(
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> Response:
+    payload = export_configuration_backup_bytes()
+    filename = build_configuration_backup_filename()
+    return Response(
+        content=payload,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/settings/config/import")
+async def settings_import_configuration_backup(
+    backup_file: UploadFile = File(...),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    try:
+        payload = await backup_file.read(_CONFIG_BACKUP_MAX_BYTES + 1)
+    finally:
+        await backup_file.close()
+
+    if not payload:
+        return JSONResponse({"ok": False, "error": _translate("Backup file is empty.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if len(payload) > _CONFIG_BACKUP_MAX_BYTES:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Backup file is too large (limit: 5 MB).")},
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
+    success, error = safe_import_configuration_backup(payload)
+    if not success:
+        return JSONResponse(
+            {"ok": False, "error": _translate(error or "Failed to import configuration backup.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _translate("Configuration backup imported. Restart services to apply runtime changes."),
+            "reload": True,
+        }
+    )
 
 
 @router.post("/settings/global")

@@ -339,6 +339,47 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
+                <h2>{{ t("Configuration backup") }}</h2>
+                <p class="section-lead">{{ t("Export and import a full GUI configuration snapshot (station, TNC, APRS-IS, WX, DIGI flows and related settings).") }}</p>
+            </div>
+        </div>
+        <dl class="details-grid">
+            <dt>{{ t("Format") }}</dt>
+            <dd><code>JSON</code></dd>
+            <dt>{{ t("Scope") }}</dt>
+            <dd>{{ t("Configuration tables only. Runtime traffic/events are not part of this backup.") }}</dd>
+        </dl>
+        {% if can_manage_config_backup %}
+        <div class="settings-update-actions">
+            <a href="{{ request.scope.root_path }}/settings/config/export" class="button button-secondary">{{ t("Export configuration backup") }}</a>
+        </div>
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/config/import"
+            enctype="multipart/form-data"
+            class="form-grid"
+            data-settings-action-id="import-config-backup"
+            onsubmit="return confirm({{ t('Import configuration backup now? Current settings will be replaced.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
+            <label class="full">
+                <span>{{ t("Backup file") }}</span>
+                <input type="file" name="backup_file" accept=".json,application/json" required>
+            </label>
+            <p class="muted full">{{ t("Import rewrites current configuration tables. Keep an exported file before restoring another snapshot. After import, restart services from Danger zone.") }}</p>
+            <div class="form-actions">
+                <button type="submit" class="button">{{ t("Import configuration backup") }}</button>
+            </div>
+        </form>
+        {% else %}
+        <p class="muted">{{ t("Your role can view backup information but cannot run export/import actions.") }}</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
                 <h2>{{ t("Database maintenance") }}</h2>
                 <p class="section-lead">{{ t("Event logs are pruned automatically after midnight. Database vacuum remains a manual action.") }}</p>
             </div>
