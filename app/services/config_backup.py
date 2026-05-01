@@ -152,9 +152,9 @@ def _apply_backup_payload(payload: dict[str, Any]) -> None:
     connection = connect()
     transaction_started = False
     try:
-        connection.execute("PRAGMA foreign_keys = OFF")
         connection.execute("BEGIN IMMEDIATE")
         transaction_started = True
+        connection.execute("PRAGMA defer_foreign_keys = ON")
 
         _replace_app_settings(connection, app_settings_payload)
         for table in CONFIG_BACKUP_TABLES:
@@ -162,7 +162,7 @@ def _apply_backup_payload(payload: dict[str, Any]) -> None:
 
         violations = list(connection.execute("PRAGMA foreign_key_check").fetchall())
         if violations:
-            raise ValueError("Backup payload contains invalid cross-table references.")
+            raise ValueError(_format_foreign_key_violation_error(violations))
 
         connection.execute("COMMIT")
         transaction_started = False
@@ -171,7 +171,6 @@ def _apply_backup_payload(payload: dict[str, Any]) -> None:
             connection.execute("ROLLBACK")
         raise
     finally:
-        connection.execute("PRAGMA foreign_keys = ON")
         connection.close()
 
 
@@ -215,6 +214,21 @@ def _replace_table_rows(connection: sqlite3.Connection, table_name: str, rows: l
 
 def _table_columns(connection: sqlite3.Connection, table_name: str) -> list[str]:
     return [str(row["name"]) for row in connection.execute(f'PRAGMA table_info("{table_name}")').fetchall()]
+
+
+def _format_foreign_key_violation_error(violations: list[sqlite3.Row]) -> str:
+    first = violations[0]
+    table_name = str(first["table"] if "table" in first.keys() else first[0])
+    rowid_value = first["rowid"] if "rowid" in first.keys() else first[1]
+    parent_table = str(first["parent"] if "parent" in first.keys() else first[2])
+    fk_index = first["fkid"] if "fkid" in first.keys() else first[3]
+    extra = ""
+    if len(violations) > 1:
+        extra = f" (+{len(violations) - 1} more)"
+    return (
+        "Backup payload contains invalid cross-table references. "
+        f"First violation: child_table={table_name}, rowid={rowid_value}, parent_table={parent_table}, fk_index={fk_index}{extra}."
+    )
 
 
 def _station_identity_slug() -> str:

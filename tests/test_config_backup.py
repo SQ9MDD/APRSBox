@@ -142,6 +142,35 @@ class ConfigBackupTests(unittest.TestCase):
             self.assertFalse(ok)
             self.assertIn("missing table data", str(error))
 
+    def test_import_clears_runtime_foreign_keys_when_backup_has_no_modems(self) -> None:
+        with temporary_database():
+            backup_payload = export_configuration_backup_bytes()
+
+            execute(
+                """
+                INSERT INTO modems(name, modem_type, band, device_path, baud_rate, enabled, notes, created_at, updated_at)
+                VALUES ('RUNTIME-TNC', 'TCP', '2m', '127.0.0.1:8100', NULL, 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """
+            )
+            modem_row = fetch_one("SELECT id FROM modems WHERE name = 'RUNTIME-TNC'")
+            assert modem_row is not None
+            modem_id = int(modem_row["id"])
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at, created_at, updated_at
+                )
+                VALUES ('beacon', ?, '{}', 'queued', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """,
+                (modem_id,),
+            )
+
+            success, error = safe_import_configuration_backup(backup_payload)
+            self.assertTrue(success, error)
+            outbound_row = fetch_one("SELECT interface_id FROM outbound_jobs ORDER BY id ASC LIMIT 1")
+            assert outbound_row is not None
+            self.assertIsNone(outbound_row["interface_id"])
+
 
 if __name__ == "__main__":
     unittest.main()
