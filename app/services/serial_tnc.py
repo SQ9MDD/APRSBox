@@ -31,7 +31,7 @@ def normalize_serial_baud_rate(value: object, *, label: str = "Baud rate") -> in
     return baud_rate
 
 
-def open_serial_device(path: str, baud_rate: int) -> int:
+def open_serial_device(path: str, baud_rate: int, *, flush_buffers: bool = True) -> int:
     normalized_path = normalize_serial_device_path(path)
     normalized_baud_rate = normalize_serial_baud_rate(baud_rate)
     fd = os.open(normalized_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
@@ -46,7 +46,8 @@ def open_serial_device(path: str, baud_rate: int) -> int:
         speed = SUPPORTED_SERIAL_BAUD_RATES[normalized_baud_rate]
         attributes[4] = speed
         attributes[5] = speed
-        termios.tcflush(fd, termios.TCIOFLUSH)
+        if flush_buffers:
+            termios.tcflush(fd, termios.TCIOFLUSH)
         termios.tcsetattr(fd, termios.TCSANOW, attributes)
     except Exception:
         os.close(fd)

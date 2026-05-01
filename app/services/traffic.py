@@ -361,6 +361,11 @@ class _TrafficModemRuntime:
         proxy_error = await self._sync_proxy_server(modem)
         self._set_state(status="connected", detail=connect_message, modem=modem, error=proxy_error)
         log_event("INFO", "traffic", connect_message)
+        log_event(
+            "INFO",
+            "traffic",
+            f"Serial RX reader started for {self._runtime_label(modem=modem)} on {device_path} ({baud_rate} baud)",
+        )
 
         try:
             await self._consume_serial_device(
@@ -371,6 +376,11 @@ class _TrafficModemRuntime:
                 silence_reconnect_timeout_seconds,
             )
         finally:
+            log_event(
+                "INFO",
+                "traffic",
+                f"Serial RX reader stopped for {self._runtime_label(modem=modem)} on {device_path} ({baud_rate} baud)",
+            )
             if self._tnc_serial_fd == serial_fd:
                 self._tnc_serial_fd = None
             await self._stop_proxy_server()
@@ -465,8 +475,19 @@ class _TrafficModemRuntime:
                 continue
 
             last_rx_at = loop.time()
-            await self._broadcast_proxy_chunk(chunk)
-            self._consume_kiss_chunk(chunk)
+            try:
+                await self._broadcast_proxy_chunk(chunk)
+                self._consume_kiss_chunk(chunk)
+            except Exception as exc:
+                message = (
+                    f"Serial RX processing failed on {self._runtime_label(modem=modem)} "
+                    f"({device_path} at {baud_rate} baud): {exc}"
+                )
+                self._set_state(status="error", detail=message, modem=modem, error=str(exc))
+                log_event("WARNING", "traffic", message)
+                log_event("WARNING", "system", message)
+                await self._sleep(self._reconnect_delay)
+                return
 
     def _consume_kiss_chunk(self, chunk: bytes) -> None:
         self._kiss_buffer.extend(chunk)
@@ -820,16 +841,37 @@ class _TrafficModemRuntime:
 
     async def _forward_client_chunk_to_tnc(self, chunk: bytes, *, record_proxy_tx: bool = False) -> None:
         async with self._tnc_write_lock:
+            payload_length = len(chunk)
             if self._tnc_writer is not None:
+                log_event(
+                    "INFO",
+                    "traffic",
+                    f"TX start on {self._runtime_label()} via TCP ({payload_length} bytes)",
+                )
                 self._tnc_writer.write(chunk)
                 await self._tnc_writer.drain()
                 if record_proxy_tx:
                     self._consume_proxy_uplink_chunk(chunk)
+                log_event(
+                    "INFO",
+                    "traffic",
+                    f"TX end on {self._runtime_label()} via TCP ({payload_length} bytes)",
+                )
                 return
             if self._tnc_serial_fd is not None:
+                log_event(
+                    "INFO",
+                    "traffic",
+                    f"TX start on {self._runtime_label()} via serial ({payload_length} bytes)",
+                )
                 await asyncio.to_thread(write_serial_data, self._tnc_serial_fd, chunk)
                 if record_proxy_tx:
                     self._consume_proxy_uplink_chunk(chunk)
+                log_event(
+                    "INFO",
+                    "traffic",
+                    f"TX end on {self._runtime_label()} via serial ({payload_length} bytes)",
+                )
                 return
             raise RuntimeError("TNC connection is not available.")
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.24.dev - 01.05.2026
+
+### Najważniejsze zmiany
+- `TNC (SERIALL/KISS)`: usunięto ryzykowny bypass TX w trybie multi-interface; wysyłka serial przechodzi przez aktywny runtime monitora, co zapobiega kolizjom z pętlą RX.
+- `Serial TX`: direct fallback przy aktywnym monitorze jest blokowany kontrolowanym błędem i czytelnym logiem (zamiast równoległego otwierania portu).
+- `Serial port`: otwarcie używane przez direct TX nie czyści już bufora wejściowego (`flush_buffers=False`), aby TX nie kasował ramek RX.
+- `Diagnostyka`: dodano logi start/stop readera RX, start/koniec TX z długością ramki oraz log błędu przetwarzania RX z wymuszonym reconnectem.
+- `Testy`: rozszerzono testy regresyjne o KISS escape w TX, serializację równoległych TX, brak flush input buffer oraz scenariusz TX error -> reconnect -> dalszy RX.
+
 ## 1.7.21.dev - 30.04.2026
 
 ### Najważniejsze zmiany
