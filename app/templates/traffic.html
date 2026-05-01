@@ -43,6 +43,7 @@
         const clientsText = {{ t("Clients")|tojson }};
         const noInterfacesText = {{ t("No enabled TNC is configured.")|tojson }};
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
+        const frameNodeByKey = new Map();
 
         const renderInterfaces = (interfaces) => {
             if (!interfaceSummary) {
@@ -74,31 +75,123 @@
             });
         };
 
+        const buildFrameDescriptors = (frames) => {
+            const duplicates = new Map();
+            return frames.map((frame) => {
+                const rawKey = [
+                    frame.timestamp || "",
+                    frame.source || "",
+                    frame.direction || "",
+                    frame.band || "",
+                    frame.command || "",
+                    frame.port || "",
+                    frame.length || "",
+                    frame.line || "",
+                    frame.hex || "",
+                ].join("|");
+                const duplicateCount = (duplicates.get(rawKey) || 0) + 1;
+                duplicates.set(rawKey, duplicateCount);
+                return { key: `${rawKey}#${duplicateCount}`, frame };
+            });
+        };
+
+        const frameRowClassName = (frame) => `traffic-log-row${frame.row_class ? " " + frame.row_class : ""}`;
+
+        const frameSourceText = (frame) => {
+            const sourceParts = [frame.source];
+            if (frame.band) sourceParts.push(frame.band);
+            if (frame.direction) sourceParts.push(frame.direction);
+            return sourceParts.join(" · ");
+        };
+
+        const createFrameRow = (frame, key) => {
+            const row = document.createElement("div");
+            row.dataset.frameKey = key;
+            row.className = frameRowClassName(frame);
+
+            const timeNode = document.createElement("span");
+            timeNode.className = "traffic-log-time";
+            timeNode.textContent = frame.timestamp;
+
+            const sourceNode = document.createElement("span");
+            sourceNode.className = "traffic-log-source";
+            sourceNode.textContent = frameSourceText(frame);
+
+            const lineNode = document.createElement("span");
+            lineNode.className = "traffic-log-line";
+            lineNode.textContent = frame.line;
+
+            row.append(timeNode, sourceNode, lineNode);
+            return row;
+        };
+
+        const updateFrameRow = (row, frame, key) => {
+            row.dataset.frameKey = key;
+            const expectedClass = frameRowClassName(frame);
+            if (row.className !== expectedClass) {
+                row.className = expectedClass;
+            }
+            const timeNode = row.children[0];
+            const sourceNode = row.children[1];
+            const lineNode = row.children[2];
+            if (timeNode && timeNode.textContent !== frame.timestamp) {
+                timeNode.textContent = frame.timestamp;
+            }
+            const nextSourceText = frameSourceText(frame);
+            if (sourceNode && sourceNode.textContent !== nextSourceText) {
+                sourceNode.textContent = nextSourceText;
+            }
+            if (lineNode && lineNode.textContent !== frame.line) {
+                lineNode.textContent = frame.line;
+            }
+        };
+
         const renderFrames = (frames) => {
             if (!frames.length) {
+                frameNodeByKey.clear();
                 streamContainer.innerHTML = `<div class="empty-state muted" id="traffic-empty-state">${noFramesText}</div>`;
                 return;
             }
 
-            streamContainer.innerHTML = frames.map((frame) => `
-                <div class="traffic-log-row${frame.row_class ? " " + frame.row_class : ""}">
-                    <span class="traffic-log-time"></span>
-                    <span class="traffic-log-source"></span>
-                    <span class="traffic-log-line"></span>
-                </div>
-            `).join("");
+            if (frameNodeByKey.size === 0 && streamContainer.querySelector("#traffic-empty-state")) {
+                streamContainer.textContent = "";
+            }
+            const descriptors = buildFrameDescriptors(frames);
+            const incomingKeys = new Set(descriptors.map((descriptor) => descriptor.key));
 
-            const timeNodes = streamContainer.querySelectorAll(".traffic-log-time");
-            const sourceNodes = streamContainer.querySelectorAll(".traffic-log-source");
-            const lineNodes = streamContainer.querySelectorAll(".traffic-log-line");
-            frames.forEach((frame, index) => {
-                timeNodes[index].textContent = frame.timestamp;
-                const sourceParts = [frame.source];
-                if (frame.band) sourceParts.push(frame.band);
-                if (frame.direction) sourceParts.push(frame.direction);
-                sourceNodes[index].textContent = sourceParts.join(" · ");
-                lineNodes[index].textContent = frame.line;
+            for (const [key, row] of Array.from(frameNodeByKey.entries())) {
+                if (!incomingKeys.has(key)) {
+                    row.remove();
+                    frameNodeByKey.delete(key);
+                }
+            }
+
+            let currentNode = streamContainer.firstElementChild;
+            descriptors.forEach((descriptor) => {
+                const frame = descriptor.frame;
+                const key = descriptor.key;
+                let row = frameNodeByKey.get(key);
+                if (!row) {
+                    row = createFrameRow(frame, key);
+                    frameNodeByKey.set(key, row);
+                } else {
+                    updateFrameRow(row, frame, key);
+                }
+                if (row !== currentNode) {
+                    streamContainer.insertBefore(row, currentNode);
+                }
+                currentNode = row.nextElementSibling;
             });
+
+            while (currentNode) {
+                const nextNode = currentNode.nextElementSibling;
+                const staleKey = currentNode.dataset.frameKey || "";
+                if (staleKey) {
+                    frameNodeByKey.delete(staleKey);
+                }
+                currentNode.remove();
+                currentNode = nextNode;
+            }
         };
 
         const applySnapshot = (snapshot) => {
@@ -107,6 +200,7 @@
             renderFrames(snapshot.frames);
         };
 
+        streamContainer.textContent = "";
         applySnapshot(initialSnapshot);
 
         const eventSource = new EventSource({{ traffic_stream_url|tojson }});
