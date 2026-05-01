@@ -32,6 +32,9 @@ class Settings:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     )
     map_tile_source_name: str = os.getenv("APRSBOX_MAP_TILE_SOURCE_NAME", "OpenStreetMap")
+    traffic_stream_tick_seconds: float = float(os.getenv("APRSBOX_TRAFFIC_STREAM_TICK_SECONDS", "1.0"))
+    traffic_stream_heartbeat_seconds: float = float(os.getenv("APRSBOX_TRAFFIC_STREAM_HEARTBEAT_SECONDS", "25.0"))
+    traffic_stream_max_clients: int = int(os.getenv("APRSBOX_TRAFFIC_STREAM_MAX_CLIENTS", "20"))
 
     @property
     def runtime_root(self) -> Path:

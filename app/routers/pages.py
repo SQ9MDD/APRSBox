@@ -123,6 +123,7 @@ from app.services.system import (
     start_host_reboot_job,
     start_service_restart_job,
 )
+from app.services.traffic_stream import TrafficSnapshotBroadcaster, TrafficStreamCapacityError
 from app.template_helpers import build_template_context
 from app.ui_palette import get_ui_palette_label, get_ui_palette_options, is_supported_ui_palette, normalize_ui_palette
 from app.services.wx import (
@@ -2449,19 +2450,35 @@ async def traffic_stream(
     request: Request,
     _: UserIdentity = Depends(get_current_user),
 ) -> StreamingResponse:
-    async def event_generator():
-        previous_payload = ""
-        while True:
-            if await request.is_disconnected():
-                break
-            snapshot = get_traffic_snapshot()
-            payload = json.dumps(snapshot, separators=(",", ":"))
-            if payload != previous_payload:
-                previous_payload = payload
-                yield f"data: {payload}\n\n"
-            await asyncio.sleep(1)
+    broadcaster: TrafficSnapshotBroadcaster | None = getattr(request.app.state, "traffic_stream_broadcaster", None)
+    if broadcaster is None:
+        log_event("ERROR", "traffic", "Traffic SSE stream requested but broadcaster is not initialized.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Traffic stream is unavailable.")
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    try:
+        subscriber_id, queue = await broadcaster.subscribe()
+    except TrafficStreamCapacityError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                yield event
+        finally:
+            await broadcaster.unsubscribe(subscriber_id)
+
+    # Reverse proxy note (nginx): proxy_buffering off; proxy_cache off; proxy_read_timeout sufficiently long.
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 
 @router.get("/map")
