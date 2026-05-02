@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.30.dev - 01.05.2026
+
+### Najważniejsze zmiany
+- `Settings -> Configuration backup`: uzupełniono brakujące klucze i18n, dzięki czemu nagłówek sekcji, etykiety akcji i komunikaty modala importu przechodzą przez tłumaczenia tak jak pozostałe elementy `Settings`.
+- `Configuration backup import`: dodano tłumaczenia komunikatów walidacji/wyjątków backupu (`empty/size/json/format/version/table payload/FK`), aby błędy z endpointu importu były prezentowane spójnie w wybranym języku GUI.
+
 ## 1.7.29 - 01.05.2026
 
 ### Stable release
