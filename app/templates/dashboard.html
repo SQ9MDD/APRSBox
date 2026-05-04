@@ -71,11 +71,16 @@
                     <div class="dashboard-activity-controls">
                         <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
                         <select id="dashboard-activity-range" name="dashboard_activity_range">
+                            <option value="1h">1h</option>
+                            <option value="3h">3h</option>
+                            <option value="6h">6h</option>
+                            <option value="12h">12h</option>
                             <option value="24h">24h</option>
                             <option value="7d" selected>7d</option>
                             <option value="30d">30d</option>
                             <option value="365d">365d</option>
                         </select>
+                        <span class="muted small dashboard-activity-zoom-hint">{{ t("Drag to zoom, double click to reset.") }}</span>
                     </div>
                 </div>
                 <div class="dashboard-activity-grid">
@@ -201,7 +206,17 @@
 
         const rootPath = {{ request.scope.root_path|tojson }};
         const apiUrl = `${rootPath}/api/dashboard/radio-activity`;
-        const rangeDisplayMap = { "24h": "24h", "7d": "7d", "30d": "30d", "365d": "365d" };
+        const rangeDisplayMap = {
+            "1h": "1h",
+            "3h": "3h",
+            "6h": "6h",
+            "12h": "12h",
+            "24h": "24h",
+            "7d": "7d",
+            "30d": "30d",
+            "365d": "365d",
+        };
+        const defaultRange = "7d";
         const minStepLabel = {{ t("min step")|tojson }};
         const rangePrefix = {{ t("Range")|tojson }};
 
@@ -311,6 +326,111 @@
 
         let mainChart = null;
         let directionChart = null;
+        let zoomBounds = null;
+        const zoomMinPoints = 6;
+
+        const applyZoomBoundsToCharts = () => {
+            const charts = [mainChart, directionChart];
+            for (const chart of charts) {
+                if (!chart) {
+                    continue;
+                }
+                const labelsCount = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+                if (labelsCount <= 0) {
+                    continue;
+                }
+                if (zoomBounds && Number.isFinite(zoomBounds.min) && Number.isFinite(zoomBounds.max) && zoomBounds.max > zoomBounds.min) {
+                    chart.options.scales.x.min = Math.max(0, Math.min(labelsCount - 1, Number(zoomBounds.min)));
+                    chart.options.scales.x.max = Math.max(0, Math.min(labelsCount - 1, Number(zoomBounds.max)));
+                } else {
+                    delete chart.options.scales.x.min;
+                    delete chart.options.scales.x.max;
+                }
+                chart.update("none");
+            }
+        };
+
+        const resetZoomBounds = () => {
+            zoomBounds = null;
+            applyZoomBoundsToCharts();
+        };
+
+        const getIndexFromPointerEvent = (chart, event) => {
+            if (!chart || !chart.canvas || !chart.scales || !chart.scales.x) {
+                return null;
+            }
+            const rect = chart.canvas.getBoundingClientRect();
+            const x = Number(event.clientX) - rect.left;
+            if (!Number.isFinite(x)) {
+                return null;
+            }
+            const rawIndex = chart.scales.x.getValueForPixel(x);
+            const index = Number(rawIndex);
+            if (!Number.isFinite(index)) {
+                return null;
+            }
+            const labelsCount = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+            if (labelsCount <= 0) {
+                return null;
+            }
+            return Math.max(0, Math.min(labelsCount - 1, Math.round(index)));
+        };
+
+        const bindMouseZoomForCanvas = (canvas, chartResolver) => {
+            if (!(canvas instanceof HTMLCanvasElement)) {
+                return;
+            }
+            const dragState = { active: false, startIndex: null };
+
+            canvas.addEventListener("mousedown", (event) => {
+                if (event.button !== 0) {
+                    return;
+                }
+                const chart = chartResolver();
+                const startIndex = getIndexFromPointerEvent(chart, event);
+                if (startIndex === null) {
+                    return;
+                }
+                dragState.active = true;
+                dragState.startIndex = startIndex;
+                canvas.classList.add("dashboard-activity-zooming");
+            });
+
+            canvas.addEventListener("mouseup", (event) => {
+                if (!dragState.active) {
+                    return;
+                }
+                dragState.active = false;
+                canvas.classList.remove("dashboard-activity-zooming");
+                const chart = chartResolver();
+                const endIndex = getIndexFromPointerEvent(chart, event);
+                const startIndex = Number(dragState.startIndex);
+                dragState.startIndex = null;
+                if (endIndex === null || !Number.isFinite(startIndex)) {
+                    return;
+                }
+                const minIndex = Math.min(startIndex, endIndex);
+                const maxIndex = Math.max(startIndex, endIndex);
+                if ((maxIndex - minIndex + 1) < zoomMinPoints) {
+                    return;
+                }
+                zoomBounds = { min: minIndex, max: maxIndex };
+                applyZoomBoundsToCharts();
+            });
+
+            canvas.addEventListener("mouseleave", () => {
+                if (!dragState.active) {
+                    return;
+                }
+                dragState.active = false;
+                dragState.startIndex = null;
+                canvas.classList.remove("dashboard-activity-zooming");
+            });
+
+            canvas.addEventListener("dblclick", () => {
+                resetZoomBounds();
+            });
+        };
 
         const renderCharts = (chartPayload) => {
             const labels = chartPayload.labels || [];
@@ -401,6 +521,8 @@
                 });
             }
 
+            applyZoomBoundsToCharts();
+
             if (mainWindowNode) {
                 const rangeLabel = rangeDisplayMap[chartPayload.range] || chartPayload.range || "-";
                 const pointsLabel = Number(chartPayload.points || labels.length || 0);
@@ -430,6 +552,9 @@
         const fallbackPayload = normalizeLegacyPayload(payload);
         renderCharts(fallbackPayload);
 
+        bindMouseZoomForCanvas(mainCanvas, () => mainChart);
+        bindMouseZoomForCanvas(directionCanvas, () => directionChart);
+
         const loadRangePayload = async (rangeValue) => {
             const normalizedRange = String(rangeValue || "").trim().toLowerCase();
             if (!normalizedRange) {
@@ -446,8 +571,10 @@
                     throw new Error(`HTTP ${response.status}`);
                 }
                 const apiPayload = await response.json();
+                zoomBounds = null;
                 renderCharts(normalizeApiPayload(apiPayload));
             } catch (_) {
+                zoomBounds = null;
                 renderCharts(fallbackPayload);
             } finally {
                 if (rangeSelect instanceof HTMLSelectElement) {
@@ -457,12 +584,12 @@
         };
 
         if (rangeSelect instanceof HTMLSelectElement) {
-            rangeSelect.value = "7d";
+            rangeSelect.value = defaultRange;
             rangeSelect.addEventListener("change", () => {
                 loadRangePayload(rangeSelect.value);
             });
         }
-        loadRangePayload("7d");
+        loadRangePayload(defaultRange);
     })();
 </script>
 {% endblock %}

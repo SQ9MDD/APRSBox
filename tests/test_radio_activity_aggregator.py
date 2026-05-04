@@ -374,6 +374,34 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertGreaterEqual(sum(payload["series"]["rx_total"]), 5)
                 self.assertEqual(payload.get("range"), "24h")
 
+                response_1h = client.get("/api/dashboard/radio-activity?range=1h")
+                self.assertEqual(response_1h.status_code, 200)
+                payload_1h = response_1h.json()
+                self.assertEqual(payload_1h.get("range"), "1h")
+                self.assertEqual(int(payload_1h.get("output_bucket_minutes") or 0), 5)
+                self.assertFalse(bool(payload_1h.get("downsampled")))
+
+                response_3h = client.get("/api/dashboard/radio-activity?range=3h")
+                self.assertEqual(response_3h.status_code, 200)
+                payload_3h = response_3h.json()
+                self.assertEqual(payload_3h.get("range"), "3h")
+                self.assertEqual(int(payload_3h.get("output_bucket_minutes") or 0), 5)
+                self.assertFalse(bool(payload_3h.get("downsampled")))
+
+                response_6h = client.get("/api/dashboard/radio-activity?range=6h")
+                self.assertEqual(response_6h.status_code, 200)
+                payload_6h = response_6h.json()
+                self.assertEqual(payload_6h.get("range"), "6h")
+                self.assertEqual(int(payload_6h.get("output_bucket_minutes") or 0), 5)
+                self.assertFalse(bool(payload_6h.get("downsampled")))
+
+                response_12h = client.get("/api/dashboard/radio-activity?range=12h")
+                self.assertEqual(response_12h.status_code, 200)
+                payload_12h = response_12h.json()
+                self.assertEqual(payload_12h.get("range"), "12h")
+                self.assertEqual(int(payload_12h.get("output_bucket_minutes") or 0), 5)
+                self.assertFalse(bool(payload_12h.get("downsampled")))
+
                 response_7d = client.get("/api/dashboard/radio-activity?range=7d")
                 self.assertEqual(response_7d.status_code, 200)
                 payload_7d = response_7d.json()
@@ -404,7 +432,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                     int(payload_30d.get("output_bucket_minutes") or 0),
                 )
 
-                unsupported = client.get("/api/dashboard/radio-activity?range=12h")
+                unsupported = client.get("/api/dashboard/radio-activity?range=2h")
                 self.assertEqual(unsupported.status_code, 400)
             finally:
                 app.dependency_overrides.clear()
