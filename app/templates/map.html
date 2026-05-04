@@ -101,7 +101,6 @@
                         <img id="map-toggle-ruler-icon" src="{{ request.scope.root_path }}/static/icons/ruler.svg" alt="">
                     </button>
                     <label class="map-mask-opacity-control" for="map-mask-opacity">
-                        <span>{{ t('Mask opacity') }}</span>
                         <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="{{ t('Mask opacity') }}">
                             {% for value in range(0, 101, 10) %}
                             <option value="{{ value }}">{{ value }}%</option>

@@ -227,15 +227,30 @@
             return values.map((value) => Number(value || 0));
         };
 
-        const rootStyle = getComputedStyle(document.documentElement);
-        const colorText = rootStyle.getPropertyValue("--text").trim() || "#d8e1e8";
-        const colorMuted = rootStyle.getPropertyValue("--muted").trim() || "#9aa9b6";
-        const colorBorder = rootStyle.getPropertyValue("--border").trim() || "rgba(120, 135, 150, 0.35)";
-        const trafficColorDefault = colorText;
-        const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#4f8dff";
-        const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
-        const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
-        const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
+        const readChartPalette = () => {
+            const rootStyle = getComputedStyle(document.documentElement);
+            const isLightTheme = document.documentElement.getAttribute("data-theme") === "light";
+            const colorText = rootStyle.getPropertyValue("--text").trim() || "#d8e1e8";
+            const colorMuted = rootStyle.getPropertyValue("--muted").trim() || "#9aa9b6";
+            const colorBorder = rootStyle.getPropertyValue("--border").trim() || "rgba(120, 135, 150, 0.35)";
+            const trafficColorDefaultFromCss = rootStyle.getPropertyValue("--traffic-color-default").trim();
+            const trafficColorDefault = trafficColorDefaultFromCss || (isLightTheme ? "#000000" : "#ffffff");
+            const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#4f8dff";
+            const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
+            const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
+            const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
+            return {
+                colorText,
+                colorMuted,
+                colorBorder,
+                trafficColorDefault,
+                trafficColorOwnBeaconTx,
+                trafficColorOwnWxTx,
+                trafficColorOwnMessageTx,
+                trafficColorRepeatedTx,
+            };
+        };
+        let chartPalette = readChartPalette();
 
         const withAlpha = (color, alpha) => {
             const normalized = String(color || "").trim();
@@ -261,18 +276,18 @@
             interaction: { mode: "index", intersect: false },
             scales: {
                 x: {
-                    ticks: { color: colorMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
-                    grid: { color: colorBorder },
+                    ticks: { color: chartPalette.colorMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+                    grid: { color: chartPalette.colorBorder },
                 },
                 y: {
                     beginAtZero: true,
-                    ticks: { color: colorMuted, precision: 0 },
-                    grid: { color: colorBorder },
+                    ticks: { color: chartPalette.colorMuted, precision: 0 },
+                    grid: { color: chartPalette.colorBorder },
                 },
             },
             plugins: {
                 legend: {
-                    labels: { color: colorText, usePointStyle: true, boxWidth: 10 },
+                    labels: { color: chartPalette.colorText, usePointStyle: true, boxWidth: 10 },
                 },
             },
             elements: {
@@ -349,6 +364,7 @@
         let mainChart = null;
         let directionChart = null;
         let zoomBounds = null;
+        let lastRenderedPayload = null;
         const zoomMinPoints = 4;
 
         const applyZoomBoundsToCharts = () => {
@@ -495,6 +511,8 @@
         };
 
         const renderCharts = (chartPayload) => {
+            chartPalette = readChartPalette();
+            lastRenderedPayload = chartPayload;
             const labels = chartPayload.labels || [];
             const series = chartPayload.series || {};
 
@@ -517,29 +535,29 @@
                             {
                                 label: {{ t("All frames")|tojson }},
                                 data: toSeries(series.total, labels.length),
-                                borderColor: trafficColorDefault,
-                                backgroundColor: withAlpha(trafficColorDefault, 0.14),
+                                borderColor: chartPalette.trafficColorDefault,
+                                backgroundColor: withAlpha(chartPalette.trafficColorDefault, 0.14),
                                 fill: true,
                             },
                             {
                                 label: {{ t("Mobile")|tojson }},
                                 data: toSeries(series.mobile, labels.length),
-                                borderColor: trafficColorOwnWxTx,
-                                backgroundColor: withAlpha(trafficColorOwnWxTx, 0.16),
+                                borderColor: chartPalette.trafficColorOwnWxTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnWxTx, 0.16),
                                 fill: false,
                             },
                             {
                                 label: {{ t("Messages")|tojson }},
                                 data: toSeries(series.message, labels.length),
-                                borderColor: trafficColorOwnMessageTx,
-                                backgroundColor: withAlpha(trafficColorOwnMessageTx, 0.18),
+                                borderColor: chartPalette.trafficColorOwnMessageTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnMessageTx, 0.18),
                                 fill: false,
                             },
                             {
                                 label: {{ t("Queries")|tojson }},
                                 data: toSeries(series.query, labels.length),
-                                borderColor: trafficColorOwnBeaconTx,
-                                backgroundColor: withAlpha(trafficColorOwnBeaconTx, 0.16),
+                                borderColor: chartPalette.trafficColorOwnBeaconTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnBeaconTx, 0.16),
                                 fill: false,
                             },
                         ],
@@ -558,22 +576,22 @@
                             {
                                 label: {{ t("Received (RX)")|tojson }},
                                 data: toSeries(series.rx, labels.length),
-                                borderColor: trafficColorDefault,
-                                backgroundColor: withAlpha(trafficColorDefault, 0.14),
+                                borderColor: chartPalette.trafficColorDefault,
+                                backgroundColor: withAlpha(chartPalette.trafficColorDefault, 0.14),
                                 fill: true,
                             },
                             {
                                 label: {{ t("Sent (TX)")|tojson }},
                                 data: toSeries(series.tx, labels.length),
-                                borderColor: trafficColorOwnBeaconTx,
-                                backgroundColor: withAlpha(trafficColorOwnBeaconTx, 0.16),
+                                borderColor: chartPalette.trafficColorOwnBeaconTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnBeaconTx, 0.16),
                                 fill: false,
                             },
                             {
                                 label: {{ t("Repeated TX")|tojson }},
                                 data: toSeries(series.repeated_tx, labels.length),
-                                borderColor: trafficColorRepeatedTx,
-                                backgroundColor: withAlpha(trafficColorRepeatedTx, 0.16),
+                                borderColor: chartPalette.trafficColorRepeatedTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorRepeatedTx, 0.16),
                                 borderDash: [6, 4],
                                 fill: false,
                             },
@@ -651,6 +669,17 @@
                 loadRangePayload(rangeSelect.value);
             });
         }
+        const themeObserver = new window.MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type === "attributes" && (mutation.attributeName === "data-theme" || mutation.attributeName === "data-palette")) {
+                    if (lastRenderedPayload) {
+                        renderCharts(lastRenderedPayload);
+                    }
+                    break;
+                }
+            }
+        });
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
         loadRangePayload(defaultRange);
     })();
 </script>
