@@ -34,6 +34,8 @@
     const toggleRulerButton = document.getElementById("map-toggle-ruler");
     const toggleRulerIcon = document.getElementById("map-toggle-ruler-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
+    const coverageFillOpacitySelect = document.getElementById("map-coverage-fill-opacity");
+    const coverageOutlineOpacitySelect = document.getElementById("map-coverage-outline-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const rootPath = root.dataset.rootPath || "";
     const locale = document.documentElement.lang || undefined;
@@ -68,6 +70,8 @@
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
+    const mapCoverageFillOpacityStorageKey = "aprsbox-map-coverage-fill-opacity";
+    const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
@@ -76,6 +80,8 @@
     let tracksVisible = true;
     let coverageVisible = true;
     let rulerVisible = true;
+    let coverageFillOpacity = 0.2;
+    let coverageOutlineOpacity = 1;
     let latestStations = [];
     let latestMobileTracks = [];
     let rulerState = null;
@@ -97,8 +103,18 @@
         return `aprsbox-map-mask-opacity-${currentThemeName()}`;
     }
 
-    function maskLayerOpacityForMaskOpacity(opacityPercent) {
+    function opacityFractionFromPercent(opacityPercent) {
         return Math.max(0, Math.min(100, opacityPercent)) / 100;
+    }
+
+    function normalizeOpacityPercent(opacityPercent, fallbackPercent) {
+        const normalizedFallback = Number.isInteger(fallbackPercent) && fallbackPercent >= 0 && fallbackPercent <= 100
+            ? fallbackPercent - (fallbackPercent % 10)
+            : 100;
+        if (Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100) {
+            return opacityPercent - (opacityPercent % 10);
+        }
+        return normalizedFallback;
     }
 
     function resolveInitialView() {
@@ -291,10 +307,8 @@
     }
 
     function applyMaskOpacity(opacityPercent) {
-        const normalizedOpacity = Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 100
-            ? opacityPercent - (opacityPercent % 10)
-            : 20;
-        const maskLayerOpacity = maskLayerOpacityForMaskOpacity(normalizedOpacity);
+        const normalizedOpacity = normalizeOpacityPercent(opacityPercent, 20);
+        const maskLayerOpacity = opacityFractionFromPercent(normalizedOpacity);
         if (!mapMaskLayer) {
             mapMaskLayer = ensureMapMaskLayer(map);
         }
@@ -308,6 +322,40 @@
             maskOpacitySelect.value = String(normalizedOpacity);
         }
         window.localStorage.setItem(maskOpacityStorageKey(), String(normalizedOpacity));
+    }
+
+    function resolveDefaultCoverageFillOpacity() {
+        const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageFillOpacityStorageKey) || "", 10);
+        if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
+            return storedOpacity;
+        }
+        return 20;
+    }
+
+    function resolveDefaultCoverageOutlineOpacity() {
+        const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageOutlineOpacityStorageKey) || "", 10);
+        if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
+            return storedOpacity;
+        }
+        return 100;
+    }
+
+    function applyCoverageFillOpacity(opacityPercent) {
+        const normalizedOpacity = normalizeOpacityPercent(opacityPercent, 20);
+        coverageFillOpacity = opacityFractionFromPercent(normalizedOpacity);
+        if (coverageFillOpacitySelect) {
+            coverageFillOpacitySelect.value = String(normalizedOpacity);
+        }
+        window.localStorage.setItem(mapCoverageFillOpacityStorageKey, String(normalizedOpacity));
+    }
+
+    function applyCoverageOutlineOpacity(opacityPercent) {
+        const normalizedOpacity = normalizeOpacityPercent(opacityPercent, 100);
+        coverageOutlineOpacity = opacityFractionFromPercent(normalizedOpacity);
+        if (coverageOutlineOpacitySelect) {
+            coverageOutlineOpacitySelect.value = String(normalizedOpacity);
+        }
+        window.localStorage.setItem(mapCoverageOutlineOpacityStorageKey, String(normalizedOpacity));
     }
 
     function resolveTracksVisible() {
@@ -667,6 +715,20 @@
             applyMaskOpacity(Number.parseInt(maskOpacitySelect.value || "", 10));
         });
     }
+    if (coverageFillOpacitySelect) {
+        applyCoverageFillOpacity(resolveDefaultCoverageFillOpacity());
+        coverageFillOpacitySelect.addEventListener("change", function () {
+            applyCoverageFillOpacity(Number.parseInt(coverageFillOpacitySelect.value || "", 10));
+            renderStations(latestStations, latestMobileTracks);
+        });
+    }
+    if (coverageOutlineOpacitySelect) {
+        applyCoverageOutlineOpacity(resolveDefaultCoverageOutlineOpacity());
+        coverageOutlineOpacitySelect.addEventListener("change", function () {
+            applyCoverageOutlineOpacity(Number.parseInt(coverageOutlineOpacitySelect.value || "", 10));
+            renderStations(latestStations, latestMobileTracks);
+        });
+    }
     applyTracksToggleState(resolveTracksVisible());
     if (toggleTracksButton) {
         toggleTracksButton.addEventListener("click", function () {
@@ -908,8 +970,8 @@
             radius: radiusMeters,
             color: coverageColor,
             fillColor: coverageColor,
-            opacity: 1,
-            fillOpacity: 0.2,
+            opacity: coverageOutlineOpacity,
+            fillOpacity: coverageFillOpacity,
             stroke: true,
             weight: 1.25,
             interactive: false,
@@ -926,8 +988,8 @@
         return window.L.polygon(cardioidPoints, {
             color: coverageColor,
             fillColor: coverageColor,
-            opacity: 1,
-            fillOpacity: 0.2,
+            opacity: coverageOutlineOpacity,
+            fillOpacity: coverageFillOpacity,
             stroke: true,
             weight: 1.25,
             interactive: false,

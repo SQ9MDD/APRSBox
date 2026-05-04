@@ -460,6 +460,8 @@
   "Map controls": "Map controls",
   "Reset view": "Reset view",
   "Mask opacity": "Mask opacity",
+  "Coverage fill opacity": "Coverage fill opacity",
+  "Coverage outline opacity": "Coverage outline opacity",
   "Show latest packet widget": "Show latest packet widget",
   "Hide latest packet widget": "Hide latest packet widget",
   "Tiles": "Tiles",

@@ -460,6 +460,8 @@
   "Map controls": "Sterowanie mapą",
   "Reset view": "Resetuj widok",
   "Mask opacity": "Przezroczystość maski",
+  "Coverage fill opacity": "Przezroczystość wypełnienia zasięgu",
+  "Coverage outline opacity": "Przezroczystość obwiedni zasięgu",
   "Show latest packet widget": "Pokaż widget ostatniego pakietu",
   "Hide latest packet widget": "Ukryj widget ostatniego pakietu",
   "Tiles": "Kafelki",

@@ -101,7 +101,24 @@
                         <img id="map-toggle-ruler-icon" src="{{ request.scope.root_path }}/static/icons/ruler.svg" alt="">
                     </button>
                     <label class="map-mask-opacity-control" for="map-mask-opacity">
+                        <span>{{ t('Mask opacity') }}</span>
                         <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="{{ t('Mask opacity') }}">
+                            {% for value in range(0, 101, 10) %}
+                            <option value="{{ value }}">{{ value }}%</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="map-mask-opacity-control" for="map-coverage-fill-opacity">
+                        <span>{{ t('Coverage fill opacity') }}</span>
+                        <select id="map-coverage-fill-opacity" class="map-mask-opacity-select" aria-label="{{ t('Coverage fill opacity') }}">
+                            {% for value in range(0, 101, 10) %}
+                            <option value="{{ value }}">{{ value }}%</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="map-mask-opacity-control" for="map-coverage-outline-opacity">
+                        <span>{{ t('Coverage outline opacity') }}</span>
+                        <select id="map-coverage-outline-opacity" class="map-mask-opacity-select" aria-label="{{ t('Coverage outline opacity') }}">
                             {% for value in range(0, 101, 10) %}
                             <option value="{{ value }}">{{ value }}%</option>
                             {% endfor %}
