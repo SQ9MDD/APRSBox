@@ -9,6 +9,7 @@ from pathlib import Path
 from app.db import connect, execute, fetch_one, init_db
 from app.services.radio_activity import (
     _floor_to_bucket_start,
+    get_dashboard_radio_activity,
     run_radio_activity_aggregation,
 )
 
@@ -278,6 +279,49 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             assert row is not None
             self.assertEqual(int(row["total"]), 0)
 
+    def test_dashboard_downsampling_for_long_ranges(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            bucket_start = _floor_to_bucket_start(now_utc - timedelta(hours=2), bucket_minutes=5)
+            bucket_end = bucket_start + timedelta(minutes=5)
+            execute(
+                """
+                INSERT INTO radio_activity_5m(
+                    bucket_start_utc, bucket_end_utc, interface_id, source_name,
+                    rx_total, tx_total, digipeated_total, own_frames_total,
+                    messages_total, queries_total, objects_total, wx_total,
+                    position_total, mobile_total, fixed_total, unique_stations_total,
+                    direct_heard_total, indirect_heard_total, rfonly_total, nogate_total,
+                    invalid_total, parse_error_total, duplicate_total, max_hops_seen, avg_hops,
+                    created_at_utc, updated_at_utc
+                )
+                VALUES (
+                    ?, ?, 1, 'Main TNC',
+                    8, 3, 1, 1,
+                    2, 1, 0, 0,
+                    3, 1, 1, 2,
+                    1, 1, 0, 0,
+                    0, 0, 0, 2, 1.5,
+                    ?, ?
+                )
+                """,
+                (bucket_start.isoformat(), bucket_end.isoformat(), now_utc.isoformat(), now_utc.isoformat()),
+            )
+
+            payload_30d = get_dashboard_radio_activity(range_value="30d")
+            self.assertEqual(payload_30d["range"], "30d")
+            self.assertTrue(bool(payload_30d.get("downsampled")))
+            self.assertGreater(int(payload_30d["output_bucket_minutes"]), 5)
+            self.assertLessEqual(int(payload_30d["points"]), 1200)
+            self.assertEqual(len(payload_30d["labels"]), int(payload_30d["points"]))
+
+            payload_365d = get_dashboard_radio_activity(range_value="365d")
+            self.assertEqual(payload_365d["range"], "365d")
+            self.assertTrue(bool(payload_365d.get("downsampled")))
+            self.assertGreater(int(payload_365d["output_bucket_minutes"]), int(payload_30d["output_bucket_minutes"]))
+            self.assertLessEqual(int(payload_365d["points"]), 1200)
+            self.assertEqual(len(payload_365d["labels"]), int(payload_365d["points"]))
+
     def test_dashboard_api_returns_aggregated_series(self) -> None:
         if not FASTAPI_AVAILABLE:
             self.skipTest("fastapi is not installed in this environment")
@@ -338,6 +382,26 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(
                     len(payload_7d.get("labels") or []),
                     len(payload_7d.get("bucket_starts_utc") or []),
+                )
+                self.assertEqual(int(payload_7d.get("output_bucket_minutes") or 0), 5)
+                self.assertFalse(bool(payload_7d.get("downsampled")))
+
+                response_30d = client.get("/api/dashboard/radio-activity?range=30d")
+                self.assertEqual(response_30d.status_code, 200)
+                payload_30d = response_30d.json()
+                self.assertEqual(payload_30d.get("range"), "30d")
+                self.assertTrue(bool(payload_30d.get("downsampled")))
+                self.assertGreater(int(payload_30d.get("output_bucket_minutes") or 0), 5)
+                self.assertLessEqual(int(payload_30d.get("points") or 0), 1200)
+
+                response_365d = client.get("/api/dashboard/radio-activity?range=365d")
+                self.assertEqual(response_365d.status_code, 200)
+                payload_365d = response_365d.json()
+                self.assertEqual(payload_365d.get("range"), "365d")
+                self.assertTrue(bool(payload_365d.get("downsampled")))
+                self.assertGreater(
+                    int(payload_365d.get("output_bucket_minutes") or 0),
+                    int(payload_30d.get("output_bucket_minutes") or 0),
                 )
 
                 unsupported = client.get("/api/dashboard/radio-activity?range=12h")

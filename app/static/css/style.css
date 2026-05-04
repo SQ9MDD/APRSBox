@@ -1197,6 +1197,24 @@ body {
     gap: var(--space-2);
 }
 
+.dashboard-activity-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.dashboard-activity-range-label {
+    display: inline;
+    color: var(--muted);
+    font-size: 0.78rem;
+    letter-spacing: 0.01em;
+}
+
+.dashboard-activity-controls select {
+    width: auto;
+    min-width: 6.2rem;
+}
+
 .dashboard-activity-grid {
     display: grid;
     grid-template-columns: 1fr;

@@ -12,7 +12,16 @@ RADIO_ACTIVITY_BUCKET_MINUTES = 5
 RADIO_ACTIVITY_STATE_KEY_DEFAULT = "radio_activity_5m.default"
 RADIO_ACTIVITY_RANGE_24H = "24h"
 RADIO_ACTIVITY_RANGE_7D = "7d"
-RADIO_ACTIVITY_RANGE_OPTIONS = {RADIO_ACTIVITY_RANGE_24H: 24 * 60, RADIO_ACTIVITY_RANGE_7D: 7 * 24 * 60}
+RADIO_ACTIVITY_RANGE_30D = "30d"
+RADIO_ACTIVITY_RANGE_365D = "365d"
+RADIO_ACTIVITY_RANGE_OPTIONS = {
+    RADIO_ACTIVITY_RANGE_24H: 24 * 60,
+    RADIO_ACTIVITY_RANGE_7D: 7 * 24 * 60,
+    RADIO_ACTIVITY_RANGE_30D: 30 * 24 * 60,
+    RADIO_ACTIVITY_RANGE_365D: 365 * 24 * 60,
+}
+RADIO_ACTIVITY_DOWNSAMPLE_MAX_POINTS = 1200
+RADIO_ACTIVITY_DOWNSAMPLE_STEPS_MINUTES = (5, 10, 15, 30, 60, 120, 180, 360, 720, 1440)
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
     "tx_total": 0,
@@ -195,19 +204,24 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
     if normalized_range not in RADIO_ACTIVITY_RANGE_OPTIONS:
         raise ValueError("Unsupported range.")
 
-    bucket_minutes = RADIO_ACTIVITY_BUCKET_MINUTES
-    bucket_delta = timedelta(minutes=bucket_minutes)
+    base_bucket_minutes = RADIO_ACTIVITY_BUCKET_MINUTES
     total_minutes = RADIO_ACTIVITY_RANGE_OPTIONS[normalized_range]
-    bucket_count = max(1, total_minutes // bucket_minutes)
+    output_bucket_minutes = _resolve_output_bucket_minutes(total_minutes)
+    output_bucket_delta = timedelta(minutes=output_bucket_minutes)
+    output_bucket_seconds = output_bucket_minutes * 60
+    output_bucket_count = max(1, (total_minutes + output_bucket_minutes - 1) // output_bucket_minutes)
     now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-    latest_expected_bucket_start = _floor_to_bucket_start(now_utc, bucket_minutes=bucket_minutes) - bucket_delta
-    window_start_utc = latest_expected_bucket_start - timedelta(minutes=bucket_minutes * (bucket_count - 1))
-    window_end_utc = latest_expected_bucket_start + bucket_delta
+    latest_base_bucket_start = _floor_to_bucket_start(now_utc, bucket_minutes=base_bucket_minutes) - timedelta(
+        minutes=base_bucket_minutes
+    )
+    latest_output_bucket_start = _floor_to_bucket_start(latest_base_bucket_start, bucket_minutes=output_bucket_minutes)
+    window_start_utc = latest_output_bucket_start - timedelta(minutes=output_bucket_minutes * (output_bucket_count - 1))
+    window_end_utc = latest_output_bucket_start + output_bucket_delta
 
     rows = fetch_all(
         """
         SELECT
-            bucket_start_utc,
+            CAST((CAST(strftime('%s', bucket_start_utc) AS INTEGER) / ?) AS INTEGER) * ? AS bucket_epoch,
             SUM(rx_total) AS rx_total,
             SUM(tx_total) AS tx_total,
             SUM(digipeated_total) AS digipeated_total,
@@ -230,12 +244,20 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
         FROM radio_activity_5m
         WHERE bucket_start_utc >= ?
           AND bucket_start_utc < ?
-        GROUP BY bucket_start_utc
-        ORDER BY bucket_start_utc ASC
+        GROUP BY bucket_epoch
+        ORDER BY bucket_epoch ASC
         """,
-        (window_start_utc.isoformat(), window_end_utc.isoformat()),
+        (output_bucket_seconds, output_bucket_seconds, window_start_utc.isoformat(), window_end_utc.isoformat()),
     )
-    row_by_bucket_start = {str(row["bucket_start_utc"]): dict(row) for row in rows}
+    row_by_bucket_start: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        epoch_raw = row["bucket_epoch"]
+        try:
+            epoch_value = int(epoch_raw)
+        except (TypeError, ValueError):
+            continue
+        bucket_start_utc = datetime.fromtimestamp(epoch_value, tz=timezone.utc)
+        row_by_bucket_start[bucket_start_utc.isoformat()] = dict(row)
 
     bucket_starts: list[str] = []
     labels: list[str] = []
@@ -262,14 +284,11 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
     }
     totals = {key: 0 for key in series}
 
-    for index in range(bucket_count):
-        bucket_start_utc = window_start_utc + timedelta(minutes=bucket_minutes * index)
+    for index in range(output_bucket_count):
+        bucket_start_utc = window_start_utc + timedelta(minutes=output_bucket_minutes * index)
         bucket_start_key = bucket_start_utc.isoformat()
         bucket_starts.append(bucket_start_key)
-        if normalized_range == RADIO_ACTIVITY_RANGE_7D:
-            labels.append(bucket_start_utc.strftime("%d.%m %H:%M"))
-        else:
-            labels.append(bucket_start_utc.strftime("%H:%M"))
+        labels.append(_format_radio_activity_label(bucket_start_utc, output_bucket_minutes=output_bucket_minutes))
         row = row_by_bucket_start.get(bucket_start_key) or {}
         for key in series:
             value = int(row.get(key) or 0)
@@ -278,14 +297,39 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
 
     return {
         "range": normalized_range,
-        "bucket_minutes": bucket_minutes,
+        "range_minutes": total_minutes,
+        "base_bucket_minutes": base_bucket_minutes,
+        "output_bucket_minutes": output_bucket_minutes,
+        "downsampled": bool(output_bucket_minutes > base_bucket_minutes),
         "window_start_utc": window_start_utc.isoformat(),
         "window_end_utc": window_end_utc.isoformat(),
         "bucket_starts_utc": bucket_starts,
         "labels": labels,
+        "points": output_bucket_count,
         "series": series,
         "totals": totals,
     }
+
+
+def _resolve_output_bucket_minutes(total_minutes: int) -> int:
+    normalized_total_minutes = max(RADIO_ACTIVITY_BUCKET_MINUTES, int(total_minutes))
+    if normalized_total_minutes <= RADIO_ACTIVITY_RANGE_OPTIONS[RADIO_ACTIVITY_RANGE_7D]:
+        return RADIO_ACTIVITY_BUCKET_MINUTES
+    for step_minutes in RADIO_ACTIVITY_DOWNSAMPLE_STEPS_MINUTES:
+        if step_minutes < RADIO_ACTIVITY_BUCKET_MINUTES:
+            continue
+        bucket_count = (normalized_total_minutes + step_minutes - 1) // step_minutes
+        if bucket_count <= RADIO_ACTIVITY_DOWNSAMPLE_MAX_POINTS:
+            return step_minutes
+    return RADIO_ACTIVITY_DOWNSAMPLE_STEPS_MINUTES[-1]
+
+
+def _format_radio_activity_label(bucket_start_utc: datetime, *, output_bucket_minutes: int) -> str:
+    if output_bucket_minutes >= 1440:
+        return bucket_start_utc.strftime("%d.%m")
+    if output_bucket_minutes >= 60:
+        return bucket_start_utc.strftime("%d.%m %H:%M")
+    return bucket_start_utc.strftime("%H:%M")
 
 
 def _collect_bucket_source_rows(

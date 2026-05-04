@@ -66,14 +66,23 @@
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Activity Charts") }}</h2>
-                        <p class="section-lead">{{ t("Last 60 minutes in 5-minute buckets.") }}</p>
+                        <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
+                    </div>
+                    <div class="dashboard-activity-controls">
+                        <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
+                        <select id="dashboard-activity-range" name="dashboard_activity_range">
+                            <option value="24h">24h</option>
+                            <option value="7d" selected>7d</option>
+                            <option value="30d">30d</option>
+                            <option value="365d">365d</option>
+                        </select>
                     </div>
                 </div>
                 <div class="dashboard-activity-grid">
                     <section class="dashboard-activity-card" id="dashboard-main-activity-chart-card">
                         <div class="dashboard-activity-card-header">
                             <h3>{{ t("All / mobile / messages / queries") }}</h3>
-                            <span class="muted small">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
+                            <span class="muted small" id="dashboard-main-activity-window">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
                         </div>
                         <div class="dashboard-activity-canvas">
                             <canvas id="dashboard-main-activity-chart"></canvas>
@@ -82,7 +91,7 @@
                     <section class="dashboard-activity-card" id="dashboard-direction-activity-chart-card">
                         <div class="dashboard-activity-card-header">
                             <h3>{{ t("RX / TX / repeats") }}</h3>
-                            <span class="muted small">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
+                            <span class="muted small" id="dashboard-direction-activity-step">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
                         </div>
                         <div class="dashboard-activity-canvas">
                             <canvas id="dashboard-direction-activity-chart"></canvas>
@@ -92,19 +101,19 @@
                 <div class="dashboard-activity-totals">
                     <div class="metric-card dashboard-kpi-card">
                         <span class="metric-label">{{ t("All frames") }}</span>
-                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.total }}</span>
+                        <span class="metric-value" id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</span>
                     </div>
                     <div class="metric-card dashboard-kpi-card">
                         <span class="metric-label">{{ t("Received (RX)") }}</span>
-                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.rx }}</span>
+                        <span class="metric-value" id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</span>
                     </div>
                     <div class="metric-card dashboard-kpi-card">
                         <span class="metric-label">{{ t("Sent (TX)") }}</span>
-                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.tx }}</span>
+                        <span class="metric-value" id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</span>
                     </div>
                     <div class="metric-card dashboard-kpi-card">
                         <span class="metric-label">{{ t("Repeated TX") }}</span>
-                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.repeated_tx }}</span>
+                        <span class="metric-value" id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</span>
                     </div>
                 </div>
             </div>
@@ -167,6 +176,13 @@
         const payloadNode = document.getElementById("dashboard-activity-data");
         const mainCanvas = document.getElementById("dashboard-main-activity-chart");
         const directionCanvas = document.getElementById("dashboard-direction-activity-chart");
+        const rangeSelect = document.getElementById("dashboard-activity-range");
+        const mainWindowNode = document.getElementById("dashboard-main-activity-window");
+        const stepNode = document.getElementById("dashboard-direction-activity-step");
+        const totalFramesNode = document.getElementById("dashboard-total-frames");
+        const totalRxNode = document.getElementById("dashboard-total-rx");
+        const totalTxNode = document.getElementById("dashboard-total-tx");
+        const totalRepeatedNode = document.getElementById("dashboard-total-repeated");
         if (
             !(payloadNode instanceof HTMLScriptElement)
             || !(mainCanvas instanceof HTMLCanvasElement)
@@ -183,16 +199,25 @@
             return;
         }
 
-        const labels = Array.isArray(payload.labels) ? payload.labels : [];
-        const series = payload.series || {};
-        const toSeries = (key) => (Array.isArray(series[key]) ? series[key].map((value) => Number(value || 0)) : labels.map(() => 0));
+        const rootPath = {{ request.scope.root_path|tojson }};
+        const apiUrl = `${rootPath}/api/dashboard/radio-activity`;
+        const rangeDisplayMap = { "24h": "24h", "7d": "7d", "30d": "30d", "365d": "365d" };
+        const minStepLabel = {{ t("min step")|tojson }};
+        const rangePrefix = {{ t("Range")|tojson }};
+
+        const toSeries = (values, sizeHint) => {
+            if (!Array.isArray(values)) {
+                return Array.from({ length: Math.max(0, Number(sizeHint) || 0) }, () => 0);
+            }
+            return values.map((value) => Number(value || 0));
+        };
 
         const rootStyle = getComputedStyle(document.documentElement);
         const colorText = rootStyle.getPropertyValue("--text").trim() || "#d8e1e8";
         const colorMuted = rootStyle.getPropertyValue("--muted").trim() || "#9aa9b6";
         const colorBorder = rootStyle.getPropertyValue("--border").trim() || "rgba(120, 135, 150, 0.35)";
 
-        const sharedOptions = {
+        const buildSharedOptions = () => ({
             responsive: true,
             maintainAspectRatio: false,
             animation: false,
@@ -217,83 +242,227 @@
                 point: { radius: 1.8, hoverRadius: 3.2 },
                 line: { tension: 0.25, borderWidth: 2 },
             },
+        });
+
+        const normalizeLegacyPayload = (rawPayload) => {
+            const labels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
+            const sourceSeries = rawPayload?.series || {};
+            const totalSeries = toSeries(sourceSeries.total, labels.length);
+            const rxSeries = toSeries(sourceSeries.rx, labels.length);
+            const txSeries = toSeries(sourceSeries.tx, labels.length);
+            const repeatedSeries = toSeries(sourceSeries.repeated_tx, labels.length);
+            const mobileSeries = toSeries(sourceSeries.mobile, labels.length);
+            const messageSeries = toSeries(sourceSeries.message, labels.length);
+            const querySeries = toSeries(sourceSeries.query, labels.length);
+            return {
+                range: "legacy",
+                outputBucketMinutes: Number(rawPayload?.bucket_minutes || 5),
+                labels,
+                series: {
+                    total: totalSeries,
+                    mobile: mobileSeries,
+                    message: messageSeries,
+                    query: querySeries,
+                    rx: rxSeries,
+                    tx: txSeries,
+                    repeated_tx: repeatedSeries,
+                },
+                totals: {
+                    total: totalSeries.reduce((acc, value) => acc + value, 0),
+                    rx: rxSeries.reduce((acc, value) => acc + value, 0),
+                    tx: txSeries.reduce((acc, value) => acc + value, 0),
+                    repeated_tx: repeatedSeries.reduce((acc, value) => acc + value, 0),
+                },
+            };
         };
 
-        const mainContext = mainCanvas.getContext("2d");
-        if (mainContext) {
-            new window.Chart(mainContext, {
-                type: "line",
-                data: {
-                    labels,
-                    datasets: [
-                        {
-                            label: {{ t("All frames")|tojson }},
-                            data: toSeries("total"),
-                            borderColor: "#4DB6AC",
-                            backgroundColor: "rgba(77, 182, 172, 0.18)",
-                            fill: true,
-                        },
-                        {
-                            label: {{ t("Mobile")|tojson }},
-                            data: toSeries("mobile"),
-                            borderColor: "#7BB7FF",
-                            backgroundColor: "rgba(123, 183, 255, 0.18)",
-                            fill: false,
-                        },
-                        {
-                            label: {{ t("Messages")|tojson }},
-                            data: toSeries("message"),
-                            borderColor: "#F2C879",
-                            backgroundColor: "rgba(242, 200, 121, 0.18)",
-                            fill: false,
-                        },
-                        {
-                            label: {{ t("Queries")|tojson }},
-                            data: toSeries("query"),
-                            borderColor: "#C38CFF",
-                            backgroundColor: "rgba(195, 140, 255, 0.18)",
-                            fill: false,
-                        },
-                    ],
+        const normalizeApiPayload = (rawPayload) => {
+            const labels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
+            const sourceSeries = rawPayload?.series || {};
+            const rxSeries = toSeries(sourceSeries.rx_total, labels.length);
+            const txSeries = toSeries(sourceSeries.tx_total, labels.length);
+            const totalSeries = rxSeries.map((value, index) => value + (txSeries[index] || 0));
+            const repeatedSeries = toSeries(sourceSeries.digipeated_total, labels.length);
+            const mobileSeries = toSeries(sourceSeries.mobile_total, labels.length);
+            const messageSeries = toSeries(sourceSeries.messages_total, labels.length);
+            const querySeries = toSeries(sourceSeries.queries_total, labels.length);
+            return {
+                range: String(rawPayload?.range || "").trim().toLowerCase(),
+                outputBucketMinutes: Number(rawPayload?.output_bucket_minutes || 5),
+                points: Number(rawPayload?.points || labels.length || 0),
+                labels,
+                series: {
+                    total: totalSeries,
+                    mobile: mobileSeries,
+                    message: messageSeries,
+                    query: querySeries,
+                    rx: rxSeries,
+                    tx: txSeries,
+                    repeated_tx: repeatedSeries,
                 },
-                options: sharedOptions,
-            });
-        }
+                totals: {
+                    total: totalSeries.reduce((acc, value) => acc + value, 0),
+                    rx: rxSeries.reduce((acc, value) => acc + value, 0),
+                    tx: txSeries.reduce((acc, value) => acc + value, 0),
+                    repeated_tx: repeatedSeries.reduce((acc, value) => acc + value, 0),
+                },
+            };
+        };
 
-        const directionContext = directionCanvas.getContext("2d");
-        if (directionContext) {
-            new window.Chart(directionContext, {
-                type: "line",
-                data: {
-                    labels,
-                    datasets: [
-                        {
-                            label: {{ t("Received (RX)")|tojson }},
-                            data: toSeries("rx"),
-                            borderColor: "#84D8BF",
-                            backgroundColor: "rgba(132, 216, 191, 0.16)",
-                            fill: true,
-                        },
-                        {
-                            label: {{ t("Sent (TX)")|tojson }},
-                            data: toSeries("tx"),
-                            borderColor: "#FF8F8F",
-                            backgroundColor: "rgba(255, 143, 143, 0.16)",
-                            fill: false,
-                        },
-                        {
-                            label: {{ t("Repeated TX")|tojson }},
-                            data: toSeries("repeated_tx"),
-                            borderColor: "#F6B26B",
-                            backgroundColor: "rgba(246, 178, 107, 0.16)",
-                            borderDash: [6, 4],
-                            fill: false,
-                        },
-                    ],
-                },
-                options: sharedOptions,
+        let mainChart = null;
+        let directionChart = null;
+
+        const renderCharts = (chartPayload) => {
+            const labels = chartPayload.labels || [];
+            const series = chartPayload.series || {};
+
+            if (mainChart) {
+                mainChart.destroy();
+                mainChart = null;
+            }
+            if (directionChart) {
+                directionChart.destroy();
+                directionChart = null;
+            }
+
+            const mainContext = mainCanvas.getContext("2d");
+            if (mainContext) {
+                mainChart = new window.Chart(mainContext, {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                label: {{ t("All frames")|tojson }},
+                                data: toSeries(series.total, labels.length),
+                                borderColor: "#4DB6AC",
+                                backgroundColor: "rgba(77, 182, 172, 0.18)",
+                                fill: true,
+                            },
+                            {
+                                label: {{ t("Mobile")|tojson }},
+                                data: toSeries(series.mobile, labels.length),
+                                borderColor: "#7BB7FF",
+                                backgroundColor: "rgba(123, 183, 255, 0.18)",
+                                fill: false,
+                            },
+                            {
+                                label: {{ t("Messages")|tojson }},
+                                data: toSeries(series.message, labels.length),
+                                borderColor: "#F2C879",
+                                backgroundColor: "rgba(242, 200, 121, 0.18)",
+                                fill: false,
+                            },
+                            {
+                                label: {{ t("Queries")|tojson }},
+                                data: toSeries(series.query, labels.length),
+                                borderColor: "#C38CFF",
+                                backgroundColor: "rgba(195, 140, 255, 0.18)",
+                                fill: false,
+                            },
+                        ],
+                    },
+                    options: buildSharedOptions(),
+                });
+            }
+
+            const directionContext = directionCanvas.getContext("2d");
+            if (directionContext) {
+                directionChart = new window.Chart(directionContext, {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                label: {{ t("Received (RX)")|tojson }},
+                                data: toSeries(series.rx, labels.length),
+                                borderColor: "#84D8BF",
+                                backgroundColor: "rgba(132, 216, 191, 0.16)",
+                                fill: true,
+                            },
+                            {
+                                label: {{ t("Sent (TX)")|tojson }},
+                                data: toSeries(series.tx, labels.length),
+                                borderColor: "#FF8F8F",
+                                backgroundColor: "rgba(255, 143, 143, 0.16)",
+                                fill: false,
+                            },
+                            {
+                                label: {{ t("Repeated TX")|tojson }},
+                                data: toSeries(series.repeated_tx, labels.length),
+                                borderColor: "#F6B26B",
+                                backgroundColor: "rgba(246, 178, 107, 0.16)",
+                                borderDash: [6, 4],
+                                fill: false,
+                            },
+                        ],
+                    },
+                    options: buildSharedOptions(),
+                });
+            }
+
+            if (mainWindowNode) {
+                const rangeLabel = rangeDisplayMap[chartPayload.range] || chartPayload.range || "-";
+                const pointsLabel = Number(chartPayload.points || labels.length || 0);
+                if (rangeLabel && rangeLabel !== "legacy") {
+                    mainWindowNode.textContent = `${rangePrefix}: ${rangeLabel} • ${pointsLabel} pkt`;
+                } else {
+                    mainWindowNode.textContent = `${pointsLabel} pkt`;
+                }
+            }
+            if (stepNode) {
+                stepNode.textContent = `${Number(chartPayload.outputBucketMinutes || 5)} ${minStepLabel}`;
+            }
+            if (totalFramesNode) {
+                totalFramesNode.textContent = String(Number(chartPayload?.totals?.total || 0));
+            }
+            if (totalRxNode) {
+                totalRxNode.textContent = String(Number(chartPayload?.totals?.rx || 0));
+            }
+            if (totalTxNode) {
+                totalTxNode.textContent = String(Number(chartPayload?.totals?.tx || 0));
+            }
+            if (totalRepeatedNode) {
+                totalRepeatedNode.textContent = String(Number(chartPayload?.totals?.repeated_tx || 0));
+            }
+        };
+
+        const fallbackPayload = normalizeLegacyPayload(payload);
+        renderCharts(fallbackPayload);
+
+        const loadRangePayload = async (rangeValue) => {
+            const normalizedRange = String(rangeValue || "").trim().toLowerCase();
+            if (!normalizedRange) {
+                return;
+            }
+            if (rangeSelect instanceof HTMLSelectElement) {
+                rangeSelect.disabled = true;
+            }
+            try {
+                const response = await fetch(`${apiUrl}?range=${encodeURIComponent(normalizedRange)}`, {
+                    headers: { Accept: "application/json" },
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const apiPayload = await response.json();
+                renderCharts(normalizeApiPayload(apiPayload));
+            } catch (_) {
+                renderCharts(fallbackPayload);
+            } finally {
+                if (rangeSelect instanceof HTMLSelectElement) {
+                    rangeSelect.disabled = false;
+                }
+            }
+        };
+
+        if (rangeSelect instanceof HTMLSelectElement) {
+            rangeSelect.value = "7d";
+            rangeSelect.addEventListener("change", () => {
+                loadRangePayload(rangeSelect.value);
             });
         }
+        loadRangePayload("7d");
     })();
 </script>
 {% endblock %}
