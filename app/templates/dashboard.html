@@ -75,8 +75,8 @@
                             <option value="3h">3h</option>
                             <option value="6h">6h</option>
                             <option value="12h">12h</option>
-                            <option value="24h">24h</option>
-                            <option value="7d" selected>7d</option>
+                            <option value="24h" selected>24h</option>
+                            <option value="7d">7d</option>
                             <option value="30d">30d</option>
                             <option value="365d">365d</option>
                         </select>
@@ -216,7 +216,7 @@
             "30d": "30d",
             "365d": "365d",
         };
-        const defaultRange = "7d";
+        const defaultRange = "24h";
         const minStepLabel = {{ t("min step")|tojson }};
         const rangePrefix = {{ t("Range")|tojson }};
 
@@ -231,6 +231,29 @@
         const colorText = rootStyle.getPropertyValue("--text").trim() || "#d8e1e8";
         const colorMuted = rootStyle.getPropertyValue("--muted").trim() || "#9aa9b6";
         const colorBorder = rootStyle.getPropertyValue("--border").trim() || "rgba(120, 135, 150, 0.35)";
+        const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#4f8dff";
+        const trafficColorOwnBeaconRx = rootStyle.getPropertyValue("--traffic-color-own-beacon-rx").trim() || "#7aa9ff";
+        const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
+        const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
+        const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
+        const trafficColorProxyTx = rootStyle.getPropertyValue("--traffic-color-proxy-tx").trim() || "#a65fc1";
+
+        const withAlpha = (color, alpha) => {
+            const normalized = String(color || "").trim();
+            if (/^#[0-9a-fA-F]{6}$/.test(normalized)) {
+                const r = Number.parseInt(normalized.slice(1, 3), 16);
+                const g = Number.parseInt(normalized.slice(3, 5), 16);
+                const b = Number.parseInt(normalized.slice(5, 7), 16);
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            }
+            if (/^#[0-9a-fA-F]{3}$/.test(normalized)) {
+                const r = Number.parseInt(normalized[1] + normalized[1], 16);
+                const g = Number.parseInt(normalized[2] + normalized[2], 16);
+                const b = Number.parseInt(normalized[3] + normalized[3], 16);
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            }
+            return normalized || `rgba(77, 182, 172, ${alpha})`;
+        };
 
         const buildSharedOptions = () => ({
             responsive: true,
@@ -455,29 +478,29 @@
                             {
                                 label: {{ t("All frames")|tojson }},
                                 data: toSeries(series.total, labels.length),
-                                borderColor: "#4DB6AC",
-                                backgroundColor: "rgba(77, 182, 172, 0.18)",
+                                borderColor: trafficColorOwnWxTx,
+                                backgroundColor: withAlpha(trafficColorOwnWxTx, 0.18),
                                 fill: true,
                             },
                             {
                                 label: {{ t("Mobile")|tojson }},
                                 data: toSeries(series.mobile, labels.length),
-                                borderColor: "#7BB7FF",
-                                backgroundColor: "rgba(123, 183, 255, 0.18)",
+                                borderColor: trafficColorOwnBeaconRx,
+                                backgroundColor: withAlpha(trafficColorOwnBeaconRx, 0.18),
                                 fill: false,
                             },
                             {
                                 label: {{ t("Messages")|tojson }},
                                 data: toSeries(series.message, labels.length),
-                                borderColor: "#F2C879",
-                                backgroundColor: "rgba(242, 200, 121, 0.18)",
+                                borderColor: trafficColorOwnMessageTx,
+                                backgroundColor: withAlpha(trafficColorOwnMessageTx, 0.18),
                                 fill: false,
                             },
                             {
                                 label: {{ t("Queries")|tojson }},
                                 data: toSeries(series.query, labels.length),
-                                borderColor: "#C38CFF",
-                                backgroundColor: "rgba(195, 140, 255, 0.18)",
+                                borderColor: trafficColorProxyTx,
+                                backgroundColor: withAlpha(trafficColorProxyTx, 0.18),
                                 fill: false,
                             },
                         ],
@@ -496,22 +519,22 @@
                             {
                                 label: {{ t("Received (RX)")|tojson }},
                                 data: toSeries(series.rx, labels.length),
-                                borderColor: "#84D8BF",
-                                backgroundColor: "rgba(132, 216, 191, 0.16)",
+                                borderColor: trafficColorOwnBeaconRx,
+                                backgroundColor: withAlpha(trafficColorOwnBeaconRx, 0.16),
                                 fill: true,
                             },
                             {
                                 label: {{ t("Sent (TX)")|tojson }},
                                 data: toSeries(series.tx, labels.length),
-                                borderColor: "#FF8F8F",
-                                backgroundColor: "rgba(255, 143, 143, 0.16)",
+                                borderColor: trafficColorOwnBeaconTx,
+                                backgroundColor: withAlpha(trafficColorOwnBeaconTx, 0.16),
                                 fill: false,
                             },
                             {
                                 label: {{ t("Repeated TX")|tojson }},
                                 data: toSeries(series.repeated_tx, labels.length),
-                                borderColor: "#F6B26B",
-                                backgroundColor: "rgba(246, 178, 107, 0.16)",
+                                borderColor: trafficColorRepeatedTx,
+                                backgroundColor: withAlpha(trafficColorRepeatedTx, 0.16),
                                 borderDash: [6, 4],
                                 fill: false,
                             },

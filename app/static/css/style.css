@@ -28,6 +28,14 @@
     --space-5: 1.13rem;
     --space-6: 1.45rem;
     --map-mask-layer-color: rgba(0, 0, 0, 0.78);
+    --traffic-color-own-beacon-tx: #4f8dff;
+    --traffic-color-own-beacon-rx: #7aa9ff;
+    --traffic-color-own-wx-tx: #46a85f;
+    --traffic-color-own-wx-rx: #75c98a;
+    --traffic-color-own-message-tx: #e8913a;
+    --traffic-color-own-message-rx: #f0b36e;
+    --traffic-color-repeated-tx: #d24b4b;
+    --traffic-color-proxy-tx: #a65fc1;
 }
 
 :root[data-theme="dark"] {
@@ -3799,7 +3807,7 @@ select:focus-visible,
 .traffic-log-row-own-beacon-tx .traffic-log-time,
 .traffic-log-row-own-beacon-tx .traffic-log-source,
 .traffic-log-row-own-beacon-tx .traffic-log-line {
-    color: #4f8dff;
+    color: var(--traffic-color-own-beacon-tx);
 }
 
 .traffic-log-row-own-beacon-rx {
@@ -3809,7 +3817,7 @@ select:focus-visible,
 .traffic-log-row-own-beacon-rx .traffic-log-time,
 .traffic-log-row-own-beacon-rx .traffic-log-source,
 .traffic-log-row-own-beacon-rx .traffic-log-line {
-    color: #7aa9ff;
+    color: var(--traffic-color-own-beacon-rx);
 }
 
 .traffic-log-row-own-wx-tx {
@@ -3819,7 +3827,7 @@ select:focus-visible,
 .traffic-log-row-own-wx-tx .traffic-log-time,
 .traffic-log-row-own-wx-tx .traffic-log-source,
 .traffic-log-row-own-wx-tx .traffic-log-line {
-    color: #46a85f;
+    color: var(--traffic-color-own-wx-tx);
 }
 
 .traffic-log-row-own-wx-rx {
@@ -3829,7 +3837,7 @@ select:focus-visible,
 .traffic-log-row-own-wx-rx .traffic-log-time,
 .traffic-log-row-own-wx-rx .traffic-log-source,
 .traffic-log-row-own-wx-rx .traffic-log-line {
-    color: #75c98a;
+    color: var(--traffic-color-own-wx-rx);
 }
 
 .traffic-log-row-own-message-tx {
@@ -3839,7 +3847,7 @@ select:focus-visible,
 .traffic-log-row-own-message-tx .traffic-log-time,
 .traffic-log-row-own-message-tx .traffic-log-source,
 .traffic-log-row-own-message-tx .traffic-log-line {
-    color: #e8913a;
+    color: var(--traffic-color-own-message-tx);
 }
 
 .traffic-log-row-own-message-rx {
@@ -3849,7 +3857,7 @@ select:focus-visible,
 .traffic-log-row-own-message-rx .traffic-log-time,
 .traffic-log-row-own-message-rx .traffic-log-source,
 .traffic-log-row-own-message-rx .traffic-log-line {
-    color: #f0b36e;
+    color: var(--traffic-color-own-message-rx);
 }
 
 .traffic-log-row-repeated-tx {
@@ -3859,7 +3867,7 @@ select:focus-visible,
 .traffic-log-row-repeated-tx .traffic-log-time,
 .traffic-log-row-repeated-tx .traffic-log-source,
 .traffic-log-row-repeated-tx .traffic-log-line {
-    color: #d24b4b;
+    color: var(--traffic-color-repeated-tx);
 }
 
 .traffic-log-row-proxy-tx {
@@ -3869,7 +3877,7 @@ select:focus-visible,
 .traffic-log-row-proxy-tx .traffic-log-time,
 .traffic-log-row-proxy-tx .traffic-log-source,
 .traffic-log-row-proxy-tx .traffic-log-line {
-    color: #a65fc1;
+    color: var(--traffic-color-proxy-tx);
 }
 
 .traffic-log-row-skipped .traffic-log-time,
@@ -3888,7 +3896,7 @@ select:focus-visible,
 .traffic-log-row-local .traffic-log-time,
 .traffic-log-row-local .traffic-log-source,
 .traffic-log-row-local .traffic-log-line {
-    color: #4f8dff;
+    color: var(--traffic-color-own-beacon-tx);
 }
 
 .traffic-log-row-weather {
@@ -3898,7 +3906,7 @@ select:focus-visible,
 .traffic-log-row-weather .traffic-log-time,
 .traffic-log-row-weather .traffic-log-source,
 .traffic-log-row-weather .traffic-log-line {
-    color: #46a85f;
+    color: var(--traffic-color-own-wx-tx);
 }
 
 .traffic-log-row-repeated {
@@ -3908,7 +3916,7 @@ select:focus-visible,
 .traffic-log-row-repeated .traffic-log-time,
 .traffic-log-row-repeated .traffic-log-source,
 .traffic-log-row-repeated .traffic-log-line {
-    color: #d24b4b;
+    color: var(--traffic-color-repeated-tx);
 }
 
 .traffic-log-time,
