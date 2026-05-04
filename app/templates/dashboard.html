@@ -231,12 +231,11 @@
         const colorText = rootStyle.getPropertyValue("--text").trim() || "#d8e1e8";
         const colorMuted = rootStyle.getPropertyValue("--muted").trim() || "#9aa9b6";
         const colorBorder = rootStyle.getPropertyValue("--border").trim() || "rgba(120, 135, 150, 0.35)";
+        const trafficColorDefault = colorText;
         const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#4f8dff";
-        const trafficColorOwnBeaconRx = rootStyle.getPropertyValue("--traffic-color-own-beacon-rx").trim() || "#7aa9ff";
         const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
         const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
         const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
-        const trafficColorProxyTx = rootStyle.getPropertyValue("--traffic-color-proxy-tx").trim() || "#a65fc1";
 
         const withAlpha = (color, alpha) => {
             const normalized = String(color || "").trim();
@@ -350,7 +349,7 @@
         let mainChart = null;
         let directionChart = null;
         let zoomBounds = null;
-        const zoomMinPoints = 6;
+        const zoomMinPoints = 4;
 
         const applyZoomBoundsToCharts = () => {
             const charts = [mainChart, directionChart];
@@ -403,9 +402,40 @@
             if (!(canvas instanceof HTMLCanvasElement)) {
                 return;
             }
-            const dragState = { active: false, startIndex: null };
+            const parent = canvas.parentElement;
+            const selectionNode = document.createElement("div");
+            selectionNode.className = "dashboard-activity-zoom-selection";
+            if (parent) {
+                parent.appendChild(selectionNode);
+            }
 
-            canvas.addEventListener("mousedown", (event) => {
+            const dragState = { active: false, startIndex: null, startPixelX: 0, pointerId: null };
+
+            const hideSelection = () => {
+                selectionNode.style.display = "none";
+                selectionNode.style.left = "0px";
+                selectionNode.style.width = "0px";
+            };
+
+            const updateSelection = (clientX) => {
+                const rect = canvas.getBoundingClientRect();
+                const localX = Math.max(0, Math.min(rect.width, Number(clientX) - rect.left));
+                const left = Math.min(dragState.startPixelX, localX);
+                const width = Math.abs(localX - dragState.startPixelX);
+                selectionNode.style.display = "block";
+                selectionNode.style.left = `${left}px`;
+                selectionNode.style.width = `${width}px`;
+            };
+
+            const stopDrag = () => {
+                dragState.active = false;
+                dragState.startIndex = null;
+                dragState.pointerId = null;
+                canvas.classList.remove("dashboard-activity-zooming");
+                hideSelection();
+            };
+
+            canvas.addEventListener("pointerdown", (event) => {
                 if (event.button !== 0) {
                     return;
                 }
@@ -414,21 +444,31 @@
                 if (startIndex === null) {
                     return;
                 }
+                const rect = canvas.getBoundingClientRect();
                 dragState.active = true;
                 dragState.startIndex = startIndex;
+                dragState.startPixelX = Math.max(0, Math.min(rect.width, Number(event.clientX) - rect.left));
+                dragState.pointerId = event.pointerId;
                 canvas.classList.add("dashboard-activity-zooming");
+                canvas.setPointerCapture(event.pointerId);
+                updateSelection(event.clientX);
             });
 
-            canvas.addEventListener("mouseup", (event) => {
+            canvas.addEventListener("pointermove", (event) => {
                 if (!dragState.active) {
                     return;
                 }
-                dragState.active = false;
-                canvas.classList.remove("dashboard-activity-zooming");
+                updateSelection(event.clientX);
+            });
+
+            canvas.addEventListener("pointerup", (event) => {
+                if (!dragState.active) {
+                    return;
+                }
                 const chart = chartResolver();
                 const endIndex = getIndexFromPointerEvent(chart, event);
                 const startIndex = Number(dragState.startIndex);
-                dragState.startIndex = null;
+                stopDrag();
                 if (endIndex === null || !Number.isFinite(startIndex)) {
                     return;
                 }
@@ -441,16 +481,15 @@
                 applyZoomBoundsToCharts();
             });
 
-            canvas.addEventListener("mouseleave", () => {
+            canvas.addEventListener("pointercancel", () => {
                 if (!dragState.active) {
                     return;
                 }
-                dragState.active = false;
-                dragState.startIndex = null;
-                canvas.classList.remove("dashboard-activity-zooming");
+                stopDrag();
             });
 
             canvas.addEventListener("dblclick", () => {
+                stopDrag();
                 resetZoomBounds();
             });
         };
@@ -478,15 +517,15 @@
                             {
                                 label: {{ t("All frames")|tojson }},
                                 data: toSeries(series.total, labels.length),
-                                borderColor: trafficColorOwnWxTx,
-                                backgroundColor: withAlpha(trafficColorOwnWxTx, 0.18),
+                                borderColor: trafficColorDefault,
+                                backgroundColor: withAlpha(trafficColorDefault, 0.14),
                                 fill: true,
                             },
                             {
                                 label: {{ t("Mobile")|tojson }},
                                 data: toSeries(series.mobile, labels.length),
-                                borderColor: trafficColorOwnBeaconRx,
-                                backgroundColor: withAlpha(trafficColorOwnBeaconRx, 0.18),
+                                borderColor: trafficColorOwnWxTx,
+                                backgroundColor: withAlpha(trafficColorOwnWxTx, 0.16),
                                 fill: false,
                             },
                             {
@@ -499,8 +538,8 @@
                             {
                                 label: {{ t("Queries")|tojson }},
                                 data: toSeries(series.query, labels.length),
-                                borderColor: trafficColorProxyTx,
-                                backgroundColor: withAlpha(trafficColorProxyTx, 0.18),
+                                borderColor: trafficColorOwnBeaconTx,
+                                backgroundColor: withAlpha(trafficColorOwnBeaconTx, 0.16),
                                 fill: false,
                             },
                         ],
@@ -519,8 +558,8 @@
                             {
                                 label: {{ t("Received (RX)")|tojson }},
                                 data: toSeries(series.rx, labels.length),
-                                borderColor: trafficColorOwnBeaconRx,
-                                backgroundColor: withAlpha(trafficColorOwnBeaconRx, 0.16),
+                                borderColor: trafficColorDefault,
+                                backgroundColor: withAlpha(trafficColorDefault, 0.14),
                                 fill: true,
                             },
                             {

@@ -1257,7 +1257,7 @@ body {
 
 .dashboard-activity-canvas {
     position: relative;
-    min-height: 232px;
+    min-height: 152px;
 }
 
 .dashboard-activity-canvas canvas {
@@ -1268,6 +1268,19 @@ body {
 
 .dashboard-activity-canvas canvas.dashboard-activity-zooming {
     cursor: grabbing;
+}
+
+.dashboard-activity-zoom-selection {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    display: none;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
 }
 
 .dashboard-activity-totals {
