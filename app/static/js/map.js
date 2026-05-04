@@ -719,15 +719,15 @@
             applyMaskOpacity(Number.parseInt(maskOpacitySelect.value || "", 10));
         });
     }
+    applyCoverageFillOpacity(resolveDefaultCoverageFillOpacity());
     if (coverageFillOpacitySelect) {
-        applyCoverageFillOpacity(resolveDefaultCoverageFillOpacity());
         coverageFillOpacitySelect.addEventListener("change", function () {
             applyCoverageFillOpacity(Number.parseInt(coverageFillOpacitySelect.value || "", 10));
             renderStations(latestStations, latestMobileTracks);
         });
     }
+    applyCoverageOutlineOpacity(resolveDefaultCoverageOutlineOpacity());
     if (coverageOutlineOpacitySelect) {
-        applyCoverageOutlineOpacity(resolveDefaultCoverageOutlineOpacity());
         coverageOutlineOpacitySelect.addEventListener("change", function () {
             applyCoverageOutlineOpacity(Number.parseInt(coverageOutlineOpacitySelect.value || "", 10));
             renderStations(latestStations, latestMobileTracks);

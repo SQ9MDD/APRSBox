@@ -108,22 +108,6 @@
                             {% endfor %}
                         </select>
                     </label>
-                    <label class="map-mask-opacity-control" for="map-coverage-fill-opacity">
-                        <span>{{ t('Coverage fill opacity') }}</span>
-                        <select id="map-coverage-fill-opacity" class="map-mask-opacity-select" aria-label="{{ t('Coverage fill opacity') }}">
-                            {% for value in range(0, 21) %}
-                            <option value="{{ value }}">{{ value }}%</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label class="map-mask-opacity-control" for="map-coverage-outline-opacity">
-                        <span>{{ t('Coverage outline opacity') }}</span>
-                        <select id="map-coverage-outline-opacity" class="map-mask-opacity-select" aria-label="{{ t('Coverage outline opacity') }}">
-                            {% for value in range(0, 101, 10) %}
-                            <option value="{{ value }}">{{ value }}%</option>
-                            {% endfor %}
-                        </select>
-                    </label>
                 </div>
                 <div class="map-info-strip" aria-live="polite">
                     <span>
