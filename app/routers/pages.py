@@ -97,6 +97,7 @@ from app.services.aprs_device_identification import (
     refresh_aprs_device_identification_cache,
 )
 from app.services.core_client import restart_core_traffic_monitor
+from app.services.radio_activity import get_dashboard_radio_activity
 from app.services.config_backup import (
     build_configuration_backup_filename,
     export_configuration_backup_bytes,
@@ -2475,6 +2476,18 @@ async def traffic_snapshot(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_traffic_snapshot())
+
+
+@router.get("/api/dashboard/radio-activity")
+def dashboard_radio_activity(
+    range: str = "24h",
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_dashboard_radio_activity(range_value=range)
+    except ValueError:
+        return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
 
 
 @router.post("/traffic/reconnect")

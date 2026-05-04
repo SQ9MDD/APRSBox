@@ -574,6 +574,44 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
     PRIMARY KEY (band, station_key, hour_of_day)
 );
 
+CREATE TABLE IF NOT EXISTS radio_activity_5m (
+    bucket_start_utc TEXT NOT NULL,
+    bucket_end_utc TEXT NOT NULL,
+    interface_id INTEGER,
+    source_name TEXT NOT NULL,
+    rx_total INTEGER NOT NULL DEFAULT 0,
+    tx_total INTEGER NOT NULL DEFAULT 0,
+    digipeated_total INTEGER NOT NULL DEFAULT 0,
+    own_frames_total INTEGER NOT NULL DEFAULT 0,
+    messages_total INTEGER NOT NULL DEFAULT 0,
+    queries_total INTEGER NOT NULL DEFAULT 0,
+    objects_total INTEGER NOT NULL DEFAULT 0,
+    wx_total INTEGER NOT NULL DEFAULT 0,
+    position_total INTEGER NOT NULL DEFAULT 0,
+    mobile_total INTEGER NOT NULL DEFAULT 0,
+    fixed_total INTEGER NOT NULL DEFAULT 0,
+    unique_stations_total INTEGER NOT NULL DEFAULT 0,
+    direct_heard_total INTEGER NOT NULL DEFAULT 0,
+    indirect_heard_total INTEGER NOT NULL DEFAULT 0,
+    rfonly_total INTEGER NOT NULL DEFAULT 0,
+    nogate_total INTEGER NOT NULL DEFAULT 0,
+    invalid_total INTEGER NOT NULL DEFAULT 0,
+    parse_error_total INTEGER NOT NULL DEFAULT 0,
+    duplicate_total INTEGER NOT NULL DEFAULT 0,
+    max_hops_seen INTEGER,
+    avg_hops REAL,
+    created_at_utc TEXT NOT NULL,
+    updated_at_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
+    key TEXT PRIMARY KEY,
+    last_processed_bucket_start_utc TEXT,
+    last_run_utc TEXT,
+    last_error TEXT,
+    updated_at_utc TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
@@ -598,6 +636,12 @@ CREATE INDEX IF NOT EXISTS idx_band_condition_activity_processed
     ON band_condition_activity_buckets(baseline_processed_at, bucket_start_utc);
 CREATE INDEX IF NOT EXISTS idx_band_condition_fixed_station_baseline_band_hour
     ON band_condition_fixed_station_baseline(band, hour_of_day);
+CREATE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_start
+    ON radio_activity_5m(bucket_start_utc);
+CREATE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_interface
+    ON radio_activity_5m(bucket_start_utc, interface_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_source
+    ON radio_activity_5m(bucket_start_utc, source_name);
 """
 
 
