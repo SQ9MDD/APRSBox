@@ -117,6 +117,16 @@
         return normalizedFallback;
     }
 
+    function normalizeCoverageOpacityPercent(opacityPercent, fallbackPercent) {
+        const normalizedFallback = Number.isInteger(fallbackPercent) && fallbackPercent >= 0 && fallbackPercent <= 20
+            ? fallbackPercent
+            : 20;
+        if (Number.isInteger(opacityPercent) && opacityPercent >= 0 && opacityPercent <= 20) {
+            return opacityPercent;
+        }
+        return normalizedFallback;
+    }
+
     function resolveInitialView() {
         try {
             const raw = window.localStorage.getItem(mapViewStorageKey);
@@ -326,22 +336,16 @@
 
     function resolveDefaultCoverageFillOpacity() {
         const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageFillOpacityStorageKey) || "", 10);
-        if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
-            return storedOpacity;
-        }
-        return 20;
+        return normalizeCoverageOpacityPercent(storedOpacity, 20);
     }
 
     function resolveDefaultCoverageOutlineOpacity() {
         const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageOutlineOpacityStorageKey) || "", 10);
-        if (Number.isInteger(storedOpacity) && storedOpacity >= 0 && storedOpacity <= 100 && storedOpacity % 10 === 0) {
-            return storedOpacity;
-        }
-        return 100;
+        return normalizeCoverageOpacityPercent(storedOpacity, 20);
     }
 
     function applyCoverageFillOpacity(opacityPercent) {
-        const normalizedOpacity = normalizeOpacityPercent(opacityPercent, 20);
+        const normalizedOpacity = normalizeCoverageOpacityPercent(opacityPercent, 20);
         coverageFillOpacity = opacityFractionFromPercent(normalizedOpacity);
         if (coverageFillOpacitySelect) {
             coverageFillOpacitySelect.value = String(normalizedOpacity);
@@ -350,7 +354,7 @@
     }
 
     function applyCoverageOutlineOpacity(opacityPercent) {
-        const normalizedOpacity = normalizeOpacityPercent(opacityPercent, 100);
+        const normalizedOpacity = normalizeCoverageOpacityPercent(opacityPercent, 20);
         coverageOutlineOpacity = opacityFractionFromPercent(normalizedOpacity);
         if (coverageOutlineOpacitySelect) {
             coverageOutlineOpacitySelect.value = String(normalizedOpacity);
