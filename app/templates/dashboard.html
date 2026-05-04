@@ -491,6 +491,13 @@
                 }
                 chart.update("none");
             }
+            const referenceChart = mainChart || directionChart;
+            const labelsCount = Array.isArray(referenceChart?.data?.labels) ? referenceChart.data.labels.length : 0;
+            if (zoomBounds && Number.isFinite(zoomBounds.min) && Number.isFinite(zoomBounds.max) && zoomBounds.max > zoomBounds.min) {
+                persistZoomBoundsForRange(activeRange, zoomBounds, labelsCount);
+            } else {
+                persistZoomBoundsForRange(activeRange, null, labelsCount);
+            }
         };
 
         const resetZoomBounds = () => {
@@ -600,8 +607,6 @@
                     return;
                 }
                 zoomBounds = { min: minIndex, max: maxIndex };
-                const labelsCount = Array.isArray(chart?.data?.labels) ? chart.data.labels.length : 0;
-                persistZoomBoundsForRange(activeRange, zoomBounds, labelsCount);
                 applyZoomBoundsToCharts();
             });
 
@@ -778,6 +783,7 @@
         if (rangeSelect instanceof HTMLSelectElement) {
             rangeSelect.value = normalizeRangeValue(activeRange);
             rangeSelect.addEventListener("change", () => {
+                persistRange(rangeSelect.value);
                 loadRangePayload(rangeSelect.value);
             });
         }
