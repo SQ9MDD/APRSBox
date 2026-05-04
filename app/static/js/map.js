@@ -341,7 +341,7 @@
 
     function resolveDefaultCoverageOutlineOpacity() {
         const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageOutlineOpacityStorageKey) || "", 10);
-        return normalizeCoverageOpacityPercent(storedOpacity, 20);
+        return normalizeOpacityPercent(storedOpacity, 100);
     }
 
     function applyCoverageFillOpacity(opacityPercent) {
@@ -354,7 +354,7 @@
     }
 
     function applyCoverageOutlineOpacity(opacityPercent) {
-        const normalizedOpacity = normalizeCoverageOpacityPercent(opacityPercent, 20);
+        const normalizedOpacity = normalizeOpacityPercent(opacityPercent, 100);
         coverageOutlineOpacity = opacityFractionFromPercent(normalizedOpacity);
         if (coverageOutlineOpacitySelect) {
             coverageOutlineOpacitySelect.value = String(normalizedOpacity);

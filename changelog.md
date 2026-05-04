@@ -4,7 +4,7 @@
 
 ### Najważniejsze zmiany
 - `Map -> controls`: dodano dwie niezależne opcje przezroczystości kół zasięgu: `Coverage fill opacity` i `Coverage outline opacity`.
-- `Coverage opacity`: zakres obu opcji ograniczono do `0-20%` z gradacją co `1%` (zgodnie z aktualnym zachowaniem UI).
+- `Coverage opacity`: zakres `Coverage fill opacity` ograniczono do `0-20%` z gradacją co `1%`; `Coverage outline opacity` pozostawiono w dotychczasowym zakresie.
 - `Map rendering`: przezroczystość wypełnienia i obwiedni PHG jest stosowana dynamicznie podczas renderu i zapisywana lokalnie (`localStorage`) per przeglądarka.
 
 ## 1.7.30.dev - 01.05.2026
