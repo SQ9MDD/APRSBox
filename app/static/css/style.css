@@ -1019,7 +1019,7 @@ body {
 
 .dashboard-detail-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 0.95fr);
     gap: var(--space-3);
 }
 
@@ -1199,7 +1199,7 @@ body {
 
 .dashboard-activity-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 0.5rem;
 }
 
@@ -1227,7 +1227,7 @@ body {
 
 .dashboard-activity-canvas {
     position: relative;
-    min-height: 188px;
+    min-height: 232px;
 }
 
 .dashboard-activity-canvas canvas {
@@ -1268,7 +1268,8 @@ body {
 }
 
 @media (max-width: 1180px) {
-    .dashboard-overview-grid {
+    .dashboard-overview-grid,
+    .dashboard-detail-grid {
         grid-template-columns: 1fr;
     }
 }
