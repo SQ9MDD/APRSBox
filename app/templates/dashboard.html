@@ -61,29 +61,52 @@
     </section>
 
     <section class="dashboard-detail-grid">
-        <section class="panel">
+        <section class="panel dashboard-activity-panel">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
-                        <h2>{{ t("What Needs Attention") }}</h2>
-                        <p class="section-lead">{{ t("Only the items that block normal use.") }}</p>
+                        <h2>{{ t("Activity Charts") }}</h2>
+                        <p class="section-lead">{{ t("Last 60 minutes in 5-minute buckets.") }}</p>
                     </div>
                 </div>
-                {% if dashboard_home.next_steps %}
-                <div class="dashboard-next-steps">
-                    {% for item in dashboard_home.next_steps %}
-                    <div class="dashboard-next-step">
-                        <strong>{{ t(item.label) }}</strong>
-                        <p>{{ t(item.value) }}</p>
-                        {% if item.note %}
-                        <p class="dashboard-check-note">{{ t(item.note) }}</p>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
+                <div class="dashboard-activity-grid">
+                    <section class="dashboard-activity-card" id="dashboard-main-activity-chart-card">
+                        <div class="dashboard-activity-card-header">
+                            <h3>{{ t("All / mobile / messages / queries") }}</h3>
+                            <span class="muted small">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
+                        </div>
+                        <div class="dashboard-activity-canvas">
+                            <canvas id="dashboard-main-activity-chart"></canvas>
+                        </div>
+                    </section>
+                    <section class="dashboard-activity-card" id="dashboard-direction-activity-chart-card">
+                        <div class="dashboard-activity-card-header">
+                            <h3>{{ t("RX / TX / repeats") }}</h3>
+                            <span class="muted small">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
+                        </div>
+                        <div class="dashboard-activity-canvas">
+                            <canvas id="dashboard-direction-activity-chart"></canvas>
+                        </div>
+                    </section>
                 </div>
-                {% else %}
-                <div class="notice">{{ t("Basic station setup is complete. You can work from My Settings, Map and Stations.") }}</div>
-                {% endif %}
+                <div class="dashboard-activity-totals">
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("All frames") }}</span>
+                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.total }}</span>
+                    </div>
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("Received (RX)") }}</span>
+                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.rx }}</span>
+                    </div>
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("Sent (TX)") }}</span>
+                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.tx }}</span>
+                    </div>
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("Repeated TX") }}</span>
+                        <span class="metric-value">{{ dashboard_home.activity_chart.totals.repeated_tx }}</span>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -134,4 +157,143 @@
         </section>
     </section>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/vendor/chart.umd.min.js?v={{ app_version }}"></script>
+<script type="application/json" id="dashboard-activity-data">{{ dashboard_home.activity_chart|tojson }}</script>
+<script>
+    (() => {
+        const payloadNode = document.getElementById("dashboard-activity-data");
+        const mainCanvas = document.getElementById("dashboard-main-activity-chart");
+        const directionCanvas = document.getElementById("dashboard-direction-activity-chart");
+        if (
+            !(payloadNode instanceof HTMLScriptElement)
+            || !(mainCanvas instanceof HTMLCanvasElement)
+            || !(directionCanvas instanceof HTMLCanvasElement)
+        ) return;
+
+        let payload = {};
+        try {
+            payload = JSON.parse(payloadNode.textContent || "{}");
+        } catch (_) {
+            return;
+        }
+        if (!window.Chart || typeof window.Chart !== "function") {
+            return;
+        }
+
+        const labels = Array.isArray(payload.labels) ? payload.labels : [];
+        const series = payload.series || {};
+        const toSeries = (key) => (Array.isArray(series[key]) ? series[key].map((value) => Number(value || 0)) : labels.map(() => 0));
+
+        const rootStyle = getComputedStyle(document.documentElement);
+        const colorText = rootStyle.getPropertyValue("--text").trim() || "#d8e1e8";
+        const colorMuted = rootStyle.getPropertyValue("--muted").trim() || "#9aa9b6";
+        const colorBorder = rootStyle.getPropertyValue("--border").trim() || "rgba(120, 135, 150, 0.35)";
+
+        const sharedOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: "index", intersect: false },
+            scales: {
+                x: {
+                    ticks: { color: colorMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+                    grid: { color: colorBorder },
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: colorMuted, precision: 0 },
+                    grid: { color: colorBorder },
+                },
+            },
+            plugins: {
+                legend: {
+                    labels: { color: colorText, usePointStyle: true, boxWidth: 10 },
+                },
+            },
+            elements: {
+                point: { radius: 1.8, hoverRadius: 3.2 },
+                line: { tension: 0.25, borderWidth: 2 },
+            },
+        };
+
+        const mainContext = mainCanvas.getContext("2d");
+        if (mainContext) {
+            new window.Chart(mainContext, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: {{ t("All frames")|tojson }},
+                            data: toSeries("total"),
+                            borderColor: "#4DB6AC",
+                            backgroundColor: "rgba(77, 182, 172, 0.18)",
+                            fill: true,
+                        },
+                        {
+                            label: {{ t("Mobile")|tojson }},
+                            data: toSeries("mobile"),
+                            borderColor: "#7BB7FF",
+                            backgroundColor: "rgba(123, 183, 255, 0.18)",
+                            fill: false,
+                        },
+                        {
+                            label: {{ t("Messages")|tojson }},
+                            data: toSeries("message"),
+                            borderColor: "#F2C879",
+                            backgroundColor: "rgba(242, 200, 121, 0.18)",
+                            fill: false,
+                        },
+                        {
+                            label: {{ t("Queries")|tojson }},
+                            data: toSeries("query"),
+                            borderColor: "#C38CFF",
+                            backgroundColor: "rgba(195, 140, 255, 0.18)",
+                            fill: false,
+                        },
+                    ],
+                },
+                options: sharedOptions,
+            });
+        }
+
+        const directionContext = directionCanvas.getContext("2d");
+        if (directionContext) {
+            new window.Chart(directionContext, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: {{ t("Received (RX)")|tojson }},
+                            data: toSeries("rx"),
+                            borderColor: "#84D8BF",
+                            backgroundColor: "rgba(132, 216, 191, 0.16)",
+                            fill: true,
+                        },
+                        {
+                            label: {{ t("Sent (TX)")|tojson }},
+                            data: toSeries("tx"),
+                            borderColor: "#FF8F8F",
+                            backgroundColor: "rgba(255, 143, 143, 0.16)",
+                            fill: false,
+                        },
+                        {
+                            label: {{ t("Repeated TX")|tojson }},
+                            data: toSeries("repeated_tx"),
+                            borderColor: "#F6B26B",
+                            backgroundColor: "rgba(246, 178, 107, 0.16)",
+                            borderDash: [6, 4],
+                            fill: false,
+                        },
+                    ],
+                },
+                options: sharedOptions,
+            });
+        }
+    })();
+</script>
 {% endblock %}
