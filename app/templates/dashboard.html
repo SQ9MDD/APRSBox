@@ -217,8 +217,52 @@
             "365d": "365d",
         };
         const defaultRange = "24h";
+        const rangeStorageKey = "aprsbox-dashboard-activity-range";
+        const zoomStorageKey = "aprsbox-dashboard-activity-zoom-v1";
         const minStepLabel = {{ t("min step")|tojson }};
         const rangePrefix = {{ t("Range")|tojson }};
+
+        const normalizeRangeValue = (value) => {
+            const normalizedValue = String(value || "").trim().toLowerCase();
+            return Object.prototype.hasOwnProperty.call(rangeDisplayMap, normalizedValue)
+                ? normalizedValue
+                : defaultRange;
+        };
+
+        const readStorageText = (key) => {
+            try {
+                return window.localStorage.getItem(key);
+            } catch (_) {
+                return null;
+            }
+        };
+
+        const writeStorageText = (key, value) => {
+            try {
+                window.localStorage.setItem(key, value);
+            } catch (_) {
+                return;
+            }
+        };
+
+        const readStoredRange = () => normalizeRangeValue(readStorageText(rangeStorageKey) || defaultRange);
+        const persistRange = (rangeValue) => writeStorageText(rangeStorageKey, normalizeRangeValue(rangeValue));
+
+        const readZoomState = () => {
+            const rawValue = readStorageText(zoomStorageKey);
+            if (!rawValue) {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(rawValue);
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    return parsed;
+                }
+            } catch (_) {
+                return {};
+            }
+            return {};
+        };
 
         const toSeries = (values, sizeHint) => {
             if (!Array.isArray(values)) {
@@ -365,7 +409,68 @@
         let directionChart = null;
         let zoomBounds = null;
         let lastRenderedPayload = null;
+        let activeRange = readStoredRange();
+        let zoomStateByRange = readZoomState();
         const zoomMinPoints = 4;
+
+        const persistZoomState = () => {
+            writeStorageText(zoomStorageKey, JSON.stringify(zoomStateByRange));
+        };
+
+        const resolveStoredZoomBounds = (rangeValue, labelsCount) => {
+            const normalizedRange = normalizeRangeValue(rangeValue);
+            const storedZoom = zoomStateByRange[normalizedRange];
+            if (!storedZoom || typeof storedZoom !== "object") {
+                return null;
+            }
+            const minValue = Math.round(Number(storedZoom.min));
+            const maxValue = Math.round(Number(storedZoom.max));
+            if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+                return null;
+            }
+            const safeLabelsCount = Math.max(0, Number(labelsCount) || 0);
+            if (safeLabelsCount <= 0) {
+                return null;
+            }
+            const clampedMin = Math.max(0, Math.min(safeLabelsCount - 1, minValue));
+            const clampedMax = Math.max(0, Math.min(safeLabelsCount - 1, maxValue));
+            if ((clampedMax - clampedMin + 1) < zoomMinPoints || clampedMax <= clampedMin) {
+                return null;
+            }
+            return { min: clampedMin, max: clampedMax };
+        };
+
+        const persistZoomBoundsForRange = (rangeValue, bounds, labelsCount) => {
+            const normalizedRange = normalizeRangeValue(rangeValue);
+            const safeLabelsCount = Math.max(0, Number(labelsCount) || 0);
+            if (safeLabelsCount <= 0 || !bounds || typeof bounds !== "object") {
+                if (zoomStateByRange[normalizedRange]) {
+                    delete zoomStateByRange[normalizedRange];
+                    persistZoomState();
+                }
+                return;
+            }
+            const minValue = Math.round(Number(bounds.min));
+            const maxValue = Math.round(Number(bounds.max));
+            if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+                if (zoomStateByRange[normalizedRange]) {
+                    delete zoomStateByRange[normalizedRange];
+                    persistZoomState();
+                }
+                return;
+            }
+            const clampedMin = Math.max(0, Math.min(safeLabelsCount - 1, minValue));
+            const clampedMax = Math.max(0, Math.min(safeLabelsCount - 1, maxValue));
+            if ((clampedMax - clampedMin + 1) < zoomMinPoints || clampedMax <= clampedMin) {
+                if (zoomStateByRange[normalizedRange]) {
+                    delete zoomStateByRange[normalizedRange];
+                    persistZoomState();
+                }
+                return;
+            }
+            zoomStateByRange[normalizedRange] = { min: clampedMin, max: clampedMax };
+            persistZoomState();
+        };
 
         const applyZoomBoundsToCharts = () => {
             const charts = [mainChart, directionChart];
@@ -390,6 +495,7 @@
 
         const resetZoomBounds = () => {
             zoomBounds = null;
+            persistZoomBoundsForRange(activeRange, null, 0);
             applyZoomBoundsToCharts();
         };
 
@@ -494,6 +600,8 @@
                     return;
                 }
                 zoomBounds = { min: minIndex, max: maxIndex };
+                const labelsCount = Array.isArray(chart?.data?.labels) ? chart.data.labels.length : 0;
+                persistZoomBoundsForRange(activeRange, zoomBounds, labelsCount);
                 applyZoomBoundsToCharts();
             });
 
@@ -630,16 +738,19 @@
         };
 
         const fallbackPayload = normalizeLegacyPayload(payload);
+        zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(fallbackPayload.labels) ? fallbackPayload.labels.length : 0);
         renderCharts(fallbackPayload);
 
         bindMouseZoomForCanvas(mainCanvas, () => mainChart);
         bindMouseZoomForCanvas(directionCanvas, () => directionChart);
 
         const loadRangePayload = async (rangeValue) => {
-            const normalizedRange = String(rangeValue || "").trim().toLowerCase();
+            const normalizedRange = normalizeRangeValue(rangeValue);
             if (!normalizedRange) {
                 return;
             }
+            activeRange = normalizedRange;
+            persistRange(activeRange);
             if (rangeSelect instanceof HTMLSelectElement) {
                 rangeSelect.disabled = true;
             }
@@ -651,10 +762,11 @@
                     throw new Error(`HTTP ${response.status}`);
                 }
                 const apiPayload = await response.json();
-                zoomBounds = null;
-                renderCharts(normalizeApiPayload(apiPayload));
+                const normalizedPayload = normalizeApiPayload(apiPayload);
+                zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(normalizedPayload.labels) ? normalizedPayload.labels.length : 0);
+                renderCharts(normalizedPayload);
             } catch (_) {
-                zoomBounds = null;
+                zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(fallbackPayload.labels) ? fallbackPayload.labels.length : 0);
                 renderCharts(fallbackPayload);
             } finally {
                 if (rangeSelect instanceof HTMLSelectElement) {
@@ -664,7 +776,7 @@
         };
 
         if (rangeSelect instanceof HTMLSelectElement) {
-            rangeSelect.value = defaultRange;
+            rangeSelect.value = normalizeRangeValue(activeRange);
             rangeSelect.addEventListener("change", () => {
                 loadRangePayload(rangeSelect.value);
             });
@@ -680,7 +792,7 @@
             }
         });
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
-        loadRangePayload(defaultRange);
+        loadRangePayload(activeRange);
     })();
 </script>
 {% endblock %}
