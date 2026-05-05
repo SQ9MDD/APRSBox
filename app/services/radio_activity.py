@@ -536,12 +536,8 @@ def _resolve_output_bucket_minutes(total_minutes: int) -> int:
 
 
 def _resolve_traffic_statistics_bucket_minutes(total_minutes: int) -> int:
-    normalized_total_minutes = max(RADIO_ACTIVITY_BUCKET_MINUTES, int(total_minutes))
-    if normalized_total_minutes <= TRAFFIC_STATISTICS_RANGE_OPTIONS[TRAFFIC_STATISTICS_RANGE_24H]:
-        return RADIO_ACTIVITY_BUCKET_MINUTES
-    if normalized_total_minutes <= TRAFFIC_STATISTICS_RANGE_OPTIONS[TRAFFIC_STATISTICS_RANGE_7D]:
-        return 60
-    return 180
+    _ = total_minutes
+    return 60
 
 
 def _format_radio_activity_label(bucket_start_utc: datetime, *, output_bucket_minutes: int) -> str:

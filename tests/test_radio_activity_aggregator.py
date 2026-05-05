@@ -493,6 +493,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 payload = response.json()
                 self.assertEqual(payload.get("range"), "24h")
+                self.assertEqual(int(payload.get("bucket_minutes") or 0), 60)
                 self.assertIn("charts", payload)
                 self.assertIn("frame_types", payload["charts"])
                 self.assertIn("heard", payload["charts"])

@@ -136,19 +136,17 @@
         });
     };
 
-    const buildLineDatasets = (seriesMapValue, definitions, labelsCount) => {
+    const buildBarDatasets = (seriesMapValue, definitions, labelsCount) => {
         return definitions.map((definition) => {
             const source = seriesMapValue[definition.key] || { label: definition.label, data: [] };
             return {
                 label: source.label || definition.label,
                 data: normalizeSeriesData(source.data, labelsCount),
                 borderColor: definition.color,
-                backgroundColor: withAlpha(definition.color, 0.16),
-                borderWidth: 2,
-                fill: false,
-                tension: 0.25,
-                pointRadius: 0,
-                pointHoverRadius: 3,
+                backgroundColor: withAlpha(definition.color, 0.18),
+                borderWidth: 1,
+                borderRadius: 3,
+                borderSkipped: false,
             };
         });
     };
@@ -236,7 +234,7 @@
             labelsCount,
         );
 
-        const heardDatasets = buildLineDatasets(
+        const heardDatasets = buildBarDatasets(
             heardSeries,
             [
                 { key: "direct_heard", label: "Direct heard", color: palette.trafficColorOwnBeaconTx },
@@ -245,7 +243,7 @@
             labelsCount,
         );
 
-        const actionsDatasets = buildStackedBarDatasets(
+        const actionsDatasets = buildBarDatasets(
             actionsSeries,
             [
                 { key: "rx", label: "RX", color: palette.trafficColorDefault },
@@ -290,7 +288,7 @@
         const heardContext = heardCanvas.getContext("2d");
         if (heardContext) {
             heardChart = new window.Chart(heardContext, {
-                type: "line",
+                type: "bar",
                 data: {
                     labels,
                     datasets: heardDatasets,
@@ -307,7 +305,7 @@
                     labels,
                     datasets: actionsDatasets,
                 },
-                options: createCommonOptions(palette, { stacked: true }),
+                options: createCommonOptions(palette, { stacked: false }),
             });
         }
     };
