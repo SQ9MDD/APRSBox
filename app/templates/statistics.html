@@ -6,9 +6,8 @@
     data-devices-api-url="{{ request.scope.root_path }}/api/statistics/devices"
     data-no-data-text="{{ t('No data for selected range.') }}"
     data-aggregation-label="{{ t('aggregation') }}"
-    data-devices-default-mode="stations"
+    data-devices-default-window="last_h"
     data-devices-count-stations-label="{{ t('Unique CALLSIGN-SSID stations') }}"
-    data-devices-count-frames-label="{{ t('Frames') }}"
     data-devices-label-other="{{ t('Other') }}"
     data-devices-label-unknown="{{ t('Unknown') }}"
     data-devices-label-mixed-unknown="{{ t('Mixed / Unknown') }}">
@@ -73,14 +72,14 @@
                     <div class="dashboard-activity-card-header">
                         <h3>{{ t("Recognized devices / apps") }}</h3>
                         <div class="statistics-devices-mode-wrap">
-                            <label class="statistics-devices-mode-label" for="statistics-devices-mode">{{ t("Count by") }}</label>
-                            <select id="statistics-devices-mode" name="statistics_devices_mode">
-                                <option value="stations">{{ t("Stations") }}</option>
-                                <option value="frames">{{ t("Frames") }}</option>
+                            <label class="statistics-devices-mode-label" for="statistics-devices-window">{{ t("Window") }}</label>
+                            <select id="statistics-devices-window" name="statistics_devices_window">
+                                <option value="last_h">{{ t("Last h") }}</option>
+                                <option value="all_time">{{ t("All time") }}</option>
                             </select>
                         </div>
                     </div>
-                    <p class="muted small statistics-devices-description">{{ t("Based on TOCALL/destination. Approximate identification, counted by unique CALLSIGN-SSID by default.") }}</p>
+                    <p class="muted small statistics-devices-description">{{ t("Based on TOCALL/destination. Approximate identification, counted by unique CALLSIGN-SSID.") }}</p>
                     <div class="empty-state muted" id="statistics-devices-empty" hidden>{{ t("No data for selected range.") }}</div>
                     <div class="dashboard-activity-canvas statistics-devices-canvas">
                         <canvas id="statistics-devices-chart"></canvas>

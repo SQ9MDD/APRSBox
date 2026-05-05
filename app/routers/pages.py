@@ -2370,7 +2370,7 @@ def statistics_page(
 ) -> object:
     templates = request.app.state.templates
     statistics_payload = get_traffic_statistics(range_value="24h")
-    statistics_devices_payload = get_traffic_devices_statistics(range_value="24h", mode="stations")
+    statistics_devices_payload = get_traffic_devices_statistics(range_value="24h", window="last_h")
     context = build_template_context(
         request,
         page_title="Statistics",
@@ -2526,11 +2526,11 @@ def statistics_traffic(
 def statistics_devices(
     range: str = "24h",
     shift: int = 0,
-    mode: str = "stations",
+    window: str = "last_h",
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     try:
-        payload = get_traffic_devices_statistics(range_value=range, shift_windows=shift, mode=mode)
+        payload = get_traffic_devices_statistics(range_value=range, shift_windows=shift, window=window)
     except ValueError as exc:
         return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)

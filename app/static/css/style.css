@@ -1296,6 +1296,22 @@ body {
     font-size: 0.82rem;
 }
 
+.statistics-devices-list-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+}
+
+.statistics-devices-color-marker {
+    display: inline-block;
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--text) 24%, transparent);
+    flex: 0 0 auto;
+}
+
 .statistics-devices-list-item:first-child {
     border-top: 0;
     padding-top: 0;

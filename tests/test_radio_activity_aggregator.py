@@ -610,21 +610,20 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                     created_at=(base_time + timedelta(seconds=120 + index)).isoformat(),
                 )
 
-            stations_payload = get_traffic_devices_statistics(range_value="24h", mode="stations")
-            self.assertEqual(stations_payload.get("mode"), "stations")
+            stations_payload = get_traffic_devices_statistics(range_value="24h")
+            self.assertEqual(stations_payload.get("window"), "last_h")
             self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid")
             self.assertEqual(int(stations_payload.get("total") or 0), 4)
             station_counts = [int(item.get("count") or 0) for item in list(stations_payload.get("items") or [])]
             self.assertEqual(sum(station_counts), 4)
             self.assertLessEqual(max(station_counts or [0]), 2)
 
-            frames_payload = get_traffic_devices_statistics(range_value="24h", mode="frames")
-            self.assertEqual(frames_payload.get("mode"), "frames")
-            self.assertEqual(frames_payload.get("count_basis"), "frames")
-            self.assertEqual(int(frames_payload.get("total") or 0), 24)
-            frame_counts = [int(item.get("count") or 0) for item in list(frames_payload.get("items") or [])]
-            self.assertEqual(sum(frame_counts), 24)
-            self.assertGreaterEqual(max(frame_counts or [0]), 20)
+            all_time_payload = get_traffic_devices_statistics(range_value="24h", window="all_time")
+            self.assertEqual(all_time_payload.get("window"), "all_time")
+            self.assertEqual(all_time_payload.get("count_basis"), "unique_callsign_ssid")
+            self.assertEqual(int(all_time_payload.get("total") or 0), 4)
+            all_time_counts = [int(item.get("count") or 0) for item in list(all_time_payload.get("items") or [])]
+            self.assertEqual(sum(all_time_counts), 4)
 
     def test_statistics_devices_api_supports_stations_and_frames_modes(self) -> None:
         if not FASTAPI_AVAILABLE:
@@ -704,7 +703,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 stations_response = client.get("/api/statistics/devices?range=24h")
                 self.assertEqual(stations_response.status_code, 200)
                 stations_payload = stations_response.json()
-                self.assertEqual(stations_payload.get("mode"), "stations")
+                self.assertEqual(stations_payload.get("window"), "last_h")
                 self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid")
                 self.assertEqual(int(stations_payload.get("total") or 0), 4)
                 station_items = list(stations_payload.get("items") or [])
@@ -712,19 +711,18 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(sum(station_counts), 4)
                 self.assertLessEqual(max(station_counts or [0]), 2)
 
-                frames_response = client.get("/api/statistics/devices?range=24h&mode=frames")
-                self.assertEqual(frames_response.status_code, 200)
-                frames_payload = frames_response.json()
-                self.assertEqual(frames_payload.get("mode"), "frames")
-                self.assertEqual(frames_payload.get("count_basis"), "frames")
-                self.assertEqual(int(frames_payload.get("total") or 0), 24)
-                frame_items = list(frames_payload.get("items") or [])
-                frame_counts = [int(item.get("count") or 0) for item in frame_items]
-                self.assertEqual(sum(frame_counts), 24)
-                self.assertGreaterEqual(max(frame_counts or [0]), 20)
+                all_time_response = client.get("/api/statistics/devices?range=24h&window=all_time")
+                self.assertEqual(all_time_response.status_code, 200)
+                all_time_payload = all_time_response.json()
+                self.assertEqual(all_time_payload.get("window"), "all_time")
+                self.assertEqual(all_time_payload.get("count_basis"), "unique_callsign_ssid")
+                self.assertEqual(int(all_time_payload.get("total") or 0), 4)
+                all_time_items = list(all_time_payload.get("items") or [])
+                all_time_counts = [int(item.get("count") or 0) for item in all_time_items]
+                self.assertEqual(sum(all_time_counts), 4)
 
-                invalid_mode = client.get("/api/statistics/devices?range=24h&mode=invalid")
-                self.assertEqual(invalid_mode.status_code, 400)
+                invalid_window = client.get("/api/statistics/devices?range=24h&window=invalid")
+                self.assertEqual(invalid_window.status_code, 400)
             finally:
                 app.dependency_overrides.clear()
 

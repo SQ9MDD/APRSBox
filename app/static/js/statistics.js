@@ -16,7 +16,7 @@
     const frameStepNode = document.getElementById("statistics-frame-types-step");
     const heardStepNode = document.getElementById("statistics-heard-step");
     const actionsStepNode = document.getElementById("statistics-actions-step");
-    const devicesModeSelect = document.getElementById("statistics-devices-mode");
+    const devicesWindowSelect = document.getElementById("statistics-devices-window");
     const devicesListNode = document.getElementById("statistics-devices-list");
 
     if (!(root instanceof HTMLElement) || !(payloadNode instanceof HTMLScriptElement)) {
@@ -37,16 +37,15 @@
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
     const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
-    const devicesCountFramesLabel = String(root.dataset.devicesCountFramesLabel || "Frames");
     const devicesLabelOther = String(root.dataset.devicesLabelOther || "Other");
     const devicesLabelUnknown = String(root.dataset.devicesLabelUnknown || "Unknown");
     const devicesLabelMixedUnknown = String(root.dataset.devicesLabelMixedUnknown || "Mixed / Unknown");
     const supportedRanges = new Set(["24h", "7d", "30d"]);
-    const supportedDeviceModes = new Set(["stations", "frames"]);
+    const supportedDeviceWindows = new Set(["last_h", "all_time"]);
     const defaultRange = "24h";
-    const defaultDeviceMode = supportedDeviceModes.has(String(root.dataset.devicesDefaultMode || "").trim().toLowerCase())
-        ? String(root.dataset.devicesDefaultMode || "").trim().toLowerCase()
-        : "stations";
+    const defaultDeviceWindow = supportedDeviceWindows.has(String(root.dataset.devicesDefaultWindow || "").trim().toLowerCase())
+        ? String(root.dataset.devicesDefaultWindow || "").trim().toLowerCase()
+        : "last_h";
     const storageKey = "aprsbox-statistics-range";
 
     let frameChart = null;
@@ -99,9 +98,9 @@
         return supportedRanges.has(normalizedValue) ? normalizedValue : defaultRange;
     };
 
-    const normalizeDeviceMode = (value) => {
+    const normalizeDeviceWindow = (value) => {
         const normalizedValue = String(value || "").trim().toLowerCase();
-        return supportedDeviceModes.has(normalizedValue) ? normalizedValue : defaultDeviceMode;
+        return supportedDeviceWindows.has(normalizedValue) ? normalizedValue : defaultDeviceWindow;
     };
 
     const readStoredRange = () => {
@@ -285,17 +284,25 @@
         return String(item.label || item.key);
     };
 
-    const renderDeviceList = (items) => {
+    const renderDeviceList = (items, colors) => {
         if (!(devicesListNode instanceof HTMLElement)) {
             return;
         }
         devicesListNode.textContent = "";
-        for (const item of items) {
+        for (let index = 0; index < items.length; index += 1) {
+            const item = items[index];
             const row = document.createElement("li");
             row.className = "statistics-devices-list-item";
 
             const labelNode = document.createElement("span");
-            labelNode.textContent = resolveDeviceLabel(item);
+            labelNode.className = "statistics-devices-list-label";
+            const markerNode = document.createElement("span");
+            markerNode.className = "statistics-devices-color-marker";
+            markerNode.style.backgroundColor = String((Array.isArray(colors) && colors[index]) || "#8a8a8a");
+            const labelTextNode = document.createElement("span");
+            labelTextNode.textContent = resolveDeviceLabel(item);
+            labelNode.appendChild(markerNode);
+            labelNode.appendChild(labelTextNode);
 
             const valueNode = document.createElement("span");
             valueNode.className = "statistics-devices-list-value";
@@ -422,18 +429,23 @@
         }
     };
 
-    const buildDeviceColors = (count, palette) => {
+    const buildDeviceColors = (count) => {
         const base = [
-            palette.trafficColorOwnBeaconTx,
-            palette.trafficColorOwnWxTx,
-            palette.trafficColorOwnMessageTx,
-            palette.trafficColorRepeatedTx,
-            palette.trafficColorProxyTx,
-            "#53c8ce",
+            "#d24b4b",
+            "#de6e3a",
+            "#e8913a",
             "#c2a34e",
+            "#8fb35a",
+            "#46a85f",
+            "#4fb39a",
+            "#53c8ce",
+            "#4ea5d4",
+            "#4f8dff",
+            "#6f79e2",
+            "#8d6ed2",
+            "#a65fc1",
             "#bc6fff",
             "#7f8d99",
-            "#d26e6e",
             "#8a8a8a",
         ];
         const colors = [];
@@ -447,13 +459,13 @@
         if (!(devicesCanvas instanceof HTMLCanvasElement)) {
             return;
         }
-        const mode = normalizeDeviceMode(payloadValue && payloadValue.mode);
         const total = Math.max(0, Number(payloadValue && payloadValue.total) || 0);
         const items = normalizeDeviceItems(payloadValue && payloadValue.items, total);
         const hasData = total > 0 && items.length > 0;
+        const colors = hasData ? buildDeviceColors(items.length) : [];
 
         toggleEmptyState(devicesEmptyNode, !hasData);
-        renderDeviceList(hasData ? items : []);
+        renderDeviceList(hasData ? items : [], colors);
 
         if (devicesChart) {
             devicesChart.destroy();
@@ -464,11 +476,10 @@
             return;
         }
 
-        const palette = readChartPalette();
         const labels = items.map((item) => resolveDeviceLabel(item));
         const counts = items.map((item) => Number(item.count) || 0);
-        const colors = buildDeviceColors(counts.length, palette);
-        const countBasisLabel = mode === "frames" ? devicesCountFramesLabel : devicesCountStationsLabel;
+        const palette = readChartPalette();
+        const countBasisLabel = devicesCountStationsLabel;
 
         const context = devicesCanvas.getContext("2d");
         if (!context) {
@@ -525,10 +536,10 @@
         activeShift = 0;
     }
 
-    let activeDeviceMode = normalizeDeviceMode(
-        (devicesPayload && devicesPayload.mode)
-        || (devicesModeSelect instanceof HTMLSelectElement ? devicesModeSelect.value : "")
-        || defaultDeviceMode,
+    let activeDevicesWindow = normalizeDeviceWindow(
+        (devicesPayload && devicesPayload.window)
+        || (devicesWindowSelect instanceof HTMLSelectElement ? devicesWindowSelect.value : "")
+        || defaultDeviceWindow,
     );
 
     const setControlsDisabled = (disabled) => {
@@ -543,25 +554,25 @@
         }
     };
 
-    const loadDevicesPayload = async (rangeValue, shiftValue, modeValue, options = {}) => {
-        const disableModeControl = Boolean(options.disableModeControl);
+    const loadDevicesPayload = async (rangeValue, shiftValue, windowValue, options = {}) => {
+        const disableWindowControl = Boolean(options.disableWindowControl);
         if (!(devicesCanvas instanceof HTMLCanvasElement) || !devicesApiUrl) {
             return;
         }
-        const normalizedMode = normalizeDeviceMode(modeValue);
+        const normalizedWindow = normalizeDeviceWindow(windowValue);
         const normalizedRange = normalizeRange(rangeValue);
         const normalizedShift = normalizeShift(shiftValue);
 
-        if (devicesModeSelect instanceof HTMLSelectElement) {
-            devicesModeSelect.value = normalizedMode;
-            if (disableModeControl) {
-                devicesModeSelect.disabled = true;
+        if (devicesWindowSelect instanceof HTMLSelectElement) {
+            devicesWindowSelect.value = normalizedWindow;
+            if (disableWindowControl) {
+                devicesWindowSelect.disabled = true;
             }
         }
 
         try {
             const response = await fetch(
-                `${devicesApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}&mode=${encodeURIComponent(normalizedMode)}`,
+                `${devicesApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}&window=${encodeURIComponent(normalizedWindow)}`,
                 {
                     method: "GET",
                     headers: { "Accept": "application/json" },
@@ -572,16 +583,16 @@
             }
             const nextPayload = await response.json();
             devicesPayload = nextPayload;
-            activeDeviceMode = normalizeDeviceMode(nextPayload && nextPayload.mode);
-            if (devicesModeSelect instanceof HTMLSelectElement) {
-                devicesModeSelect.value = activeDeviceMode;
+            activeDevicesWindow = normalizeDeviceWindow(nextPayload && nextPayload.window);
+            if (devicesWindowSelect instanceof HTMLSelectElement) {
+                devicesWindowSelect.value = activeDevicesWindow;
             }
             renderDevices(nextPayload);
         } catch (_) {
             return;
         } finally {
-            if (devicesModeSelect instanceof HTMLSelectElement && disableModeControl) {
-                devicesModeSelect.disabled = false;
+            if (devicesWindowSelect instanceof HTMLSelectElement && disableWindowControl) {
+                devicesWindowSelect.disabled = false;
             }
         }
     };
@@ -613,7 +624,7 @@
                 rangeSelect.value = activeRange;
             }
             renderCharts(nextPayload);
-            await loadDevicesPayload(activeRange, activeShift, activeDeviceMode);
+            await loadDevicesPayload(activeRange, activeShift, activeDevicesWindow);
         } catch (_) {
             return;
         } finally {
@@ -641,12 +652,12 @@
             void loadRangePayload(activeRange, activeShift - 1);
         });
     }
-    if (devicesModeSelect instanceof HTMLSelectElement) {
-        devicesModeSelect.value = activeDeviceMode;
-        devicesModeSelect.addEventListener("change", () => {
-            const nextMode = normalizeDeviceMode(devicesModeSelect.value);
-            activeDeviceMode = nextMode;
-            void loadDevicesPayload(activeRange, activeShift, nextMode, { disableModeControl: true });
+    if (devicesWindowSelect instanceof HTMLSelectElement) {
+        devicesWindowSelect.value = activeDevicesWindow;
+        devicesWindowSelect.addEventListener("change", () => {
+            const nextWindow = normalizeDeviceWindow(devicesWindowSelect.value);
+            activeDevicesWindow = nextWindow;
+            void loadDevicesPayload(activeRange, activeShift, nextWindow, { disableWindowControl: true });
         });
     }
 
@@ -657,6 +668,6 @@
     if (activeRange !== normalizeRange(payload && payload.range)) {
         void loadRangePayload(activeRange, activeShift);
     } else if (!(devicesPayload && Array.isArray(devicesPayload.items) && devicesPayload.range === activeRange)) {
-        void loadDevicesPayload(activeRange, activeShift, activeDeviceMode);
+        void loadDevicesPayload(activeRange, activeShift, activeDevicesWindow);
     }
 })();

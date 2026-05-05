@@ -44,13 +44,13 @@ TRAFFIC_STATISTICS_RANGE_OPTIONS = {
     TRAFFIC_STATISTICS_RANGE_30D: 30 * 24 * 60,
     TRAFFIC_STATISTICS_RANGE_365D: 365 * 24 * 60,
 }
-TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS = "stations"
-TRAFFIC_STATISTICS_DEVICES_MODE_FRAMES = "frames"
-TRAFFIC_STATISTICS_DEVICES_MODE_OPTIONS = {
-    TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS,
-    TRAFFIC_STATISTICS_DEVICES_MODE_FRAMES,
+TRAFFIC_STATISTICS_DEVICES_WINDOW_LAST_H = "last_h"
+TRAFFIC_STATISTICS_DEVICES_WINDOW_ALL_TIME = "all_time"
+TRAFFIC_STATISTICS_DEVICES_WINDOW_OPTIONS = {
+    TRAFFIC_STATISTICS_DEVICES_WINDOW_LAST_H,
+    TRAFFIC_STATISTICS_DEVICES_WINDOW_ALL_TIME,
 }
-TRAFFIC_STATISTICS_DEVICES_DEFAULT_TOP_LIMIT = 8
+TRAFFIC_STATISTICS_DEVICES_DEFAULT_TOP_LIMIT = 20
 TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY = "unknown"
 TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL = "Unknown"
 TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY = "mixed_unknown"
@@ -547,7 +547,7 @@ def get_traffic_devices_statistics(
     *,
     range_value: str = TRAFFIC_STATISTICS_RANGE_24H,
     shift_windows: int = 0,
-    mode: str = TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS,
+    window: str = TRAFFIC_STATISTICS_DEVICES_WINDOW_LAST_H,
     top_limit: int = TRAFFIC_STATISTICS_DEVICES_DEFAULT_TOP_LIMIT,
 ) -> dict[str, Any]:
     normalized_range = str(range_value or TRAFFIC_STATISTICS_RANGE_24H).strip().lower()
@@ -556,37 +556,37 @@ def get_traffic_devices_statistics(
     normalized_shift_windows = int(shift_windows)
     if normalized_shift_windows < 0:
         raise ValueError("Unsupported range.")
-    normalized_mode = str(mode or TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS).strip().lower()
-    if normalized_mode not in TRAFFIC_STATISTICS_DEVICES_MODE_OPTIONS:
-        raise ValueError("Unsupported mode.")
+    normalized_window = str(window or TRAFFIC_STATISTICS_DEVICES_WINDOW_LAST_H).strip().lower()
+    if normalized_window not in TRAFFIC_STATISTICS_DEVICES_WINDOW_OPTIONS:
+        raise ValueError("Unsupported window.")
     normalized_top_limit = max(1, int(top_limit))
 
-    total_minutes = int(TRAFFIC_STATISTICS_RANGE_OPTIONS[normalized_range])
-    output_bucket_minutes = _resolve_traffic_statistics_bucket_minutes(total_minutes)
-    output_bucket_delta = timedelta(minutes=output_bucket_minutes)
-    output_bucket_count = max(1, (total_minutes + output_bucket_minutes - 1) // output_bucket_minutes)
     now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-
-    latest_base_bucket_start = _floor_to_bucket_start(now_utc, bucket_minutes=RADIO_ACTIVITY_BUCKET_MINUTES) - timedelta(
-        minutes=RADIO_ACTIVITY_BUCKET_MINUTES
-    )
-    latest_output_bucket_start = _floor_to_bucket_start(latest_base_bucket_start, bucket_minutes=output_bucket_minutes)
-    if normalized_shift_windows > 0:
-        latest_output_bucket_start -= timedelta(minutes=total_minutes * normalized_shift_windows)
-    window_start_utc = latest_output_bucket_start - timedelta(minutes=output_bucket_minutes * (output_bucket_count - 1))
-    window_end_utc = latest_output_bucket_start + output_bucket_delta
-
-    frame_rows = fetch_all(
-        """
-        SELECT direction, format, line, created_at
-        FROM traffic_frames
-        WHERE format LIKE 'TNC2%'
-          AND created_at >= ?
-          AND created_at < ?
-        ORDER BY created_at ASC, id ASC
-        """,
-        (window_start_utc.isoformat(), window_end_utc.isoformat()),
-    )
+    window_start_utc: datetime | None = None
+    window_end_utc: datetime | None = None
+    if normalized_window == TRAFFIC_STATISTICS_DEVICES_WINDOW_LAST_H:
+        window_end_utc = now_utc
+        window_start_utc = now_utc - timedelta(hours=1)
+        frame_rows = fetch_all(
+            """
+            SELECT direction, format, line, created_at
+            FROM traffic_frames
+            WHERE format LIKE 'TNC2%'
+              AND created_at >= ?
+              AND created_at < ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (window_start_utc.isoformat(), window_end_utc.isoformat()),
+        )
+    else:
+        frame_rows = fetch_all(
+            """
+            SELECT direction, format, line, created_at
+            FROM traffic_frames
+            WHERE format LIKE 'TNC2%'
+            ORDER BY created_at ASC, id ASC
+            """
+        )
 
     labels_by_key: dict[str, str] = {
         TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY: TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
@@ -595,43 +595,6 @@ def get_traffic_devices_statistics(
     }
     device_db = get_aprs_device_identification_database()
     destination_cache: dict[str, tuple[str, str, bool]] = {}
-
-    if normalized_mode == TRAFFIC_STATISTICS_DEVICES_MODE_FRAMES:
-        frame_counts: dict[str, int] = {}
-        for row in frame_rows:
-            frame_format = str(row["format"] or "").strip().upper()
-            direction = _normalize_direction(row["direction"], frame_format)
-            if direction != "RX":
-                continue
-            parsed = parse_tnc2_frame(str(row["line"] or ""))
-            if parsed is None:
-                continue
-            device_key, device_label, _is_recognized = _resolve_statistics_device_bucket(
-                str(parsed.get("logical_destination") or parsed.get("destination") or ""),
-                database=device_db,
-                cache=destination_cache,
-            )
-            frame_counts[device_key] = int(frame_counts.get(device_key) or 0) + 1
-            labels_by_key[device_key] = device_label
-
-        total = sum(frame_counts.values())
-        items = _build_traffic_devices_items(
-            counts=frame_counts,
-            labels_by_key=labels_by_key,
-            total=total,
-            top_limit=normalized_top_limit,
-        )
-        return {
-            "range": normalized_range,
-            "shift_windows": normalized_shift_windows,
-            "mode": normalized_mode,
-            "count_basis": "frames",
-            "total": total,
-            "top_limit": normalized_top_limit,
-            "window_start_utc": window_start_utc.isoformat(),
-            "window_end_utc": window_end_utc.isoformat(),
-            "items": items,
-        }
 
     station_votes: dict[str, dict[str, Any]] = {}
     for row_index, row in enumerate(frame_rows):
@@ -690,12 +653,12 @@ def get_traffic_devices_statistics(
     return {
         "range": normalized_range,
         "shift_windows": normalized_shift_windows,
-        "mode": normalized_mode,
+        "window": normalized_window,
         "count_basis": "unique_callsign_ssid",
         "total": total,
         "top_limit": normalized_top_limit,
-        "window_start_utc": window_start_utc.isoformat(),
-        "window_end_utc": window_end_utc.isoformat(),
+        "window_start_utc": window_start_utc.isoformat() if window_start_utc is not None else None,
+        "window_end_utc": window_end_utc.isoformat() if window_end_utc is not None else None,
         "items": items,
     }
 
