@@ -614,9 +614,12 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             self.assertEqual(stations_payload.get("window"), "last_h")
             self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid")
             self.assertEqual(int(stations_payload.get("total") or 0), 4)
-            station_counts = [int(item.get("count") or 0) for item in list(stations_payload.get("items") or [])]
+            station_items = list(stations_payload.get("items") or [])
+            station_counts = [int(item.get("count") or 0) for item in station_items]
             self.assertEqual(sum(station_counts), 4)
-            self.assertLessEqual(max(station_counts or [0]), 2)
+            unknown_item = next((item for item in station_items if str(item.get("key") or "") == "unknown"), None)
+            self.assertIsNotNone(unknown_item)
+            self.assertEqual(int((unknown_item or {}).get("count") or 0), 4)
 
             all_time_payload = get_traffic_devices_statistics(range_value="24h", window="all_time")
             self.assertEqual(all_time_payload.get("window"), "all_time")
@@ -709,7 +712,9 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 station_items = list(stations_payload.get("items") or [])
                 station_counts = [int(item.get("count") or 0) for item in station_items]
                 self.assertEqual(sum(station_counts), 4)
-                self.assertLessEqual(max(station_counts or [0]), 2)
+                unknown_item = next((item for item in station_items if str(item.get("key") or "") == "unknown"), None)
+                self.assertIsNotNone(unknown_item)
+                self.assertEqual(int((unknown_item or {}).get("count") or 0), 4)
 
                 all_time_response = client.get("/api/statistics/devices?range=24h&window=all_time")
                 self.assertEqual(all_time_response.status_code, 200)

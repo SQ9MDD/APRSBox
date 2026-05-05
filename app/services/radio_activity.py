@@ -610,6 +610,7 @@ def get_traffic_devices_statistics(
             continue
         device_key, device_label, is_recognized = _resolve_statistics_device_bucket(
             str(parsed.get("logical_destination") or parsed.get("destination") or ""),
+            str(parsed.get("logical_info") or parsed.get("info") or ""),
             database=device_db,
             cache=destination_cache,
         )
@@ -665,29 +666,36 @@ def get_traffic_devices_statistics(
 
 def _resolve_statistics_device_bucket(
     destination: str,
+    info: str,
     *,
     database: Any,
     cache: dict[str, tuple[str, str, bool]],
 ) -> tuple[str, str, bool]:
     normalized_destination = _normalize_statistics_destination(destination)
+    normalized_info = str(info or "")
     if not normalized_destination:
         return (
             TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
             TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
             False,
         )
-    cached = cache.get(normalized_destination)
+    cache_key = f"{normalized_destination}\u241f{normalized_info}"
+    cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    matched = lookup_aprs_device_identification(destination=normalized_destination, info="", database=database)
+    matched = lookup_aprs_device_identification(destination=normalized_destination, info=normalized_info, database=database)
     if matched is not None:
         key = str(matched.get("actual_identifier") or normalized_destination).strip().upper() or normalized_destination
         label = str(matched.get("short_name") or matched.get("identified_as") or key).strip() or key
         resolved = (key, label, True)
     else:
-        resolved = (normalized_destination, normalized_destination, True)
-    cache[normalized_destination] = resolved
+        resolved = (
+            TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
+            TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
+            False,
+        )
+    cache[cache_key] = resolved
     return resolved
 
 
