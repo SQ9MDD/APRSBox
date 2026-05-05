@@ -163,7 +163,9 @@
         node.hidden = !showEmpty;
     };
 
-    const createCommonOptions = (palette, *, stacked) => ({
+    const createCommonOptions = (palette, options = {}) => {
+        const stacked = Boolean(options.stacked);
+        return ({
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
@@ -195,6 +197,7 @@
             },
         },
     });
+    };
 
     const renderCharts = (payload) => {
         const labels = Array.isArray(payload && payload.labels) ? payload.labels : [];
