@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.7.38 - 05.05.2026
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- zmiany  od 1.7.29.dev do 1.7.37.dev
+
+## 1.7.37.dev - 05.05.2026
+
+### Najważniejsze zmiany
+- `TNC RX / KISS parser`: naprawiono parsowanie ramek rozdzielanych `FEND`, aby poprawnie obsługiwać `back-to-back FEND` i nie gubić poprawnych ramek danych.
+- `Arduino TNC compatibility`: pseudo-ramki `C0 0D 0A C0` (CR/LF po ramce) są ignorowane jako `unsupported/non-data`, więc nie spamują już głównego `Traffic Log` wpisami `KISS command 0xD len=1`.
+- `Diagnostyka`: dodano liczniki ignorowanych ramek KISS (`ignored_kiss_non_data`, `ignored_kiss_garbage`) oraz rate-limited debug hex dump do potwierdzania sekwencji śmieciowych bez zalewania logów. (tnx SP5QWJ)
+
+## 1.7.36.dev - 04.05.2026
+
+### Najważniejsze zmiany
+- `Dashboard / Activity Charts`: dodano trwałe zapamiętywanie `Range` i zoomu wykresów w `localStorage` (zoom per zakres: `1h..365d`), z odtwarzaniem po odświeżeniu.
+- `Dashboard / Chart visibility`: w trybie jasnym domyślna linia wykresu (`All frames` / `RX`) ma kolor czarny dla lepszej czytelności; kolory serii pozostają spójne z paletą `Traffic Log`.
+- `Dashboard / Theme switch`: po zmianie motywu/palety kolory wykresów odświeżają się bez przeładowania strony.
+- `Map / Topbar`: usunięto widoczną etykietę `Mask opacity` i skompaktowano topbar (mniejsze odstępy, padding i kontrolki), zachowując `aria-label` dla dostępności.
+
+## 1.7.35.dev - 04.05.2026
+
+### Najważniejsze zmiany
+- `Radio activity aggregation`: dodano trwałą warstwę bucketów `5m` (`radio_activity_5m`) oraz tabelę stanu workera (`radio_activity_aggregator_state`) do historycznej analityki bez zmiany semantyki `traffic_frames`.
+- `Radio activity worker`: dodano okresowy worker działający poza ścieżką RX/TX, który agreguje tylko zamknięte buckety UTC z `safety delay`, wspiera catch-up po restarcie i zapisuje `last_error` bez wywracania runtime.
+- `Dashboard API`: dodano endpoint `GET /api/dashboard/radio-activity` oparty o `radio_activity_5m` z zakresami `1h/3h/6h/12h/24h/7d/30d/365d`.
+- `Long-range charts`: dla zakresów powyżej `7d` dodano adaptacyjny downsampling (agregacja odczytu z limitem punktów), aby nie przeciążać wykresów i przeglądarki.
+- `Dashboard UI`: wykresy aktywności zostały przepięte na nowy endpoint, dodano selector zakresu (domyślnie `24h`) oraz zoom myszą (`drag` do przybliżenia, `double click` do resetu).
+- `Chart palette`: kolory datasetów wykresów są teraz oparte o tę samą paletę co `Traffic Log` (wspólne zmienne CSS), co ujednolica znaczenie kolorów między widokami.
+- `Testy`: dodano testy agregatora i API (tworzenie tabel, bucketing UTC, upsert, pomijanie otwartego bucketu, zakresy i downsampling) oraz utrzymano zgodność istniejących testów dashboard/traffic.
+
+## 1.7.32.dev - 04.05.2026
+
+### Najważniejsze zmiany
+- `Settings -> Global Settings`: dodano dwie niezależne opcje przezroczystości kół zasięgu: `Coverage fill opacity` i `Coverage outline opacity`.
+- `Coverage opacity`: zakres `Coverage fill opacity` ograniczono do `0-20%` z gradacją co `1%`; `Coverage outline opacity` pozostawiono w dotychczasowym zakresie.
+- `Map rendering`: przezroczystość wypełnienia i obwiedni PHG jest stosowana dynamicznie podczas renderu i zapisywana lokalnie (`localStorage`) per przeglądarka.
+
+## 1.7.30.dev - 01.05.2026
+
+### Najważniejsze zmiany
+- `Settings -> Configuration backup`: uzupełniono brakujące klucze i18n, dzięki czemu nagłówek sekcji, etykiety akcji i komunikaty modala importu przechodzą przez tłumaczenia tak jak pozostałe elementy `Settings`.
+- `Configuration backup import`: dodano tłumaczenia komunikatów walidacji/wyjątków backupu (`empty/size/json/format/version/table payload/FK`), aby błędy z endpointu importu były prezentowane spójnie w wybranym języku GUI.
+
 ## 1.7.29 - 01.05.2026
 
 ### Stable release

@@ -61,29 +61,66 @@
     </section>
 
     <section class="dashboard-detail-grid">
-        <section class="panel">
+        <section class="panel dashboard-activity-panel">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
-                        <h2>{{ t("What Needs Attention") }}</h2>
-                        <p class="section-lead">{{ t("Only the items that block normal use.") }}</p>
+                        <h2>{{ t("Activity Charts") }}</h2>
+                        <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
+                    </div>
+                    <div class="dashboard-activity-controls">
+                        <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
+                        <select id="dashboard-activity-range" name="dashboard_activity_range">
+                            <option value="1h">1h</option>
+                            <option value="3h">3h</option>
+                            <option value="6h">6h</option>
+                            <option value="12h">12h</option>
+                            <option value="24h" selected>24h</option>
+                            <option value="7d">7d</option>
+                            <option value="30d">30d</option>
+                            <option value="365d">365d</option>
+                        </select>
+                        <span class="muted small dashboard-activity-zoom-hint">{{ t("Drag to zoom, double click to reset.") }}</span>
                     </div>
                 </div>
-                {% if dashboard_home.next_steps %}
-                <div class="dashboard-next-steps">
-                    {% for item in dashboard_home.next_steps %}
-                    <div class="dashboard-next-step">
-                        <strong>{{ t(item.label) }}</strong>
-                        <p>{{ t(item.value) }}</p>
-                        {% if item.note %}
-                        <p class="dashboard-check-note">{{ t(item.note) }}</p>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
+                <div class="dashboard-activity-grid">
+                    <section class="dashboard-activity-card" id="dashboard-main-activity-chart-card">
+                        <div class="dashboard-activity-card-header">
+                            <h3>{{ t("All / mobile / messages / queries") }}</h3>
+                            <span class="muted small" id="dashboard-main-activity-window">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
+                        </div>
+                        <div class="dashboard-activity-canvas">
+                            <canvas id="dashboard-main-activity-chart"></canvas>
+                        </div>
+                    </section>
+                    <section class="dashboard-activity-card" id="dashboard-direction-activity-chart-card">
+                        <div class="dashboard-activity-card-header">
+                            <h3>{{ t("RX / TX / repeats") }}</h3>
+                            <span class="muted small" id="dashboard-direction-activity-step">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
+                        </div>
+                        <div class="dashboard-activity-canvas">
+                            <canvas id="dashboard-direction-activity-chart"></canvas>
+                        </div>
+                    </section>
                 </div>
-                {% else %}
-                <div class="notice">{{ t("Basic station setup is complete. You can work from My Settings, Map and Stations.") }}</div>
-                {% endif %}
+                <div class="dashboard-activity-totals">
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("All frames") }}</span>
+                        <span class="metric-value" id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</span>
+                    </div>
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("Received (RX)") }}</span>
+                        <span class="metric-value" id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</span>
+                    </div>
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("Sent (TX)") }}</span>
+                        <span class="metric-value" id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</span>
+                    </div>
+                    <div class="metric-card dashboard-kpi-card">
+                        <span class="metric-label">{{ t("Repeated TX") }}</span>
+                        <span class="metric-value" id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</span>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -134,4 +171,635 @@
         </section>
     </section>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/vendor/chart.umd.min.js?v={{ app_version }}"></script>
+<script type="application/json" id="dashboard-activity-data">{{ dashboard_home.activity_chart|tojson }}</script>
+<script>
+    (() => {
+        const payloadNode = document.getElementById("dashboard-activity-data");
+        const mainCanvas = document.getElementById("dashboard-main-activity-chart");
+        const directionCanvas = document.getElementById("dashboard-direction-activity-chart");
+        const rangeSelect = document.getElementById("dashboard-activity-range");
+        const mainWindowNode = document.getElementById("dashboard-main-activity-window");
+        const stepNode = document.getElementById("dashboard-direction-activity-step");
+        const totalFramesNode = document.getElementById("dashboard-total-frames");
+        const totalRxNode = document.getElementById("dashboard-total-rx");
+        const totalTxNode = document.getElementById("dashboard-total-tx");
+        const totalRepeatedNode = document.getElementById("dashboard-total-repeated");
+        if (
+            !(payloadNode instanceof HTMLScriptElement)
+            || !(mainCanvas instanceof HTMLCanvasElement)
+            || !(directionCanvas instanceof HTMLCanvasElement)
+        ) return;
+
+        let payload = {};
+        try {
+            payload = JSON.parse(payloadNode.textContent || "{}");
+        } catch (_) {
+            return;
+        }
+        if (!window.Chart || typeof window.Chart !== "function") {
+            return;
+        }
+
+        const rootPath = {{ request.scope.root_path|tojson }};
+        const apiUrl = `${rootPath}/api/dashboard/radio-activity`;
+        const rangeDisplayMap = {
+            "1h": "1h",
+            "3h": "3h",
+            "6h": "6h",
+            "12h": "12h",
+            "24h": "24h",
+            "7d": "7d",
+            "30d": "30d",
+            "365d": "365d",
+        };
+        const defaultRange = "24h";
+        const rangeStorageKey = "aprsbox-dashboard-activity-range";
+        const zoomStorageKey = "aprsbox-dashboard-activity-zoom-v1";
+        const minStepLabel = {{ t("min step")|tojson }};
+        const rangePrefix = {{ t("Range")|tojson }};
+        const pointsUnitLabel = {{ t("points")|tojson }};
+
+        const normalizeRangeValue = (value) => {
+            const normalizedValue = String(value || "").trim().toLowerCase();
+            return Object.prototype.hasOwnProperty.call(rangeDisplayMap, normalizedValue)
+                ? normalizedValue
+                : defaultRange;
+        };
+
+        const readStorageText = (key) => {
+            try {
+                return window.localStorage.getItem(key);
+            } catch (_) {
+                return null;
+            }
+        };
+
+        const writeStorageText = (key, value) => {
+            try {
+                window.localStorage.setItem(key, value);
+            } catch (_) {
+                return;
+            }
+        };
+
+        const readStoredRange = () => normalizeRangeValue(readStorageText(rangeStorageKey) || defaultRange);
+        const persistRange = (rangeValue) => writeStorageText(rangeStorageKey, normalizeRangeValue(rangeValue));
+
+        const readZoomState = () => {
+            const rawValue = readStorageText(zoomStorageKey);
+            if (!rawValue) {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(rawValue);
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    return parsed;
+                }
+            } catch (_) {
+                return {};
+            }
+            return {};
+        };
+
+        const toSeries = (values, sizeHint) => {
+            if (!Array.isArray(values)) {
+                return Array.from({ length: Math.max(0, Number(sizeHint) || 0) }, () => 0);
+            }
+            return values.map((value) => Number(value || 0));
+        };
+
+        const readChartPalette = () => {
+            const rootStyle = getComputedStyle(document.documentElement);
+            const isLightTheme = document.documentElement.getAttribute("data-theme") === "light";
+            const colorText = rootStyle.getPropertyValue("--text").trim() || "#d8e1e8";
+            const colorMuted = rootStyle.getPropertyValue("--muted").trim() || "#9aa9b6";
+            const colorBorder = rootStyle.getPropertyValue("--border").trim() || "rgba(120, 135, 150, 0.35)";
+            const trafficColorDefaultFromCss = rootStyle.getPropertyValue("--traffic-color-default").trim();
+            const trafficColorDefault = trafficColorDefaultFromCss || (isLightTheme ? "#000000" : "#ffffff");
+            const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#4f8dff";
+            const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
+            const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
+            const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
+            return {
+                colorText,
+                colorMuted,
+                colorBorder,
+                trafficColorDefault,
+                trafficColorOwnBeaconTx,
+                trafficColorOwnWxTx,
+                trafficColorOwnMessageTx,
+                trafficColorRepeatedTx,
+            };
+        };
+        let chartPalette = readChartPalette();
+
+        const withAlpha = (color, alpha) => {
+            const normalized = String(color || "").trim();
+            if (/^#[0-9a-fA-F]{6}$/.test(normalized)) {
+                const r = Number.parseInt(normalized.slice(1, 3), 16);
+                const g = Number.parseInt(normalized.slice(3, 5), 16);
+                const b = Number.parseInt(normalized.slice(5, 7), 16);
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            }
+            if (/^#[0-9a-fA-F]{3}$/.test(normalized)) {
+                const r = Number.parseInt(normalized[1] + normalized[1], 16);
+                const g = Number.parseInt(normalized[2] + normalized[2], 16);
+                const b = Number.parseInt(normalized[3] + normalized[3], 16);
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            }
+            return normalized || `rgba(77, 182, 172, ${alpha})`;
+        };
+
+        const buildSharedOptions = () => ({
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: "index", intersect: false },
+            scales: {
+                x: {
+                    ticks: { color: chartPalette.colorMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+                    grid: { color: chartPalette.colorBorder },
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: chartPalette.colorMuted, precision: 0 },
+                    grid: { color: chartPalette.colorBorder },
+                },
+            },
+            plugins: {
+                legend: {
+                    labels: { color: chartPalette.colorText, usePointStyle: true, boxWidth: 10 },
+                },
+            },
+            elements: {
+                point: { radius: 1.8, hoverRadius: 3.2 },
+                line: { tension: 0.25, borderWidth: 2 },
+            },
+        });
+
+        const normalizeLegacyPayload = (rawPayload) => {
+            const labels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
+            const sourceSeries = rawPayload?.series || {};
+            const totalSeries = toSeries(sourceSeries.total, labels.length);
+            const rxSeries = toSeries(sourceSeries.rx, labels.length);
+            const txSeries = toSeries(sourceSeries.tx, labels.length);
+            const repeatedSeries = toSeries(sourceSeries.repeated_tx, labels.length);
+            const mobileSeries = toSeries(sourceSeries.mobile, labels.length);
+            const messageSeries = toSeries(sourceSeries.message, labels.length);
+            const querySeries = toSeries(sourceSeries.query, labels.length);
+            return {
+                range: "legacy",
+                outputBucketMinutes: Number(rawPayload?.bucket_minutes || 5),
+                labels,
+                series: {
+                    total: totalSeries,
+                    mobile: mobileSeries,
+                    message: messageSeries,
+                    query: querySeries,
+                    rx: rxSeries,
+                    tx: txSeries,
+                    repeated_tx: repeatedSeries,
+                },
+                totals: {
+                    total: totalSeries.reduce((acc, value) => acc + value, 0),
+                    rx: rxSeries.reduce((acc, value) => acc + value, 0),
+                    tx: txSeries.reduce((acc, value) => acc + value, 0),
+                    repeated_tx: repeatedSeries.reduce((acc, value) => acc + value, 0),
+                },
+            };
+        };
+
+        const normalizeApiPayload = (rawPayload) => {
+            const labels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
+            const sourceSeries = rawPayload?.series || {};
+            const rxSeries = toSeries(sourceSeries.rx_total, labels.length);
+            const txSeries = toSeries(sourceSeries.tx_total, labels.length);
+            const totalSeries = rxSeries.map((value, index) => value + (txSeries[index] || 0));
+            const repeatedSeries = toSeries(sourceSeries.digipeated_total, labels.length);
+            const mobileSeries = toSeries(sourceSeries.mobile_total, labels.length);
+            const messageSeries = toSeries(sourceSeries.messages_total, labels.length);
+            const querySeries = toSeries(sourceSeries.queries_total, labels.length);
+            return {
+                range: String(rawPayload?.range || "").trim().toLowerCase(),
+                outputBucketMinutes: Number(rawPayload?.output_bucket_minutes || 5),
+                points: Number(rawPayload?.points || labels.length || 0),
+                labels,
+                series: {
+                    total: totalSeries,
+                    mobile: mobileSeries,
+                    message: messageSeries,
+                    query: querySeries,
+                    rx: rxSeries,
+                    tx: txSeries,
+                    repeated_tx: repeatedSeries,
+                },
+                totals: {
+                    total: totalSeries.reduce((acc, value) => acc + value, 0),
+                    rx: rxSeries.reduce((acc, value) => acc + value, 0),
+                    tx: txSeries.reduce((acc, value) => acc + value, 0),
+                    repeated_tx: repeatedSeries.reduce((acc, value) => acc + value, 0),
+                },
+            };
+        };
+
+        let mainChart = null;
+        let directionChart = null;
+        let zoomBounds = null;
+        let lastRenderedPayload = null;
+        let activeRange = readStoredRange();
+        let zoomStateByRange = readZoomState();
+        const zoomMinPoints = 4;
+
+        const persistZoomState = () => {
+            writeStorageText(zoomStorageKey, JSON.stringify(zoomStateByRange));
+        };
+
+        const resolveStoredZoomBounds = (rangeValue, labelsCount) => {
+            const normalizedRange = normalizeRangeValue(rangeValue);
+            const storedZoom = zoomStateByRange[normalizedRange];
+            if (!storedZoom || typeof storedZoom !== "object") {
+                return null;
+            }
+            const minValue = Math.round(Number(storedZoom.min));
+            const maxValue = Math.round(Number(storedZoom.max));
+            if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+                return null;
+            }
+            const safeLabelsCount = Math.max(0, Number(labelsCount) || 0);
+            if (safeLabelsCount <= 0) {
+                return null;
+            }
+            const clampedMin = Math.max(0, Math.min(safeLabelsCount - 1, minValue));
+            const clampedMax = Math.max(0, Math.min(safeLabelsCount - 1, maxValue));
+            if ((clampedMax - clampedMin + 1) < zoomMinPoints || clampedMax <= clampedMin) {
+                return null;
+            }
+            return { min: clampedMin, max: clampedMax };
+        };
+
+        const persistZoomBoundsForRange = (rangeValue, bounds, labelsCount) => {
+            const normalizedRange = normalizeRangeValue(rangeValue);
+            const safeLabelsCount = Math.max(0, Number(labelsCount) || 0);
+            if (safeLabelsCount <= 0 || !bounds || typeof bounds !== "object") {
+                if (zoomStateByRange[normalizedRange]) {
+                    delete zoomStateByRange[normalizedRange];
+                    persistZoomState();
+                }
+                return;
+            }
+            const minValue = Math.round(Number(bounds.min));
+            const maxValue = Math.round(Number(bounds.max));
+            if (!Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+                if (zoomStateByRange[normalizedRange]) {
+                    delete zoomStateByRange[normalizedRange];
+                    persistZoomState();
+                }
+                return;
+            }
+            const clampedMin = Math.max(0, Math.min(safeLabelsCount - 1, minValue));
+            const clampedMax = Math.max(0, Math.min(safeLabelsCount - 1, maxValue));
+            if ((clampedMax - clampedMin + 1) < zoomMinPoints || clampedMax <= clampedMin) {
+                if (zoomStateByRange[normalizedRange]) {
+                    delete zoomStateByRange[normalizedRange];
+                    persistZoomState();
+                }
+                return;
+            }
+            zoomStateByRange[normalizedRange] = { min: clampedMin, max: clampedMax };
+            persistZoomState();
+        };
+
+        const applyZoomBoundsToCharts = () => {
+            const charts = [mainChart, directionChart];
+            for (const chart of charts) {
+                if (!chart) {
+                    continue;
+                }
+                const labelsCount = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+                if (labelsCount <= 0) {
+                    continue;
+                }
+                if (zoomBounds && Number.isFinite(zoomBounds.min) && Number.isFinite(zoomBounds.max) && zoomBounds.max > zoomBounds.min) {
+                    chart.options.scales.x.min = Math.max(0, Math.min(labelsCount - 1, Number(zoomBounds.min)));
+                    chart.options.scales.x.max = Math.max(0, Math.min(labelsCount - 1, Number(zoomBounds.max)));
+                } else {
+                    delete chart.options.scales.x.min;
+                    delete chart.options.scales.x.max;
+                }
+                chart.update("none");
+            }
+            const referenceChart = mainChart || directionChart;
+            const labelsCount = Array.isArray(referenceChart?.data?.labels) ? referenceChart.data.labels.length : 0;
+            if (zoomBounds && Number.isFinite(zoomBounds.min) && Number.isFinite(zoomBounds.max) && zoomBounds.max > zoomBounds.min) {
+                persistZoomBoundsForRange(activeRange, zoomBounds, labelsCount);
+            } else {
+                persistZoomBoundsForRange(activeRange, null, labelsCount);
+            }
+        };
+
+        const resetZoomBounds = () => {
+            zoomBounds = null;
+            persistZoomBoundsForRange(activeRange, null, 0);
+            applyZoomBoundsToCharts();
+        };
+
+        const getIndexFromPointerEvent = (chart, event) => {
+            if (!chart || !chart.canvas || !chart.scales || !chart.scales.x) {
+                return null;
+            }
+            const rect = chart.canvas.getBoundingClientRect();
+            const x = Number(event.clientX) - rect.left;
+            if (!Number.isFinite(x)) {
+                return null;
+            }
+            const rawIndex = chart.scales.x.getValueForPixel(x);
+            const index = Number(rawIndex);
+            if (!Number.isFinite(index)) {
+                return null;
+            }
+            const labelsCount = Array.isArray(chart.data?.labels) ? chart.data.labels.length : 0;
+            if (labelsCount <= 0) {
+                return null;
+            }
+            return Math.max(0, Math.min(labelsCount - 1, Math.round(index)));
+        };
+
+        const bindMouseZoomForCanvas = (canvas, chartResolver) => {
+            if (!(canvas instanceof HTMLCanvasElement)) {
+                return;
+            }
+            const parent = canvas.parentElement;
+            const selectionNode = document.createElement("div");
+            selectionNode.className = "dashboard-activity-zoom-selection";
+            if (parent) {
+                parent.appendChild(selectionNode);
+            }
+
+            const dragState = { active: false, startIndex: null, startPixelX: 0, pointerId: null };
+
+            const hideSelection = () => {
+                selectionNode.style.display = "none";
+                selectionNode.style.left = "0px";
+                selectionNode.style.width = "0px";
+            };
+
+            const updateSelection = (clientX) => {
+                const rect = canvas.getBoundingClientRect();
+                const localX = Math.max(0, Math.min(rect.width, Number(clientX) - rect.left));
+                const left = Math.min(dragState.startPixelX, localX);
+                const width = Math.abs(localX - dragState.startPixelX);
+                selectionNode.style.display = "block";
+                selectionNode.style.left = `${left}px`;
+                selectionNode.style.width = `${width}px`;
+            };
+
+            const stopDrag = () => {
+                dragState.active = false;
+                dragState.startIndex = null;
+                dragState.pointerId = null;
+                canvas.classList.remove("dashboard-activity-zooming");
+                hideSelection();
+            };
+
+            canvas.addEventListener("pointerdown", (event) => {
+                if (event.button !== 0) {
+                    return;
+                }
+                const chart = chartResolver();
+                const startIndex = getIndexFromPointerEvent(chart, event);
+                if (startIndex === null) {
+                    return;
+                }
+                const rect = canvas.getBoundingClientRect();
+                dragState.active = true;
+                dragState.startIndex = startIndex;
+                dragState.startPixelX = Math.max(0, Math.min(rect.width, Number(event.clientX) - rect.left));
+                dragState.pointerId = event.pointerId;
+                canvas.classList.add("dashboard-activity-zooming");
+                canvas.setPointerCapture(event.pointerId);
+                updateSelection(event.clientX);
+            });
+
+            canvas.addEventListener("pointermove", (event) => {
+                if (!dragState.active) {
+                    return;
+                }
+                updateSelection(event.clientX);
+            });
+
+            canvas.addEventListener("pointerup", (event) => {
+                if (!dragState.active) {
+                    return;
+                }
+                const chart = chartResolver();
+                const endIndex = getIndexFromPointerEvent(chart, event);
+                const startIndex = Number(dragState.startIndex);
+                stopDrag();
+                if (endIndex === null || !Number.isFinite(startIndex)) {
+                    return;
+                }
+                const minIndex = Math.min(startIndex, endIndex);
+                const maxIndex = Math.max(startIndex, endIndex);
+                if ((maxIndex - minIndex + 1) < zoomMinPoints) {
+                    return;
+                }
+                zoomBounds = { min: minIndex, max: maxIndex };
+                applyZoomBoundsToCharts();
+            });
+
+            canvas.addEventListener("pointercancel", () => {
+                if (!dragState.active) {
+                    return;
+                }
+                stopDrag();
+            });
+
+            canvas.addEventListener("dblclick", () => {
+                stopDrag();
+                resetZoomBounds();
+            });
+        };
+
+        const renderCharts = (chartPayload) => {
+            chartPalette = readChartPalette();
+            lastRenderedPayload = chartPayload;
+            const labels = chartPayload.labels || [];
+            const series = chartPayload.series || {};
+
+            if (mainChart) {
+                mainChart.destroy();
+                mainChart = null;
+            }
+            if (directionChart) {
+                directionChart.destroy();
+                directionChart = null;
+            }
+
+            const mainContext = mainCanvas.getContext("2d");
+            if (mainContext) {
+                mainChart = new window.Chart(mainContext, {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                label: {{ t("All frames")|tojson }},
+                                data: toSeries(series.total, labels.length),
+                                borderColor: chartPalette.trafficColorDefault,
+                                backgroundColor: withAlpha(chartPalette.trafficColorDefault, 0.14),
+                                fill: true,
+                            },
+                            {
+                                label: {{ t("Mobile")|tojson }},
+                                data: toSeries(series.mobile, labels.length),
+                                borderColor: chartPalette.trafficColorOwnWxTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnWxTx, 0.16),
+                                fill: false,
+                            },
+                            {
+                                label: {{ t("Messages")|tojson }},
+                                data: toSeries(series.message, labels.length),
+                                borderColor: chartPalette.trafficColorOwnMessageTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnMessageTx, 0.18),
+                                fill: false,
+                            },
+                            {
+                                label: {{ t("Queries")|tojson }},
+                                data: toSeries(series.query, labels.length),
+                                borderColor: chartPalette.trafficColorOwnBeaconTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnBeaconTx, 0.16),
+                                fill: false,
+                            },
+                        ],
+                    },
+                    options: buildSharedOptions(),
+                });
+            }
+
+            const directionContext = directionCanvas.getContext("2d");
+            if (directionContext) {
+                directionChart = new window.Chart(directionContext, {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                label: {{ t("Received (RX)")|tojson }},
+                                data: toSeries(series.rx, labels.length),
+                                borderColor: chartPalette.trafficColorDefault,
+                                backgroundColor: withAlpha(chartPalette.trafficColorDefault, 0.14),
+                                fill: true,
+                            },
+                            {
+                                label: {{ t("Sent (TX)")|tojson }},
+                                data: toSeries(series.tx, labels.length),
+                                borderColor: chartPalette.trafficColorOwnBeaconTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnBeaconTx, 0.16),
+                                fill: false,
+                            },
+                            {
+                                label: {{ t("Repeated TX")|tojson }},
+                                data: toSeries(series.repeated_tx, labels.length),
+                                borderColor: chartPalette.trafficColorRepeatedTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorRepeatedTx, 0.16),
+                                borderDash: [6, 4],
+                                fill: false,
+                            },
+                        ],
+                    },
+                    options: buildSharedOptions(),
+                });
+            }
+
+            applyZoomBoundsToCharts();
+
+            if (mainWindowNode) {
+                const rangeLabel = rangeDisplayMap[chartPayload.range] || chartPayload.range || "-";
+                const pointsLabel = Number(chartPayload.points || labels.length || 0);
+                if (rangeLabel && rangeLabel !== "legacy") {
+                    mainWindowNode.textContent = `${rangePrefix}: ${rangeLabel} • ${pointsLabel} ${pointsUnitLabel}`;
+                } else {
+                    mainWindowNode.textContent = `${pointsLabel} ${pointsUnitLabel}`;
+                }
+            }
+            if (stepNode) {
+                stepNode.textContent = `${Number(chartPayload.outputBucketMinutes || 5)} ${minStepLabel}`;
+            }
+            if (totalFramesNode) {
+                totalFramesNode.textContent = String(Number(chartPayload?.totals?.total || 0));
+            }
+            if (totalRxNode) {
+                totalRxNode.textContent = String(Number(chartPayload?.totals?.rx || 0));
+            }
+            if (totalTxNode) {
+                totalTxNode.textContent = String(Number(chartPayload?.totals?.tx || 0));
+            }
+            if (totalRepeatedNode) {
+                totalRepeatedNode.textContent = String(Number(chartPayload?.totals?.repeated_tx || 0));
+            }
+        };
+
+        const fallbackPayload = normalizeLegacyPayload(payload);
+        zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(fallbackPayload.labels) ? fallbackPayload.labels.length : 0);
+        renderCharts(fallbackPayload);
+
+        bindMouseZoomForCanvas(mainCanvas, () => mainChart);
+        bindMouseZoomForCanvas(directionCanvas, () => directionChart);
+
+        const loadRangePayload = async (rangeValue) => {
+            const normalizedRange = normalizeRangeValue(rangeValue);
+            if (!normalizedRange) {
+                return;
+            }
+            activeRange = normalizedRange;
+            persistRange(activeRange);
+            if (rangeSelect instanceof HTMLSelectElement) {
+                rangeSelect.disabled = true;
+            }
+            try {
+                const response = await fetch(`${apiUrl}?range=${encodeURIComponent(normalizedRange)}`, {
+                    headers: { Accept: "application/json" },
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const apiPayload = await response.json();
+                const normalizedPayload = normalizeApiPayload(apiPayload);
+                zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(normalizedPayload.labels) ? normalizedPayload.labels.length : 0);
+                renderCharts(normalizedPayload);
+            } catch (_) {
+                zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(fallbackPayload.labels) ? fallbackPayload.labels.length : 0);
+                renderCharts(fallbackPayload);
+            } finally {
+                if (rangeSelect instanceof HTMLSelectElement) {
+                    rangeSelect.disabled = false;
+                }
+            }
+        };
+
+        if (rangeSelect instanceof HTMLSelectElement) {
+            rangeSelect.value = normalizeRangeValue(activeRange);
+            rangeSelect.addEventListener("change", () => {
+                persistRange(rangeSelect.value);
+                loadRangePayload(rangeSelect.value);
+            });
+        }
+        const themeObserver = new window.MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type === "attributes" && (mutation.attributeName === "data-theme" || mutation.attributeName === "data-palette")) {
+                    if (lastRenderedPayload) {
+                        renderCharts(lastRenderedPayload);
+                    }
+                    break;
+                }
+            }
+        });
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
+        loadRangePayload(activeRange);
+    })();
+</script>
 {% endblock %}

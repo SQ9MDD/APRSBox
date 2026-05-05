@@ -51,6 +51,8 @@ SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
 MODEM_TX_MIN_GAP_SECONDS_DEFAULT = 0.35
 MODEM_TX_MIN_GAP_SECONDS_MIN = 0.2
 MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
+DASHBOARD_ACTIVITY_WINDOW_MINUTES = 60
+DASHBOARD_ACTIVITY_BUCKET_MINUTES = 5
 
 
 def _t(message: object) -> str:
@@ -1013,6 +1015,109 @@ def dashboard_traffic_summary() -> dict[str, Any]:
     }
 
 
+def dashboard_activity_series(
+    *,
+    window_minutes: int = DASHBOARD_ACTIVITY_WINDOW_MINUTES,
+    bucket_minutes: int = DASHBOARD_ACTIVITY_BUCKET_MINUTES,
+) -> dict[str, Any]:
+    normalized_bucket_minutes = max(1, int(bucket_minutes or DASHBOARD_ACTIVITY_BUCKET_MINUTES))
+    normalized_window_minutes = max(normalized_bucket_minutes, int(window_minutes or DASHBOARD_ACTIVITY_WINDOW_MINUTES))
+    bucket_count = max(1, math.ceil(normalized_window_minutes / normalized_bucket_minutes))
+
+    now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    rounded_minute = (now_utc.minute // normalized_bucket_minutes) * normalized_bucket_minutes
+    current_bucket_start = now_utc.replace(minute=rounded_minute)
+    first_bucket_start = current_bucket_start - timedelta(minutes=normalized_bucket_minutes * (bucket_count - 1))
+
+    bucket_starts = [first_bucket_start + timedelta(minutes=normalized_bucket_minutes * index) for index in range(bucket_count)]
+    labels = [bucket_start.strftime("%H:%M") for bucket_start in bucket_starts]
+    series = {
+        "total": [0] * bucket_count,
+        "mobile": [0] * bucket_count,
+        "message": [0] * bucket_count,
+        "query": [0] * bucket_count,
+        "rx": [0] * bucket_count,
+        "tx": [0] * bucket_count,
+        "repeated_tx": [0] * bucket_count,
+    }
+
+    station_settings = get_station_settings()
+    station_source_key = _station_source_key(station_settings)
+    from app.services.wx import get_wx_config
+
+    wx_config = get_wx_config()
+    wx_source_key = _build_source_key(wx_config.get("callsign"), wx_config.get("ssid"))
+
+    frame_rows = fetch_all(
+        """
+        SELECT created_at, direction, format, line, command
+        FROM traffic_frames
+        WHERE created_at >= ?
+        ORDER BY created_at ASC, id ASC
+        """,
+        (first_bucket_start.isoformat(),),
+    )
+    bucket_size_seconds = normalized_bucket_minutes * 60
+
+    for row in frame_rows:
+        created_at_raw = str(row["created_at"] or "").strip()
+        created_at = _parse_iso_timestamp_utc(created_at_raw)
+        if created_at is None:
+            continue
+        delta_seconds = (created_at - first_bucket_start).total_seconds()
+        if delta_seconds < 0:
+            continue
+        bucket_index = int(delta_seconds // bucket_size_seconds)
+        if bucket_index < 0 or bucket_index >= bucket_count:
+            continue
+
+        direction = str(row["direction"] or "").strip().upper()
+        frame_format = str(row["format"] or "").strip().upper()
+        if direction not in {"RX", "TX"}:
+            direction = "TX" if frame_format.endswith("-TX") else "RX"
+
+        series["total"][bucket_index] += 1
+        if direction == "RX":
+            series["rx"][bucket_index] += 1
+        elif direction == "TX":
+            series["tx"][bucket_index] += 1
+
+        line = str(row["line"] or "")
+        command = str(row["command"] or "")
+        parsed = parse_tnc2_frame(line)
+        aprs_data = parsed.get("aprs_data") if parsed else {}
+        packet_group = str((aprs_data or {}).get("packet_group") or "").strip().lower()
+        frame_type = str((aprs_data or {}).get("frame_type") or "").strip().upper()
+
+        if frame_type == "M":
+            series["mobile"][bucket_index] += 1
+        if packet_group == "message":
+            series["message"][bucket_index] += 1
+        elif packet_group == "query":
+            series["query"][bucket_index] += 1
+
+        if direction == "TX":
+            row_class = _traffic_frame_row_class(
+                direction=direction,
+                line=line,
+                command=command,
+                station_source_key=station_source_key,
+                wx_source_key=wx_source_key,
+            )
+            if "traffic-log-row-repeated-tx" in row_class.split():
+                series["repeated_tx"][bucket_index] += 1
+
+    return {
+        "bucket_minutes": normalized_bucket_minutes,
+        "window_minutes": normalized_bucket_minutes * bucket_count,
+        "window_start_utc": first_bucket_start.isoformat(),
+        "window_end_utc": (current_bucket_start + timedelta(minutes=normalized_bucket_minutes)).isoformat(),
+        "labels": labels,
+        "series": series,
+        "totals": {key: int(sum(values)) for key, values in series.items()},
+    }
+
+
 def recent_alert_logs(limit: int = 5) -> list[dict[str, Any]]:
     rows = fetch_all(
         """
@@ -1233,6 +1338,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             {"label": "Active interfaces", "value": str(len(enabled_interfaces)), "suffix": ""},
             {"label": "Last station TX", "value": latest_station_tx_display, "suffix": ""},
         ],
+        "activity_chart": dashboard_activity_series(),
         "checks": checks,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,

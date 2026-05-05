@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import time
 from threading import Lock
 from typing import Any, Callable
 
@@ -28,6 +29,8 @@ EXPOSE_PORT_MAX_CONNECTIONS = 3
 SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS = 150
 SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS = set(range(0, 601, 30))
 SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
+IGNORED_KISS_DEBUG_PREVIEW_BYTES = 24
+IGNORED_KISS_DEBUG_INTERVAL_SECONDS = 30.0
 
 
 def _normalize_modem_type(value: Any) -> str:
@@ -84,6 +87,10 @@ class _TrafficModemRuntime:
         self._proxy_port: int | None = None
         self._proxy_enabled = False
         self._proxy_active_clients = 0
+        self._ignored_kiss_non_data = 0
+        self._ignored_kiss_garbage = 0
+        self._ignored_kiss_debug_next_log_at = 0.0
+        self._ignored_kiss_debug_suppressed = 0
 
     async def start(self) -> None:
         if self._task is not None:
@@ -157,6 +164,10 @@ class _TrafficModemRuntime:
                 "port": self._proxy_port,
                 "active_clients": self._proxy_active_clients,
             }
+            kiss_stats = {
+                "ignored_kiss_non_data": self._ignored_kiss_non_data,
+                "ignored_kiss_garbage": self._ignored_kiss_garbage,
+            }
         expose["listen_endpoint"] = (
             f"{expose['bind_address']}:{expose['port']}"
             if expose["enabled"] and expose["bind_address"] and expose["port"] is not None
@@ -191,6 +202,7 @@ class _TrafficModemRuntime:
             "expose": expose,
             "last_error": last_error,
             "updated_at": updated_at,
+            "kiss_stats": kiss_stats,
             "frames": frames,
         }
 
@@ -202,6 +214,10 @@ class _TrafficModemRuntime:
                 "bind_address": self._proxy_bind_address,
                 "port": self._proxy_port,
                 "active_clients": self._proxy_active_clients,
+            }
+            kiss_stats = {
+                "ignored_kiss_non_data": self._ignored_kiss_non_data,
+                "ignored_kiss_garbage": self._ignored_kiss_garbage,
             }
             status = self._status
             status_detail = self._status_detail
@@ -219,6 +235,7 @@ class _TrafficModemRuntime:
             "expose": expose,
             "last_error": last_error,
             "updated_at": updated_at,
+            "kiss_stats": kiss_stats,
         }
 
     async def _run(self) -> None:
@@ -514,7 +531,7 @@ class _TrafficModemRuntime:
                 return
 
             raw_frame = bytes(self._kiss_buffer[1:end])
-            del self._kiss_buffer[: end + 1]
+            del self._kiss_buffer[:end]
 
             if not raw_frame:
                 continue
@@ -546,7 +563,7 @@ class _TrafficModemRuntime:
                 return
 
             raw_frame = bytes(self._proxy_uplink_buffer[1:end])
-            del self._proxy_uplink_buffer[: end + 1]
+            del self._proxy_uplink_buffer[:end]
 
             if not raw_frame:
                 continue
@@ -592,6 +609,16 @@ class _TrafficModemRuntime:
         port = (command >> 4) & 0x0F
         command_id = command & 0x0F
         payload = self._kiss_unescape(raw_frame[1:])
+        if command_id != 0x00:
+            reason = "garbage" if self._looks_like_kiss_garbage(raw_frame) else "non-data"
+            self._register_ignored_kiss_frame(
+                reason=reason,
+                port=port,
+                command_id=command_id,
+                payload=payload,
+                raw_frame=raw_frame,
+            )
+            return
         timestamp = utc_now()
 
         entry: dict[str, str] = {
@@ -606,21 +633,84 @@ class _TrafficModemRuntime:
             "text": payload.decode("utf-8", errors="replace").strip() or "<binary>",
         }
 
-        if command_id == 0x00:
-            decoded = self._decode_ax25_to_tnc2(payload)
-            if decoded is not None:
-                entry["format"] = "TNC2"
-                entry["line"] = decoded
-            else:
-                entry["format"] = "KISS"
-                entry["line"] = f"port={port} AX.25 frame len={len(payload)}"
+        decoded = self._decode_ax25_to_tnc2(payload)
+        if decoded is not None:
+            entry["format"] = "TNC2"
+            entry["line"] = decoded
         else:
-            entry["format"] = "KISS-CMD"
-            entry["line"] = f"port={port} KISS command 0x{command_id:X} len={len(payload)}"
+            entry["format"] = "KISS"
+            entry["line"] = f"port={port} AX.25 frame len={len(payload)}"
 
         self._persist_frame(entry, timestamp)
         with self._lock:
             self._updated_at = timestamp
+
+    def _register_ignored_kiss_frame(
+        self,
+        *,
+        reason: str,
+        port: int,
+        command_id: int,
+        payload: bytes,
+        raw_frame: bytes,
+    ) -> None:
+        with self._lock:
+            if reason == "garbage":
+                self._ignored_kiss_garbage += 1
+            else:
+                self._ignored_kiss_non_data += 1
+            self._updated_at = utc_now()
+        self._log_ignored_kiss_frame(
+            reason=reason,
+            port=port,
+            command_id=command_id,
+            payload=payload,
+            raw_frame=raw_frame,
+        )
+
+    def _looks_like_kiss_garbage(self, raw_frame: bytes) -> bool:
+        for byte in raw_frame:
+            if byte in {9, 10, 13}:
+                continue
+            if 32 <= byte <= 126:
+                continue
+            return False
+        return True
+
+    def _log_ignored_kiss_frame(
+        self,
+        *,
+        reason: str,
+        port: int,
+        command_id: int,
+        payload: bytes,
+        raw_frame: bytes,
+    ) -> None:
+        now = time.monotonic()
+        suppressed = 0
+        with self._lock:
+            if now < self._ignored_kiss_debug_next_log_at:
+                self._ignored_kiss_debug_suppressed += 1
+                return
+            suppressed = self._ignored_kiss_debug_suppressed
+            self._ignored_kiss_debug_suppressed = 0
+            self._ignored_kiss_debug_next_log_at = now + IGNORED_KISS_DEBUG_INTERVAL_SECONDS
+
+        preview = raw_frame[:IGNORED_KISS_DEBUG_PREVIEW_BYTES].hex(" ").upper()
+        if len(raw_frame) > IGNORED_KISS_DEBUG_PREVIEW_BYTES:
+            preview = f"{preview} ..."
+        if not preview:
+            preview = "<empty>"
+        suppressed_suffix = f"; suppressed={suppressed}" if suppressed > 0 else ""
+        log_event(
+            "DEBUG",
+            "traffic",
+            (
+                f"Ignored KISS {reason} frame on {self._runtime_label()}: "
+                f"port={port} command=0x{command_id:X} len={len(payload)} "
+                f"raw={preview}{suppressed_suffix}"
+            ),
+        )
 
     def _kiss_unescape(self, payload: bytes) -> bytes:
         output = bytearray()
@@ -1397,6 +1487,7 @@ class TrafficMonitorService:
             snapshot = runtime.runtime_snapshot()
             modem = snapshot.get("active_modem") or {}
             expose = dict(snapshot.get("expose") or {})
+            kiss_stats = dict(snapshot.get("kiss_stats") or {})
             expose["listen_endpoint"] = (
                 f"{expose.get('bind_address')}:{expose.get('port')}"
                 if expose.get("enabled") and expose.get("bind_address") and expose.get("port") is not None
@@ -1412,6 +1503,8 @@ class TrafficMonitorService:
                     "status_detail": snapshot.get("status_detail") or "",
                     "last_error": snapshot.get("last_error"),
                     "updated_at": snapshot.get("updated_at"),
+                    "ignored_kiss_non_data": int(kiss_stats.get("ignored_kiss_non_data") or 0),
+                    "ignored_kiss_garbage": int(kiss_stats.get("ignored_kiss_garbage") or 0),
                     "expose": expose,
                 }
             )

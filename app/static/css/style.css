@@ -28,6 +28,14 @@
     --space-5: 1.13rem;
     --space-6: 1.45rem;
     --map-mask-layer-color: rgba(0, 0, 0, 0.78);
+    --traffic-color-own-beacon-tx: #4f8dff;
+    --traffic-color-own-beacon-rx: #7aa9ff;
+    --traffic-color-own-wx-tx: #46a85f;
+    --traffic-color-own-wx-rx: #75c98a;
+    --traffic-color-own-message-tx: #e8913a;
+    --traffic-color-own-message-rx: #f0b36e;
+    --traffic-color-repeated-tx: #d24b4b;
+    --traffic-color-proxy-tx: #a65fc1;
 }
 
 :root[data-theme="dark"] {
@@ -1019,7 +1027,7 @@ body {
 
 .dashboard-detail-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 0.95fr);
     gap: var(--space-3);
 }
 
@@ -1193,6 +1201,94 @@ body {
     overflow-wrap: anywhere;
 }
 
+.dashboard-activity-panel .panel-body {
+    gap: var(--space-2);
+}
+
+.dashboard-activity-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.dashboard-activity-range-label {
+    display: inline;
+    color: var(--muted);
+    font-size: 0.78rem;
+    letter-spacing: 0.01em;
+}
+
+.dashboard-activity-controls select {
+    width: auto;
+    min-width: 6.2rem;
+}
+
+.dashboard-activity-zoom-hint {
+    margin-left: 0.15rem;
+}
+
+.dashboard-activity-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+}
+
+.dashboard-activity-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+    padding: 0.52rem 0.6rem;
+    display: grid;
+    gap: 0.42rem;
+}
+
+.dashboard-activity-card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.dashboard-activity-card-header h3 {
+    margin: 0;
+    font-size: 0.92rem;
+}
+
+.dashboard-activity-canvas {
+    position: relative;
+    min-height: 152px;
+}
+
+.dashboard-activity-canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+    cursor: crosshair;
+}
+
+.dashboard-activity-canvas canvas.dashboard-activity-zooming {
+    cursor: grabbing;
+}
+
+.dashboard-activity-zoom-selection {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    display: none;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.dashboard-activity-totals {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
 .metric-value {
     display: block;
     font-size: 1.18rem;
@@ -1220,7 +1316,8 @@ body {
 }
 
 @media (max-width: 1180px) {
-    .dashboard-overview-grid {
+    .dashboard-overview-grid,
+    .dashboard-detail-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -3723,7 +3820,7 @@ select:focus-visible,
 .traffic-log-row-own-beacon-tx .traffic-log-time,
 .traffic-log-row-own-beacon-tx .traffic-log-source,
 .traffic-log-row-own-beacon-tx .traffic-log-line {
-    color: #4f8dff;
+    color: var(--traffic-color-own-beacon-tx);
 }
 
 .traffic-log-row-own-beacon-rx {
@@ -3733,7 +3830,7 @@ select:focus-visible,
 .traffic-log-row-own-beacon-rx .traffic-log-time,
 .traffic-log-row-own-beacon-rx .traffic-log-source,
 .traffic-log-row-own-beacon-rx .traffic-log-line {
-    color: #7aa9ff;
+    color: var(--traffic-color-own-beacon-rx);
 }
 
 .traffic-log-row-own-wx-tx {
@@ -3743,7 +3840,7 @@ select:focus-visible,
 .traffic-log-row-own-wx-tx .traffic-log-time,
 .traffic-log-row-own-wx-tx .traffic-log-source,
 .traffic-log-row-own-wx-tx .traffic-log-line {
-    color: #46a85f;
+    color: var(--traffic-color-own-wx-tx);
 }
 
 .traffic-log-row-own-wx-rx {
@@ -3753,7 +3850,7 @@ select:focus-visible,
 .traffic-log-row-own-wx-rx .traffic-log-time,
 .traffic-log-row-own-wx-rx .traffic-log-source,
 .traffic-log-row-own-wx-rx .traffic-log-line {
-    color: #75c98a;
+    color: var(--traffic-color-own-wx-rx);
 }
 
 .traffic-log-row-own-message-tx {
@@ -3763,7 +3860,7 @@ select:focus-visible,
 .traffic-log-row-own-message-tx .traffic-log-time,
 .traffic-log-row-own-message-tx .traffic-log-source,
 .traffic-log-row-own-message-tx .traffic-log-line {
-    color: #e8913a;
+    color: var(--traffic-color-own-message-tx);
 }
 
 .traffic-log-row-own-message-rx {
@@ -3773,7 +3870,7 @@ select:focus-visible,
 .traffic-log-row-own-message-rx .traffic-log-time,
 .traffic-log-row-own-message-rx .traffic-log-source,
 .traffic-log-row-own-message-rx .traffic-log-line {
-    color: #f0b36e;
+    color: var(--traffic-color-own-message-rx);
 }
 
 .traffic-log-row-repeated-tx {
@@ -3783,7 +3880,7 @@ select:focus-visible,
 .traffic-log-row-repeated-tx .traffic-log-time,
 .traffic-log-row-repeated-tx .traffic-log-source,
 .traffic-log-row-repeated-tx .traffic-log-line {
-    color: #d24b4b;
+    color: var(--traffic-color-repeated-tx);
 }
 
 .traffic-log-row-proxy-tx {
@@ -3793,7 +3890,7 @@ select:focus-visible,
 .traffic-log-row-proxy-tx .traffic-log-time,
 .traffic-log-row-proxy-tx .traffic-log-source,
 .traffic-log-row-proxy-tx .traffic-log-line {
-    color: #a65fc1;
+    color: var(--traffic-color-proxy-tx);
 }
 
 .traffic-log-row-skipped .traffic-log-time,
@@ -3812,7 +3909,7 @@ select:focus-visible,
 .traffic-log-row-local .traffic-log-time,
 .traffic-log-row-local .traffic-log-source,
 .traffic-log-row-local .traffic-log-line {
-    color: #4f8dff;
+    color: var(--traffic-color-own-beacon-tx);
 }
 
 .traffic-log-row-weather {
@@ -3822,7 +3919,7 @@ select:focus-visible,
 .traffic-log-row-weather .traffic-log-time,
 .traffic-log-row-weather .traffic-log-source,
 .traffic-log-row-weather .traffic-log-line {
-    color: #46a85f;
+    color: var(--traffic-color-own-wx-tx);
 }
 
 .traffic-log-row-repeated {
@@ -3832,7 +3929,7 @@ select:focus-visible,
 .traffic-log-row-repeated .traffic-log-time,
 .traffic-log-row-repeated .traffic-log-source,
 .traffic-log-row-repeated .traffic-log-line {
-    color: #d24b4b;
+    color: var(--traffic-color-repeated-tx);
 }
 
 .traffic-log-time,
@@ -4821,6 +4918,11 @@ button.message-delivery-badge {
         padding-left: 0;
         padding-right: 0;
         padding-bottom: 0;
+    }
+
+    .dashboard-activity-grid,
+    .dashboard-activity-totals {
+        grid-template-columns: 1fr;
     }
 
     .page-header,

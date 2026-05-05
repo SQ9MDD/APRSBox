@@ -14,6 +14,7 @@ from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.maintenance_scheduler import MaintenanceSchedulerService
 from app.services.object_scheduler import ObjectSchedulerService
 from app.services.outbound_runtime import OutboundService
+from app.services.radio_activity import RadioActivityAggregatorService
 from app.services.traffic import TrafficMonitorService
 from app.services.wx_scheduler import WxSchedulerService
 
@@ -30,6 +31,7 @@ async def lifespan(app_instance: FastAPI):
     maintenance_scheduler = MaintenanceSchedulerService()
     object_scheduler = ObjectSchedulerService()
     wx_scheduler = WxSchedulerService()
+    radio_activity_aggregator = RadioActivityAggregatorService()
     app_instance.state.aprsis_uplink = aprsis_uplink
     app_instance.state.digi_flow_runtime = digi_flow_runtime
     app_instance.state.traffic_monitor = traffic_monitor
@@ -39,6 +41,7 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.maintenance_scheduler = maintenance_scheduler
     app_instance.state.object_scheduler = object_scheduler
     app_instance.state.wx_scheduler = wx_scheduler
+    app_instance.state.radio_activity_aggregator = radio_activity_aggregator
     await aprsis_uplink.start()
     await digi_flow_runtime.start()
     await traffic_monitor.start()
@@ -48,10 +51,12 @@ async def lifespan(app_instance: FastAPI):
     await maintenance_scheduler.start()
     await object_scheduler.start()
     await wx_scheduler.start()
+    await radio_activity_aggregator.start()
     log_event("INFO", "system", "APRSBox core started")
     try:
         yield
     finally:
+        await radio_activity_aggregator.stop()
         await wx_scheduler.stop()
         await object_scheduler.stop()
         await maintenance_scheduler.stop()

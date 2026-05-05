@@ -80,6 +80,24 @@ def station_payload(interface_id: int) -> dict[str, str]:
 
 
 class DashboardHomeTests(unittest.TestCase):
+    def test_dashboard_exposes_activity_chart_series(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="Chart TNC", enabled=1, tx_blocked=0)
+            update_station_settings(station_payload(interface_id))
+
+            view = dashboard_home_data()
+            chart = view.get("activity_chart") or {}
+            series = chart.get("series") or {}
+            labels = chart.get("labels") or []
+
+            self.assertEqual(chart.get("bucket_minutes"), 5)
+            self.assertEqual(chart.get("window_minutes"), 60)
+            self.assertEqual(len(labels), 12)
+            self.assertEqual(len(series.get("total") or []), len(labels))
+            self.assertEqual(len(series.get("rx") or []), len(labels))
+            self.assertEqual(len(series.get("tx") or []), len(labels))
+            self.assertEqual(sum(series.get("total") or []), int((chart.get("totals") or {}).get("total", 0)))
+
     def test_dashboard_exposes_compact_station_readiness_lists(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="Main TNC", enabled=1, tx_blocked=0)
