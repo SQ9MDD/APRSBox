@@ -11,6 +11,7 @@ from app.services.radio_activity import (
     _floor_to_bucket_start,
     get_dashboard_radio_activity,
     get_traffic_devices_statistics,
+    record_traffic_device_station_observation,
     run_radio_activity_aggregation,
 )
 
@@ -74,8 +75,14 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 state_columns = {
                     row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_aggregator_state)").fetchall()
                 }
+                devices_columns = {
+                    row["name"] for row in connection.execute("PRAGMA table_info(traffic_device_station_device_hourly)").fetchall()
+                }
                 activity_indexes = {
                     row["name"] for row in connection.execute("PRAGMA index_list('radio_activity_5m')").fetchall()
+                }
+                devices_indexes = {
+                    row["name"] for row in connection.execute("PRAGMA index_list('traffic_device_station_device_hourly')").fetchall()
                 }
             finally:
                 connection.close()
@@ -86,8 +93,13 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             self.assertIn("rx_total", activity_columns)
             self.assertIn("duplicate_total", activity_columns)
             self.assertIn("last_processed_bucket_start_utc", state_columns)
+            self.assertIn("bucket_start_utc", devices_columns)
+            self.assertIn("station_key", devices_columns)
+            self.assertIn("device_key", devices_columns)
+            self.assertIn("destination_key", devices_columns)
             self.assertIn("idx_radio_activity_5m_bucket_start", activity_indexes)
             self.assertIn("idx_radio_activity_5m_bucket_source", activity_indexes)
+            self.assertIn("idx_traffic_device_station_device_hourly_bucket", devices_indexes)
 
     def test_bucket_floor_uses_utc_5m_resolution(self) -> None:
         value = datetime(2026, 5, 4, 10, 7, 52, tzinfo=timezone.utc)
@@ -611,7 +623,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 )
 
             stations_payload = get_traffic_devices_statistics(range_value="24h")
-            self.assertEqual(stations_payload.get("window"), "last_h")
+            self.assertEqual(stations_payload.get("window"), "range")
             self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid")
             self.assertEqual(int(stations_payload.get("total") or 0), 4)
             station_items = list(stations_payload.get("items") or [])
@@ -620,15 +632,44 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             unknown_item = next((item for item in station_items if str(item.get("key") or "") == "unknown"), None)
             self.assertIsNotNone(unknown_item)
             self.assertEqual(int((unknown_item or {}).get("count") or 0), 4)
+            self.assertEqual(str((unknown_item or {}).get("tocall") or ""), "QZ1234")
 
-            all_time_payload = get_traffic_devices_statistics(range_value="24h", window="all_time")
-            self.assertEqual(all_time_payload.get("window"), "all_time")
-            self.assertEqual(all_time_payload.get("count_basis"), "unique_callsign_ssid")
-            self.assertEqual(int(all_time_payload.get("total") or 0), 4)
-            all_time_counts = [int(item.get("count") or 0) for item in list(all_time_payload.get("items") or [])]
-            self.assertEqual(sum(all_time_counts), 4)
+            shifted_payload = get_traffic_devices_statistics(range_value="24h", shift_windows=1)
+            self.assertEqual(shifted_payload.get("window"), "range")
+            self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid")
+            self.assertEqual(int(shifted_payload.get("total") or 0), 0)
 
-    def test_statistics_devices_api_supports_stations_and_frames_modes(self) -> None:
+    def test_traffic_devices_range_uses_buffer_when_traffic_frames_are_pruned(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            old_timestamp = (now_utc - timedelta(hours=2)).isoformat()
+            line = "SP8OLD-7>APY05D,WIDE1-1:>legacy"
+
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line=line,
+                created_at=old_timestamp,
+            )
+            record_traffic_device_station_observation(
+                frame_format="TNC2",
+                line=line,
+                timestamp=old_timestamp,
+            )
+
+            execute(
+                "DELETE FROM traffic_frames WHERE created_at < ?",
+                ((now_utc - timedelta(hours=1)).isoformat(),),
+            )
+
+            payload = get_traffic_devices_statistics(range_value="24h")
+            self.assertEqual(int(payload.get("total") or 0), 1)
+            self.assertEqual(payload.get("count_basis"), "unique_callsign_ssid")
+            self.assertEqual(payload.get("window"), "range")
+
+    def test_statistics_devices_api_supports_main_range_windows(self) -> None:
         if not FASTAPI_AVAILABLE:
             self.skipTest("fastapi is not installed in this environment")
         with temporary_database():
@@ -706,7 +747,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 stations_response = client.get("/api/statistics/devices?range=24h")
                 self.assertEqual(stations_response.status_code, 200)
                 stations_payload = stations_response.json()
-                self.assertEqual(stations_payload.get("window"), "last_h")
+                self.assertEqual(stations_payload.get("window"), "range")
                 self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid")
                 self.assertEqual(int(stations_payload.get("total") or 0), 4)
                 station_items = list(stations_payload.get("items") or [])
@@ -715,16 +756,14 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 unknown_item = next((item for item in station_items if str(item.get("key") or "") == "unknown"), None)
                 self.assertIsNotNone(unknown_item)
                 self.assertEqual(int((unknown_item or {}).get("count") or 0), 4)
+                self.assertEqual(str((unknown_item or {}).get("tocall") or ""), "QZ1234")
 
-                all_time_response = client.get("/api/statistics/devices?range=24h&window=all_time")
-                self.assertEqual(all_time_response.status_code, 200)
-                all_time_payload = all_time_response.json()
-                self.assertEqual(all_time_payload.get("window"), "all_time")
-                self.assertEqual(all_time_payload.get("count_basis"), "unique_callsign_ssid")
-                self.assertEqual(int(all_time_payload.get("total") or 0), 4)
-                all_time_items = list(all_time_payload.get("items") or [])
-                all_time_counts = [int(item.get("count") or 0) for item in all_time_items]
-                self.assertEqual(sum(all_time_counts), 4)
+                shifted_response = client.get("/api/statistics/devices?range=24h&shift=1")
+                self.assertEqual(shifted_response.status_code, 200)
+                shifted_payload = shifted_response.json()
+                self.assertEqual(shifted_payload.get("window"), "range")
+                self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid")
+                self.assertEqual(int(shifted_payload.get("total") or 0), 0)
 
                 invalid_window = client.get("/api/statistics/devices?range=24h&window=invalid")
                 self.assertEqual(invalid_window.status_code, 400)

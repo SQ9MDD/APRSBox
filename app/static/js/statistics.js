@@ -16,7 +16,6 @@
     const frameStepNode = document.getElementById("statistics-frame-types-step");
     const heardStepNode = document.getElementById("statistics-heard-step");
     const actionsStepNode = document.getElementById("statistics-actions-step");
-    const devicesWindowSelect = document.getElementById("statistics-devices-window");
     const devicesListNode = document.getElementById("statistics-devices-list");
 
     if (!(root instanceof HTMLElement) || !(payloadNode instanceof HTMLScriptElement)) {
@@ -37,15 +36,12 @@
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
     const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
+    const devicesTocallLabel = String(root.dataset.devicesTocallLabel || "TOCALL");
     const devicesLabelOther = String(root.dataset.devicesLabelOther || "Other");
     const devicesLabelUnknown = String(root.dataset.devicesLabelUnknown || "Unknown");
     const devicesLabelMixedUnknown = String(root.dataset.devicesLabelMixedUnknown || "Mixed / Unknown");
     const supportedRanges = new Set(["24h", "7d", "30d"]);
-    const supportedDeviceWindows = new Set(["last_h", "all_time"]);
     const defaultRange = "24h";
-    const defaultDeviceWindow = supportedDeviceWindows.has(String(root.dataset.devicesDefaultWindow || "").trim().toLowerCase())
-        ? String(root.dataset.devicesDefaultWindow || "").trim().toLowerCase()
-        : "last_h";
     const storageKey = "aprsbox-statistics-range";
 
     let frameChart = null;
@@ -96,11 +92,6 @@
     const normalizeRange = (value) => {
         const normalizedValue = String(value || "").trim().toLowerCase();
         return supportedRanges.has(normalizedValue) ? normalizedValue : defaultRange;
-    };
-
-    const normalizeDeviceWindow = (value) => {
-        const normalizedValue = String(value || "").trim().toLowerCase();
-        return supportedDeviceWindows.has(normalizedValue) ? normalizedValue : defaultDeviceWindow;
     };
 
     const readStoredRange = () => {
@@ -262,6 +253,7 @@
                 label: String(item && item.label ? item.label : key),
                 count,
                 percent,
+                tocall: String(item && item.tocall ? item.tocall : "").trim().toUpperCase(),
             });
         }
         return result;
@@ -307,6 +299,7 @@
             const valueNode = document.createElement("span");
             valueNode.className = "statistics-devices-list-value";
             valueNode.textContent = `${Math.round(item.count)} (${Number(item.percent).toFixed(1)}%)`;
+            row.title = `${devicesTocallLabel}: ${item.tocall || "-"}`;
 
             row.appendChild(labelNode);
             row.appendChild(valueNode);
@@ -429,30 +422,24 @@
         }
     };
 
-    const buildDeviceColors = (count) => {
-        const base = [
-            "#d24b4b",
-            "#de6e3a",
-            "#e8913a",
-            "#c2a34e",
-            "#8fb35a",
-            "#46a85f",
-            "#4fb39a",
-            "#53c8ce",
-            "#4ea5d4",
-            "#4f8dff",
-            "#6f79e2",
-            "#8d6ed2",
-            "#a65fc1",
-            "#bc6fff",
-            "#7f8d99",
-            "#8a8a8a",
-        ];
-        const colors = [];
-        for (let index = 0; index < count; index += 1) {
-            colors.push(base[index % base.length]);
+    const buildDeviceColors = (items) => {
+        const list = Array.isArray(items) ? items : [];
+        const total = list.length;
+        if (total <= 0) {
+            return [];
         }
-        return colors;
+        const divisor = Math.max(1, total - 1);
+        return list.map((item, index) => {
+            const key = String(item && item.key ? item.key : "").trim().toLowerCase();
+            if (key === "other") {
+                return "#7d7d7d";
+            }
+            const ratio = index / divisor;
+            const hue = 12 + (210 * ratio);
+            const saturation = 80 - (24 * ratio);
+            const lightness = 54 - (8 * ratio);
+            return `hsl(${Math.round(hue)} ${Math.round(saturation)}% ${Math.round(lightness)}%)`;
+        });
     };
 
     const renderDevices = (payloadValue) => {
@@ -462,7 +449,7 @@
         const total = Math.max(0, Number(payloadValue && payloadValue.total) || 0);
         const items = normalizeDeviceItems(payloadValue && payloadValue.items, total);
         const hasData = total > 0 && items.length > 0;
-        const colors = hasData ? buildDeviceColors(items.length) : [];
+        const colors = hasData ? buildDeviceColors(items) : [];
 
         toggleEmptyState(devicesEmptyNode, !hasData);
         renderDeviceList(hasData ? items : [], colors);
@@ -516,7 +503,8 @@
                                 const label = resolveDeviceLabel(item);
                                 const count = Math.max(0, Number(item.count) || 0);
                                 const percent = Number(item.percent) || 0;
-                                return `${label}: ${count} (${percent.toFixed(1)}%) • ${countBasisLabel}`;
+                                const tocallPart = item.tocall ? ` • ${devicesTocallLabel}: ${item.tocall}` : "";
+                                return `${label}: ${count} (${percent.toFixed(1)}%) • ${countBasisLabel}${tocallPart}`;
                             },
                         },
                     },
@@ -536,12 +524,6 @@
         activeShift = 0;
     }
 
-    let activeDevicesWindow = normalizeDeviceWindow(
-        (devicesPayload && devicesPayload.window)
-        || (devicesWindowSelect instanceof HTMLSelectElement ? devicesWindowSelect.value : "")
-        || defaultDeviceWindow,
-    );
-
     const setControlsDisabled = (disabled) => {
         if (rangeSelect instanceof HTMLSelectElement) {
             rangeSelect.disabled = disabled;
@@ -554,25 +536,16 @@
         }
     };
 
-    const loadDevicesPayload = async (rangeValue, shiftValue, windowValue, options = {}) => {
-        const disableWindowControl = Boolean(options.disableWindowControl);
+    const loadDevicesPayload = async (rangeValue, shiftValue) => {
         if (!(devicesCanvas instanceof HTMLCanvasElement) || !devicesApiUrl) {
             return;
         }
-        const normalizedWindow = normalizeDeviceWindow(windowValue);
         const normalizedRange = normalizeRange(rangeValue);
         const normalizedShift = normalizeShift(shiftValue);
 
-        if (devicesWindowSelect instanceof HTMLSelectElement) {
-            devicesWindowSelect.value = normalizedWindow;
-            if (disableWindowControl) {
-                devicesWindowSelect.disabled = true;
-            }
-        }
-
         try {
             const response = await fetch(
-                `${devicesApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}&window=${encodeURIComponent(normalizedWindow)}`,
+                `${devicesApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}`,
                 {
                     method: "GET",
                     headers: { "Accept": "application/json" },
@@ -583,17 +556,9 @@
             }
             const nextPayload = await response.json();
             devicesPayload = nextPayload;
-            activeDevicesWindow = normalizeDeviceWindow(nextPayload && nextPayload.window);
-            if (devicesWindowSelect instanceof HTMLSelectElement) {
-                devicesWindowSelect.value = activeDevicesWindow;
-            }
             renderDevices(nextPayload);
         } catch (_) {
             return;
-        } finally {
-            if (devicesWindowSelect instanceof HTMLSelectElement && disableWindowControl) {
-                devicesWindowSelect.disabled = false;
-            }
         }
     };
 
@@ -624,7 +589,7 @@
                 rangeSelect.value = activeRange;
             }
             renderCharts(nextPayload);
-            await loadDevicesPayload(activeRange, activeShift, activeDevicesWindow);
+            await loadDevicesPayload(activeRange, activeShift);
         } catch (_) {
             return;
         } finally {
@@ -652,22 +617,20 @@
             void loadRangePayload(activeRange, activeShift - 1);
         });
     }
-    if (devicesWindowSelect instanceof HTMLSelectElement) {
-        devicesWindowSelect.value = activeDevicesWindow;
-        devicesWindowSelect.addEventListener("change", () => {
-            const nextWindow = normalizeDeviceWindow(devicesWindowSelect.value);
-            activeDevicesWindow = nextWindow;
-            void loadDevicesPayload(activeRange, activeShift, nextWindow, { disableWindowControl: true });
-        });
-    }
-
     renderCharts(payload);
     renderDevices(devicesPayload);
     setControlsDisabled(false);
 
     if (activeRange !== normalizeRange(payload && payload.range)) {
         void loadRangePayload(activeRange, activeShift);
-    } else if (!(devicesPayload && Array.isArray(devicesPayload.items) && devicesPayload.range === activeRange)) {
-        void loadDevicesPayload(activeRange, activeShift, activeDevicesWindow);
+    } else if (
+        !(
+            devicesPayload
+            && Array.isArray(devicesPayload.items)
+            && devicesPayload.range === activeRange
+            && normalizeShift(devicesPayload.shift_windows) === activeShift
+        )
+    ) {
+        void loadDevicesPayload(activeRange, activeShift);
     }
 })();

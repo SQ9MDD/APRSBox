@@ -425,6 +425,18 @@ CREATE TABLE IF NOT EXISTS traffic_frames (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS traffic_device_station_device_hourly (
+    bucket_start_utc TEXT NOT NULL,
+    station_key TEXT NOT NULL,
+    device_key TEXT NOT NULL,
+    destination_key TEXT NOT NULL,
+    device_label TEXT NOT NULL,
+    recognized_flag INTEGER NOT NULL DEFAULT 0 CHECK (recognized_flag IN (0, 1)),
+    frame_count INTEGER NOT NULL DEFAULT 0,
+    last_seen_at TEXT NOT NULL,
+    PRIMARY KEY (bucket_start_utc, station_key, device_key, destination_key)
+);
+
 CREATE TABLE IF NOT EXISTS traffic_runtime_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     status TEXT NOT NULL,
@@ -625,6 +637,8 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_device_station_device_hourly_bucket
+    ON traffic_device_station_device_hourly(bucket_start_utc, station_key);
 CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_map_sources_enabled_sort ON map_sources(enabled DESC, sort_order ASC, id ASC);

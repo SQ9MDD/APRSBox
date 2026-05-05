@@ -1251,28 +1251,6 @@ body {
     align-content: start;
 }
 
-.statistics-devices-mode-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-}
-
-.statistics-devices-mode-label {
-    color: var(--muted);
-    font-size: 0.76rem;
-    letter-spacing: 0.01em;
-}
-
-.statistics-devices-mode-wrap select {
-    width: auto;
-    min-width: 7.6rem;
-}
-
-.statistics-devices-description {
-    margin: 0;
-}
-
 .statistics-devices-canvas {
     min-height: 220px;
     max-height: 280px;

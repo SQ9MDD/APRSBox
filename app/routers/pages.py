@@ -2370,7 +2370,7 @@ def statistics_page(
 ) -> object:
     templates = request.app.state.templates
     statistics_payload = get_traffic_statistics(range_value="24h")
-    statistics_devices_payload = get_traffic_devices_statistics(range_value="24h", window="last_h")
+    statistics_devices_payload = get_traffic_devices_statistics(range_value="24h")
     context = build_template_context(
         request,
         page_title="Statistics",
@@ -2526,7 +2526,7 @@ def statistics_traffic(
 def statistics_devices(
     range: str = "24h",
     shift: int = 0,
-    window: str = "last_h",
+    window: str | None = None,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     try:

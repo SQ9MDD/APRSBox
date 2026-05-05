@@ -10,6 +10,7 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_rete
 from app.services.band_condition import process_incoming_frame
 from app.services.messages import process_incoming_tnc2_message
 from app.services.outbound import persist_outbound_frame
+from app.services.radio_activity import record_traffic_device_station_observation
 from app.services.serial_tnc import (
     close_serial_device,
     normalize_serial_baud_rate,
@@ -1203,6 +1204,14 @@ class _TrafficModemRuntime:
                 ),
             )
             connection.execute("DELETE FROM traffic_frames WHERE created_at < ?", (cutoff,))
+        try:
+            record_traffic_device_station_observation(
+                frame_format=entry["format"],
+                line=entry["line"],
+                timestamp=timestamp,
+            )
+        except Exception as exc:
+            log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {exc}")
         if entry["format"] == "TNC2":
             process_incoming_frame(entry["line"], band=active_band, timestamp=timestamp)
             process_incoming_tnc2_message(entry["line"], timestamp=timestamp)
