@@ -35,11 +35,13 @@ TRAFFIC_STATISTICS_RANGE_6H = "6h"
 TRAFFIC_STATISTICS_RANGE_24H = "24h"
 TRAFFIC_STATISTICS_RANGE_7D = "7d"
 TRAFFIC_STATISTICS_RANGE_30D = "30d"
+TRAFFIC_STATISTICS_RANGE_365D = "365d"
 TRAFFIC_STATISTICS_RANGE_OPTIONS = {
     TRAFFIC_STATISTICS_RANGE_6H: 6 * 60,
     TRAFFIC_STATISTICS_RANGE_24H: 24 * 60,
     TRAFFIC_STATISTICS_RANGE_7D: 7 * 24 * 60,
     TRAFFIC_STATISTICS_RANGE_30D: 30 * 24 * 60,
+    TRAFFIC_STATISTICS_RANGE_365D: 365 * 24 * 60,
 }
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
@@ -368,7 +370,6 @@ def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -
             SUM(tx_total) AS tx_total,
             SUM(digipeated_total) AS digipeated_total,
             SUM(direct_heard_total) AS direct_heard_total,
-            SUM(duplicate_total) AS duplicate_total,
             SUM(type_position_total) AS type_position_total,
             SUM(type_weather_total) AS type_weather_total,
             SUM(type_message_total) AS type_message_total,
@@ -444,8 +445,6 @@ def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -
         "digipeated": [],
         "gated_to_aprsis": [],
         "filtered_dropped": [],
-        # NOTE: This remains zero until normalized deduplication metadata is available.
-        "duplicate_ignored": [],
     }
 
     for index in range(output_bucket_count):
@@ -475,7 +474,6 @@ def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -
         actions_series["digipeated"].append(int(row.get("digipeated_total") or 0))
         actions_series["gated_to_aprsis"].append(int(aprsis_row.get("gated_total") or 0))
         actions_series["filtered_dropped"].append(int(aprsis_row.get("filtered_dropped_total") or 0))
-        actions_series["duplicate_ignored"].append(int(row.get("duplicate_total") or 0))
 
     return {
         "range": normalized_range,
@@ -514,8 +512,7 @@ def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -
                     {"key": "tx", "label": "TX", "data": actions_series["tx"]},
                     {"key": "digipeated", "label": "Digipeated", "data": actions_series["digipeated"]},
                     {"key": "gated_to_aprsis", "label": "Gated to APRS-IS", "data": actions_series["gated_to_aprsis"]},
-                    {"key": "filtered_dropped", "label": "Filtered / Dropped", "data": actions_series["filtered_dropped"]},
-                    {"key": "duplicate_ignored", "label": "Duplicate ignored", "data": actions_series["duplicate_ignored"]},
+                    {"key": "filtered_dropped", "label": "Filtered / dropped to APRS-IS", "data": actions_series["filtered_dropped"]},
                 ]
             },
         },

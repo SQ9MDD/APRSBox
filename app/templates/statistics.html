@@ -4,7 +4,7 @@
 <section class="panel dashboard-activity-panel" id="statistics-root"
     data-api-url="{{ request.scope.root_path }}/api/statistics/traffic"
     data-no-data-text="{{ t('No data for selected range.') }}"
-    data-min-step-text="{{ t('min step') }}">
+    data-aggregation-label="{{ t('aggregation') }}">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -14,9 +14,10 @@
             <div class="dashboard-activity-controls">
                 <label class="dashboard-activity-range-label" for="statistics-range">{{ t("Range") }}</label>
                 <select id="statistics-range" name="statistics_range">
-                    <option value="6h">6h</option>
-                    <option value="24h" selected>24h</option>
-                    <option value="7d">7d</option>
+                    <option value="24h" selected>{{ t("1 day") }}</option>
+                    <option value="7d">{{ t("7 days") }}</option>
+                    <option value="30d">{{ t("30 days") }}</option>
+                    <option value="365d">{{ t("1 year") }}</option>
                 </select>
             </div>
         </div>

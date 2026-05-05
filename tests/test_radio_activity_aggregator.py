@@ -509,6 +509,17 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertGreaterEqual(sum(heard_by_key["direct_heard"].get("data") or []), 6)
                 self.assertGreaterEqual(sum(heard_by_key["all_heard"].get("data") or []), 10)
 
+                actions = payload["charts"]["actions"]["series"]
+                action_keys = {item.get("key") for item in actions}
+                self.assertIn("filtered_dropped", action_keys)
+                self.assertNotIn("duplicate_ignored", action_keys)
+
+                response_year = client.get("/api/statistics/traffic?range=365d")
+                self.assertEqual(response_year.status_code, 200)
+                payload_year = response_year.json()
+                self.assertEqual(payload_year.get("range"), "365d")
+                self.assertEqual(int(payload_year.get("bucket_minutes") or 0), 60)
+
                 unsupported = client.get("/api/statistics/traffic?range=2h")
                 self.assertEqual(unsupported.status_code, 400)
             finally:

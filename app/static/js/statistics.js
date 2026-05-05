@@ -18,14 +18,17 @@
     if (!(frameCanvas instanceof HTMLCanvasElement) || !(heardCanvas instanceof HTMLCanvasElement) || !(actionsCanvas instanceof HTMLCanvasElement)) {
         return;
     }
-    if (!window.Chart || typeof window.Chart !== "function") {
+    const ChartConstructor = typeof window.Chart === "function"
+        ? window.Chart
+        : (window.Chart && typeof window.Chart.Chart === "function" ? window.Chart.Chart : null);
+    if (!ChartConstructor) {
         return;
     }
 
     const apiUrl = String(root.dataset.apiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
-    const minStepText = String(root.dataset.minStepText || "min step");
-    const supportedRanges = new Set(["6h", "24h", "7d"]);
+    const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
+    const supportedRanges = new Set(["24h", "7d", "30d", "365d"]);
     const defaultRange = "24h";
     const storageKey = "aprsbox-statistics-range";
 
@@ -42,12 +45,14 @@
         const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
         const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
         const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
+        const trafficColorProxyTx = rootStyle.getPropertyValue("--traffic-color-proxy-tx").trim() || "#a65fc1";
         return {
             trafficColorDefault,
             trafficColorOwnBeaconTx,
             trafficColorOwnWxTx,
             trafficColorOwnMessageTx,
             trafficColorRepeatedTx,
+            trafficColorProxyTx,
             colorText: rootStyle.getPropertyValue("--text").trim() || "#e6efe8",
             colorMuted: rootStyle.getPropertyValue("--muted").trim() || "#9cb0a2",
             colorBorder: rootStyle.getPropertyValue("--border").trim() || "rgba(255, 255, 255, 0.18)",
@@ -202,15 +207,16 @@
         const labelsCount = labels.length;
         const bucketMinutes = Number(payload && payload.bucket_minutes) || 5;
         const palette = readChartPalette();
+        const bucketLabel = `${aggregationLabel} ${bucketMinutes}min`;
 
         if (frameStepNode instanceof HTMLElement) {
-            frameStepNode.textContent = `${bucketMinutes} ${minStepText}`;
+            frameStepNode.textContent = bucketLabel;
         }
         if (heardStepNode instanceof HTMLElement) {
-            heardStepNode.textContent = `${bucketMinutes} ${minStepText}`;
+            heardStepNode.textContent = bucketLabel;
         }
         if (actionsStepNode instanceof HTMLElement) {
-            actionsStepNode.textContent = `${bucketMinutes} ${minStepText}`;
+            actionsStepNode.textContent = bucketLabel;
         }
 
         const frameSeries = seriesMap(payload, "frame_types");
@@ -249,9 +255,8 @@
                 { key: "rx", label: "RX", color: palette.trafficColorDefault },
                 { key: "tx", label: "TX", color: palette.trafficColorOwnBeaconTx },
                 { key: "digipeated", label: "Digipeated", color: palette.trafficColorRepeatedTx },
-                { key: "gated_to_aprsis", label: "Gated to APRS-IS", color: palette.trafficColorOwnWxTx },
-                { key: "filtered_dropped", label: "Filtered / Dropped", color: palette.trafficColorOwnMessageTx },
-                { key: "duplicate_ignored", label: "Duplicate ignored", color: "#8a8a8a" },
+                { key: "gated_to_aprsis", label: "Gated to APRS-IS", color: palette.trafficColorProxyTx },
+                { key: "filtered_dropped", label: "Filtered / dropped to APRS-IS", color: palette.trafficColorOwnMessageTx },
             ],
             labelsCount,
         );
@@ -275,7 +280,7 @@
 
         const frameContext = frameCanvas.getContext("2d");
         if (frameContext) {
-            frameChart = new window.Chart(frameContext, {
+            frameChart = new ChartConstructor(frameContext, {
                 type: "bar",
                 data: {
                     labels,
@@ -287,7 +292,7 @@
 
         const heardContext = heardCanvas.getContext("2d");
         if (heardContext) {
-            heardChart = new window.Chart(heardContext, {
+            heardChart = new ChartConstructor(heardContext, {
                 type: "bar",
                 data: {
                     labels,
@@ -299,7 +304,7 @@
 
         const actionsContext = actionsCanvas.getContext("2d");
         if (actionsContext) {
-            actionsChart = new window.Chart(actionsContext, {
+            actionsChart = new ChartConstructor(actionsContext, {
                 type: "bar",
                 data: {
                     labels,
