@@ -954,7 +954,7 @@ class _TrafficModemRuntime:
                     "traffic",
                     f"TX start on {self._runtime_label()} via serial ({payload_length} bytes)",
                 )
-                await asyncio.to_thread(write_serial_data, self._tnc_serial_fd, chunk)
+                await asyncio.to_thread(write_serial_data, self._tnc_serial_fd, chunk, drain=True)
                 if record_proxy_tx:
                     self._consume_proxy_uplink_chunk(chunk)
                 log_event(

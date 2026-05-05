@@ -160,6 +160,26 @@ class SerialTxLockTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(writer.writes), 2)
         self.assertEqual(writer.max_in_flight, 1)
 
+    async def test_serial_runtime_uses_drain_for_serial_tx(self) -> None:
+        runtime = _TrafficModemRuntime(modem_id=1)
+        with runtime._lock:
+            runtime._active_modem = {"id": 1, "name": "Serial TNC"}
+        runtime._tnc_serial_fd = 123
+
+        calls: list[tuple[int, bytes, float, bool]] = []
+
+        def fake_write(fd: int, data: bytes, *, timeout: float = 1.0, drain: bool = False) -> None:
+            calls.append((fd, bytes(data), float(timeout), bool(drain)))
+
+        with patch.object(traffic_module, "write_serial_data", side_effect=fake_write):
+            result = await runtime.send_outbound_frame(interface_id=1, frame=b"\xC0\x00A\xC0")
+
+        self.assertTrue(result)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], 123)
+        self.assertEqual(calls[0][1], b"\xC0\x00A\xC0")
+        self.assertTrue(calls[0][3])
+
 
 class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_traffic_monitor_reads_kiss_frames_from_serial_tnc(self) -> None:
