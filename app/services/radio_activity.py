@@ -573,30 +573,35 @@ def get_traffic_devices_statistics(
         TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY: TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL,
         TRAFFIC_STATISTICS_DEVICES_OTHER_KEY: TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL,
     }
-    station_votes, tocall_counts_by_device = _build_station_votes_from_hourly_buffer(
+    station_votes_buffer, tocall_counts_by_device_buffer = _build_station_votes_from_hourly_buffer(
         window_start_utc=window_start_utc,
         window_end_utc=window_end_utc,
         labels_by_key=labels_by_key,
     )
-    if not station_votes:
-        # Fallback for warm-up and legacy data: derive from currently retained frames
-        # (limited by traffic_frames retention).
-        frame_rows = fetch_all(
-            """
-            SELECT direction, format, line, created_at
-            FROM traffic_frames
-            WHERE format LIKE 'TNC2%'
-              AND created_at >= ?
-              AND created_at < ?
-            ORDER BY created_at ASC, id ASC
-            """,
-            (window_start_utc.isoformat(), window_end_utc.isoformat()),
-        )
-        station_votes, tocall_counts_by_device = _build_station_votes_from_frame_rows(
-            frame_rows=frame_rows,
-            labels_by_key=labels_by_key,
-            database=get_aprs_device_identification_database(),
-        )
+    frame_rows = fetch_all(
+        """
+        SELECT direction, format, line, created_at
+        FROM traffic_frames
+        WHERE format LIKE 'TNC2%'
+          AND created_at >= ?
+          AND created_at < ?
+        ORDER BY created_at ASC, id ASC
+        """,
+        (window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+    station_votes_frames, tocall_counts_by_device_frames = _build_station_votes_from_frame_rows(
+        frame_rows=frame_rows,
+        labels_by_key=labels_by_key,
+        database=get_aprs_device_identification_database(),
+    )
+
+    # Prefer richer dataset while buffer is warming up after deploy/restart.
+    if len(station_votes_frames) > len(station_votes_buffer):
+        station_votes = station_votes_frames
+        tocall_counts_by_device = tocall_counts_by_device_frames
+    else:
+        station_votes = station_votes_buffer
+        tocall_counts_by_device = tocall_counts_by_device_buffer
 
     station_counts: dict[str, int] = {}
     for station_bucket in station_votes.values():
