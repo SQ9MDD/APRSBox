@@ -888,8 +888,9 @@ def _latest_closed_bucket_start(
 
 def _floor_to_bucket_start(value: datetime, *, bucket_minutes: int) -> datetime:
     normalized = _normalize_utc_datetime(value)
-    rounded_minute = (normalized.minute // bucket_minutes) * bucket_minutes
-    return normalized.replace(minute=rounded_minute, second=0, microsecond=0)
+    bucket_seconds = max(60, int(bucket_minutes) * 60)
+    floored_epoch = (int(normalized.timestamp()) // bucket_seconds) * bucket_seconds
+    return datetime.fromtimestamp(floored_epoch, tz=timezone.utc).replace(second=0, microsecond=0)
 
 
 def _get_aggregator_state(state_key: str) -> dict[str, Any] | None:

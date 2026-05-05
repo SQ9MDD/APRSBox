@@ -95,6 +95,13 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             datetime(2026, 5, 4, 10, 5, 0, tzinfo=timezone.utc).isoformat(),
         )
 
+    def test_bucket_floor_uses_full_day_boundaries_for_1d_buckets(self) -> None:
+        value = datetime(2026, 5, 5, 15, 50, 12, tzinfo=timezone.utc)
+        self.assertEqual(
+            _floor_to_bucket_start(value, bucket_minutes=1440).isoformat(),
+            datetime(2026, 5, 5, 0, 0, 0, tzinfo=timezone.utc).isoformat(),
+        )
+
     def test_aggregates_single_closed_bucket_and_saves_state(self) -> None:
         with temporary_database():
             execute(
@@ -525,6 +532,9 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 payload_7d = response_7d.json()
                 self.assertEqual(payload_7d.get("range"), "7d")
                 self.assertEqual(int(payload_7d.get("bucket_minutes") or 0), 1440)
+                frame_types_7d = payload_7d["charts"]["frame_types"]["series"]
+                series_7d_by_key = {item.get("key"): item for item in frame_types_7d}
+                self.assertGreaterEqual(sum(series_7d_by_key["position"].get("data") or []), 4)
 
                 response_shift = client.get("/api/statistics/traffic?range=24h&shift=1")
                 self.assertEqual(response_shift.status_code, 200)
