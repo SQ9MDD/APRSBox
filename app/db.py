@@ -598,6 +598,16 @@ CREATE TABLE IF NOT EXISTS radio_activity_5m (
     invalid_total INTEGER NOT NULL DEFAULT 0,
     parse_error_total INTEGER NOT NULL DEFAULT 0,
     duplicate_total INTEGER NOT NULL DEFAULT 0,
+    type_position_total INTEGER NOT NULL DEFAULT 0,
+    type_weather_total INTEGER NOT NULL DEFAULT 0,
+    type_message_total INTEGER NOT NULL DEFAULT 0,
+    type_object_item_total INTEGER NOT NULL DEFAULT 0,
+    type_status_total INTEGER NOT NULL DEFAULT 0,
+    type_telemetry_total INTEGER NOT NULL DEFAULT 0,
+    type_query_total INTEGER NOT NULL DEFAULT 0,
+    type_user_defined_total INTEGER NOT NULL DEFAULT 0,
+    type_third_party_total INTEGER NOT NULL DEFAULT 0,
+    type_other_unknown_total INTEGER NOT NULL DEFAULT 0,
     max_hops_seen INTEGER,
     avg_hops REAL,
     created_at_utc TEXT NOT NULL,
@@ -668,6 +678,7 @@ def init_db() -> None:
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
+        radio_activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_5m)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -897,6 +908,76 @@ def init_db() -> None:
                 """
                 ALTER TABLE traffic_frames
                 ADD COLUMN band TEXT
+                """
+            )
+        if "type_position_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_position_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_weather_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_weather_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_message_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_message_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_object_item_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_object_item_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_status_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_status_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_telemetry_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_telemetry_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_query_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_query_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_user_defined_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_user_defined_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_third_party_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_third_party_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_other_unknown_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_other_unknown_total INTEGER NOT NULL DEFAULT 0
                 """
             )
         connection.execute(

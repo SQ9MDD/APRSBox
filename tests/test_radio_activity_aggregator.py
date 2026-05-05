@@ -437,6 +437,82 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             finally:
                 app.dependency_overrides.clear()
 
+    def test_statistics_api_returns_aggregated_series(self) -> None:
+        if not FASTAPI_AVAILABLE:
+            self.skipTest("fastapi is not installed in this environment")
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            bucket_start = _floor_to_bucket_start(now_utc - timedelta(minutes=10), bucket_minutes=5)
+            bucket_end = bucket_start + timedelta(minutes=5)
+            execute(
+                """
+                INSERT INTO radio_activity_5m(
+                    bucket_start_utc, bucket_end_utc, interface_id, source_name,
+                    rx_total, tx_total, digipeated_total, own_frames_total,
+                    messages_total, queries_total, objects_total, wx_total,
+                    position_total, mobile_total, fixed_total, unique_stations_total,
+                    direct_heard_total, indirect_heard_total, rfonly_total, nogate_total,
+                    invalid_total, parse_error_total, duplicate_total,
+                    type_position_total, type_weather_total, type_message_total, type_object_item_total,
+                    type_status_total, type_telemetry_total, type_query_total, type_user_defined_total,
+                    type_third_party_total, type_other_unknown_total,
+                    max_hops_seen, avg_hops,
+                    created_at_utc, updated_at_utc
+                )
+                VALUES (
+                    ?, ?, 1, 'Main TNC',
+                    10, 4, 2, 1,
+                    3, 1, 1, 1,
+                    4, 2, 2, 5,
+                    6, 2, 0, 0,
+                    0, 0, 0,
+                    4, 1, 2, 1,
+                    1, 1, 1, 0,
+                    0, 0,
+                    2, 1.5,
+                    ?, ?
+                )
+                """,
+                (bucket_start.isoformat(), bucket_end.isoformat(), now_utc.isoformat(), now_utc.isoformat()),
+            )
+
+            from fastapi.testclient import TestClient
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="tester",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                response = client.get("/api/statistics/traffic?range=24h")
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertEqual(payload.get("range"), "24h")
+                self.assertIn("charts", payload)
+                self.assertIn("frame_types", payload["charts"])
+                self.assertIn("heard", payload["charts"])
+                self.assertIn("actions", payload["charts"])
+
+                frame_types = payload["charts"]["frame_types"]["series"]
+                series_by_key = {item.get("key"): item for item in frame_types}
+                self.assertIn("position", series_by_key)
+                self.assertGreaterEqual(sum(series_by_key["position"].get("data") or []), 4)
+
+                heard = payload["charts"]["heard"]["series"]
+                heard_by_key = {item.get("key"): item for item in heard}
+                self.assertGreaterEqual(sum(heard_by_key["direct_heard"].get("data") or []), 6)
+                self.assertGreaterEqual(sum(heard_by_key["all_heard"].get("data") or []), 10)
+
+                unsupported = client.get("/api/statistics/traffic?range=2h")
+                self.assertEqual(unsupported.status_code, 400)
+            finally:
+                app.dependency_overrides.clear()
+
 
 if __name__ == "__main__":
     unittest.main()

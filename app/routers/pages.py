@@ -97,7 +97,7 @@ from app.services.aprs_device_identification import (
     refresh_aprs_device_identification_cache,
 )
 from app.services.core_client import restart_core_traffic_monitor
-from app.services.radio_activity import get_dashboard_radio_activity
+from app.services.radio_activity import get_dashboard_radio_activity, get_traffic_statistics
 from app.services.config_backup import (
     build_configuration_backup_filename,
     export_configuration_backup_bytes,
@@ -2363,6 +2363,23 @@ def traffic_page(
     return templates.TemplateResponse("traffic.html", context)
 
 
+@router.get("/statistics")
+def statistics_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    statistics_payload = get_traffic_statistics(range_value="24h")
+    context = build_template_context(
+        request,
+        page_title="Statistics",
+        current_user=current_user,
+        active_nav="statistics",
+        statistics_payload=statistics_payload,
+    )
+    return templates.TemplateResponse("statistics.html", context)
+
+
 @router.get("/messages")
 def messages_page(
     request: Request,
@@ -2485,6 +2502,18 @@ def dashboard_radio_activity(
 ) -> JSONResponse:
     try:
         payload = get_dashboard_radio_activity(range_value=range)
+    except ValueError:
+        return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/traffic")
+def statistics_traffic(
+    range: str = "24h",
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_traffic_statistics(range_value=range)
     except ValueError:
         return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)

@@ -10,6 +10,7 @@ from app.services.content import parse_tnc2_frame
 
 RADIO_ACTIVITY_BUCKET_MINUTES = 5
 RADIO_ACTIVITY_STATE_KEY_DEFAULT = "radio_activity_5m.default"
+RADIO_ACTIVITY_RETENTION_DAYS = 365
 RADIO_ACTIVITY_RANGE_1H = "1h"
 RADIO_ACTIVITY_RANGE_3H = "3h"
 RADIO_ACTIVITY_RANGE_6H = "6h"
@@ -30,6 +31,16 @@ RADIO_ACTIVITY_RANGE_OPTIONS = {
 }
 RADIO_ACTIVITY_DOWNSAMPLE_MAX_POINTS = 1200
 RADIO_ACTIVITY_DOWNSAMPLE_STEPS_MINUTES = (5, 10, 15, 30, 60, 120, 180, 360, 720, 1440)
+TRAFFIC_STATISTICS_RANGE_6H = "6h"
+TRAFFIC_STATISTICS_RANGE_24H = "24h"
+TRAFFIC_STATISTICS_RANGE_7D = "7d"
+TRAFFIC_STATISTICS_RANGE_30D = "30d"
+TRAFFIC_STATISTICS_RANGE_OPTIONS = {
+    TRAFFIC_STATISTICS_RANGE_6H: 6 * 60,
+    TRAFFIC_STATISTICS_RANGE_24H: 24 * 60,
+    TRAFFIC_STATISTICS_RANGE_7D: 7 * 24 * 60,
+    TRAFFIC_STATISTICS_RANGE_30D: 30 * 24 * 60,
+}
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
     "tx_total": 0,
@@ -51,6 +62,16 @@ _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "parse_error_total": 0,
     # Placeholder for future normalized deduplication metadata.
     "duplicate_total": 0,
+    "type_position_total": 0,
+    "type_weather_total": 0,
+    "type_message_total": 0,
+    "type_object_item_total": 0,
+    "type_status_total": 0,
+    "type_telemetry_total": 0,
+    "type_query_total": 0,
+    "type_user_defined_total": 0,
+    "type_third_party_total": 0,
+    "type_other_unknown_total": 0,
     "max_hops_seen": None,
     "avg_hops": None,
 }
@@ -117,6 +138,7 @@ def run_radio_activity_aggregation(
     normalized_bucket_minutes = max(1, int(bucket_minutes))
     normalized_safety_delay_seconds = max(0, int(safety_delay_seconds))
     now = _normalize_utc_datetime(now_utc or datetime.now(timezone.utc))
+    _prune_radio_activity_history(now_utc=now)
     latest_closed_bucket_start = _latest_closed_bucket_start(
         now_utc=now,
         bucket_minutes=normalized_bucket_minutes,
@@ -319,6 +341,187 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
     }
 
 
+def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -> dict[str, Any]:
+    normalized_range = str(range_value or TRAFFIC_STATISTICS_RANGE_24H).strip().lower()
+    if normalized_range not in TRAFFIC_STATISTICS_RANGE_OPTIONS:
+        raise ValueError("Unsupported range.")
+
+    total_minutes = int(TRAFFIC_STATISTICS_RANGE_OPTIONS[normalized_range])
+    output_bucket_minutes = _resolve_traffic_statistics_bucket_minutes(total_minutes)
+    output_bucket_seconds = output_bucket_minutes * 60
+    output_bucket_delta = timedelta(minutes=output_bucket_minutes)
+    output_bucket_count = max(1, (total_minutes + output_bucket_minutes - 1) // output_bucket_minutes)
+    now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+
+    latest_base_bucket_start = _floor_to_bucket_start(now_utc, bucket_minutes=RADIO_ACTIVITY_BUCKET_MINUTES) - timedelta(
+        minutes=RADIO_ACTIVITY_BUCKET_MINUTES
+    )
+    latest_output_bucket_start = _floor_to_bucket_start(latest_base_bucket_start, bucket_minutes=output_bucket_minutes)
+    window_start_utc = latest_output_bucket_start - timedelta(minutes=output_bucket_minutes * (output_bucket_count - 1))
+    window_end_utc = latest_output_bucket_start + output_bucket_delta
+
+    rows = fetch_all(
+        """
+        SELECT
+            CAST((CAST(strftime('%s', bucket_start_utc) AS INTEGER) / ?) AS INTEGER) * ? AS bucket_epoch,
+            SUM(rx_total) AS rx_total,
+            SUM(tx_total) AS tx_total,
+            SUM(digipeated_total) AS digipeated_total,
+            SUM(direct_heard_total) AS direct_heard_total,
+            SUM(duplicate_total) AS duplicate_total,
+            SUM(type_position_total) AS type_position_total,
+            SUM(type_weather_total) AS type_weather_total,
+            SUM(type_message_total) AS type_message_total,
+            SUM(type_object_item_total) AS type_object_item_total,
+            SUM(type_status_total) AS type_status_total,
+            SUM(type_telemetry_total) AS type_telemetry_total,
+            SUM(type_query_total) AS type_query_total,
+            SUM(type_user_defined_total) AS type_user_defined_total,
+            SUM(type_third_party_total) AS type_third_party_total,
+            SUM(type_other_unknown_total) AS type_other_unknown_total
+        FROM radio_activity_5m
+        WHERE bucket_start_utc >= ?
+          AND bucket_start_utc < ?
+        GROUP BY bucket_epoch
+        ORDER BY bucket_epoch ASC
+        """,
+        (output_bucket_seconds, output_bucket_seconds, window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+    row_by_bucket_start: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        epoch_raw = row["bucket_epoch"]
+        try:
+            epoch_value = int(epoch_raw)
+        except (TypeError, ValueError):
+            continue
+        bucket_start_utc = datetime.fromtimestamp(epoch_value, tz=timezone.utc)
+        row_by_bucket_start[bucket_start_utc.isoformat()] = dict(row)
+
+    aprsis_rows = fetch_all(
+        """
+        SELECT
+            CAST((CAST(strftime('%s', bucket_minute_utc) AS INTEGER) / ?) AS INTEGER) * ? AS bucket_epoch,
+            SUM(tx_count) AS gated_total,
+            SUM(drop_count + strict_count) AS filtered_dropped_total
+        FROM aprsis_uplink_minute_stats
+        WHERE bucket_minute_utc >= ?
+          AND bucket_minute_utc < ?
+        GROUP BY bucket_epoch
+        ORDER BY bucket_epoch ASC
+        """,
+        (output_bucket_seconds, output_bucket_seconds, window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+    aprsis_by_bucket_start: dict[str, dict[str, Any]] = {}
+    for row in aprsis_rows:
+        epoch_raw = row["bucket_epoch"]
+        try:
+            epoch_value = int(epoch_raw)
+        except (TypeError, ValueError):
+            continue
+        bucket_start_utc = datetime.fromtimestamp(epoch_value, tz=timezone.utc)
+        aprsis_by_bucket_start[bucket_start_utc.isoformat()] = dict(row)
+
+    labels: list[str] = []
+    frame_type_series: dict[str, list[int]] = {
+        "position": [],
+        "weather": [],
+        "message": [],
+        "object_item": [],
+        "status": [],
+        "telemetry": [],
+        "query": [],
+        "user_defined": [],
+        "third_party": [],
+        "other_unknown": [],
+    }
+    heard_series: dict[str, list[int]] = {
+        "direct_heard": [],
+        "all_heard": [],
+    }
+    actions_series: dict[str, list[int]] = {
+        "rx": [],
+        "tx": [],
+        "digipeated": [],
+        "gated_to_aprsis": [],
+        "filtered_dropped": [],
+        # NOTE: This remains zero until normalized deduplication metadata is available.
+        "duplicate_ignored": [],
+    }
+
+    for index in range(output_bucket_count):
+        bucket_start_utc = window_start_utc + timedelta(minutes=output_bucket_minutes * index)
+        bucket_key = bucket_start_utc.isoformat()
+        labels.append(_format_radio_activity_label(bucket_start_utc, output_bucket_minutes=output_bucket_minutes))
+
+        row = row_by_bucket_start.get(bucket_key) or {}
+        aprsis_row = aprsis_by_bucket_start.get(bucket_key) or {}
+
+        frame_type_series["position"].append(int(row.get("type_position_total") or 0))
+        frame_type_series["weather"].append(int(row.get("type_weather_total") or 0))
+        frame_type_series["message"].append(int(row.get("type_message_total") or 0))
+        frame_type_series["object_item"].append(int(row.get("type_object_item_total") or 0))
+        frame_type_series["status"].append(int(row.get("type_status_total") or 0))
+        frame_type_series["telemetry"].append(int(row.get("type_telemetry_total") or 0))
+        frame_type_series["query"].append(int(row.get("type_query_total") or 0))
+        frame_type_series["user_defined"].append(int(row.get("type_user_defined_total") or 0))
+        frame_type_series["third_party"].append(int(row.get("type_third_party_total") or 0))
+        frame_type_series["other_unknown"].append(int(row.get("type_other_unknown_total") or 0))
+
+        heard_series["direct_heard"].append(int(row.get("direct_heard_total") or 0))
+        heard_series["all_heard"].append(int(row.get("rx_total") or 0))
+
+        actions_series["rx"].append(int(row.get("rx_total") or 0))
+        actions_series["tx"].append(int(row.get("tx_total") or 0))
+        actions_series["digipeated"].append(int(row.get("digipeated_total") or 0))
+        actions_series["gated_to_aprsis"].append(int(aprsis_row.get("gated_total") or 0))
+        actions_series["filtered_dropped"].append(int(aprsis_row.get("filtered_dropped_total") or 0))
+        actions_series["duplicate_ignored"].append(int(row.get("duplicate_total") or 0))
+
+    return {
+        "range": normalized_range,
+        "range_minutes": total_minutes,
+        "bucket_minutes": output_bucket_minutes,
+        "bucket_seconds": output_bucket_seconds,
+        "downsampled": bool(output_bucket_minutes > RADIO_ACTIVITY_BUCKET_MINUTES),
+        "points": output_bucket_count,
+        "window_start_utc": window_start_utc.isoformat(),
+        "window_end_utc": window_end_utc.isoformat(),
+        "labels": labels,
+        "charts": {
+            "frame_types": {
+                "series": [
+                    {"key": "position", "label": "Position", "data": frame_type_series["position"]},
+                    {"key": "weather", "label": "Weather", "data": frame_type_series["weather"]},
+                    {"key": "message", "label": "Message", "data": frame_type_series["message"]},
+                    {"key": "object_item", "label": "Object / Item", "data": frame_type_series["object_item"]},
+                    {"key": "status", "label": "Status", "data": frame_type_series["status"]},
+                    {"key": "telemetry", "label": "Telemetry", "data": frame_type_series["telemetry"]},
+                    {"key": "query", "label": "Query", "data": frame_type_series["query"]},
+                    {"key": "user_defined", "label": "User-defined", "data": frame_type_series["user_defined"]},
+                    {"key": "third_party", "label": "Third-party", "data": frame_type_series["third_party"]},
+                    {"key": "other_unknown", "label": "Other / Unknown", "data": frame_type_series["other_unknown"]},
+                ]
+            },
+            "heard": {
+                "series": [
+                    {"key": "direct_heard", "label": "Direct heard", "data": heard_series["direct_heard"]},
+                    {"key": "all_heard", "label": "All heard", "data": heard_series["all_heard"]},
+                ]
+            },
+            "actions": {
+                "series": [
+                    {"key": "rx", "label": "RX", "data": actions_series["rx"]},
+                    {"key": "tx", "label": "TX", "data": actions_series["tx"]},
+                    {"key": "digipeated", "label": "Digipeated", "data": actions_series["digipeated"]},
+                    {"key": "gated_to_aprsis", "label": "Gated to APRS-IS", "data": actions_series["gated_to_aprsis"]},
+                    {"key": "filtered_dropped", "label": "Filtered / Dropped", "data": actions_series["filtered_dropped"]},
+                    {"key": "duplicate_ignored", "label": "Duplicate ignored", "data": actions_series["duplicate_ignored"]},
+                ]
+            },
+        },
+    }
+
+
 def _resolve_output_bucket_minutes(total_minutes: int) -> int:
     normalized_total_minutes = max(RADIO_ACTIVITY_BUCKET_MINUTES, int(total_minutes))
     if normalized_total_minutes <= RADIO_ACTIVITY_RANGE_OPTIONS[RADIO_ACTIVITY_RANGE_7D]:
@@ -330,6 +533,15 @@ def _resolve_output_bucket_minutes(total_minutes: int) -> int:
         if bucket_count <= RADIO_ACTIVITY_DOWNSAMPLE_MAX_POINTS:
             return step_minutes
     return RADIO_ACTIVITY_DOWNSAMPLE_STEPS_MINUTES[-1]
+
+
+def _resolve_traffic_statistics_bucket_minutes(total_minutes: int) -> int:
+    normalized_total_minutes = max(RADIO_ACTIVITY_BUCKET_MINUTES, int(total_minutes))
+    if normalized_total_minutes <= TRAFFIC_STATISTICS_RANGE_OPTIONS[TRAFFIC_STATISTICS_RANGE_24H]:
+        return RADIO_ACTIVITY_BUCKET_MINUTES
+    if normalized_total_minutes <= TRAFFIC_STATISTICS_RANGE_OPTIONS[TRAFFIC_STATISTICS_RANGE_7D]:
+        return 60
+    return 180
 
 
 def _format_radio_activity_label(bucket_start_utc: datetime, *, output_bucket_minutes: int) -> str:
@@ -389,7 +601,11 @@ def _collect_bucket_source_rows(
         parsed = parse_tnc2_frame(line)
         if parsed is None:
             source_bucket["parse_error_total"] += 1
+            source_bucket["type_other_unknown_total"] += 1
             continue
+
+        frame_type_bucket_key = _classify_frame_type_bucket_key(parsed=parsed)
+        source_bucket[frame_type_bucket_key] += 1
 
         parsed_source_key = str(parsed.get("source_key") or "").strip().upper()
         parsed_source_callsign = str(parsed.get("source_callsign") or "").strip().upper()
@@ -492,7 +708,11 @@ def _upsert_radio_activity_bucket_rows(
                     messages_total, queries_total, objects_total, wx_total,
                     position_total, mobile_total, fixed_total, unique_stations_total,
                     direct_heard_total, indirect_heard_total, rfonly_total, nogate_total,
-                    invalid_total, parse_error_total, duplicate_total, max_hops_seen, avg_hops,
+                    invalid_total, parse_error_total, duplicate_total,
+                    type_position_total, type_weather_total, type_message_total, type_object_item_total,
+                    type_status_total, type_telemetry_total, type_query_total, type_user_defined_total,
+                    type_third_party_total, type_other_unknown_total,
+                    max_hops_seen, avg_hops,
                     created_at_utc, updated_at_utc
                 )
                 VALUES (
@@ -501,7 +721,11 @@ def _upsert_radio_activity_bucket_rows(
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?,
+                    ?, ?,
                     ?, ?
                 )
                 ON CONFLICT(bucket_start_utc, source_name) DO UPDATE SET
@@ -526,6 +750,16 @@ def _upsert_radio_activity_bucket_rows(
                     invalid_total = excluded.invalid_total,
                     parse_error_total = excluded.parse_error_total,
                     duplicate_total = excluded.duplicate_total,
+                    type_position_total = excluded.type_position_total,
+                    type_weather_total = excluded.type_weather_total,
+                    type_message_total = excluded.type_message_total,
+                    type_object_item_total = excluded.type_object_item_total,
+                    type_status_total = excluded.type_status_total,
+                    type_telemetry_total = excluded.type_telemetry_total,
+                    type_query_total = excluded.type_query_total,
+                    type_user_defined_total = excluded.type_user_defined_total,
+                    type_third_party_total = excluded.type_third_party_total,
+                    type_other_unknown_total = excluded.type_other_unknown_total,
                     max_hops_seen = excluded.max_hops_seen,
                     avg_hops = excluded.avg_hops,
                     updated_at_utc = excluded.updated_at_utc
@@ -554,12 +788,60 @@ def _upsert_radio_activity_bucket_rows(
                     int(row.get("invalid_total") or 0),
                     int(row.get("parse_error_total") or 0),
                     int(row.get("duplicate_total") or 0),
+                    int(row.get("type_position_total") or 0),
+                    int(row.get("type_weather_total") or 0),
+                    int(row.get("type_message_total") or 0),
+                    int(row.get("type_object_item_total") or 0),
+                    int(row.get("type_status_total") or 0),
+                    int(row.get("type_telemetry_total") or 0),
+                    int(row.get("type_query_total") or 0),
+                    int(row.get("type_user_defined_total") or 0),
+                    int(row.get("type_third_party_total") or 0),
+                    int(row.get("type_other_unknown_total") or 0),
                     _int_or_none(row.get("max_hops_seen")),
                     float(row["avg_hops"]) if row.get("avg_hops") is not None else None,
                     now_utc,
                     now_utc,
                 ),
             )
+
+
+def _prune_radio_activity_history(*, now_utc: datetime) -> None:
+    cutoff_utc = (_normalize_utc_datetime(now_utc) - timedelta(days=RADIO_ACTIVITY_RETENTION_DAYS)).replace(microsecond=0)
+    with get_connection() as connection:
+        connection.execute(
+            """
+            DELETE FROM radio_activity_5m
+            WHERE bucket_start_utc < ?
+            """,
+            (cutoff_utc.isoformat(),),
+        )
+
+
+def _classify_frame_type_bucket_key(*, parsed: dict[str, Any]) -> str:
+    if bool(parsed.get("is_third_party")):
+        return "type_third_party_total"
+    logical_info = str(parsed.get("logical_info") or parsed.get("info") or "")
+    if logical_info.startswith("{"):
+        return "type_user_defined_total"
+
+    aprs_data = dict(parsed.get("aprs_data") or {})
+    packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+    if packet_group == "position":
+        return "type_position_total"
+    if packet_group == "weather":
+        return "type_weather_total"
+    if packet_group == "message":
+        return "type_message_total"
+    if packet_group in {"object", "item"}:
+        return "type_object_item_total"
+    if packet_group == "status":
+        return "type_status_total"
+    if packet_group == "telemetry":
+        return "type_telemetry_total"
+    if packet_group == "query":
+        return "type_query_total"
+    return "type_other_unknown_total"
 
 
 def _oldest_closed_bucket_start(
