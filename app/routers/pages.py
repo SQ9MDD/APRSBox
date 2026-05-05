@@ -2510,10 +2510,11 @@ def dashboard_radio_activity(
 @router.get("/api/statistics/traffic")
 def statistics_traffic(
     range: str = "24h",
+    shift: int = 0,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     try:
-        payload = get_traffic_statistics(range_value=range)
+        payload = get_traffic_statistics(range_value=range, shift_windows=shift)
     except ValueError:
         return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)

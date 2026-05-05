@@ -518,10 +518,25 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(response_year.status_code, 200)
                 payload_year = response_year.json()
                 self.assertEqual(payload_year.get("range"), "365d")
-                self.assertEqual(int(payload_year.get("bucket_minutes") or 0), 60)
+                self.assertEqual(int(payload_year.get("bucket_minutes") or 0), 1440)
+
+                response_7d = client.get("/api/statistics/traffic?range=7d")
+                self.assertEqual(response_7d.status_code, 200)
+                payload_7d = response_7d.json()
+                self.assertEqual(payload_7d.get("range"), "7d")
+                self.assertEqual(int(payload_7d.get("bucket_minutes") or 0), 1440)
+
+                response_shift = client.get("/api/statistics/traffic?range=24h&shift=1")
+                self.assertEqual(response_shift.status_code, 200)
+                payload_shift = response_shift.json()
+                self.assertEqual(payload_shift.get("range"), "24h")
+                self.assertEqual(int(payload_shift.get("bucket_minutes") or 0), 60)
+                self.assertEqual(str(payload_shift.get("window_end_utc") or ""), str(payload.get("window_start_utc") or ""))
 
                 unsupported = client.get("/api/statistics/traffic?range=2h")
                 self.assertEqual(unsupported.status_code, 400)
+                invalid_shift = client.get("/api/statistics/traffic?range=24h&shift=-1")
+                self.assertEqual(invalid_shift.status_code, 400)
             finally:
                 app.dependency_overrides.clear()
 

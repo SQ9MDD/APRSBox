@@ -343,9 +343,16 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
     }
 
 
-def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -> dict[str, Any]:
+def get_traffic_statistics(
+    *,
+    range_value: str = TRAFFIC_STATISTICS_RANGE_24H,
+    shift_windows: int = 0,
+) -> dict[str, Any]:
     normalized_range = str(range_value or TRAFFIC_STATISTICS_RANGE_24H).strip().lower()
     if normalized_range not in TRAFFIC_STATISTICS_RANGE_OPTIONS:
+        raise ValueError("Unsupported range.")
+    normalized_shift_windows = int(shift_windows)
+    if normalized_shift_windows < 0:
         raise ValueError("Unsupported range.")
 
     total_minutes = int(TRAFFIC_STATISTICS_RANGE_OPTIONS[normalized_range])
@@ -359,6 +366,8 @@ def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -
         minutes=RADIO_ACTIVITY_BUCKET_MINUTES
     )
     latest_output_bucket_start = _floor_to_bucket_start(latest_base_bucket_start, bucket_minutes=output_bucket_minutes)
+    if normalized_shift_windows > 0:
+        latest_output_bucket_start -= timedelta(minutes=total_minutes * normalized_shift_windows)
     window_start_utc = latest_output_bucket_start - timedelta(minutes=output_bucket_minutes * (output_bucket_count - 1))
     window_end_utc = latest_output_bucket_start + output_bucket_delta
 
@@ -477,6 +486,7 @@ def get_traffic_statistics(*, range_value: str = TRAFFIC_STATISTICS_RANGE_24H) -
 
     return {
         "range": normalized_range,
+        "shift_windows": normalized_shift_windows,
         "range_minutes": total_minutes,
         "bucket_minutes": output_bucket_minutes,
         "bucket_seconds": output_bucket_seconds,
@@ -533,8 +543,10 @@ def _resolve_output_bucket_minutes(total_minutes: int) -> int:
 
 
 def _resolve_traffic_statistics_bucket_minutes(total_minutes: int) -> int:
-    _ = total_minutes
-    return 60
+    normalized_total_minutes = max(1, int(total_minutes))
+    if normalized_total_minutes <= TRAFFIC_STATISTICS_RANGE_OPTIONS[TRAFFIC_STATISTICS_RANGE_24H]:
+        return 60
+    return 1440
 
 
 def _format_radio_activity_label(bucket_start_utc: datetime, *, output_bucket_minutes: int) -> str:

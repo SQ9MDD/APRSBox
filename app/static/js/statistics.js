@@ -2,6 +2,8 @@
     const root = document.getElementById("statistics-root");
     const payloadNode = document.getElementById("statistics-data");
     const rangeSelect = document.getElementById("statistics-range");
+    const backButton = document.getElementById("statistics-back");
+    const forwardButton = document.getElementById("statistics-forward");
     const frameCanvas = document.getElementById("statistics-frame-types-chart");
     const heardCanvas = document.getElementById("statistics-heard-chart");
     const actionsCanvas = document.getElementById("statistics-actions-chart");
@@ -95,6 +97,14 @@
         } catch (_) {
             return;
         }
+    };
+
+    const normalizeShift = (value) => {
+        const parsed = Number.parseInt(String(value || "0"), 10);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return 0;
+        }
+        return parsed;
     };
 
     const normalizeSeriesData = (value, expectedLength) => {
@@ -207,7 +217,9 @@
         const labelsCount = labels.length;
         const bucketMinutes = Number(payload && payload.bucket_minutes) || 5;
         const palette = readChartPalette();
-        const bucketLabel = `${aggregationLabel} ${bucketMinutes}min`;
+        const bucketLabel = bucketMinutes >= 1440 && bucketMinutes % 1440 === 0
+            ? `${aggregationLabel} ${Math.floor(bucketMinutes / 1440)}d`
+            : `${aggregationLabel} ${bucketMinutes}min`;
 
         if (frameStepNode instanceof HTMLElement) {
             frameStepNode.textContent = bucketLabel;
@@ -323,48 +335,84 @@
     }
 
     let activeRange = normalizeRange(payload && payload.range);
+    let activeShift = normalizeShift(payload && payload.shift_windows);
     const storedRange = readStoredRange();
     if (storedRange) {
         activeRange = storedRange;
+        activeShift = 0;
     }
 
-    const loadRangePayload = async (rangeValue) => {
+    const setControlsDisabled = (disabled) => {
+        if (rangeSelect instanceof HTMLSelectElement) {
+            rangeSelect.disabled = disabled;
+        }
+        if (backButton instanceof HTMLButtonElement) {
+            backButton.disabled = disabled;
+        }
+        if (forwardButton instanceof HTMLButtonElement) {
+            forwardButton.disabled = disabled || activeShift <= 0;
+        }
+    };
+
+    const loadRangePayload = async (rangeValue, shiftValue) => {
         const normalizedRange = normalizeRange(rangeValue);
-        if (!(rangeSelect instanceof HTMLSelectElement) || !apiUrl) {
+        const normalizedShift = normalizeShift(shiftValue);
+        if (!apiUrl) {
             return;
         }
-        rangeSelect.disabled = true;
+        setControlsDisabled(true);
         try {
-            const response = await fetch(`${apiUrl}?range=${encodeURIComponent(normalizedRange)}`, {
+            const response = await fetch(
+                `${apiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}`,
+                {
                 method: "GET",
                 headers: { "Accept": "application/json" },
-            });
+                },
+            );
             if (!response.ok) {
                 return;
             }
             const nextPayload = await response.json();
             payload = nextPayload;
             activeRange = normalizeRange(nextPayload && nextPayload.range);
+            activeShift = normalizeShift(nextPayload && nextPayload.shift_windows);
             persistRange(activeRange);
-            rangeSelect.value = activeRange;
+            if (rangeSelect instanceof HTMLSelectElement) {
+                rangeSelect.value = activeRange;
+            }
             renderCharts(nextPayload);
         } catch (_) {
             return;
         } finally {
-            rangeSelect.disabled = false;
+            setControlsDisabled(false);
         }
     };
 
     if (rangeSelect instanceof HTMLSelectElement) {
         rangeSelect.value = activeRange;
         rangeSelect.addEventListener("change", () => {
-            void loadRangePayload(rangeSelect.value);
+            activeShift = 0;
+            void loadRangePayload(rangeSelect.value, activeShift);
+        });
+    }
+    if (backButton instanceof HTMLButtonElement) {
+        backButton.addEventListener("click", () => {
+            void loadRangePayload(activeRange, activeShift + 1);
+        });
+    }
+    if (forwardButton instanceof HTMLButtonElement) {
+        forwardButton.addEventListener("click", () => {
+            if (activeShift <= 0) {
+                return;
+            }
+            void loadRangePayload(activeRange, activeShift - 1);
         });
     }
 
     renderCharts(payload);
+    setControlsDisabled(false);
 
     if (activeRange !== normalizeRange(payload && payload.range)) {
-        void loadRangePayload(activeRange);
+        void loadRangePayload(activeRange, activeShift);
     }
 })();
