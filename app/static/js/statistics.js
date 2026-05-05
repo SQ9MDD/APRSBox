@@ -30,7 +30,7 @@
     const apiUrl = String(root.dataset.apiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
-    const supportedRanges = new Set(["24h", "7d", "30d", "365d"]);
+    const supportedRanges = new Set(["24h", "7d", "30d"]);
     const defaultRange = "24h";
     const storageKey = "aprsbox-statistics-range";
 
