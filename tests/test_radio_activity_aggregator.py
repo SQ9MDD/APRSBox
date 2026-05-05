@@ -10,6 +10,7 @@ from app.db import connect, execute, fetch_one, init_db
 from app.services.radio_activity import (
     _floor_to_bucket_start,
     get_dashboard_radio_activity,
+    get_traffic_devices_statistics,
     run_radio_activity_aggregation,
 )
 
@@ -547,6 +548,183 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(unsupported.status_code, 400)
                 invalid_shift = client.get("/api/statistics/traffic?range=24h&shift=-1")
                 self.assertEqual(invalid_shift.status_code, 400)
+            finally:
+                app.dependency_overrides.clear()
+
+    def test_traffic_devices_statistics_counts_unique_stations_by_default(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            base_time = now_utc - timedelta(minutes=15)
+
+            for index in range(20):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP1AAA-1>QZ1234,WIDE1-1:>a",
+                    created_at=(base_time + timedelta(seconds=index)).isoformat(),
+                )
+
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP2BBB-2>WZ5678,WIDE1-1:>b",
+                created_at=(base_time + timedelta(seconds=25)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP3CCC-3>XZ9ABC,WIDE1-1:>c",
+                created_at=(base_time + timedelta(seconds=26)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP4DDD-4>YZ9AAA,WIDE1-1:>d",
+                created_at=(base_time + timedelta(seconds=27)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP4DDD-4>YZ9BBB,WIDE1-1:>e",
+                created_at=(base_time + timedelta(seconds=28)).isoformat(),
+            )
+
+            for index in range(10):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="TX",
+                    frame_format="TNC2-TX",
+                    line="SP9TX-1>TX9999:>tx",
+                    command="TX",
+                    created_at=(base_time + timedelta(seconds=120 + index)).isoformat(),
+                )
+
+            stations_payload = get_traffic_devices_statistics(range_value="24h", mode="stations")
+            self.assertEqual(stations_payload.get("mode"), "stations")
+            self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid")
+            self.assertEqual(int(stations_payload.get("total") or 0), 4)
+            station_counts = [int(item.get("count") or 0) for item in list(stations_payload.get("items") or [])]
+            self.assertEqual(sum(station_counts), 4)
+            self.assertLessEqual(max(station_counts or [0]), 2)
+
+            frames_payload = get_traffic_devices_statistics(range_value="24h", mode="frames")
+            self.assertEqual(frames_payload.get("mode"), "frames")
+            self.assertEqual(frames_payload.get("count_basis"), "frames")
+            self.assertEqual(int(frames_payload.get("total") or 0), 24)
+            frame_counts = [int(item.get("count") or 0) for item in list(frames_payload.get("items") or [])]
+            self.assertEqual(sum(frame_counts), 24)
+            self.assertGreaterEqual(max(frame_counts or [0]), 20)
+
+    def test_statistics_devices_api_supports_stations_and_frames_modes(self) -> None:
+        if not FASTAPI_AVAILABLE:
+            self.skipTest("fastapi is not installed in this environment")
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            base_time = now_utc - timedelta(minutes=15)
+
+            for index in range(20):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP1AAA-1>QZ1234,WIDE1-1:>a",
+                    created_at=(base_time + timedelta(seconds=index)).isoformat(),
+                )
+
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP2BBB-2>WZ5678,WIDE1-1:>b",
+                created_at=(base_time + timedelta(seconds=25)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP3CCC-3>XZ9ABC,WIDE1-1:>c",
+                created_at=(base_time + timedelta(seconds=26)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP4DDD-4>YZ9AAA,WIDE1-1:>d",
+                created_at=(base_time + timedelta(seconds=27)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP4DDD-4>YZ9BBB,WIDE1-1:>e",
+                created_at=(base_time + timedelta(seconds=28)).isoformat(),
+            )
+
+            for index in range(10):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="TX",
+                    frame_format="TNC2-TX",
+                    line="SP9TX-1>TX9999:>tx",
+                    command="TX",
+                    created_at=(base_time + timedelta(seconds=120 + index)).isoformat(),
+                )
+
+            from fastapi.testclient import TestClient
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="tester",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+
+                stations_response = client.get("/api/statistics/devices?range=24h")
+                self.assertEqual(stations_response.status_code, 200)
+                stations_payload = stations_response.json()
+                self.assertEqual(stations_payload.get("mode"), "stations")
+                self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid")
+                self.assertEqual(int(stations_payload.get("total") or 0), 4)
+                station_items = list(stations_payload.get("items") or [])
+                station_counts = [int(item.get("count") or 0) for item in station_items]
+                self.assertEqual(sum(station_counts), 4)
+                self.assertLessEqual(max(station_counts or [0]), 2)
+
+                frames_response = client.get("/api/statistics/devices?range=24h&mode=frames")
+                self.assertEqual(frames_response.status_code, 200)
+                frames_payload = frames_response.json()
+                self.assertEqual(frames_payload.get("mode"), "frames")
+                self.assertEqual(frames_payload.get("count_basis"), "frames")
+                self.assertEqual(int(frames_payload.get("total") or 0), 24)
+                frame_items = list(frames_payload.get("items") or [])
+                frame_counts = [int(item.get("count") or 0) for item in frame_items]
+                self.assertEqual(sum(frame_counts), 24)
+                self.assertGreaterEqual(max(frame_counts or [0]), 20)
+
+                invalid_mode = client.get("/api/statistics/devices?range=24h&mode=invalid")
+                self.assertEqual(invalid_mode.status_code, 400)
             finally:
                 app.dependency_overrides.clear()
 

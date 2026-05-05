@@ -1,18 +1,23 @@
 (() => {
     const root = document.getElementById("statistics-root");
     const payloadNode = document.getElementById("statistics-data");
+    const devicesPayloadNode = document.getElementById("statistics-devices-data");
     const rangeSelect = document.getElementById("statistics-range");
     const backButton = document.getElementById("statistics-back");
     const forwardButton = document.getElementById("statistics-forward");
     const frameCanvas = document.getElementById("statistics-frame-types-chart");
     const heardCanvas = document.getElementById("statistics-heard-chart");
     const actionsCanvas = document.getElementById("statistics-actions-chart");
+    const devicesCanvas = document.getElementById("statistics-devices-chart");
     const frameEmptyNode = document.getElementById("statistics-frame-types-empty");
     const heardEmptyNode = document.getElementById("statistics-heard-empty");
     const actionsEmptyNode = document.getElementById("statistics-actions-empty");
+    const devicesEmptyNode = document.getElementById("statistics-devices-empty");
     const frameStepNode = document.getElementById("statistics-frame-types-step");
     const heardStepNode = document.getElementById("statistics-heard-step");
     const actionsStepNode = document.getElementById("statistics-actions-step");
+    const devicesModeSelect = document.getElementById("statistics-devices-mode");
+    const devicesListNode = document.getElementById("statistics-devices-list");
 
     if (!(root instanceof HTMLElement) || !(payloadNode instanceof HTMLScriptElement)) {
         return;
@@ -28,15 +33,26 @@
     }
 
     const apiUrl = String(root.dataset.apiUrl || "").trim();
+    const devicesApiUrl = String(root.dataset.devicesApiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
+    const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
+    const devicesCountFramesLabel = String(root.dataset.devicesCountFramesLabel || "Frames");
+    const devicesLabelOther = String(root.dataset.devicesLabelOther || "Other");
+    const devicesLabelUnknown = String(root.dataset.devicesLabelUnknown || "Unknown");
+    const devicesLabelMixedUnknown = String(root.dataset.devicesLabelMixedUnknown || "Mixed / Unknown");
     const supportedRanges = new Set(["24h", "7d", "30d"]);
+    const supportedDeviceModes = new Set(["stations", "frames"]);
     const defaultRange = "24h";
+    const defaultDeviceMode = supportedDeviceModes.has(String(root.dataset.devicesDefaultMode || "").trim().toLowerCase())
+        ? String(root.dataset.devicesDefaultMode || "").trim().toLowerCase()
+        : "stations";
     const storageKey = "aprsbox-statistics-range";
 
     let frameChart = null;
     let heardChart = null;
     let actionsChart = null;
+    let devicesChart = null;
 
     const readChartPalette = () => {
         const isLightTheme = document.documentElement.getAttribute("data-theme") === "light";
@@ -81,6 +97,11 @@
     const normalizeRange = (value) => {
         const normalizedValue = String(value || "").trim().toLowerCase();
         return supportedRanges.has(normalizedValue) ? normalizedValue : defaultRange;
+    };
+
+    const normalizeDeviceMode = (value) => {
+        const normalizedValue = String(value || "").trim().toLowerCase();
+        return supportedDeviceModes.has(normalizedValue) ? normalizedValue : defaultDeviceMode;
     };
 
     const readStoredRange = () => {
@@ -179,37 +200,111 @@
     const createCommonOptions = (palette, options = {}) => {
         const stacked = Boolean(options.stacked);
         return ({
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        scales: {
-            x: {
-                stacked,
-                ticks: { color: palette.colorMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 16 },
-                grid: { color: withAlpha(palette.colorBorder, 0.65) },
-            },
-            y: {
-                beginAtZero: true,
-                stacked,
-                ticks: { color: palette.colorMuted, precision: 0 },
-                grid: { color: withAlpha(palette.colorBorder, 0.7) },
-            },
-        },
-        plugins: {
-            legend: {
-                labels: {
-                    color: palette.colorText,
-                    usePointStyle: true,
-                    boxWidth: 10,
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            scales: {
+                x: {
+                    stacked,
+                    ticks: { color: palette.colorMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 16 },
+                    grid: { color: withAlpha(palette.colorBorder, 0.65) },
+                },
+                y: {
+                    beginAtZero: true,
+                    stacked,
+                    ticks: { color: palette.colorMuted, precision: 0 },
+                    grid: { color: withAlpha(palette.colorBorder, 0.7) },
                 },
             },
-            tooltip: {
-                displayColors: true,
-                mode: "index",
-                intersect: false,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: palette.colorText,
+                        usePointStyle: true,
+                        boxWidth: 10,
+                    },
+                },
+                tooltip: {
+                    displayColors: true,
+                    mode: "index",
+                    intersect: false,
+                },
             },
-        },
-    });
+        });
+    };
+
+    const parseJsonPayload = (node) => {
+        if (!(node instanceof HTMLScriptElement)) {
+            return {};
+        }
+        try {
+            return JSON.parse(node.textContent || "{}");
+        } catch (_) {
+            return {};
+        }
+    };
+
+    const normalizeDeviceItems = (rawItems, total) => {
+        const items = Array.isArray(rawItems) ? rawItems : [];
+        const normalizedTotal = Math.max(0, Number(total) || 0);
+        const result = [];
+        for (const item of items) {
+            const key = String(item && item.key ? item.key : "").trim();
+            const count = Math.max(0, Number(item && item.count) || 0);
+            if (!key || count <= 0) {
+                continue;
+            }
+            let percent = Number(item && item.percent);
+            if (!Number.isFinite(percent)) {
+                percent = normalizedTotal > 0 ? (count * 100.0) / normalizedTotal : 0;
+            }
+            result.push({
+                key,
+                label: String(item && item.label ? item.label : key),
+                count,
+                percent,
+            });
+        }
+        return result;
+    };
+
+    const resolveDeviceLabel = (item) => {
+        if (!item || !item.key) {
+            return devicesLabelUnknown;
+        }
+        const key = String(item.key).trim().toLowerCase();
+        if (key === "other") {
+            return devicesLabelOther;
+        }
+        if (key === "unknown") {
+            return devicesLabelUnknown;
+        }
+        if (key === "mixed_unknown") {
+            return devicesLabelMixedUnknown;
+        }
+        return String(item.label || item.key);
+    };
+
+    const renderDeviceList = (items) => {
+        if (!(devicesListNode instanceof HTMLElement)) {
+            return;
+        }
+        devicesListNode.textContent = "";
+        for (const item of items) {
+            const row = document.createElement("li");
+            row.className = "statistics-devices-list-item";
+
+            const labelNode = document.createElement("span");
+            labelNode.textContent = resolveDeviceLabel(item);
+
+            const valueNode = document.createElement("span");
+            valueNode.className = "statistics-devices-list-value";
+            valueNode.textContent = `${Math.round(item.count)} (${Number(item.percent).toFixed(1)}%)`;
+
+            row.appendChild(labelNode);
+            row.appendChild(valueNode);
+            devicesListNode.appendChild(row);
+        }
     };
 
     const renderCharts = (payload) => {
@@ -327,12 +422,100 @@
         }
     };
 
-    let payload = {};
-    try {
-        payload = JSON.parse(payloadNode.textContent || "{}");
-    } catch (_) {
-        payload = {};
-    }
+    const buildDeviceColors = (count, palette) => {
+        const base = [
+            palette.trafficColorOwnBeaconTx,
+            palette.trafficColorOwnWxTx,
+            palette.trafficColorOwnMessageTx,
+            palette.trafficColorRepeatedTx,
+            palette.trafficColorProxyTx,
+            "#53c8ce",
+            "#c2a34e",
+            "#bc6fff",
+            "#7f8d99",
+            "#d26e6e",
+            "#8a8a8a",
+        ];
+        const colors = [];
+        for (let index = 0; index < count; index += 1) {
+            colors.push(base[index % base.length]);
+        }
+        return colors;
+    };
+
+    const renderDevices = (payloadValue) => {
+        if (!(devicesCanvas instanceof HTMLCanvasElement)) {
+            return;
+        }
+        const mode = normalizeDeviceMode(payloadValue && payloadValue.mode);
+        const total = Math.max(0, Number(payloadValue && payloadValue.total) || 0);
+        const items = normalizeDeviceItems(payloadValue && payloadValue.items, total);
+        const hasData = total > 0 && items.length > 0;
+
+        toggleEmptyState(devicesEmptyNode, !hasData);
+        renderDeviceList(hasData ? items : []);
+
+        if (devicesChart) {
+            devicesChart.destroy();
+            devicesChart = null;
+        }
+
+        if (!hasData) {
+            return;
+        }
+
+        const palette = readChartPalette();
+        const labels = items.map((item) => resolveDeviceLabel(item));
+        const counts = items.map((item) => Number(item.count) || 0);
+        const colors = buildDeviceColors(counts.length, palette);
+        const countBasisLabel = mode === "frames" ? devicesCountFramesLabel : devicesCountStationsLabel;
+
+        const context = devicesCanvas.getContext("2d");
+        if (!context) {
+            return;
+        }
+
+        devicesChart = new ChartConstructor(context, {
+            type: "doughnut",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        data: counts,
+                        backgroundColor: colors,
+                        borderColor: withAlpha(palette.colorBorder, 0.7),
+                        borderWidth: 1,
+                        hoverOffset: 4,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "62%",
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                    tooltip: {
+                        displayColors: true,
+                        callbacks: {
+                            label: (contextValue) => {
+                                const item = items[contextValue.dataIndex] || { count: 0, percent: 0, label: "" };
+                                const label = resolveDeviceLabel(item);
+                                const count = Math.max(0, Number(item.count) || 0);
+                                const percent = Number(item.percent) || 0;
+                                return `${label}: ${count} (${percent.toFixed(1)}%) • ${countBasisLabel}`;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    };
+
+    let payload = parseJsonPayload(payloadNode);
+    let devicesPayload = parseJsonPayload(devicesPayloadNode);
 
     let activeRange = normalizeRange(payload && payload.range);
     let activeShift = normalizeShift(payload && payload.shift_windows);
@@ -341,6 +524,12 @@
         activeRange = storedRange;
         activeShift = 0;
     }
+
+    let activeDeviceMode = normalizeDeviceMode(
+        (devicesPayload && devicesPayload.mode)
+        || (devicesModeSelect instanceof HTMLSelectElement ? devicesModeSelect.value : "")
+        || defaultDeviceMode,
+    );
 
     const setControlsDisabled = (disabled) => {
         if (rangeSelect instanceof HTMLSelectElement) {
@@ -351,6 +540,49 @@
         }
         if (forwardButton instanceof HTMLButtonElement) {
             forwardButton.disabled = disabled || activeShift <= 0;
+        }
+    };
+
+    const loadDevicesPayload = async (rangeValue, shiftValue, modeValue, options = {}) => {
+        const disableModeControl = Boolean(options.disableModeControl);
+        if (!(devicesCanvas instanceof HTMLCanvasElement) || !devicesApiUrl) {
+            return;
+        }
+        const normalizedMode = normalizeDeviceMode(modeValue);
+        const normalizedRange = normalizeRange(rangeValue);
+        const normalizedShift = normalizeShift(shiftValue);
+
+        if (devicesModeSelect instanceof HTMLSelectElement) {
+            devicesModeSelect.value = normalizedMode;
+            if (disableModeControl) {
+                devicesModeSelect.disabled = true;
+            }
+        }
+
+        try {
+            const response = await fetch(
+                `${devicesApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}&mode=${encodeURIComponent(normalizedMode)}`,
+                {
+                    method: "GET",
+                    headers: { "Accept": "application/json" },
+                },
+            );
+            if (!response.ok) {
+                return;
+            }
+            const nextPayload = await response.json();
+            devicesPayload = nextPayload;
+            activeDeviceMode = normalizeDeviceMode(nextPayload && nextPayload.mode);
+            if (devicesModeSelect instanceof HTMLSelectElement) {
+                devicesModeSelect.value = activeDeviceMode;
+            }
+            renderDevices(nextPayload);
+        } catch (_) {
+            return;
+        } finally {
+            if (devicesModeSelect instanceof HTMLSelectElement && disableModeControl) {
+                devicesModeSelect.disabled = false;
+            }
         }
     };
 
@@ -365,8 +597,8 @@
             const response = await fetch(
                 `${apiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}`,
                 {
-                method: "GET",
-                headers: { "Accept": "application/json" },
+                    method: "GET",
+                    headers: { "Accept": "application/json" },
                 },
             );
             if (!response.ok) {
@@ -381,6 +613,7 @@
                 rangeSelect.value = activeRange;
             }
             renderCharts(nextPayload);
+            await loadDevicesPayload(activeRange, activeShift, activeDeviceMode);
         } catch (_) {
             return;
         } finally {
@@ -408,11 +641,22 @@
             void loadRangePayload(activeRange, activeShift - 1);
         });
     }
+    if (devicesModeSelect instanceof HTMLSelectElement) {
+        devicesModeSelect.value = activeDeviceMode;
+        devicesModeSelect.addEventListener("change", () => {
+            const nextMode = normalizeDeviceMode(devicesModeSelect.value);
+            activeDeviceMode = nextMode;
+            void loadDevicesPayload(activeRange, activeShift, nextMode, { disableModeControl: true });
+        });
+    }
 
     renderCharts(payload);
+    renderDevices(devicesPayload);
     setControlsDisabled(false);
 
     if (activeRange !== normalizeRange(payload && payload.range)) {
         void loadRangePayload(activeRange, activeShift);
+    } else if (!(devicesPayload && Array.isArray(devicesPayload.items) && devicesPayload.range === activeRange)) {
+        void loadDevicesPayload(activeRange, activeShift, activeDeviceMode);
     }
 })();

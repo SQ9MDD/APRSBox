@@ -1233,6 +1233,79 @@ body {
     gap: 0.5rem;
 }
 
+.statistics-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+}
+
+.statistics-main-column,
+.statistics-side-column {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-3);
+}
+
+.statistics-devices-card {
+    align-content: start;
+}
+
+.statistics-devices-mode-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.statistics-devices-mode-label {
+    color: var(--muted);
+    font-size: 0.76rem;
+    letter-spacing: 0.01em;
+}
+
+.statistics-devices-mode-wrap select {
+    width: auto;
+    min-width: 7.6rem;
+}
+
+.statistics-devices-description {
+    margin: 0;
+}
+
+.statistics-devices-canvas {
+    min-height: 220px;
+    max-height: 280px;
+}
+
+.statistics-devices-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.statistics-devices-list-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.28rem;
+    font-size: 0.82rem;
+}
+
+.statistics-devices-list-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.statistics-devices-list-value {
+    white-space: nowrap;
+    color: var(--muted);
+}
+
 .dashboard-activity-card {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -1317,7 +1390,8 @@ body {
 
 @media (max-width: 1180px) {
     .dashboard-overview-grid,
-    .dashboard-detail-grid {
+    .dashboard-detail-grid,
+    .statistics-layout {
         grid-template-columns: 1fr;
     }
 }

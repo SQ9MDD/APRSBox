@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.services.aprs_device_identification import get_aprs_device_identification_database, lookup_aprs_device_identification
 from app.services.content import parse_tnc2_frame
 
 
@@ -43,6 +44,19 @@ TRAFFIC_STATISTICS_RANGE_OPTIONS = {
     TRAFFIC_STATISTICS_RANGE_30D: 30 * 24 * 60,
     TRAFFIC_STATISTICS_RANGE_365D: 365 * 24 * 60,
 }
+TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS = "stations"
+TRAFFIC_STATISTICS_DEVICES_MODE_FRAMES = "frames"
+TRAFFIC_STATISTICS_DEVICES_MODE_OPTIONS = {
+    TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS,
+    TRAFFIC_STATISTICS_DEVICES_MODE_FRAMES,
+}
+TRAFFIC_STATISTICS_DEVICES_DEFAULT_TOP_LIMIT = 8
+TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY = "unknown"
+TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL = "Unknown"
+TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY = "mixed_unknown"
+TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL = "Mixed / Unknown"
+TRAFFIC_STATISTICS_DEVICES_OTHER_KEY = "other"
+TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL = "Other"
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
     "tx_total": 0,
@@ -526,6 +540,289 @@ def get_traffic_statistics(
                 ]
             },
         },
+    }
+
+
+def get_traffic_devices_statistics(
+    *,
+    range_value: str = TRAFFIC_STATISTICS_RANGE_24H,
+    shift_windows: int = 0,
+    mode: str = TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS,
+    top_limit: int = TRAFFIC_STATISTICS_DEVICES_DEFAULT_TOP_LIMIT,
+) -> dict[str, Any]:
+    normalized_range = str(range_value or TRAFFIC_STATISTICS_RANGE_24H).strip().lower()
+    if normalized_range not in TRAFFIC_STATISTICS_RANGE_OPTIONS:
+        raise ValueError("Unsupported range.")
+    normalized_shift_windows = int(shift_windows)
+    if normalized_shift_windows < 0:
+        raise ValueError("Unsupported range.")
+    normalized_mode = str(mode or TRAFFIC_STATISTICS_DEVICES_MODE_STATIONS).strip().lower()
+    if normalized_mode not in TRAFFIC_STATISTICS_DEVICES_MODE_OPTIONS:
+        raise ValueError("Unsupported mode.")
+    normalized_top_limit = max(1, int(top_limit))
+
+    total_minutes = int(TRAFFIC_STATISTICS_RANGE_OPTIONS[normalized_range])
+    output_bucket_minutes = _resolve_traffic_statistics_bucket_minutes(total_minutes)
+    output_bucket_delta = timedelta(minutes=output_bucket_minutes)
+    output_bucket_count = max(1, (total_minutes + output_bucket_minutes - 1) // output_bucket_minutes)
+    now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+
+    latest_base_bucket_start = _floor_to_bucket_start(now_utc, bucket_minutes=RADIO_ACTIVITY_BUCKET_MINUTES) - timedelta(
+        minutes=RADIO_ACTIVITY_BUCKET_MINUTES
+    )
+    latest_output_bucket_start = _floor_to_bucket_start(latest_base_bucket_start, bucket_minutes=output_bucket_minutes)
+    if normalized_shift_windows > 0:
+        latest_output_bucket_start -= timedelta(minutes=total_minutes * normalized_shift_windows)
+    window_start_utc = latest_output_bucket_start - timedelta(minutes=output_bucket_minutes * (output_bucket_count - 1))
+    window_end_utc = latest_output_bucket_start + output_bucket_delta
+
+    frame_rows = fetch_all(
+        """
+        SELECT direction, format, line, created_at
+        FROM traffic_frames
+        WHERE format LIKE 'TNC2%'
+          AND created_at >= ?
+          AND created_at < ?
+        ORDER BY created_at ASC, id ASC
+        """,
+        (window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+
+    labels_by_key: dict[str, str] = {
+        TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY: TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
+        TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY: TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL,
+        TRAFFIC_STATISTICS_DEVICES_OTHER_KEY: TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL,
+    }
+    device_db = get_aprs_device_identification_database()
+    destination_cache: dict[str, tuple[str, str, bool]] = {}
+
+    if normalized_mode == TRAFFIC_STATISTICS_DEVICES_MODE_FRAMES:
+        frame_counts: dict[str, int] = {}
+        for row in frame_rows:
+            frame_format = str(row["format"] or "").strip().upper()
+            direction = _normalize_direction(row["direction"], frame_format)
+            if direction != "RX":
+                continue
+            parsed = parse_tnc2_frame(str(row["line"] or ""))
+            if parsed is None:
+                continue
+            device_key, device_label, _is_recognized = _resolve_statistics_device_bucket(
+                str(parsed.get("logical_destination") or parsed.get("destination") or ""),
+                database=device_db,
+                cache=destination_cache,
+            )
+            frame_counts[device_key] = int(frame_counts.get(device_key) or 0) + 1
+            labels_by_key[device_key] = device_label
+
+        total = sum(frame_counts.values())
+        items = _build_traffic_devices_items(
+            counts=frame_counts,
+            labels_by_key=labels_by_key,
+            total=total,
+            top_limit=normalized_top_limit,
+        )
+        return {
+            "range": normalized_range,
+            "shift_windows": normalized_shift_windows,
+            "mode": normalized_mode,
+            "count_basis": "frames",
+            "total": total,
+            "top_limit": normalized_top_limit,
+            "window_start_utc": window_start_utc.isoformat(),
+            "window_end_utc": window_end_utc.isoformat(),
+            "items": items,
+        }
+
+    station_votes: dict[str, dict[str, Any]] = {}
+    for row_index, row in enumerate(frame_rows):
+        frame_format = str(row["format"] or "").strip().upper()
+        direction = _normalize_direction(row["direction"], frame_format)
+        if direction != "RX":
+            continue
+        parsed = parse_tnc2_frame(str(row["line"] or ""))
+        if parsed is None:
+            continue
+        station_key = str(parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or "").strip().upper()
+        if not station_key:
+            continue
+        device_key, device_label, is_recognized = _resolve_statistics_device_bucket(
+            str(parsed.get("logical_destination") or parsed.get("destination") or ""),
+            database=device_db,
+            cache=destination_cache,
+        )
+        labels_by_key[device_key] = device_label
+
+        station_bucket = station_votes.get(station_key)
+        if station_bucket is None:
+            station_bucket = {
+                "counts": {},
+                "last_index_by_key": {},
+                "recognized_by_key": {},
+            }
+            station_votes[station_key] = station_bucket
+
+        counts_by_key = station_bucket["counts"]
+        counts_by_key[device_key] = int(counts_by_key.get(device_key) or 0) + 1
+        station_bucket["last_index_by_key"][device_key] = row_index
+        if is_recognized:
+            station_bucket["recognized_by_key"][device_key] = True
+        elif device_key not in station_bucket["recognized_by_key"]:
+            station_bucket["recognized_by_key"][device_key] = False
+
+    station_counts: dict[str, int] = {}
+    for station_bucket in station_votes.values():
+        resolved_key = _resolve_station_device_bucket_key(station_bucket)
+        resolved_label = labels_by_key.get(resolved_key) or (
+            TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL
+            if resolved_key == TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY
+            else TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL
+        )
+        labels_by_key[resolved_key] = resolved_label
+        station_counts[resolved_key] = int(station_counts.get(resolved_key) or 0) + 1
+
+    total = sum(station_counts.values())
+    items = _build_traffic_devices_items(
+        counts=station_counts,
+        labels_by_key=labels_by_key,
+        total=total,
+        top_limit=normalized_top_limit,
+    )
+    return {
+        "range": normalized_range,
+        "shift_windows": normalized_shift_windows,
+        "mode": normalized_mode,
+        "count_basis": "unique_callsign_ssid",
+        "total": total,
+        "top_limit": normalized_top_limit,
+        "window_start_utc": window_start_utc.isoformat(),
+        "window_end_utc": window_end_utc.isoformat(),
+        "items": items,
+    }
+
+
+def _resolve_statistics_device_bucket(
+    destination: str,
+    *,
+    database: Any,
+    cache: dict[str, tuple[str, str, bool]],
+) -> tuple[str, str, bool]:
+    normalized_destination = _normalize_statistics_destination(destination)
+    if not normalized_destination:
+        return (
+            TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
+            TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
+            False,
+        )
+    cached = cache.get(normalized_destination)
+    if cached is not None:
+        return cached
+
+    matched = lookup_aprs_device_identification(destination=normalized_destination, info="", database=database)
+    if matched is not None:
+        key = str(matched.get("actual_identifier") or normalized_destination).strip().upper() or normalized_destination
+        label = str(matched.get("short_name") or matched.get("identified_as") or key).strip() or key
+        resolved = (key, label, True)
+    else:
+        resolved = (normalized_destination, normalized_destination, True)
+    cache[normalized_destination] = resolved
+    return resolved
+
+
+def _normalize_statistics_destination(destination: str) -> str:
+    value = str(destination or "").strip().upper()
+    base, separator, suffix = value.partition("-")
+    if separator and suffix.isdigit():
+        value = base
+    return value
+
+
+def _resolve_station_device_bucket_key(station_bucket: dict[str, Any]) -> str:
+    counts_by_key = dict(station_bucket.get("counts") or {})
+    if not counts_by_key:
+        return TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
+
+    max_count = max(int(value) for value in counts_by_key.values())
+    top_keys = [str(key) for key, value in counts_by_key.items() if int(value) == max_count]
+    if len(top_keys) == 1:
+        return top_keys[0]
+
+    recognized_by_key = dict(station_bucket.get("recognized_by_key") or {})
+    last_index_by_key = dict(station_bucket.get("last_index_by_key") or {})
+    recognized_top_keys = [key for key in top_keys if bool(recognized_by_key.get(key))]
+    if recognized_top_keys:
+        recognized_top_keys.sort(key=lambda key: int(last_index_by_key.get(key) or 0), reverse=True)
+        best_key = recognized_top_keys[0]
+        best_index = int(last_index_by_key.get(best_key) or 0)
+        best_keys = [key for key in recognized_top_keys if int(last_index_by_key.get(key) or 0) == best_index]
+        if len(best_keys) == 1:
+            return best_key
+    return TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY
+
+
+def _build_traffic_devices_items(
+    *,
+    counts: dict[str, int],
+    labels_by_key: dict[str, str],
+    total: int,
+    top_limit: int,
+) -> list[dict[str, Any]]:
+    if total <= 0:
+        return []
+
+    non_zero_counts = {str(key): int(value) for key, value in counts.items() if int(value) > 0}
+    if not non_zero_counts:
+        return []
+
+    special_keys = {
+        TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
+        TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY,
+    }
+    regular_items = [(key, value) for key, value in non_zero_counts.items() if key not in special_keys]
+    regular_items.sort(key=lambda item: (-item[1], str(labels_by_key.get(item[0]) or item[0]).casefold(), item[0]))
+
+    normalized_top_limit = max(1, int(top_limit))
+    selected_regular = regular_items[:normalized_top_limit]
+    remaining_regular = regular_items[normalized_top_limit:]
+    other_count = sum(count for _key, count in remaining_regular)
+
+    items: list[dict[str, Any]] = []
+    for key, count in selected_regular:
+        label = str(labels_by_key.get(key) or key).strip() or key
+        items.append(_traffic_devices_item(key=key, label=label, count=count, total=total))
+
+    for special_key, special_label in (
+        (TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY, TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL),
+        (TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY, TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL),
+    ):
+        special_count = int(non_zero_counts.get(special_key) or 0)
+        if special_count <= 0:
+            continue
+        label = str(labels_by_key.get(special_key) or special_label).strip() or special_label
+        items.append(_traffic_devices_item(key=special_key, label=label, count=special_count, total=total))
+
+    if other_count > 0:
+        items.append(
+            _traffic_devices_item(
+                key=TRAFFIC_STATISTICS_DEVICES_OTHER_KEY,
+                label=str(labels_by_key.get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY) or TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL),
+                count=other_count,
+                total=total,
+            )
+        )
+    return items
+
+
+def _traffic_devices_item(*, key: str, label: str, count: int, total: int) -> dict[str, Any]:
+    normalized_count = max(0, int(count))
+    normalized_total = max(0, int(total))
+    percent = 0.0
+    if normalized_total > 0:
+        percent = round((float(normalized_count) * 100.0) / float(normalized_total), 1)
+    return {
+        "key": str(key or "").strip() or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
+        "label": str(label or "").strip() or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
+        "count": normalized_count,
+        "percent": percent,
     }
 
 
