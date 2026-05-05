@@ -221,6 +221,7 @@
         const zoomStorageKey = "aprsbox-dashboard-activity-zoom-v1";
         const minStepLabel = {{ t("min step")|tojson }};
         const rangePrefix = {{ t("Range")|tojson }};
+        const pointsUnitLabel = {{ t("points")|tojson }};
 
         const normalizeRangeValue = (value) => {
             const normalizedValue = String(value || "").trim().toLowerCase();
@@ -720,9 +721,9 @@
                 const rangeLabel = rangeDisplayMap[chartPayload.range] || chartPayload.range || "-";
                 const pointsLabel = Number(chartPayload.points || labels.length || 0);
                 if (rangeLabel && rangeLabel !== "legacy") {
-                    mainWindowNode.textContent = `${rangePrefix}: ${rangeLabel} • ${pointsLabel} pkt`;
+                    mainWindowNode.textContent = `${rangePrefix}: ${rangeLabel} • ${pointsLabel} ${pointsUnitLabel}`;
                 } else {
-                    mainWindowNode.textContent = `${pointsLabel} pkt`;
+                    mainWindowNode.textContent = `${pointsLabel} ${pointsUnitLabel}`;
                 }
             }
             if (stepNode) {
