@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.38 - 05.05.2026
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- zmiany  od 1.7.29.dev do 1.7.37.dev
+
 ## 1.7.37.dev - 05.05.2026
 
 ### Najważniejsze zmiany
