@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.47.dev - 07.05.2026
+
+### Najważniejsze zmiany
+- poprawki w statystykach, naprawa blednych wyliczeń TOP20 sprzet
+
 ## 1.7.47.dev - 06.05.2026
 
 ### Najważniejsze zmiany
