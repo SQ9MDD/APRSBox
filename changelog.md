@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.44.dev - 06.05.2026
+
+### Najważniejsze zmiany
+- `TNC (SERIAL/SERIALL)`: wewnętrznie zastąpiono direct-serial lokalnym brokerem `KISS SERIAL <-> KISS TCP (127.0.0.1)`, bez zmian w konfiguracji użytkownika.
+- `Runtime/lifecycle`: dla każdego aktywnego TNC serial działa osobny broker z kontrolowanym start/stop/reconnect i pełnym zamykaniem uchwytów przy disable/shutdown.
+
 ## 1.7.40.dev - 05.05.2026
 
 ### Najważniejsze zmiany

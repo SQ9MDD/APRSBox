@@ -11,14 +11,8 @@ from app.services.band_condition import process_incoming_frame
 from app.services.messages import process_incoming_tnc2_message
 from app.services.outbound import persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
-from app.services.serial_tnc import (
-    close_serial_device,
-    normalize_serial_baud_rate,
-    normalize_serial_device_path,
-    open_serial_device,
-    read_serial_chunk,
-    write_serial_data,
-)
+from app.services.serial_broker import SerialKissTcpBroker
+from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
 
 KISS_FEND = 0xC0
 KISS_FESC = 0xDB
@@ -33,7 +27,6 @@ SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
 IGNORED_KISS_DEBUG_PREVIEW_BYTES = 24
 IGNORED_KISS_DEBUG_INTERVAL_SECONDS = 30.0
 SERIAL_TX_DEBUG_PREVIEW_BYTES = 32
-SERIAL_CLOSE_SETTLE_SECONDS = 0.15
 KISS_RETURN = 0xFF
 
 
@@ -93,7 +86,7 @@ class _TrafficModemRuntime:
         self._kiss_buffer = bytearray()
         self._proxy_uplink_buffer = bytearray()
         self._tnc_writer: asyncio.StreamWriter | None = None
-        self._tnc_serial_fd: int | None = None
+        self._serial_broker: SerialKissTcpBroker | None = None
         self._tnc_write_lock = asyncio.Lock()
         self._proxy_server: asyncio.AbstractServer | None = None
         self._proxy_server_key: tuple[str, int, str] | None = None
@@ -117,25 +110,24 @@ class _TrafficModemRuntime:
     async def stop(self) -> None:
         self._stop_event.set()
         await self._stop_proxy_server()
-        if self._task is None:
-            await self._close_active_serial_fd(settle=True)
-            return
-        self._task.cancel()
-        try:
-            await self._task
-        except asyncio.CancelledError:
-            pass
-        except Exception as exc:
-            log_event(
-                "WARNING",
-                "traffic",
-                (
-                    f"Traffic runtime stop observed task failure on "
-                    f"{self._runtime_label()}: {exc}"
-                ),
-            )
+        task = self._task
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                log_event(
+                    "WARNING",
+                    "traffic",
+                    (
+                        f"Traffic runtime stop observed task failure on "
+                        f"{self._runtime_label()}: {exc}"
+                    ),
+                )
         self._task = None
-        await self._close_active_serial_fd(settle=True)
+        await self._stop_serial_broker()
 
     async def send_outbound_frame(self, *, interface_id: int | None, frame: bytes) -> bool:
         with self._lock:
@@ -179,20 +171,12 @@ class _TrafficModemRuntime:
             return False
         return True
 
-    async def _close_active_serial_fd(self, *, settle: bool) -> None:
-        async with self._tnc_write_lock:
-            serial_fd = self._tnc_serial_fd
-            self._tnc_serial_fd = None
-        if serial_fd is None:
+    async def _stop_serial_broker(self) -> None:
+        broker = self._serial_broker
+        self._serial_broker = None
+        if broker is None:
             return
-        await asyncio.to_thread(close_serial_device, serial_fd)
-        log_event(
-            "DEBUG",
-            "traffic",
-            f"Closed serial handle fd={serial_fd} on {self._runtime_label()}",
-        )
-        if settle:
-            await asyncio.sleep(SERIAL_CLOSE_SETTLE_SECONDS)
+        await broker.stop()
 
     def is_running(self) -> bool:
         task = self._task
@@ -349,40 +333,12 @@ class _TrafficModemRuntime:
             return
 
         host, port = endpoint
-        self._set_state(
-            status="connecting",
-            detail=f"Connecting to {host}:{port}.",
+        await self._run_kiss_tcp_endpoint(
             modem=modem,
-            error=None,
+            host=host,
+            port=port,
+            connect_label=f"TCP TNC {modem['name']} at {host}:{port}",
         )
-
-        try:
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5)
-        except (OSError, TimeoutError) as exc:
-            message = f"TCP connection to {host}:{port} failed: {exc}"
-            self._set_state(status="error", detail=message, modem=modem, error=str(exc))
-            log_event("WARNING", "traffic", message)
-            await self._sleep(self._reconnect_delay)
-            return
-
-        self._clear_kiss_buffers()
-        connect_message = f"Connected to TCP TNC {modem['name']} at {host}:{port}"
-        self._tnc_writer = writer
-        proxy_error = await self._sync_proxy_server(modem)
-        self._set_state(status="connected", detail=connect_message, modem=modem, error=proxy_error)
-        log_event("INFO", "traffic", connect_message)
-
-        try:
-            await self._consume_connection(reader, modem, host, port)
-        finally:
-            if self._tnc_writer is writer:
-                self._tnc_writer = None
-            await self._stop_proxy_server()
-            writer.close()
-            try:
-                await writer.wait_closed()
-            except OSError:
-                pass
 
     async def _run_serial_modem(self, modem: dict[str, Any]) -> None:
         try:
@@ -399,67 +355,96 @@ class _TrafficModemRuntime:
             await self._sleep(self._reconnect_delay)
             return
 
-        self._set_state(
-            status="connecting",
-            detail=f"Opening serial TNC {device_path} at {baud_rate} baud.",
-            modem=modem,
-            error=None,
+        silence_reconnect_timeout_seconds = _normalize_serial_rx_silence_reconnect_seconds(
+            modem.get("serial_rx_silence_reconnect_seconds")
         )
+        broker = SerialKissTcpBroker(
+            modem_id=int(modem["id"]),
+            tnc_name=str(modem.get("name") or ""),
+            device_path=device_path,
+            baud_rate=baud_rate,
+            rx_silence_reconnect_seconds=silence_reconnect_timeout_seconds,
+            reconnect_delay=self._reconnect_delay,
+        )
+        self._serial_broker = broker
 
         try:
-            serial_fd = await asyncio.to_thread(open_serial_device, device_path, baud_rate)
-        except (OSError, ValueError) as exc:
-            message = f"Serial connection to {device_path} at {baud_rate} baud failed: {exc}"
+            await broker.start()
+        except (OSError, ValueError, RuntimeError) as exc:
+            self._serial_broker = None
+            message = f"Serial broker start failed for {device_path} at {baud_rate} baud: {exc}"
             self._set_state(status="error", detail=message, modem=modem, error=str(exc))
             log_event("WARNING", "traffic", message)
             log_event("WARNING", "system", message)
             await self._sleep(self._reconnect_delay)
             return
 
-        silence_reconnect_timeout_seconds = _normalize_serial_rx_silence_reconnect_seconds(
-            modem.get("serial_rx_silence_reconnect_seconds")
-        )
-        self._clear_kiss_buffers()
-        self._tnc_serial_fd = serial_fd
-        connect_message = f"Connected to serial TNC {modem['name']} at {device_path} ({baud_rate} baud)"
-        proxy_error = await self._sync_proxy_server(modem)
-        self._set_state(status="connected", detail=connect_message, modem=modem, error=proxy_error)
-        log_event("INFO", "traffic", connect_message)
-        log_event(
-            "DEBUG",
-            "traffic",
-            f"Serial runtime handle ready on {self._runtime_label(modem=modem)}: fd={serial_fd}",
-        )
-        log_event(
-            "INFO",
-            "traffic",
-            f"Serial RX reader started for {self._runtime_label(modem=modem)} on {device_path} ({baud_rate} baud)",
+        try:
+            while not self._stop_event.is_set():
+                current_modem = self._load_active_modem()
+                if current_modem != modem:
+                    self._clear_kiss_buffers()
+                    self._set_state(
+                        status="idle",
+                        detail="Active TNC configuration changed. Reconnecting.",
+                        modem=current_modem,
+                        error=None,
+                    )
+                    return
+                await self._run_kiss_tcp_endpoint(
+                    modem=modem,
+                    host=broker.host,
+                    port=broker.port,
+                    connect_label=(
+                        f"serial broker for {modem['name']} "
+                        f"({device_path} -> {broker.host}:{broker.port})"
+                    ),
+                )
+        finally:
+            await self._stop_serial_broker()
+
+    async def _run_kiss_tcp_endpoint(
+        self,
+        *,
+        modem: dict[str, Any],
+        host: str,
+        port: int,
+        connect_label: str,
+    ) -> None:
+        self._set_state(
+            status="connecting",
+            detail=f"Connecting to {host}:{port}.",
+            modem=modem,
+            error=None,
         )
 
         try:
-            await self._consume_serial_device(
-                serial_fd,
-                modem,
-                device_path,
-                baud_rate,
-                silence_reconnect_timeout_seconds,
-            )
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5)
+        except (OSError, TimeoutError) as exc:
+            message = f"Connection to {connect_label} failed: {exc}"
+            self._set_state(status="error", detail=message, modem=modem, error=str(exc))
+            log_event("WARNING", "traffic", message)
+            await self._sleep(self._reconnect_delay)
+            return
+
+        self._clear_kiss_buffers()
+        connect_message = f"Connected to {connect_label}"
+        self._tnc_writer = writer
+        proxy_error = await self._sync_proxy_server(modem)
+        self._set_state(status="connected", detail=connect_message, modem=modem, error=proxy_error)
+        log_event("INFO", "traffic", connect_message)
+
+        try:
+            await self._consume_connection(reader, modem, host, port)
         finally:
-            log_event(
-                "INFO",
-                "traffic",
-                f"Serial RX reader stopped for {self._runtime_label(modem=modem)} on {device_path} ({baud_rate} baud)",
-            )
-            if self._tnc_serial_fd == serial_fd:
-                self._tnc_serial_fd = None
+            if self._tnc_writer is writer:
+                self._tnc_writer = None
             await self._stop_proxy_server()
-            await asyncio.to_thread(close_serial_device, serial_fd)
-            log_event(
-                "DEBUG",
-                "traffic",
-                f"Serial runtime handle released on {self._runtime_label(modem=modem)}: fd={serial_fd}",
-            )
-            await asyncio.sleep(SERIAL_CLOSE_SETTLE_SECONDS)
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
 
     async def _consume_connection(
         self,
@@ -501,68 +486,6 @@ class _TrafficModemRuntime:
 
             await self._broadcast_proxy_chunk(chunk)
             self._consume_kiss_chunk(chunk)
-
-    async def _consume_serial_device(
-        self,
-        serial_fd: int,
-        modem: dict[str, Any],
-        device_path: str,
-        baud_rate: int,
-        silence_reconnect_timeout_seconds: int,
-    ) -> None:
-        loop = asyncio.get_running_loop()
-        last_rx_at = loop.time()
-        while not self._stop_event.is_set():
-            current_modem = self._load_active_modem()
-            if current_modem != modem:
-                self._clear_kiss_buffers()
-                self._set_state(
-                    status="idle",
-                    detail="Active TNC configuration changed. Reconnecting.",
-                    modem=current_modem,
-                    error=None,
-                )
-                return
-
-            try:
-                chunk = await asyncio.to_thread(read_serial_chunk, serial_fd, max_bytes=1024, timeout=1.0)
-            except OSError as exc:
-                message = f"Read from serial TNC {device_path} at {baud_rate} baud failed: {exc}"
-                self._set_state(status="error", detail=message, modem=modem, error=str(exc))
-                log_event("WARNING", "traffic", message)
-                log_event("WARNING", "system", message)
-                await self._sleep(self._reconnect_delay)
-                return
-
-            if not chunk:
-                silence_seconds = loop.time() - last_rx_at
-                if silence_reconnect_timeout_seconds > 0 and silence_seconds >= silence_reconnect_timeout_seconds:
-                    timeout_seconds = silence_reconnect_timeout_seconds
-                    message = (
-                        f"No RX data from serial TNC {device_path} at {baud_rate} baud "
-                        f"for {timeout_seconds}s. Forcing reconnect."
-                    )
-                    self._set_state(status="error", detail=message, modem=modem, error=message)
-                    log_event("WARNING", "traffic", message)
-                    log_event("WARNING", "system", message)
-                    await self._sleep(self._reconnect_delay)
-                    return
-                continue
-
-            last_rx_at = loop.time()
-            try:
-                await self._broadcast_proxy_chunk(chunk)
-                self._consume_kiss_chunk(chunk)
-            except Exception as exc:
-                message = (
-                    f"Serial RX processing failed on {self._runtime_label(modem=modem)} "
-                    f"({device_path} at {baud_rate} baud): {exc}"
-                )
-                self._set_state(status="error", detail=message, modem=modem, error=str(exc))
-                log_event("WARNING", "traffic", message)
-                log_event("WARNING", "system", message)
-                await self._sleep(self._reconnect_delay)
-                return
 
     def _consume_kiss_chunk(self, chunk: bytes) -> None:
         self._kiss_buffer.extend(chunk)
@@ -936,7 +859,7 @@ class _TrafficModemRuntime:
         peer = writer.get_extra_info("peername")
         client_host = str(peer[0]) if isinstance(peer, tuple) and peer else "unknown"
 
-        if self._proxy_server is None or (self._tnc_writer is None and self._tnc_serial_fd is None):
+        if self._proxy_server is None or self._tnc_writer is None:
             await self._close_proxy_client(writer)
             return
 
@@ -1027,39 +950,15 @@ class _TrafficModemRuntime:
                     ),
                 )
                 return
-            if self._tnc_serial_fd is not None:
-                serial_fd = self._tnc_serial_fd
-                log_event(
-                    "DEBUG",
-                    "traffic",
-                    (
-                        f"TX start on {self._runtime_label()} via serial fd={serial_fd}: "
-                        f"len={payload_length} cmd={command_text} frame={preview}"
-                    ),
-                )
-                await asyncio.to_thread(write_serial_data, serial_fd, chunk, drain=True)
-                if record_proxy_tx:
-                    self._consume_proxy_uplink_chunk(chunk)
-                log_event(
-                    "DEBUG",
-                    "traffic",
-                    (
-                        f"TX end on {self._runtime_label()} via serial fd={serial_fd}: "
-                        f"len={payload_length} cmd={command_text}"
-                    ),
-                )
-                return
             raise RuntimeError("TNC connection is not available.")
 
     async def _recover_from_tx_error(self, *, modem: dict[str, Any] | None, exc: OSError) -> None:
         async with self._tnc_write_lock:
             writer = self._tnc_writer
-            serial_fd = self._tnc_serial_fd
             self._tnc_writer = None
-            self._tnc_serial_fd = None
         message = (
             f"Transmit to {self._runtime_label(modem=modem)} failed: {exc}. "
-            f"Closing current link and reconnecting (serial_fd={serial_fd if serial_fd is not None else 'n/a'})."
+            "Closing current link and reconnecting."
         )
 
         if writer is not None:
@@ -1068,8 +967,6 @@ class _TrafficModemRuntime:
                 await writer.wait_closed()
             except OSError:
                 pass
-        if serial_fd is not None:
-            await asyncio.to_thread(close_serial_device, serial_fd)
 
         self._clear_kiss_buffers()
         self._set_state(
