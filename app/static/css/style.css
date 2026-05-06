@@ -1269,13 +1269,21 @@ body {
 }
 
 .statistics-devices-list-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: baseline;
-    justify-content: space-between;
     gap: 0.6rem;
     border-top: 1px solid var(--border);
     padding-top: 0.28rem;
     font-size: 0.82rem;
+}
+
+.statistics-list-index {
+    width: 1.8rem;
+    flex: 0 0 1.8rem;
+    text-align: right;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .statistics-devices-list-label {
@@ -1304,34 +1312,39 @@ body {
     color: var(--muted);
 }
 
-.statistics-users-table {
-    width: 100%;
+.statistics-users-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.3rem;
 }
 
-.statistics-users-table td.statistics-users-frames-cell,
-.statistics-users-table td.statistics-users-percent-cell {
-    text-align: right;
-    white-space: nowrap;
+.statistics-users-list-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.6rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.28rem;
+    font-size: 0.82rem;
 }
 
-.statistics-users-label-cell {
-    min-width: 0;
-}
-
-.statistics-users-label {
+.statistics-users-list-label {
     display: inline-flex;
     align-items: center;
     gap: 0.42rem;
     min-width: 0;
 }
 
-.statistics-users-color-marker {
-    display: inline-block;
-    width: 0.72rem;
-    height: 0.72rem;
-    border-radius: 0.16rem;
-    border: 1px solid color-mix(in srgb, var(--text) 24%, transparent);
-    flex: 0 0 auto;
+.statistics-users-list-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.statistics-users-list-value {
+    white-space: nowrap;
+    color: var(--muted);
 }
 
 .dashboard-activity-card {

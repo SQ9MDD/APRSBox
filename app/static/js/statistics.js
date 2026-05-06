@@ -10,8 +10,7 @@
     const heardCanvas = document.getElementById("statistics-heard-chart");
     const actionsCanvas = document.getElementById("statistics-actions-chart");
     const devicesCanvas = document.getElementById("statistics-devices-chart");
-    const usersTable = document.getElementById("statistics-users-table");
-    const usersTableBody = document.getElementById("statistics-users-table-body");
+    const usersListNode = document.getElementById("statistics-users-list");
     const frameEmptyNode = document.getElementById("statistics-frame-types-empty");
     const heardEmptyNode = document.getElementById("statistics-heard-empty");
     const actionsEmptyNode = document.getElementById("statistics-actions-empty");
@@ -315,6 +314,10 @@
             const row = document.createElement("li");
             row.className = "statistics-devices-list-item";
 
+            const indexNode = document.createElement("span");
+            indexNode.className = "statistics-list-index";
+            indexNode.textContent = String(index + 1);
+
             const labelNode = document.createElement("span");
             labelNode.className = "statistics-devices-list-label";
             const markerNode = document.createElement("span");
@@ -330,6 +333,7 @@
             valueNode.textContent = `${Math.round(item.count)} (${Number(item.percent).toFixed(1)}%)`;
             row.title = `${devicesTocallLabel}: ${item.tocall || "-"}`;
 
+            row.appendChild(indexNode);
             row.appendChild(labelNode);
             row.appendChild(valueNode);
             devicesListNode.appendChild(row);
@@ -542,40 +546,38 @@
         });
     };
 
-    const renderUsersTable = (items, colors) => {
-        if (!(usersTableBody instanceof HTMLElement)) {
+    const renderUsersList = (items, colors) => {
+        if (!(usersListNode instanceof HTMLElement)) {
             return;
         }
-        usersTableBody.textContent = "";
+        usersListNode.textContent = "";
         for (let index = 0; index < items.length; index += 1) {
             const item = items[index];
-            const row = document.createElement("tr");
+            const row = document.createElement("li");
+            row.className = "statistics-users-list-item";
 
-            const labelCell = document.createElement("td");
-            labelCell.className = "statistics-users-label-cell";
-            const labelWrapper = document.createElement("span");
-            labelWrapper.className = "statistics-users-label";
+            const indexNode = document.createElement("span");
+            indexNode.className = "statistics-list-index";
+            indexNode.textContent = String(index + 1);
+
+            const labelNode = document.createElement("span");
+            labelNode.className = "statistics-users-list-label";
             const markerNode = document.createElement("span");
-            markerNode.className = "statistics-users-color-marker";
+            markerNode.className = "statistics-devices-color-marker";
             markerNode.style.backgroundColor = String((Array.isArray(colors) && colors[index]) || "#8a8a8a");
             const labelTextNode = document.createElement("span");
             labelTextNode.textContent = String(item.label || item.key || "").trim().toUpperCase();
-            labelWrapper.appendChild(markerNode);
-            labelWrapper.appendChild(labelTextNode);
-            labelCell.appendChild(labelWrapper);
+            labelNode.appendChild(markerNode);
+            labelNode.appendChild(labelTextNode);
 
-            const framesCell = document.createElement("td");
-            framesCell.className = "statistics-users-frames-cell";
-            framesCell.textContent = String(Math.round(Number(item.count) || 0));
+            const valueNode = document.createElement("span");
+            valueNode.className = "statistics-users-list-value";
+            valueNode.textContent = `${Math.round(Number(item.count) || 0)} (${(Number(item.percent) || 0).toFixed(1)}%)`;
 
-            const percentCell = document.createElement("td");
-            percentCell.className = "statistics-users-percent-cell";
-            percentCell.textContent = `${(Number(item.percent) || 0).toFixed(1)}%`;
-
-            row.appendChild(labelCell);
-            row.appendChild(framesCell);
-            row.appendChild(percentCell);
-            usersTableBody.appendChild(row);
+            row.appendChild(indexNode);
+            row.appendChild(labelNode);
+            row.appendChild(valueNode);
+            usersListNode.appendChild(row);
         }
     };
 
@@ -584,11 +586,8 @@
         const items = normalizeUserItems(payloadValue && payloadValue.items, total);
         const hasData = total > 0 && items.length > 0;
         toggleEmptyState(usersEmptyNode, !hasData);
-        if (usersTable instanceof HTMLElement) {
-            usersTable.hidden = !hasData;
-        }
         const colors = hasData ? buildDeviceColors(items) : [];
-        renderUsersTable(hasData ? items : [], colors);
+        renderUsersList(hasData ? items : [], colors);
     };
 
     let payload = parseJsonPayload(payloadNode);

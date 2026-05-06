@@ -82,19 +82,10 @@
 
                 <section class="dashboard-activity-card statistics-users-card">
                     <div class="dashboard-activity-card-header">
-                        <h3>{{ t("TOP users") }}</h3>
+                        <h3>{{ t("TOP20 users") }}</h3>
                     </div>
                     <div class="empty-state muted" id="statistics-users-empty" hidden>{{ t("No data for selected range.") }}</div>
-                    <table class="data-table compact-table statistics-users-table" id="statistics-users-table" hidden>
-                        <thead>
-                            <tr>
-                                <th>CALLSIGN-SSID</th>
-                                <th>{{ t("Frames") }}</th>
-                                <th>%</th>
-                            </tr>
-                        </thead>
-                        <tbody id="statistics-users-table-body"></tbody>
-                    </table>
+                    <ul class="statistics-users-list" id="statistics-users-list"></ul>
                 </section>
             </aside>
         </div>
