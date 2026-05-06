@@ -7,6 +7,7 @@
 - `Statystyki / agregacja`: dla `1 dzień` używany jest bucket `1h`, a dla dłuższych zakresów bucket `1d`; poprawiono wyliczanie granic bucketów dziennych (UTC), aby bieżący dzień był widoczny w widokach `7 dni` i `30 dni`.
 - `Statystyki / TOP20 devices`: dodano numerację pozycji jako pierwszą kolumnę listy.
 - `Statystyki / TOP20 devices`: poprawiono semantykę zliczania na `unikalne CALLSIGN-SSID per urządzenie` w wybranym oknie czasu (bez przypisywania stacji wyłącznie do jednego „dominującego” urządzenia), co eliminuje zaniżanie liczników dla urządzeń takich jak `TH-D75`.
+- `Statystyki / TOP20 devices`: scalono duplikaty tego samego modelu wykryte przez różne identyfikatory (`TOCALL`/`Mic-E`) do jednej pozycji rankingu oraz ujednolicono `TOCALL APRS` jako `GENERIC APRS`, aby uniknąć równoległych pozycji `Unknown`/`Nieznany`.
 - `Statystyki / TOP20 users`: dodano nowy blok `TOP20 users` pod `TOP20 devices` (lista bez wykresu kołowego), z rankingiem `CALLSIGN-SSID` liczonym po liczbie ramek RX (`ramki (procent)`), numeracją pozycji i kolorowymi markerami.
 - `Statystyki / API`: dodano endpoint `GET /api/statistics/users` z obsługą `range` i `shift`, spójny z istniejącym mechanizmem odświeżania danych statystyk.
 - `I18N`: dodano/uzupełniono klucze tłumaczeń statystyk (`Back`, `Forward`, `aggregation`, `TOP20 users`) w `en/pl/tlh`.

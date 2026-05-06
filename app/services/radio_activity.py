@@ -623,6 +623,12 @@ def get_traffic_devices_statistics(
             labels_by_key[resolved_key] = resolved_label
             station_counts[resolved_key] = int(station_counts.get(resolved_key) or 0) + 1
 
+    station_counts, labels_by_key, tocall_counts_by_device = _merge_device_buckets_by_label(
+        station_counts=station_counts,
+        labels_by_key=labels_by_key,
+        tocall_counts_by_device=tocall_counts_by_device,
+    )
+
     total = sum(station_counts.values())
     items = _build_traffic_devices_items(
         counts=station_counts,
@@ -946,9 +952,76 @@ def _build_device_tocall_hints(tocall_counts_by_device: dict[str, dict[str, int]
             continue
         items.sort(key=lambda item: (-item[1], item[0]))
         top_destination_key = str(items[0][0]).strip().upper()
+        if top_destination_key == "APRS":
+            top_destination_key = "GENERIC APRS"
         if top_destination_key:
             hints[str(device_key).strip().upper()] = top_destination_key
     return hints
+
+
+def _merge_device_buckets_by_label(
+    *,
+    station_counts: dict[str, int],
+    labels_by_key: dict[str, str],
+    tocall_counts_by_device: dict[str, dict[str, int]],
+) -> tuple[dict[str, int], dict[str, str], dict[str, dict[str, int]]]:
+    special_keys = {
+        TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
+        TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY,
+        TRAFFIC_STATISTICS_DEVICES_OTHER_KEY,
+    }
+    merged_counts: dict[str, int] = {}
+    merged_labels: dict[str, str] = {}
+    merged_tocall_counts: dict[str, dict[str, int]] = {}
+    merged_key_by_label: dict[str, str] = {}
+
+    for raw_key, raw_count in dict(station_counts or {}).items():
+        normalized_key = str(raw_key or "").strip()
+        normalized_count = max(0, int(raw_count or 0))
+        if not normalized_key or normalized_count <= 0:
+            continue
+
+        label = str(labels_by_key.get(normalized_key) or normalized_key).strip() or normalized_key
+        if normalized_key in special_keys:
+            merged_key = normalized_key
+        else:
+            label_key = label.casefold()
+            existing_merged_key = merged_key_by_label.get(label_key)
+            if existing_merged_key is None:
+                merged_key = normalized_key
+                merged_key_by_label[label_key] = merged_key
+            else:
+                merged_key = existing_merged_key
+
+        merged_counts[merged_key] = int(merged_counts.get(merged_key) or 0) + normalized_count
+        if merged_key not in merged_labels:
+            merged_labels[merged_key] = label
+
+        per_device_tocalls = dict(tocall_counts_by_device.get(normalized_key) or {})
+        if not per_device_tocalls:
+            continue
+        merged_device_tocalls = merged_tocall_counts.get(merged_key)
+        if merged_device_tocalls is None:
+            merged_device_tocalls = {}
+            merged_tocall_counts[merged_key] = merged_device_tocalls
+        for destination_key, destination_count in per_device_tocalls.items():
+            normalized_destination = str(destination_key or "").strip().upper()
+            normalized_destination_count = max(0, int(destination_count or 0))
+            if not normalized_destination or normalized_destination_count <= 0:
+                continue
+            merged_device_tocalls[normalized_destination] = (
+                int(merged_device_tocalls.get(normalized_destination) or 0) + normalized_destination_count
+            )
+
+    for special_key, special_label in (
+        (TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY, TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL),
+        (TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY, TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL),
+        (TRAFFIC_STATISTICS_DEVICES_OTHER_KEY, TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL),
+    ):
+        if special_key in merged_counts and special_key not in merged_labels:
+            merged_labels[special_key] = special_label
+
+    return merged_counts, merged_labels, merged_tocall_counts
 
 
 def _resolve_statistics_device_bucket(
@@ -975,7 +1048,14 @@ def _resolve_statistics_device_bucket(
     if matched is not None:
         key = str(matched.get("actual_identifier") or normalized_destination).strip().upper() or normalized_destination
         label = str(matched.get("short_name") or matched.get("identified_as") or key).strip() or key
-        resolved = (key, label, True)
+        if key == "APRS" and label.casefold() == "unknown":
+            resolved = (
+                TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
+                TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
+                False,
+            )
+        else:
+            resolved = (key, label, True)
     else:
         resolved = (
             TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
