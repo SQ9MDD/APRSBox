@@ -575,7 +575,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                     interface_id=1,
                     direction="RX",
                     frame_format="TNC2",
-                    line="SP1AAA-1>QZ1234,WIDE1-1:>a",
+                    line="SP1AAA-1>APA001,WIDE1-1:>a",
                     created_at=(base_time + timedelta(seconds=index)).isoformat(),
                 )
 
@@ -584,7 +584,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 interface_id=1,
                 direction="RX",
                 frame_format="TNC2",
-                line="SP2BBB-2>WZ5678,WIDE1-1:>b",
+                line="SP2BBB-2>APA002,WIDE1-1:>b",
                 created_at=(base_time + timedelta(seconds=25)).isoformat(),
             )
             insert_frame(
@@ -592,7 +592,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 interface_id=1,
                 direction="RX",
                 frame_format="TNC2",
-                line="SP3CCC-3>XZ9ABC,WIDE1-1:>c",
+                line="SP3CCC-3>APA003,WIDE1-1:>c",
                 created_at=(base_time + timedelta(seconds=26)).isoformat(),
             )
             insert_frame(
@@ -600,7 +600,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 interface_id=1,
                 direction="RX",
                 frame_format="TNC2",
-                line="SP4DDD-4>YZ9AAA,WIDE1-1:>d",
+                line="SP4DDD-4>APA004,WIDE1-1:>d",
                 created_at=(base_time + timedelta(seconds=27)).isoformat(),
             )
             insert_frame(
@@ -608,7 +608,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 interface_id=1,
                 direction="RX",
                 frame_format="TNC2",
-                line="SP4DDD-4>YZ9BBB,WIDE1-1:>e",
+                line="SP4DDD-4>APA005,WIDE1-1:>e",
                 created_at=(base_time + timedelta(seconds=28)).isoformat(),
             )
 
@@ -874,6 +874,39 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             entries = list((unknown_item or {}).get("entries") or [])
             self.assertEqual(len(entries), 1)
             self.assertEqual(str((entries[0] or {}).get("callsign_ssid") or ""), "SP8AAA-1")
+            self.assertEqual(str((entries[0] or {}).get("tocall") or ""), "UNKNOWN")
+
+    def test_traffic_devices_collapses_non_tocall_destinations_to_unknown_pair(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            base_time = now_utc - timedelta(minutes=10)
+
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP5MRF-9>UR1P88,WIDE1-1:>x",
+                created_at=(base_time + timedelta(seconds=1)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP5MRF-9>UR1P89,WIDE1-1:>y",
+                created_at=(base_time + timedelta(seconds=2)).isoformat(),
+            )
+
+            payload = get_traffic_devices_statistics(range_value="24h")
+            self.assertEqual(int(payload.get("total") or 0), 1)
+            items = list(payload.get("items") or [])
+            unknown_item = next((item for item in items if str(item.get("key") or "") == "unknown"), None)
+            self.assertIsNotNone(unknown_item)
+            self.assertEqual(int((unknown_item or {}).get("count") or 0), 1)
+            entries = list((unknown_item or {}).get("entries") or [])
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(str((entries[0] or {}).get("callsign_ssid") or ""), "SP5MRF-9")
             self.assertEqual(str((entries[0] or {}).get("tocall") or ""), "UNKNOWN")
 
     def test_traffic_devices_top_list_is_capped_to_top_limit(self) -> None:

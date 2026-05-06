@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -54,6 +55,8 @@ TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL = "Mixed / Unknown"
 TRAFFIC_STATISTICS_DEVICES_OTHER_KEY = "other"
 TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL = "Other"
 TRAFFIC_STATISTICS_TOCALL_UNKNOWN = "UNKNOWN"
+_TRAFFIC_STATISTICS_TOCALL_RE = re.compile(r"^AP[A-Z0-9]{2,4}$")
+_TRAFFIC_STATISTICS_TOCALL_NON_AP_ALLOWED = frozenset({"PSKAPR"})
 TRAFFIC_STATISTICS_USERS_DEFAULT_TOP_LIMIT = 20
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
@@ -762,11 +765,13 @@ def record_traffic_device_station_observation(
     if not station_key:
         return
 
-    destination_key = _normalize_statistics_destination(str(parsed.get("logical_destination") or parsed.get("destination") or ""))
-    if not destination_key:
-        destination_key = TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
+    destination_candidate = _normalize_statistics_destination(
+        str(parsed.get("logical_destination") or parsed.get("destination") or "")
+    )
+    destination_key = _normalize_statistics_tocall(destination_candidate)
+    lookup_destination = destination_candidate if destination_key != TRAFFIC_STATISTICS_TOCALL_UNKNOWN else ""
     device_key, device_label, is_recognized = _resolve_statistics_device_bucket(
-        destination_key,
+        lookup_destination,
         str(parsed.get("logical_info") or parsed.get("info") or ""),
         database=get_aprs_device_identification_database(),
         cache={},
@@ -833,8 +838,9 @@ def _build_device_pair_observations_from_frame_rows(
             str(parsed.get("logical_destination") or parsed.get("destination") or "")
         )
         tocall = _normalize_statistics_tocall(normalized_destination)
+        lookup_destination = normalized_destination if tocall != TRAFFIC_STATISTICS_TOCALL_UNKNOWN else ""
         device_key, device_label, is_recognized = _resolve_statistics_device_bucket(
-            normalized_destination,
+            lookup_destination,
             str(parsed.get("logical_info") or parsed.get("info") or ""),
             database=database,
             cache=destination_cache,
@@ -953,7 +959,17 @@ def _normalize_statistics_tocall(value: Any) -> str:
         TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper(),
     }:
         return TRAFFIC_STATISTICS_TOCALL_UNKNOWN
+    if not _is_statistics_tocall_candidate(normalized):
+        return TRAFFIC_STATISTICS_TOCALL_UNKNOWN
     return normalized
+
+
+def _is_statistics_tocall_candidate(value: str) -> bool:
+    if not value:
+        return False
+    if value in _TRAFFIC_STATISTICS_TOCALL_NON_AP_ALLOWED:
+        return True
+    return _TRAFFIC_STATISTICS_TOCALL_RE.fullmatch(value) is not None
 
 
 def _normalize_traffic_device_last_seen(value: Any) -> str | None:
