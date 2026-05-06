@@ -626,6 +626,8 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             stations_payload = get_traffic_devices_statistics(range_value="24h")
             self.assertEqual(stations_payload.get("window"), "range")
             self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid_per_device")
+            self.assertEqual(int(stations_payload.get("unique_station_keys_total") or 0), 4)
+            self.assertEqual(int(stations_payload.get("unique_station_device_pairs_total") or 0), 4)
             self.assertEqual(int(stations_payload.get("total") or 0), 4)
             station_items = list(stations_payload.get("items") or [])
             station_counts = [int(item.get("count") or 0) for item in station_items]
@@ -771,6 +773,8 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             )
 
             payload = get_traffic_devices_statistics(range_value="24h")
+            self.assertEqual(int(payload.get("unique_station_keys_total") or 0), 2)
+            self.assertEqual(int(payload.get("unique_station_device_pairs_total") or 0), 2)
             items = list(payload.get("items") or [])
             tm_d700_item = next((item for item in items if str(item.get("label") or "") == "TM-D700"), None)
             self.assertIsNotNone(tm_d700_item)
@@ -848,6 +852,36 @@ class RadioActivityAggregatorTests(unittest.TestCase):
 
             shifted_payload = get_traffic_users_statistics(range_value="24h", shift_windows=1)
             self.assertEqual(int(shifted_payload.get("total") or 0), 0)
+
+    def test_traffic_users_statistics_aggregates_station_frames_across_multiple_device_keys(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            base_time = now_utc - timedelta(minutes=15)
+
+            for index in range(3):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP8AAA-1>APNK01,WIDE1-1:>d700-a",
+                    created_at=(base_time + timedelta(seconds=index)).isoformat(),
+                )
+            for index in range(2):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP8AAA-1>APK123,WIDE1-1:>d700-b",
+                    created_at=(base_time + timedelta(seconds=10 + index)).isoformat(),
+                )
+
+            payload = get_traffic_users_statistics(range_value="24h")
+            items = list(payload.get("items") or [])
+            self.assertGreaterEqual(len(items), 1)
+            self.assertEqual(str(items[0].get("key") or ""), "SP8AAA-1")
+            self.assertEqual(int(items[0].get("count") or 0), 5)
 
     def test_statistics_devices_api_supports_main_range_windows(self) -> None:
         if not FASTAPI_AVAILABLE:

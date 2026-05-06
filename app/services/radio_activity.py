@@ -624,6 +624,7 @@ def get_traffic_devices_statistics(
         resolve_group_key=resolve_group_key,
     )
 
+    unique_station_keys_total = len(station_votes)
     total = sum(station_counts.values())
     items = _build_traffic_devices_items(
         counts=station_counts,
@@ -637,6 +638,8 @@ def get_traffic_devices_statistics(
         "shift_windows": normalized_shift_windows,
         "window": "range",
         "count_basis": "unique_callsign_ssid_per_device",
+        "unique_station_keys_total": unique_station_keys_total,
+        "unique_station_device_pairs_total": total,
         "total": total,
         "top_limit": normalized_top_limit,
         "window_start_utc": window_start_utc.isoformat(),
