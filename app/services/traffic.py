@@ -32,6 +32,21 @@ SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS = set(range(0, 601, 30))
 SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
 IGNORED_KISS_DEBUG_PREVIEW_BYTES = 24
 IGNORED_KISS_DEBUG_INTERVAL_SECONDS = 30.0
+SERIAL_TX_DEBUG_PREVIEW_BYTES = 32
+SERIAL_CLOSE_SETTLE_SECONDS = 0.15
+KISS_RETURN = 0xFF
+
+
+def _kiss_frame_hex_preview(frame: bytes, *, max_bytes: int = SERIAL_TX_DEBUG_PREVIEW_BYTES) -> str:
+    if not frame:
+        return "<empty>"
+    if len(frame) <= max_bytes:
+        return frame.hex(" ").upper()
+    head_len = max_bytes // 2
+    tail_len = max_bytes - head_len
+    head = frame[:head_len].hex(" ").upper()
+    tail = frame[-tail_len:].hex(" ").upper()
+    return f"{head} ... {tail}"
 
 
 def _normalize_modem_type(value: Any) -> str:
@@ -103,9 +118,7 @@ class _TrafficModemRuntime:
         self._stop_event.set()
         await self._stop_proxy_server()
         if self._task is None:
-            if self._tnc_serial_fd is not None:
-                await asyncio.to_thread(close_serial_device, self._tnc_serial_fd)
-                self._tnc_serial_fd = None
+            await self._close_active_serial_fd(settle=True)
             return
         self._task.cancel()
         try:
@@ -122,9 +135,7 @@ class _TrafficModemRuntime:
                 ),
             )
         self._task = None
-        if self._tnc_serial_fd is not None:
-            await asyncio.to_thread(close_serial_device, self._tnc_serial_fd)
-            self._tnc_serial_fd = None
+        await self._close_active_serial_fd(settle=True)
 
     async def send_outbound_frame(self, *, interface_id: int | None, frame: bytes) -> bool:
         with self._lock:
@@ -140,6 +151,26 @@ class _TrafficModemRuntime:
         if active_interface_id != interface_id:
             return False
         try:
+            command = self._validate_outbound_kiss_frame(frame)
+        except ValueError as exc:
+            log_event(
+                "WARNING",
+                "traffic",
+                (
+                    f"Rejected outbound TX frame on {self._runtime_label(modem=modem)}: {exc}. "
+                    f"frame={_kiss_frame_hex_preview(frame)}"
+                ),
+            )
+            return False
+        log_event(
+            "DEBUG",
+            "traffic",
+            (
+                f"Outbound TX frame accepted on {self._runtime_label(modem=modem)}: "
+                f"len={len(frame)} cmd=0x{command:02X} frame={_kiss_frame_hex_preview(frame)}"
+            ),
+        )
+        try:
             await self._forward_client_chunk_to_tnc(frame)
         except OSError as exc:
             await self._recover_from_tx_error(modem=modem, exc=exc)
@@ -147,6 +178,21 @@ class _TrafficModemRuntime:
         except RuntimeError:
             return False
         return True
+
+    async def _close_active_serial_fd(self, *, settle: bool) -> None:
+        async with self._tnc_write_lock:
+            serial_fd = self._tnc_serial_fd
+            self._tnc_serial_fd = None
+        if serial_fd is None:
+            return
+        await asyncio.to_thread(close_serial_device, serial_fd)
+        log_event(
+            "DEBUG",
+            "traffic",
+            f"Closed serial handle fd={serial_fd} on {self._runtime_label()}",
+        )
+        if settle:
+            await asyncio.sleep(SERIAL_CLOSE_SETTLE_SECONDS)
 
     def is_running(self) -> bool:
         task = self._task
@@ -380,6 +426,11 @@ class _TrafficModemRuntime:
         self._set_state(status="connected", detail=connect_message, modem=modem, error=proxy_error)
         log_event("INFO", "traffic", connect_message)
         log_event(
+            "DEBUG",
+            "traffic",
+            f"Serial runtime handle ready on {self._runtime_label(modem=modem)}: fd={serial_fd}",
+        )
+        log_event(
             "INFO",
             "traffic",
             f"Serial RX reader started for {self._runtime_label(modem=modem)} on {device_path} ({baud_rate} baud)",
@@ -403,6 +454,12 @@ class _TrafficModemRuntime:
                 self._tnc_serial_fd = None
             await self._stop_proxy_server()
             await asyncio.to_thread(close_serial_device, serial_fd)
+            log_event(
+                "DEBUG",
+                "traffic",
+                f"Serial runtime handle released on {self._runtime_label(modem=modem)}: fd={serial_fd}",
+            )
+            await asyncio.sleep(SERIAL_CLOSE_SETTLE_SECONDS)
 
     async def _consume_connection(
         self,
@@ -791,6 +848,18 @@ class _TrafficModemRuntime:
 
         return callsign, has_been_repeated, last_address
 
+    def _validate_outbound_kiss_frame(self, frame: bytes) -> int:
+        if len(frame) < 3:
+            raise ValueError("KISS frame is too short.")
+        if frame[0] != KISS_FEND or frame[-1] != KISS_FEND:
+            raise ValueError("KISS frame must start and end with FEND 0xC0.")
+        command = frame[1]
+        if command == KISS_RETURN:
+            raise ValueError("KISS RETURN command 0xFF is not allowed on TX.")
+        if command != 0x00:
+            raise ValueError(f"KISS command byte must be 0x00 for data frames on port 0, got 0x{command:02X}.")
+        return command
+
     async def _sync_proxy_server(self, modem: dict[str, Any]) -> str | None:
         try:
             config = self._proxy_config_from_modem(modem)
@@ -933,49 +1002,65 @@ class _TrafficModemRuntime:
     async def _forward_client_chunk_to_tnc(self, chunk: bytes, *, record_proxy_tx: bool = False) -> None:
         async with self._tnc_write_lock:
             payload_length = len(chunk)
+            command = chunk[1] if payload_length >= 2 and chunk[0] == KISS_FEND else None
+            command_text = f"0x{command:02X}" if command is not None else "n/a"
+            preview = _kiss_frame_hex_preview(chunk)
             if self._tnc_writer is not None:
                 log_event(
-                    "INFO",
+                    "DEBUG",
                     "traffic",
-                    f"TX start on {self._runtime_label()} via TCP ({payload_length} bytes)",
+                    (
+                        f"TX start on {self._runtime_label()} via TCP: "
+                        f"len={payload_length} cmd={command_text} frame={preview}"
+                    ),
                 )
                 self._tnc_writer.write(chunk)
                 await self._tnc_writer.drain()
                 if record_proxy_tx:
                     self._consume_proxy_uplink_chunk(chunk)
                 log_event(
-                    "INFO",
+                    "DEBUG",
                     "traffic",
-                    f"TX end on {self._runtime_label()} via TCP ({payload_length} bytes)",
+                    (
+                        f"TX end on {self._runtime_label()} via TCP: "
+                        f"len={payload_length} cmd={command_text}"
+                    ),
                 )
                 return
             if self._tnc_serial_fd is not None:
+                serial_fd = self._tnc_serial_fd
                 log_event(
-                    "INFO",
+                    "DEBUG",
                     "traffic",
-                    f"TX start on {self._runtime_label()} via serial ({payload_length} bytes)",
+                    (
+                        f"TX start on {self._runtime_label()} via serial fd={serial_fd}: "
+                        f"len={payload_length} cmd={command_text} frame={preview}"
+                    ),
                 )
-                await asyncio.to_thread(write_serial_data, self._tnc_serial_fd, chunk, drain=True)
+                await asyncio.to_thread(write_serial_data, serial_fd, chunk, drain=True)
                 if record_proxy_tx:
                     self._consume_proxy_uplink_chunk(chunk)
                 log_event(
-                    "INFO",
+                    "DEBUG",
                     "traffic",
-                    f"TX end on {self._runtime_label()} via serial ({payload_length} bytes)",
+                    (
+                        f"TX end on {self._runtime_label()} via serial fd={serial_fd}: "
+                        f"len={payload_length} cmd={command_text}"
+                    ),
                 )
                 return
             raise RuntimeError("TNC connection is not available.")
 
     async def _recover_from_tx_error(self, *, modem: dict[str, Any] | None, exc: OSError) -> None:
-        message = (
-            f"Transmit to {self._runtime_label(modem=modem)} failed: {exc}. "
-            "Closing current link and reconnecting."
-        )
         async with self._tnc_write_lock:
             writer = self._tnc_writer
             serial_fd = self._tnc_serial_fd
             self._tnc_writer = None
             self._tnc_serial_fd = None
+        message = (
+            f"Transmit to {self._runtime_label(modem=modem)} failed: {exc}. "
+            f"Closing current link and reconnecting (serial_fd={serial_fd if serial_fd is not None else 'n/a'})."
+        )
 
         if writer is not None:
             writer.close()
@@ -1135,9 +1220,9 @@ class _TrafficModemRuntime:
                 "modem_id": int(modem["id"]) if modem and modem.get("id") is not None else self._modem_id,
                 "status": self._status,
                 "detail": self._status_detail,
-                "modem_name": str(modem.get("name") or "").strip() if modem else None,
-                "modem_endpoint": str(modem.get("device_path") or "").strip() if modem else None,
-                "band": str(modem.get("band") or "").strip() if modem else None,
+                "modem_name": str(modem.get("name") or "").strip() if modem else "",
+                "modem_endpoint": str(modem.get("device_path") or "").strip() if modem else "",
+                "band": str(modem.get("band") or "").strip() if modem else "",
                 "proxy_enabled": int(self._proxy_enabled),
                 "proxy_bind_address": self._proxy_bind_address,
                 "proxy_port": self._proxy_port,

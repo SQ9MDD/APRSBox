@@ -3,7 +3,9 @@ import contextlib
 import os
 import pty
 import select
+import threading
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -136,8 +138,36 @@ class KISSFrameEncodingTests(unittest.TestCase):
         self.assertTrue(frame.startswith(bytes([0xC0, 0x00])))
         self.assertEqual(frame[-1], 0xC0)
 
+    def test_build_tnc2_kiss_frame_uses_data_command_and_never_uses_kiss_return(self) -> None:
+        frame = build_tnc2_kiss_frame("SQ9MDD-7>APRS,WIDE1-1:>test")
+        self.assertEqual(frame[0], 0xC0)
+        self.assertEqual(frame[-1], 0xC0)
+        self.assertEqual(frame[1], 0x00)
+        self.assertNotEqual(frame[1], 0xFF)
+
 
 class SerialTxLockTests(unittest.IsolatedAsyncioTestCase):
+    async def test_serial_runtime_rejects_kiss_return_command_byte(self) -> None:
+        class _Writer:
+            def __init__(self) -> None:
+                self.writes: list[bytes] = []
+
+            def write(self, chunk: bytes) -> None:
+                self.writes.append(bytes(chunk))
+
+            async def drain(self) -> None:
+                return None
+
+        runtime = _TrafficModemRuntime(modem_id=1)
+        with runtime._lock:
+            runtime._active_modem = {"id": 1, "name": "Serial TNC"}
+        writer = _Writer()
+        runtime._tnc_writer = writer
+
+        result = await runtime.send_outbound_frame(interface_id=1, frame=b"\xC0\xFFA\xC0")
+        self.assertFalse(result)
+        self.assertEqual(writer.writes, [])
+
     async def test_serial_runtime_serializes_parallel_tx_writes(self) -> None:
         class _SlowWriter:
             def __init__(self) -> None:
@@ -187,6 +217,37 @@ class SerialTxLockTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0][0], 123)
         self.assertEqual(calls[0][1], b"\xC0\x00A\xC0")
         self.assertTrue(calls[0][3])
+
+    async def test_serial_runtime_serializes_parallel_writes_to_same_serial_fd(self) -> None:
+        runtime = _TrafficModemRuntime(modem_id=1)
+        with runtime._lock:
+            runtime._active_modem = {"id": 1, "name": "Serial TNC"}
+        runtime._tnc_serial_fd = 321
+
+        state_lock = threading.Lock()
+        in_flight = 0
+        max_in_flight = 0
+
+        def slow_write(fd: int, data: bytes, *, timeout: float = 1.0, drain: bool = False) -> None:
+            nonlocal in_flight, max_in_flight
+            _ = timeout
+            _ = drain
+            self.assertEqual(fd, 321)
+            self.assertTrue(data.startswith(b"\xC0\x00"))
+            with state_lock:
+                in_flight += 1
+                max_in_flight = max(max_in_flight, in_flight)
+            time.sleep(0.05)
+            with state_lock:
+                in_flight -= 1
+
+        with patch.object(traffic_module, "write_serial_data", side_effect=slow_write):
+            first = asyncio.create_task(runtime.send_outbound_frame(interface_id=1, frame=b"\xC0\x00A\xC0"))
+            second = asyncio.create_task(runtime.send_outbound_frame(interface_id=1, frame=b"\xC0\x00B\xC0"))
+            results = await asyncio.gather(first, second)
+
+        self.assertEqual(results, [True, True])
+        self.assertEqual(max_in_flight, 1)
 
 
 class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -251,18 +312,24 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
                 job = claim_next_outbound_job()
                 assert job is not None
-                await OutboundService()._process_job(job)
+                traffic_monitor = TrafficMonitorService(reconnect_delay=0.1)
+                try:
+                    await traffic_monitor.start()
+                    await wait_until(lambda: traffic_monitor.snapshot()["status"] == "connected", timeout=3.0)
+                    await OutboundService(traffic_monitor=traffic_monitor)._process_job(job)
 
-                runtime_job = get_outbound_job(int(job["id"]))
-                assert runtime_job is not None
-                expected_line = build_beacon_tnc2(runtime_job["payload"])
-                expected_frame = build_tnc2_kiss_frame(expected_line)
-                written_frame = await asyncio.to_thread(read_master_chunk, master_fd, timeout=1.0)
+                    runtime_job = get_outbound_job(int(job["id"]))
+                    assert runtime_job is not None
+                    expected_line = build_beacon_tnc2(runtime_job["payload"])
+                    expected_frame = build_tnc2_kiss_frame(expected_line)
+                    written_frame = await asyncio.to_thread(read_master_chunk, master_fd, timeout=1.0)
 
-                self.assertEqual(written_frame, expected_frame)
-                row = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
-                assert row is not None
-                self.assertEqual(row["status"], "sent")
+                    self.assertEqual(written_frame, expected_frame)
+                    row = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+                    assert row is not None
+                    self.assertEqual(row["status"], "sent")
+                finally:
+                    await traffic_monitor.stop()
 
     async def test_outbound_service_reuses_active_serial_monitor_connection(self) -> None:
         with temporary_database():
@@ -406,9 +473,9 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 finally:
                     await traffic_monitor.stop()
 
-    async def test_outbound_service_restarts_monitor_and_retries_serial_tx_once(self) -> None:
+    async def test_outbound_service_does_not_use_direct_serial_fallback_when_shared_runtime_send_fails(self) -> None:
         with temporary_database():
-            interface_id = insert_serial_modem(device_path="/dev/ttyUSB-mock-retry", baud_rate=9600)
+            interface_id = insert_serial_modem(device_path="/dev/ttyUSB-mock-shared-runtime", baud_rate=9600)
             update_station_settings(
                 {
                     "callsign": "sq9xyz",
@@ -445,20 +512,19 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             job = claim_next_outbound_job()
             assert job is not None
             traffic_monitor = TrafficMonitorService(reconnect_delay=0.1)
-            send_mock = AsyncMock(side_effect=[False, True])
+            send_mock = AsyncMock(return_value=False)
             restart_mock = AsyncMock()
             with patch.object(traffic_monitor, "send_outbound_frame", send_mock):
                 with patch.object(traffic_monitor, "restart", restart_mock):
                     await OutboundService(traffic_monitor=traffic_monitor)._process_job(job)
 
-            self.assertEqual(send_mock.await_count, 2)
+            self.assertEqual(send_mock.await_count, 1)
             self.assertEqual(send_mock.await_args_list[0].kwargs["interface_id"], interface_id)
-            self.assertEqual(send_mock.await_args_list[1].kwargs["interface_id"], interface_id)
-            restart_mock.assert_awaited_once()
+            restart_mock.assert_not_awaited()
             row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
             assert row is not None
-            self.assertEqual(str(row["status"]), "sent")
-            self.assertFalse(str(row["last_error"] or "").strip())
+            self.assertEqual(str(row["status"]), "failed")
+            self.assertIn("Serial TX must use the active shared runtime", str(row["last_error"] or ""))
 
     async def test_outbound_marks_digi_tx_failed_for_non_printable_aprs_payload(self) -> None:
         with temporary_database():
@@ -487,7 +553,7 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(row["status"]), "failed")
             self.assertIn("Invalid AX.25 callsign", str(row["last_error"] or ""))
 
-    async def test_outbound_direct_serial_tx_does_not_flush_input_buffer(self) -> None:
+    async def test_outbound_serial_tx_requires_active_traffic_monitor_runtime(self) -> None:
         with temporary_database():
             interface_id = insert_serial_modem(device_path="/dev/ttyUSB-mock", baud_rate=9600)
             execute(
@@ -507,14 +573,64 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             job = claim_next_outbound_job()
             assert job is not None
-            with patch("app.services.outbound_runtime.open_serial_device", return_value=101) as open_mock:
-                with patch("app.services.outbound_runtime.write_serial_data") as write_mock:
-                    with patch("app.services.outbound_runtime.close_serial_device") as close_mock:
-                        await OutboundService()._process_job(job)
+            await OutboundService()._process_job(job)
 
-            open_mock.assert_called_once_with("/dev/ttyUSB-mock", 9600, flush_buffers=False)
-            write_mock.assert_called_once()
-            close_mock.assert_called_once_with(101)
+            row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert row is not None
+            self.assertEqual(str(row["status"]), "failed")
+            self.assertIn("requires an active traffic monitor runtime", str(row["last_error"] or ""))
+
+    async def test_disable_enable_recreates_runtime_and_closes_old_serial_handle(self) -> None:
+        with temporary_database():
+            interface_id = insert_serial_modem(device_path="/dev/ttyUSB-lifecycle", baud_rate=9600)
+            opened_handles = [401, 402]
+            closed_handles: list[int] = []
+
+            def fake_open(path: str, baud_rate: int, *, flush_buffers: bool = True) -> int:
+                self.assertEqual(path, "/dev/ttyUSB-lifecycle")
+                self.assertEqual(baud_rate, 9600)
+                self.assertTrue(flush_buffers)
+                return opened_handles.pop(0)
+
+            def fake_close(fd: int | None, **_kwargs: object) -> None:
+                if fd is not None:
+                    closed_handles.append(int(fd))
+
+            def fake_read(_fd: int, *, max_bytes: int = 1024, timeout: float = 1.0) -> bytes:
+                _ = max_bytes
+                _ = timeout
+                return b""
+
+            def fake_write(_fd: int, _data: bytes, *, timeout: float = 1.0, drain: bool = False) -> None:
+                _ = timeout
+                _ = drain
+
+            service = TrafficMonitorService(reconnect_delay=0.1)
+            with patch.object(traffic_module, "open_serial_device", side_effect=fake_open):
+                with patch.object(traffic_module, "close_serial_device", side_effect=fake_close):
+                    with patch.object(traffic_module, "read_serial_chunk", side_effect=fake_read):
+                        with patch.object(traffic_module, "write_serial_data", side_effect=fake_write):
+                            try:
+                                await service.start()
+                                await wait_until(
+                                    lambda: service.snapshot()["status"] == "connected" and service.snapshot()["modem_count"] == 1,
+                                    timeout=3.0,
+                                )
+
+                                execute("UPDATE modems SET enabled = 0 WHERE id = ?", (interface_id,))
+                                await wait_until(lambda: service.snapshot()["modem_count"] == 0, timeout=4.0)
+
+                                execute("UPDATE modems SET enabled = 1 WHERE id = ?", (interface_id,))
+                                await wait_until(
+                                    lambda: service.snapshot()["status"] == "connected" and service.snapshot()["modem_count"] == 1,
+                                    timeout=4.0,
+                                )
+                            finally:
+                                await service.stop()
+
+            self.assertEqual(opened_handles, [])
+            self.assertIn(401, closed_handles)
+            self.assertIn(402, closed_handles)
 
     async def test_tx_failure_triggers_reconnect_and_rx_continues(self) -> None:
         with temporary_database():
