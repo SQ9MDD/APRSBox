@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,6 +27,7 @@ OUTBOUND_STATUS_SENT = "sent"
 OUTBOUND_STATUS_FAILED = "failed"
 STALE_BEACON_PROCESSING_REASON = "Beacon was not transmitted: APRSBox core restarted while outbound job was processing."
 STALE_WX_PROCESSING_REASON = "WX frame was not transmitted: APRSBox core restarted while outbound job was processing."
+_AX25_CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -889,6 +891,7 @@ def latest_message_dispatch_at() -> datetime | None:
 
 def build_tnc2_kiss_frame(line: str) -> bytes:
     source, destination, path, info = _parse_tnc2_line(line)
+    _validate_aprs_info_field(info)
     ax25 = bytearray()
     addresses = [_encode_ax25_address(destination, is_last=False), _encode_ax25_address(source, is_last=not bool(path))]
     if path:
@@ -917,6 +920,15 @@ def build_tnc2_kiss_frame(line: str) -> bytes:
         else:
             escaped.append(byte)
     return bytes([KISS_FEND]) + bytes(escaped) + bytes([KISS_FEND])
+
+
+def _validate_aprs_info_field(info: str) -> None:
+    if not info:
+        raise ValueError("Invalid TNC2 frame: missing APRS info payload.")
+    for char in info:
+        codepoint = ord(char)
+        if codepoint < 32 or codepoint > 126:
+            raise ValueError("APRS info field must contain printable ASCII characters only.")
 
 
 def _parse_coordinate(value: Any) -> float | None:
@@ -1101,7 +1113,7 @@ def _encode_ax25_address(value: str, *, is_last: bool, has_been_repeated: bool =
 def _split_callsign_ssid(value: str) -> tuple[str, int]:
     normalized = value.strip().upper()
     base, separator, ssid_text = normalized.partition("-")
-    if not base:
+    if not base or not _AX25_CALLSIGN_RE.fullmatch(base):
         raise ValueError("Invalid AX.25 callsign.")
     ssid = 0
     if separator:
@@ -1111,7 +1123,7 @@ def _split_callsign_ssid(value: str) -> tuple[str, int]:
             raise ValueError("Invalid AX.25 SSID.") from exc
         if ssid < 0 or ssid > 15:
             raise ValueError("AX.25 SSID out of range.")
-    return base[:6], ssid
+    return base, ssid
 
 
 def _enqueue_generic_message_payload(

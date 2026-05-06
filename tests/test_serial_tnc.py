@@ -121,12 +121,19 @@ class KISSFrameEncodingTests(unittest.TestCase):
             ):
                 frame = build_tnc2_kiss_frame("SRC>DST:PAYLOAD")
         payload = frame[1:-1]
-
         self.assertEqual(frame[0], 0xC0)
         self.assertEqual(frame[-1], 0xC0)
         self.assertIn(bytes([0xDB, 0xDC]), payload)
         self.assertIn(bytes([0xDB, 0xDD]), payload)
         self.assertNotIn(bytes([0xC0]), payload)
+
+    def test_build_tnc2_kiss_frame_rejects_invalid_ax25_callsign(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Invalid AX.25 callsign"):
+            build_tnc2_kiss_frame("SQ9XYZ-9>AP?RS:>Test")
+
+    def test_build_tnc2_kiss_frame_rejects_non_printable_info(self) -> None:
+        with self.assertRaisesRegex(ValueError, "printable ASCII characters"):
+            build_tnc2_kiss_frame("SQ9XYZ-9>APRS:>Test\u00f3")
 
 
 class SerialTxLockTests(unittest.IsolatedAsyncioTestCase):
@@ -451,6 +458,33 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert row is not None
             self.assertEqual(str(row["status"]), "sent")
             self.assertFalse(str(row["last_error"] or "").strip())
+
+    async def test_outbound_marks_digi_tx_failed_for_non_printable_aprs_payload(self) -> None:
+        with temporary_database():
+            interface_id = insert_serial_modem(device_path="/dev/ttyUSB-mock", baud_rate=9600)
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES (
+                    'digi_tx', ?, '{"line":"SQ9XYZ-9>APRS:>Test\\u00f3"}',
+                    'queued', '2026-01-01T00:00:00+00:00',
+                    NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                )
+                """,
+                (interface_id,),
+            )
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            await OutboundService()._process_job(job)
+
+            row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert row is not None
+            self.assertEqual(str(row["status"]), "failed")
+            self.assertIn("printable ASCII", str(row["last_error"] or ""))
 
     async def test_outbound_direct_serial_tx_does_not_flush_input_buffer(self) -> None:
         with temporary_database():
