@@ -273,6 +273,8 @@
   "Last h": "Last h",
   "All time": "All time",
   "Unique CALLSIGN-SSID stations": "Unique CALLSIGN-SSID stations per device",
+  "Stations (TOCALL)": "Stations (TOCALL)",
+  "Stations (model)": "Stations (model)",
   "Mixed / Unknown": "Mixed / Unknown",
   "Other": "Other",
   "No data for selected range.": "No data for selected range.",

@@ -618,8 +618,11 @@ def get_traffic_devices_statistics(
 
     resolve_group_key, grouped_labels_by_key = _build_device_group_key_resolver(labels_by_key=labels_by_key)
 
-    station_counts: dict[str, int] = {}
-    for station_bucket in station_votes.values():
+    station_keys_by_group: dict[str, set[str]] = {}
+    for station_key, station_bucket in station_votes.items():
+        normalized_station_key = _normalize_station_key_for_devices(station_key)
+        if not normalized_station_key:
+            continue
         counts_by_key = dict(station_bucket.get("counts") or {})
         counted_group_keys_for_station: set[str] = set()
         for raw_device_key, raw_count in counts_by_key.items():
@@ -629,7 +632,17 @@ def get_traffic_devices_statistics(
             if group_key in counted_group_keys_for_station:
                 continue
             counted_group_keys_for_station.add(group_key)
-            station_counts[group_key] = int(station_counts.get(group_key) or 0) + 1
+            group_station_keys = station_keys_by_group.get(group_key)
+            if group_station_keys is None:
+                group_station_keys = set()
+                station_keys_by_group[group_key] = group_station_keys
+            group_station_keys.add(normalized_station_key)
+
+    station_counts: dict[str, int] = {
+        group_key: len(station_keys)
+        for group_key, station_keys in station_keys_by_group.items()
+        if station_keys
+    }
 
     grouped_tocall_counts_by_device = _merge_device_tocall_counts_by_group(
         tocall_counts_by_device=tocall_counts_by_device,
@@ -647,6 +660,7 @@ def get_traffic_devices_statistics(
         labels_by_key=grouped_labels_by_key,
         total=total,
         top_limit=normalized_top_limit,
+        station_keys_by_key=station_keys_by_group,
         tocall_meta_by_key=_build_device_tocall_hints(
             tocall_counts_by_device=grouped_tocall_counts_by_device,
             tocall_station_keys_by_device=grouped_tocall_station_keys_by_device,
@@ -1201,6 +1215,7 @@ def _build_traffic_devices_items(
     labels_by_key: dict[str, str],
     total: int,
     top_limit: int,
+    station_keys_by_key: dict[str, set[str]] | None = None,
     tocall_meta_by_key: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     if total <= 0:
@@ -1216,12 +1231,12 @@ def _build_traffic_devices_items(
     items: list[dict[str, Any]] = []
     normalized_top_limit = max(1, int(top_limit))
     remaining_items = ranked_items
-    if len(ranked_items) > normalized_top_limit:
+    if len(ranked_items) > normalized_top_limit and normalized_top_limit > 1:
         selected_items = ranked_items[:normalized_top_limit - 1]
         remaining_items = ranked_items[normalized_top_limit - 1:]
     else:
-        selected_items = ranked_items
-        remaining_items = []
+        selected_items = ranked_items[:normalized_top_limit]
+        remaining_items = ranked_items[normalized_top_limit:]
 
     hints_by_key = {
         str(key).strip().upper(): dict(value or {})
@@ -1231,6 +1246,11 @@ def _build_traffic_devices_items(
     for key, count in selected_items:
         label = str(labels_by_key.get(key) or key).strip() or key
         key_hint = hints_by_key.get(str(key).strip().upper()) or {}
+        model_station_keys = sorted(
+            _normalize_station_key_for_devices(station_key)
+            for station_key in set((station_keys_by_key or {}).get(key) or set())
+            if _normalize_station_key_for_devices(station_key)
+        )
         items.append(
             _traffic_devices_item(
                 key=key,
@@ -1238,7 +1258,8 @@ def _build_traffic_devices_items(
                 count=count,
                 total=total,
                 tocall=key_hint.get("tocall"),
-                stations=key_hint.get("stations"),
+                stations_tocall=key_hint.get("stations"),
+                stations_model=model_station_keys,
             )
         )
 
@@ -1251,7 +1272,12 @@ def _build_traffic_devices_items(
                 count=other_count,
                 total=total,
                 tocall=(hints_by_key.get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper()) or {}).get("tocall"),
-                stations=(hints_by_key.get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper()) or {}).get("stations"),
+                stations_tocall=(hints_by_key.get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper()) or {}).get("stations"),
+                stations_model=sorted(
+                    _normalize_station_key_for_devices(station_key)
+                    for station_key in set((station_keys_by_key or {}).get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY) or set())
+                    if _normalize_station_key_for_devices(station_key)
+                ),
             )
         )
     return items
@@ -1264,7 +1290,8 @@ def _traffic_devices_item(
     count: int,
     total: int,
     tocall: str | None = None,
-    stations: Any = None,
+    stations_tocall: Any = None,
+    stations_model: Any = None,
 ) -> dict[str, Any]:
     normalized_count = max(0, int(count))
     normalized_total = max(0, int(total))
@@ -1278,9 +1305,14 @@ def _traffic_devices_item(
         "percent": percent,
         "ident": str(key or "").strip() or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
         "tocall": str(tocall or "").strip().upper() or None,
-        "stations": [
+        "stations_tocall": [
             _normalize_station_key_for_devices(station_key)
-            for station_key in list(stations or [])
+            for station_key in list(stations_tocall or [])
+            if _normalize_station_key_for_devices(station_key)
+        ],
+        "stations_model": [
+            _normalize_station_key_for_devices(station_key)
+            for station_key in list(stations_model or [])
             if _normalize_station_key_for_devices(station_key)
         ],
     }

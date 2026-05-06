@@ -800,7 +800,8 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             self.assertIsNotNone(unknown_item)
             self.assertEqual(str((unknown_item or {}).get("tocall") or ""), "GENERIC APRS")
             self.assertEqual(str((unknown_item or {}).get("ident") or ""), "unknown")
-            self.assertIn("SP8AAA-1", list((unknown_item or {}).get("stations") or []))
+            self.assertIn("SP8AAA-1", list((unknown_item or {}).get("stations_tocall") or []))
+            self.assertIn("SP8AAA-1", list((unknown_item or {}).get("stations_model") or []))
 
     def test_traffic_devices_top_list_is_capped_to_top_limit(self) -> None:
         with temporary_database():

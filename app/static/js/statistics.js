@@ -42,7 +42,8 @@
     const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
     const devicesTocallLabel = String(root.dataset.devicesTocallLabel || "TOCALL");
     const devicesIdentLabel = String(root.dataset.devicesIdentLabel || "Identifier");
-    const devicesStationsLabel = String(root.dataset.devicesStationsLabel || "Stations");
+    const devicesStationsTocallLabel = String(root.dataset.devicesStationsTocallLabel || "Stations (TOCALL)");
+    const devicesStationsModelLabel = String(root.dataset.devicesStationsModelLabel || "Stations (model)");
     const devicesLabelOther = String(root.dataset.devicesLabelOther || "Other");
     const devicesLabelUnknown = String(root.dataset.devicesLabelUnknown || "Unknown");
     const devicesLabelMixedUnknown = String(root.dataset.devicesLabelMixedUnknown || "Mixed / Unknown");
@@ -261,8 +262,19 @@
                 percent,
                 ident: String(item && item.ident ? item.ident : key).trim().toUpperCase() || key.toUpperCase(),
                 tocall: String(item && item.tocall ? item.tocall : "").trim().toUpperCase(),
-                stations: Array.isArray(item && item.stations)
-                    ? item.stations
+                stationsTocall: Array.isArray(item && item.stations_tocall)
+                    ? item.stations_tocall
+                        .map((value) => String(value || "").trim().toUpperCase())
+                        .filter((value) => value.length > 0)
+                    : (
+                        Array.isArray(item && item.stations)
+                            ? item.stations
+                                .map((value) => String(value || "").trim().toUpperCase())
+                                .filter((value) => value.length > 0)
+                            : []
+                    ),
+                stationsModel: Array.isArray(item && item.stations_model)
+                    ? item.stations_model
                         .map((value) => String(value || "").trim().toUpperCase())
                         .filter((value) => value.length > 0)
                     : [],
@@ -343,9 +355,15 @@
                 `${devicesTocallLabel}: ${item.tocall || "-"}`,
                 `${devicesIdentLabel}: ${item.ident || "-"}`,
             ];
-            if (Array.isArray(item.stations) && item.stations.length > 0) {
-                tooltipLines.push(`${devicesStationsLabel}:`);
-                for (const stationKey of item.stations) {
+            if (Array.isArray(item.stationsTocall) && item.stationsTocall.length > 0) {
+                tooltipLines.push(`${devicesStationsTocallLabel}:`);
+                for (const stationKey of item.stationsTocall) {
+                    tooltipLines.push(stationKey);
+                }
+            }
+            if (Array.isArray(item.stationsModel) && item.stationsModel.length > 0) {
+                tooltipLines.push(`${devicesStationsModelLabel}:`);
+                for (const stationKey of item.stationsModel) {
                     tooltipLines.push(stationKey);
                 }
             }
