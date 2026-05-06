@@ -131,9 +131,10 @@ class KISSFrameEncodingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Invalid AX.25 callsign"):
             build_tnc2_kiss_frame("SQ9XYZ-9>AP?RS:>Test")
 
-    def test_build_tnc2_kiss_frame_rejects_non_printable_info(self) -> None:
-        with self.assertRaisesRegex(ValueError, "printable ASCII characters"):
-            build_tnc2_kiss_frame("SQ9XYZ-9>APRS:>Test\u00f3")
+    def test_build_tnc2_kiss_frame_keeps_control_bytes_in_info(self) -> None:
+        frame = build_tnc2_kiss_frame("SQ9XYZ-9>APRS:'0SWl \x1c[/>144.800MHz op. Rysiek&")
+        self.assertTrue(frame.startswith(bytes([0xC0, 0x00])))
+        self.assertEqual(frame[-1], 0xC0)
 
 
 class SerialTxLockTests(unittest.IsolatedAsyncioTestCase):
@@ -469,7 +470,7 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
                 )
                 VALUES (
-                    'digi_tx', ?, '{"line":"SQ9XYZ-9>APRS:>Test\\u00f3"}',
+                    'digi_tx', ?, '{"line":"SQ9XYZ-9>AP?RS:>Bad destination"}',
                     'queued', '2026-01-01T00:00:00+00:00',
                     NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
                 )
@@ -484,7 +485,7 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
             assert row is not None
             self.assertEqual(str(row["status"]), "failed")
-            self.assertIn("printable ASCII", str(row["last_error"] or ""))
+            self.assertIn("Invalid AX.25 callsign", str(row["last_error"] or ""))
 
     async def test_outbound_direct_serial_tx_does_not_flush_input_buffer(self) -> None:
         with temporary_database():

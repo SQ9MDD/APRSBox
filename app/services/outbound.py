@@ -891,7 +891,6 @@ def latest_message_dispatch_at() -> datetime | None:
 
 def build_tnc2_kiss_frame(line: str) -> bytes:
     source, destination, path, info = _parse_tnc2_line(line)
-    _validate_aprs_info_field(info)
     ax25 = bytearray()
     addresses = [_encode_ax25_address(destination, is_last=False), _encode_ax25_address(source, is_last=not bool(path))]
     if path:
@@ -920,15 +919,6 @@ def build_tnc2_kiss_frame(line: str) -> bytes:
         else:
             escaped.append(byte)
     return bytes([KISS_FEND]) + bytes(escaped) + bytes([KISS_FEND])
-
-
-def _validate_aprs_info_field(info: str) -> None:
-    if not info:
-        raise ValueError("Invalid TNC2 frame: missing APRS info payload.")
-    for char in info:
-        codepoint = ord(char)
-        if codepoint < 32 or codepoint > 126:
-            raise ValueError("APRS info field must contain printable ASCII characters only.")
 
 
 def _parse_coordinate(value: Any) -> float | None:
