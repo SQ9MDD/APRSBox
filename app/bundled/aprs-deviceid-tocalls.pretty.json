@@ -812,7 +812,7 @@
       },
       "APY400" : {
          "vendor" : "Yaesu",
-         "model" : "FTM-400",
+         "model" : "FTM-400DR",
          "class" : "rig"
       },
       "APBPQ?" : {
