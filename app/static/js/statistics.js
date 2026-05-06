@@ -386,15 +386,7 @@
                 if (!callsignSsid) {
                     continue;
                 }
-                const rawTocalls = Array.isArray(entry && entry.tocalls) ? entry.tocalls : [];
-                const normalizedTocalls = rawTocalls
-                    .map((value) => String(value || "").trim().toUpperCase())
-                    .filter((value) => value.length > 0);
-                const displayTocalls = normalizedTocalls.length > 0 ? normalizedTocalls : ["UNKNOWN"];
-                const tocallLabel = displayTocalls
-                    .map((value) => (value === "UNKNOWN" ? devicesLabelUnknown : value))
-                    .join(", ");
-                tooltipLines.push(`${callsignSsid} • ${devicesTocallLabel}: ${tocallLabel}`);
+                tooltipLines.push(callsignSsid);
             }
             row.title = tooltipLines.join("\n");
 
