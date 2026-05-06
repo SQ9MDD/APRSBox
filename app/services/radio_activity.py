@@ -53,6 +53,7 @@ TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY = "mixed_unknown"
 TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL = "Mixed / Unknown"
 TRAFFIC_STATISTICS_DEVICES_OTHER_KEY = "other"
 TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL = "Other"
+TRAFFIC_STATISTICS_TOCALL_UNKNOWN = "UNKNOWN"
 TRAFFIC_STATISTICS_USERS_DEFAULT_TOP_LIMIT = 20
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
@@ -576,11 +577,7 @@ def get_traffic_devices_statistics(
         TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY: TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL,
         TRAFFIC_STATISTICS_DEVICES_OTHER_KEY: TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL,
     }
-    (
-        station_votes_buffer,
-        tocall_counts_by_device_buffer,
-        tocall_station_keys_by_device_buffer,
-    ) = _build_station_votes_from_hourly_buffer(
+    observations_from_buffer = _build_device_pair_observations_from_hourly_buffer(
         window_start_utc=window_start_utc,
         window_end_utc=window_end_utc,
         labels_by_key=labels_by_key,
@@ -596,83 +593,60 @@ def get_traffic_devices_statistics(
         """,
         (window_start_utc.isoformat(), window_end_utc.isoformat()),
     )
-    (
-        station_votes_frames,
-        tocall_counts_by_device_frames,
-        tocall_station_keys_by_device_frames,
-    ) = _build_station_votes_from_frame_rows(
+    observations_from_frames = _build_device_pair_observations_from_frame_rows(
         frame_rows=frame_rows,
         labels_by_key=labels_by_key,
         database=get_aprs_device_identification_database(),
     )
-
-    # Prefer richer dataset while buffer is warming up after deploy/restart.
-    if len(station_votes_frames) > len(station_votes_buffer):
-        station_votes = station_votes_frames
-        tocall_counts_by_device = tocall_counts_by_device_frames
-        tocall_station_keys_by_device = tocall_station_keys_by_device_frames
-    else:
-        station_votes = station_votes_buffer
-        tocall_counts_by_device = tocall_counts_by_device_buffer
-        tocall_station_keys_by_device = tocall_station_keys_by_device_buffer
-
     resolve_group_key, grouped_labels_by_key = _build_device_group_key_resolver(labels_by_key=labels_by_key)
-
-    station_keys_by_group: dict[str, set[str]] = {}
-    for station_key, station_bucket in station_votes.items():
-        normalized_station_key = _normalize_station_key_for_devices(station_key)
-        if not normalized_station_key:
+    pair_assignments = _resolve_unique_station_tocall_pair_assignments(
+        observations=[*observations_from_buffer, *observations_from_frames],
+        resolve_group_key=resolve_group_key,
+    )
+    entries_by_group: dict[str, list[dict[str, Any]]] = {}
+    unique_station_keys: set[str] = set()
+    for assignment in pair_assignments.values():
+        group_key = str(assignment.get("group_key") or "").strip()
+        station_key = _normalize_station_key_for_devices(assignment.get("callsign_ssid"))
+        tocall = _normalize_statistics_tocall(assignment.get("tocall"))
+        if not group_key or not station_key:
             continue
-        counts_by_key = dict(station_bucket.get("counts") or {})
-        counted_group_keys_for_station: set[str] = set()
-        for raw_device_key, raw_count in counts_by_key.items():
-            if int(raw_count or 0) <= 0:
-                continue
-            group_key = resolve_group_key(raw_device_key)
-            if group_key in counted_group_keys_for_station:
-                continue
-            counted_group_keys_for_station.add(group_key)
-            group_station_keys = station_keys_by_group.get(group_key)
-            if group_station_keys is None:
-                group_station_keys = set()
-                station_keys_by_group[group_key] = group_station_keys
-            group_station_keys.add(normalized_station_key)
-
-    station_counts: dict[str, int] = {
-        group_key: len(station_keys)
-        for group_key, station_keys in station_keys_by_group.items()
-        if station_keys
+        unique_station_keys.add(station_key)
+        group_entries = entries_by_group.get(group_key)
+        if group_entries is None:
+            group_entries = []
+            entries_by_group[group_key] = group_entries
+        group_entries.append(
+            {
+                "callsign_ssid": station_key,
+                "tocall": tocall,
+                "model_key": str(assignment.get("model_key") or "").strip().upper() or None,
+                "model_label": str(assignment.get("model_label") or "").strip() or None,
+                "last_seen": _normalize_traffic_device_last_seen(assignment.get("last_seen")),
+            }
+        )
+    counts_by_group = {
+        group_key: len(_normalize_traffic_device_entries(group_entries))
+        for group_key, group_entries in entries_by_group.items()
+        if group_entries
     }
-
-    grouped_tocall_counts_by_device = _merge_device_tocall_counts_by_group(
-        tocall_counts_by_device=tocall_counts_by_device,
-        resolve_group_key=resolve_group_key,
-    )
-    grouped_tocall_station_keys_by_device = _merge_device_tocall_station_keys_by_group(
-        tocall_station_keys_by_device=tocall_station_keys_by_device,
-        resolve_group_key=resolve_group_key,
-    )
-
-    unique_station_keys_total = len(station_votes)
-    total = sum(station_counts.values())
+    total = sum(counts_by_group.values())
+    unique_station_keys_total = len(unique_station_keys)
     items = _build_traffic_devices_items(
-        counts=station_counts,
+        counts=counts_by_group,
         labels_by_key=grouped_labels_by_key,
         total=total,
         top_limit=normalized_top_limit,
-        station_keys_by_key=station_keys_by_group,
-        tocall_meta_by_key=_build_device_tocall_hints(
-            tocall_counts_by_device=grouped_tocall_counts_by_device,
-            tocall_station_keys_by_device=grouped_tocall_station_keys_by_device,
-        ),
+        entries_by_key=entries_by_group,
     )
     return {
         "range": normalized_range,
         "shift_windows": normalized_shift_windows,
         "window": "range",
-        "count_basis": "unique_callsign_ssid_per_device",
+        "count_basis": "unique_callsign_ssid_tocall_pairs",
         "unique_station_keys_total": unique_station_keys_total,
         "unique_station_device_pairs_total": total,
+        "unique_callsign_ssid_tocall_pairs_total": total,
         "total": total,
         "top_limit": normalized_top_limit,
         "window_start_utc": window_start_utc.isoformat(),
@@ -834,21 +808,14 @@ def record_traffic_device_station_observation(
         )
 
 
-def _build_station_votes_from_frame_rows(
+def _build_device_pair_observations_from_frame_rows(
     *,
     frame_rows: list[dict[str, Any]],
     labels_by_key: dict[str, str],
     database: Any,
-) -> tuple[
-    dict[str, dict[str, Any]],
-    dict[str, dict[str, int]],
-    dict[str, dict[str, set[str]]],
-]:
-    station_votes: dict[str, dict[str, Any]] = {}
-    tocall_counts_by_device: dict[str, dict[str, int]] = {}
-    tocall_station_keys_by_device: dict[str, dict[str, set[str]]] = {}
+) -> list[dict[str, Any]]:
+    observations: list[dict[str, Any]] = []
     destination_cache: dict[str, tuple[str, str, bool]] = {}
-
     for row in frame_rows:
         frame_format = str(row["format"] or "").strip().upper()
         direction = _normalize_direction(row["direction"], frame_format)
@@ -857,53 +824,44 @@ def _build_station_votes_from_frame_rows(
         parsed = parse_tnc2_frame(str(row["line"] or ""))
         if parsed is None:
             continue
-        station_key = _normalize_station_key_for_devices(parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or "")
+        station_key = _normalize_station_key_for_devices(
+            parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or ""
+        )
         if not station_key:
             continue
-        destination_key = _normalize_statistics_destination(str(parsed.get("logical_destination") or parsed.get("destination") or ""))
-        if not destination_key:
-            destination_key = TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
-        device_key, device_label, _is_recognized = _resolve_statistics_device_bucket(
-            destination_key,
+        normalized_destination = _normalize_statistics_destination(
+            str(parsed.get("logical_destination") or parsed.get("destination") or "")
+        )
+        tocall = _normalize_statistics_tocall(normalized_destination)
+        device_key, device_label, is_recognized = _resolve_statistics_device_bucket(
+            normalized_destination,
             str(parsed.get("logical_info") or parsed.get("info") or ""),
             database=database,
             cache=destination_cache,
         )
         labels_by_key[device_key] = device_label
-        _accumulate_device_tocall_count(
-            tocall_counts_by_device=tocall_counts_by_device,
-            device_key=device_key,
-            destination_key=destination_key,
-            count_delta=1,
+        observations.append(
+            {
+                "callsign_ssid": station_key,
+                "tocall": tocall,
+                "model_key": device_key,
+                "model_label": device_label,
+                "recognized": bool(is_recognized),
+                "last_seen": _normalize_traffic_device_last_seen(row["created_at"]),
+            }
         )
-        _accumulate_device_tocall_station_key(
-            tocall_station_keys_by_device=tocall_station_keys_by_device,
-            device_key=device_key,
-            destination_key=destination_key,
-            station_key=station_key,
-        )
-        _accumulate_station_vote(
-            station_votes=station_votes,
-            station_key=station_key,
-            device_key=device_key,
-            votes_to_add=1,
-        )
-    return station_votes, tocall_counts_by_device, tocall_station_keys_by_device
+    return observations
 
 
-def _build_station_votes_from_hourly_buffer(
+def _build_device_pair_observations_from_hourly_buffer(
     *,
     window_start_utc: datetime,
     window_end_utc: datetime,
     labels_by_key: dict[str, str],
-) -> tuple[
-    dict[str, dict[str, Any]],
-    dict[str, dict[str, int]],
-    dict[str, dict[str, set[str]]],
-]:
+) -> list[dict[str, Any]]:
     rows = fetch_all(
         """
-        SELECT station_key, device_key, destination_key, device_label, frame_count, last_seen_at
+        SELECT station_key, device_key, destination_key, device_label, frame_count, recognized_flag, last_seen_at
         FROM traffic_device_station_device_hourly
         WHERE frame_count > 0
           AND bucket_start_utc >= ?
@@ -912,140 +870,126 @@ def _build_station_votes_from_hourly_buffer(
         """,
         (window_start_utc.isoformat(), window_end_utc.isoformat()),
     )
-    station_votes: dict[str, dict[str, Any]] = {}
-    tocall_counts_by_device: dict[str, dict[str, int]] = {}
-    tocall_station_keys_by_device: dict[str, dict[str, set[str]]] = {}
+    observations: list[dict[str, Any]] = []
     for row in rows:
         station_key = _normalize_station_key_for_devices(row["station_key"])
         if not station_key:
             continue
-        device_key = str(row["device_key"] or "").strip().upper()
-        if not device_key:
+        model_key = str(row["device_key"] or "").strip().upper()
+        if not model_key:
             continue
-        votes_to_add = max(0, int(row["frame_count"] or 0))
-        if votes_to_add <= 0:
+        normalized_count = max(0, int(row["frame_count"] or 0))
+        if normalized_count <= 0:
             continue
-        device_label = str(row["device_label"] or "").strip() or device_key
-        labels_by_key[device_key] = device_label
-        destination_key = _normalize_statistics_destination(str(row["destination_key"] or ""))
-        if not destination_key:
-            destination_key = TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
-        _accumulate_device_tocall_count(
-            tocall_counts_by_device=tocall_counts_by_device,
-            device_key=device_key,
-            destination_key=destination_key,
-            count_delta=votes_to_add,
+        model_label = str(row["device_label"] or "").strip() or model_key
+        labels_by_key[model_key] = model_label
+        tocall = _normalize_statistics_tocall(str(row["destination_key"] or ""))
+        observations.append(
+            {
+                "callsign_ssid": station_key,
+                "tocall": tocall,
+                "model_key": model_key,
+                "model_label": model_label,
+                "recognized": bool(int(row["recognized_flag"] or 0) > 0),
+                "last_seen": _normalize_traffic_device_last_seen(row["last_seen_at"]),
+            }
         )
-        _accumulate_device_tocall_station_key(
-            tocall_station_keys_by_device=tocall_station_keys_by_device,
-            device_key=device_key,
-            destination_key=destination_key,
-            station_key=station_key,
-        )
-        _accumulate_station_vote(
-            station_votes=station_votes,
-            station_key=station_key,
-            device_key=device_key,
-            votes_to_add=votes_to_add,
-        )
-    return station_votes, tocall_counts_by_device, tocall_station_keys_by_device
+    return observations
 
 
-def _accumulate_station_vote(
+def _resolve_unique_station_tocall_pair_assignments(
     *,
-    station_votes: dict[str, dict[str, Any]],
-    station_key: str,
-    device_key: str,
-    votes_to_add: int,
-) -> None:
-    normalized_votes = max(0, int(votes_to_add))
-    if normalized_votes <= 0:
-        return
-    station_bucket = station_votes.get(station_key)
-    if station_bucket is None:
-        station_bucket = {
-            "counts": {},
+    observations: list[dict[str, Any]],
+    resolve_group_key: Callable[[Any], str],
+) -> dict[str, dict[str, Any]]:
+    assignments: dict[str, dict[str, Any]] = {}
+    for observation in observations:
+        station_key = _normalize_station_key_for_devices(observation.get("callsign_ssid"))
+        tocall = _normalize_statistics_tocall(observation.get("tocall"))
+        model_key = _normalize_statistics_device_key(observation.get("model_key"))
+        group_key = resolve_group_key(model_key)
+        if not station_key or not tocall or not group_key:
+            continue
+        pair_key = f"{station_key}\u241f{tocall}"
+        candidate = {
+            "callsign_ssid": station_key,
+            "tocall": tocall,
+            "model_key": model_key,
+            "model_label": str(observation.get("model_label") or "").strip() or model_key,
+            "group_key": group_key,
+            "recognized": bool(observation.get("recognized")),
+            "last_seen": _normalize_traffic_device_last_seen(observation.get("last_seen")),
         }
-        station_votes[station_key] = station_bucket
-
-    counts_by_key = station_bucket["counts"]
-    counts_by_key[device_key] = int(counts_by_key.get(device_key) or 0) + normalized_votes
+        current = assignments.get(pair_key)
+        if current is None:
+            assignments[pair_key] = candidate
+            continue
+        if current.get("group_key") == candidate.get("group_key"):
+            merged_last_seen = _max_traffic_device_last_seen(
+                _normalize_traffic_device_last_seen(current.get("last_seen")),
+                _normalize_traffic_device_last_seen(candidate.get("last_seen")),
+            )
+            current["last_seen"] = merged_last_seen
+            if candidate.get("recognized") and not current.get("recognized"):
+                current["recognized"] = True
+                current["model_key"] = candidate.get("model_key")
+                current["model_label"] = candidate.get("model_label")
+            continue
+        if _device_pair_assignment_priority(candidate) > _device_pair_assignment_priority(current):
+            assignments[pair_key] = candidate
+    return assignments
 
 
 def _normalize_station_key_for_devices(value: Any) -> str:
     return str(value or "").strip().upper()
 
 
-def _accumulate_device_tocall_count(
-    *,
-    tocall_counts_by_device: dict[str, dict[str, int]],
-    device_key: str,
-    destination_key: str,
-    count_delta: int,
-) -> None:
-    normalized_count = max(0, int(count_delta))
-    if normalized_count <= 0:
-        return
-    device_tocalls = tocall_counts_by_device.get(device_key)
-    if device_tocalls is None:
-        device_tocalls = {}
-        tocall_counts_by_device[device_key] = device_tocalls
-    device_tocalls[destination_key] = int(device_tocalls.get(destination_key) or 0) + normalized_count
+def _normalize_statistics_tocall(value: Any) -> str:
+    normalized = _normalize_statistics_destination(str(value or ""))
+    if normalized in {
+        "",
+        TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY.upper(),
+        TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY.upper(),
+        TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper(),
+    }:
+        return TRAFFIC_STATISTICS_TOCALL_UNKNOWN
+    return normalized
 
 
-def _accumulate_device_tocall_station_key(
-    *,
-    tocall_station_keys_by_device: dict[str, dict[str, set[str]]],
-    device_key: str,
-    destination_key: str,
-    station_key: str,
-) -> None:
-    normalized_device_key = str(device_key or "").strip().upper()
-    normalized_destination_key = str(destination_key or "").strip().upper()
-    normalized_station_key = _normalize_station_key_for_devices(station_key)
-    if not normalized_device_key or not normalized_destination_key or not normalized_station_key:
-        return
-    device_tocall_station_keys = tocall_station_keys_by_device.get(normalized_device_key)
-    if device_tocall_station_keys is None:
-        device_tocall_station_keys = {}
-        tocall_station_keys_by_device[normalized_device_key] = device_tocall_station_keys
-    station_keys = device_tocall_station_keys.get(normalized_destination_key)
-    if station_keys is None:
-        station_keys = set()
-        device_tocall_station_keys[normalized_destination_key] = station_keys
-    station_keys.add(normalized_station_key)
+def _normalize_traffic_device_last_seen(value: Any) -> str | None:
+    parsed = _parse_iso_timestamp_utc(str(value or ""))
+    if parsed is None:
+        return None
+    return parsed.isoformat()
 
 
-def _build_device_tocall_hints(
-    *,
-    tocall_counts_by_device: dict[str, dict[str, int]],
-    tocall_station_keys_by_device: dict[str, dict[str, set[str]]],
-) -> dict[str, dict[str, Any]]:
-    hints: dict[str, dict[str, Any]] = {}
-    for device_key, destination_counts in tocall_counts_by_device.items():
-        items = [
-            (str(destination_key), max(0, int(count)))
-            for destination_key, count in dict(destination_counts or {}).items()
-            if str(destination_key).strip()
-        ]
-        if not items:
-            continue
-        items.sort(key=lambda item: (-item[1], item[0]))
-        raw_top_destination_key = str(items[0][0]).strip().upper()
-        if not raw_top_destination_key:
-            continue
-        top_destination_key = "GENERIC APRS" if raw_top_destination_key == "APRS" else raw_top_destination_key
-        device_station_keys = dict(tocall_station_keys_by_device.get(device_key) or {})
-        station_keys_for_tocall = sorted(
-            _normalize_station_key_for_devices(station_key)
-            for station_key in set(device_station_keys.get(raw_top_destination_key) or set())
-            if _normalize_station_key_for_devices(station_key)
-        )
-        hints[str(device_key).strip().upper()] = {
-            "tocall": top_destination_key,
-            "stations": station_keys_for_tocall,
-        }
-    return hints
+def _max_traffic_device_last_seen(left: str | None, right: str | None) -> str | None:
+    left_parsed = _parse_iso_timestamp_utc(str(left or ""))
+    right_parsed = _parse_iso_timestamp_utc(str(right or ""))
+    if left_parsed is None:
+        return right_parsed.isoformat() if right_parsed is not None else None
+    if right_parsed is None:
+        return left_parsed.isoformat()
+    return left_parsed.isoformat() if left_parsed >= right_parsed else right_parsed.isoformat()
+
+
+def _device_pair_assignment_priority(value: dict[str, Any]) -> tuple[int, int, datetime, str]:
+    group_key = str(value.get("group_key") or "").strip().lower()
+    recognized_score = 1 if bool(value.get("recognized")) else 0
+    non_special_score = 0 if group_key in {
+        TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
+        TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY,
+        TRAFFIC_STATISTICS_DEVICES_OTHER_KEY,
+    } else 1
+    last_seen = _parse_iso_timestamp_utc(str(value.get("last_seen") or ""))
+    if last_seen is None:
+        last_seen = datetime.min.replace(tzinfo=timezone.utc)
+    return (
+        recognized_score,
+        non_special_score,
+        last_seen,
+        str(value.get("model_key") or "").strip().upper(),
+    )
 
 
 def _normalize_statistics_device_key(value: Any) -> str:
@@ -1108,57 +1052,6 @@ def _build_device_group_key_resolver(
     return resolve_group_key, grouped_labels
 
 
-def _merge_device_tocall_counts_by_group(
-    *,
-    tocall_counts_by_device: dict[str, dict[str, int]],
-    resolve_group_key: Callable[[Any], str],
-) -> dict[str, dict[str, int]]:
-    grouped_tocall_counts: dict[str, dict[str, int]] = {}
-    for raw_key, destination_counts in dict(tocall_counts_by_device or {}).items():
-        group_key = resolve_group_key(raw_key)
-        grouped_destination_counts = grouped_tocall_counts.get(group_key)
-        if grouped_destination_counts is None:
-            grouped_destination_counts = {}
-            grouped_tocall_counts[group_key] = grouped_destination_counts
-        for destination_key, raw_count in dict(destination_counts or {}).items():
-            normalized_destination_key = str(destination_key or "").strip().upper()
-            normalized_count = max(0, int(raw_count or 0))
-            if not normalized_destination_key or normalized_count <= 0:
-                continue
-            grouped_destination_counts[normalized_destination_key] = (
-                int(grouped_destination_counts.get(normalized_destination_key) or 0) + normalized_count
-            )
-
-    return grouped_tocall_counts
-
-
-def _merge_device_tocall_station_keys_by_group(
-    *,
-    tocall_station_keys_by_device: dict[str, dict[str, set[str]]],
-    resolve_group_key: Callable[[Any], str],
-) -> dict[str, dict[str, set[str]]]:
-    grouped_station_keys: dict[str, dict[str, set[str]]] = {}
-    for raw_key, destination_station_keys in dict(tocall_station_keys_by_device or {}).items():
-        group_key = resolve_group_key(raw_key)
-        grouped_destination_station_keys = grouped_station_keys.get(group_key)
-        if grouped_destination_station_keys is None:
-            grouped_destination_station_keys = {}
-            grouped_station_keys[group_key] = grouped_destination_station_keys
-        for destination_key, raw_station_keys in dict(destination_station_keys or {}).items():
-            normalized_destination_key = str(destination_key or "").strip().upper()
-            if not normalized_destination_key:
-                continue
-            grouped_station_set = grouped_destination_station_keys.get(normalized_destination_key)
-            if grouped_station_set is None:
-                grouped_station_set = set()
-                grouped_destination_station_keys[normalized_destination_key] = grouped_station_set
-            for station_key in set(raw_station_keys or set()):
-                normalized_station_key = _normalize_station_key_for_devices(station_key)
-                if normalized_station_key:
-                    grouped_station_set.add(normalized_station_key)
-    return grouped_station_keys
-
-
 def _resolve_statistics_device_bucket(
     destination: str,
     info: str,
@@ -1215,8 +1108,7 @@ def _build_traffic_devices_items(
     labels_by_key: dict[str, str],
     total: int,
     top_limit: int,
-    station_keys_by_key: dict[str, set[str]] | None = None,
-    tocall_meta_by_key: dict[str, dict[str, Any]] | None = None,
+    entries_by_key: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     if total <= 0:
         return []
@@ -1238,49 +1130,73 @@ def _build_traffic_devices_items(
         selected_items = ranked_items[:normalized_top_limit]
         remaining_items = ranked_items[normalized_top_limit:]
 
-    hints_by_key = {
-        str(key).strip().upper(): dict(value or {})
-        for key, value in dict(tocall_meta_by_key or {}).items()
-        if isinstance(value, dict)
-    }
     for key, count in selected_items:
         label = str(labels_by_key.get(key) or key).strip() or key
-        key_hint = hints_by_key.get(str(key).strip().upper()) or {}
-        model_station_keys = sorted(
-            _normalize_station_key_for_devices(station_key)
-            for station_key in set((station_keys_by_key or {}).get(key) or set())
-            if _normalize_station_key_for_devices(station_key)
-        )
+        normalized_entries = _normalize_traffic_device_entries((entries_by_key or {}).get(key))
         items.append(
             _traffic_devices_item(
                 key=key,
                 label=label,
                 count=count,
                 total=total,
-                tocall=key_hint.get("tocall"),
-                stations_tocall=key_hint.get("stations"),
-                stations_model=model_station_keys,
+                entries=normalized_entries,
             )
         )
 
-    other_count = sum(count for _key, count in remaining_items)
-    if other_count > 0 and len(items) < normalized_top_limit:
+    other_entries: list[dict[str, Any]] = []
+    for remaining_key, _remaining_count in remaining_items:
+        other_entries.extend(list((entries_by_key or {}).get(remaining_key) or []))
+    normalized_other_entries = _normalize_traffic_device_entries(other_entries)
+    if normalized_other_entries and len(items) < normalized_top_limit:
         items.append(
             _traffic_devices_item(
                 key=TRAFFIC_STATISTICS_DEVICES_OTHER_KEY,
                 label=str(labels_by_key.get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY) or TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL),
-                count=other_count,
+                count=len(normalized_other_entries),
                 total=total,
-                tocall=(hints_by_key.get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper()) or {}).get("tocall"),
-                stations_tocall=(hints_by_key.get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper()) or {}).get("stations"),
-                stations_model=sorted(
-                    _normalize_station_key_for_devices(station_key)
-                    for station_key in set((station_keys_by_key or {}).get(TRAFFIC_STATISTICS_DEVICES_OTHER_KEY) or set())
-                    if _normalize_station_key_for_devices(station_key)
-                ),
+                entries=normalized_other_entries,
             )
         )
     return items
+
+
+def _normalize_traffic_device_entries(entries: Any) -> list[dict[str, Any]]:
+    normalized_by_pair: dict[str, dict[str, Any]] = {}
+    for raw_entry in list(entries or []):
+        if not isinstance(raw_entry, dict):
+            continue
+        station_key = _normalize_station_key_for_devices(raw_entry.get("callsign_ssid"))
+        tocall = _normalize_statistics_tocall(raw_entry.get("tocall"))
+        if not station_key or not tocall:
+            continue
+        pair_key = f"{station_key}\u241f{tocall}"
+        model_key_raw = str(raw_entry.get("model_key") or "").strip()
+        model_key = _normalize_statistics_device_key(model_key_raw) if model_key_raw else None
+        normalized_entry = {
+            "callsign_ssid": station_key,
+            "tocall": tocall,
+            "model_key": model_key,
+            "model_label": str(raw_entry.get("model_label") or "").strip() or None,
+            "last_seen": _normalize_traffic_device_last_seen(raw_entry.get("last_seen")),
+        }
+        existing = normalized_by_pair.get(pair_key)
+        if existing is None:
+            normalized_by_pair[pair_key] = normalized_entry
+            continue
+        existing["last_seen"] = _max_traffic_device_last_seen(existing.get("last_seen"), normalized_entry.get("last_seen"))
+        if normalized_entry.get("model_key") and not existing.get("model_key"):
+            existing["model_key"] = normalized_entry.get("model_key")
+            existing["model_label"] = normalized_entry.get("model_label")
+
+    normalized_entries = list(normalized_by_pair.values())
+    normalized_entries.sort(
+        key=lambda item: (
+            str(item.get("callsign_ssid") or ""),
+            str(item.get("tocall") or ""),
+            str(item.get("last_seen") or ""),
+        )
+    )
+    return normalized_entries
 
 
 def _traffic_devices_item(
@@ -1289,32 +1205,39 @@ def _traffic_devices_item(
     label: str,
     count: int,
     total: int,
-    tocall: str | None = None,
-    stations_tocall: Any = None,
-    stations_model: Any = None,
+    entries: Any = None,
 ) -> dict[str, Any]:
-    normalized_count = max(0, int(count))
+    normalized_entries = _normalize_traffic_device_entries(entries)
+    normalized_count = len(normalized_entries) if normalized_entries else max(0, int(count))
     normalized_total = max(0, int(total))
     percent = 0.0
     if normalized_total > 0:
         percent = round((float(normalized_count) * 100.0) / float(normalized_total), 1)
+    unique_station_keys = sorted(
+        {
+            _normalize_station_key_for_devices(entry.get("callsign_ssid"))
+            for entry in normalized_entries
+            if _normalize_station_key_for_devices(entry.get("callsign_ssid"))
+        }
+    )
+    unique_tocalls = sorted(
+        {
+            _normalize_statistics_tocall(entry.get("tocall"))
+            for entry in normalized_entries
+            if _normalize_statistics_tocall(entry.get("tocall"))
+        }
+    )
+    tocall_value = unique_tocalls[0] if len(unique_tocalls) == 1 else None
     return {
         "key": str(key or "").strip() or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
         "label": str(label or "").strip() or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL,
         "count": normalized_count,
         "percent": percent,
         "ident": str(key or "").strip() or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
-        "tocall": str(tocall or "").strip().upper() or None,
-        "stations_tocall": [
-            _normalize_station_key_for_devices(station_key)
-            for station_key in list(stations_tocall or [])
-            if _normalize_station_key_for_devices(station_key)
-        ],
-        "stations_model": [
-            _normalize_station_key_for_devices(station_key)
-            for station_key in list(stations_model or [])
-            if _normalize_station_key_for_devices(station_key)
-        ],
+        "tocall": tocall_value,
+        "stations_tocall": unique_station_keys,
+        "stations_model": unique_station_keys,
+        "entries": normalized_entries,
     }
 
 

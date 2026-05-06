@@ -272,6 +272,8 @@
   "TOP20 users": "TOP20 users",
   "Last h": "Ostatnia godzina",
   "All time": "Cały czas",
+  "Unique CALLSIGN-SSID + TOCALL pairs": "Unikalne pary CALLSIGN-SSID + TOCALL",
+  "Counted unique CALLSIGN-SSID + TOCALL pairs": "Policzone unikalne pary CALLSIGN-SSID + TOCALL",
   "Unique CALLSIGN-SSID stations": "Unikalne stacje CALLSIGN-SSID dla urządzenia",
   "Stations (TOCALL)": "Stacje (TOCALL)",
   "Stations (model)": "Stacje (model)",

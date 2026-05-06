@@ -625,21 +625,22 @@ class RadioActivityAggregatorTests(unittest.TestCase):
 
             stations_payload = get_traffic_devices_statistics(range_value="24h")
             self.assertEqual(stations_payload.get("window"), "range")
-            self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid_per_device")
+            self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid_tocall_pairs")
             self.assertEqual(int(stations_payload.get("unique_station_keys_total") or 0), 4)
-            self.assertEqual(int(stations_payload.get("unique_station_device_pairs_total") or 0), 4)
-            self.assertEqual(int(stations_payload.get("total") or 0), 4)
+            self.assertEqual(int(stations_payload.get("unique_station_device_pairs_total") or 0), 5)
+            self.assertEqual(int(stations_payload.get("unique_callsign_ssid_tocall_pairs_total") or 0), 5)
+            self.assertEqual(int(stations_payload.get("total") or 0), 5)
             station_items = list(stations_payload.get("items") or [])
             station_counts = [int(item.get("count") or 0) for item in station_items]
-            self.assertEqual(sum(station_counts), 4)
+            self.assertEqual(sum(station_counts), 5)
             unknown_item = next((item for item in station_items if str(item.get("key") or "") == "unknown"), None)
             self.assertIsNotNone(unknown_item)
-            self.assertEqual(int((unknown_item or {}).get("count") or 0), 4)
-            self.assertEqual(str((unknown_item or {}).get("tocall") or ""), "QZ1234")
+            self.assertEqual(int((unknown_item or {}).get("count") or 0), 5)
+            self.assertEqual(len(list((unknown_item or {}).get("entries") or [])), 5)
 
             shifted_payload = get_traffic_devices_statistics(range_value="24h", shift_windows=1)
             self.assertEqual(shifted_payload.get("window"), "range")
-            self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid_per_device")
+            self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid_tocall_pairs")
             self.assertEqual(int(shifted_payload.get("total") or 0), 0)
 
     def test_traffic_devices_range_uses_buffer_when_traffic_frames_are_pruned(self) -> None:
@@ -669,7 +670,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
 
             payload = get_traffic_devices_statistics(range_value="24h")
             self.assertEqual(int(payload.get("total") or 0), 1)
-            self.assertEqual(payload.get("count_basis"), "unique_callsign_ssid_per_device")
+            self.assertEqual(payload.get("count_basis"), "unique_callsign_ssid_tocall_pairs")
             self.assertEqual(payload.get("window"), "range")
 
     def test_traffic_devices_counts_station_in_each_observed_device_bucket(self) -> None:
@@ -703,7 +704,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             )
 
             payload = get_traffic_devices_statistics(range_value="24h")
-            self.assertEqual(payload.get("count_basis"), "unique_callsign_ssid_per_device")
+            self.assertEqual(payload.get("count_basis"), "unique_callsign_ssid_tocall_pairs")
             self.assertEqual(int(payload.get("total") or 0), 3)
 
             items = list(payload.get("items") or [])
@@ -713,6 +714,12 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             }
             self.assertEqual(int(counts_by_key.get("APK005") or 0), 2)
             self.assertEqual(int(counts_by_key.get("APY05D") or 0), 1)
+            apy05d_item = next((item for item in items if str(item.get("key") or "") == "APY05D"), None)
+            self.assertIsNotNone(apy05d_item)
+            apy_entries = list((apy05d_item or {}).get("entries") or [])
+            self.assertEqual(len(apy_entries), 1)
+            self.assertEqual(str((apy_entries[0] or {}).get("callsign_ssid") or ""), "SP8AAA-1")
+            self.assertEqual(str((apy_entries[0] or {}).get("tocall") or ""), "APY05D")
 
     def test_traffic_devices_merges_same_model_from_multiple_identifiers(self) -> None:
         with temporary_database():
@@ -741,6 +748,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             tm_d700_items = [item for item in items if str(item.get("label") or "") == "TM-D700"]
             self.assertEqual(len(tm_d700_items), 1)
             self.assertEqual(int(tm_d700_items[0].get("count") or 0), 2)
+            self.assertEqual(len(list(tm_d700_items[0].get("entries") or [])), 2)
 
     def test_traffic_devices_deduplicates_station_with_multiple_identifiers_of_same_model(self) -> None:
         with temporary_database():
@@ -774,13 +782,21 @@ class RadioActivityAggregatorTests(unittest.TestCase):
 
             payload = get_traffic_devices_statistics(range_value="24h")
             self.assertEqual(int(payload.get("unique_station_keys_total") or 0), 2)
-            self.assertEqual(int(payload.get("unique_station_device_pairs_total") or 0), 2)
+            self.assertEqual(int(payload.get("unique_station_device_pairs_total") or 0), 3)
             items = list(payload.get("items") or [])
             tm_d700_item = next((item for item in items if str(item.get("label") or "") == "TM-D700"), None)
             self.assertIsNotNone(tm_d700_item)
-            self.assertEqual(int((tm_d700_item or {}).get("count") or 0), 2)
+            self.assertEqual(int((tm_d700_item or {}).get("count") or 0), 3)
+            tm_entries = list((tm_d700_item or {}).get("entries") or [])
+            self.assertEqual(len(tm_entries), 3)
+            sp8aaa_pairs = [
+                str(entry.get("tocall") or "")
+                for entry in tm_entries
+                if str(entry.get("callsign_ssid") or "") == "SP8AAA-1"
+            ]
+            self.assertEqual(sorted(sp8aaa_pairs), ["APK123", "APNK01"])
 
-    def test_traffic_devices_uses_generic_aprs_tocall_hint(self) -> None:
+    def test_traffic_devices_exposes_entries_for_unknown_model(self) -> None:
         with temporary_database():
             now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
             base_time = now_utc - timedelta(minutes=10)
@@ -798,10 +814,67 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             items = list(payload.get("items") or [])
             unknown_item = next((item for item in items if str(item.get("key") or "") == "unknown"), None)
             self.assertIsNotNone(unknown_item)
-            self.assertEqual(str((unknown_item or {}).get("tocall") or ""), "GENERIC APRS")
             self.assertEqual(str((unknown_item or {}).get("ident") or ""), "unknown")
-            self.assertIn("SP8AAA-1", list((unknown_item or {}).get("stations_tocall") or []))
-            self.assertIn("SP8AAA-1", list((unknown_item or {}).get("stations_model") or []))
+            self.assertEqual(int((unknown_item or {}).get("count") or 0), 1)
+            entries = list((unknown_item or {}).get("entries") or [])
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(str((entries[0] or {}).get("callsign_ssid") or ""), "SP8AAA-1")
+            self.assertEqual(str((entries[0] or {}).get("tocall") or ""), "APRS")
+
+    def test_traffic_devices_counts_missing_tocall_once_per_station_pair(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            bucket_start_older = _floor_to_bucket_start(now_utc - timedelta(hours=3), bucket_minutes=60).isoformat()
+            bucket_start_newer = _floor_to_bucket_start(now_utc - timedelta(hours=2), bucket_minutes=60).isoformat()
+            last_seen_old = (now_utc - timedelta(hours=3)).isoformat()
+            last_seen_new = (now_utc - timedelta(hours=2)).isoformat()
+
+            with connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO traffic_device_station_device_hourly(
+                        bucket_start_utc, station_key, device_key, destination_key,
+                        device_label, recognized_flag, frame_count, last_seen_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, 0, 5, ?)
+                    """,
+                    (
+                        bucket_start_older,
+                        "SP8AAA-1",
+                        "unknown",
+                        "",
+                        "Unknown",
+                        last_seen_old,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO traffic_device_station_device_hourly(
+                        bucket_start_utc, station_key, device_key, destination_key,
+                        device_label, recognized_flag, frame_count, last_seen_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, 0, 8, ?)
+                    """,
+                    (
+                        bucket_start_newer,
+                        "SP8AAA-1",
+                        "unknown",
+                        "",
+                        "Unknown",
+                        last_seen_new,
+                    ),
+                )
+
+            payload = get_traffic_devices_statistics(range_value="24h")
+            self.assertEqual(int(payload.get("total") or 0), 1)
+            items = list(payload.get("items") or [])
+            unknown_item = next((item for item in items if str(item.get("key") or "") == "unknown"), None)
+            self.assertIsNotNone(unknown_item)
+            self.assertEqual(int((unknown_item or {}).get("count") or 0), 1)
+            entries = list((unknown_item or {}).get("entries") or [])
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(str((entries[0] or {}).get("callsign_ssid") or ""), "SP8AAA-1")
+            self.assertEqual(str((entries[0] or {}).get("tocall") or ""), "UNKNOWN")
 
     def test_traffic_devices_top_list_is_capped_to_top_limit(self) -> None:
         with temporary_database():
@@ -836,9 +909,12 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             payload = get_traffic_devices_statistics(range_value="24h")
             items = list(payload.get("items") or [])
             self.assertEqual(len(items), 20)
+            for item in items:
+                self.assertEqual(int(item.get("count") or 0), len(list(item.get("entries") or [])))
             other_item = next((item for item in items if str(item.get("key") or "") == "other"), None)
             self.assertIsNotNone(other_item)
             self.assertEqual(int((other_item or {}).get("count") or 0), 6)
+            self.assertEqual(len(list((other_item or {}).get("entries") or [])), 6)
 
     def test_traffic_devices_merges_unknown_synonyms_into_single_bucket(self) -> None:
         with temporary_database():
@@ -887,6 +963,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             unknown_items = [item for item in items if str(item.get("key") or "") == "unknown"]
             self.assertEqual(len(unknown_items), 1)
             self.assertEqual(int(unknown_items[0].get("count") or 0), 2)
+            self.assertEqual(len(list(unknown_items[0].get("entries") or [])), 2)
 
     def test_traffic_users_statistics_counts_frames_per_station(self) -> None:
         with temporary_database():
@@ -1050,21 +1127,21 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(stations_response.status_code, 200)
                 stations_payload = stations_response.json()
                 self.assertEqual(stations_payload.get("window"), "range")
-                self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid_per_device")
-                self.assertEqual(int(stations_payload.get("total") or 0), 4)
+                self.assertEqual(stations_payload.get("count_basis"), "unique_callsign_ssid_tocall_pairs")
+                self.assertEqual(int(stations_payload.get("total") or 0), 5)
                 station_items = list(stations_payload.get("items") or [])
                 station_counts = [int(item.get("count") or 0) for item in station_items]
-                self.assertEqual(sum(station_counts), 4)
+                self.assertEqual(sum(station_counts), 5)
                 unknown_item = next((item for item in station_items if str(item.get("key") or "") == "unknown"), None)
                 self.assertIsNotNone(unknown_item)
-                self.assertEqual(int((unknown_item or {}).get("count") or 0), 4)
-                self.assertEqual(str((unknown_item or {}).get("tocall") or ""), "QZ1234")
+                self.assertEqual(int((unknown_item or {}).get("count") or 0), 5)
+                self.assertEqual(len(list((unknown_item or {}).get("entries") or [])), 5)
 
                 shifted_response = client.get("/api/statistics/devices?range=24h&shift=1")
                 self.assertEqual(shifted_response.status_code, 200)
                 shifted_payload = shifted_response.json()
                 self.assertEqual(shifted_payload.get("window"), "range")
-                self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid_per_device")
+                self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid_tocall_pairs")
                 self.assertEqual(int(shifted_payload.get("total") or 0), 0)
 
                 hour_response = client.get("/api/statistics/devices?range=1h")

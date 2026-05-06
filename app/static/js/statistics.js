@@ -39,11 +39,11 @@
     const usersApiUrl = String(root.dataset.usersApiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
-    const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
+    const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID + TOCALL pairs");
     const devicesTocallLabel = String(root.dataset.devicesTocallLabel || "TOCALL");
-    const devicesIdentLabel = String(root.dataset.devicesIdentLabel || "Identifier");
-    const devicesStationsTocallLabel = String(root.dataset.devicesStationsTocallLabel || "Stations (TOCALL)");
-    const devicesStationsModelLabel = String(root.dataset.devicesStationsModelLabel || "Stations (model)");
+    const devicesPairsTooltipLabel = String(
+        root.dataset.devicesPairsTooltipLabel || "Counted unique CALLSIGN-SSID + TOCALL pairs"
+    );
     const devicesLabelOther = String(root.dataset.devicesLabelOther || "Other");
     const devicesLabelUnknown = String(root.dataset.devicesLabelUnknown || "Unknown");
     const devicesLabelMixedUnknown = String(root.dataset.devicesLabelMixedUnknown || "Mixed / Unknown");
@@ -241,6 +241,34 @@
         }
     };
 
+    const normalizeDeviceEntries = (values) => {
+        const entries = Array.isArray(values) ? values : [];
+        const byPair = new Map();
+        for (const rawEntry of entries) {
+            const callsignSsid = String(rawEntry && rawEntry.callsign_ssid ? rawEntry.callsign_ssid : "").trim().toUpperCase();
+            const tocall = String(rawEntry && rawEntry.tocall ? rawEntry.tocall : "").trim().toUpperCase() || "UNKNOWN";
+            if (!callsignSsid) {
+                continue;
+            }
+            const pairKey = `${callsignSsid}\u241f${tocall}`;
+            if (!byPair.has(pairKey)) {
+                byPair.set(pairKey, {
+                    callsignSsid,
+                    tocall,
+                });
+            }
+        }
+        const normalized = Array.from(byPair.values());
+        normalized.sort((left, right) => {
+            const callsignCompare = String(left.callsignSsid || "").localeCompare(String(right.callsignSsid || ""));
+            if (callsignCompare !== 0) {
+                return callsignCompare;
+            }
+            return String(left.tocall || "").localeCompare(String(right.tocall || ""));
+        });
+        return normalized;
+    };
+
     const normalizeDeviceItems = (rawItems, total) => {
         const items = Array.isArray(rawItems) ? rawItems : [];
         const normalizedTotal = Math.max(0, Number(total) || 0);
@@ -251,33 +279,19 @@
             if (!key || count <= 0) {
                 continue;
             }
+            const entries = normalizeDeviceEntries(item && item.entries);
+            const effectiveCount = entries.length > 0 ? entries.length : count;
             let percent = Number(item && item.percent);
             if (!Number.isFinite(percent)) {
-                percent = normalizedTotal > 0 ? (count * 100.0) / normalizedTotal : 0;
+                percent = normalizedTotal > 0 ? (effectiveCount * 100.0) / normalizedTotal : 0;
             }
             result.push({
                 key,
                 label: String(item && item.label ? item.label : key),
-                count,
+                count: effectiveCount,
                 percent,
                 ident: String(item && item.ident ? item.ident : key).trim().toUpperCase() || key.toUpperCase(),
-                tocall: String(item && item.tocall ? item.tocall : "").trim().toUpperCase(),
-                stationsTocall: Array.isArray(item && item.stations_tocall)
-                    ? item.stations_tocall
-                        .map((value) => String(value || "").trim().toUpperCase())
-                        .filter((value) => value.length > 0)
-                    : (
-                        Array.isArray(item && item.stations)
-                            ? item.stations
-                                .map((value) => String(value || "").trim().toUpperCase())
-                                .filter((value) => value.length > 0)
-                            : []
-                    ),
-                stationsModel: Array.isArray(item && item.stations_model)
-                    ? item.stations_model
-                        .map((value) => String(value || "").trim().toUpperCase())
-                        .filter((value) => value.length > 0)
-                    : [],
+                entries,
             });
         }
         return result;
@@ -351,21 +365,16 @@
             const valueNode = document.createElement("span");
             valueNode.className = "statistics-devices-list-value";
             valueNode.textContent = `${Math.round(item.count)} (${Number(item.percent).toFixed(1)}%)`;
-            const tooltipLines = [
-                `${devicesTocallLabel}: ${item.tocall || "-"}`,
-                `${devicesIdentLabel}: ${item.ident || "-"}`,
-            ];
-            if (Array.isArray(item.stationsTocall) && item.stationsTocall.length > 0) {
-                tooltipLines.push(`${devicesStationsTocallLabel}:`);
-                for (const stationKey of item.stationsTocall) {
-                    tooltipLines.push(stationKey);
+            const tooltipLines = [devicesPairsTooltipLabel];
+            const entries = Array.isArray(item.entries) ? item.entries : [];
+            for (const entry of entries) {
+                const callsignSsid = String(entry && entry.callsignSsid ? entry.callsignSsid : "").trim().toUpperCase();
+                const tocall = String(entry && entry.tocall ? entry.tocall : "").trim().toUpperCase() || "UNKNOWN";
+                if (!callsignSsid) {
+                    continue;
                 }
-            }
-            if (Array.isArray(item.stationsModel) && item.stationsModel.length > 0) {
-                tooltipLines.push(`${devicesStationsModelLabel}:`);
-                for (const stationKey of item.stationsModel) {
-                    tooltipLines.push(stationKey);
-                }
+                const tocallLabel = tocall === "UNKNOWN" ? devicesLabelUnknown : tocall;
+                tooltipLines.push(`${callsignSsid} • ${devicesTocallLabel}: ${tocallLabel}`);
             }
             row.title = tooltipLines.join("\n");
 
@@ -572,8 +581,7 @@
                                 const label = resolveDeviceLabel(item);
                                 const count = Math.max(0, Number(item.count) || 0);
                                 const percent = Number(item.percent) || 0;
-                                const tocallPart = item.tocall ? ` • ${devicesTocallLabel}: ${item.tocall}` : "";
-                                return `${label}: ${count} (${percent.toFixed(1)}%) • ${countBasisLabel}${tocallPart}`;
+                                return `${label}: ${count} (${percent.toFixed(1)}%) • ${countBasisLabel}`;
                             },
                         },
                     },
