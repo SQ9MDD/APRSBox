@@ -67,6 +67,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('action="{{ request.scope.root_path }}/settings/config/import"', template_source)
         self.assertIn('name="backup_file"', template_source)
 
+    def test_settings_template_contains_event_log_controls(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('name="event_log_min_level"', template_source)
+        self.assertIn('name="event_log_debug_enabled"', template_source)
+        self.assertIn('{{ t("Minimum stored log level") }}', template_source)
+        self.assertIn('{{ t("Enable DEBUG logs") }}', template_source)
+
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('{{ t("Danger zone") }}', template_source)
