@@ -606,14 +606,22 @@ def get_traffic_devices_statistics(
 
     station_counts: dict[str, int] = {}
     for station_bucket in station_votes.values():
-        resolved_key = _resolve_station_device_bucket_key(station_bucket)
-        resolved_label = labels_by_key.get(resolved_key) or (
-            TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL
-            if resolved_key == TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY
-            else TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL
-        )
-        labels_by_key[resolved_key] = resolved_label
-        station_counts[resolved_key] = int(station_counts.get(resolved_key) or 0) + 1
+        counts_by_key = dict(station_bucket.get("counts") or {})
+        for raw_device_key, raw_count in counts_by_key.items():
+            if int(raw_count or 0) <= 0:
+                continue
+            resolved_key_raw = str(raw_device_key or "").strip().upper()
+            if resolved_key_raw in {"", TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY.upper()}:
+                resolved_key = TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
+            elif resolved_key_raw == TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY.upper():
+                resolved_key = TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY
+            elif resolved_key_raw == TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper():
+                resolved_key = TRAFFIC_STATISTICS_DEVICES_OTHER_KEY
+            else:
+                resolved_key = resolved_key_raw
+            resolved_label = labels_by_key.get(resolved_key) or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL
+            labels_by_key[resolved_key] = resolved_label
+            station_counts[resolved_key] = int(station_counts.get(resolved_key) or 0) + 1
 
     total = sum(station_counts.values())
     items = _build_traffic_devices_items(
@@ -627,7 +635,7 @@ def get_traffic_devices_statistics(
         "range": normalized_range,
         "shift_windows": normalized_shift_windows,
         "window": "range",
-        "count_basis": "unique_callsign_ssid",
+        "count_basis": "unique_callsign_ssid_per_device",
         "total": total,
         "top_limit": normalized_top_limit,
         "window_start_utc": window_start_utc.isoformat(),
@@ -799,7 +807,7 @@ def _build_station_votes_from_frame_rows(
     tocall_counts_by_device: dict[str, dict[str, int]] = {}
     destination_cache: dict[str, tuple[str, str, bool]] = {}
 
-    for row_index, row in enumerate(frame_rows):
+    for row in frame_rows:
         frame_format = str(row["format"] or "").strip().upper()
         direction = _normalize_direction(row["direction"], frame_format)
         if direction != "RX":
@@ -813,7 +821,7 @@ def _build_station_votes_from_frame_rows(
         destination_key = _normalize_statistics_destination(str(parsed.get("logical_destination") or parsed.get("destination") or ""))
         if not destination_key:
             destination_key = TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
-        device_key, device_label, is_recognized = _resolve_statistics_device_bucket(
+        device_key, device_label, _is_recognized = _resolve_statistics_device_bucket(
             destination_key,
             str(parsed.get("logical_info") or parsed.get("info") or ""),
             database=database,
@@ -831,8 +839,6 @@ def _build_station_votes_from_frame_rows(
             station_key=station_key,
             device_key=device_key,
             votes_to_add=1,
-            row_index=row_index,
-            is_recognized=is_recognized,
         )
     return station_votes, tocall_counts_by_device
 
@@ -845,7 +851,7 @@ def _build_station_votes_from_hourly_buffer(
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, int]]]:
     rows = fetch_all(
         """
-        SELECT station_key, device_key, destination_key, device_label, recognized_flag, frame_count, last_seen_at
+        SELECT station_key, device_key, destination_key, device_label, frame_count, last_seen_at
         FROM traffic_device_station_device_hourly
         WHERE frame_count > 0
           AND bucket_start_utc >= ?
@@ -856,7 +862,7 @@ def _build_station_votes_from_hourly_buffer(
     )
     station_votes: dict[str, dict[str, Any]] = {}
     tocall_counts_by_device: dict[str, dict[str, int]] = {}
-    for row_index, row in enumerate(rows):
+    for row in rows:
         station_key = _normalize_station_key_for_devices(row["station_key"])
         if not station_key:
             continue
@@ -882,8 +888,6 @@ def _build_station_votes_from_hourly_buffer(
             station_key=station_key,
             device_key=device_key,
             votes_to_add=votes_to_add,
-            row_index=row_index,
-            is_recognized=bool(int(row["recognized_flag"] or 0)),
         )
     return station_votes, tocall_counts_by_device
 
@@ -894,8 +898,6 @@ def _accumulate_station_vote(
     station_key: str,
     device_key: str,
     votes_to_add: int,
-    row_index: int,
-    is_recognized: bool,
 ) -> None:
     normalized_votes = max(0, int(votes_to_add))
     if normalized_votes <= 0:
@@ -904,16 +906,11 @@ def _accumulate_station_vote(
     if station_bucket is None:
         station_bucket = {
             "counts": {},
-            "last_index_by_key": {},
-            "recognized_by_key": {},
         }
         station_votes[station_key] = station_bucket
 
     counts_by_key = station_bucket["counts"]
     counts_by_key[device_key] = int(counts_by_key.get(device_key) or 0) + normalized_votes
-    previous_last_index = int(station_bucket["last_index_by_key"].get(device_key) or -1)
-    station_bucket["last_index_by_key"][device_key] = max(previous_last_index, int(row_index))
-    station_bucket["recognized_by_key"][device_key] = bool(station_bucket["recognized_by_key"].get(device_key)) or bool(is_recognized)
 
 
 def _normalize_station_key_for_devices(value: Any) -> str:
@@ -995,29 +992,6 @@ def _normalize_statistics_destination(destination: str) -> str:
     if separator and suffix.isdigit():
         value = base
     return value
-
-
-def _resolve_station_device_bucket_key(station_bucket: dict[str, Any]) -> str:
-    counts_by_key = dict(station_bucket.get("counts") or {})
-    if not counts_by_key:
-        return TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
-
-    max_count = max(int(value) for value in counts_by_key.values())
-    top_keys = [str(key) for key, value in counts_by_key.items() if int(value) == max_count]
-    if len(top_keys) == 1:
-        return top_keys[0]
-
-    recognized_by_key = dict(station_bucket.get("recognized_by_key") or {})
-    last_index_by_key = dict(station_bucket.get("last_index_by_key") or {})
-    recognized_top_keys = [key for key in top_keys if bool(recognized_by_key.get(key))]
-    if recognized_top_keys:
-        recognized_top_keys.sort(key=lambda key: int(last_index_by_key.get(key) or 0), reverse=True)
-        best_key = recognized_top_keys[0]
-        best_index = int(last_index_by_key.get(best_key) or 0)
-        best_keys = [key for key in recognized_top_keys if int(last_index_by_key.get(key) or 0) == best_index]
-        if len(best_keys) == 1:
-            return best_key
-    return TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY
 
 
 def _build_traffic_devices_items(
