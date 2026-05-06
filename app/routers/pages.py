@@ -103,7 +103,12 @@ from app.services.aprs_device_identification import (
     refresh_aprs_device_identification_cache,
 )
 from app.services.core_client import restart_core_traffic_monitor
-from app.services.radio_activity import get_dashboard_radio_activity, get_traffic_devices_statistics, get_traffic_statistics
+from app.services.radio_activity import (
+    get_dashboard_radio_activity,
+    get_traffic_devices_statistics,
+    get_traffic_statistics,
+    get_traffic_users_statistics,
+)
 from app.services.config_backup import (
     build_configuration_backup_filename,
     export_configuration_backup_bytes,
@@ -2409,6 +2414,7 @@ def statistics_page(
     templates = request.app.state.templates
     statistics_payload = get_traffic_statistics(range_value="24h")
     statistics_devices_payload = get_traffic_devices_statistics(range_value="24h")
+    statistics_users_payload = get_traffic_users_statistics(range_value="24h")
     context = build_template_context(
         request,
         page_title="Statistics",
@@ -2416,6 +2422,7 @@ def statistics_page(
         active_nav="statistics",
         statistics_payload=statistics_payload,
         statistics_devices_payload=statistics_devices_payload,
+        statistics_users_payload=statistics_users_payload,
     )
     return templates.TemplateResponse("statistics.html", context)
 
@@ -2569,6 +2576,19 @@ def statistics_devices(
 ) -> JSONResponse:
     try:
         payload = get_traffic_devices_statistics(range_value=range, shift_windows=shift, window=window)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/users")
+def statistics_users(
+    range: str = "24h",
+    shift: int = 0,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_traffic_users_statistics(range_value=range, shift_windows=shift)
     except ValueError as exc:
         return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)

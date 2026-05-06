@@ -11,6 +11,7 @@ from app.services.radio_activity import (
     _floor_to_bucket_start,
     get_dashboard_radio_activity,
     get_traffic_devices_statistics,
+    get_traffic_users_statistics,
     record_traffic_device_station_observation,
     run_radio_activity_aggregation,
 )
@@ -669,6 +670,59 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             self.assertEqual(payload.get("count_basis"), "unique_callsign_ssid")
             self.assertEqual(payload.get("window"), "range")
 
+    def test_traffic_users_statistics_counts_frames_per_station(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            base_time = now_utc - timedelta(minutes=15)
+
+            for index in range(20):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP1AAA-1>QZ1234,WIDE1-1:>a",
+                    created_at=(base_time + timedelta(seconds=index)).isoformat(),
+                )
+            for index in range(2):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP2BBB-2>QZ1234,WIDE1-1:>b",
+                    created_at=(base_time + timedelta(seconds=40 + index)).isoformat(),
+                )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP3CCC-3>QZ1234,WIDE1-1:>c",
+                created_at=(base_time + timedelta(seconds=50)).isoformat(),
+            )
+            for index in range(4):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="TX",
+                    frame_format="TNC2-TX",
+                    line="SP9TX-1>TX9999:>tx",
+                    command="TX",
+                    created_at=(base_time + timedelta(seconds=80 + index)).isoformat(),
+                )
+
+            payload = get_traffic_users_statistics(range_value="24h")
+            self.assertEqual(payload.get("count_basis"), "frames_rx_tnc2")
+            self.assertEqual(int(payload.get("total") or 0), 23)
+            items = list(payload.get("items") or [])
+            self.assertGreaterEqual(len(items), 1)
+            self.assertEqual(str(items[0].get("key") or ""), "SP1AAA-1")
+            self.assertEqual(int(items[0].get("count") or 0), 20)
+
+            shifted_payload = get_traffic_users_statistics(range_value="24h", shift_windows=1)
+            self.assertEqual(int(shifted_payload.get("total") or 0), 0)
+
     def test_statistics_devices_api_supports_main_range_windows(self) -> None:
         if not FASTAPI_AVAILABLE:
             self.skipTest("fastapi is not installed in this environment")
@@ -764,6 +818,21 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(shifted_payload.get("window"), "range")
                 self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid")
                 self.assertEqual(int(shifted_payload.get("total") or 0), 0)
+
+                users_response = client.get("/api/statistics/users?range=24h")
+                self.assertEqual(users_response.status_code, 200)
+                users_payload = users_response.json()
+                self.assertEqual(users_payload.get("count_basis"), "frames_rx_tnc2")
+                self.assertEqual(int(users_payload.get("total") or 0), 24)
+                users_items = list(users_payload.get("items") or [])
+                self.assertGreaterEqual(len(users_items), 1)
+                self.assertEqual(str(users_items[0].get("key") or ""), "SP1AAA-1")
+                self.assertEqual(int(users_items[0].get("count") or 0), 20)
+
+                users_shifted_response = client.get("/api/statistics/users?range=24h&shift=1")
+                self.assertEqual(users_shifted_response.status_code, 200)
+                users_shifted_payload = users_shifted_response.json()
+                self.assertEqual(int(users_shifted_payload.get("total") or 0), 0)
 
                 invalid_window = client.get("/api/statistics/devices?range=24h&window=invalid")
                 self.assertEqual(invalid_window.status_code, 400)

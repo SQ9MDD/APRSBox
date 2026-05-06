@@ -2,6 +2,7 @@
     const root = document.getElementById("statistics-root");
     const payloadNode = document.getElementById("statistics-data");
     const devicesPayloadNode = document.getElementById("statistics-devices-data");
+    const usersPayloadNode = document.getElementById("statistics-users-data");
     const rangeSelect = document.getElementById("statistics-range");
     const backButton = document.getElementById("statistics-back");
     const forwardButton = document.getElementById("statistics-forward");
@@ -9,10 +10,13 @@
     const heardCanvas = document.getElementById("statistics-heard-chart");
     const actionsCanvas = document.getElementById("statistics-actions-chart");
     const devicesCanvas = document.getElementById("statistics-devices-chart");
+    const usersTable = document.getElementById("statistics-users-table");
+    const usersTableBody = document.getElementById("statistics-users-table-body");
     const frameEmptyNode = document.getElementById("statistics-frame-types-empty");
     const heardEmptyNode = document.getElementById("statistics-heard-empty");
     const actionsEmptyNode = document.getElementById("statistics-actions-empty");
     const devicesEmptyNode = document.getElementById("statistics-devices-empty");
+    const usersEmptyNode = document.getElementById("statistics-users-empty");
     const frameStepNode = document.getElementById("statistics-frame-types-step");
     const heardStepNode = document.getElementById("statistics-heard-step");
     const actionsStepNode = document.getElementById("statistics-actions-step");
@@ -33,6 +37,7 @@
 
     const apiUrl = String(root.dataset.apiUrl || "").trim();
     const devicesApiUrl = String(root.dataset.devicesApiUrl || "").trim();
+    const usersApiUrl = String(root.dataset.usersApiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
     const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
@@ -254,6 +259,30 @@
                 count,
                 percent,
                 tocall: String(item && item.tocall ? item.tocall : "").trim().toUpperCase(),
+            });
+        }
+        return result;
+    };
+
+    const normalizeUserItems = (rawItems, total) => {
+        const items = Array.isArray(rawItems) ? rawItems : [];
+        const normalizedTotal = Math.max(0, Number(total) || 0);
+        const result = [];
+        for (const item of items) {
+            const key = String(item && item.key ? item.key : "").trim().toUpperCase();
+            const count = Math.max(0, Number(item && item.count) || 0);
+            if (!key || count <= 0) {
+                continue;
+            }
+            let percent = Number(item && item.percent);
+            if (!Number.isFinite(percent)) {
+                percent = normalizedTotal > 0 ? (count * 100.0) / normalizedTotal : 0;
+            }
+            result.push({
+                key,
+                label: String(item && item.label ? item.label : key).trim().toUpperCase() || key,
+                count,
+                percent,
             });
         }
         return result;
@@ -513,8 +542,58 @@
         });
     };
 
+    const renderUsersTable = (items, colors) => {
+        if (!(usersTableBody instanceof HTMLElement)) {
+            return;
+        }
+        usersTableBody.textContent = "";
+        for (let index = 0; index < items.length; index += 1) {
+            const item = items[index];
+            const row = document.createElement("tr");
+
+            const labelCell = document.createElement("td");
+            labelCell.className = "statistics-users-label-cell";
+            const labelWrapper = document.createElement("span");
+            labelWrapper.className = "statistics-users-label";
+            const markerNode = document.createElement("span");
+            markerNode.className = "statistics-users-color-marker";
+            markerNode.style.backgroundColor = String((Array.isArray(colors) && colors[index]) || "#8a8a8a");
+            const labelTextNode = document.createElement("span");
+            labelTextNode.textContent = String(item.label || item.key || "").trim().toUpperCase();
+            labelWrapper.appendChild(markerNode);
+            labelWrapper.appendChild(labelTextNode);
+            labelCell.appendChild(labelWrapper);
+
+            const framesCell = document.createElement("td");
+            framesCell.className = "statistics-users-frames-cell";
+            framesCell.textContent = String(Math.round(Number(item.count) || 0));
+
+            const percentCell = document.createElement("td");
+            percentCell.className = "statistics-users-percent-cell";
+            percentCell.textContent = `${(Number(item.percent) || 0).toFixed(1)}%`;
+
+            row.appendChild(labelCell);
+            row.appendChild(framesCell);
+            row.appendChild(percentCell);
+            usersTableBody.appendChild(row);
+        }
+    };
+
+    const renderUsers = (payloadValue) => {
+        const total = Math.max(0, Number(payloadValue && payloadValue.total) || 0);
+        const items = normalizeUserItems(payloadValue && payloadValue.items, total);
+        const hasData = total > 0 && items.length > 0;
+        toggleEmptyState(usersEmptyNode, !hasData);
+        if (usersTable instanceof HTMLElement) {
+            usersTable.hidden = !hasData;
+        }
+        const colors = hasData ? buildDeviceColors(items) : [];
+        renderUsersTable(hasData ? items : [], colors);
+    };
+
     let payload = parseJsonPayload(payloadNode);
     let devicesPayload = parseJsonPayload(devicesPayloadNode);
+    let usersPayload = parseJsonPayload(usersPayloadNode);
 
     let activeRange = normalizeRange(payload && payload.range);
     let activeShift = normalizeShift(payload && payload.shift_windows);
@@ -562,6 +641,32 @@
         }
     };
 
+    const loadUsersPayload = async (rangeValue, shiftValue) => {
+        if (!usersApiUrl) {
+            return;
+        }
+        const normalizedRange = normalizeRange(rangeValue);
+        const normalizedShift = normalizeShift(shiftValue);
+
+        try {
+            const response = await fetch(
+                `${usersApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}`,
+                {
+                    method: "GET",
+                    headers: { "Accept": "application/json" },
+                },
+            );
+            if (!response.ok) {
+                return;
+            }
+            const nextPayload = await response.json();
+            usersPayload = nextPayload;
+            renderUsers(nextPayload);
+        } catch (_) {
+            return;
+        }
+    };
+
     const loadRangePayload = async (rangeValue, shiftValue) => {
         const normalizedRange = normalizeRange(rangeValue);
         const normalizedShift = normalizeShift(shiftValue);
@@ -590,6 +695,7 @@
             }
             renderCharts(nextPayload);
             await loadDevicesPayload(activeRange, activeShift);
+            await loadUsersPayload(activeRange, activeShift);
         } catch (_) {
             return;
         } finally {
@@ -619,18 +725,31 @@
     }
     renderCharts(payload);
     renderDevices(devicesPayload);
+    renderUsers(usersPayload);
     setControlsDisabled(false);
 
     if (activeRange !== normalizeRange(payload && payload.range)) {
         void loadRangePayload(activeRange, activeShift);
-    } else if (
-        !(
-            devicesPayload
-            && Array.isArray(devicesPayload.items)
-            && devicesPayload.range === activeRange
-            && normalizeShift(devicesPayload.shift_windows) === activeShift
-        )
-    ) {
-        void loadDevicesPayload(activeRange, activeShift);
+    } else {
+        if (
+            !(
+                devicesPayload
+                && Array.isArray(devicesPayload.items)
+                && devicesPayload.range === activeRange
+                && normalizeShift(devicesPayload.shift_windows) === activeShift
+            )
+        ) {
+            void loadDevicesPayload(activeRange, activeShift);
+        }
+        if (
+            !(
+                usersPayload
+                && Array.isArray(usersPayload.items)
+                && usersPayload.range === activeRange
+                && normalizeShift(usersPayload.shift_windows) === activeShift
+            )
+        ) {
+            void loadUsersPayload(activeRange, activeShift);
+        }
     }
 })();

@@ -1251,6 +1251,10 @@ body {
     align-content: start;
 }
 
+.statistics-users-card {
+    align-content: start;
+}
+
 .statistics-devices-canvas {
     min-height: 220px;
     max-height: 280px;
@@ -1298,6 +1302,36 @@ body {
 .statistics-devices-list-value {
     white-space: nowrap;
     color: var(--muted);
+}
+
+.statistics-users-table {
+    width: 100%;
+}
+
+.statistics-users-table td.statistics-users-frames-cell,
+.statistics-users-table td.statistics-users-percent-cell {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.statistics-users-label-cell {
+    min-width: 0;
+}
+
+.statistics-users-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+}
+
+.statistics-users-color-marker {
+    display: inline-block;
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 0.16rem;
+    border: 1px solid color-mix(in srgb, var(--text) 24%, transparent);
+    flex: 0 0 auto;
 }
 
 .dashboard-activity-card {

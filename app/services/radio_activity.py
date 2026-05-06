@@ -51,6 +51,7 @@ TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY = "mixed_unknown"
 TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL = "Mixed / Unknown"
 TRAFFIC_STATISTICS_DEVICES_OTHER_KEY = "other"
 TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL = "Other"
+TRAFFIC_STATISTICS_USERS_DEFAULT_TOP_LIMIT = 20
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
     "tx_total": 0,
@@ -635,6 +636,93 @@ def get_traffic_devices_statistics(
     }
 
 
+def get_traffic_users_statistics(
+    *,
+    range_value: str = TRAFFIC_STATISTICS_RANGE_24H,
+    shift_windows: int = 0,
+    top_limit: int = TRAFFIC_STATISTICS_USERS_DEFAULT_TOP_LIMIT,
+) -> dict[str, Any]:
+    normalized_range = str(range_value or TRAFFIC_STATISTICS_RANGE_24H).strip().lower()
+    if normalized_range not in TRAFFIC_STATISTICS_RANGE_OPTIONS:
+        raise ValueError("Unsupported range.")
+    normalized_shift_windows = int(shift_windows)
+    if normalized_shift_windows < 0:
+        raise ValueError("Unsupported range.")
+    normalized_top_limit = max(1, int(top_limit))
+
+    total_minutes = int(TRAFFIC_STATISTICS_RANGE_OPTIONS[normalized_range])
+    output_bucket_minutes = _resolve_traffic_statistics_bucket_minutes(total_minutes)
+    output_bucket_count = max(1, (total_minutes + output_bucket_minutes - 1) // output_bucket_minutes)
+    now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    latest_base_bucket_start = _floor_to_bucket_start(now_utc, bucket_minutes=RADIO_ACTIVITY_BUCKET_MINUTES) - timedelta(
+        minutes=RADIO_ACTIVITY_BUCKET_MINUTES
+    )
+    latest_output_bucket_start = _floor_to_bucket_start(latest_base_bucket_start, bucket_minutes=output_bucket_minutes)
+    if normalized_shift_windows > 0:
+        latest_output_bucket_start -= timedelta(minutes=total_minutes * normalized_shift_windows)
+    window_start_utc = latest_output_bucket_start - timedelta(minutes=output_bucket_minutes * (output_bucket_count - 1))
+    window_end_utc = latest_output_bucket_start + timedelta(minutes=output_bucket_minutes)
+
+    station_counts: dict[str, int] = {}
+    hourly_rows = fetch_all(
+        """
+        SELECT station_key, SUM(frame_count) AS frame_total
+        FROM traffic_device_station_device_hourly
+        WHERE frame_count > 0
+          AND bucket_start_utc >= ?
+          AND bucket_start_utc < ?
+        GROUP BY station_key
+        ORDER BY frame_total DESC, station_key ASC
+        """,
+        (window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+    for row in hourly_rows:
+        station_key = _normalize_station_key_for_devices(row["station_key"])
+        if not station_key:
+            continue
+        station_counts[station_key] = int(station_counts.get(station_key) or 0) + max(0, int(row["frame_total"] or 0))
+
+    if not station_counts:
+        frame_rows = fetch_all(
+            """
+            SELECT direction, format, line
+            FROM traffic_frames
+            WHERE format LIKE 'TNC2%'
+              AND created_at >= ?
+              AND created_at < ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (window_start_utc.isoformat(), window_end_utc.isoformat()),
+        )
+        for row in frame_rows:
+            frame_format = str(row["format"] or "").strip().upper()
+            direction = _normalize_direction(row["direction"], frame_format)
+            if direction != "RX":
+                continue
+            parsed = parse_tnc2_frame(str(row["line"] or ""))
+            if parsed is None:
+                continue
+            station_key = _normalize_station_key_for_devices(
+                parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or ""
+            )
+            if not station_key:
+                continue
+            station_counts[station_key] = int(station_counts.get(station_key) or 0) + 1
+
+    total = sum(max(0, int(value)) for value in station_counts.values())
+    items = _build_traffic_users_items(counts=station_counts, total=total, top_limit=normalized_top_limit)
+    return {
+        "range": normalized_range,
+        "shift_windows": normalized_shift_windows,
+        "count_basis": "frames_rx_tnc2",
+        "total": total,
+        "top_limit": normalized_top_limit,
+        "window_start_utc": window_start_utc.isoformat(),
+        "window_end_utc": window_end_utc.isoformat(),
+        "items": items,
+    }
+
+
 def record_traffic_device_station_observation(
     *,
     frame_format: str,
@@ -1016,6 +1104,45 @@ def _traffic_devices_item(*, key: str, label: str, count: int, total: int, tocal
         "count": normalized_count,
         "percent": percent,
         "tocall": str(tocall or "").strip().upper() or None,
+    }
+
+
+def _build_traffic_users_items(
+    *,
+    counts: dict[str, int],
+    total: int,
+    top_limit: int,
+) -> list[dict[str, Any]]:
+    if total <= 0:
+        return []
+    items = [
+        (str(key).strip().upper(), max(0, int(value)))
+        for key, value in dict(counts or {}).items()
+        if str(key).strip() and int(value) > 0
+    ]
+    if not items:
+        return []
+    items.sort(key=lambda item: (-item[1], item[0]))
+    normalized_top_limit = max(1, int(top_limit))
+    selected_items = items[:normalized_top_limit]
+    return [
+        _traffic_users_item(station_key=station_key, count=count, total=total)
+        for station_key, count in selected_items
+    ]
+
+
+def _traffic_users_item(*, station_key: str, count: int, total: int) -> dict[str, Any]:
+    normalized_count = max(0, int(count))
+    normalized_total = max(0, int(total))
+    percent = 0.0
+    if normalized_total > 0:
+        percent = round((float(normalized_count) * 100.0) / float(normalized_total), 1)
+    normalized_station_key = str(station_key or "").strip().upper()
+    return {
+        "key": normalized_station_key,
+        "label": normalized_station_key,
+        "count": normalized_count,
+        "percent": percent,
     }
 
 
