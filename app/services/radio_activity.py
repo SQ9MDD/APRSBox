@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.aprs_device_identification import get_aprs_device_identification_database, lookup_aprs_device_identification
@@ -604,38 +604,33 @@ def get_traffic_devices_statistics(
         station_votes = station_votes_buffer
         tocall_counts_by_device = tocall_counts_by_device_buffer
 
+    resolve_group_key, grouped_labels_by_key = _build_device_group_key_resolver(labels_by_key=labels_by_key)
+
     station_counts: dict[str, int] = {}
     for station_bucket in station_votes.values():
         counts_by_key = dict(station_bucket.get("counts") or {})
+        counted_group_keys_for_station: set[str] = set()
         for raw_device_key, raw_count in counts_by_key.items():
             if int(raw_count or 0) <= 0:
                 continue
-            resolved_key_raw = str(raw_device_key or "").strip().upper()
-            if resolved_key_raw in {"", TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY.upper()}:
-                resolved_key = TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
-            elif resolved_key_raw == TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY.upper():
-                resolved_key = TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY
-            elif resolved_key_raw == TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper():
-                resolved_key = TRAFFIC_STATISTICS_DEVICES_OTHER_KEY
-            else:
-                resolved_key = resolved_key_raw
-            resolved_label = labels_by_key.get(resolved_key) or TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL
-            labels_by_key[resolved_key] = resolved_label
-            station_counts[resolved_key] = int(station_counts.get(resolved_key) or 0) + 1
+            group_key = resolve_group_key(raw_device_key)
+            if group_key in counted_group_keys_for_station:
+                continue
+            counted_group_keys_for_station.add(group_key)
+            station_counts[group_key] = int(station_counts.get(group_key) or 0) + 1
 
-    station_counts, labels_by_key, tocall_counts_by_device = _merge_device_buckets_by_label(
-        station_counts=station_counts,
-        labels_by_key=labels_by_key,
+    grouped_tocall_counts_by_device = _merge_device_tocall_counts_by_group(
         tocall_counts_by_device=tocall_counts_by_device,
+        resolve_group_key=resolve_group_key,
     )
 
     total = sum(station_counts.values())
     items = _build_traffic_devices_items(
         counts=station_counts,
-        labels_by_key=labels_by_key,
+        labels_by_key=grouped_labels_by_key,
         total=total,
         top_limit=normalized_top_limit,
-        tocall_hints_by_key=_build_device_tocall_hints(tocall_counts_by_device),
+        tocall_hints_by_key=_build_device_tocall_hints(grouped_tocall_counts_by_device),
     )
     return {
         "range": normalized_range,
@@ -959,69 +954,84 @@ def _build_device_tocall_hints(tocall_counts_by_device: dict[str, dict[str, int]
     return hints
 
 
-def _merge_device_buckets_by_label(
+def _normalize_statistics_device_key(value: Any) -> str:
+    resolved_key_raw = str(value or "").strip().upper()
+    if resolved_key_raw in {"", TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY.upper()}:
+        return TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY
+    if resolved_key_raw == TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY.upper():
+        return TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY
+    if resolved_key_raw == TRAFFIC_STATISTICS_DEVICES_OTHER_KEY.upper():
+        return TRAFFIC_STATISTICS_DEVICES_OTHER_KEY
+    return resolved_key_raw
+
+
+def _build_device_group_key_resolver(
     *,
-    station_counts: dict[str, int],
     labels_by_key: dict[str, str],
-    tocall_counts_by_device: dict[str, dict[str, int]],
-) -> tuple[dict[str, int], dict[str, str], dict[str, dict[str, int]]]:
+) -> tuple[Callable[[Any], str], dict[str, str]]:
     special_keys = {
         TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY,
         TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY,
         TRAFFIC_STATISTICS_DEVICES_OTHER_KEY,
     }
-    merged_counts: dict[str, int] = {}
-    merged_labels: dict[str, str] = {}
-    merged_tocall_counts: dict[str, dict[str, int]] = {}
+    grouped_labels: dict[str, str] = {}
     merged_key_by_label: dict[str, str] = {}
+    normalized_labels_by_key = {
+        _normalize_statistics_device_key(raw_key): str(raw_label or "").strip()
+        for raw_key, raw_label in dict(labels_by_key or {}).items()
+        if str(raw_key or "").strip()
+    }
 
-    for raw_key, raw_count in dict(station_counts or {}).items():
-        normalized_key = str(raw_key or "").strip()
-        normalized_count = max(0, int(raw_count or 0))
-        if not normalized_key or normalized_count <= 0:
-            continue
-
-        label = str(labels_by_key.get(normalized_key) or normalized_key).strip() or normalized_key
+    def resolve_group_key(raw_key: Any) -> str:
+        normalized_key = _normalize_statistics_device_key(raw_key)
+        label = str(normalized_labels_by_key.get(normalized_key) or normalized_key).strip() or normalized_key
         if normalized_key in special_keys:
-            merged_key = normalized_key
+            group_key = normalized_key
         else:
             label_key = label.casefold()
             existing_merged_key = merged_key_by_label.get(label_key)
             if existing_merged_key is None:
-                merged_key = normalized_key
-                merged_key_by_label[label_key] = merged_key
+                group_key = normalized_key
+                merged_key_by_label[label_key] = group_key
             else:
-                merged_key = existing_merged_key
+                group_key = existing_merged_key
 
-        merged_counts[merged_key] = int(merged_counts.get(merged_key) or 0) + normalized_count
-        if merged_key not in merged_labels:
-            merged_labels[merged_key] = label
-
-        per_device_tocalls = dict(tocall_counts_by_device.get(normalized_key) or {})
-        if not per_device_tocalls:
-            continue
-        merged_device_tocalls = merged_tocall_counts.get(merged_key)
-        if merged_device_tocalls is None:
-            merged_device_tocalls = {}
-            merged_tocall_counts[merged_key] = merged_device_tocalls
-        for destination_key, destination_count in per_device_tocalls.items():
-            normalized_destination = str(destination_key or "").strip().upper()
-            normalized_destination_count = max(0, int(destination_count or 0))
-            if not normalized_destination or normalized_destination_count <= 0:
-                continue
-            merged_device_tocalls[normalized_destination] = (
-                int(merged_device_tocalls.get(normalized_destination) or 0) + normalized_destination_count
-            )
+        if group_key not in grouped_labels:
+            grouped_labels[group_key] = label
+        return group_key
 
     for special_key, special_label in (
         (TRAFFIC_STATISTICS_DEVICES_UNKNOWN_KEY, TRAFFIC_STATISTICS_DEVICES_UNKNOWN_LABEL),
         (TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_KEY, TRAFFIC_STATISTICS_DEVICES_MIXED_UNKNOWN_LABEL),
         (TRAFFIC_STATISTICS_DEVICES_OTHER_KEY, TRAFFIC_STATISTICS_DEVICES_OTHER_LABEL),
     ):
-        if special_key in merged_counts and special_key not in merged_labels:
-            merged_labels[special_key] = special_label
+        grouped_labels.setdefault(special_key, special_label)
 
-    return merged_counts, merged_labels, merged_tocall_counts
+    return resolve_group_key, grouped_labels
+
+
+def _merge_device_tocall_counts_by_group(
+    *,
+    tocall_counts_by_device: dict[str, dict[str, int]],
+    resolve_group_key: Callable[[Any], str],
+) -> dict[str, dict[str, int]]:
+    grouped_tocall_counts: dict[str, dict[str, int]] = {}
+    for raw_key, destination_counts in dict(tocall_counts_by_device or {}).items():
+        group_key = resolve_group_key(raw_key)
+        grouped_destination_counts = grouped_tocall_counts.get(group_key)
+        if grouped_destination_counts is None:
+            grouped_destination_counts = {}
+            grouped_tocall_counts[group_key] = grouped_destination_counts
+        for destination_key, raw_count in dict(destination_counts or {}).items():
+            normalized_destination_key = str(destination_key or "").strip().upper()
+            normalized_count = max(0, int(raw_count or 0))
+            if not normalized_destination_key or normalized_count <= 0:
+                continue
+            grouped_destination_counts[normalized_destination_key] = (
+                int(grouped_destination_counts.get(normalized_destination_key) or 0) + normalized_count
+            )
+
+    return grouped_tocall_counts
 
 
 def _resolve_statistics_device_bucket(

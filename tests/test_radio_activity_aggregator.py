@@ -740,6 +740,42 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             self.assertEqual(len(tm_d700_items), 1)
             self.assertEqual(int(tm_d700_items[0].get("count") or 0), 2)
 
+    def test_traffic_devices_deduplicates_station_with_multiple_identifiers_of_same_model(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            base_time = now_utc - timedelta(minutes=10)
+
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP8AAA-1>APNK01,WIDE1-1:>d700-a",
+                created_at=(base_time + timedelta(seconds=1)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP8AAA-1>APK123,WIDE1-1:>d700-b",
+                created_at=(base_time + timedelta(seconds=2)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP8BBB-2>APNK01,WIDE1-1:>d700-c",
+                created_at=(base_time + timedelta(seconds=3)).isoformat(),
+            )
+
+            payload = get_traffic_devices_statistics(range_value="24h")
+            items = list(payload.get("items") or [])
+            tm_d700_item = next((item for item in items if str(item.get("label") or "") == "TM-D700"), None)
+            self.assertIsNotNone(tm_d700_item)
+            self.assertEqual(int((tm_d700_item or {}).get("count") or 0), 2)
+
     def test_traffic_devices_uses_generic_aprs_tocall_hint(self) -> None:
         with temporary_database():
             now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
