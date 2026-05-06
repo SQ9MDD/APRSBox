@@ -854,6 +854,7 @@
   "Unique CALLSIGN-SSID stations": "Unique CALLSIGN-SSID stations per device",
   "No data for selected range.": "No data for selected range.",
   "Statistics show APRS traffic structure observed by APRSBox. They are not a measure of audio quality or TNC decoding.": "Statistics show APRS traffic structure observed by APRSBox. They are not a measure of audio quality or TNC decoding.",
+  "1 hour": "1 hour",
   "1 day": "1 day",
   "7 days": "7 days",
   "30 days": "30 days",

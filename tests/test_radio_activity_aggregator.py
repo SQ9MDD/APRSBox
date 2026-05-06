@@ -799,6 +799,93 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             unknown_item = next((item for item in items if str(item.get("key") or "") == "unknown"), None)
             self.assertIsNotNone(unknown_item)
             self.assertEqual(str((unknown_item or {}).get("tocall") or ""), "GENERIC APRS")
+            self.assertEqual(str((unknown_item or {}).get("ident") or ""), "unknown")
+            self.assertIn("SP8AAA-1", list((unknown_item or {}).get("stations") or []))
+
+    def test_traffic_devices_top_list_is_capped_to_top_limit(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            bucket_start_utc = _floor_to_bucket_start(now_utc - timedelta(hours=1), bucket_minutes=60).isoformat()
+            last_seen_at = now_utc.isoformat()
+
+            with connect() as connection:
+                for index in range(25):
+                    device_key = f"DEV{index:02d}"
+                    station_key = f"SP8{index:03d}-1"
+                    destination_key = f"AP{index:04d}"
+                    device_label = f"Device {index:02d}"
+                    connection.execute(
+                        """
+                        INSERT INTO traffic_device_station_device_hourly(
+                            bucket_start_utc, station_key, device_key, destination_key,
+                            device_label, recognized_flag, frame_count, last_seen_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, 1, 1, ?)
+                        """,
+                        (
+                            bucket_start_utc,
+                            station_key,
+                            device_key,
+                            destination_key,
+                            device_label,
+                            last_seen_at,
+                        ),
+                    )
+
+            payload = get_traffic_devices_statistics(range_value="24h")
+            items = list(payload.get("items") or [])
+            self.assertEqual(len(items), 20)
+            other_item = next((item for item in items if str(item.get("key") or "") == "other"), None)
+            self.assertIsNotNone(other_item)
+            self.assertEqual(int((other_item or {}).get("count") or 0), 6)
+
+    def test_traffic_devices_merges_unknown_synonyms_into_single_bucket(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            bucket_start_utc = _floor_to_bucket_start(now_utc - timedelta(hours=1), bucket_minutes=60).isoformat()
+            last_seen_at = now_utc.isoformat()
+
+            with connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO traffic_device_station_device_hourly(
+                        bucket_start_utc, station_key, device_key, destination_key,
+                        device_label, recognized_flag, frame_count, last_seen_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, 0, 1, ?)
+                    """,
+                    (
+                        bucket_start_utc,
+                        "SP8AAA-1",
+                        "unknown",
+                        "APRS",
+                        "Unknown",
+                        last_seen_at,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO traffic_device_station_device_hourly(
+                        bucket_start_utc, station_key, device_key, destination_key,
+                        device_label, recognized_flag, frame_count, last_seen_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, 0, 1, ?)
+                    """,
+                    (
+                        bucket_start_utc,
+                        "SP8BBB-2",
+                        "DEVZZ",
+                        "APRS",
+                        "Nieznany",
+                        last_seen_at,
+                    ),
+                )
+
+            payload = get_traffic_devices_statistics(range_value="24h")
+            items = list(payload.get("items") or [])
+            unknown_items = [item for item in items if str(item.get("key") or "") == "unknown"]
+            self.assertEqual(len(unknown_items), 1)
+            self.assertEqual(int(unknown_items[0].get("count") or 0), 2)
 
     def test_traffic_users_statistics_counts_frames_per_station(self) -> None:
         with temporary_database():
@@ -979,6 +1066,9 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(shifted_payload.get("count_basis"), "unique_callsign_ssid_per_device")
                 self.assertEqual(int(shifted_payload.get("total") or 0), 0)
 
+                hour_response = client.get("/api/statistics/devices?range=1h")
+                self.assertEqual(hour_response.status_code, 200)
+
                 users_response = client.get("/api/statistics/users?range=24h")
                 self.assertEqual(users_response.status_code, 200)
                 users_payload = users_response.json()
@@ -993,6 +1083,9 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(users_shifted_response.status_code, 200)
                 users_shifted_payload = users_shifted_response.json()
                 self.assertEqual(int(users_shifted_payload.get("total") or 0), 0)
+
+                users_hour_response = client.get("/api/statistics/users?range=1h")
+                self.assertEqual(users_hour_response.status_code, 200)
 
                 invalid_window = client.get("/api/statistics/devices?range=24h&window=invalid")
                 self.assertEqual(invalid_window.status_code, 400)

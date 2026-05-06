@@ -41,10 +41,12 @@
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
     const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
     const devicesTocallLabel = String(root.dataset.devicesTocallLabel || "TOCALL");
+    const devicesIdentLabel = String(root.dataset.devicesIdentLabel || "Identifier");
+    const devicesStationsLabel = String(root.dataset.devicesStationsLabel || "Stations");
     const devicesLabelOther = String(root.dataset.devicesLabelOther || "Other");
     const devicesLabelUnknown = String(root.dataset.devicesLabelUnknown || "Unknown");
     const devicesLabelMixedUnknown = String(root.dataset.devicesLabelMixedUnknown || "Mixed / Unknown");
-    const supportedRanges = new Set(["24h", "7d", "30d"]);
+    const supportedRanges = new Set(["1h", "24h", "7d", "30d"]);
     const defaultRange = "24h";
     const storageKey = "aprsbox-statistics-range";
 
@@ -257,7 +259,13 @@
                 label: String(item && item.label ? item.label : key),
                 count,
                 percent,
+                ident: String(item && item.ident ? item.ident : key).trim().toUpperCase() || key.toUpperCase(),
                 tocall: String(item && item.tocall ? item.tocall : "").trim().toUpperCase(),
+                stations: Array.isArray(item && item.stations)
+                    ? item.stations
+                        .map((value) => String(value || "").trim().toUpperCase())
+                        .filter((value) => value.length > 0)
+                    : [],
             });
         }
         return result;
@@ -331,7 +339,17 @@
             const valueNode = document.createElement("span");
             valueNode.className = "statistics-devices-list-value";
             valueNode.textContent = `${Math.round(item.count)} (${Number(item.percent).toFixed(1)}%)`;
-            row.title = `${devicesTocallLabel}: ${item.tocall || "-"}`;
+            const tooltipLines = [
+                `${devicesTocallLabel}: ${item.tocall || "-"}`,
+                `${devicesIdentLabel}: ${item.ident || "-"}`,
+            ];
+            if (Array.isArray(item.stations) && item.stations.length > 0) {
+                tooltipLines.push(`${devicesStationsLabel}:`);
+                for (const stationKey of item.stations) {
+                    tooltipLines.push(stationKey);
+                }
+            }
+            row.title = tooltipLines.join("\n");
 
             row.appendChild(indexNode);
             row.appendChild(labelNode);

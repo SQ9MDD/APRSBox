@@ -9,6 +9,8 @@
     data-aggregation-label="{{ t('aggregation') }}"
     data-devices-count-stations-label="{{ t('Unique CALLSIGN-SSID stations') }}"
     data-devices-tocall-label="{{ t('TOCALL') }}"
+    data-devices-ident-label="{{ t('Identifier') }}"
+    data-devices-stations-label="{{ t('Stations') }}"
     data-devices-label-other="{{ t('Other') }}"
     data-devices-label-unknown="{{ t('Unknown') }}"
     data-devices-label-mixed-unknown="{{ t('Mixed / Unknown') }}">
@@ -21,6 +23,7 @@
             <div class="dashboard-activity-controls">
                 <label class="dashboard-activity-range-label" for="statistics-range">{{ t("Range") }}</label>
                 <select id="statistics-range" name="statistics_range">
+                    <option value="1h">{{ t("1 hour") }}</option>
                     <option value="24h" selected>{{ t("1 day") }}</option>
                     <option value="7d">{{ t("7 days") }}</option>
                     <option value="30d">{{ t("30 days") }}</option>
