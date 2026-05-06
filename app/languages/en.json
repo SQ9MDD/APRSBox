@@ -275,6 +275,7 @@
   "Unique CALLSIGN-SSID + TOCALL pairs": "Unique CALLSIGN-SSID + TOCALL pairs",
   "Counted unique CALLSIGN-SSID + TOCALL pairs": "Counted unique CALLSIGN-SSID + TOCALL pairs",
   "Unique CALLSIGN-SSID stations": "Unique CALLSIGN-SSID stations per device",
+  "Counted unique CALLSIGN-SSID stations in this model": "Counted unique CALLSIGN-SSID stations in this model",
   "Stations (TOCALL)": "Stations (TOCALL)",
   "Stations (model)": "Stations (model)",
   "Mixed / Unknown": "Mixed / Unknown",

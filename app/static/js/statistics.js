@@ -39,10 +39,10 @@
     const usersApiUrl = String(root.dataset.usersApiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
-    const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID + TOCALL pairs");
+    const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
     const devicesTocallLabel = String(root.dataset.devicesTocallLabel || "TOCALL");
     const devicesPairsTooltipLabel = String(
-        root.dataset.devicesPairsTooltipLabel || "Counted unique CALLSIGN-SSID + TOCALL pairs"
+        root.dataset.devicesPairsTooltipLabel || "Counted unique CALLSIGN-SSID stations in this model"
     );
     const devicesLabelOther = String(root.dataset.devicesLabelOther || "Other");
     const devicesLabelUnknown = String(root.dataset.devicesLabelUnknown || "Unknown");
@@ -243,28 +243,42 @@
 
     const normalizeDeviceEntries = (values) => {
         const entries = Array.isArray(values) ? values : [];
-        const byPair = new Map();
+        const byStation = new Map();
         for (const rawEntry of entries) {
             const callsignSsid = String(rawEntry && rawEntry.callsign_ssid ? rawEntry.callsign_ssid : "").trim().toUpperCase();
-            const tocall = String(rawEntry && rawEntry.tocall ? rawEntry.tocall : "").trim().toUpperCase() || "UNKNOWN";
             if (!callsignSsid) {
                 continue;
             }
-            const pairKey = `${callsignSsid}\u241f${tocall}`;
-            if (!byPair.has(pairKey)) {
-                byPair.set(pairKey, {
-                    callsignSsid,
-                    tocall,
-                });
+            const tocallValues = [];
+            const rawTocalls = Array.isArray(rawEntry && rawEntry.tocalls) ? rawEntry.tocalls : [];
+            for (const value of rawTocalls) {
+                const normalized = String(value || "").trim().toUpperCase();
+                if (normalized) {
+                    tocallValues.push(normalized);
+                }
             }
+            if (tocallValues.length === 0) {
+                const fallback = String(rawEntry && rawEntry.tocall ? rawEntry.tocall : "").trim().toUpperCase() || "UNKNOWN";
+                tocallValues.push(fallback);
+            }
+            const existing = byStation.get(callsignSsid);
+            if (!existing) {
+                byStation.set(callsignSsid, {
+                    callsignSsid,
+                    tocalls: Array.from(new Set(tocallValues)).sort(),
+                });
+                continue;
+            }
+            const merged = new Set([...(existing.tocalls || []), ...tocallValues]);
+            existing.tocalls = Array.from(merged).sort();
         }
-        const normalized = Array.from(byPair.values());
+        const normalized = Array.from(byStation.values());
         normalized.sort((left, right) => {
             const callsignCompare = String(left.callsignSsid || "").localeCompare(String(right.callsignSsid || ""));
             if (callsignCompare !== 0) {
                 return callsignCompare;
             }
-            return String(left.tocall || "").localeCompare(String(right.tocall || ""));
+            return String((left.tocalls || []).join(",")).localeCompare(String((right.tocalls || []).join(",")));
         });
         return normalized;
     };
@@ -369,11 +383,17 @@
             const entries = Array.isArray(item.entries) ? item.entries : [];
             for (const entry of entries) {
                 const callsignSsid = String(entry && entry.callsignSsid ? entry.callsignSsid : "").trim().toUpperCase();
-                const tocall = String(entry && entry.tocall ? entry.tocall : "").trim().toUpperCase() || "UNKNOWN";
                 if (!callsignSsid) {
                     continue;
                 }
-                const tocallLabel = tocall === "UNKNOWN" ? devicesLabelUnknown : tocall;
+                const rawTocalls = Array.isArray(entry && entry.tocalls) ? entry.tocalls : [];
+                const normalizedTocalls = rawTocalls
+                    .map((value) => String(value || "").trim().toUpperCase())
+                    .filter((value) => value.length > 0);
+                const displayTocalls = normalizedTocalls.length > 0 ? normalizedTocalls : ["UNKNOWN"];
+                const tocallLabel = displayTocalls
+                    .map((value) => (value === "UNKNOWN" ? devicesLabelUnknown : value))
+                    .join(", ");
                 tooltipLines.push(`${callsignSsid} • ${devicesTocallLabel}: ${tocallLabel}`);
             }
             row.title = tooltipLines.join("\n");

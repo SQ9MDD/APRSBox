@@ -628,9 +628,14 @@ def get_traffic_devices_statistics(
                 "last_seen": _normalize_traffic_device_last_seen(assignment.get("last_seen")),
             }
         )
-    counts_by_group = {
-        group_key: len(_normalize_traffic_device_entries(group_entries))
+    station_entries_by_group = {
+        group_key: _normalize_traffic_device_station_entries(group_entries)
         for group_key, group_entries in entries_by_group.items()
+        if group_entries
+    }
+    counts_by_group = {
+        group_key: len(group_entries)
+        for group_key, group_entries in station_entries_by_group.items()
         if group_entries
     }
     total = sum(counts_by_group.values())
@@ -640,16 +645,16 @@ def get_traffic_devices_statistics(
         labels_by_key=grouped_labels_by_key,
         total=total,
         top_limit=normalized_top_limit,
-        entries_by_key=entries_by_group,
+        entries_by_key=station_entries_by_group,
     )
     return {
         "range": normalized_range,
         "shift_windows": normalized_shift_windows,
         "window": "range",
-        "count_basis": "unique_callsign_ssid_tocall_pairs",
+        "count_basis": "unique_callsign_ssid_per_model",
         "unique_station_keys_total": unique_station_keys_total,
         "unique_station_device_pairs_total": total,
-        "unique_callsign_ssid_tocall_pairs_total": total,
+        "unique_callsign_ssid_tocall_pairs_total": len(pair_assignments),
         "total": total,
         "top_limit": normalized_top_limit,
         "window_start_utc": window_start_utc.isoformat(),
@@ -1148,7 +1153,7 @@ def _build_traffic_devices_items(
 
     for key, count in selected_items:
         label = str(labels_by_key.get(key) or key).strip() or key
-        normalized_entries = _normalize_traffic_device_entries((entries_by_key or {}).get(key))
+        normalized_entries = _normalize_traffic_device_station_entries((entries_by_key or {}).get(key))
         items.append(
             _traffic_devices_item(
                 key=key,
@@ -1162,7 +1167,7 @@ def _build_traffic_devices_items(
     other_entries: list[dict[str, Any]] = []
     for remaining_key, _remaining_count in remaining_items:
         other_entries.extend(list((entries_by_key or {}).get(remaining_key) or []))
-    normalized_other_entries = _normalize_traffic_device_entries(other_entries)
+    normalized_other_entries = _normalize_traffic_device_station_entries(other_entries)
     if normalized_other_entries and len(items) < normalized_top_limit:
         items.append(
             _traffic_devices_item(
@@ -1176,45 +1181,6 @@ def _build_traffic_devices_items(
     return items
 
 
-def _normalize_traffic_device_entries(entries: Any) -> list[dict[str, Any]]:
-    normalized_by_pair: dict[str, dict[str, Any]] = {}
-    for raw_entry in list(entries or []):
-        if not isinstance(raw_entry, dict):
-            continue
-        station_key = _normalize_station_key_for_devices(raw_entry.get("callsign_ssid"))
-        tocall = _normalize_statistics_tocall(raw_entry.get("tocall"))
-        if not station_key or not tocall:
-            continue
-        pair_key = f"{station_key}\u241f{tocall}"
-        model_key_raw = str(raw_entry.get("model_key") or "").strip()
-        model_key = _normalize_statistics_device_key(model_key_raw) if model_key_raw else None
-        normalized_entry = {
-            "callsign_ssid": station_key,
-            "tocall": tocall,
-            "model_key": model_key,
-            "model_label": str(raw_entry.get("model_label") or "").strip() or None,
-            "last_seen": _normalize_traffic_device_last_seen(raw_entry.get("last_seen")),
-        }
-        existing = normalized_by_pair.get(pair_key)
-        if existing is None:
-            normalized_by_pair[pair_key] = normalized_entry
-            continue
-        existing["last_seen"] = _max_traffic_device_last_seen(existing.get("last_seen"), normalized_entry.get("last_seen"))
-        if normalized_entry.get("model_key") and not existing.get("model_key"):
-            existing["model_key"] = normalized_entry.get("model_key")
-            existing["model_label"] = normalized_entry.get("model_label")
-
-    normalized_entries = list(normalized_by_pair.values())
-    normalized_entries.sort(
-        key=lambda item: (
-            str(item.get("callsign_ssid") or ""),
-            str(item.get("tocall") or ""),
-            str(item.get("last_seen") or ""),
-        )
-    )
-    return normalized_entries
-
-
 def _traffic_devices_item(
     *,
     key: str,
@@ -1223,8 +1189,10 @@ def _traffic_devices_item(
     total: int,
     entries: Any = None,
 ) -> dict[str, Any]:
-    normalized_entries = _normalize_traffic_device_entries(entries)
-    normalized_count = len(normalized_entries) if normalized_entries else max(0, int(count))
+    normalized_entries = _normalize_traffic_device_station_entries(entries)
+    normalized_count = max(0, int(count))
+    if normalized_entries:
+        normalized_count = len(normalized_entries)
     normalized_total = max(0, int(total))
     percent = 0.0
     if normalized_total > 0:
@@ -1238,9 +1206,10 @@ def _traffic_devices_item(
     )
     unique_tocalls = sorted(
         {
-            _normalize_statistics_tocall(entry.get("tocall"))
+            _normalize_statistics_tocall(value)
             for entry in normalized_entries
-            if _normalize_statistics_tocall(entry.get("tocall"))
+            for value in list(entry.get("tocalls") or ([entry.get("tocall")] if entry.get("tocall") else []))
+            if _normalize_statistics_tocall(value)
         }
     )
     tocall_value = unique_tocalls[0] if len(unique_tocalls) == 1 else None
@@ -1255,6 +1224,60 @@ def _traffic_devices_item(
         "stations_model": unique_station_keys,
         "entries": normalized_entries,
     }
+
+
+def _normalize_traffic_device_station_entries(entries: Any) -> list[dict[str, Any]]:
+    normalized_by_station: dict[str, dict[str, Any]] = {}
+    for raw_entry in list(entries or []):
+        if not isinstance(raw_entry, dict):
+            continue
+        station_key = _normalize_station_key_for_devices(raw_entry.get("callsign_ssid"))
+        if not station_key:
+            continue
+        tocall_values = list(raw_entry.get("tocalls") or [])
+        if not tocall_values and raw_entry.get("tocall") is not None:
+            tocall_values = [raw_entry.get("tocall")]
+        normalized_tocalls = sorted(
+            {
+                _normalize_statistics_tocall(value)
+                for value in tocall_values
+                if _normalize_statistics_tocall(value)
+            }
+        )
+        normalized_entry = {
+            "callsign_ssid": station_key,
+            "tocall": normalized_tocalls[0] if len(normalized_tocalls) == 1 else None,
+            "tocalls": normalized_tocalls,
+            "model_key": _normalize_statistics_device_key(raw_entry.get("model_key")) if raw_entry.get("model_key") else None,
+            "model_label": str(raw_entry.get("model_label") or "").strip() or None,
+            "last_seen": _normalize_traffic_device_last_seen(raw_entry.get("last_seen")),
+        }
+        existing = normalized_by_station.get(station_key)
+        if existing is None:
+            normalized_by_station[station_key] = normalized_entry
+            continue
+        merged_tocalls = sorted(
+            {
+                _normalize_statistics_tocall(value)
+                for value in [*list(existing.get("tocalls") or []), *normalized_tocalls]
+                if _normalize_statistics_tocall(value)
+            }
+        )
+        existing["tocalls"] = merged_tocalls
+        existing["tocall"] = merged_tocalls[0] if len(merged_tocalls) == 1 else None
+        existing["last_seen"] = _max_traffic_device_last_seen(existing.get("last_seen"), normalized_entry.get("last_seen"))
+        if normalized_entry.get("model_key") and not existing.get("model_key"):
+            existing["model_key"] = normalized_entry.get("model_key")
+            existing["model_label"] = normalized_entry.get("model_label")
+
+    normalized_entries = list(normalized_by_station.values())
+    normalized_entries.sort(
+        key=lambda item: (
+            str(item.get("callsign_ssid") or ""),
+            str(item.get("last_seen") or ""),
+        )
+    )
+    return normalized_entries
 
 
 def _build_traffic_users_items(

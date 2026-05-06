@@ -275,6 +275,7 @@
   "Unique CALLSIGN-SSID + TOCALL pairs": "Unikalne pary CALLSIGN-SSID + TOCALL",
   "Counted unique CALLSIGN-SSID + TOCALL pairs": "Policzone unikalne pary CALLSIGN-SSID + TOCALL",
   "Unique CALLSIGN-SSID stations": "Unikalne stacje CALLSIGN-SSID dla urządzenia",
+  "Counted unique CALLSIGN-SSID stations in this model": "Policzone unikalne stacje CALLSIGN-SSID w tym modelu",
   "Stations (TOCALL)": "Stacje (TOCALL)",
   "Stations (model)": "Stacje (model)",
   "Mixed / Unknown": "Mieszane / nieznane",
