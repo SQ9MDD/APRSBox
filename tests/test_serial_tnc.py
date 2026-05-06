@@ -6,7 +6,7 @@ import select
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.db import execute, fetch_one, init_db
 from app.services import traffic as traffic_module
@@ -397,6 +397,60 @@ class SerialTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(await asyncio.to_thread(read_master_chunk, master_fd, timeout=1.0), expected_frame)
                 finally:
                     await traffic_monitor.stop()
+
+    async def test_outbound_service_restarts_monitor_and_retries_serial_tx_once(self) -> None:
+        with temporary_database():
+            interface_id = insert_serial_modem(device_path="/dev/ttyUSB-mock-retry", baud_rate=9600)
+            update_station_settings(
+                {
+                    "callsign": "sq9xyz",
+                    "ssid": "9",
+                    "beacon_interface_id": str(interface_id),
+                    "beacon_comment": "Test beacon",
+                    "beacon_interval_minutes": "15",
+                    "beacon_path": "WIDE2-2",
+                    "status_text": "Station online",
+                    "status_interval_minutes": "30",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "1",
+                }
+            )
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES (
+                    'beacon', ?, '{"callsign":"SQ9XYZ","ssid":"9","latitude":52.2297,"longitude":21.0122,"symbol_table":"/","symbol_code":">","beacon_comment":"Test beacon","beacon_path":"WIDE2-2","trigger":"manual"}',
+                    'queued', '2026-01-01T00:00:00+00:00',
+                    NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                )
+                """,
+                (interface_id,),
+            )
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            traffic_monitor = TrafficMonitorService(reconnect_delay=0.1)
+            send_mock = AsyncMock(side_effect=[False, True])
+            restart_mock = AsyncMock()
+            with patch.object(traffic_monitor, "send_outbound_frame", send_mock):
+                with patch.object(traffic_monitor, "restart", restart_mock):
+                    await OutboundService(traffic_monitor=traffic_monitor)._process_job(job)
+
+            self.assertEqual(send_mock.await_count, 2)
+            self.assertEqual(send_mock.await_args_list[0].kwargs["interface_id"], interface_id)
+            self.assertEqual(send_mock.await_args_list[1].kwargs["interface_id"], interface_id)
+            restart_mock.assert_awaited_once()
+            row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert row is not None
+            self.assertEqual(str(row["status"]), "sent")
+            self.assertFalse(str(row["last_error"] or "").strip())
 
     async def test_outbound_direct_serial_tx_does_not_flush_input_buffer(self) -> None:
         with temporary_database():

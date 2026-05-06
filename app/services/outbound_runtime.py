@@ -46,10 +46,12 @@ class OutboundService:
         poll_interval: float = 1.0,
         traffic_monitor: TrafficMonitorService | None = None,
         min_tx_gap_seconds: float = 0.35,
+        serial_monitor_retry_delay_seconds: float = 0.35,
     ) -> None:
         self._poll_interval = poll_interval
         self._traffic_monitor = traffic_monitor
         self._min_tx_gap_seconds = max(0.0, float(min_tx_gap_seconds))
+        self._serial_monitor_retry_delay_seconds = max(0.0, float(serial_monitor_retry_delay_seconds))
         self._last_tx_monotonic_by_interface: dict[int, float] = {}
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
@@ -268,10 +270,65 @@ class OutboundService:
                         if kind == "wx":
                             log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via {interface_name}")
                         return
+                    log_event(
+                        "WARNING",
+                        "outbound",
+                        (
+                            f"Serial TX unavailable for {kind} outbound job #{job_id} via {interface_name}; "
+                            "restarting traffic monitor and retrying once."
+                        ),
+                    )
+                    restart_error: str | None = None
+                    try:
+                        await self._traffic_monitor.restart()
+                    except Exception as exc:
+                        restart_error = str(exc).strip() or exc.__class__.__name__
+                    if restart_error is None:
+                        if self._serial_monitor_retry_delay_seconds > 0:
+                            await self._sleep(self._serial_monitor_retry_delay_seconds)
+                        sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
+                            interface_id=normalized_interface_id,
+                            frame=frame,
+                        )
+                        if sent_via_monitor:
+                            persist_outbound_frame(
+                                source=interface_name,
+                                interface_id=normalized_interface_id,
+                                band=str(job.get("band") or "").strip(),
+                                line=tnc2_line,
+                                payload_hex=frame.hex(" ").upper(),
+                            )
+                            mark_outbound_job_sent(job_id)
+                            self._remember_tx_timestamp(interface_id=normalized_interface_id)
+                            message_kind = str(payload.get("message_kind") or "").strip()
+                            if kind == "message" and payload.get("aprs_message_id") is not None:
+                                if message_kind == "direct_message":
+                                    register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
+                                elif message_kind == QUERY_MESSAGE_KIND:
+                                    register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                            elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                                register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                            log_event(
+                                "INFO",
+                                "outbound",
+                                (
+                                    f"Sent {kind} outbound job #{job_id} via {interface_name} "
+                                    "after traffic monitor restart."
+                                ),
+                            )
+                            if kind == "wx":
+                                log_event(
+                                    "INFO",
+                                    "wx",
+                                    f"Sent WX outbound job #{job_id} via {interface_name} after traffic monitor restart.",
+                                )
+                            return
                     message = (
                         f"Traffic monitor could not send {kind} outbound job #{job_id} via {interface_name}. "
                         "Direct serial fallback is disabled to protect active RX runtime; reconnect is required."
                     )
+                    if restart_error:
+                        message = f"{message} Traffic monitor restart failed: {restart_error}"
                     log_event("WARNING", "outbound", message)
                     log_event("WARNING", "system", message)
                     raise RuntimeError(message)
