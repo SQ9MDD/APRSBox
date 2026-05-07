@@ -12,12 +12,18 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from app.dependencies import get_current_user, require_roles
 from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
+    EVENT_LOG_DEBUG_ENABLED_SETTING_KEY,
+    EVENT_LOG_MIN_LEVEL_SETTING_KEY,
     create_system_job,
+    event_log_levels_at_or_above,
     fetch_system_job,
+    get_event_log_debug_enabled,
+    get_event_log_min_level,
     get_app_setting,
     log_event,
     mark_system_job_error,
     mark_system_job_running,
+    normalize_event_log_level,
     set_app_setting,
     vacuum_database,
 )
@@ -97,7 +103,12 @@ from app.services.aprs_device_identification import (
     refresh_aprs_device_identification_cache,
 )
 from app.services.core_client import restart_core_traffic_monitor
-from app.services.radio_activity import get_dashboard_radio_activity
+from app.services.radio_activity import (
+    get_dashboard_radio_activity,
+    get_traffic_devices_statistics,
+    get_traffic_statistics,
+    get_traffic_users_statistics,
+)
 from app.services.config_backup import (
     build_configuration_backup_filename,
     export_configuration_backup_bytes,
@@ -149,6 +160,8 @@ router = APIRouter()
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
 _CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
 _CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
+EVENT_LOG_MIN_LEVEL_OPTIONS: tuple[str, ...] = ("INFO", "WARNING", "ERROR")
+EVENT_LOG_VIEW_LEVEL_OPTIONS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
 
 
 def _translate(message: object) -> str:
@@ -422,6 +435,13 @@ def _map_source_checkbox(value: Any) -> bool:
     return text in {"1", "true", "on", "yes"}
 
 
+def _normalize_event_log_min_level(value: Any) -> str:
+    normalized = normalize_event_log_level(value, default=get_event_log_min_level())
+    if normalized not in EVENT_LOG_MIN_LEVEL_OPTIONS:
+        return "INFO"
+    return normalized
+
+
 def _empty_map_source_form() -> dict[str, Any]:
     return {
         "record_id": None,
@@ -491,6 +511,8 @@ def _settings_page_context(
     )
     update_channels = list_update_channels()
     resolved_ui_palette = normalize_ui_palette(current_ui_palette if current_ui_palette is not None else get_app_setting("ui_palette"))
+    event_log_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
+    event_log_debug_enabled = get_event_log_debug_enabled()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -520,6 +542,9 @@ def _settings_page_context(
         ui_palette_options=get_ui_palette_options(),
         aprs_device_identification_status=get_aprs_device_identification_status(),
         event_log_keep_rows=DEFAULT_EVENT_LOG_KEEP_ROWS,
+        event_log_min_level=event_log_min_level,
+        event_log_debug_enabled=event_log_debug_enabled,
+        event_log_min_level_options=[{"value": value, "label": value} for value in EVENT_LOG_MIN_LEVEL_OPTIONS],
         database_vacuum_blocked=database_vacuum_blocked,
         update_channel_selected=selected_update_channel,
         update_channel_stable=stable_update_channel,
@@ -1098,6 +1123,8 @@ def settings_update_global(
     language: str = Form(...),
     default_units: str = Form(...),
     ui_palette: str = Form(""),
+    event_log_min_level: str = Form(""),
+    event_log_debug_enabled: str | None = Form(None),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
@@ -1105,6 +1132,9 @@ def settings_update_global(
     selected_language = normalize_language(language)
     selected_default_units = str(default_units or "").strip().lower()
     selected_ui_palette = normalize_ui_palette(raw_ui_palette)
+    raw_event_log_min_level = str(event_log_min_level or "").strip().upper()
+    selected_event_log_min_level = _normalize_event_log_min_level(raw_event_log_min_level)
+    selected_event_log_debug_enabled = _map_source_checkbox(event_log_debug_enabled)
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
@@ -1113,6 +1143,8 @@ def settings_update_global(
         return JSONResponse({"ok": False, "error": _translate("Unsupported unit selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if not is_supported_ui_palette(raw_ui_palette):
         return JSONResponse({"ok": False, "error": _translate("Unsupported color palette selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if raw_event_log_min_level not in EVENT_LOG_MIN_LEVEL_OPTIONS:
+        return JSONResponse({"ok": False, "error": _translate("Unsupported log level selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
@@ -1125,6 +1157,8 @@ def settings_update_global(
 
     set_app_setting("app_language", selected_language)
     set_app_setting("ui_palette", selected_ui_palette)
+    set_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY, selected_event_log_min_level)
+    set_app_setting(EVENT_LOG_DEBUG_ENABLED_SETTING_KEY, "1" if selected_event_log_debug_enabled else "0")
     return JSONResponse(
         {
             "ok": True,
@@ -1132,6 +1166,8 @@ def settings_update_global(
             "current_language": selected_language,
             "current_default_units": selected_default_units,
             "current_ui_palette": selected_ui_palette,
+            "event_log_min_level": selected_event_log_min_level,
+            "event_log_debug_enabled": selected_event_log_debug_enabled,
             "reload": True,
         }
     )
@@ -2312,15 +2348,22 @@ def station_send_status(
 @router.get("/logs")
 def logs_page(
     request: Request,
+    min_level: str = "",
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
+    configured_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
+    selected_min_level = normalize_event_log_level(min_level, default=configured_min_level)
+    visible_levels = event_log_levels_at_or_above(selected_min_level)
     context = build_template_context(
         request,
         page_title="Logs",
         current_user=current_user,
         active_nav="logs",
-        log_rows=recent_event_logs(limit=200),
+        log_rows=recent_event_logs(limit=200, min_level=selected_min_level),
+        log_min_level=selected_min_level,
+        log_min_level_options=[{"value": value, "label": value} for value in EVENT_LOG_VIEW_LEVEL_OPTIONS],
+        log_visible_levels=visible_levels,
     )
     return templates.TemplateResponse("logs.html", context)
 
@@ -2361,6 +2404,27 @@ def traffic_page(
         can_manage_traffic_runtime=current_user.role in {"admin", "operator"},
     )
     return templates.TemplateResponse("traffic.html", context)
+
+
+@router.get("/statistics")
+def statistics_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    statistics_payload = get_traffic_statistics(range_value="24h")
+    statistics_devices_payload = get_traffic_devices_statistics(range_value="24h")
+    statistics_users_payload = get_traffic_users_statistics(range_value="24h")
+    context = build_template_context(
+        request,
+        page_title="Statistics",
+        current_user=current_user,
+        active_nav="statistics",
+        statistics_payload=statistics_payload,
+        statistics_devices_payload=statistics_devices_payload,
+        statistics_users_payload=statistics_users_payload,
+    )
+    return templates.TemplateResponse("statistics.html", context)
 
 
 @router.get("/messages")
@@ -2487,6 +2551,46 @@ def dashboard_radio_activity(
         payload = get_dashboard_radio_activity(range_value=range)
     except ValueError:
         return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/traffic")
+def statistics_traffic(
+    range: str = "24h",
+    shift: int = 0,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_traffic_statistics(range_value=range, shift_windows=shift)
+    except ValueError:
+        return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/devices")
+def statistics_devices(
+    range: str = "24h",
+    shift: int = 0,
+    window: str | None = None,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_traffic_devices_statistics(range_value=range, shift_windows=shift, window=window)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/users")
+def statistics_users(
+    range: str = "24h",
+    shift: int = 0,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_traffic_users_statistics(range_value=range, shift_windows=shift)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)
 
 

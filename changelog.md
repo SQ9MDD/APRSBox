@@ -1,5 +1,66 @@
 # Changelog
 
+## 1.8.0
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- zmiany  od 1.7.37.dev do 1.7.47
+
+## 1.7.47.dev - 07.05.2026
+
+### Najważniejsze zmiany
+- poprawki w statystykach, naprawa blednych wyliczeń TOP20 sprzet
+
+## 1.7.47.dev - 06.05.2026
+
+### Najważniejsze zmiany
+- `Statystyki / zakresy`: utrzymano zakresy `1 godzina`, `1 dzień`, `7 dni`, `30 dni` (usunięto `rok` z selektora UI), z nawigacją okna `Wstecz/Dalej`.
+- `Statystyki / agregacja`: dla `1 dzień` używany jest bucket `1h`, a dla dłuższych zakresów bucket `1d`; poprawiono wyliczanie granic bucketów dziennych (UTC), aby bieżący dzień był widoczny w widokach `7 dni` i `30 dni`.
+- `Statystyki / TOP20 devices`: dodano numerację pozycji jako pierwszą kolumnę listy.
+- `Statystyki / TOP20 devices`: poprawiono semantykę zliczania na `unikalne CALLSIGN-SSID per urządzenie` w wybranym oknie czasu (bez przypisywania stacji wyłącznie do jednego „dominującego” urządzenia), co eliminuje zaniżanie liczników dla urządzeń takich jak `TH-D75`.
+- `Statystyki / TOP20 devices`: scalono duplikaty tego samego modelu wykryte przez różne identyfikatory (`TOCALL`/`Mic-E`) do jednej pozycji rankingu oraz ujednolicono `TOCALL APRS` jako `GENERIC APRS`, aby uniknąć równoległych pozycji `Unknown`/`Nieznany`.
+- `Statystyki / TOP20 devices`: naprawiono podwójne zliczanie tej samej stacji w obrębie jednego modelu (np. kilka identyfikatorów `TH-D75` dla jednego `CALLSIGN-SSID`), więc licznik modelu odpowiada unikalnym stacjom.
+- `Statystyki / TOP20 devices`: API zwraca teraz dodatkowe sumary (`unique_station_keys_total`, `unique_station_device_pairs_total`) do rozróżnienia „ile unikalnych stacji słyszano” vs „ile unikalnych wystąpień urządzeń (station-device) zliczono”.
+- `Statystyki / TOP20 devices`: lista jest twardo ograniczona do 20 pozycji (nadmiar agregowany do `Inne`); tooltip pozycji zawiera `TOCALL`, `Identifier`, listę stacji dla wskazanego `TOCALL` oraz pełną listę stacji modelu, z której liczony jest ranking.
+- `Statystyki / TOP20 users`: dodano nowy blok `TOP20 users` pod `TOP20 devices` (lista bez wykresu kołowego), z rankingiem `CALLSIGN-SSID` liczonym po liczbie ramek RX (`ramki (procent)`), numeracją pozycji i kolorowymi markerami.
+- `Statystyki / API`: dodano endpoint `GET /api/statistics/users` z obsługą `range` i `shift`, spójny z istniejącym mechanizmem odświeżania danych statystyk.
+- `I18N`: dodano/uzupełniono klucze tłumaczeń statystyk (`Back`, `Forward`, `aggregation`, `TOP20 users`) w `en/pl/tlh`.
+- `Testy`: rozszerzono testy regresyjne `statistics` o API `users`, nawigację `shift` oraz poprawność agregacji i mapowania danych.
+
+## 1.7.44.dev - 06.05.2026
+
+### Najważniejsze zmiany
+- `TNC (SERIAL/SERIALL)`: wewnętrznie zastąpiono direct-serial lokalnym brokerem `KISS SERIAL <-> KISS TCP (127.0.0.1)`, bez zmian w konfiguracji użytkownika.
+- `Runtime/lifecycle`: dla każdego aktywnego TNC serial działa osobny broker z kontrolowanym start/stop/reconnect i pełnym zamykaniem uchwytów przy disable/shutdown.
+
+## 1.7.40.dev - 05.05.2026
+
+### Najważniejsze zmiany
+- `Statystyki / layout`: przebudowano układ strony `Statistics` do kolumn `2/3 + 1/3` (główne wykresy czasowe po lewej, panel podsumowań po prawej) z zachowaniem responsywności i istniejącego stylu kart.
+- `Statystyki / TOP20 devices`: dodano kartę donut `TOP20 devices` opartą o istniejący `Chart.js`, wraz z listą pozycji (`count`, `%`) i markerami kolorów zgodnymi z segmentami wykresu.
+- `Statystyki / metryka`: TOP20 liczy udział domyślnie po unikalnych `CALLSIGN-SSID` (nie po liczbie ramek), z obsługą kategorii `Unknown`, `Mixed / Unknown` i `Other`.
+- `Statystyki / TOCALL`: identyfikacja urządzeń używa istniejącego mechanizmu `aprs-deviceid`; nieznane `destination/TOCALL` są mapowane do `Unknown` zamiast surowych, mylących etykiet.
+- `Statystyki / zakres czasu`: usunięto lokalny przełącznik `Window` z karty TOP20; wykres i lista korzystają z tego samego głównego `Range` oraz nawigacji `Back/Forward` co pozostałe wykresy statystyk.
+- `Statystyki / bufor danych`: dodano bufor godzinowy `traffic_device_station_device_hourly` aktualizowany przy RX `TNC2`, aby TOP20 dla dłuższych zakresów nie zależał wyłącznie od retencji `traffic_frames`.
+- `Statystyki / stabilność danych`: API TOP20 porównuje wariant z bufora i wariant z bieżących `traffic_frames` dla tego samego okna i wybiera bogatszy zbiór podczas dogrzewania bufora po wdrożeniu/restarcie.
+- `Statystyki / tooltipy`: dodano `TOCALL` w tooltipie donuta oraz w hover tooltipie pozycji listy.
+- `Statystyki / kolory`: poprawiono paletę donuta do ciągłego gradientu ciepłe->zimne bez resetu po 16. elemencie; segment `Other` ma stały szary kolor.
+- `Testy`: zaktualizowano testy API/statystyk urządzeń do nowego modelu zakresów i bufora godzinowego oraz dodano asercje dla pola `tocall`.
+
+## 1.7.39.dev - 05.05.2026
+
+### Najważniejsze zmiany
+- `Statystyki / routing`: dodano osobną stronę `Statystyki` w menu bocznym (`/statistics`) wraz z endpointem `GET /api/statistics/traffic` zwracającym gotowe buckety czasowe do wykresów.
+- `Statystyki / wykresy`: dodano trzy karty wykresów (`Typy ramek APRS`, `Słyszane bezpośrednio vs wszystko`, `Akcje APRSBox`) oparte o istniejący `Chart.js` i bieżącą paletę kolorów `Traffic Log`.
+- `Statystyki / semantyka`: usunięto serię `duplicate ignored`; seria `filtered_dropped` została opisana jako `Filtered / dropped to APRS-IS`, a kolor `gated to APRS-IS` przepięto na `--traffic-color-proxy-tx`.
+- `Statystyki / zakresy`: uproszczono zakresy do `1 dzień`, `7 dni`, `30 dni`; dodano nawigację okna `Wstecz/Dalej` przesuwającą wykresy o pełny wybrany zakres.
+- `Statystyki / agregacja`: ustawiono bucket `1h` dla `1 dzień` oraz `1d` dla zakresów dłuższych; naprawiono wyliczanie granic bucketa dziennego (UTC epoch flooring), aby bieżący dzień nie znikał z wykresów `7 dni`.
+- `Statystyki / TOP users`: dodano tabelę `TOP20 users` pod `TOP20 devices` (bez wykresu kołowego), z rankingiem `CALLSIGN-SSID` wg liczby ramek i udziałem procentowym w całym zakresie.
+- `I18N`: dodano/uzupełniono klucze tłumaczeń dla statystyk (`1 day`, `7 days`, `30 days`, `Back`, `Forward`, `aggregation`, `TOP20 users`) w `en/pl/tlh`.
+- `Testy`: rozszerzono testy regresyjne API statystyk o bucketowanie `1h/1d`, nawigację `shift` i poprawność mapowania danych w zakresie dziennym.
+
 ## 1.7.38 - 05.05.2026
 
 ### Stable release

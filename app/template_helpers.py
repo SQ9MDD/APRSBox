@@ -19,6 +19,7 @@ PRIMARY_NAV = [
     {"key": "band-condition", "label": "Band Condition", "href": "/band-condition", "roles": ("admin", "operator", "viewer"), "icon": "chart-line.svg"},
     {"key": "modems", "label": "TNC", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
     {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
+    {"key": "statistics", "label": "Statistics", "href": "/statistics", "roles": ("admin", "operator", "viewer"), "icon": "chart-bar-stacked.svg"},
     {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator", "viewer")},
     {"key": "station", "label": "My Settings", "href": "/station", "roles": ("admin", "operator", "viewer"), "icon": "antenna.svg"},
     {"key": "wx", "label": "WX", "href": "/wx", "roles": ("admin", "operator", "viewer"), "icon": "weather-partly-snowy.svg"},

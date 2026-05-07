@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.datetime_utils import format_display_datetime
-from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.db import event_log_levels_at_or_above, fetch_all, fetch_one, get_connection, log_event, normalize_event_log_level, utc_now
 from app.i18n import get_app_language, get_translator
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
@@ -378,16 +378,19 @@ def _normalize_station_symbol_overlay_value(value: Any, *, symbol_table: str) ->
     return None
 
 
-def recent_event_logs(limit: int = 100) -> list[dict[str, Any]]:
+def recent_event_logs(limit: int = 100, *, min_level: str = "DEBUG") -> list[dict[str, Any]]:
+    levels = event_log_levels_at_or_above(normalize_event_log_level(min_level, default="DEBUG"))
+    level_placeholders = ", ".join("?" for _ in levels)
     rows = fetch_all(
-        """
+        f"""
         SELECT id, level, category, message, created_at
         FROM event_logs
         WHERE category NOT IN ('outbound', 'digi_flow_runtime', 'traffic', 'aprsis', 'aprs', 'messages')
+          AND level IN ({level_placeholders})
         ORDER BY id DESC
         LIMIT ?
         """,
-        (limit,),
+        (*levels, limit),
     )
     return [dict(row) for row in rows]
 

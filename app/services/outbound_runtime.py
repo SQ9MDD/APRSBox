@@ -29,14 +29,21 @@ from app.services.outbound import (
     recover_stale_processing_beacon_jobs,
     recover_stale_processing_wx_jobs,
 )
-from app.services.serial_tnc import (
-    close_serial_device,
-    normalize_serial_baud_rate,
-    normalize_serial_device_path,
-    open_serial_device,
-    write_serial_data,
-)
 from app.services.traffic import TrafficMonitorService
+
+KISS_FEND = 0xC0
+
+
+def _kiss_frame_hex_preview(frame: bytes, *, max_bytes: int = 32) -> str:
+    if not frame:
+        return "<empty>"
+    if len(frame) <= max_bytes:
+        return frame.hex(" ").upper()
+    head_len = max_bytes // 2
+    tail_len = max_bytes - head_len
+    head = frame[:head_len].hex(" ").upper()
+    tail = frame[-tail_len:].hex(" ").upper()
+    return f"{head} ... {tail}"
 
 
 class OutboundService:
@@ -241,47 +248,61 @@ class OutboundService:
                         pass
                     _ = reader
             elif modem_type in {"SERIALL", "SERIAL"}:
-                if self._traffic_monitor is not None:
-                    sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
-                        interface_id=normalized_interface_id,
-                        frame=frame,
-                    )
-                    if sent_via_monitor:
-                        persist_outbound_frame(
-                            source=interface_name,
-                            interface_id=normalized_interface_id,
-                            band=str(job.get("band") or "").strip(),
-                            line=tnc2_line,
-                            payload_hex=frame.hex(" ").upper(),
-                        )
-                        mark_outbound_job_sent(job_id)
-                        self._remember_tx_timestamp(interface_id=normalized_interface_id)
-                        message_kind = str(payload.get("message_kind") or "").strip()
-                        if kind == "message" and payload.get("aprs_message_id") is not None:
-                            if message_kind == "direct_message":
-                                register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
-                            elif message_kind == QUERY_MESSAGE_KIND:
-                                register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
-                        elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
-                            register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
-                        log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
-                        if kind == "wx":
-                            log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via {interface_name}")
-                        return
+                if self._traffic_monitor is None:
                     message = (
-                        f"Traffic monitor could not send {kind} outbound job #{job_id} via {interface_name}. "
-                        "Direct serial fallback is disabled to protect active RX runtime; reconnect is required."
+                        f"Serial TX for {kind} outbound job #{job_id} via {interface_name} requires "
+                        "an active traffic monitor runtime. Direct serial fallback is disabled."
                     )
-                    log_event("WARNING", "outbound", message)
-                    log_event("WARNING", "system", message)
+                    log_event("ERROR", "outbound", message)
+                    log_event("ERROR", "system", message)
                     raise RuntimeError(message)
-                serial_path = normalize_serial_device_path(device_path)
-                baud_rate = normalize_serial_baud_rate(job.get("baud_rate"))
-                serial_fd = await asyncio.to_thread(open_serial_device, serial_path, baud_rate, flush_buffers=False)
-                try:
-                    await asyncio.to_thread(write_serial_data, serial_fd, frame, drain=True)
-                finally:
-                    await asyncio.to_thread(close_serial_device, serial_fd)
+                self._log_serial_runtime_tx(
+                    job_id=job_id,
+                    kind=kind,
+                    interface_name=interface_name,
+                    frame=frame,
+                    using_shared_runtime=True,
+                )
+                sent_via_monitor = await self._traffic_monitor.send_outbound_frame(
+                    interface_id=normalized_interface_id,
+                    frame=frame,
+                )
+                if sent_via_monitor:
+                    persist_outbound_frame(
+                        source=interface_name,
+                        interface_id=normalized_interface_id,
+                        band=str(job.get("band") or "").strip(),
+                        line=tnc2_line,
+                        payload_hex=frame.hex(" ").upper(),
+                    )
+                    mark_outbound_job_sent(job_id)
+                    self._remember_tx_timestamp(interface_id=normalized_interface_id)
+                    message_kind = str(payload.get("message_kind") or "").strip()
+                    if kind == "message" and payload.get("aprs_message_id") is not None:
+                        if message_kind == "direct_message":
+                            register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
+                        elif message_kind == QUERY_MESSAGE_KIND:
+                            register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                    elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                        register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                    log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via {interface_name}")
+                    if kind == "wx":
+                        log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via {interface_name}")
+                    return
+                self._log_serial_runtime_tx(
+                    job_id=job_id,
+                    kind=kind,
+                    interface_name=interface_name,
+                    frame=frame,
+                    using_shared_runtime=False,
+                )
+                message = (
+                    f"Traffic monitor could not send {kind} outbound job #{job_id} via {interface_name}. "
+                    "Serial TX must use the active shared runtime; no direct fallback will be used."
+                )
+                log_event("WARNING", "outbound", message)
+                log_event("WARNING", "system", message)
+                raise RuntimeError(message)
             else:
                 raise ValueError(f"Interface {interface_name} uses unsupported modem type {modem_type or '-'}")
 
@@ -377,6 +398,33 @@ class OutboundService:
         )
         log_event("WARNING", "outbound", message)
         log_event("WARNING", "system", message)
+
+    def _log_serial_runtime_tx(
+        self,
+        *,
+        job_id: int,
+        kind: str,
+        interface_name: str,
+        frame: bytes,
+        using_shared_runtime: bool,
+    ) -> None:
+        command_text = "n/a"
+        if len(frame) >= 2 and frame[0] == KISS_FEND:
+            command = frame[1]
+            command_text = f"0x{command:02X}"
+        preview = _kiss_frame_hex_preview(frame)
+        if using_shared_runtime:
+            message = (
+                f"Serial TX {kind} job #{job_id} via {interface_name} uses shared runtime: "
+                f"len={len(frame)} cmd={command_text} frame={preview}"
+            )
+            log_event("DEBUG", "outbound", message)
+            return
+        message = (
+            f"Serial TX {kind} job #{job_id} via {interface_name} shared runtime unavailable: "
+            f"len={len(frame)} cmd={command_text} frame={preview}"
+        )
+        log_event("WARNING", "outbound", message)
 
 
 def _skip_reason_for_expired_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:

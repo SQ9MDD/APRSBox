@@ -55,9 +55,27 @@ def open_serial_device(path: str, baud_rate: int, *, flush_buffers: bool = True)
     return fd
 
 
-def close_serial_device(fd: int | None) -> None:
+def close_serial_device(
+    fd: int | None,
+    *,
+    drain_timeout: float = 0.2,
+    flush_buffers: bool = True,
+    drop_control_lines: bool = True,
+) -> None:
     if fd is None:
         return
+    if drain_timeout > 0:
+        try:
+            _best_effort_drain(fd, timeout=drain_timeout)
+        except OSError:
+            pass
+    if flush_buffers:
+        try:
+            termios.tcflush(fd, termios.TCIOFLUSH)
+        except OSError:
+            pass
+    if drop_control_lines:
+        _best_effort_set_modem_lines(fd, dtr=False, rts=False)
     try:
         os.close(fd)
     except OSError:
@@ -108,3 +126,38 @@ def _best_effort_drain(fd: int, *, timeout: float) -> None:
         if pending[0] <= 0:
             return
         time.sleep(0.01)
+
+
+def _best_effort_set_modem_lines(fd: int, *, dtr: bool | None, rts: bool | None) -> None:
+    tiocmbic = getattr(termios, "TIOCMBIC", None)
+    tiocmbis = getattr(termios, "TIOCMBIS", None)
+    dtr_mask = getattr(termios, "TIOCM_DTR", None)
+    rts_mask = getattr(termios, "TIOCM_RTS", None)
+    if tiocmbic is None or tiocmbis is None:
+        return
+
+    clear_mask = 0
+    set_mask = 0
+    if dtr is not None and dtr_mask is not None:
+        if dtr:
+            set_mask |= int(dtr_mask)
+        else:
+            clear_mask |= int(dtr_mask)
+    if rts is not None and rts_mask is not None:
+        if rts:
+            set_mask |= int(rts_mask)
+        else:
+            clear_mask |= int(rts_mask)
+
+    if clear_mask:
+        try:
+            clear_bits = array.array("i", [clear_mask])
+            fcntl.ioctl(fd, tiocmbic, clear_bits, True)
+        except OSError:
+            return
+    if set_mask:
+        try:
+            set_bits = array.array("i", [set_mask])
+            fcntl.ioctl(fd, tiocmbis, set_bits, True)
+        except OSError:
+            return

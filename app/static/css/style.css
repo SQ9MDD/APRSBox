@@ -1233,6 +1233,120 @@ body {
     gap: 0.5rem;
 }
 
+.statistics-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+}
+
+.statistics-main-column,
+.statistics-side-column {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-3);
+}
+
+.statistics-devices-card {
+    align-content: start;
+}
+
+.statistics-users-card {
+    align-content: start;
+}
+
+.statistics-devices-canvas {
+    min-height: 220px;
+    max-height: 280px;
+}
+
+.statistics-devices-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.statistics-devices-list-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.6rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.28rem;
+    font-size: 0.82rem;
+}
+
+.statistics-list-index {
+    width: 1.8rem;
+    flex: 0 0 1.8rem;
+    text-align: right;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.statistics-devices-list-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+}
+
+.statistics-devices-color-marker {
+    display: inline-block;
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--text) 24%, transparent);
+    flex: 0 0 auto;
+}
+
+.statistics-devices-list-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.statistics-devices-list-value {
+    white-space: nowrap;
+    color: var(--muted);
+}
+
+.statistics-users-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.statistics-users-list-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.6rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.28rem;
+    font-size: 0.82rem;
+}
+
+.statistics-users-list-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+}
+
+.statistics-users-list-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.statistics-users-list-value {
+    white-space: nowrap;
+    color: var(--muted);
+}
+
 .dashboard-activity-card {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -1317,7 +1431,8 @@ body {
 
 @media (max-width: 1180px) {
     .dashboard-overview-grid,
-    .dashboard-detail-grid {
+    .dashboard-detail-grid,
+    .statistics-layout {
         grid-template-columns: 1fr;
     }
 }

@@ -8,6 +8,14 @@ from typing import Any, Iterator
 from app.config import settings
 
 DEFAULT_EVENT_LOG_KEEP_ROWS = 5000
+EVENT_LOG_LEVELS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
+EVENT_LOG_MIN_LEVEL_SETTING_KEY = "event_log_min_level"
+EVENT_LOG_DEBUG_ENABLED_SETTING_KEY = "event_log_debug_enabled"
+DEFAULT_EVENT_LOG_MIN_LEVEL = "INFO"
+_EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LEVELS)}
+
+_event_log_min_level_cache: str | None = None
+_event_log_debug_enabled_cache: bool | None = None
 
 
 def utc_now() -> str:
@@ -425,6 +433,18 @@ CREATE TABLE IF NOT EXISTS traffic_frames (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS traffic_device_station_device_hourly (
+    bucket_start_utc TEXT NOT NULL,
+    station_key TEXT NOT NULL,
+    device_key TEXT NOT NULL,
+    destination_key TEXT NOT NULL,
+    device_label TEXT NOT NULL,
+    recognized_flag INTEGER NOT NULL DEFAULT 0 CHECK (recognized_flag IN (0, 1)),
+    frame_count INTEGER NOT NULL DEFAULT 0,
+    last_seen_at TEXT NOT NULL,
+    PRIMARY KEY (bucket_start_utc, station_key, device_key, destination_key)
+);
+
 CREATE TABLE IF NOT EXISTS traffic_runtime_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     status TEXT NOT NULL,
@@ -598,6 +618,16 @@ CREATE TABLE IF NOT EXISTS radio_activity_5m (
     invalid_total INTEGER NOT NULL DEFAULT 0,
     parse_error_total INTEGER NOT NULL DEFAULT 0,
     duplicate_total INTEGER NOT NULL DEFAULT 0,
+    type_position_total INTEGER NOT NULL DEFAULT 0,
+    type_weather_total INTEGER NOT NULL DEFAULT 0,
+    type_message_total INTEGER NOT NULL DEFAULT 0,
+    type_object_item_total INTEGER NOT NULL DEFAULT 0,
+    type_status_total INTEGER NOT NULL DEFAULT 0,
+    type_telemetry_total INTEGER NOT NULL DEFAULT 0,
+    type_query_total INTEGER NOT NULL DEFAULT 0,
+    type_user_defined_total INTEGER NOT NULL DEFAULT 0,
+    type_third_party_total INTEGER NOT NULL DEFAULT 0,
+    type_other_unknown_total INTEGER NOT NULL DEFAULT 0,
     max_hops_seen INTEGER,
     avg_hops REAL,
     created_at_utc TEXT NOT NULL,
@@ -615,6 +645,8 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_device_station_device_hourly_bucket
+    ON traffic_device_station_device_hourly(bucket_start_utc, station_key);
 CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_flow_created_at ON digi_flow_event_log(flow_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_map_sources_enabled_sort ON map_sources(enabled DESC, sort_order ASC, id ASC);
@@ -646,6 +678,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_source
 
 
 def init_db() -> None:
+    global _event_log_min_level_cache, _event_log_debug_enabled_cache
+    _event_log_min_level_cache = None
+    _event_log_debug_enabled_cache = None
     with get_connection() as connection:
         connection.executescript(SCHEMA)
         _migrate_system_jobs_table(connection)
@@ -668,6 +703,7 @@ def init_db() -> None:
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
+        radio_activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_5m)").fetchall()}
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -897,6 +933,76 @@ def init_db() -> None:
                 """
                 ALTER TABLE traffic_frames
                 ADD COLUMN band TEXT
+                """
+            )
+        if "type_position_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_position_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_weather_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_weather_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_message_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_message_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_object_item_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_object_item_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_status_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_status_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_telemetry_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_telemetry_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_query_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_query_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_user_defined_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_user_defined_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_third_party_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_third_party_total INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "type_other_unknown_total" not in radio_activity_columns:
+            connection.execute(
+                """
+                ALTER TABLE radio_activity_5m
+                ADD COLUMN type_other_unknown_total INTEGER NOT NULL DEFAULT 0
                 """
             )
         connection.execute(
@@ -1782,6 +1888,7 @@ def get_app_setting(key: str) -> str | None:
 
 
 def set_app_setting(key: str, value: str) -> None:
+    global _event_log_min_level_cache, _event_log_debug_enabled_cache
     execute(
         """
         INSERT INTO app_settings(key, value, updated_at)
@@ -1792,6 +1899,47 @@ def set_app_setting(key: str, value: str) -> None:
         """,
         (key, value, utc_now()),
     )
+    if key == EVENT_LOG_MIN_LEVEL_SETTING_KEY:
+        _event_log_min_level_cache = normalize_event_log_level(value, default=DEFAULT_EVENT_LOG_MIN_LEVEL)
+    elif key == EVENT_LOG_DEBUG_ENABLED_SETTING_KEY:
+        _event_log_debug_enabled_cache = _normalize_app_setting_bool(value)
+
+
+def normalize_event_log_level(value: Any, *, default: str = DEFAULT_EVENT_LOG_MIN_LEVEL) -> str:
+    normalized_default = str(default or DEFAULT_EVENT_LOG_MIN_LEVEL).strip().upper()
+    if normalized_default not in _EVENT_LOG_LEVEL_RANK:
+        normalized_default = DEFAULT_EVENT_LOG_MIN_LEVEL
+    normalized = str(value or "").strip().upper()
+    if normalized in _EVENT_LOG_LEVEL_RANK:
+        return normalized
+    return normalized_default
+
+
+def event_log_levels_at_or_above(min_level: str) -> tuple[str, ...]:
+    normalized = normalize_event_log_level(min_level)
+    minimum_rank = _EVENT_LOG_LEVEL_RANK.get(normalized, _EVENT_LOG_LEVEL_RANK[DEFAULT_EVENT_LOG_MIN_LEVEL])
+    return tuple(level for level in EVENT_LOG_LEVELS if _EVENT_LOG_LEVEL_RANK[level] >= minimum_rank)
+
+
+def get_event_log_min_level() -> str:
+    global _event_log_min_level_cache
+    if _event_log_min_level_cache is not None:
+        return _event_log_min_level_cache
+    stored = get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY)
+    _event_log_min_level_cache = normalize_event_log_level(stored, default=DEFAULT_EVENT_LOG_MIN_LEVEL)
+    return _event_log_min_level_cache
+
+
+def get_event_log_debug_enabled() -> bool:
+    global _event_log_debug_enabled_cache
+    if _event_log_debug_enabled_cache is not None:
+        return _event_log_debug_enabled_cache
+    _event_log_debug_enabled_cache = _normalize_app_setting_bool(get_app_setting(EVENT_LOG_DEBUG_ENABLED_SETTING_KEY))
+    return _event_log_debug_enabled_cache
+
+
+def _normalize_app_setting_bool(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "on", "yes"}
 
 
 def prune_event_logs(*, keep_rows: int) -> int:
@@ -1829,9 +1977,17 @@ def vacuum_database() -> None:
 
 
 def log_event(level: str, category: str, message: str) -> None:
+    normalized_level = normalize_event_log_level(level)
+    if normalized_level == "DEBUG":
+        if not get_event_log_debug_enabled():
+            return
+    else:
+        minimum_level = get_event_log_min_level()
+        if _EVENT_LOG_LEVEL_RANK[normalized_level] < _EVENT_LOG_LEVEL_RANK[minimum_level]:
+            return
     execute(
         "INSERT INTO event_logs(level, category, message, created_at) VALUES (?, ?, ?, ?)",
-        (level, category, message, utc_now()),
+        (normalized_level, category, message, utc_now()),
     )
 
 

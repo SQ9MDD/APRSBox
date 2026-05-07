@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,6 +27,7 @@ OUTBOUND_STATUS_SENT = "sent"
 OUTBOUND_STATUS_FAILED = "failed"
 STALE_BEACON_PROCESSING_REASON = "Beacon was not transmitted: APRSBox core restarted while outbound job was processing."
 STALE_WX_PROCESSING_REASON = "WX frame was not transmitted: APRSBox core restarted while outbound job was processing."
+_AX25_CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -1101,7 +1103,7 @@ def _encode_ax25_address(value: str, *, is_last: bool, has_been_repeated: bool =
 def _split_callsign_ssid(value: str) -> tuple[str, int]:
     normalized = value.strip().upper()
     base, separator, ssid_text = normalized.partition("-")
-    if not base:
+    if not base or not _AX25_CALLSIGN_RE.fullmatch(base):
         raise ValueError("Invalid AX.25 callsign.")
     ssid = 0
     if separator:
@@ -1111,7 +1113,7 @@ def _split_callsign_ssid(value: str) -> tuple[str, int]:
             raise ValueError("Invalid AX.25 SSID.") from exc
         if ssid < 0 or ssid > 15:
             raise ValueError("AX.25 SSID out of range.")
-    return base[:6], ssid
+    return base, ssid
 
 
 def _enqueue_generic_message_payload(
