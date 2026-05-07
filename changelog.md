@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- zmiany  od 1.7.37.dev do 1.7.47
+
 ## 1.7.47.dev - 07.05.2026
 
 ### Najważniejsze zmiany
