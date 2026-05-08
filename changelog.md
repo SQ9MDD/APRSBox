@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.1.dev - 08.05.2026
+
+### Najważniejsze zmiany
+- `APRS WX / parser`: dodano obsługę pola promieniowania `Xxxx` (nSv/h) zgodnie z `APRS-SPEC/weather-new.txt`; wartość nie trafia już do komentarza i jest prezentowana jako metryka `Promieniowanie` w szczegółach stacji.
+
 ## 1.8.0
 
 ### Stable release

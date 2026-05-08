@@ -160,6 +160,17 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("frame_type"), "S")
         self.assertEqual((parsed or {}).get("classification"), "fixed")
 
+    def test_parse_tnc2_frame_decodes_weather_radiation_extension_and_cleans_comment(self) -> None:
+        parsed = parse_tnc2_frame("SQ9MDD-3>APBOX0,RFONLY:=5215.03N/02055.60E_.../...t050h75b10161X111")
+        self.assertIsNotNone(parsed)
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        metrics = dict(aprs_data.get("data") or {})
+        self.assertEqual(aprs_data.get("comment"), "")
+        self.assertEqual(metrics.get("temperature_f"), 50)
+        self.assertEqual(metrics.get("humidity_percent"), 75)
+        self.assertEqual(metrics.get("pressure_hpa"), 1016.1)
+        self.assertEqual(metrics.get("radiation_nsv_h"), 110.0)
+
     def test_parse_tnc2_frame_decodes_mic_e_position(self) -> None:
         parsed = parse_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!')
         aprs_data = (parsed or {}).get("aprs_data") or {}

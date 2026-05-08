@@ -2667,6 +2667,7 @@ def _parse_weather_fields(text: str) -> dict[str, float | int] | None:
     rain_midnight = _match_group(text, r"P(\d{3})")
     humidity = _match_group(text, r"h(\d{2})")
     pressure = _match_group(text, r"b(\d{5})")
+    radiation = _match_group(text, r"[Xx](\d{3})")
 
     if wind_dir:
         metrics["wind_dir"] = int(wind_dir)
@@ -2687,6 +2688,10 @@ def _parse_weather_fields(text: str) -> dict[str, float | int] | None:
         metrics["humidity_percent"] = humidity_value
     if pressure:
         metrics["pressure_hpa"] = int(pressure) / 10
+    if radiation:
+        mantissa = int(radiation[:2])
+        exponent = int(radiation[2])
+        metrics["radiation_nsv_h"] = float(mantissa * (10**exponent))
 
     return metrics or None
 
@@ -2858,7 +2863,7 @@ def _clean_decoded_tokens(text: str, *, preserve_qsy_callsign: bool = False) -> 
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
     cleaned = re.sub(r"\|[!-{]{4,14}\|", " ", cleaned)
     cleaned = re.sub(r"![Ww][!-{]{2}!", " ", cleaned)
-    cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
+    cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5}|[Xx]\d{3})", " ", cleaned)
     cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
     cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
     cleaned = re.sub(r"(?:^|[\s/])A=\d{6}", " ", cleaned)
@@ -2940,6 +2945,17 @@ def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit
     pressure_hpa = metrics.get("pressure_hpa")
     if pressure_hpa is not None:
         items.append(_weather_item("gauge.svg", "Ciśnienie", f"{float(pressure_hpa):.1f} hPa"))
+
+    radiation_nsv_h = metrics.get("radiation_nsv_h")
+    if radiation_nsv_h is not None:
+        radiation_value = float(radiation_nsv_h)
+        if radiation_value >= 1_000_000:
+            value = f"{radiation_value / 1_000_000:.3f} mSv/h"
+        elif radiation_value >= 1_000:
+            value = f"{radiation_value / 1_000:.2f} µSv/h"
+        else:
+            value = f"{radiation_value:.0f} nSv/h"
+        items.append(_weather_item("radioactive.svg", "Promieniowanie", value))
 
     phg_power_w = metrics.get("phg_power_w")
     if phg_power_w is not None:
