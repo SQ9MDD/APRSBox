@@ -30,6 +30,16 @@ SERIAL_TX_DEBUG_PREVIEW_BYTES = 32
 KISS_RETURN = 0xFF
 
 
+def _elapsed_ms_since(start: Any, *, now: float | None = None) -> float | None:
+    if not isinstance(start, (int, float)):
+        return None
+    reference = now if now is not None else time.monotonic()
+    delta_ms = (reference - float(start)) * 1000.0
+    if delta_ms < 0:
+        return 0.0
+    return delta_ms
+
+
 def _kiss_frame_hex_preview(frame: bytes, *, max_bytes: int = SERIAL_TX_DEBUG_PREVIEW_BYTES) -> str:
     if not frame:
         return "<empty>"
@@ -586,6 +596,7 @@ class _TrafficModemRuntime:
         )
 
     def _record_kiss_frame(self, raw_frame: bytes) -> None:
+        rx_monotonic = time.monotonic()
         command = raw_frame[0]
         port = (command >> 4) & 0x0F
         command_id = command & 0x0F
@@ -602,7 +613,7 @@ class _TrafficModemRuntime:
             return
         timestamp = utc_now()
 
-        entry: dict[str, str] = {
+        entry: dict[str, Any] = {
             "timestamp": timestamp,
             "source": self._format_modem_label(),
             "port": str(port),
@@ -612,6 +623,7 @@ class _TrafficModemRuntime:
             "format": "RAW",
             "line": f"port={port} cmd=0x{command_id:X} len={len(payload)}",
             "text": payload.decode("utf-8", errors="replace").strip() or "<binary>",
+            "_rx_monotonic": rx_monotonic,
         }
 
         decoded = self._decode_ax25_to_tnc2(payload)
@@ -1153,10 +1165,12 @@ class _TrafficModemRuntime:
             return f"id={self._modem_id}"
         return "unknown modem"
 
-    def _persist_frame(self, entry: dict[str, str], timestamp: str) -> None:
+    def _persist_frame(self, entry: dict[str, Any], timestamp: str) -> None:
         cutoff = traffic_retention_cutoff()
         active_band = ""
         interface_id: int | None = None
+        rx_monotonic = entry.get("_rx_monotonic")
+        rx_to_igate_enqueue_ms: float | None = None
         with self._lock:
             if self._active_modem:
                 active_band = str(self._active_modem.get("band") or "").strip()
@@ -1164,6 +1178,18 @@ class _TrafficModemRuntime:
                     interface_id = int(self._active_modem["id"])
                 except (TypeError, ValueError, KeyError):
                     interface_id = None
+        if entry["format"] == "TNC2" and self._frame_consumer is not None:
+            enqueue_started_at = time.monotonic()
+            rx_to_igate_enqueue_ms = _elapsed_ms_since(rx_monotonic, now=enqueue_started_at)
+            try:
+                self._frame_consumer(
+                    str(entry["line"]),
+                    source_ref=self._format_modem_label(),
+                    rx_received_at=timestamp,
+                    rx_received_monotonic=rx_monotonic,
+                )
+            except TypeError:
+                self._frame_consumer(str(entry["line"]), source_ref=self._format_modem_label())
         with get_connection() as connection:
             connection.execute(
                 """
@@ -1186,6 +1212,17 @@ class _TrafficModemRuntime:
                 ),
             )
             connection.execute("DELETE FROM traffic_frames WHERE created_at < ?", (cutoff,))
+        rx_to_db_commit_ms = _elapsed_ms_since(rx_monotonic)
+        if entry["format"] == "TNC2":
+            details = [
+                f"source={entry['source']}",
+                f"line={str(entry['line'])[:120]}",
+            ]
+            if rx_to_igate_enqueue_ms is not None:
+                details.append(f"rx_to_igate_enqueue_ms={rx_to_igate_enqueue_ms:.3f}")
+            if rx_to_db_commit_ms is not None:
+                details.append(f"rx_to_db_commit_ms={rx_to_db_commit_ms:.3f}")
+            log_event("DEBUG", "traffic_latency", " | ".join(details))
         try:
             record_traffic_device_station_observation(
                 frame_format=entry["format"],
@@ -1197,8 +1234,6 @@ class _TrafficModemRuntime:
         if entry["format"] == "TNC2":
             process_incoming_frame(entry["line"], band=active_band, timestamp=timestamp)
             process_incoming_tnc2_message(entry["line"], timestamp=timestamp)
-            if self._frame_consumer is not None:
-                self._frame_consumer(entry["line"], source_ref=self._format_modem_label())
 
     async def _sleep(self, delay: float) -> None:
         try:

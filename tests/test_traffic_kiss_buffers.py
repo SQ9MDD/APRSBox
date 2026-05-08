@@ -1,7 +1,29 @@
+import contextlib
+import os
+import tempfile
+import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
+from app.db import init_db, utc_now
 from app.services.traffic import KISS_FEND, _TrafficModemRuntime
+
+
+@contextlib.contextmanager
+def temporary_database() -> Path:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database_path = Path(temp_dir) / "aprsbox-test.db"
+        previous = os.environ.get("APRSBOX_DB_PATH")
+        os.environ["APRSBOX_DB_PATH"] = str(database_path)
+        try:
+            init_db()
+            yield database_path
+        finally:
+            if previous is None:
+                os.environ.pop("APRSBOX_DB_PATH", None)
+            else:
+                os.environ["APRSBOX_DB_PATH"] = previous
 
 
 class TrafficKissBufferGuardTests(unittest.TestCase):
@@ -100,6 +122,48 @@ class TrafficKissRxParserTests(unittest.TestCase):
         stats = runtime.runtime_snapshot()["kiss_stats"]
         self.assertEqual(stats["ignored_kiss_non_data"] + stats["ignored_kiss_garbage"], 2)
         self.assertEqual(log_event_mock.call_count, 1)
+
+
+class TrafficRxHotPathOrderingTests(unittest.TestCase):
+    def test_frame_consumer_is_called_before_heavy_side_effects(self) -> None:
+        with temporary_database():
+            call_order: list[str] = []
+            consumer_calls: list[dict[str, object]] = []
+
+            def frame_consumer(line: str, **kwargs: object) -> None:
+                call_order.append("consumer")
+                consumer_calls.append({"line": line, **kwargs})
+
+            runtime = _TrafficModemRuntime(frame_consumer=frame_consumer)
+            timestamp = utc_now()
+            entry = {
+                "source": "TNC-A",
+                "port": "0",
+                "command": "0x0",
+                "length": "12",
+                "hex": "AA BB CC",
+                "format": "TNC2",
+                "line": "SP8ABC-9>APRS,WIDE1-1:>Hot path test",
+                "_rx_monotonic": time.monotonic(),
+            }
+
+            with patch("app.services.traffic.record_traffic_device_station_observation", side_effect=lambda **_kwargs: call_order.append("device_stats")), patch(
+                "app.services.traffic.process_incoming_frame",
+                side_effect=lambda *_args, **_kwargs: call_order.append("band_condition"),
+            ), patch(
+                "app.services.traffic.process_incoming_tnc2_message",
+                side_effect=lambda *_args, **_kwargs: call_order.append("messages"),
+            ):
+                runtime._persist_frame(entry, timestamp)
+
+            self.assertTrue(call_order)
+            self.assertEqual(call_order[0], "consumer")
+            self.assertEqual(call_order[1:], ["device_stats", "band_condition", "messages"])
+            self.assertEqual(len(consumer_calls), 1)
+            self.assertEqual(consumer_calls[0]["line"], entry["line"])
+            self.assertEqual(consumer_calls[0]["source_ref"], "TNC")
+            self.assertEqual(consumer_calls[0]["rx_received_at"], timestamp)
+            self.assertIsInstance(consumer_calls[0]["rx_received_monotonic"], float)
 
 
 if __name__ == "__main__":

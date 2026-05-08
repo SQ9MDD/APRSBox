@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.2.dev - 08.05.2026
+
+### Najważniejsze zmiany
+- `iGate RX-only / hot path`: przyspieszono tor `RF -> APRS-IS` przez wcześniejsze enqueue do runtime DIGI/APRS-IS (przed cięższymi efektami ubocznymi: DB/statystyki/band-condition/messages), aby ograniczyć opóźnienie względem innych iGate.
+- `APRS-IS TX`: dodano krótki timeout `drain()` po stronie uplinku APRS-IS, żeby problemy sieciowe nie blokowały długo workera runtime.
+- `Diagnostyka opóźnień`: dodano lekkie metryki czasu w logach debug (`rx_to_igate_enqueue_ms`, `igate_queue_wait_ms`, `rx_to_aprsis_write_ms`, `rx_to_db_commit_ms`) dla ramek RX.
+- `Bezpieczeństwo routingu`: zachowano dotychczasową semantykę filtrów i guardów (`TCPIP/TCPXX`, `NOGATE/RFONLY`, third-party strict), bez zmian logiki DIGI RF TX i bez zmian formatu bazy.
+- `Testy`: dodano test kolejności hot path (`enqueue` przed ciężkimi side-effectami) oraz test timeoutu `APRS-IS drain`; testy regresyjne modułów `traffic/aprsis/digi_flow_runtime` przechodzą.
+
 ## 1.8.1.dev - 08.05.2026
 
 ### Najważniejsze zmiany

@@ -35,10 +35,21 @@ _APRSIS_STRICT_REASON_KEYS = {
     APRSIS_STRICT_REASON_OTHER,
 }
 _APRSIS_MINUTE_STATS_RETENTION_HOURS = 24 * 365
+APRSIS_TX_DRAIN_TIMEOUT_SECONDS = 0.25
 
 
 def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _monotonic_delta_ms(start: Any, *, end: float | None = None) -> float | None:
+    if not isinstance(start, (int, float)):
+        return None
+    reference = end if end is not None else time.monotonic()
+    delta_ms = (reference - float(start)) * 1000.0
+    if delta_ms < 0:
+        return 0.0
+    return delta_ms
 
 
 def _normalize_callsign(value: Any) -> str:
@@ -1061,7 +1072,7 @@ class AprsisClientService:
             pass
         self._task = None
 
-    async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+    async def send_tnc2_line(self, line: str, telemetry: dict[str, Any] | None = None) -> tuple[bool, str]:
         payload_line = str(line or "").rstrip("\r\n")
         if not payload_line:
             return False, "APRS-IS TX skipped: empty packet line."
@@ -1071,12 +1082,26 @@ class AprsisClientService:
                 return False, "APRS-IS TX skipped: uplink is not connected."
             try:
                 self._writer.write(wire)
-                await self._writer.drain()
-            except OSError as exc:
+                await asyncio.wait_for(self._writer.drain(), timeout=APRSIS_TX_DRAIN_TIMEOUT_SECONDS)
+            except (OSError, TimeoutError) as exc:
                 detail = f"APRS-IS TX failed: {exc}"
                 await self._disconnect_locked(reason=detail, status=APRSIS_STATUS_ERROR, error=str(exc))
                 self._retry_not_before = time.monotonic() + self._reconnect_delay
                 return False, detail
+        rx_to_aprsis_write_ms = _monotonic_delta_ms((telemetry or {}).get("rx_received_monotonic"))
+        rx_to_igate_enqueue_ms = (telemetry or {}).get("rx_to_igate_enqueue_ms")
+        igate_queue_wait_ms = (telemetry or {}).get("igate_queue_wait_ms")
+        metrics_parts = [f"line={payload_line[:120]}"]
+        frame_uid = str((telemetry or {}).get("frame_uid") or "").strip()
+        if frame_uid:
+            metrics_parts.append(f"frame_uid={frame_uid}")
+        if isinstance(rx_to_igate_enqueue_ms, (int, float)):
+            metrics_parts.append(f"rx_to_igate_enqueue_ms={float(rx_to_igate_enqueue_ms):.3f}")
+        if isinstance(igate_queue_wait_ms, (int, float)):
+            metrics_parts.append(f"igate_queue_wait_ms={float(igate_queue_wait_ms):.3f}")
+        if rx_to_aprsis_write_ms is not None:
+            metrics_parts.append(f"rx_to_aprsis_write_ms={rx_to_aprsis_write_ms:.3f}")
+        log_event("DEBUG", "aprsis_latency", " | ".join(metrics_parts))
         return True, "APRS-IS TX queued."
 
     async def _run(self) -> None:

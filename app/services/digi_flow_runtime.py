@@ -29,6 +29,15 @@ _DUPLICATE_FILTER_WINDOW_DEFAULT_SEC = 5
 _DUPLICATE_FILTER_WINDOW_ALLOWED = {2, 3, 4, 5, 6, 7}
 
 
+def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
+    if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+        return None
+    delta_ms = (float(end) - float(start)) * 1000.0
+    if delta_ms < 0:
+        return 0.0
+    return delta_ms
+
+
 def _t(message: object) -> str:
     return get_translator(get_app_language())(message)
 
@@ -111,13 +120,17 @@ class DigiFlowRuntimeService:
         raw_payload: str,
         frame_uid: str | None = None,
         created_at: str | None = None,
+        rx_received_monotonic: float | None = None,
     ) -> dict[str, Any]:
+        enqueue_monotonic = time.monotonic()
         frame = self._build_frame(
             source_kind=source_kind,
             source_ref=source_ref,
             raw_payload=raw_payload,
             frame_uid=frame_uid,
             created_at=created_at,
+            enqueue_monotonic=enqueue_monotonic,
+            rx_received_monotonic=rx_received_monotonic,
         )
         self._queue.put_nowait(frame)
         log_event(
@@ -136,7 +149,14 @@ class DigiFlowRuntimeService:
             "parsed": bool(frame["parsed"]),
         }
 
-    def enqueue_rx_tnc2_frame(self, line: str, *, source_ref: str) -> None:
+    def enqueue_rx_tnc2_frame(
+        self,
+        line: str,
+        *,
+        source_ref: str,
+        rx_received_at: str | None = None,
+        rx_received_monotonic: float | None = None,
+    ) -> None:
         matching_flows = self._matching_flows(source_kind="receiver_rf", source_ref=source_ref)
         if not matching_flows:
             log_event(
@@ -149,6 +169,8 @@ class DigiFlowRuntimeService:
             source_kind="receiver_rf",
             source_ref=source_ref,
             raw_payload=line,
+            created_at=rx_received_at,
+            rx_received_monotonic=rx_received_monotonic,
         )
 
     async def _run(self) -> None:
@@ -200,6 +222,8 @@ class DigiFlowRuntimeService:
                 "flow": flow,
                 "frame_uid": str(frame["frame_uid"]),
                 "created_at": str(frame["created_at"]),
+                "enqueue_monotonic": frame.get("enqueue_monotonic"),
+                "rx_received_monotonic": frame.get("rx_received_monotonic"),
                 "source_kind": str(frame["source_kind"]),
                 "source_ref": str(frame["source_ref"]),
                 "raw_payload": str(frame["raw_payload"]),
@@ -1160,7 +1184,25 @@ class DigiFlowRuntimeService:
             record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
-        success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
+        now_monotonic = time.monotonic()
+        rx_to_igate_enqueue_ms = _monotonic_delta_ms(
+            context.get("rx_received_monotonic"),
+            context.get("enqueue_monotonic"),
+        )
+        igate_queue_wait_ms = _monotonic_delta_ms(
+            context.get("enqueue_monotonic"),
+            now_monotonic,
+        )
+        tx_telemetry = {
+            "frame_uid": str(context.get("frame_uid") or ""),
+            "rx_received_monotonic": context.get("rx_received_monotonic"),
+            "rx_to_igate_enqueue_ms": rx_to_igate_enqueue_ms,
+            "igate_queue_wait_ms": igate_queue_wait_ms,
+        }
+        if isinstance(self._aprsis_client, AprsisClientService):
+            success, detail = await self._aprsis_client.send_tnc2_line(tx_line, telemetry=tx_telemetry)
+        else:
+            success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
         decision = "tx" if success else "drop"
         message = detail or ("APRS-IS TX queued." if success else "APRS-IS TX failed.")
         log_digi_flow_event(
@@ -1204,6 +1246,8 @@ class DigiFlowRuntimeService:
         raw_payload: str,
         frame_uid: str | None,
         created_at: str | None,
+        enqueue_monotonic: float,
+        rx_received_monotonic: float | None,
     ) -> dict[str, Any]:
         timestamp = created_at or utc_now()
         line = str(raw_payload or "").rstrip("\r\n")
@@ -1214,6 +1258,8 @@ class DigiFlowRuntimeService:
             "raw_payload": line,
             "parsed": parse_tnc2_frame(line) if line else None,
             "created_at": timestamp,
+            "enqueue_monotonic": enqueue_monotonic,
+            "rx_received_monotonic": rx_received_monotonic,
         }
 
 
