@@ -113,6 +113,7 @@ from app.services.aprs_device_identification import (
 from app.services.core_client import restart_core_traffic_monitor
 from app.services.radio_activity import (
     get_dashboard_radio_activity,
+    get_traffic_direct_heard_statistics,
     get_traffic_devices_statistics,
     get_traffic_statistics,
     get_traffic_users_statistics,
@@ -2467,6 +2468,7 @@ def statistics_page(
     statistics_payload = get_traffic_statistics(range_value="24h")
     statistics_devices_payload = get_traffic_devices_statistics(range_value="24h")
     statistics_users_payload = get_traffic_users_statistics(range_value="24h")
+    statistics_direct_heard_payload = get_traffic_direct_heard_statistics(range_value="24h")
     context = build_template_context(
         request,
         page_title="Statistics",
@@ -2475,6 +2477,7 @@ def statistics_page(
         statistics_payload=statistics_payload,
         statistics_devices_payload=statistics_devices_payload,
         statistics_users_payload=statistics_users_payload,
+        statistics_direct_heard_payload=statistics_direct_heard_payload,
     )
     return templates.TemplateResponse("statistics.html", context)
 
@@ -2641,6 +2644,19 @@ def statistics_users(
 ) -> JSONResponse:
     try:
         payload = get_traffic_users_statistics(range_value=range, shift_windows=shift)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/direct-heard")
+def statistics_direct_heard(
+    range: str = "24h",
+    shift: int = 0,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_traffic_direct_heard_statistics(range_value=range, shift_windows=shift)
     except ValueError as exc:
         return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)
