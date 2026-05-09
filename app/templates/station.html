@@ -359,7 +359,8 @@
                                 {{ t("Effective schedule:") }}
                                 {% endif %}
                             </summary>
-                            <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines">{{ beacon_proportional_schedule_lines|join('\n') }}</pre>
+                            <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines">{% for line in beacon_proportional_schedule_lines %}{{ t(line|replace("(first run)", t("(first run)"))) }}{% if not loop.last %}
+{% endif %}{% endfor %}</pre>
                             <p class="muted beacon-schedule-note" id="station-beacon-schedule-note">{{ t("Proportional Path sends frequent local beacons and rarer wide-path beacons to reduce RF channel load.") }}</p>
                         </details>
                     </div>
