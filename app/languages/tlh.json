@@ -503,6 +503,7 @@
   "Moderate": "motlh",
   "Move step down": "step yIyotlh",
   "Move step up": "step yIteb",
+  "My Station": "StationwIj",
   "My Settings": "SeHwIj",
   "NO TRACE marks the matched hop as consumed without inserting the local digi callsign.": "NO TRACE, hop botlhlu'bogh consumed 'e' Del 'ach local digi callsign chelbe'.",
   "NO_TRACE matched {matched_no_trace}. Path {input_path} -> {updated_path}.": "NO_TRACE matched {matched_no_trace}. Path {input_path} -> {updated_path}.",

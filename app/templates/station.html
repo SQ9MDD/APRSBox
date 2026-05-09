@@ -37,42 +37,6 @@
         flex: 0 0 auto;
     }
 
-    .field-label-with-help {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2);
-    }
-
-    .beacon-info-button {
-        width: 1.5rem;
-        height: 1.5rem;
-        min-height: 1.5rem;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: var(--panel-alt);
-        color: var(--muted);
-        cursor: help;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        font-size: 0.76rem;
-        line-height: 1;
-    }
-
-    .beacon-info-button:hover {
-        border-color: var(--border-hover);
-        color: var(--text);
-        background: var(--panel-emphasis);
-    }
-
-    .beacon-info-button:focus-visible {
-        outline: none;
-        box-shadow: 0 0 0 3px var(--focus-ring);
-        border-color: var(--accent);
-    }
-
     .beacon-health-alert {
         margin-top: calc(var(--space-2) * -0.1);
         display: grid;
@@ -112,6 +76,51 @@
         background: color-mix(in srgb, var(--panel-emphasis) 56%, transparent);
         border-color: var(--border);
         color: var(--muted);
+    }
+
+    .beacon-schedule-details {
+        margin-top: calc(var(--space-2) * -0.1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--panel-emphasis) 46%, transparent);
+        padding: 0.5rem 0.66rem;
+    }
+
+    .beacon-schedule-details[hidden] {
+        display: none !important;
+    }
+
+    .beacon-schedule-details summary {
+        cursor: pointer;
+        color: var(--text);
+        font-size: 0.81rem;
+        line-height: 1.34;
+        font-weight: 600;
+    }
+
+    .beacon-schedule-details[open] {
+        display: grid;
+        gap: var(--space-2);
+    }
+
+    .beacon-schedule-lines {
+        margin: 0;
+        padding: 0.46rem 0.54rem;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--panel-soft) 58%, transparent);
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        line-height: 1.36;
+        color: var(--text);
+        white-space: pre;
+        overflow-x: auto;
+    }
+
+    .beacon-schedule-note {
+        margin: 0;
+        font-size: 0.77rem;
+        line-height: 1.36;
     }
 
     .phg-generator-modal[hidden] {
@@ -316,16 +325,7 @@
                         </div>
                     </label>
                     <label>
-                        <span class="field-label-with-help">
-                            <span>{{ t("Beacon at every") }}</span>
-                            <button
-                                type="button"
-                                class="beacon-info-button"
-                                id="station-beacon-schedule-info"
-                                aria-label="{{ t('Proportional Path schedule info') }}"
-                                title="{{ beacon_proportional_tooltip }}"
-                            >i</button>
-                        </span>
+                        <span>{{ t("Beacon at every") }}</span>
                         <select name="beacon_interval_minutes" id="station-beacon-interval">
                             {% for option in beacon_position_interval_options %}
                             <option value="{{ option.value }}" {% if (selected_beacon_interval_value|string) == (option.value|string) %}selected{% endif %}>{{ t(option.label) }}</option>
@@ -349,6 +349,13 @@
                             <p>{{ t(line) }}</p>
                             {% endfor %}
                         </div>
+                    </div>
+                    <div class="full">
+                        <details class="beacon-schedule-details" id="station-beacon-schedule" hidden>
+                            <summary id="station-beacon-schedule-summary">{{ t("Effective schedule:") }}</summary>
+                            <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines"></pre>
+                            <p class="muted beacon-schedule-note" id="station-beacon-schedule-note"></p>
+                        </details>
                     </div>
                     <label class="full">
                         <span>{{ t("Get location") }}</span>
@@ -779,7 +786,10 @@
             const modeInput = document.getElementById("station-beacon-interval-mode");
             const fixedInput = document.getElementById("station-beacon-interval-fixed");
             const healthNode = document.getElementById("station-beacon-health");
-            const scheduleInfoButton = document.getElementById("station-beacon-schedule-info");
+            const scheduleDetails = document.getElementById("station-beacon-schedule");
+            const scheduleSummaryNode = document.getElementById("station-beacon-schedule-summary");
+            const scheduleLinesNode = document.getElementById("station-beacon-schedule-lines");
+            const scheduleNoteNode = document.getElementById("station-beacon-schedule-note");
             const confirmModal = document.getElementById("station-beacon-confirm-modal");
             const confirmAcceptButton = document.getElementById("station-beacon-confirm-accept");
             const confirmCloseButtons = confirmModal ? confirmModal.querySelectorAll("[data-close-beacon-confirm]") : [];
@@ -790,7 +800,10 @@
                 || !(modeInput instanceof HTMLInputElement)
                 || !(fixedInput instanceof HTMLInputElement)
                 || !(healthNode instanceof HTMLElement)
-                || !(scheduleInfoButton instanceof HTMLButtonElement)
+                || !(scheduleDetails instanceof HTMLDetailsElement)
+                || !(scheduleSummaryNode instanceof HTMLElement)
+                || !(scheduleLinesNode instanceof HTMLElement)
+                || !(scheduleNoteNode instanceof HTMLElement)
                 || !(confirmModal instanceof HTMLElement)
                 || !(confirmAcceptButton instanceof HTMLButtonElement)
             ) {
@@ -978,15 +991,23 @@
                 ];
             };
 
-            const syncScheduleTooltip = () => {
+            const syncSchedulePanel = () => {
                 const classification = classifyPath(pathInput.value);
                 const header = classification.normalizedPath
                     ? i18n.scheduleHeaderWithPath.replace("{path}", classification.normalizedPath)
                     : i18n.scheduleHeaderNoPath;
                 const lines = buildScheduleLines(classification);
-                const tooltip = [header, "", ...lines, "", i18n.proportionalExplain].join("\n");
-                scheduleInfoButton.title = tooltip;
-                intervalSelect.title = resolveMode() === i18n.proportionalMode ? tooltip : "";
+                const isProportional = resolveMode() === i18n.proportionalMode;
+
+                scheduleDetails.hidden = !isProportional;
+                if (!isProportional) {
+                    scheduleDetails.open = false;
+                    return;
+                }
+
+                scheduleSummaryNode.textContent = header;
+                scheduleLinesNode.textContent = lines.join("\n");
+                scheduleNoteNode.textContent = i18n.proportionalExplain;
             };
 
             const syncModeInputs = () => {
@@ -1030,11 +1051,11 @@
             intervalSelect.addEventListener("change", () => {
                 syncModeInputs();
                 renderHealth();
-                syncScheduleTooltip();
+                syncSchedulePanel();
             });
             pathInput.addEventListener("input", () => {
                 renderHealth();
-                syncScheduleTooltip();
+                syncSchedulePanel();
             });
 
             confirmCloseButtons.forEach((button) => {
@@ -1079,7 +1100,7 @@
 
             syncModeInputs();
             renderHealth();
-            syncScheduleTooltip();
+            syncSchedulePanel();
         };
 
         const initLocationPicker = () => {
