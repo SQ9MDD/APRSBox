@@ -831,7 +831,10 @@
                 hop2OkHeadline: {{ t("Recommended: 2-hop path with interval 60m or longer.")|tojson|forceescape }},
                 scheduleHeaderWithPath: {{ t("Effective schedule for {path}:")|tojson|forceescape }},
                 scheduleHeaderNoPath: {{ t("Effective schedule:")|tojson|forceescape }},
-                everyTenMinutesDirect: {{ t("Every 10 minutes  DIRECT")|tojson|forceescape }},
+                firstRunLabel: {{ t("(first run)")|tojson|forceescape }},
+                cycleRepeat10: {{ t("Then cycle repeats every 10 minutes (DIRECT).")|tojson|forceescape }},
+                cycleRepeat30: {{ t("Then cycle repeats every 30 minutes (full path every third beacon).")|tojson|forceescape }},
+                cycleRepeat60: {{ t("Then cycle repeats every 60 minutes (WIDE1-1 at +30m, full path at +60m).")|tojson|forceescape }},
                 proportionalExplain: {{ t("Proportional Path sends frequent local beacons and rarer wide-path beacons to reduce RF channel load.")|tojson|forceescape }},
             };
 
@@ -976,24 +979,46 @@
 
             const buildScheduleLines = (classification) => {
                 if (!Number.isInteger(classification.hopClass) || classification.hopClass <= 0) {
-                    return [i18n.everyTenMinutesDirect];
+                    return [
+                        `00:00  DIRECT ${i18n.firstRunLabel}`,
+                        "00:10  DIRECT",
+                        "00:20  DIRECT",
+                        "00:30  DIRECT",
+                        "",
+                        i18n.cycleRepeat10,
+                    ];
                 }
                 if (classification.hopClass === 1) {
                     return [
-                        "00:00  DIRECT",
+                        `00:00  DIRECT ${i18n.firstRunLabel}`,
                         "00:10  DIRECT",
                         "00:20  DIRECT",
                         `00:30  ${classification.normalizedPath}`,
+                        "00:40  DIRECT",
+                        "00:50  DIRECT",
+                        `01:00  ${classification.normalizedPath}`,
+                        "01:10  DIRECT",
+                        "",
+                        i18n.cycleRepeat30,
                     ];
                 }
                 return [
-                    "00:00  DIRECT",
+                    `00:00  DIRECT ${i18n.firstRunLabel}`,
                     "00:10  DIRECT",
                     "00:20  DIRECT",
                     "00:30  WIDE1-1",
                     "00:40  DIRECT",
                     "00:50  DIRECT",
                     `01:00  ${classification.normalizedPath}`,
+                    "01:10  DIRECT",
+                    "01:20  DIRECT",
+                    "01:30  WIDE1-1",
+                    "01:40  DIRECT",
+                    "01:50  DIRECT",
+                    `02:00  ${classification.normalizedPath}`,
+                    "02:10  DIRECT",
+                    "",
+                    i18n.cycleRepeat60,
                 ];
             };
 

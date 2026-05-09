@@ -191,24 +191,46 @@ def build_proportional_schedule_lines(beacon_path: str) -> list[str]:
     normalized_path = str(classification["normalized_path"] or "")
 
     if not isinstance(hop_class, int) or hop_class <= 0:
-        return ["Every 10 minutes  DIRECT"]
+        return [
+            "00:00  DIRECT (first run)",
+            "00:10  DIRECT",
+            "00:20  DIRECT",
+            "00:30  DIRECT",
+            "",
+            "Then cycle repeats every 10 minutes (DIRECT).",
+        ]
 
     if hop_class == 1:
         return [
-            "00:00  DIRECT",
+            "00:00  DIRECT (first run)",
             "00:10  DIRECT",
             "00:20  DIRECT",
             f"00:30  {normalized_path}",
+            "00:40  DIRECT",
+            "00:50  DIRECT",
+            f"01:00  {normalized_path}",
+            "01:10  DIRECT",
+            "",
+            "Then cycle repeats every 30 minutes (full path every third beacon).",
         ]
 
     return [
-        "00:00  DIRECT",
+        "00:00  DIRECT (first run)",
         "00:10  DIRECT",
         "00:20  DIRECT",
         "00:30  WIDE1-1",
         "00:40  DIRECT",
         "00:50  DIRECT",
         f"01:00  {normalized_path}",
+        "01:10  DIRECT",
+        "01:20  DIRECT",
+        "01:30  WIDE1-1",
+        "01:40  DIRECT",
+        "01:50  DIRECT",
+        f"02:00  {normalized_path}",
+        "02:10  DIRECT",
+        "",
+        "Then cycle repeats every 60 minutes (WIDE1-1 at +30m, full path at +60m).",
     ]
 
 

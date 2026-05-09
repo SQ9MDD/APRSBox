@@ -79,14 +79,18 @@ class BeaconPathingHealthTests(unittest.TestCase):
 class BeaconPathingTooltipTests(unittest.TestCase):
     def test_tooltip_for_wide2_2_contains_expected_paths(self) -> None:
         tooltip = build_proportional_schedule_tooltip("WIDE2-2")
+        self.assertIn("first run", tooltip)
         self.assertIn("DIRECT", tooltip)
         self.assertIn("WIDE1-1", tooltip)
         self.assertIn("WIDE2-2", tooltip)
+        self.assertIn("Then cycle repeats every 60 minutes", tooltip)
 
     def test_tooltip_for_wide2_1_contains_expected_paths(self) -> None:
         tooltip = build_proportional_schedule_tooltip("WIDE2-1")
+        self.assertIn("first run", tooltip)
         self.assertIn("DIRECT", tooltip)
         self.assertIn("WIDE2-1", tooltip)
+        self.assertIn("Then cycle repeats every 30 minutes", tooltip)
 
 
 if __name__ == "__main__":
