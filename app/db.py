@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS station_settings (
     beacon_interface_id INTEGER,
     beacon_tx_scope TEXT NOT NULL DEFAULT 'single' CHECK (beacon_tx_scope IN ('single', 'all_active')),
     beacon_comment TEXT,
+    beacon_interval_mode TEXT NOT NULL DEFAULT 'fixed' CHECK (beacon_interval_mode IN ('fixed', 'proportional')),
     beacon_interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (beacon_interval_minutes IN (15, 30, 45, 60)),
     beacon_path TEXT,
     status_enabled INTEGER NOT NULL DEFAULT 0 CHECK (status_enabled IN (0, 1)),
@@ -727,6 +728,14 @@ def init_db() -> None:
                 CHECK (beacon_interval_minutes IN (15, 30, 45, 60))
                 """
             )
+        if "beacon_interval_mode" not in station_columns:
+            connection.execute(
+                """
+                ALTER TABLE station_settings
+                ADD COLUMN beacon_interval_mode TEXT NOT NULL DEFAULT 'fixed'
+                CHECK (beacon_interval_mode IN ('fixed', 'proportional'))
+                """
+            )
         if "beacon_path" not in station_columns:
             connection.execute(
                 """
@@ -1170,11 +1179,11 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
         connection.execute(
             """
             INSERT INTO station_settings (
-                id, callsign, ssid, beacon_interface_id, beacon_tx_scope, beacon_comment, beacon_interval_minutes, beacon_path,
+                id, callsign, ssid, beacon_interface_id, beacon_tx_scope, beacon_comment, beacon_interval_mode, beacon_interval_minutes, beacon_path,
                 status_enabled, status_text, status_interval_minutes, latitude, longitude,
                 symbol_table, symbol_code, symbol_overlay, default_units, tx_enabled, updated_at
             )
-            VALUES (1, '', '', NULL, 'single', '', 30, '', 0, '', 30, '', '', '/', '>', NULL, 'metric', 0, ?)
+            VALUES (1, '', '', NULL, 'single', '', 'fixed', 30, '', 0, '', 30, '', '', '/', '>', NULL, 'metric', 0, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),

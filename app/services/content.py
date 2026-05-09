@@ -15,6 +15,11 @@ from app.config import settings
 from app.datetime_utils import format_display_datetime
 from app.db import event_log_levels_at_or_above, fetch_all, fetch_one, get_connection, log_event, normalize_event_log_level, utc_now
 from app.i18n import get_app_language, get_translator
+from app.services.beacon_pathing import (
+    BEACON_INTERVAL_MODE_FIXED,
+    BEACON_INTERVAL_MODE_PROPORTIONAL,
+    normalize_beacon_interval_mode,
+)
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
     lookup_aprs_device_identification,
@@ -209,6 +214,10 @@ def get_station_settings() -> dict[str, Any]:
     result.setdefault("beacon_interface_id", None)
     result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     result.setdefault("default_units", "metric")
+    result["beacon_interval_mode"] = normalize_beacon_interval_mode(
+        result.get("beacon_interval_mode"),
+        default=BEACON_INTERVAL_MODE_FIXED,
+    )
     result.setdefault("beacon_interval_minutes", 30)
     result.setdefault("beacon_path", "")
     result.setdefault("status_enabled", 0)
@@ -265,6 +274,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
                 beacon_interface_id = :beacon_interface_id,
                 beacon_tx_scope = :beacon_tx_scope,
                 beacon_comment = :beacon_comment,
+                beacon_interval_mode = :beacon_interval_mode,
                 beacon_interval_minutes = :beacon_interval_minutes,
                 beacon_path = :beacon_path,
                 status_enabled = :status_enabled,
@@ -321,7 +331,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
             beacon_interface_id = None
     if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
         beacon_interface_id = None
-    beacon_interval_minutes = _normalize_station_interval(payload.get("beacon_interval_minutes"), label="Beacon interval")
+    beacon_interval_mode, beacon_interval_minutes = _normalize_station_beacon_interval_config(payload)
     status_interval_minutes = _normalize_station_interval(payload.get("status_interval_minutes"), label="Status interval")
     status_enabled = int(bool(payload.get("status_enabled")))
     beacon_comment = _normalize_station_text_field(
@@ -345,6 +355,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "beacon_interface_id": beacon_interface_id,
         "beacon_tx_scope": beacon_tx_scope,
         "beacon_comment": beacon_comment,
+        "beacon_interval_mode": beacon_interval_mode,
         "beacon_interval_minutes": beacon_interval_minutes,
         "beacon_path": payload.get("beacon_path", ""),
         "status_enabled": status_enabled,
@@ -3443,6 +3454,24 @@ def _normalize_station_interval(value: Any, *, label: str) -> int:
     if interval_minutes not in {15, 30, 45, 60}:
         raise ValueError(f"{label} must be one of: 15, 30, 45, 60 minutes.")
     return interval_minutes
+
+
+def _normalize_station_beacon_interval_config(payload: dict[str, Any]) -> tuple[str, int]:
+    raw_interval = str(payload.get("beacon_interval_minutes") or "").strip()
+    mode = normalize_beacon_interval_mode(payload.get("beacon_interval_mode"), default=BEACON_INTERVAL_MODE_FIXED)
+    if raw_interval.lower() == BEACON_INTERVAL_MODE_PROPORTIONAL:
+        mode = BEACON_INTERVAL_MODE_PROPORTIONAL
+
+    if mode == BEACON_INTERVAL_MODE_PROPORTIONAL:
+        fallback_value = payload.get("beacon_interval_minutes_fixed")
+        fallback_text = str(fallback_value or "").strip()
+        if not fallback_text and raw_interval.lower() != BEACON_INTERVAL_MODE_PROPORTIONAL:
+            fallback_text = raw_interval
+        if not fallback_text:
+            fallback_text = "30"
+        return mode, _normalize_station_interval(fallback_text, label="Beacon interval")
+
+    return BEACON_INTERVAL_MODE_FIXED, _normalize_station_interval(raw_interval, label="Beacon interval")
 
 
 def _normalize_serial_rx_silence_timeout_seconds(value: Any) -> int:

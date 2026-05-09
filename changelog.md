@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.3.dev - 09.05.2026
+
+### Najważniejsze zmiany
+- `Beacon / Proportional Path`: dodano tryb `Proportional Path` w `My Settings -> Position Beacon`, aby promować prawidłową pracę RF (częste beacony lokalne, rzadsze szerokie ścieżki).
+- `Beacon scheduler`: dla własnego beaconu pozycji dodano deterministyczny harmonogram efektywnej ścieżki (DIRECT / 1-hop / pełna), bez wysyłania kilku beaconów naraz w jednym ticku.
+- `Health check konfiguracji`: dodano dynamiczną ocenę pary `Beacon co` + `Ścieżka beaconu` (`Zalecane`, `Do rozważenia`, `Niezalecane`) jako ostrzeżenie edukacyjne, bez twardej blokady zapisu.
+- `UX bezpieczeństwa`: przy bardzo agresywnych ustawieniach dodano potwierdzenie przy zapisie konfiguracji; dla `Proportional Path` dodano tooltip z efektywnym harmonogramem zależnym od wybranej ścieżki.
+- `Kompatybilność`: zachowano zgodność wsteczną istniejących konfiguracji interwału liczbowego (`fixed`), a nowy tryb działa jako rozszerzenie bez zmiany logiki DIGI/iGate/messages.
+
 ## 1.8.2.dev - 08.05.2026
 
 ### Najważniejsze zmiany

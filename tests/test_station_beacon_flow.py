@@ -51,6 +51,8 @@ def station_payload(
     interface_id: int,
     *,
     tx_enabled: str | None,
+    beacon_interval_minutes: str = "15",
+    beacon_interval_mode: str | None = None,
     symbol_table: str = "/",
     symbol_code: str = ">",
     symbol_overlay: str = "",
@@ -60,7 +62,7 @@ def station_payload(
         "ssid": "9",
         "beacon_interface_id": str(interface_id),
         "beacon_comment": "Test beacon",
-        "beacon_interval_minutes": "15",
+        "beacon_interval_minutes": beacon_interval_minutes,
         "beacon_path": "WIDE2-2",
         "status_text": "Station online",
         "status_interval_minutes": "30",
@@ -71,6 +73,8 @@ def station_payload(
         "symbol_overlay": symbol_overlay,
         "default_units": "metric",
     }
+    if beacon_interval_mode is not None:
+        payload["beacon_interval_mode"] = beacon_interval_mode
     if tx_enabled is not None:
         payload["tx_enabled"] = tx_enabled
     return payload
@@ -84,6 +88,7 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
 
             station_settings = get_station_settings()
             self.assertEqual(station_settings["tx_enabled"], 1)
+            self.assertEqual(station_settings["beacon_interval_mode"], "fixed")
             self.assertEqual(station_settings["beacon_interval_minutes"], 15)
             self.assertEqual(station_settings["beacon_interface_id"], interface_id)
             self.assertEqual(station_settings["status_enabled"], 0)
@@ -283,6 +288,55 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
                 int(row["interface_id"])
                 for row in fetch_all("SELECT interface_id FROM outbound_jobs WHERE kind IN ('beacon', 'status')")
             })
+
+    def test_scheduler_uses_proportional_path_for_scheduled_beacons(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(
+                interface_id,
+                tx_enabled="1",
+                beacon_interval_minutes="30",
+                beacon_interval_mode="proportional",
+            )
+            payload["beacon_path"] = "WIDE2-2"
+            update_station_settings(payload)
+
+            scheduler = BeaconSchedulerService()
+            scheduled_paths: list[str] = []
+
+            for _ in range(7):
+                set_app_setting(LAST_SCHEDULED_BEACON_AT_KEY, "2000-01-01T00:00:00+00:00")
+                scheduler._tick()
+                row = fetch_one(
+                    """
+                    SELECT payload_json
+                    FROM outbound_jobs
+                    WHERE kind = 'beacon'
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """
+                )
+                assert row is not None
+                outbound_payload = json.loads(row["payload_json"])
+                scheduled_paths.append(str(outbound_payload.get("beacon_path") or ""))
+                execute("UPDATE outbound_jobs SET status = 'sent', updated_at = '2026-01-01T00:00:01+00:00' WHERE kind = 'beacon'")
+
+            self.assertEqual(
+                scheduled_paths,
+                ["", "", "", "WIDE1-1", "", "", "WIDE2-2"],
+            )
+
+    def test_payload_with_proportional_interval_value_is_saved_with_mode(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["beacon_interval_minutes"] = "proportional"
+            payload["beacon_interval_minutes_fixed"] = "30"
+            success, error = safe_update_station_settings(payload)
+            self.assertTrue(success, error)
+            station_settings = get_station_settings()
+            self.assertEqual(station_settings["beacon_interval_mode"], "proportional")
+            self.assertEqual(int(station_settings["beacon_interval_minutes"]), 30)
 
 
 class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):

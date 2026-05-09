@@ -162,6 +162,7 @@ def enqueue_beacon_job(
     *,
     trigger: str = "manual",
     aprs_message_id: int | None = None,
+    beacon_path_override: str | None = None,
     scheduled_for: datetime | None = None,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
@@ -179,6 +180,10 @@ def enqueue_beacon_job(
     symbol_table = _normalize_symbol_table(station_settings.get("symbol_table"))
     symbol_overlay = _normalize_symbol_overlay(station_settings.get("symbol_overlay"), symbol_table=symbol_table)
 
+    selected_beacon_path = str(station_settings.get("beacon_path") or "").strip()
+    if beacon_path_override is not None:
+        selected_beacon_path = str(beacon_path_override).strip()
+
     payload = {
         "aprs_message_id": aprs_message_id,
         "callsign": callsign,
@@ -189,7 +194,7 @@ def enqueue_beacon_job(
         "symbol_code": _normalize_symbol_code(station_settings.get("symbol_code")),
         "symbol_overlay": symbol_overlay,
         "beacon_comment": str(station_settings.get("beacon_comment") or "").strip(),
-        "beacon_path": str(station_settings.get("beacon_path") or "").strip(),
+        "beacon_path": selected_beacon_path,
         "trigger": str(trigger or "manual").strip() or "manual",
     }
     scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()

@@ -30,6 +30,13 @@ from app.db import (
 from app.i18n import get_app_language, get_translator, normalize_language, SUPPORTED_LANGUAGE_CODES
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
+from app.services.beacon_pathing import (
+    BEACON_INTERVAL_MODE_FIXED,
+    BEACON_INTERVAL_MODE_PROPORTIONAL,
+    build_proportional_schedule_tooltip,
+    evaluate_beacon_health,
+    normalize_beacon_interval_mode,
+)
 from app.services.content import (
     dashboard_home_data,
     delete_section_row,
@@ -381,6 +388,10 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
             for code in range(33, 127)
         ],
         "beacon_interval_options": [{"value": value, "label": f"{value}m"} for value in (15, 30, 45, 60)],
+        "beacon_position_interval_options": (
+            [{"value": str(value), "label": f"{value}m"} for value in (15, 30, 45, 60)]
+            + [{"value": BEACON_INTERVAL_MODE_PROPORTIONAL, "label": "Proportional Path"}]
+        ),
     }
 
 
@@ -392,16 +403,41 @@ def _station_page_context(
     flash_success: bool = True,
     station: dict | None = None,
 ) -> dict:
+    resolved_station = dict(station or get_station_settings())
+    raw_interval_value = str(resolved_station.get("beacon_interval_minutes") or "").strip().lower()
+    interval_mode = normalize_beacon_interval_mode(
+        resolved_station.get("beacon_interval_mode"),
+        default=BEACON_INTERVAL_MODE_FIXED,
+    )
+    if raw_interval_value == BEACON_INTERVAL_MODE_PROPORTIONAL:
+        interval_mode = BEACON_INTERVAL_MODE_PROPORTIONAL
+    resolved_station["beacon_interval_mode"] = interval_mode
+
+    interval_minutes: int | None = None
+    try:
+        interval_minutes = int(str(resolved_station.get("beacon_interval_minutes") or "").strip())
+    except ValueError:
+        interval_minutes = None
+
+    beacon_health = evaluate_beacon_health(
+        beacon_interval_mode=interval_mode,
+        beacon_interval_minutes=interval_minutes,
+        beacon_path=str(resolved_station.get("beacon_path") or ""),
+    )
+    proportional_tooltip = build_proportional_schedule_tooltip(str(resolved_station.get("beacon_path") or ""))
+
     return build_template_context(
         request,
         page_title="My Settings",
         current_user=current_user,
         active_nav="station",
-        station=station or get_station_settings(),
+        station=resolved_station,
         can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=flash_success,
         beacon_log_rows=recent_station_outbound_jobs(limit=20),
+        beacon_health=beacon_health,
+        beacon_proportional_tooltip=proportional_tooltip,
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         **_station_form_options(),
     )
@@ -2203,6 +2239,8 @@ def station_update(
     beacon_interface_id: str = Form(""),
     beacon_comment: str = Form(""),
     beacon_interval_minutes: str = Form("30"),
+    beacon_interval_mode: str = Form(BEACON_INTERVAL_MODE_FIXED),
+    beacon_interval_minutes_fixed: str = Form("30"),
     beacon_path: str = Form(""),
     status_enabled: str | None = Form(None),
     status_text: str = Form(""),
@@ -2223,6 +2261,8 @@ def station_update(
         "beacon_interface_id": beacon_interface_id.strip(),
         "beacon_comment": beacon_comment.strip(),
         "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_interval_mode": beacon_interval_mode.strip().lower(),
+        "beacon_interval_minutes_fixed": beacon_interval_minutes_fixed.strip(),
         "beacon_path": beacon_path.strip(),
         "status_enabled": status_enabled,
         "status_text": status_text.strip(),
@@ -2252,6 +2292,8 @@ def station_send_beacon(
     beacon_interface_id: str = Form(""),
     beacon_comment: str = Form(""),
     beacon_interval_minutes: str = Form("30"),
+    beacon_interval_mode: str = Form(BEACON_INTERVAL_MODE_FIXED),
+    beacon_interval_minutes_fixed: str = Form("30"),
     beacon_path: str = Form(""),
     status_enabled: str | None = Form(None),
     status_text: str = Form(""),
@@ -2272,6 +2314,8 @@ def station_send_beacon(
         "beacon_interface_id": beacon_interface_id.strip(),
         "beacon_comment": beacon_comment.strip(),
         "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_interval_mode": beacon_interval_mode.strip().lower(),
+        "beacon_interval_minutes_fixed": beacon_interval_minutes_fixed.strip(),
         "beacon_path": beacon_path.strip(),
         "status_enabled": status_enabled,
         "status_text": status_text.strip(),
@@ -2303,6 +2347,8 @@ def station_send_status(
     beacon_interface_id: str = Form(""),
     beacon_comment: str = Form(""),
     beacon_interval_minutes: str = Form("30"),
+    beacon_interval_mode: str = Form(BEACON_INTERVAL_MODE_FIXED),
+    beacon_interval_minutes_fixed: str = Form("30"),
     beacon_path: str = Form(""),
     status_enabled: str | None = Form(None),
     status_text: str = Form(""),
@@ -2323,6 +2369,8 @@ def station_send_status(
         "beacon_interface_id": beacon_interface_id.strip(),
         "beacon_comment": beacon_comment.strip(),
         "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_interval_mode": beacon_interval_mode.strip().lower(),
+        "beacon_interval_minutes_fixed": beacon_interval_minutes_fixed.strip(),
         "beacon_path": beacon_path.strip(),
         "status_enabled": status_enabled,
         "status_text": status_text.strip(),
