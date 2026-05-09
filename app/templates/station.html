@@ -352,9 +352,15 @@
                     </div>
                     <div class="full">
                         <details class="beacon-schedule-details" id="station-beacon-schedule" {% if beacon_interval_mode != 'proportional' %}hidden{% endif %}>
-                            <summary id="station-beacon-schedule-summary">{{ t("Effective schedule:") }}</summary>
-                            <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines"></pre>
-                            <p class="muted beacon-schedule-note" id="station-beacon-schedule-note"></p>
+                            <summary id="station-beacon-schedule-summary">
+                                {% if beacon_proportional_schedule_path %}
+                                {{ tf("Effective schedule for {path}:", {"path": beacon_proportional_schedule_path}) }}
+                                {% else %}
+                                {{ t("Effective schedule:") }}
+                                {% endif %}
+                            </summary>
+                            <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines">{{ beacon_proportional_schedule_lines|join('\n') }}</pre>
+                            <p class="muted beacon-schedule-note" id="station-beacon-schedule-note">{{ t("Proportional Path sends frequent local beacons and rarer wide-path beacons to reduce RF channel load.") }}</p>
                         </details>
                     </div>
                     <label class="full">
@@ -1085,7 +1091,8 @@
                     return;
                 }
                 const submitter = event.submitter instanceof HTMLButtonElement ? event.submitter : null;
-                const action = submitter?.getAttribute("formaction") || form.getAttribute("action") || "";
+                const submitterAction = submitter ? (submitter.getAttribute("formaction") || "") : "";
+                const action = submitterAction || form.getAttribute("action") || "";
                 const isSaveAction = !action || action.endsWith("/station");
                 if (!isSaveAction) {
                     return;

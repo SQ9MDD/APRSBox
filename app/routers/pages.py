@@ -33,6 +33,8 @@ from app.sections import SECTION_DEFINITIONS
 from app.services.beacon_pathing import (
     BEACON_INTERVAL_MODE_FIXED,
     BEACON_INTERVAL_MODE_PROPORTIONAL,
+    build_proportional_schedule_lines,
+    classify_beacon_path,
     evaluate_beacon_health,
     normalize_beacon_interval_mode,
 )
@@ -423,6 +425,9 @@ def _station_page_context(
         beacon_interval_minutes=interval_minutes,
         beacon_path=str(resolved_station.get("beacon_path") or ""),
     )
+    beacon_path_value = str(resolved_station.get("beacon_path") or "")
+    beacon_path_classification = classify_beacon_path(beacon_path_value)
+    beacon_schedule_lines = build_proportional_schedule_lines(beacon_path_value)
 
     return build_template_context(
         request,
@@ -435,6 +440,8 @@ def _station_page_context(
         flash_success=flash_success,
         beacon_log_rows=recent_station_outbound_jobs(limit=20),
         beacon_health=beacon_health,
+        beacon_proportional_schedule_lines=beacon_schedule_lines,
+        beacon_proportional_schedule_path=beacon_path_classification.get("normalized_path", ""),
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         **_station_form_options(),
     )

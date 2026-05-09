@@ -338,6 +338,18 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             self.assertEqual(station_settings["beacon_interval_mode"], "proportional")
             self.assertEqual(int(station_settings["beacon_interval_minutes"]), 30)
 
+    def test_numeric_interval_from_form_overrides_stale_proportional_mode(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1", beacon_interval_minutes="60")
+            payload["beacon_interval_mode"] = "proportional"
+            payload["beacon_interval_minutes_fixed"] = "30"
+            success, error = safe_update_station_settings(payload)
+            self.assertTrue(success, error)
+            station_settings = get_station_settings()
+            self.assertEqual(station_settings["beacon_interval_mode"], "fixed")
+            self.assertEqual(int(station_settings["beacon_interval_minutes"]), 60)
+
 
 class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_scheduled_beacon_flows_from_saved_flag_to_runtime_send(self) -> None:

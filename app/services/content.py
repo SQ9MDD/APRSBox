@@ -3461,6 +3461,10 @@ def _normalize_station_beacon_interval_config(payload: dict[str, Any]) -> tuple[
     mode = normalize_beacon_interval_mode(payload.get("beacon_interval_mode"), default=BEACON_INTERVAL_MODE_FIXED)
     if raw_interval.lower() == BEACON_INTERVAL_MODE_PROPORTIONAL:
         mode = BEACON_INTERVAL_MODE_PROPORTIONAL
+    elif mode == BEACON_INTERVAL_MODE_PROPORTIONAL and "beacon_interval_minutes_fixed" in payload:
+        # Defensive fallback for form submissions: if select sends numeric value,
+        # treat it as fixed interval even when stale hidden mode says proportional.
+        mode = BEACON_INTERVAL_MODE_FIXED
 
     if mode == BEACON_INTERVAL_MODE_PROPORTIONAL:
         fallback_value = payload.get("beacon_interval_minutes_fixed")
