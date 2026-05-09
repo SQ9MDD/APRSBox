@@ -351,7 +351,7 @@
                         </div>
                     </div>
                     <div class="full">
-                        <details class="beacon-schedule-details" id="station-beacon-schedule" hidden>
+                        <details class="beacon-schedule-details" id="station-beacon-schedule" {% if beacon_interval_mode != 'proportional' %}hidden{% endif %}>
                             <summary id="station-beacon-schedule-summary">{{ t("Effective schedule:") }}</summary>
                             <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines"></pre>
                             <p class="muted beacon-schedule-note" id="station-beacon-schedule-note"></p>
@@ -800,7 +800,7 @@
                 || !(modeInput instanceof HTMLInputElement)
                 || !(fixedInput instanceof HTMLInputElement)
                 || !(healthNode instanceof HTMLElement)
-                || !(scheduleDetails instanceof HTMLDetailsElement)
+                || !(scheduleDetails instanceof HTMLElement)
                 || !(scheduleSummaryNode instanceof HTMLElement)
                 || !(scheduleLinesNode instanceof HTMLElement)
                 || !(scheduleNoteNode instanceof HTMLElement)
