@@ -16,6 +16,7 @@ from app.db import (
     EVENT_LOG_MIN_LEVEL_SETTING_KEY,
     create_system_job,
     event_log_levels_at_or_above,
+    fetch_one,
     fetch_system_job,
     get_event_log_debug_enabled,
     get_event_log_min_level,
@@ -63,6 +64,7 @@ from app.services.content import (
     safe_update_section_row,
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
+from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -861,14 +863,22 @@ def modems_create(
     normalized_modem_type = modem_type.strip().upper()
     if normalized_modem_type == "SERIAL":
         normalized_modem_type = "SERIALL"
-    if normalized_modem_type not in {"SERIALL", "TCP"}:
+    if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE}:
         context = _section_template_context(request, current_user, "modems", flash="Unsupported TNC type.")
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    normalized_device_path = device_path.strip()
+    if record_id is not None and normalized_modem_type == OPENWEBRX_MQTT_MODEM_TYPE and "***" in normalized_device_path:
+        existing_row = fetch_one("SELECT modem_type, device_path FROM modems WHERE id = ?", (record_id,))
+        if existing_row is not None:
+            existing_type = str(existing_row["modem_type"] or "").strip().upper()
+            existing_path = str(existing_row["device_path"] or "").strip()
+            if existing_type == OPENWEBRX_MQTT_MODEM_TYPE and mask_mqtt_url(existing_path) == normalized_device_path:
+                normalized_device_path = existing_path
     payload = {
         "name": name.strip(),
         "band": band.strip().lower(),
         "modem_type": normalized_modem_type,
-        "device_path": device_path.strip(),
+        "device_path": normalized_device_path,
         "baud_rate": baud_rate,
         "serial_rx_silence_reconnect_seconds": serial_rx_silence_reconnect_seconds,
         "enabled": enabled,

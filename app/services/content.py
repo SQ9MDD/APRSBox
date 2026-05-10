@@ -20,6 +20,7 @@ from app.services.beacon_pathing import (
     BEACON_INTERVAL_MODE_PROPORTIONAL,
     normalize_beacon_interval_mode,
 )
+from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, TX_CAPABLE_MODEM_TYPES, mask_mqtt_url, parse_mqtt_url
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
     lookup_aprs_device_identification,
@@ -108,6 +109,9 @@ def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None) -> dict[str, Any]:
     result = dict(row)
+    modem_type = str(result.get("modem_type") or "").strip().upper()
+    if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
+        result["device_path"] = mask_mqtt_url(result.get("device_path"))
     if not bool(result.get("enabled")):
         result["modem_runtime_status"] = "disabled"
         result["modem_runtime_label"] = "Disabled"
@@ -239,12 +243,13 @@ def get_configured_modem_interfaces() -> list[dict[str, Any]]:
 
 
 def get_active_tnc_interfaces() -> list[dict[str, Any]]:
+    modem_type_filter = ", ".join(f"'{item}'" for item in TX_CAPABLE_MODEM_TYPES)
     rows = fetch_all(
-        """
+        f"""
         SELECT id, name, modem_type, band, device_path, enabled
         FROM modems
         WHERE enabled = 1
-          AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+          AND modem_type IN ({modem_type_filter})
         ORDER BY name COLLATE NOCASE ASC, id ASC
         """
     )
@@ -252,11 +257,12 @@ def get_active_tnc_interfaces() -> list[dict[str, Any]]:
 
 
 def has_enabled_modem_interface() -> bool:
+    modem_type_filter = ", ".join(f"'{item}'" for item in TX_CAPABLE_MODEM_TYPES)
     row = fetch_one(
-        """
+        f"""
         SELECT 1
         FROM modems
-        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+        WHERE enabled = 1 AND modem_type IN ({modem_type_filter})
         LIMIT 1
         """
     )
@@ -561,6 +567,14 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             expose_bind_address,
             expose_port,
             expose_active_clients,
+            mqtt_connected,
+            mqtt_subscribed_topic,
+            mqtt_broker_host,
+            mqtt_broker_port,
+            mqtt_last_frame_at,
+            mqtt_frames_received,
+            mqtt_duplicates_dropped,
+            mqtt_invalid_json_dropped,
             last_error,
             updated_at
         FROM traffic_runtime_interfaces
@@ -616,6 +630,14 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "status_detail": row["status_detail"] or "",
                 "last_error": row["last_error"],
                 "updated_at": _format_monitor_timestamp(row["updated_at"]),
+                "connected": bool(row["mqtt_connected"]) if row["mqtt_connected"] is not None else str(row["status"] or "").strip().lower() == "connected",
+                "subscribed_topic": str(row["mqtt_subscribed_topic"] or "").strip(),
+                "broker_host": str(row["mqtt_broker_host"] or "").strip(),
+                "broker_port": int(row["mqtt_broker_port"]) if row["mqtt_broker_port"] is not None else None,
+                "last_frame_time": _format_monitor_timestamp(row["mqtt_last_frame_at"]),
+                "frames_received": int(row["mqtt_frames_received"]) if row["mqtt_frames_received"] is not None else 0,
+                "duplicates_dropped": int(row["mqtt_duplicates_dropped"]) if row["mqtt_duplicates_dropped"] is not None else 0,
+                "invalid_json_dropped": int(row["mqtt_invalid_json_dropped"]) if row["mqtt_invalid_json_dropped"] is not None else 0,
                 "expose": expose,
             }
         )
@@ -3238,6 +3260,29 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     modem_type = str(payload.get("modem_type") or "").strip().upper()
     if modem_type == "SERIAL":
         modem_type = "SERIALL"
+    supported_modem_types = set(TX_CAPABLE_MODEM_TYPES) | {OPENWEBRX_MQTT_MODEM_TYPE}
+    if modem_type not in supported_modem_types:
+        raise ValueError("Unsupported TNC type.")
+
+    normalized["modem_type"] = modem_type
+    normalized["name"] = str(payload.get("name") or "").strip()
+    normalized["band"] = str(payload.get("band") or "").strip().lower()
+    if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
+        endpoint = parse_mqtt_url(payload.get("device_path"), label="OpenWebRX MQTT URL")
+        normalized["device_path"] = endpoint.normalized_url
+        normalized["baud_rate"] = None
+        normalized["tx_blocked"] = 1
+        normalized["expose_port_enabled"] = 0
+        normalized["expose_allow_tx"] = 0
+        normalized["expose_bind_address"] = "0.0.0.0"
+        normalized["expose_port"] = 8002
+        normalized["expose_whitelist"] = ""
+        normalized["tx_min_gap_seconds"] = _normalize_modem_tx_min_gap_seconds(payload.get("tx_min_gap_seconds"))
+        normalized["serial_rx_silence_reconnect_seconds"] = _normalize_serial_rx_silence_timeout_seconds(
+            payload.get("serial_rx_silence_reconnect_seconds")
+        )
+        return normalized
+
     expose_port_enabled = int(bool(payload.get("expose_port_enabled")))
     expose_bind_address = _normalize_ipv4_address(
         payload.get("expose_bind_address"),
@@ -3247,13 +3292,10 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     expose_port = _normalize_tcp_port(payload.get("expose_port"), default=8002, label="Expose port")
     expose_whitelist = _normalize_ip_whitelist(payload.get("expose_whitelist"))
 
-    normalized["modem_type"] = modem_type
     normalized["expose_port_enabled"] = expose_port_enabled
     normalized["expose_bind_address"] = expose_bind_address
     normalized["expose_port"] = expose_port
     normalized["expose_whitelist"] = expose_whitelist
-    normalized["name"] = str(payload.get("name") or "").strip()
-    normalized["band"] = str(payload.get("band") or "").strip().lower()
     if modem_type == "SERIALL":
         normalized["device_path"] = normalize_serial_device_path(payload.get("device_path"))
         normalized["baud_rate"] = normalize_serial_baud_rate(payload.get("baud_rate"))

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
+import json
 import time
 from threading import Lock
 from typing import Any, Callable
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
+from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
 from app.services.band_condition import process_incoming_frame
 from app.services.messages import process_incoming_tnc2_message
 from app.services.outbound import persist_outbound_frame
@@ -24,6 +27,8 @@ EXPOSE_PORT_MAX_CONNECTIONS = 3
 SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS = 150
 SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS = set(range(0, 601, 30))
 SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
+OPENWEBRX_MQTT_DEDUP_WINDOW_SECONDS = 3.0
+OPENWEBRX_MQTT_UNKNOWN_KEYS_LOG_INTERVAL_SECONDS = 30.0
 IGNORED_KISS_DEBUG_PREVIEW_BYTES = 24
 IGNORED_KISS_DEBUG_INTERVAL_SECONDS = 30.0
 SERIAL_TX_DEBUG_PREVIEW_BYTES = 32
@@ -72,6 +77,62 @@ def _normalize_serial_rx_silence_reconnect_seconds(value: Any) -> int:
     return timeout_seconds
 
 
+def _decode_ax25_address_chunk(chunk: bytes) -> tuple[str, bool, bool] | None:
+    if len(chunk) != 7:
+        return None
+
+    callsign = "".join(chr(byte >> 1) for byte in chunk[:6]).rstrip()
+    if not callsign:
+        return None
+
+    ssid_value = (chunk[6] >> 1) & 0x0F
+    has_been_repeated = bool(chunk[6] & 0x80)
+    last_address = bool(chunk[6] & 0x01)
+
+    if ssid_value:
+        callsign = f"{callsign}-{ssid_value}"
+
+    return callsign, has_been_repeated, last_address
+
+
+def decode_ax25_to_tnc2(payload: bytes) -> str | None:
+    if len(payload) < 16:
+        return None
+
+    addresses: list[tuple[str, bool, bool]] = []
+    offset = 0
+
+    while offset + 7 <= len(payload):
+        chunk = payload[offset : offset + 7]
+        address = _decode_ax25_address_chunk(chunk)
+        if address is None:
+            return None
+        addresses.append(address)
+        offset += 7
+        if chunk[6] & 0x01:
+            break
+    else:
+        return None
+
+    if len(addresses) < 2 or offset + 2 > len(payload):
+        return None
+
+    control = payload[offset]
+    pid = payload[offset + 1]
+    info = payload[offset + 2 :]
+    if control != AX25_CONTROL_UI or pid != AX25_PID_NO_LAYER3:
+        return None
+
+    destination = addresses[0][0]
+    source = addresses[1][0]
+    via = [f"{repeater}{'*' if has_been_repeated else ''}" for repeater, has_been_repeated, _reserved in addresses[2:]]
+    header = f"{source} > {destination}"
+    if via:
+        header = f"{header} , {','.join(via)}"
+    info_text = info.decode("utf-8", errors="replace")
+    return f"{header}:{info_text}"
+
+
 class _TrafficModemRuntime:
     def __init__(
         self,
@@ -110,6 +171,16 @@ class _TrafficModemRuntime:
         self._ignored_kiss_garbage = 0
         self._ignored_kiss_debug_next_log_at = 0.0
         self._ignored_kiss_debug_suppressed = 0
+        self._mqtt_connected = False
+        self._mqtt_subscribed_topic: str | None = None
+        self._mqtt_broker_host: str | None = None
+        self._mqtt_broker_port: int | None = None
+        self._mqtt_last_frame_at: str | None = None
+        self._mqtt_frames_received = 0
+        self._mqtt_duplicates_dropped = 0
+        self._mqtt_invalid_json_dropped = 0
+        self._mqtt_fingerprint_seen_at: dict[str, float] = {}
+        self._mqtt_unknown_keys_next_log_at = 0.0
 
     async def start(self) -> None:
         if self._task is not None:
@@ -209,6 +280,16 @@ class _TrafficModemRuntime:
                 "ignored_kiss_non_data": self._ignored_kiss_non_data,
                 "ignored_kiss_garbage": self._ignored_kiss_garbage,
             }
+            mqtt_stats = {
+                "connected": self._mqtt_connected,
+                "subscribed_topic": self._mqtt_subscribed_topic,
+                "broker_host": self._mqtt_broker_host,
+                "broker_port": self._mqtt_broker_port,
+                "last_frame_at": self._mqtt_last_frame_at,
+                "frames_received": self._mqtt_frames_received,
+                "duplicates_dropped": self._mqtt_duplicates_dropped,
+                "invalid_json_dropped": self._mqtt_invalid_json_dropped,
+            }
         expose["listen_endpoint"] = (
             f"{expose['bind_address']}:{expose['port']}"
             if expose["enabled"] and expose["bind_address"] and expose["port"] is not None
@@ -244,6 +325,7 @@ class _TrafficModemRuntime:
             "last_error": last_error,
             "updated_at": updated_at,
             "kiss_stats": kiss_stats,
+            "mqtt_stats": mqtt_stats,
             "frames": frames,
         }
 
@@ -259,6 +341,16 @@ class _TrafficModemRuntime:
             kiss_stats = {
                 "ignored_kiss_non_data": self._ignored_kiss_non_data,
                 "ignored_kiss_garbage": self._ignored_kiss_garbage,
+            }
+            mqtt_stats = {
+                "connected": self._mqtt_connected,
+                "subscribed_topic": self._mqtt_subscribed_topic,
+                "broker_host": self._mqtt_broker_host,
+                "broker_port": self._mqtt_broker_port,
+                "last_frame_at": self._mqtt_last_frame_at,
+                "frames_received": self._mqtt_frames_received,
+                "duplicates_dropped": self._mqtt_duplicates_dropped,
+                "invalid_json_dropped": self._mqtt_invalid_json_dropped,
             }
             status = self._status
             status_detail = self._status_detail
@@ -277,6 +369,7 @@ class _TrafficModemRuntime:
             "last_error": last_error,
             "updated_at": updated_at,
             "kiss_stats": kiss_stats,
+            "mqtt_stats": mqtt_stats,
         }
 
     async def _run(self) -> None:
@@ -302,6 +395,9 @@ class _TrafficModemRuntime:
                 if modem_type in SUPPORTED_SERIAL_MODEM_TYPES:
                     await self._run_serial_modem(modem)
                     continue
+                if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
+                    await self._run_openwebrx_mqtt_modem(modem)
+                    continue
 
                 message = f"TNC {modem.get('name') or modem.get('id') or 'unknown'} uses unsupported modem type {modem_type or '-'}."
                 self._set_state(status="error", detail=message, modem=modem, error=message)
@@ -319,14 +415,15 @@ class _TrafficModemRuntime:
                     f"Traffic runtime loop crashed on {self._runtime_label(modem=current_modem)}: {exc}. "
                     "Retrying."
                 )
+                sanitized_message = sanitize_url_passwords(message)
                 self._set_state(
                     status="error",
-                    detail=message,
+                    detail=sanitized_message,
                     modem=current_modem,
                     error=str(exc),
                 )
-                log_event("WARNING", "traffic", message)
-                log_event("WARNING", "system", message)
+                log_event("WARNING", "traffic", sanitized_message)
+                log_event("WARNING", "system", sanitized_message)
                 await self._sleep(self._reconnect_delay)
 
     async def _run_tcp_modem(self, modem: dict[str, Any]) -> None:
@@ -412,6 +509,406 @@ class _TrafficModemRuntime:
                 )
         finally:
             await self._stop_serial_broker()
+
+    async def _run_openwebrx_mqtt_modem(self, modem: dict[str, Any]) -> None:
+        await self._stop_proxy_server()
+        await self._stop_serial_broker()
+        self._clear_kiss_buffers()
+        self._reset_mqtt_runtime_state()
+
+        try:
+            endpoint = parse_mqtt_url(modem.get("device_path"), label="OpenWebRX MQTT URL")
+        except ValueError as exc:
+            error = sanitize_url_passwords(str(exc))
+            self._set_state(status="error", detail=error, modem=modem, error=error)
+            await self._sleep(self._reconnect_delay)
+            return
+
+        try:
+            import paho.mqtt.client as mqtt_client  # type: ignore[import-not-found]
+        except Exception:
+            message = "OpenWebRX MQTT runtime requires paho-mqtt dependency."
+            self._set_state(status="error", detail=message, modem=modem, error=message)
+            await self._sleep(self._reconnect_delay)
+            return
+
+        queue: asyncio.Queue[tuple[str, str, float, str]] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        client = mqtt_client.Client()
+        if endpoint.username is not None:
+            client.username_pw_set(endpoint.username, endpoint.password if endpoint.password is not None else None)
+        if endpoint.use_tls:
+            await asyncio.to_thread(client.tls_set)
+
+        def _on_message(_client: Any, _userdata: Any, message: Any) -> None:
+            payload_bytes = bytes(getattr(message, "payload", b"") or b"")
+            payload_text = payload_bytes.decode("utf-8", errors="replace")
+            topic = str(getattr(message, "topic", "") or endpoint.topic)
+            received_monotonic = time.monotonic()
+            received_at = utc_now()
+            loop.call_soon_threadsafe(queue.put_nowait, (topic, payload_text, received_monotonic, received_at))
+
+        client.on_message = _on_message
+        self._set_state(
+            status="connecting",
+            detail=f"Connecting to MQTT broker {endpoint.broker_display}.",
+            modem=modem,
+            error=None,
+        )
+        try:
+            connect_result = await asyncio.to_thread(client.connect, endpoint.host, endpoint.port, 30)
+            if int(connect_result) != 0:
+                message = f"OpenWebRX MQTT connect failed (rc={connect_result}) on {endpoint.broker_display}."
+                self._set_state(status="error", detail=message, modem=modem, error=message)
+                await self._sleep(self._reconnect_delay)
+                return
+            subscribe_result, _subscribe_mid = await asyncio.to_thread(client.subscribe, endpoint.topic, 0)
+            success_code = int(getattr(mqtt_client, "MQTT_ERR_SUCCESS", 0))
+            if int(subscribe_result) != success_code:
+                message = (
+                    f"OpenWebRX MQTT subscribe failed (rc={subscribe_result}) "
+                    f"on {endpoint.broker_display} topic /{endpoint.topic}."
+                )
+                self._set_state(status="error", detail=message, modem=modem, error=message)
+                await self._sleep(self._reconnect_delay)
+                return
+            self._set_mqtt_runtime_connected(
+                connected=True,
+                topic=f"/{endpoint.topic}",
+                broker_host=endpoint.host,
+                broker_port=endpoint.port,
+            )
+            self._set_state(
+                status="connected",
+                detail=f"Subscribed to /{endpoint.topic} on {endpoint.broker_display}.",
+                modem=modem,
+                error=None,
+            )
+
+            allowed_loop_codes = {
+                int(getattr(mqtt_client, "MQTT_ERR_SUCCESS", 0)),
+                int(getattr(mqtt_client, "MQTT_ERR_AGAIN", 0)),
+            }
+            while not self._stop_event.is_set():
+                current_modem = self._load_active_modem()
+                if current_modem != modem:
+                    self._set_mqtt_runtime_connected(
+                        connected=False,
+                        topic=f"/{endpoint.topic}",
+                        broker_host=endpoint.host,
+                        broker_port=endpoint.port,
+                    )
+                    self._set_state(
+                        status="idle",
+                        detail="Active TNC configuration changed. Reconnecting.",
+                        modem=current_modem,
+                        error=None,
+                    )
+                    return
+
+                loop_result = await asyncio.to_thread(client.loop, 1.0)
+                if int(loop_result) not in allowed_loop_codes:
+                    message = (
+                        f"OpenWebRX MQTT connection lost (rc={loop_result}) "
+                        f"on {endpoint.broker_display} topic /{endpoint.topic}."
+                    )
+                    self._set_mqtt_runtime_connected(
+                        connected=False,
+                        topic=f"/{endpoint.topic}",
+                        broker_host=endpoint.host,
+                        broker_port=endpoint.port,
+                    )
+                    self._set_state(status="error", detail=message, modem=modem, error=message)
+                    await self._sleep(self._reconnect_delay)
+                    return
+
+                while True:
+                    try:
+                        topic, payload_text, received_monotonic, received_at = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    self._record_openwebrx_mqtt_message(
+                        modem=modem,
+                        topic=topic,
+                        payload_text=payload_text,
+                        received_monotonic=received_monotonic,
+                        received_at=received_at,
+                    )
+        finally:
+            self._set_mqtt_runtime_connected(
+                connected=False,
+                topic=f"/{endpoint.topic}",
+                broker_host=endpoint.host,
+                broker_port=endpoint.port,
+            )
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(client.disconnect)
+
+    def _record_openwebrx_mqtt_message(
+        self,
+        *,
+        modem: dict[str, Any],
+        topic: str,
+        payload_text: str,
+        received_monotonic: float,
+        received_at: str,
+    ) -> None:
+        try:
+            packet = json.loads(payload_text)
+        except json.JSONDecodeError:
+            self._increment_mqtt_invalid_json(
+                error=f"Invalid JSON payload dropped from {topic or '-'}."
+            )
+            return
+        if not isinstance(packet, dict):
+            self._increment_mqtt_invalid_json(
+                error=f"Non-object JSON payload dropped from {topic or '-'}."
+            )
+            return
+
+        mode = str(packet.get("mode") or "").strip().upper()
+        if mode and mode != "APRS":
+            return
+
+        self._increment_mqtt_frames_received()
+        fingerprint = self._build_openwebrx_fingerprint(packet)
+        if self._is_duplicate_openwebrx_fingerprint(fingerprint, received_monotonic):
+            self._increment_mqtt_duplicates_dropped()
+            return
+
+        tnc2_line, diagnostic_hex = self._map_openwebrx_packet_to_tnc2_line(packet, payload_text)
+        if not tnc2_line:
+            message = "OpenWebRX payload dropped because mapping to TNC2 failed."
+            self._set_runtime_last_error(message)
+            log_event("DEBUG", "traffic", f"{message} modem={self._runtime_label(modem=modem)}")
+            return
+
+        entry: dict[str, Any] = {
+            "timestamp": received_at,
+            "source": self._format_modem_label(),
+            "port": topic or "",
+            "command": "MQTT",
+            "length": str(len(payload_text.encode("utf-8"))),
+            "hex": diagnostic_hex,
+            "format": "TNC2",
+            "line": tnc2_line,
+            "text": payload_text,
+            "_rx_monotonic": received_monotonic,
+        }
+        self._persist_frame(entry, received_at)
+        self._set_mqtt_last_frame_time(received_at)
+
+        known_keys = {
+            "source",
+            "destination",
+            "path",
+            "raw",
+            "mode",
+            "freq",
+            "lat",
+            "lon",
+            "comment",
+            "symbol",
+            "type",
+            "fix",
+            "altitude",
+            "speed",
+            "course",
+            "device",
+        }
+        unknown_keys = sorted(key for key in packet.keys() if key not in known_keys)
+        if unknown_keys:
+            now = time.monotonic()
+            with self._lock:
+                should_log = now >= self._mqtt_unknown_keys_next_log_at
+                if should_log:
+                    self._mqtt_unknown_keys_next_log_at = now + OPENWEBRX_MQTT_UNKNOWN_KEYS_LOG_INTERVAL_SECONDS
+            if should_log:
+                log_event(
+                    "DEBUG",
+                    "traffic",
+                    (
+                        f"OpenWebRX MQTT payload on {self._runtime_label(modem=modem)} has unsupported keys: "
+                        f"{', '.join(unknown_keys)}"
+                    ),
+                )
+
+    def _map_openwebrx_packet_to_tnc2_line(self, packet: dict[str, Any], payload_text: str) -> tuple[str | None, str]:
+        raw_hex = self._normalize_openwebrx_raw_hex(packet.get("raw"))
+        if raw_hex:
+            try:
+                raw_bytes = bytes.fromhex(raw_hex)
+            except ValueError:
+                raw_bytes = b""
+            if raw_bytes:
+                decoded = decode_ax25_to_tnc2(raw_bytes)
+                if decoded:
+                    return decoded, raw_bytes.hex(" ").upper()
+
+        source = str(packet.get("source") or "").strip()
+        destination = str(packet.get("destination") or "").strip()
+        if not source or not destination:
+            fallback_hex = payload_text.encode("utf-8").hex(" ").upper()
+            return None, fallback_hex
+
+        path_items = packet.get("path")
+        path_list: list[str] = []
+        if isinstance(path_items, list):
+            for item in path_items:
+                value = str(item or "").strip()
+                if value:
+                    path_list.append(value)
+
+        info = self._build_openwebrx_fallback_info(packet)
+        header = f"{source} > {destination}"
+        if path_list:
+            header = f"{header} , {','.join(path_list)}"
+        fallback_hex = payload_text.encode("utf-8").hex(" ").upper()
+        return f"{header}:{info}", fallback_hex
+
+    def _build_openwebrx_fallback_info(self, packet: dict[str, Any]) -> str:
+        lat = self._safe_float(packet.get("lat"))
+        lon = self._safe_float(packet.get("lon"))
+        comment = str(packet.get("comment") or "").strip()
+        if lat is not None and lon is not None and -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0:
+            lat_text = self._to_aprs_latitude(lat)
+            lon_text = self._to_aprs_longitude(lon)
+            symbol_table = "/"
+            symbol_code = ">"
+            symbol = packet.get("symbol")
+            if isinstance(symbol, dict):
+                table_candidate = str(symbol.get("table") or "/")
+                if table_candidate in {"/", "\\"}:
+                    symbol_table = table_candidate
+                code_candidate = str(symbol.get("symbol") or ">")
+                if code_candidate:
+                    symbol_code = code_candidate[0]
+            return f"!{lat_text}{symbol_table}{lon_text}{symbol_code}{comment}"
+        if comment:
+            return f">{comment}"
+        return ""
+
+    def _to_aprs_latitude(self, value: float) -> str:
+        latitude = abs(float(value))
+        degrees = int(latitude)
+        minutes = (latitude - degrees) * 60.0
+        hemisphere = "N" if value >= 0 else "S"
+        return f"{degrees:02d}{minutes:05.2f}{hemisphere}"
+
+    def _to_aprs_longitude(self, value: float) -> str:
+        longitude = abs(float(value))
+        degrees = int(longitude)
+        minutes = (longitude - degrees) * 60.0
+        hemisphere = "E" if value >= 0 else "W"
+        return f"{degrees:03d}{minutes:05.2f}{hemisphere}"
+
+    def _safe_float(self, value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _normalize_openwebrx_raw_hex(self, value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        candidate = "".join(char for char in raw if char not in {" ", "\t", "\r", "\n"})
+        if not candidate or len(candidate) % 2 != 0:
+            return ""
+        for char in candidate:
+            if char not in "0123456789abcdefABCDEF":
+                return ""
+        return candidate.upper()
+
+    def _build_openwebrx_fingerprint(self, packet: dict[str, Any]) -> str:
+        source = str(packet.get("source") or "").strip().upper()
+        destination = str(packet.get("destination") or "").strip().upper()
+        raw = str(packet.get("raw") or "").strip().upper()
+        freq = str(packet.get("freq") or "").strip()
+        path_items = packet.get("path")
+        path_parts: list[str] = []
+        if isinstance(path_items, list):
+            for item in path_items:
+                part = str(item or "").strip().upper()
+                if part:
+                    path_parts.append(part)
+        path = ",".join(path_parts)
+        return f"{source}|{destination}|{path}|{raw}|{freq}"
+
+    def _is_duplicate_openwebrx_fingerprint(self, fingerprint: str, now_monotonic: float) -> bool:
+        threshold = float(now_monotonic) - OPENWEBRX_MQTT_DEDUP_WINDOW_SECONDS
+        with self._lock:
+            stale_keys = [key for key, seen_at in self._mqtt_fingerprint_seen_at.items() if seen_at < threshold]
+            for key in stale_keys:
+                self._mqtt_fingerprint_seen_at.pop(key, None)
+            previous_seen = self._mqtt_fingerprint_seen_at.get(fingerprint)
+            self._mqtt_fingerprint_seen_at[fingerprint] = float(now_monotonic)
+        return previous_seen is not None and (float(now_monotonic) - float(previous_seen)) <= OPENWEBRX_MQTT_DEDUP_WINDOW_SECONDS
+
+    def _reset_mqtt_runtime_state(self) -> None:
+        with self._lock:
+            self._mqtt_connected = False
+            self._mqtt_subscribed_topic = None
+            self._mqtt_broker_host = None
+            self._mqtt_broker_port = None
+            self._mqtt_last_frame_at = None
+            self._mqtt_frames_received = 0
+            self._mqtt_duplicates_dropped = 0
+            self._mqtt_invalid_json_dropped = 0
+            self._mqtt_fingerprint_seen_at.clear()
+            self._mqtt_unknown_keys_next_log_at = 0.0
+            self._last_error = None
+            self._updated_at = utc_now()
+        self._persist_runtime_state()
+
+    def _set_mqtt_runtime_connected(
+        self,
+        *,
+        connected: bool,
+        topic: str | None,
+        broker_host: str | None,
+        broker_port: int | None,
+    ) -> None:
+        with self._lock:
+            self._mqtt_connected = bool(connected)
+            self._mqtt_subscribed_topic = topic
+            self._mqtt_broker_host = broker_host
+            self._mqtt_broker_port = broker_port
+            self._updated_at = utc_now()
+        self._persist_runtime_state()
+
+    def _increment_mqtt_frames_received(self) -> None:
+        with self._lock:
+            self._mqtt_frames_received += 1
+            self._updated_at = utc_now()
+        self._persist_runtime_state()
+
+    def _increment_mqtt_duplicates_dropped(self) -> None:
+        with self._lock:
+            self._mqtt_duplicates_dropped += 1
+            self._updated_at = utc_now()
+        self._persist_runtime_state()
+
+    def _increment_mqtt_invalid_json(self, *, error: str) -> None:
+        message = sanitize_url_passwords(error)
+        with self._lock:
+            self._mqtt_invalid_json_dropped += 1
+            self._last_error = message
+            self._updated_at = utc_now()
+        self._persist_runtime_state()
+
+    def _set_mqtt_last_frame_time(self, timestamp: str) -> None:
+        with self._lock:
+            self._mqtt_last_frame_at = timestamp
+            self._updated_at = timestamp
+        self._persist_runtime_state()
+
+    def _set_runtime_last_error(self, message: str) -> None:
+        sanitized = sanitize_url_passwords(message)
+        with self._lock:
+            self._last_error = sanitized
+            self._updated_at = utc_now()
+        self._persist_runtime_state()
 
     async def _run_kiss_tcp_endpoint(
         self,
@@ -725,63 +1222,10 @@ class _TrafficModemRuntime:
         return bytes(output)
 
     def _decode_ax25_to_tnc2(self, payload: bytes) -> str | None:
-        if len(payload) < 16:
-            return None
-
-        addresses: list[tuple[str, bool, bool]] = []
-        offset = 0
-
-        while offset + 7 <= len(payload):
-            chunk = payload[offset : offset + 7]
-            address = self._decode_ax25_address(chunk)
-            if address is None:
-                return None
-            addresses.append(address)
-            offset += 7
-            if chunk[6] & 0x01:
-                break
-        else:
-            return None
-
-        if len(addresses) < 2 or offset + 2 > len(payload):
-            return None
-
-        control = payload[offset]
-        pid = payload[offset + 1]
-        info = payload[offset + 2 :]
-
-        if control != AX25_CONTROL_UI or pid != AX25_PID_NO_LAYER3:
-            return None
-
-        destination = addresses[0][0]
-        source = addresses[1][0]
-        via = []
-        for repeater, has_been_repeated, _reserved in addresses[2:]:
-            via.append(f"{repeater}{'*' if has_been_repeated else ''}")
-
-        header = f"{source} > {destination}"
-        if via:
-            header = f"{header} , {','.join(via)}"
-
-        info_text = info.decode("utf-8", errors="replace")
-        return f"{header}:{info_text}"
+        return decode_ax25_to_tnc2(payload)
 
     def _decode_ax25_address(self, chunk: bytes) -> tuple[str, bool, bool] | None:
-        if len(chunk) != 7:
-            return None
-
-        callsign = "".join(chr(byte >> 1) for byte in chunk[:6]).rstrip()
-        if not callsign:
-            return None
-
-        ssid_value = (chunk[6] >> 1) & 0x0F
-        has_been_repeated = bool(chunk[6] & 0x80)
-        last_address = bool(chunk[6] & 0x01)
-
-        if ssid_value:
-            callsign = f"{callsign}-{ssid_value}"
-
-        return callsign, has_been_repeated, last_address
+        return _decode_ax25_address_chunk(chunk)
 
     def _validate_outbound_kiss_frame(self, frame: bytes) -> int:
         if len(frame) < 3:
@@ -1086,11 +1530,13 @@ class _TrafficModemRuntime:
         error: str | None,
     ) -> None:
         timestamp = utc_now()
+        sanitized_detail = sanitize_url_passwords(detail)
+        sanitized_error = sanitize_url_passwords(error) if error else None
         with self._lock:
             self._status = status
-            self._status_detail = detail
+            self._status_detail = sanitized_detail
             self._active_modem = dict(modem) if modem else None
-            self._last_error = error
+            self._last_error = sanitized_error
             self._updated_at = timestamp
         self._persist_runtime_state()
 
@@ -1108,9 +1554,11 @@ class _TrafficModemRuntime:
                     modem_id, modem_name, modem_endpoint, band,
                     status, status_detail,
                     expose_port_enabled, expose_bind_address, expose_port, expose_active_clients,
+                    mqtt_connected, mqtt_subscribed_topic, mqtt_broker_host, mqtt_broker_port,
+                    mqtt_last_frame_at, mqtt_frames_received, mqtt_duplicates_dropped, mqtt_invalid_json_dropped,
                     last_error, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(modem_id) DO UPDATE SET
                     modem_name = excluded.modem_name,
                     modem_endpoint = excluded.modem_endpoint,
@@ -1121,6 +1569,14 @@ class _TrafficModemRuntime:
                     expose_bind_address = excluded.expose_bind_address,
                     expose_port = excluded.expose_port,
                     expose_active_clients = excluded.expose_active_clients,
+                    mqtt_connected = excluded.mqtt_connected,
+                    mqtt_subscribed_topic = excluded.mqtt_subscribed_topic,
+                    mqtt_broker_host = excluded.mqtt_broker_host,
+                    mqtt_broker_port = excluded.mqtt_broker_port,
+                    mqtt_last_frame_at = excluded.mqtt_last_frame_at,
+                    mqtt_frames_received = excluded.mqtt_frames_received,
+                    mqtt_duplicates_dropped = excluded.mqtt_duplicates_dropped,
+                    mqtt_invalid_json_dropped = excluded.mqtt_invalid_json_dropped,
                     last_error = excluded.last_error,
                     updated_at = excluded.updated_at
                 """,
@@ -1135,6 +1591,14 @@ class _TrafficModemRuntime:
                     payload["proxy_bind_address"],
                     payload["proxy_port"],
                     payload["proxy_active_clients"],
+                    payload["mqtt_connected"],
+                    payload["mqtt_subscribed_topic"],
+                    payload["mqtt_broker_host"],
+                    payload["mqtt_broker_port"],
+                    payload["mqtt_last_frame_at"],
+                    payload["mqtt_frames_received"],
+                    payload["mqtt_duplicates_dropped"],
+                    payload["mqtt_invalid_json_dropped"],
                     payload["error"],
                     payload["updated_at"],
                 ),
@@ -1148,15 +1612,32 @@ class _TrafficModemRuntime:
                 "status": self._status,
                 "detail": self._status_detail,
                 "modem_name": str(modem.get("name") or "").strip() if modem else "",
-                "modem_endpoint": str(modem.get("device_path") or "").strip() if modem else "",
+                "modem_endpoint": self._masked_modem_endpoint(modem),
                 "band": str(modem.get("band") or "").strip() if modem else "",
                 "proxy_enabled": int(self._proxy_enabled),
                 "proxy_bind_address": self._proxy_bind_address,
                 "proxy_port": self._proxy_port,
                 "proxy_active_clients": self._proxy_active_clients,
+                "mqtt_connected": int(self._mqtt_connected),
+                "mqtt_subscribed_topic": self._mqtt_subscribed_topic,
+                "mqtt_broker_host": self._mqtt_broker_host,
+                "mqtt_broker_port": self._mqtt_broker_port,
+                "mqtt_last_frame_at": self._mqtt_last_frame_at,
+                "mqtt_frames_received": self._mqtt_frames_received,
+                "mqtt_duplicates_dropped": self._mqtt_duplicates_dropped,
+                "mqtt_invalid_json_dropped": self._mqtt_invalid_json_dropped,
                 "error": self._last_error,
                 "updated_at": self._updated_at,
             }
+
+    def _masked_modem_endpoint(self, modem: dict[str, Any] | None) -> str:
+        if not modem:
+            return ""
+        endpoint = str(modem.get("device_path") or "").strip()
+        modem_type = _normalize_modem_type(modem.get("modem_type"))
+        if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
+            return sanitize_url_passwords(endpoint)
+        return endpoint
 
     def _format_modem_label(self) -> str:
         with self._lock:
@@ -1261,8 +1742,9 @@ class _TrafficModemRuntime:
 
     def _load_active_modem(self) -> dict[str, Any] | None:
         params: tuple[Any, ...] = ()
+        modem_type_filter = ", ".join(f"'{item}'" for item in RX_CAPABLE_MODEM_TYPES)
         if self._modem_id is None:
-            query = """
+            query = f"""
                 SELECT
                     id,
                     name,
@@ -1281,12 +1763,12 @@ class _TrafficModemRuntime:
                     created_at,
                     updated_at
                 FROM modems
-                WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+                WHERE enabled = 1 AND modem_type IN ({modem_type_filter})
                 ORDER BY id ASC
                 LIMIT 1
             """
         else:
-            query = """
+            query = f"""
                 SELECT
                     id,
                     name,
@@ -1305,7 +1787,7 @@ class _TrafficModemRuntime:
                     created_at,
                     updated_at
                 FROM modems
-                WHERE id = ? AND enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+                WHERE id = ? AND enabled = 1 AND modem_type IN ({modem_type_filter})
                 LIMIT 1
             """
             params = (self._modem_id,)
@@ -1474,8 +1956,9 @@ class TrafficMonitorService:
             await runtime.start()
 
     def _load_enabled_modems(self) -> list[dict[str, Any]]:
+        modem_type_filter = ", ".join(f"'{item}'" for item in RX_CAPABLE_MODEM_TYPES)
         rows = fetch_all(
-            """
+            f"""
             SELECT
                 id,
                 name,
@@ -1494,7 +1977,7 @@ class TrafficMonitorService:
                 created_at,
                 updated_at
             FROM modems
-            WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+            WHERE enabled = 1 AND modem_type IN ({modem_type_filter})
             ORDER BY id ASC
             """
         )
@@ -1536,6 +2019,11 @@ class TrafficMonitorService:
             modem = snapshot.get("active_modem") or {}
             expose = dict(snapshot.get("expose") or {})
             kiss_stats = dict(snapshot.get("kiss_stats") or {})
+            mqtt_stats = dict(snapshot.get("mqtt_stats") or {})
+            modem_type = _normalize_modem_type(modem.get("modem_type"))
+            device_path = str(modem.get("device_path") or "").strip()
+            if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
+                device_path = sanitize_url_passwords(device_path)
             expose["listen_endpoint"] = (
                 f"{expose.get('bind_address')}:{expose.get('port')}"
                 if expose.get("enabled") and expose.get("bind_address") and expose.get("port") is not None
@@ -1545,7 +2033,8 @@ class TrafficMonitorService:
                 {
                     "modem_id": int(modem["id"]) if modem.get("id") is not None else None,
                     "name": str(modem.get("name") or "").strip(),
-                    "device_path": str(modem.get("device_path") or "").strip(),
+                    "device_path": device_path,
+                    "modem_type": modem_type,
                     "band": str(modem.get("band") or "").strip(),
                     "status": snapshot.get("status") or "idle",
                     "status_detail": snapshot.get("status_detail") or "",
@@ -1553,6 +2042,14 @@ class TrafficMonitorService:
                     "updated_at": snapshot.get("updated_at"),
                     "ignored_kiss_non_data": int(kiss_stats.get("ignored_kiss_non_data") or 0),
                     "ignored_kiss_garbage": int(kiss_stats.get("ignored_kiss_garbage") or 0),
+                    "connected": bool(mqtt_stats.get("connected")) if modem_type == OPENWEBRX_MQTT_MODEM_TYPE else bool(snapshot.get("status") == "connected"),
+                    "subscribed_topic": str(mqtt_stats.get("subscribed_topic") or "") if modem_type == OPENWEBRX_MQTT_MODEM_TYPE else "",
+                    "broker_host": str(mqtt_stats.get("broker_host") or "") if modem_type == OPENWEBRX_MQTT_MODEM_TYPE else "",
+                    "broker_port": int(mqtt_stats["broker_port"]) if modem_type == OPENWEBRX_MQTT_MODEM_TYPE and mqtt_stats.get("broker_port") is not None else None,
+                    "last_frame_time": str(mqtt_stats.get("last_frame_at") or "") if modem_type == OPENWEBRX_MQTT_MODEM_TYPE else "",
+                    "frames_received": int(mqtt_stats.get("frames_received") or 0) if modem_type == OPENWEBRX_MQTT_MODEM_TYPE else 0,
+                    "duplicates_dropped": int(mqtt_stats.get("duplicates_dropped") or 0) if modem_type == OPENWEBRX_MQTT_MODEM_TYPE else 0,
+                    "invalid_json_dropped": int(mqtt_stats.get("invalid_json_dropped") or 0) if modem_type == OPENWEBRX_MQTT_MODEM_TYPE else 0,
                     "expose": expose,
                 }
             )

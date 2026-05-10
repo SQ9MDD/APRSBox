@@ -319,6 +319,36 @@ class DigiFlowsTests(unittest.TestCase):
             }
             self.assertIn("tx_rf::TNC-70cm", preserved_values)
 
+    def test_openwebrx_mqtt_is_available_as_source_but_not_as_tx_target(self) -> None:
+        with temporary_database():
+            connection = connect()
+            try:
+                connection.executemany(
+                    """
+                    INSERT INTO modems (
+                        name, modem_type, band, device_path, baud_rate, enabled,
+                        expose_port_enabled, expose_bind_address, expose_port, expose_whitelist,
+                        notes, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, NULL, 1, 0, '127.0.0.1', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    (
+                        ("OpenWebRX-1", "OPENWEBRX_MQTT", "2m", "mqtt://127.0.0.1:1883/rxqwe/APRS"),
+                        ("TNC-TX", "TCP", "2m", "127.0.0.1:9001"),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            options = get_digi_flow_endpoint_options()
+            source_values = {option["value"] for option in options["source"]}
+            target_values = {option["value"] for option in options["target"]}
+
+            self.assertIn("receiver_rf::OpenWebRX-1", source_values)
+            self.assertNotIn("tx_rf::OpenWebRX-1", target_values)
+            self.assertIn("tx_rf::TNC-TX", target_values)
+
     def test_type_meta_exposes_runtime_status_for_filters(self) -> None:
         with temporary_database():
             type_meta = get_digi_flow_type_meta()

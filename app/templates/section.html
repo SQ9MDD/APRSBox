@@ -514,13 +514,25 @@
             if (typeSelect && baudInput) {
                 const syncModemFields = () => {
                     const isTcp = typeSelect.value === "TCP";
-                    baudInput.disabled = isTcp;
-                    if (isTcp) {
+                    const isOpenWebRxMqtt = typeSelect.value === "OPENWEBRX_MQTT";
+                    const disableBaud = isTcp || isOpenWebRxMqtt;
+                    baudInput.disabled = disableBaud;
+                    if (disableBaud) {
                         baudInput.value = "";
                     }
-                    const showExposeFields = Boolean(exposeToggle && exposeToggle.checked);
+                    if (exposeToggle) {
+                        exposeToggle.disabled = isOpenWebRxMqtt;
+                        if (isOpenWebRxMqtt) {
+                            exposeToggle.checked = false;
+                        }
+                    }
+                    const showExposeFields = Boolean(!isOpenWebRxMqtt && exposeToggle && exposeToggle.checked);
                     for (const row of exposeRows) {
                         row.hidden = !showExposeFields;
+                        const rowInputs = row.querySelectorAll("input, textarea, select");
+                        for (const input of rowInputs) {
+                            input.disabled = !showExposeFields;
+                        }
                     }
                 };
 

@@ -43,6 +43,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 "options": [
                     {"value": "SERIALL", "label": "SERIALL"},
                     {"value": "TCP", "label": "TCP"},
+                    {"value": "OPENWEBRX_MQTT", "label": "OpenWebRX MQTT (RX only)"},
                 ],
             },
             {"name": "device_path", "label": "Path / Adress", "type": "text", "required": False},

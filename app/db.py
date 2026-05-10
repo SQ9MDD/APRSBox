@@ -515,6 +515,14 @@ CREATE TABLE IF NOT EXISTS traffic_runtime_interfaces (
     expose_bind_address TEXT,
     expose_port INTEGER,
     expose_active_clients INTEGER NOT NULL DEFAULT 0,
+    mqtt_connected INTEGER NOT NULL DEFAULT 0 CHECK (mqtt_connected IN (0, 1)),
+    mqtt_subscribed_topic TEXT,
+    mqtt_broker_host TEXT,
+    mqtt_broker_port INTEGER,
+    mqtt_last_frame_at TEXT,
+    mqtt_frames_received INTEGER NOT NULL DEFAULT 0,
+    mqtt_duplicates_dropped INTEGER NOT NULL DEFAULT 0,
+    mqtt_invalid_json_dropped INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (modem_id) REFERENCES modems(id) ON DELETE CASCADE
@@ -704,6 +712,9 @@ def init_db() -> None:
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
+        traffic_runtime_interface_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_interfaces)").fetchall()
+        }
         digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
         radio_activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_5m)").fetchall()}
         if "last_login_at" not in user_columns:
@@ -1062,6 +1073,63 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
                 """
                 ALTER TABLE traffic_runtime_state
                 ADD COLUMN expose_active_clients INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "mqtt_connected" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_connected INTEGER NOT NULL DEFAULT 0
+                CHECK (mqtt_connected IN (0, 1))
+                """
+            )
+        if "mqtt_subscribed_topic" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_subscribed_topic TEXT
+                """
+            )
+        if "mqtt_broker_host" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_broker_host TEXT
+                """
+            )
+        if "mqtt_broker_port" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_broker_port INTEGER
+                """
+            )
+        if "mqtt_last_frame_at" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_last_frame_at TEXT
+                """
+            )
+        if "mqtt_frames_received" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_frames_received INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "mqtt_duplicates_dropped" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_duplicates_dropped INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "mqtt_invalid_json_dropped" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_invalid_json_dropped INTEGER NOT NULL DEFAULT 0
                 """
             )
         connection.execute(

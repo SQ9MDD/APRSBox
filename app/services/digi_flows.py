@@ -8,6 +8,7 @@ from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
+from app.services.mqtt_url import RX_CAPABLE_MODEM_TYPES, TX_CAPABLE_MODEM_TYPES
 
 SOURCE_STEP_TYPES = ("receiver_rf",)
 FILTER_STEP_TYPES = (
@@ -773,10 +774,25 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
 
 
 def get_digi_flow_reference_options() -> dict[str, list[str]]:
-    rf_rows = fetch_all("SELECT name FROM modems ORDER BY name COLLATE NOCASE ASC, id ASC")
+    source_type_filter = ", ".join(f"'{item}'" for item in RX_CAPABLE_MODEM_TYPES)
+    target_type_filter = ", ".join(f"'{item}'" for item in TX_CAPABLE_MODEM_TYPES)
+    source_rows = fetch_all(
+        f"""
+        SELECT name FROM modems
+        WHERE modem_type IN ({source_type_filter})
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
+    target_rows = fetch_all(
+        f"""
+        SELECT name FROM modems
+        WHERE modem_type IN ({target_type_filter})
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
     return {
-        "receiver_rf": [str(row["name"]) for row in rf_rows if row["name"]],
-        "tx_rf": [str(row["name"]) for row in rf_rows if row["name"]],
+        "receiver_rf": [str(row["name"]) for row in source_rows if row["name"]],
+        "tx_rf": [str(row["name"]) for row in target_rows if row["name"]],
         "tx_aprsis": ["aprsis"],
         "action_drop": ["drop"],
         "action_log": ["log-only"],
@@ -788,15 +804,30 @@ def get_digi_flow_endpoint_options(
     selected_target_selector: str | None = None,
     current_flow_id: int | None = None,
 ) -> dict[str, list[dict[str, str]]]:
-    rf_rows = fetch_all("SELECT name FROM modems ORDER BY name COLLATE NOCASE ASC, id ASC")
+    source_type_filter = ", ".join(f"'{item}'" for item in RX_CAPABLE_MODEM_TYPES)
+    target_type_filter = ", ".join(f"'{item}'" for item in TX_CAPABLE_MODEM_TYPES)
+    source_rows = fetch_all(
+        f"""
+        SELECT name FROM modems
+        WHERE modem_type IN ({source_type_filter})
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
+    target_rows = fetch_all(
+        f"""
+        SELECT name FROM modems
+        WHERE modem_type IN ({target_type_filter})
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
     source_options = [
         {"value": f"receiver_rf::{row['name']}", "label": str(row["name"]), "kind": "receiver_rf", "ref": str(row["name"])}
-        for row in rf_rows
+        for row in source_rows
         if row["name"]
     ]
     target_options = [
         {"value": f"tx_rf::{row['name']}", "label": str(row["name"]), "kind": "tx_rf", "ref": str(row["name"])}
-        for row in rf_rows
+        for row in target_rows
         if row["name"]
     ]
     target_options.append(
