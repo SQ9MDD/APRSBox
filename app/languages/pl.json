@@ -548,6 +548,7 @@
   "Add TNC": "Dodaj TNC",
   "Edit TNC": "Edytuj TNC",
   "Expose Port": "Udostępnij port",
+  "Allow TX from remote clients": "Zezwolenie na nadawanie",
   "Bind Address": "Adres nasłuchu",
   "Whitelist": "Biała lista",
   "LAN listen address. Use <code>0.0.0.0</code> for all interfaces.": "Adres nasłuchu w LAN. Użyj <code>0.0.0.0</code>, aby nasłuchiwać na wszystkich interfejsach.",

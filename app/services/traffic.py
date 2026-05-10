@@ -888,6 +888,7 @@ class _TrafficModemRuntime:
         self._proxy_clients.add(writer)
         self._update_proxy_state(active_clients=len(self._proxy_clients))
         log_event("INFO", "traffic", f"Expose port client {client_host} connected")
+        tx_rejected_logged = False
 
         try:
             while not self._stop_event.is_set():
@@ -901,6 +902,16 @@ class _TrafficModemRuntime:
 
                 if not chunk:
                     break
+
+                if not self._is_proxy_tx_allowed():
+                    if not tx_rejected_logged:
+                        log_event(
+                            "INFO",
+                            "traffic",
+                            f"Expose port client {client_host} TX rejected because remote TX is disabled in modem settings",
+                        )
+                        tx_rejected_logged = True
+                    continue
 
                 try:
                     await self._forward_client_chunk_to_tnc(chunk, record_proxy_tx=True)
@@ -1040,6 +1051,13 @@ class _TrafficModemRuntime:
         if address.version != 4:
             return False
         return any(address in network for network in self._proxy_whitelist)
+
+    def _is_proxy_tx_allowed(self) -> bool:
+        with self._lock:
+            modem = dict(self._active_modem) if self._active_modem else None
+        if not modem:
+            return False
+        return bool(modem.get("expose_allow_tx"))
 
     def _update_proxy_state(
         self,
@@ -1255,6 +1273,7 @@ class _TrafficModemRuntime:
                     serial_rx_silence_reconnect_seconds,
                     enabled,
                     expose_port_enabled,
+                    expose_allow_tx,
                     expose_bind_address,
                     expose_port,
                     expose_whitelist,
@@ -1278,6 +1297,7 @@ class _TrafficModemRuntime:
                     serial_rx_silence_reconnect_seconds,
                     enabled,
                     expose_port_enabled,
+                    expose_allow_tx,
                     expose_bind_address,
                     expose_port,
                     expose_whitelist,
@@ -1466,6 +1486,7 @@ class TrafficMonitorService:
                 serial_rx_silence_reconnect_seconds,
                 enabled,
                 expose_port_enabled,
+                expose_allow_tx,
                 expose_bind_address,
                 expose_port,
                 expose_whitelist,
@@ -1489,6 +1510,7 @@ class TrafficMonitorService:
             modem.get("baud_rate"),
             modem.get("serial_rx_silence_reconnect_seconds"),
             int(bool(modem.get("expose_port_enabled"))),
+            int(bool(modem.get("expose_allow_tx"))),
             str(modem.get("expose_bind_address") or "").strip(),
             int(modem.get("expose_port") or 0),
             str(modem.get("expose_whitelist") or "").strip(),

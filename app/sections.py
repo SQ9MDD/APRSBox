@@ -59,6 +59,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             {"name": "tx_blocked", "label": "Block TX on this interface", "type": "checkbox", "required": False},
             {"name": "tx_min_gap_seconds", "label": "TX Min Gap (s)", "type": "number", "required": True, "default": "0.35"},
             {"name": "expose_port_enabled", "label": "Expose Port", "type": "checkbox", "required": False},
+            {"name": "expose_allow_tx", "label": "Allow TX from remote clients", "type": "checkbox", "required": False},
             {"name": "expose_bind_address", "label": "Bind Address", "type": "text", "required": False, "default": "0.0.0.0"},
             {"name": "expose_port", "label": "Port", "type": "number", "required": False, "default": "8002"},
             {"name": "expose_whitelist", "label": "Whitelist", "type": "textarea", "required": False, "placeholder": "192.168.1.10\n192.168.1.0/24"},

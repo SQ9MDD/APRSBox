@@ -548,6 +548,7 @@
   "Add TNC": "Add TNC",
   "Edit TNC": "Edit TNC",
   "Expose Port": "Expose Port",
+  "Allow TX from remote clients": "Allow TX from remote clients",
   "Bind Address": "Bind Address",
   "Whitelist": "Whitelist",
   "LAN listen address. Use <code>0.0.0.0</code> for all interfaces.": "LAN listen address. Use <code>0.0.0.0</code> for all interfaces.",

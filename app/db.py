@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS modems (
     tx_min_gap_seconds REAL NOT NULL DEFAULT 0.35
         CHECK (tx_min_gap_seconds >= 0.2 AND tx_min_gap_seconds <= 1.2),
     expose_port_enabled INTEGER NOT NULL DEFAULT 0 CHECK (expose_port_enabled IN (0, 1)),
+    expose_allow_tx INTEGER NOT NULL DEFAULT 1 CHECK (expose_allow_tx IN (0, 1)),
     expose_bind_address TEXT NOT NULL DEFAULT '0.0.0.0',
     expose_port INTEGER NOT NULL DEFAULT 8002 CHECK (expose_port BETWEEN 1 AND 65535),
     expose_whitelist TEXT NOT NULL DEFAULT '',
@@ -861,6 +862,14 @@ def init_db() -> None:
                 ALTER TABLE modems
                 ADD COLUMN expose_port_enabled INTEGER NOT NULL DEFAULT 0
                 CHECK (expose_port_enabled IN (0, 1))
+                """
+            )
+        if "expose_allow_tx" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN expose_allow_tx INTEGER NOT NULL DEFAULT 1
+                CHECK (expose_allow_tx IN (0, 1))
                 """
             )
         if "expose_bind_address" not in modem_columns:
