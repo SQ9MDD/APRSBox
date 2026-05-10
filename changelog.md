@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.8.6.dev - 10.05.2026
+## 1.8.7.dev - 10.05.2026
 
 ### Najważniejsze zmiany
 - `Nowy interfejs RX`: dodano typ `OpenWebRX MQTT (RX only)` z konfiguracją pełnym URL (`mqtt://`/`mqtts://`) i topiciem pobieranym ze ścieżki URL.
@@ -9,6 +9,10 @@
 - `Deduplikacja wejściowa`: dla OpenWebRX MQTT dodano lokalne dedupe (okno 3 s) po fingerprint `source+destination+path+raw+freq` oraz licznik `duplicates_dropped`.
 - `Routing`: źródło `OpenWebRX MQTT` jest dostępne jako `source` w regułach DIGI, ale nie jest dostępne jako target TX (`tx_rf`); nie dodano auto-iGate, auto-DIGI ani TX przez MQTT.
 - `Diagnostyka`: rozszerzono statusy/health runtime interfejsu o `connected`, `subscribed topic`, `broker host/port`, `last frame time`, `frames received`, `duplicates dropped`, `invalid JSON dropped`, `last error`.
+- `Monitor ruchu / kolorowanie`: ujednolicono reguły kolorowania ramek tak, aby wszystkie ramki `TX` miały klasę koloru; `query (?)` i `telemetry` są traktowane jak kategoria wiadomości, a `object/item` jak kategoria pozycji/beacon.
+- `Monitor ruchu / proxy`: ramki wysyłane przez udostępniony port TNC (`TX-PROXY`) mają własny kolor także wtedy, gdy źródłowy callsign jest lokalny.
+- `Monitor ruchu / RX własne`: własne ramki odebrane (`RX`) zachowują ten sam podział kategorii co `TX`, z jaśniejszym wariantem kolorów.
+- `Testy`: dodano testy regresyjne kolorowania dla `query`, `object` oraz `TX-PROXY`.
 
 ## 1.8.3.dev - 09.05.2026
 

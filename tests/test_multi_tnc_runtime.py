@@ -186,6 +186,67 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("traffic-log-row-own-beacon-tx", tx_skip_row["row_class"])
             self.assertIn("traffic-log-row-skipped", tx_skip_row["row_class"])
 
+    async def test_traffic_snapshot_marks_own_query_and_object_rows(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'SQ9MDD',
+                    ssid = '4'
+                WHERE id = 1
+                """
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APRS:?APRSP', '0', 'TX', 18, '', '2026-01-01T00:00:04+00:00'),
+                    ('TNC-2m', 1, 'rx', '2m', 'TNC2', 'SQ9MDD-4>APRS:?APRSP', '0', 'RX', 18, '', '2026-01-01T00:00:03+00:00'),
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APRS:;OBJTEST *010101z5218.37N/02104.87E-Test', '0', 'TX', 58, '', '2026-01-01T00:00:02+00:00'),
+                    ('TNC-2m', 1, 'rx', '2m', 'TNC2', 'SQ9MDD-4>APRS:;OBJTEST *010101z5218.37N/02104.87E-Test', '0', 'RX', 58, '', '2026-01-01T00:00:01+00:00')
+                """
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            row_classes = {(frame["direction"], frame["line"]): frame["row_class"] for frame in snapshot["frames"]}
+
+            self.assertEqual(row_classes[("TX", "SQ9MDD-4>APRS:?APRSP")], "traffic-log-row-own-message-tx")
+            self.assertEqual(row_classes[("RX", "SQ9MDD-4>APRS:?APRSP")], "traffic-log-row-own-message-rx")
+            self.assertEqual(
+                row_classes[("TX", "SQ9MDD-4>APRS:;OBJTEST *010101z5218.37N/02104.87E-Test")],
+                "traffic-log-row-own-beacon-tx",
+            )
+            self.assertEqual(
+                row_classes[("RX", "SQ9MDD-4>APRS:;OBJTEST *010101z5218.37N/02104.87E-Test")],
+                "traffic-log-row-own-beacon-rx",
+            )
+
+    async def test_traffic_snapshot_marks_proxy_tx_even_for_own_source(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'SQ9MDD',
+                    ssid = '4'
+                WHERE id = 1
+                """
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES
+                    ('TNC-2m', 1, 'tx', '2m', 'TNC2-TX', 'SQ9MDD-4>APRS:>Proxy-originated frame', '0', 'TX-PROXY', 36, '', '2026-01-01T00:00:03+00:00')
+                """
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            row_classes = {frame["line"]: frame["row_class"] for frame in snapshot["frames"]}
+            self.assertEqual(row_classes["SQ9MDD-4>APRS:>Proxy-originated frame"], "traffic-log-row-proxy-tx")
+
     async def test_monitor_tracks_multiple_enabled_tncs_and_persists_shared_traffic_log(self) -> None:
         with temporary_database():
             port_2m = free_tcp_port()

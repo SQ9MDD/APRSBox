@@ -978,39 +978,40 @@ def _traffic_frame_row_class(
     source_callsign = str(parsed.get("source_callsign") or "").strip().upper()
 
     aprs_data = parsed.get("aprs_data") or {}
+    info_field = str(parsed.get("logical_info") or parsed.get("info") or "")
     packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
-    packet_type_code = str(aprs_data.get("packet_type_code") or "").strip().lower()
     symbol = str(aprs_data.get("symbol") or "").strip()
     is_weather = packet_group == "weather" or symbol.endswith("_")
-    is_beacon_or_status = packet_group in {"position", "status"} and not is_weather
-    is_message_or_bulletin = packet_group == "message" and packet_type_code in {
-        "message",
-        "bulletin",
-        "announcement",
-        "group_bulletin",
-    }
+    is_position_like = packet_group in {"position", "status", "object", "item"} and not is_weather
+    is_message_like = packet_group in {"message", "query", "telemetry"} or (not packet_group and info_field.startswith("?"))
     is_own_station_source = bool(station_source_key) and source_key == station_source_key
     is_own_wx_source = bool(wx_source_key) and source_key == wx_source_key
     is_own_callsign = bool(station_callsign) and source_callsign == station_callsign
 
     if normalized_direction == "TX":
-        if is_proxy_tx and source_key and source_key not in {station_source_key, wx_source_key}:
+        if is_proxy_tx:
             classes.append("traffic-log-row-proxy-tx")
         elif (is_own_wx_source or is_own_callsign) and is_weather:
             classes.append("traffic-log-row-own-wx-tx")
-        elif is_own_station_source and is_beacon_or_status:
-            classes.append("traffic-log-row-own-beacon-tx")
-        elif is_own_station_source and is_message_or_bulletin:
-            classes.append("traffic-log-row-own-message-tx")
-        elif source_key and source_key not in {station_source_key, wx_source_key}:
+        elif is_own_station_source:
+            if is_position_like:
+                classes.append("traffic-log-row-own-beacon-tx")
+            elif is_message_like:
+                classes.append("traffic-log-row-own-message-tx")
+            else:
+                classes.append("traffic-log-row-own-beacon-tx")
+        elif source_key:
             classes.append("traffic-log-row-repeated-tx")
     elif normalized_direction == "RX":
         if (is_own_wx_source or is_own_callsign) and is_weather:
             classes.append("traffic-log-row-own-wx-rx")
-        elif is_own_station_source and is_beacon_or_status:
-            classes.append("traffic-log-row-own-beacon-rx")
-        elif is_own_station_source and is_message_or_bulletin:
-            classes.append("traffic-log-row-own-message-rx")
+        elif is_own_station_source:
+            if is_position_like:
+                classes.append("traffic-log-row-own-beacon-rx")
+            elif is_message_like:
+                classes.append("traffic-log-row-own-message-rx")
+            else:
+                classes.append("traffic-log-row-own-beacon-rx")
 
     return " ".join(classes)
 
