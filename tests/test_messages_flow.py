@@ -4,6 +4,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -755,7 +756,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id, ssid="15"))
 
-            inbound_line = "SQ9SIM-3>APBOX0,SP9INZ-10*::SQ9MDD-15:Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"
+            inbound_line = "SQ9SIM-3>APBOX0,SP9INZ-10*::SQ9MDD-15:Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER"
             process_incoming_tnc2_message(inbound_line, timestamp="2026-04-16T15:02:00+00:00")
 
             row = fetch_one(
@@ -772,7 +773,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(row["direction"], "rx")
             self.assertEqual(row["sender"], "SQ9SIM-3")
             self.assertEqual(row["addressee"], "SQ9MDD-15")
-            self.assertEqual(row["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(row["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER")
             self.assertEqual(row["message_number"], None)
             self.assertEqual(row["status"], MESSAGE_STATUS_RECEIVED)
             self.assertEqual(row["remote_callsign"], "SQ9SIM")
@@ -785,7 +786,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             view = get_messages_page_data()
             self.assertEqual(len(view["conversations"]), 1)
             self.assertEqual(view["conversations"][0]["callsign"], "SQ9SIM-3")
-            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER")
 
     def test_incoming_unnumbered_message_duplicate_via_consumed_hops_is_stored_once(self) -> None:
         with temporary_database():
@@ -931,7 +932,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(job["payload"].get("message_kind")), QUERY_MESSAGE_KIND)
             self.assertEqual(
                 build_message_tnc2(job["payload"]),
-                "SQ9MDD-4>APBOX0,WIDE2-1::SP8ABC   :Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER",
+                "SQ9MDD-4>APBOX0,WIDE2-1::SP8ABC   :Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER",
             )
 
             rows = fetch_all(
@@ -945,7 +946,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(rows[0]["direction"], "rx")
             self.assertEqual(rows[0]["message_text"], "?APRS")
             self.assertEqual(rows[1]["direction"], "tx")
-            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER")
 
     def test_incoming_numbered_aprs_query_is_accepted_and_shown_in_conversation(self) -> None:
         with temporary_database():
@@ -967,13 +968,13 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(rows[0]["message_text"], "?APRS")
             self.assertEqual(rows[0]["message_number"], "49")
             self.assertEqual(rows[1]["direction"], "tx")
-            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER")
 
             view = get_messages_page_data()
             self.assertEqual(len(view["conversations"]), 1)
             self.assertEqual(len(view["conversations"][0]["messages"]), 2)
             self.assertEqual(view["conversations"][0]["messages"][0]["text"], "?APRS")
-            self.assertEqual(view["conversations"][0]["messages"][1]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(view["conversations"][0]["messages"][1]["text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER")
 
             row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
             assert row is not None
@@ -989,7 +990,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(jobs), 3)
             ack_now_job = next(job for job in jobs if '"message_text":"ack49"' in str(job["payload_json"]) and '"trigger":"ack-now"' in str(job["payload_json"]))
-            response_job = next(job for job in jobs if '"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER"' in str(job["payload_json"]))
+            response_job = next(job for job in jobs if '"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER"' in str(job["payload_json"]))
             self.assertGreater(str(response_job["scheduled_at"]), str(ack_now_job["scheduled_at"]))
 
     def test_incoming_numbered_query_preserves_existing_manual_conversation_path_for_ack(self) -> None:
@@ -1045,7 +1046,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(rows[0]["message_text"], "?APRS")
             self.assertEqual(rows[0]["message_number"], "01")
             self.assertEqual(rows[1]["direction"], "tx")
-            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSV ?VER")
+            self.assertEqual(rows[1]["message_text"], "Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER")
 
             ack_jobs = fetch_all(
                 """
@@ -1200,6 +1201,98 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["message_text"], "?APRSS")
             self.assertEqual(rows[1]["message_text"], ">Station online")
+
+    def test_incoming_aprsd_query_returns_direct_station_list(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+
+            for line, timestamp in (
+                ("SP1AAA-1>APRS,WIDE1-1:>direct-a", now_utc - timedelta(minutes=3)),
+                ("SP2BBB-2>APRS:>direct-b", now_utc - timedelta(minutes=2)),
+                ("SP3CCC-3>APRS,SR9XYZ*:>digipeated", now_utc - timedelta(minutes=1)),
+            ):
+                execute(
+                    """
+                    INSERT INTO traffic_frames(
+                        source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                    )
+                    VALUES (?, ?, 'RX', '2m', 'TNC2', ?, '0', '', ?, '', ?)
+                    """,
+                    ("Main TNC", interface_id, line, len(line.encode("utf-8")), timestamp.isoformat()),
+                )
+
+            inbound_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "query",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "?APRSD",
+                }
+            )
+            process_incoming_tnc2_message(inbound_line, timestamp=now_utc.isoformat())
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "message")
+            self.assertEqual(
+                build_message_tnc2(job["payload"]),
+                "SQ9MDD-4>APBOX0,WIDE2-1::SP8ABC   :Directs= SP1AAA-1 SP2BBB-2",
+            )
+
+            rows = fetch_all("SELECT direction, message_text FROM aprs_messages ORDER BY id ASC")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["message_text"], "?APRSD")
+            self.assertEqual(rows[1]["message_text"], "Directs= SP1AAA-1 SP2BBB-2")
+
+    def test_incoming_dx_query_returns_farthest_direct_and_overall_stations(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+
+            direct_line = "SP1AAA-1>APRS,WIDE1-1:!5313.78N/02100.73E>Direct"
+            indirect_far_line = "SP9ZZZ-9>APRS,SR9DIGI*:!5513.78N/02100.73E>Far"
+            for line, timestamp in (
+                (direct_line, now_utc - timedelta(minutes=2)),
+                (indirect_far_line, now_utc - timedelta(minutes=1)),
+            ):
+                execute(
+                    """
+                    INSERT INTO traffic_frames(
+                        source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                    )
+                    VALUES (?, ?, 'RX', '2m', 'TNC2', ?, '0', '', ?, '', ?)
+                    """,
+                    ("Main TNC", interface_id, line, len(line.encode("utf-8")), timestamp.isoformat()),
+                )
+
+            inbound_line = build_message_tnc2(
+                {
+                    "callsign": "SP8ABC",
+                    "ssid": "",
+                    "message_kind": "query",
+                    "addressee": "SQ9MDD-4",
+                    "message_text": "?DX",
+                }
+            )
+            process_incoming_tnc2_message(inbound_line, timestamp=now_utc.isoformat())
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "message")
+            line = build_message_tnc2(job["payload"])
+            self.assertIn("::SP8ABC   :DX: D SP1AAA-1 ", line)
+            self.assertIn(" A SP9ZZZ-9 ", line)
+            self.assertIn("km", line)
+
+            rows = fetch_all("SELECT direction, message_text FROM aprs_messages ORDER BY id ASC")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["message_text"], "?DX")
+            self.assertIn("DX: D SP1AAA-1 ", rows[1]["message_text"])
+            self.assertIn(" A SP9ZZZ-9 ", rows[1]["message_text"])
 
     def test_incoming_version_queries_return_single_text_response(self) -> None:
         with temporary_database():

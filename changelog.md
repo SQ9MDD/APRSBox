@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.11.dev - 11.05.2026
+
+### Najważniejsze zmiany
+- `Messages / APRS queries`: dodano obsługę `?APRSD` z odpowiedzią `Directs= ...` (stacje słyszane bezpośrednio, bez zużytych hopów digi).
+- `Messages / APRS queries`: dodano obsługę `?DX` z krótkim raportem `DX: D ... A ...` (najdalsza stacja direct oraz najdalsza stacja ogółem).
+- `Messages / query list`: odpowiedź na `?APRS` została rozszerzona o nowe pozycje `?APRSD` i `?DX`.
+
 ## 1.8.10.dev - 11.05.2026
 
 ### Najważniejsze zmiany

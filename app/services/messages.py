@@ -8,6 +8,7 @@ from typing import Any
 from app import get_version
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.i18n import get_app_language, get_translator
+from app.services.content import get_visible_station_snapshots
 from app.services.outbound import (
     _format_aprs_latitude,
     _format_aprs_longitude,
@@ -19,6 +20,7 @@ from app.services.outbound import (
     enqueue_status_job,
     mark_outbound_job_cancelled,
 )
+from app.services.radio_activity import TRAFFIC_STATISTICS_RANGE_24H, get_traffic_direct_heard_statistics
 
 MESSAGE_DIRECTION_RX = "rx"
 MESSAGE_DIRECTION_TX = "tx"
@@ -46,7 +48,7 @@ OUTGOING_BURST_DUPLICATE_WINDOW_SECONDS = 5
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
 _MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
-SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
+SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSD", "?DX", "?APRSV", "?VER")
 APRS_SERVICE_DESTINATIONS = (
     "ANSRVR",
     "AVRS",
@@ -768,6 +770,26 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSS from {sender}: {error or 'status unavailable'}")
         return
+    if query_type == "?APRSD":
+        enqueue_automatic_query_text_response(
+            sender=sender,
+            station_settings=station_settings,
+            message_text=_build_query_direct_stations_text(),
+            trigger="query-aprsd",
+            scheduled_for=scheduled_for,
+            timestamp=timestamp,
+        )
+        return
+    if query_type == "?DX":
+        enqueue_automatic_query_text_response(
+            sender=sender,
+            station_settings=station_settings,
+            message_text=_build_query_dx_text(),
+            trigger="query-dx",
+            scheduled_for=scheduled_for,
+            timestamp=timestamp,
+        )
+        return
     if query_type in {"?APRSV", "?VER"}:
         enqueue_automatic_query_text_response(
             sender=sender,
@@ -1358,6 +1380,113 @@ def _build_query_position_text(station_settings: dict[str, Any]) -> str:
 
 def _build_query_status_text(station_settings: dict[str, Any]) -> str:
     return f">{str(station_settings.get('status_text') or '').strip()}"
+
+
+def _build_query_direct_stations_text() -> str:
+    direct_station_keys = _query_direct_station_keys(limit=500)
+    if not direct_station_keys:
+        return "Directs= none"
+    return _build_query_callsign_list_message(prefix="Directs= ", callsigns=direct_station_keys, empty_fallback="Directs= none")
+
+
+def _build_query_dx_text() -> str:
+    distance_rows = _query_distance_station_rows(limit=500)
+    if not distance_rows:
+        return "DX: D none A none"
+    direct_keys = set(_query_direct_station_keys(limit=500))
+    farthest_direct = max((row for row in distance_rows if row["callsign"] in direct_keys), key=lambda row: row["distance_km"], default=None)
+    farthest_any = max(distance_rows, key=lambda row: row["distance_km"], default=None)
+    direct_part = _format_dx_part("D", farthest_direct)
+    any_part = _format_dx_part("A", farthest_any)
+    return f"DX: {direct_part} {any_part}"
+
+
+def _build_query_callsign_list_message(*, prefix: str, callsigns: list[str], empty_fallback: str) -> str:
+    if not callsigns:
+        return empty_fallback
+    normalized_prefix = str(prefix or "")
+    selected: list[str] = []
+    for callsign in callsigns:
+        candidate = f"{normalized_prefix}{' '.join([*selected, callsign])}"
+        if len(candidate) > MESSAGE_MAX_LENGTH:
+            break
+        selected.append(callsign)
+    if not selected:
+        return empty_fallback
+    message = f"{normalized_prefix}{' '.join(selected)}"
+    if len(selected) < len(callsigns):
+        ellipsis_candidate = f"{message} ..."
+        if len(ellipsis_candidate) <= MESSAGE_MAX_LENGTH:
+            return ellipsis_candidate
+    return message
+
+
+def _format_dx_part(label: str, row: dict[str, Any] | None) -> str:
+    normalized_label = str(label or "").strip().upper() or "?"
+    if row is None:
+        return f"{normalized_label} none"
+    callsign = str(row.get("callsign") or "").strip().upper()
+    distance = _format_distance_km_compact(row.get("distance_km"))
+    if not callsign or not distance:
+        return f"{normalized_label} none"
+    return f"{normalized_label} {callsign} {distance}km"
+
+
+def _format_distance_km_compact(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return ""
+    return f"{numeric:.1f}".rstrip("0").rstrip(".")
+
+
+def _query_direct_station_keys(*, limit: int) -> list[str]:
+    normalized_limit = max(1, int(limit or 0))
+    try:
+        payload = get_traffic_direct_heard_statistics(
+            range_value=TRAFFIC_STATISTICS_RANGE_24H,
+            top_limit=normalized_limit,
+        )
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load direct-heard statistics for APRSD query: {exc}")
+        return []
+    except Exception as exc:
+        _safe_messages_warning(f"Failed to build APRSD query response: {exc}")
+        return []
+    items = list(payload.get("items") or [])
+    callsigns: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        callsign = str(item.get("key") or "").strip().upper()
+        if not callsign or callsign in seen or _CALLSIGN_RE.fullmatch(callsign) is None:
+            continue
+        seen.add(callsign)
+        callsigns.append(callsign)
+    return callsigns
+
+
+def _query_distance_station_rows(*, limit: int) -> list[dict[str, Any]]:
+    normalized_limit = max(1, int(limit or 0))
+    try:
+        snapshots = get_visible_station_snapshots(limit=normalized_limit)
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load station snapshots for ?DX query: {exc}")
+        return []
+    except Exception as exc:
+        _safe_messages_warning(f"Failed to build ?DX station snapshot list: {exc}")
+        return []
+    rows: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        callsign = str(snapshot.get("display_callsign") or "").strip().upper()
+        if not callsign or _CALLSIGN_RE.fullmatch(callsign) is None:
+            continue
+        distance_raw = snapshot.get("distance_km")
+        try:
+            distance_km = float(distance_raw)
+        except (TypeError, ValueError):
+            continue
+        rows.append({"callsign": callsign, "distance_km": distance_km})
+    return rows
 
 
 def _query_response_scheduled_for(query_number: str | None) -> datetime | None:
