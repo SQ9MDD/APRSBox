@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from datetime import datetime, timezone
 import ipaddress
 import json
 import time
@@ -12,7 +13,7 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_rete
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
 from app.services.band_condition import process_incoming_frame
 from app.services.messages import process_incoming_tnc2_message
-from app.services.outbound import persist_outbound_frame
+from app.services.outbound import build_object_tnc2, persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
 from app.services.serial_broker import SerialKissTcpBroker
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
@@ -29,6 +30,7 @@ SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS = set(range(0, 601, 30))
 SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
 OPENWEBRX_MQTT_DEDUP_WINDOW_SECONDS = 3.0
 OPENWEBRX_MQTT_UNKNOWN_KEYS_LOG_INTERVAL_SECONDS = 30.0
+OPENWEBRX_MQTT_SUPPORTED_MODES = {"APRS", "SONDE"}
 IGNORED_KISS_DEBUG_PREVIEW_BYTES = 24
 IGNORED_KISS_DEBUG_INTERVAL_SECONDS = 30.0
 SERIAL_TX_DEBUG_PREVIEW_BYTES = 32
@@ -667,16 +669,16 @@ class _TrafficModemRuntime:
             return
 
         mode = str(packet.get("mode") or "").strip().upper()
-        if mode and mode != "APRS":
+        if mode and mode not in OPENWEBRX_MQTT_SUPPORTED_MODES:
             return
 
         self._increment_mqtt_frames_received()
-        fingerprint = self._build_openwebrx_fingerprint(packet)
+        fingerprint = self._build_openwebrx_fingerprint(packet, mode=mode)
         if self._is_duplicate_openwebrx_fingerprint(fingerprint, received_monotonic):
             self._increment_mqtt_duplicates_dropped()
             return
 
-        tnc2_line, diagnostic_hex = self._map_openwebrx_packet_to_tnc2_line(packet, payload_text)
+        tnc2_line, diagnostic_hex = self._map_openwebrx_packet_to_tnc2_line(packet, payload_text, mode=mode)
         if not tnc2_line:
             message = "OpenWebRX payload dropped because mapping to TNC2 failed."
             self._set_runtime_last_error(message)
@@ -715,6 +717,12 @@ class _TrafficModemRuntime:
             "speed",
             "course",
             "device",
+            "timestamp",
+            "data",
+            "sats",
+            "battery",
+            "vspeed",
+            "weather",
         }
         unknown_keys = sorted(key for key in packet.keys() if key not in known_keys)
         if unknown_keys:
@@ -733,7 +741,17 @@ class _TrafficModemRuntime:
                     ),
                 )
 
-    def _map_openwebrx_packet_to_tnc2_line(self, packet: dict[str, Any], payload_text: str) -> tuple[str | None, str]:
+    def _map_openwebrx_packet_to_tnc2_line(
+        self,
+        packet: dict[str, Any],
+        payload_text: str,
+        *,
+        mode: str = "",
+    ) -> tuple[str | None, str]:
+        normalized_mode = str(mode or "").strip().upper()
+        if normalized_mode == "SONDE":
+            return self._map_openwebrx_sonde_packet_to_tnc2_line(packet, payload_text)
+
         raw_hex = self._normalize_openwebrx_raw_hex(packet.get("raw"))
         if raw_hex:
             try:
@@ -765,6 +783,46 @@ class _TrafficModemRuntime:
             header = f"{header} , {','.join(path_list)}"
         fallback_hex = payload_text.encode("utf-8").hex(" ").upper()
         return f"{header}:{info}", fallback_hex
+
+    def _map_openwebrx_sonde_packet_to_tnc2_line(self, packet: dict[str, Any], payload_text: str) -> tuple[str | None, str]:
+        fallback_hex = payload_text.encode("utf-8").hex(" ").upper()
+
+        lat = self._safe_float(packet.get("lat"))
+        lon = self._safe_float(packet.get("lon"))
+        if lat is None or lon is None or not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            return None, fallback_hex
+
+        callsign, ssid = self._local_station_callsign()
+        if not callsign:
+            return None, fallback_hex
+
+        symbol_table = "/"
+        symbol_code = "O"
+        symbol = packet.get("symbol")
+        if isinstance(symbol, dict):
+            table_candidate = str(symbol.get("table") or "/")
+            if table_candidate in {"/", "\\"}:
+                symbol_table = table_candidate
+            code_candidate = str(symbol.get("symbol") or "O")
+            if code_candidate and 33 <= ord(code_candidate[0]) <= 126:
+                symbol_code = code_candidate[0]
+
+        payload = {
+            "callsign": callsign,
+            "ssid": ssid,
+            "name": self._normalize_openwebrx_sonde_object_name(packet),
+            "lifetime": "temporary",
+            "state": "live",
+            "latitude": lat,
+            "longitude": lon,
+            "symbol_table": symbol_table,
+            "symbol_code": symbol_code,
+            "symbol_overlay": None,
+            "comment": self._build_openwebrx_sonde_comment(packet),
+            "path": "",
+            "object_timestamp": self._openwebrx_object_timestamp(packet.get("timestamp")),
+        }
+        return build_object_tnc2(payload), fallback_hex
 
     def _build_openwebrx_fallback_info(self, packet: dict[str, Any]) -> str:
         lat = self._safe_float(packet.get("lat"))
@@ -820,7 +878,120 @@ class _TrafficModemRuntime:
                 return ""
         return candidate.upper()
 
-    def _build_openwebrx_fingerprint(self, packet: dict[str, Any]) -> str:
+    def _local_station_callsign(self) -> tuple[str, str]:
+        row = fetch_one(
+            """
+            SELECT callsign, ssid
+            FROM station_settings
+            WHERE id = 1
+            """
+        )
+        if row is None:
+            return "", ""
+        callsign = str(row["callsign"] or "").strip().upper()
+        ssid = str(row["ssid"] or "").strip()
+        if ssid == "0":
+            ssid = ""
+        return callsign, ssid
+
+    def _normalize_openwebrx_sonde_object_name(self, packet: dict[str, Any]) -> str:
+        data = packet.get("data")
+        candidates: list[Any] = [packet.get("source")]
+        if isinstance(data, dict):
+            candidates.append(data.get("id"))
+        for candidate in candidates:
+            text = str(candidate or "").strip().upper()
+            if not text:
+                continue
+            normalized_chars: list[str] = []
+            for char in text:
+                if ("A" <= char <= "Z") or ("0" <= char <= "9") or char in {"-", "_"}:
+                    normalized_chars.append(char)
+                else:
+                    normalized_chars.append("_")
+            normalized = "".join(normalized_chars).strip("_")
+            if normalized:
+                return normalized[:9]
+        return "SONDE"
+
+    def _openwebrx_object_timestamp(self, value: Any) -> str:
+        timestamp_value = self._safe_float(value)
+        if timestamp_value is None:
+            return datetime.now(timezone.utc).strftime("%d%H%Mz")
+        if timestamp_value > 10_000_000_000:
+            timestamp_value = timestamp_value / 1000.0
+        try:
+            moment = datetime.fromtimestamp(timestamp_value, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return datetime.now(timezone.utc).strftime("%d%H%Mz")
+        return moment.strftime("%d%H%Mz")
+
+    def _build_openwebrx_sonde_comment(self, packet: dict[str, Any]) -> str:
+        data = packet.get("data") if isinstance(packet.get("data"), dict) else {}
+        weather = packet.get("weather") if isinstance(packet.get("weather"), dict) else {}
+
+        parts: list[str] = []
+        device = str(packet.get("device") or data.get("subtype") or data.get("type") or "").strip()
+        if device:
+            parts.append(device)
+
+        temperature = self._safe_float(weather.get("temperature"))
+        if temperature is None:
+            temperature = self._safe_float(data.get("temp"))
+        if temperature is not None:
+            parts.append(f"T={temperature:.1f}C")
+
+        pressure = self._safe_float(weather.get("barometricpressure"))
+        if pressure is None:
+            pressure = self._safe_float(data.get("pressure"))
+        if pressure is not None:
+            parts.append(f"P={pressure:.2f}hPa")
+
+        humidity = self._safe_float(weather.get("humidity"))
+        if humidity is None:
+            humidity = self._safe_float(data.get("humidity"))
+        if humidity is not None:
+            parts.append(f"H={humidity:.1f}%")
+
+        altitude_m = self._safe_float(packet.get("altitude"))
+        if altitude_m is None:
+            altitude_m = self._safe_float(data.get("alt"))
+        if altitude_m is not None:
+            altitude_ft = max(0, int(round(altitude_m * 3.28084)))
+            parts.append(f"/A={altitude_ft:06d}")
+
+        frame_id = data.get("frame")
+        if frame_id is not None:
+            try:
+                parts.append(f"F={int(frame_id)}")
+            except (TypeError, ValueError):
+                pass
+
+        fallback_comment = str(packet.get("comment") or "").strip()
+        summary = " ".join(parts).strip()
+        if fallback_comment:
+            summary = f"{summary} {fallback_comment}".strip() if summary else fallback_comment
+        if not summary:
+            summary = "OpenWebRX SONDE"
+        return summary.encode("ascii", errors="replace").decode("ascii")[:120]
+
+    def _build_openwebrx_fingerprint(self, packet: dict[str, Any], *, mode: str = "") -> str:
+        normalized_mode = str(mode or "").strip().upper()
+        if normalized_mode == "SONDE":
+            data = packet.get("data")
+            sonde_id = str(packet.get("source") or "").strip().upper()
+            frame = ""
+            if isinstance(data, dict):
+                frame = str(data.get("frame") or "").strip()
+                if not sonde_id:
+                    sonde_id = str(data.get("id") or "").strip().upper()
+            timestamp = str(packet.get("timestamp") or "").strip()
+            freq = str(packet.get("freq") or "").strip()
+            lat = str(packet.get("lat") or "").strip()
+            lon = str(packet.get("lon") or "").strip()
+            altitude = str(packet.get("altitude") or "").strip()
+            return f"SONDE|{sonde_id}|{frame}|{timestamp}|{freq}|{lat}|{lon}|{altitude}"
+
         source = str(packet.get("source") or "").strip().upper()
         destination = str(packet.get("destination") or "").strip().upper()
         raw = str(packet.get("raw") or "").strip().upper()
