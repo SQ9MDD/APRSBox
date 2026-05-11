@@ -3907,8 +3907,39 @@ select:focus-visible,
     grid-template-columns: 5rem minmax(10rem, 14rem) minmax(0, 1fr);
 }
 
+.traffic-summary-stream .traffic-interface-row {
+    grid-template-columns: 5.2rem 5rem minmax(10rem, 14rem) minmax(0, 1fr);
+}
+
 .traffic-summary-stream .traffic-log-source {
     white-space: normal;
+}
+
+.traffic-interface-toggle {
+    justify-self: start;
+    min-width: 4.2rem;
+    padding: 0.16rem 0.42rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--panel-soft);
+    color: var(--text);
+    font-size: 0.68rem;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.traffic-interface-toggle:hover {
+    border-color: var(--border-hover);
+    background: var(--panel-emphasis);
+}
+
+.traffic-interface-toggle[aria-pressed="false"] {
+    background: transparent;
+    color: var(--muted);
+}
+
+.traffic-interface-row-hidden {
+    opacity: 0.75;
 }
 
 .traffic-log-row {

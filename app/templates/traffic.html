@@ -41,9 +41,64 @@
         const entriesText = {{ t("entries")|tojson }};
         const listeningText = {{ t("Listening")|tojson }};
         const clientsText = {{ t("Clients")|tojson }};
+        const showText = {{ t("Show")|tojson }};
+        const hideText = {{ t("Hide")|tojson }};
         const noInterfacesText = {{ t("No enabled TNC is configured.")|tojson }};
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
         const frameNodeByKey = new Map();
+        const interfaceVisibilityByKey = new Map();
+        let latestSnapshot = { interfaces: [], frames: [] };
+
+        const interfaceKey = (item) => {
+            if (Number.isInteger(item.modem_id)) {
+                return `modem:${item.modem_id}`;
+            }
+            return `fallback:${item.name || ""}:${item.band || ""}`;
+        };
+
+        const syncInterfaceVisibility = (interfaces) => {
+            const currentKeys = new Set();
+            interfaces.forEach((item) => {
+                const key = interfaceKey(item);
+                currentKeys.add(key);
+                if (!interfaceVisibilityByKey.has(key)) {
+                    interfaceVisibilityByKey.set(key, true);
+                }
+            });
+            Array.from(interfaceVisibilityByKey.keys()).forEach((key) => {
+                if (!currentKeys.has(key)) {
+                    interfaceVisibilityByKey.delete(key);
+                }
+            });
+        };
+
+        const isFrameVisible = (frame, interfacesById, visibleInterfaceIds) => {
+            const interfaceId = Number.isInteger(frame.interface_id) ? frame.interface_id : null;
+            if (interfaceId === null) {
+                return true;
+            }
+            if (!interfacesById.has(interfaceId)) {
+                return true;
+            }
+            return visibleInterfaceIds.has(interfaceId);
+        };
+
+        const filteredFrames = (snapshot) => {
+            const interfaces = Array.isArray(snapshot.interfaces) ? snapshot.interfaces : [];
+            const frames = Array.isArray(snapshot.frames) ? snapshot.frames : [];
+            const interfacesById = new Map();
+            const visibleInterfaceIds = new Set();
+            interfaces.forEach((item) => {
+                if (!Number.isInteger(item.modem_id)) {
+                    return;
+                }
+                interfacesById.set(item.modem_id, item);
+                if (interfaceVisibilityByKey.get(interfaceKey(item)) !== false) {
+                    visibleInterfaceIds.add(item.modem_id);
+                }
+            });
+            return frames.filter((frame) => isFrameVisible(frame, interfacesById, visibleInterfaceIds));
+        };
 
         const renderInterfaces = (interfaces) => {
             if (!interfaceSummary) {
@@ -53,25 +108,44 @@
                 interfaceSummary.innerHTML = `<div class="empty-state muted">${noInterfacesText}</div>`;
                 return;
             }
-            interfaceSummary.innerHTML = interfaces.map((item) => `
-                <div class="traffic-log-row">
-                    <span class="traffic-log-time"></span>
-                    <span class="traffic-log-source"></span>
-                    <span class="traffic-log-line"></span>
-                </div>
-            `).join("");
-            const timeNodes = interfaceSummary.querySelectorAll(".traffic-log-time");
-            const sourceNodes = interfaceSummary.querySelectorAll(".traffic-log-source");
-            const lineNodes = interfaceSummary.querySelectorAll(".traffic-log-line");
-            interfaces.forEach((item, index) => {
-                timeNodes[index].textContent = item.band || "-";
-                sourceNodes[index].textContent = item.name || "-";
+            interfaceSummary.textContent = "";
+            interfaces.forEach((item) => {
+                const key = interfaceKey(item);
+                const isVisible = interfaceVisibilityByKey.get(key) !== false;
+                const row = document.createElement("div");
+                row.className = "traffic-log-row traffic-interface-row";
+                if (!isVisible) {
+                    row.classList.add("traffic-interface-row-hidden");
+                }
+
+                const toggle = document.createElement("button");
+                toggle.type = "button";
+                toggle.className = "traffic-interface-toggle";
+                toggle.textContent = isVisible ? hideText : showText;
+                toggle.setAttribute("aria-pressed", isVisible ? "true" : "false");
+                toggle.addEventListener("click", () => {
+                    interfaceVisibilityByKey.set(key, !isVisible);
+                    applySnapshot(latestSnapshot);
+                });
+
+                const bandNode = document.createElement("span");
+                bandNode.className = "traffic-log-time";
+                bandNode.textContent = item.band || "-";
+
+                const sourceNode = document.createElement("span");
+                sourceNode.className = "traffic-log-source";
+                sourceNode.textContent = item.name || "-";
+
+                const lineNode = document.createElement("span");
+                lineNode.className = "traffic-log-line";
                 const parts = [item.status || "-", item.status_detail || ""].filter(Boolean);
                 if (item.expose && item.expose.listen_endpoint) {
                     parts.push(`${listeningText} ${item.expose.listen_endpoint}`);
                     parts.push(`${clientsText}: ${item.expose.active_clients || 0}`);
                 }
-                lineNodes[index].textContent = parts.join(" · ");
+                lineNode.textContent = parts.join(" · ");
+                row.append(toggle, bandNode, sourceNode, lineNode);
+                interfaceSummary.appendChild(row);
             });
         };
 
@@ -195,9 +269,15 @@
         };
 
         const applySnapshot = (snapshot) => {
-            count.textContent = `${snapshot.frames.length} ${entriesText}`;
-            renderInterfaces(snapshot.interfaces || []);
-            renderFrames(snapshot.frames);
+            latestSnapshot = {
+                interfaces: Array.isArray(snapshot.interfaces) ? snapshot.interfaces : [],
+                frames: Array.isArray(snapshot.frames) ? snapshot.frames : [],
+            };
+            syncInterfaceVisibility(latestSnapshot.interfaces);
+            const visibleFrames = filteredFrames(latestSnapshot);
+            count.textContent = `${visibleFrames.length} ${entriesText}`;
+            renderInterfaces(latestSnapshot.interfaces);
+            renderFrames(visibleFrames);
         };
 
         streamContainer.textContent = "";
