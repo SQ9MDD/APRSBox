@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.8.dev - 11.05.2026
+
+### Najważniejsze zmiany
+- `DIGI / Path rule`: obowiązkowy krok `Reguła ścieżki` rozszerzono o wbudowane guardy blokujące wejście ramki do kolejki DIGI/TX dla: `message/query` do lokalnych stacji (`My station`, `WX station`), ramek `third-party` (`}`) oraz ramek już powtórzonych przez lokalną stację (`CALL-SSID*` w path).
+- `UI / nazewnictwo`: zmieniono nazwę kroku na `Reguła ścieżki i ochrona DIGI` (`Path rule and DIGI guard`) oraz dodano krótki opis i listę przypadków blokowanych przez guardy w edytorze reguł.
+- `Diagnostyka`: dodano jednoznaczne kody przyczyny odrzucenia (`DIGI_GUARD_*`) w logu wykonania DIGI Flow.
+- `Testy`: dodano regresyjne testy scenariuszy local `message/query`, `third-party`, `already repeated by local` oraz przypadków, które nie powinny być blokowane przez nowe guardy.
+
 ## 1.8.7.dev - 10.05.2026
 
 ### Najważniejsze zmiany

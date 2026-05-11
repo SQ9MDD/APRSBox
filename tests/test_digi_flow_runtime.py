@@ -44,6 +44,17 @@ def set_local_station_identity(callsign: str = "SQ9MDD", ssid: str = "4") -> Non
     )
 
 
+def set_wx_station_identity(*, enabled: bool = False, callsign: str = "", ssid: str = "") -> None:
+    execute(
+        """
+        UPDATE wx_config
+        SET enabled = ?, callsign = ?, ssid = ?, updated_at = '2026-01-01T00:00:00+00:00'
+        WHERE id = 1
+        """,
+        (1 if enabled else 0, callsign, ssid),
+    )
+
+
 def create_flow(payload: dict) -> int:
     flow_id = create_digi_flow(payload)
     row = fetch_one("SELECT id FROM digi_flows WHERE id = ?", (flow_id,))
@@ -794,12 +805,144 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 any(
                     row["event_type"] == "path_rule"
                     and row["decision"] == "rejected"
-                    and "already appears as a consumed hop" in row["message"]
+                    and "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL" in row["message"]
                     for row in rejected_rows
                 )
             )
             self.assertFalse(any(row["event_type"] == "output_action" for row in rejected_rows))
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rejected_rows))
+
+    async def test_path_rule_and_digi_guard_blocks_selected_frames_before_digi_tx(self) -> None:
+        with temporary_database():
+            set_local_station_identity(callsign="SQ9MDD", ssid="4")
+            set_wx_station_identity(enabled=True, callsign="SQ9MDD", ssid="7")
+            create_flow(
+                {
+                    "name": "Path + DIGI guard",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "guard",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE2-2", "WIDE2-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "guard", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                frames = {
+                    "message_my": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2::SQ9MDD-4 :tekst{1U",
+                    ),
+                    "query_my": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2::SQ9MDD-4 :?APRSP{1U",
+                    ),
+                    "message_wx": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2::SQ9MDD-7 :tekst{1U",
+                    ),
+                    "query_wx": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2::SQ9MDD-7 :?APRSP{1U",
+                    ),
+                    "message_foreign": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2::SP5XYZ-9 :tekst{1U",
+                    ),
+                    "third_party_message": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2:}SQ9MDD-4>APBOX0,TCPIP,SR0DZ*::SQ2IBK-3 :ack1V",
+                    ),
+                    "already_repeated_local": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,SQ9MDD-4*,WIDE2-1::SP5XYZ-9 :tekst{1U",
+                    ),
+                    "already_repeated_foreign": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,SR5DLA*,WIDE2-1::SP5XYZ-9 :tekst{1U",
+                    ),
+                    "third_party_position": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2:}SQ9MDD-4>APRS,TCPIP,SR0DZ*:!5000.00N/01900.00E-Test",
+                    ),
+                    "position_wide": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,WIDE2-2:!5000.00N/01900.00E-Test",
+                    ),
+                    "local_path_without_star": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ2IBK-3>APBOX0,SQ9MDD-4,WIDE2-1:!5000.00N/01900.00E-NoStar",
+                    ),
+                }
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = {name: event_rows_for_frame(str(item["frame_uid"])) for name, item in frames.items()}
+
+            def _has_reason(frame_name: str, reason_code: str) -> bool:
+                return any(
+                    row["event_type"] == "path_rule"
+                    and row["decision"] == "rejected"
+                    and reason_code in str(row["message"] or "")
+                    for row in rows[frame_name]
+                )
+
+            self.assertTrue(_has_reason("message_my", "DIGI_GUARD_LOCAL_MESSAGE_MY_STATION"))
+            self.assertTrue(_has_reason("query_my", "DIGI_GUARD_LOCAL_QUERY_MY_STATION"))
+            self.assertTrue(_has_reason("message_wx", "DIGI_GUARD_LOCAL_MESSAGE_WX"))
+            self.assertTrue(_has_reason("query_wx", "DIGI_GUARD_LOCAL_QUERY_WX"))
+            self.assertTrue(_has_reason("third_party_message", "DIGI_GUARD_THIRD_PARTY"))
+            self.assertTrue(_has_reason("third_party_position", "DIGI_GUARD_THIRD_PARTY"))
+            self.assertTrue(_has_reason("already_repeated_local", "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"))
+
+            self.assertFalse(any("DIGI_GUARD_LOCAL_MESSAGE" in str(row["message"] or "") for row in rows["message_foreign"]))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows["message_foreign"]))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "log_only" for row in rows["message_foreign"]))
+
+            self.assertFalse(any("DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL" in str(row["message"] or "") for row in rows["already_repeated_foreign"]))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows["already_repeated_foreign"]))
+
+            self.assertFalse(any("DIGI_GUARD" in str(row["message"] or "") for row in rows["position_wide"]))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows["position_wide"]))
+
+            self.assertFalse(any("DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL" in str(row["message"] or "") for row in rows["local_path_without_star"]))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "rejected" for row in rows["local_path_without_star"]))
+
+            for blocked_name in (
+                "message_my",
+                "query_my",
+                "message_wx",
+                "query_wx",
+                "third_party_message",
+                "already_repeated_local",
+                "third_party_position",
+            ):
+                self.assertFalse(any(row["event_type"] == "output_action" for row in rows[blocked_name]), blocked_name)
+                self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rows[blocked_name]), blocked_name)
 
     async def test_digi_flow_event_log_retains_only_latest_completed_executions_per_flow(self) -> None:
         with temporary_database():

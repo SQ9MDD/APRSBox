@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from app.db import log_event, utc_now
+from app.db import fetch_one, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.aprsis import (
     APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY,
@@ -27,6 +27,14 @@ from app.services.outbound import enqueue_digi_tx_job
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
 _DUPLICATE_FILTER_WINDOW_DEFAULT_SEC = 5
 _DUPLICATE_FILTER_WINDOW_ALLOWED = {2, 3, 4, 5, 6, 7}
+DIGI_GUARD_LOCAL_MESSAGE_MY_STATION = "DIGI_GUARD_LOCAL_MESSAGE_MY_STATION"
+DIGI_GUARD_LOCAL_QUERY_MY_STATION = "DIGI_GUARD_LOCAL_QUERY_MY_STATION"
+DIGI_GUARD_LOCAL_MESSAGE_WX = "DIGI_GUARD_LOCAL_MESSAGE_WX"
+DIGI_GUARD_LOCAL_QUERY_WX = "DIGI_GUARD_LOCAL_QUERY_WX"
+DIGI_GUARD_THIRD_PARTY = "DIGI_GUARD_THIRD_PARTY"
+DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL = "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"
+_LOCAL_IDENTITY_MY = "my_station"
+_LOCAL_IDENTITY_WX = "wx_station"
 
 
 def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
@@ -584,6 +592,75 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "drop"}
 
+        local_identities = _local_station_identities()
+        aprs_data = dict(parsed.get("aprs_data") or {})
+        packet_group = str(aprs_data.get("packet_group") or "").strip().casefold()
+        addressee = _canonical_callsign_identity(aprs_data.get("addressee"))
+        addressee_owner = local_identities.get(addressee) if addressee else None
+        info_field = str(parsed.get("info") or "")
+
+        if bool(parsed.get("is_third_party")) or info_field.startswith("}"):
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=_tf(
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS payload starts with third-party encapsulation marker {marker}.",
+                    {"reason_code": DIGI_GUARD_THIRD_PARTY, "marker": "}"},
+                ),
+            )
+            return {"decision": "drop"}
+
+        if packet_group == "message" and addressee_owner:
+            if addressee_owner == _LOCAL_IDENTITY_WX:
+                reason_code = DIGI_GUARD_LOCAL_MESSAGE_WX
+                identity_label = _t("WX station")
+            else:
+                reason_code = DIGI_GUARD_LOCAL_MESSAGE_MY_STATION
+                identity_label = _t("My station")
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=_tf(
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS message is addressed to local {identity_label} {local_identity}.",
+                    {
+                        "reason_code": reason_code,
+                        "identity_label": identity_label,
+                        "local_identity": addressee or "-",
+                    },
+                ),
+            )
+            return {"decision": "drop"}
+
+        if packet_group == "query" and addressee_owner:
+            if addressee_owner == _LOCAL_IDENTITY_WX:
+                reason_code = DIGI_GUARD_LOCAL_QUERY_WX
+                identity_label = _t("WX station")
+            else:
+                reason_code = DIGI_GUARD_LOCAL_QUERY_MY_STATION
+                identity_label = _t("My station")
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=_tf(
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS query is addressed to local {identity_label} {local_identity}.",
+                    {
+                        "reason_code": reason_code,
+                        "identity_label": identity_label,
+                        "local_identity": addressee or "-",
+                    },
+                ),
+            )
+            return {"decision": "drop"}
+
         input_path = str(parsed.get("path") or "").strip().upper()
         path_tokens = _split_path_tokens(input_path)
         if not path_tokens:
@@ -613,7 +690,9 @@ class DigiFlowRuntimeService:
             return {"decision": "drop"}
 
         local_identity = _local_station_identity()
-        if local_identity and _path_has_consumed_local_identity(path_tokens, local_identity):
+        consumed_local = _find_consumed_local_identity(path_tokens, local_identities)
+        if consumed_local is not None:
+            consumed_identity = consumed_local[0]
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
@@ -621,8 +700,12 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule rejected frame because local DIGI {local_identity} already appears as a consumed hop in path {path}.",
-                    {"local_identity": local_identity, "path": input_path or "-"},
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because local identity {local_identity} is already marked as consumed in path {path}.",
+                    {
+                        "reason_code": DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL,
+                        "local_identity": consumed_identity,
+                        "path": input_path or "-",
+                    },
                 ),
             )
             return {"decision": "drop"}
@@ -1267,13 +1350,6 @@ def _split_path_tokens(path: str) -> list[str]:
     return [item.strip().upper() for item in path.split(",") if item.strip()]
 
 
-def _path_has_consumed_local_identity(path_tokens: list[str], local_identity: str) -> bool:
-    normalized_identity = str(local_identity or "").strip().upper()
-    if not normalized_identity:
-        return False
-    return any(token.rstrip("*") == normalized_identity and token.endswith("*") for token in path_tokens)
-
-
 def _receiver_source_ref_matches(flow_source_ref: str, runtime_source_ref: str) -> bool:
     return not _receiver_source_ref_aliases(flow_source_ref).isdisjoint(_receiver_source_ref_aliases(runtime_source_ref))
 
@@ -1456,11 +1532,73 @@ def _split_path_tokens_keep_case(path: str) -> list[str]:
 
 def _local_station_identity() -> str:
     station_settings = get_station_settings()
-    callsign = str(station_settings.get("callsign") or "").strip().upper()
-    if not callsign:
+    return _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
+
+
+def _local_station_identities() -> dict[str, str]:
+    station_settings = get_station_settings()
+    identities: dict[str, str] = {}
+    my_identity = _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
+    if my_identity:
+        identities[my_identity] = _LOCAL_IDENTITY_MY
+
+    wx_row = fetch_one("SELECT enabled, callsign, ssid FROM wx_config WHERE id = 1")
+    if not wx_row:
+        return identities
+
+    wx_enabled = int(wx_row["enabled"] or 0) == 1
+    raw_wx_callsign = str(wx_row["callsign"] or "").strip().upper()
+    raw_wx_ssid = str(wx_row["ssid"] or "").strip()
+    wx_has_explicit_identity = bool(raw_wx_callsign or raw_wx_ssid)
+    if not wx_enabled and not wx_has_explicit_identity:
+        return identities
+
+    wx_callsign = raw_wx_callsign or str(station_settings.get("callsign") or "").strip().upper()
+    wx_identity = _build_source_key(wx_callsign, raw_wx_ssid)
+    if wx_identity:
+        identities.setdefault(wx_identity, _LOCAL_IDENTITY_WX)
+    return identities
+
+
+def _find_consumed_local_identity(path_tokens: list[str], local_identities: dict[str, str]) -> tuple[str, str] | None:
+    if not local_identities:
+        return None
+    for token in path_tokens:
+        if not token.endswith("*"):
+            continue
+        consumed_hop = _canonical_callsign_identity(token.rstrip("*"))
+        if not consumed_hop:
+            continue
+        owner = local_identities.get(consumed_hop)
+        if owner:
+            return consumed_hop, owner
+    return None
+
+
+def _build_source_key(callsign: Any, ssid: Any) -> str:
+    callsign_text = str(callsign or "").strip().upper()
+    ssid_text = str(ssid or "").strip()
+    if ssid_text == "0":
+        ssid_text = ""
+    if not callsign_text:
         return ""
-    ssid = str(station_settings.get("ssid") or "").strip()
-    return f"{callsign}-{ssid}" if ssid else callsign
+    return f"{callsign_text}-{ssid_text}" if ssid_text else callsign_text
+
+
+def _canonical_callsign_identity(value: Any) -> str:
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        return ""
+    base, separator, suffix = normalized.partition("-")
+    base = base.strip().upper()
+    if not base:
+        return ""
+    if not separator:
+        return base
+    normalized_ssid = suffix.strip()
+    if normalized_ssid in {"", "0"}:
+        return base
+    return f"{base}-{normalized_ssid}"
 
 
 def _parse_coordinate(value: Any) -> float | None:

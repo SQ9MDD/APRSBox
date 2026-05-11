@@ -100,12 +100,17 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_path": {
         "category": "filter",
-        "label": "Path Rule",
+        "label": "Path rule and DIGI guard",
         "badge": "Rule",
         "description": (
-            "Checks only the first remaining path hop. TRACE (traced) repeats the hop with the local digi callsign "
-            "and keeps N-N continuation when needed. NO TRACE (not traced) consumes the hop without adding the local "
-            "digi callsign. If the first remaining hop matches neither TRACE nor NO TRACE, the packet is dropped."
+            "This mandatory block handles the DIGI path and blocks frames that should not be repeated: messages and "
+            "queries addressed to local stations, third-party frames, and frames already repeated by this station."
+        ),
+        "editor_help_lines": (
+            "messages/queries addressed to My station",
+            "messages/queries addressed to WX station",
+            "third-party frames",
+            "frames already repeated by this station",
         ),
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow",)},
@@ -324,7 +329,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
 }
 
 LEGACY_DEFAULT_STEP_TITLES = {
-    "filter_path": {"Path Filter"},
+    "filter_path": {"Path Filter", "Path Rule", "Reguła ścieżki"},
     "filter_dupe": {"Duplicate Filter"},
 }
 
@@ -1106,7 +1111,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     if target_kind != last_step["step_type"] or target_ref != last_ref:
         raise ValueError(_t("Flow target must match the last step type and reference."))
     if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
-        raise ValueError(_t("Flow with an RF TX target must include at least one enabled Path Rule step."))
+        raise ValueError(_t("Flow with an RF TX target must include at least one enabled Path rule and DIGI guard step."))
 
     return {
         "name": name,
@@ -1373,7 +1378,7 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
         target_kind = str(flow.get("target_kind") or "")
         flow_steps = list(flow.get("steps") or [])
         if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(flow_steps):
-            raise ValueError(_t("DIGI Flow with an RF TX target cannot be enabled without an enabled Path Rule step."))
+            raise ValueError(_t("DIGI Flow with an RF TX target cannot be enabled without an enabled Path rule and DIGI guard step."))
         if target_kind == "tx_aprsis" and source_kind != "receiver_rf":
             raise ValueError(_t("APRS-IS RX-only target flow must use Receiver RF as source."))
         if target_kind == "tx_aprsis" and not _has_enabled_aprsis_strict_guard(flow_steps):
