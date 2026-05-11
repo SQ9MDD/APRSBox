@@ -41,6 +41,7 @@ HEARD_FRESH_SECONDS = 10 * 60
 HEARD_WARN_SECONDS = 30 * 60
 QUERY_RESPONSE_DELAY_SECONDS = 5
 INCOMING_UNNUMBERED_DUPLICATE_WINDOW_SECONDS = 30
+OUTGOING_BURST_DUPLICATE_WINDOW_SECONDS = 5
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -196,12 +197,22 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     normalized_callsign = normalize_aprs_destination_callsign(callsign)
     normalized_text = normalize_aprs_message_text(message_text)
     normalized_path = normalize_aprs_path(path)
-    message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
-    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND else None
     timestamp = utc_now()
     local_sender = _local_station_identity()
     if not local_sender:
         raise ValueError(_t("Local station callsign is required."))
+    duplicate = _find_recent_outgoing_message_duplicate(
+        sender=local_sender,
+        addressee=normalized_callsign,
+        message_text=normalized_text,
+        path=normalized_path,
+        timestamp=timestamp,
+    )
+    if duplicate is not None:
+        log_event("INFO", "messages", f"Ignored duplicate outbound APRS send burst to {normalized_callsign}")
+        return duplicate
+    message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
+    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND else None
     conversation = create_or_update_conversation(normalized_callsign, path=normalized_path)
     update_conversation_path(int(conversation["id"]), normalized_path)
 
@@ -1235,6 +1246,59 @@ def _has_recent_duplicate_ack(*, sender: str, query_number: str, window_seconds:
         ),
     )
     return row is not None
+
+
+def _find_recent_outgoing_message_duplicate(
+    *,
+    sender: str,
+    addressee: str,
+    message_text: str,
+    path: str,
+    timestamp: str,
+    window_seconds: int = OUTGOING_BURST_DUPLICATE_WINDOW_SECONDS,
+) -> dict[str, Any] | None:
+    normalized_sender = str(sender or "").strip().upper()
+    normalized_addressee = str(addressee or "").strip().upper()
+    normalized_text = str(message_text or "")
+    normalized_path = normalize_aprs_path(path)
+    if not normalized_sender or not normalized_addressee or not normalized_text:
+        return None
+    reference_timestamp = _parse_iso_timestamp_utc(timestamp) or datetime.now(timezone.utc)
+    window_seconds = max(1, int(window_seconds))
+    window_start = (reference_timestamp - timedelta(seconds=window_seconds)).replace(microsecond=0).isoformat()
+    window_end = reference_timestamp.replace(microsecond=0).isoformat()
+    row = fetch_one(
+        """
+        SELECT id
+        FROM aprs_messages
+        WHERE direction = ?
+          AND sender = ?
+          AND addressee = ?
+          AND message_text = ?
+          AND path = ?
+          AND status IN (?, ?, ?, ?)
+          AND created_at >= ?
+          AND created_at <= ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (
+            MESSAGE_DIRECTION_TX,
+            normalized_sender,
+            normalized_addressee,
+            normalized_text,
+            normalized_path,
+            MESSAGE_STATUS_QUEUED,
+            MESSAGE_STATUS_SENT,
+            MESSAGE_STATUS_ACKED,
+            MESSAGE_STATUS_REJECTED,
+            window_start,
+            window_end,
+        ),
+    )
+    if row is None:
+        return None
+    return get_message(int(row["id"]))
 
 
 def _has_recent_unnumbered_incoming_message_duplicate(

@@ -189,6 +189,29 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(int(message_row["tx_attempt_count"]), 1)
             self.assertTrue(written_frames)
 
+    def test_queue_outgoing_message_burst_duplicate_is_stored_once(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+
+            first = queue_outgoing_message(callsign="SP8ABC", message_text="Burst test", path="WIDE1-1")
+            second = queue_outgoing_message(callsign="SP8ABC", message_text="Burst test", path="WIDE1-1")
+
+            self.assertEqual(int(first["id"]), int(second["id"]))
+            self.assertEqual(first["message_number"], "00")
+            self.assertEqual(second["message_number"], "00")
+
+            total_messages = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert total_messages is not None
+            self.assertEqual(int(total_messages["total"]), 1)
+
+            total_jobs = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ?", (int(first["id"]),))
+            assert total_jobs is not None
+            self.assertEqual(int(total_jobs["total"]), 1)
+
+            next_unique = queue_outgoing_message(callsign="SP8ABC", message_text="Burst test 2", path="WIDE1-1")
+            self.assertEqual(next_unique["message_number"], "01")
+
     async def test_queue_outgoing_message_uses_all_active_tx_scope(self) -> None:
         with temporary_database():
             first_interface = insert_modem(name="MSG TNC A", device_path="127.0.0.1:9301")

@@ -138,6 +138,7 @@
 
     let state = buildInitialState(initialData);
     let refreshTimer = null;
+    let sendRequestInFlight = false;
     const messageDrafts = new Map();
     const pathStorageKeyPrefix = "aprsbox.messages.path.";
 
@@ -541,7 +542,7 @@
         composerCount.textContent = `${validation.length}`;
         const hasError = validation.tooLong || validation.asciiInvalid;
         composerError.hidden = !hasError;
-        sendButton.disabled = !conversation || validation.empty || hasError;
+        sendButton.disabled = sendRequestInFlight || !conversation || validation.empty || hasError;
         composerInput.disabled = !conversation;
         composerPathInput.disabled = !conversation;
         const desiredPathValue = conversation
@@ -668,6 +669,9 @@
 
     composerForm.addEventListener("submit", (event) => {
         event.preventDefault();
+        if (sendRequestInFlight) {
+            return;
+        }
         const conversation = getActiveConversation();
         if (!conversation) return;
         const text = composerInput.value;
@@ -676,6 +680,8 @@
             renderComposer(conversation);
             return;
         }
+        sendRequestInFlight = true;
+        renderComposer(conversation);
         void apiRequest(`${messagesApi}/send`, {
             method: "POST",
             body: JSON.stringify({
@@ -693,6 +699,9 @@
         }).catch((error) => {
             composerError.hidden = false;
             composerError.textContent = error.message;
+        }).finally(() => {
+            sendRequestInFlight = false;
+            renderComposer(getActiveConversation());
         });
     });
 
