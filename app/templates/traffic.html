@@ -37,12 +37,15 @@
         const count = document.getElementById("traffic-frame-count");
         const interfaceSummary = document.getElementById("traffic-interface-summary");
         const initialDataNode = document.getElementById("traffic-initial-data");
+        const staticIconsRoot = {{ (request.scope.root_path ~ '/static/icons')|tojson }};
         const noFramesText = {{ t("No frames received yet.")|tojson }};
         const entriesText = {{ t("entries")|tojson }};
         const listeningText = {{ t("Listening")|tojson }};
         const clientsText = {{ t("Clients")|tojson }};
         const showText = {{ t("Show")|tojson }};
         const hideText = {{ t("Hide")|tojson }};
+        const visibleIconPath = `${staticIconsRoot}/eye.svg`;
+        const hiddenIconPath = `${staticIconsRoot}/eye-off.svg`;
         const noInterfacesText = {{ t("No enabled TNC is configured.")|tojson }};
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
         const frameNodeByKey = new Map();
@@ -120,9 +123,14 @@
 
                 const toggle = document.createElement("button");
                 toggle.type = "button";
-                toggle.className = "traffic-interface-toggle";
-                toggle.textContent = isVisible ? hideText : showText;
+                toggle.className = "table-icon-button traffic-interface-toggle";
                 toggle.setAttribute("aria-pressed", isVisible ? "true" : "false");
+                toggle.setAttribute("aria-label", isVisible ? hideText : showText);
+                toggle.setAttribute("title", isVisible ? hideText : showText);
+                const toggleIcon = document.createElement("img");
+                toggleIcon.src = isVisible ? visibleIconPath : hiddenIconPath;
+                toggleIcon.alt = "";
+                toggle.appendChild(toggleIcon);
                 toggle.addEventListener("click", () => {
                     interfaceVisibilityByKey.set(key, !isVisible);
                     applySnapshot(latestSnapshot);

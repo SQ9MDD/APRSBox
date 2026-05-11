@@ -3917,25 +3917,22 @@ select:focus-visible,
 
 .traffic-interface-toggle {
     justify-self: start;
-    min-width: 4.2rem;
-    padding: 0.16rem 0.42rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
-    background: var(--panel-soft);
-    color: var(--text);
-    font-size: 0.68rem;
-    line-height: 1.2;
-    cursor: pointer;
+}
+
+.traffic-interface-toggle img {
+    width: 0.88rem;
+    height: 0.88rem;
+    filter: var(--icon-filter);
 }
 
 .traffic-interface-toggle:hover {
-    border-color: var(--border-hover);
-    background: var(--panel-emphasis);
+    transform: translateY(-1px);
 }
 
 .traffic-interface-toggle[aria-pressed="false"] {
     background: transparent;
-    color: var(--muted);
+    border-color: var(--border);
+    opacity: 0.72;
 }
 
 .traffic-interface-row-hidden {

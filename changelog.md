@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.10.dev - 11.05.2026
+
+### Najważniejsze zmiany
+- `Traffic Monitor / interfejsy`: dodano lokalny filtr widoczności ramek per interfejs TNC w GUI (`Pokaż/Ukryj` dla każdego aktywnego interfejsu), bez zmian w API i schemacie bazy.
+- `Traffic Monitor / UX`: przełączniki filtrów interfejsów zmieniono na ikonowe (`eye` / `eye-off`) z zachowaniem `aria-label` i `title` dla dostępności.
+- `Traffic Monitor / licznik`: licznik `entries` prezentuje teraz liczbę wpisów widocznych po aktywnych filtrach interfejsów.
+- `Zakres zmian`: filtr działa wyłącznie po stronie frontend (stan sesyjny; po odświeżeniu strony wraca domyślny widok wszystkich interfejsów).
+
 ## 1.8.8.dev - 11.05.2026
 
 ### Najważniejsze zmiany
