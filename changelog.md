@@ -7,7 +7,8 @@
 - `Bezpieczeństwo danych`: hasło w URL jest maskowane w UI i diagnostyce (`***`); pełny URL z hasłem nie trafia do logów/statusów błędów.
 - `Runtime RX`: dodano odbiór ramek APRS z MQTT (JSON), akceptację `mode=APRS` (jeśli `mode` istnieje), odrzucanie invalid JSON z licznikiem oraz mapowanie do wspólnego pipeline TNC2.
 - `OpenWebRX SONDE`: dodano obsługę `mode=SONDE` przez bezpieczne mapowanie do ramki `APRS Object` (źródło: lokalny `CALLSIGN-SSID` z `My Settings`), z zachowaniem danych telemetrycznych w komentarzu i symbolem balonu.
-- `Deduplikacja wejściowa`: dla OpenWebRX MQTT dodano lokalne dedupe (okno 3 s) po fingerprint `source+destination+path+raw+freq` oraz licznik `duplicates_dropped`.
+- `OpenWebRX ADSB`: dodano obsługę `mode=ADSB` przez bezpieczne mapowanie do ramki `APRS Object` (źródło: lokalny `CALLSIGN-SSID`), z ikoną samolotu i metadanymi lotu (`ICAO/flight/alt/speed/course/vspeed`) w komentarzu.
+- `Deduplikacja wejściowa`: dla OpenWebRX MQTT dodano lokalne dedupe (okno 3 s) oraz licznik `duplicates_dropped` (`APRS`: `source+destination+path+raw+freq`, `SONDE/ADSB`: fingerprint telemetrii pozycyjnej/czasu).
 - `Routing`: źródło `OpenWebRX MQTT` jest dostępne jako `source` w regułach DIGI, ale nie jest dostępne jako target TX (`tx_rf`); nie dodano auto-iGate, auto-DIGI ani TX przez MQTT.
 - `Diagnostyka`: rozszerzono statusy/health runtime interfejsu o `connected`, `subscribed topic`, `broker host/port`, `last frame time`, `frames received`, `duplicates dropped`, `invalid JSON dropped`, `last error`.
 - `Monitor ruchu / kolorowanie`: ujednolicono reguły kolorowania ramek tak, aby wszystkie ramki `TX` miały klasę koloru; `query (?)` i `telemetry` są traktowane jak kategoria wiadomości, a `object/item` jak kategoria pozycji/beacon.

@@ -82,6 +82,29 @@ def sample_openwebrx_sonde_packet() -> dict[str, object]:
     }
 
 
+def sample_openwebrx_adsb_packet() -> dict[str, object]:
+    return {
+        "mode": "ADSB",
+        "icao": "484B31",
+        "timestamp": 1778502231100,
+        "msgs": 8,
+        "rssi": -26.2,
+        "country": "Netherlands",
+        "ccode": "NL",
+        "lat": 52.108853,
+        "lon": 21.161237,
+        "squawk": "1000",
+        "altitude": 7900,
+        "vspeed": 2112,
+        "speed": 227,
+        "course": 52,
+        "ttl": 1778503131100,
+        "mapid": "484B31",
+        "flight": "KLM9968",
+        "color": "#FFFFFF",
+    }
+
+
 class OpenWebRxMqttUrlTests(unittest.TestCase):
     def test_parse_mqtt_url_without_credentials(self) -> None:
         endpoint = parse_mqtt_url("mqtt://host:1883/rxqwe/APRS")
@@ -293,6 +316,83 @@ class OpenWebRxMqttPayloadTests(unittest.TestCase):
             runtime._set_state(status="connected", detail="test", modem=dict(modem), error=None)
 
             payload = json.dumps(sample_openwebrx_sonde_packet())
+            runtime._record_openwebrx_mqtt_message(
+                modem=dict(modem),
+                topic="/rxqwe/APRS",
+                payload_text=payload,
+                received_monotonic=10.0,
+                received_at=utc_now(),
+            )
+            runtime._record_openwebrx_mqtt_message(
+                modem=dict(modem),
+                topic="/rxqwe/APRS",
+                payload_text=payload,
+                received_monotonic=12.0,
+                received_at=utc_now(),
+            )
+
+            frame_count_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames")
+            assert frame_count_row is not None
+            self.assertEqual(int(frame_count_row["total"]), 1)
+
+            snapshot = runtime.runtime_snapshot()
+            mqtt_stats = dict(snapshot.get("mqtt_stats") or {})
+            self.assertEqual(int(mqtt_stats.get("frames_received") or 0), 2)
+            self.assertEqual(int(mqtt_stats.get("duplicates_dropped") or 0), 1)
+
+    def test_maps_adsb_payload_to_object_frame_from_local_station_callsign(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'SQ5ABC', ssid = '9', updated_at = ?
+                WHERE id = 1
+                """,
+                (utc_now(),),
+            )
+            packet = sample_openwebrx_adsb_packet()
+            runtime = _TrafficModemRuntime()
+
+            line, diagnostic_hex = runtime._map_openwebrx_packet_to_tnc2_line(
+                packet,
+                json.dumps(packet),
+                mode="ADSB",
+            )
+
+            self.assertIsNotNone(line)
+            assert line is not None
+            self.assertIn(":;KLM9968  *111223z", line)
+            self.assertIn("ICAO=484B31", line)
+            self.assertIn("/A=007900", line)
+            self.assertIn("SPD=227kt", line)
+            self.assertIn("CRS=52", line)
+            self.assertIn("VS=2112fpm", line)
+            self.assertTrue(bool(diagnostic_hex))
+
+            parsed = parse_tnc2_frame(line)
+            self.assertIsNotNone(parsed)
+            aprs_data = dict((parsed or {}).get("aprs_data") or {})
+            self.assertEqual(aprs_data.get("packet_group"), "object")
+            self.assertEqual(aprs_data.get("entity_name"), "KLM9968")
+            self.assertEqual(aprs_data.get("symbol"), "/'")
+
+    def test_duplicate_adsb_frames_are_dropped_within_three_second_window(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                UPDATE station_settings
+                SET callsign = 'SQ5ABC', ssid = '9', updated_at = ?
+                WHERE id = 1
+                """,
+                (utc_now(),),
+            )
+            modem_id = insert_openwebrx_modem()
+            modem = fetch_one("SELECT * FROM modems WHERE id = ?", (modem_id,))
+            assert modem is not None
+            runtime = _TrafficModemRuntime(modem_id=modem_id)
+            runtime._set_state(status="connected", detail="test", modem=dict(modem), error=None)
+
+            payload = json.dumps(sample_openwebrx_adsb_packet())
             runtime._record_openwebrx_mqtt_message(
                 modem=dict(modem),
                 topic="/rxqwe/APRS",

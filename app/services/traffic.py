@@ -30,7 +30,7 @@ SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS = set(range(0, 601, 30))
 SUPPORTED_SERIAL_MODEM_TYPES = {"SERIALL", "SERIAL"}
 OPENWEBRX_MQTT_DEDUP_WINDOW_SECONDS = 3.0
 OPENWEBRX_MQTT_UNKNOWN_KEYS_LOG_INTERVAL_SECONDS = 30.0
-OPENWEBRX_MQTT_SUPPORTED_MODES = {"APRS", "SONDE"}
+OPENWEBRX_MQTT_SUPPORTED_MODES = {"APRS", "SONDE", "ADSB"}
 IGNORED_KISS_DEBUG_PREVIEW_BYTES = 24
 IGNORED_KISS_DEBUG_INTERVAL_SECONDS = 30.0
 SERIAL_TX_DEBUG_PREVIEW_BYTES = 32
@@ -723,6 +723,16 @@ class _TrafficModemRuntime:
             "battery",
             "vspeed",
             "weather",
+            "icao",
+            "msgs",
+            "rssi",
+            "country",
+            "ccode",
+            "squawk",
+            "ttl",
+            "mapid",
+            "flight",
+            "color",
         }
         unknown_keys = sorted(key for key in packet.keys() if key not in known_keys)
         if unknown_keys:
@@ -751,6 +761,8 @@ class _TrafficModemRuntime:
         normalized_mode = str(mode or "").strip().upper()
         if normalized_mode == "SONDE":
             return self._map_openwebrx_sonde_packet_to_tnc2_line(packet, payload_text)
+        if normalized_mode == "ADSB":
+            return self._map_openwebrx_adsb_packet_to_tnc2_line(packet, payload_text)
 
         raw_hex = self._normalize_openwebrx_raw_hex(packet.get("raw"))
         if raw_hex:
@@ -819,6 +831,35 @@ class _TrafficModemRuntime:
             "symbol_code": symbol_code,
             "symbol_overlay": None,
             "comment": self._build_openwebrx_sonde_comment(packet),
+            "path": "",
+            "object_timestamp": self._openwebrx_object_timestamp(packet.get("timestamp")),
+        }
+        return build_object_tnc2(payload), fallback_hex
+
+    def _map_openwebrx_adsb_packet_to_tnc2_line(self, packet: dict[str, Any], payload_text: str) -> tuple[str | None, str]:
+        fallback_hex = payload_text.encode("utf-8").hex(" ").upper()
+
+        lat = self._safe_float(packet.get("lat"))
+        lon = self._safe_float(packet.get("lon"))
+        if lat is None or lon is None or not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            return None, fallback_hex
+
+        callsign, ssid = self._local_station_callsign()
+        if not callsign:
+            return None, fallback_hex
+
+        payload = {
+            "callsign": callsign,
+            "ssid": ssid,
+            "name": self._normalize_openwebrx_adsb_object_name(packet),
+            "lifetime": "temporary",
+            "state": "live",
+            "latitude": lat,
+            "longitude": lon,
+            "symbol_table": "/",
+            "symbol_code": "'",
+            "symbol_overlay": None,
+            "comment": self._build_openwebrx_adsb_comment(packet),
             "path": "",
             "object_timestamp": self._openwebrx_object_timestamp(packet.get("timestamp")),
         }
@@ -975,6 +1016,72 @@ class _TrafficModemRuntime:
             summary = "OpenWebRX SONDE"
         return summary.encode("ascii", errors="replace").decode("ascii")[:120]
 
+    def _normalize_openwebrx_adsb_object_name(self, packet: dict[str, Any]) -> str:
+        candidates = [
+            packet.get("flight"),
+            packet.get("mapid"),
+            packet.get("icao"),
+            packet.get("source"),
+        ]
+        for candidate in candidates:
+            text = str(candidate or "").strip().upper()
+            if not text:
+                continue
+            normalized_chars: list[str] = []
+            for char in text:
+                if ("A" <= char <= "Z") or ("0" <= char <= "9") or char in {"-", "_"}:
+                    normalized_chars.append(char)
+                else:
+                    normalized_chars.append("_")
+            normalized = "".join(normalized_chars).strip("_")
+            if normalized:
+                return normalized[:9]
+        return "ADSB"
+
+    def _build_openwebrx_adsb_comment(self, packet: dict[str, Any]) -> str:
+        parts: list[str] = []
+
+        flight = str(packet.get("flight") or "").strip().upper()
+        if flight:
+            parts.append(flight)
+
+        icao = str(packet.get("icao") or packet.get("mapid") or "").strip().upper()
+        if icao:
+            parts.append(f"ICAO={icao}")
+
+        altitude = self._safe_float(packet.get("altitude"))
+        if altitude is not None:
+            altitude_ft = max(0, int(round(altitude)))
+            parts.append(f"/A={altitude_ft:06d}")
+
+        speed = self._safe_float(packet.get("speed"))
+        if speed is not None:
+            parts.append(f"SPD={max(0, int(round(speed)))}kt")
+
+        course = self._safe_float(packet.get("course"))
+        if course is not None:
+            parts.append(f"CRS={int(round(course)) % 360}")
+
+        vertical_speed = self._safe_float(packet.get("vspeed"))
+        if vertical_speed is not None:
+            parts.append(f"VS={int(round(vertical_speed))}fpm")
+
+        squawk = str(packet.get("squawk") or "").strip().upper()
+        if squawk:
+            parts.append(f"SQK={squawk}")
+
+        rssi = self._safe_float(packet.get("rssi"))
+        if rssi is not None:
+            parts.append(f"RSSI={rssi:.1f}")
+
+        country = str(packet.get("country") or "").strip()
+        if country:
+            parts.append(country)
+
+        if not parts:
+            parts.append("OpenWebRX ADSB")
+        return " ".join(parts).encode("ascii", errors="replace").decode("ascii")[:120]
+
     def _build_openwebrx_fingerprint(self, packet: dict[str, Any], *, mode: str = "") -> str:
         normalized_mode = str(mode or "").strip().upper()
         if normalized_mode == "SONDE":
@@ -991,6 +1098,16 @@ class _TrafficModemRuntime:
             lon = str(packet.get("lon") or "").strip()
             altitude = str(packet.get("altitude") or "").strip()
             return f"SONDE|{sonde_id}|{frame}|{timestamp}|{freq}|{lat}|{lon}|{altitude}"
+        if normalized_mode == "ADSB":
+            icao = str(packet.get("icao") or packet.get("mapid") or "").strip().upper()
+            flight = str(packet.get("flight") or "").strip().upper()
+            timestamp = str(packet.get("timestamp") or "").strip()
+            lat = str(packet.get("lat") or "").strip()
+            lon = str(packet.get("lon") or "").strip()
+            altitude = str(packet.get("altitude") or "").strip()
+            speed = str(packet.get("speed") or "").strip()
+            course = str(packet.get("course") or "").strip()
+            return f"ADSB|{icao}|{flight}|{timestamp}|{lat}|{lon}|{altitude}|{speed}|{course}"
 
         source = str(packet.get("source") or "").strip().upper()
         destination = str(packet.get("destination") or "").strip().upper()
