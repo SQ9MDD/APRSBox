@@ -564,7 +564,11 @@ def retry_failed_message(message_id: int) -> dict[str, Any]:
     if refreshed is None:
         raise ValueError(_t("Message could not be reloaded."))
     station_settings = _get_station_settings()
-    success, error = enqueue_direct_message_job(refreshed, station_settings, trigger="manual-retry")
+    refreshed_text = str(refreshed.get("message_text") or "").strip()
+    if refreshed_text.startswith("?"):
+        success, error = enqueue_query_message_job(refreshed, station_settings, trigger="manual-retry")
+    else:
+        success, error = enqueue_direct_message_job(refreshed, station_settings, trigger="manual-retry")
     if not success:
         mark_message_failed(message_id, error or "Failed to queue manual retry.")
         raise ValueError(error or _t("Failed to queue manual retry."))

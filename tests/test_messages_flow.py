@@ -1601,6 +1601,40 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert queued_job is not None
             self.assertEqual(queued_job["status"], "queued")
 
+    def test_retry_failed_query_requeues_query_job_without_number(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="?VER", path="WIDE1-1")
+
+            execute(
+                """
+                UPDATE aprs_messages
+                SET status = ?, tx_attempt_count = 1, failed_at = '2026-01-01T00:10:00+00:00', failure_reason = 'No route', updated_at = '2026-01-01T00:10:00+00:00'
+                WHERE id = ?
+                """,
+                (MESSAGE_STATUS_FAILED, int(message["id"])),
+            )
+            execute("DELETE FROM outbound_jobs WHERE aprs_message_id = ?", (int(message["id"]),))
+
+            retried = retry_failed_message(int(message["id"]))
+            self.assertEqual(retried["status"], "queued")
+
+            queued_job = fetch_one(
+                """
+                SELECT status, payload_json
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(message["id"]),),
+            )
+            assert queued_job is not None
+            self.assertEqual(queued_job["status"], "queued")
+            self.assertIn('"message_kind":"query"', str(queued_job["payload_json"]))
+            self.assertNotIn('"message_number"', str(queued_job["payload_json"]))
+
     def test_messages_page_data_ignores_timeout_expire_db_error(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
