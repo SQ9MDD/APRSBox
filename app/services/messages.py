@@ -445,6 +445,24 @@ def register_outbound_job_link(message_id: int, job_id: int) -> None:
         )
 
 
+def _count_message_transmission_rounds(message_id: int) -> int:
+    row = fetch_one(
+        """
+        SELECT COUNT(DISTINCT scheduled_at) AS round_count
+        FROM outbound_jobs
+        WHERE aprs_message_id = ?
+          AND status IN ('processing', 'sent')
+        """,
+        (message_id,),
+    )
+    if row is None:
+        return 0
+    try:
+        return max(0, int(row["round_count"] or 0))
+    except (TypeError, ValueError, KeyError):
+        return 0
+
+
 def _register_outbound_message_transmission(message_id: int, job_id: int, *, allow_retry: bool) -> None:
     message = get_message(message_id)
     if message is None:
@@ -453,7 +471,10 @@ def _register_outbound_message_transmission(message_id: int, job_id: int, *, all
     if current_status not in {MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT}:
         return
     now = utc_now()
-    next_attempt = int(message.get("tx_attempt_count") or 0) + 1
+    next_attempt = max(
+        int(message.get("tx_attempt_count") or 0),
+        _count_message_transmission_rounds(message_id),
+    )
     with get_connection() as connection:
         connection.execute(
             """
@@ -477,8 +498,9 @@ def _register_outbound_message_transmission(message_id: int, job_id: int, *, all
             """,
             (now, int(message["conversation_id"])),
         )
-    if allow_retry and next_attempt < MAX_TX_ATTEMPTS:
-        schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[next_attempt - 1])
+    delay_index = next_attempt - 1
+    if allow_retry and next_attempt < MAX_TX_ATTEMPTS and 0 <= delay_index < len(RETRY_DELAYS_SECONDS):
+        schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[delay_index])
 
 
 def register_direct_message_transmission(message_id: int, job_id: int) -> None:

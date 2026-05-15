@@ -34,7 +34,7 @@ from app.services.messages import (
     retry_failed_message,
     split_callsign_ssid,
 )
-from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job
+from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
 
@@ -269,6 +269,85 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             cancelled_retry = fetch_one("SELECT status FROM outbound_jobs WHERE id = ?", (int(retry_job["id"]),))
             assert cancelled_retry is not None
             self.assertEqual(cancelled_retry["status"], "cancelled")
+
+    async def test_all_active_direct_message_retry_attempts_are_counted_per_round(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="Retry TNC A", device_path="127.0.0.1:9401")
+            second_interface = insert_modem(name="Retry TNC B", device_path="127.0.0.1:9402")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Round retry test", path="WIDE1-1")
+            message_id = int(message["id"])
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertIn(port, {9401, 9402})
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                for _ in range(2):
+                    first_round_job = claim_next_outbound_job()
+                    assert first_round_job is not None
+                    await OutboundService()._process_job(first_round_job)
+
+                first_round_message = fetch_one(
+                    "SELECT tx_attempt_count FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert first_round_message is not None
+                self.assertEqual(int(first_round_message["tx_attempt_count"]), 1)
+
+                first_retry_jobs = fetch_one(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                    (message_id,),
+                )
+                assert first_retry_jobs is not None
+                self.assertEqual(int(first_retry_jobs["total"]), 2)
+
+                second_round_jobs = fetch_all(
+                    """
+                    SELECT id
+                    FROM outbound_jobs
+                    WHERE aprs_message_id = ?
+                      AND status = 'queued'
+                    ORDER BY id ASC
+                    """,
+                    (message_id,),
+                )
+                self.assertEqual(len(second_round_jobs), 2)
+                for queued_row in second_round_jobs:
+                    second_round_job = get_outbound_job(int(queued_row["id"]))
+                    assert second_round_job is not None
+                    await OutboundService()._process_job(second_round_job)
+
+                second_round_message = fetch_one(
+                    "SELECT tx_attempt_count FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert second_round_message is not None
+                self.assertEqual(int(second_round_message["tx_attempt_count"]), 2)
+
+                second_retry_jobs = fetch_one(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                    (message_id,),
+                )
+                assert second_retry_jobs is not None
+                self.assertEqual(int(second_retry_jobs["total"]), 2)
 
     def test_late_ack_marks_failed_direct_message_as_acked(self) -> None:
         with temporary_database():
