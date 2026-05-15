@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.13.dev - 15.05.2026
+
+### Najważniejsze zmiany
+- `TNC SERIAL / close`: domyślnie wyłączono opuszczanie linii sterujących DTR/RTS przy zamknięciu portu (`drop_control_lines=False`), aby ograniczyć nieplanowane resety części urządzeń USB-serial.
+- `TNC SERIAL / open`: dodano defensywne `O_CLOEXEC` (jeśli wspierane przez system) oraz doprecyzowano konfigurację portu do trybu raw `8N1` bez hardware/software flow control.
+- `TNC SERIAL / flush`: zmieniono kolejność inicjalizacji portu: najpierw `tcsetattr`, potem opcjonalny `tcflush`, żeby czyścić bufory już po przełączeniu w docelowy tryb.
+- `TNC SERIAL / IO`: `read_serial_chunk()` zwraca teraz `b""` po `InterruptedError` z `select`, a `write_serial_data()` używa jednego deadline dla całej operacji zapisu (z retry po `InterruptedError`), co stabilizuje timeouty pod obciążeniem.
+- `Testy`: dodano testy niskopoziomowe modułu serial (`open/close/read/write`, `O_CLOEXEC`, `CRTSCTS`, semantyka timeoutów), bez wymogu fizycznego portu.
+
 ## 1.8.11.dev - 11.05.2026
 
 ### Najważniejsze zmiany
