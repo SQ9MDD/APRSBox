@@ -97,9 +97,9 @@ def _decode_ax25_address_chunk(chunk: bytes) -> tuple[str, bool, bool] | None:
     return callsign, has_been_repeated, last_address
 
 
-def decode_ax25_to_tnc2(payload: bytes) -> str | None:
+def _decode_ax25_to_tnc2_with_reason(payload: bytes) -> tuple[str | None, str]:
     if len(payload) < 16:
-        return None
+        return None, f"payload too short ({len(payload)}B)"
 
     addresses: list[tuple[str, bool, bool]] = []
     offset = 0
@@ -108,22 +108,24 @@ def decode_ax25_to_tnc2(payload: bytes) -> str | None:
         chunk = payload[offset : offset + 7]
         address = _decode_ax25_address_chunk(chunk)
         if address is None:
-            return None
+            return None, f"invalid AX.25 address chunk at offset {offset}"
         addresses.append(address)
         offset += 7
         if chunk[6] & 0x01:
             break
     else:
-        return None
+        return None, "AX.25 address field has no end marker"
 
     if len(addresses) < 2 or offset + 2 > len(payload):
-        return None
+        if len(addresses) < 2:
+            return None, "AX.25 header missing source or destination address"
+        return None, "AX.25 frame missing control/PID bytes"
 
     control = payload[offset]
     pid = payload[offset + 1]
     info = payload[offset + 2 :]
     if control != AX25_CONTROL_UI or pid != AX25_PID_NO_LAYER3:
-        return None
+        return None, f"unsupported AX.25 control/PID 0x{control:02X}/0x{pid:02X}"
 
     destination = addresses[0][0]
     source = addresses[1][0]
@@ -132,7 +134,12 @@ def decode_ax25_to_tnc2(payload: bytes) -> str | None:
     if via:
         header = f"{header} , {','.join(via)}"
     info_text = info.decode("utf-8", errors="replace")
-    return f"{header}:{info_text}"
+    return f"{header}:{info_text}", "ok"
+
+
+def decode_ax25_to_tnc2(payload: bytes) -> str | None:
+    decoded, _reason = _decode_ax25_to_tnc2_with_reason(payload)
+    return decoded
 
 
 class _TrafficModemRuntime:
@@ -1290,6 +1297,14 @@ class _TrafficModemRuntime:
                 start = self._kiss_buffer.index(KISS_FEND)
             except ValueError:
                 if len(self._kiss_buffer) > 8192:
+                    log_event(
+                        "DEBUG",
+                        "traffic",
+                        (
+                            f"Dropped oversized KISS RX buffer on {self._runtime_label()}: "
+                            f"len={len(self._kiss_buffer)} (no FEND frame boundary)"
+                        ),
+                    )
                     self._kiss_buffer.clear()
                 return
 
@@ -1303,6 +1318,14 @@ class _TrafficModemRuntime:
                 end = self._kiss_buffer.index(KISS_FEND, 1)
             except ValueError:
                 if len(self._kiss_buffer) > 8192:
+                    log_event(
+                        "DEBUG",
+                        "traffic",
+                        (
+                            f"Dropped oversized partial KISS RX frame on {self._runtime_label()}: "
+                            f"len={len(self._kiss_buffer)} (missing closing FEND)"
+                        ),
+                    )
                     self._kiss_buffer.clear()
                 return
 
@@ -1322,6 +1345,14 @@ class _TrafficModemRuntime:
                 start = self._proxy_uplink_buffer.index(KISS_FEND)
             except ValueError:
                 if len(self._proxy_uplink_buffer) > 8192:
+                    log_event(
+                        "DEBUG",
+                        "traffic",
+                        (
+                            f"Dropped oversized proxy uplink KISS buffer on {self._runtime_label()}: "
+                            f"len={len(self._proxy_uplink_buffer)} (no FEND frame boundary)"
+                        ),
+                    )
                     self._proxy_uplink_buffer.clear()
                 return
 
@@ -1335,6 +1366,14 @@ class _TrafficModemRuntime:
                 end = self._proxy_uplink_buffer.index(KISS_FEND, 1)
             except ValueError:
                 if len(self._proxy_uplink_buffer) > 8192:
+                    log_event(
+                        "DEBUG",
+                        "traffic",
+                        (
+                            f"Dropped oversized partial proxy uplink KISS frame on {self._runtime_label()}: "
+                            f"len={len(self._proxy_uplink_buffer)} (missing closing FEND)"
+                        ),
+                    )
                     self._proxy_uplink_buffer.clear()
                 return
 
@@ -1354,8 +1393,17 @@ class _TrafficModemRuntime:
 
         port = (command >> 4) & 0x0F
         payload = self._kiss_unescape(raw_frame[1:])
-        decoded = self._decode_ax25_to_tnc2(payload)
+        decoded, decode_reason = self._decode_ax25_to_tnc2_with_diagnostics(payload)
         if decoded is None:
+            log_event(
+                "DEBUG",
+                "traffic",
+                (
+                    f"Proxy uplink frame ignored on {self._runtime_label()}: "
+                    f"port={port} command=0x{command_id:X} decode_reason={decode_reason} "
+                    f"payload={_kiss_frame_hex_preview(payload)}"
+                ),
+            )
             return
 
         interface_id: int | None = None
@@ -1386,6 +1434,15 @@ class _TrafficModemRuntime:
         port = (command >> 4) & 0x0F
         command_id = command & 0x0F
         payload = self._kiss_unescape(raw_frame[1:])
+        log_event(
+            "DEBUG",
+            "traffic",
+            (
+                f"KISS RX frame on {self._runtime_label()}: "
+                f"port={port} command=0x{command_id:X} raw_len={len(raw_frame)} payload_len={len(payload)} "
+                f"raw={_kiss_frame_hex_preview(raw_frame)} payload={_kiss_frame_hex_preview(payload)}"
+            ),
+        )
         if command_id != 0x00:
             reason = "garbage" if self._looks_like_kiss_garbage(raw_frame) else "non-data"
             self._register_ignored_kiss_frame(
@@ -1411,13 +1468,29 @@ class _TrafficModemRuntime:
             "_rx_monotonic": rx_monotonic,
         }
 
-        decoded = self._decode_ax25_to_tnc2(payload)
+        decoded, decode_reason = self._decode_ax25_to_tnc2_with_diagnostics(payload)
         if decoded is not None:
             entry["format"] = "TNC2"
             entry["line"] = decoded
+            log_event(
+                "DEBUG",
+                "traffic",
+                (
+                    f"KISS RX decode OK on {self._runtime_label()}: "
+                    f"port={port} line={decoded[:180]}"
+                ),
+            )
         else:
             entry["format"] = "KISS"
-            entry["line"] = f"port={port} AX.25 frame len={len(payload)}"
+            entry["line"] = f"port={port} AX.25 decode failed ({decode_reason}) len={len(payload)}"
+            log_event(
+                "DEBUG",
+                "traffic",
+                (
+                    f"KISS RX decode failed on {self._runtime_label()}: "
+                    f"port={port} reason={decode_reason} payload={_kiss_frame_hex_preview(payload)}"
+                ),
+            )
 
         self._persist_frame(entry, timestamp)
         with self._lock:
@@ -1511,6 +1584,13 @@ class _TrafficModemRuntime:
 
     def _decode_ax25_to_tnc2(self, payload: bytes) -> str | None:
         return decode_ax25_to_tnc2(payload)
+
+    def _decode_ax25_to_tnc2_with_diagnostics(self, payload: bytes) -> tuple[str | None, str]:
+        decoded = self._decode_ax25_to_tnc2(payload)
+        if decoded is not None:
+            return decoded, "ok"
+        _decoded, reason = _decode_ax25_to_tnc2_with_reason(payload)
+        return None, reason
 
     def _decode_ax25_address(self, chunk: bytes) -> tuple[str, bool, bool] | None:
         return _decode_ax25_address_chunk(chunk)

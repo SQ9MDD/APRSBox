@@ -91,6 +91,15 @@ class TrafficKissRxParserTests(unittest.TestCase):
 
         self.assertEqual([entry["line"] for entry in persisted], ["A"])
 
+    def test_undecodable_ax25_data_frame_is_persisted_with_diagnostic_reason(self) -> None:
+        runtime, persisted = self._runtime_with_capture()
+        runtime._consume_kiss_chunk(bytes([KISS_FEND, 0x00, 0x01, 0x02, KISS_FEND]))
+
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0]["format"], "KISS")
+        self.assertIn("AX.25 decode failed", persisted[0]["line"])
+        self.assertIn("payload too short", persisted[0]["line"])
+
     def test_welcome_text_before_frame_is_ignored(self) -> None:
         runtime, persisted = self._runtime_with_capture()
         runtime._consume_kiss_chunk(b"ARDUINO-TNC READY\r\n" + bytes([KISS_FEND, 0x00, 0x41, KISS_FEND]))
@@ -121,7 +130,8 @@ class TrafficKissRxParserTests(unittest.TestCase):
         self.assertEqual(persisted, [])
         stats = runtime.runtime_snapshot()["kiss_stats"]
         self.assertEqual(stats["ignored_kiss_non_data"] + stats["ignored_kiss_garbage"], 2)
-        self.assertEqual(log_event_mock.call_count, 1)
+        ignored_logs = [call for call in log_event_mock.call_args_list if "Ignored KISS" in str(call)]
+        self.assertEqual(len(ignored_logs), 1)
 
 
 class TrafficRxHotPathOrderingTests(unittest.TestCase):
