@@ -59,6 +59,16 @@ def _kiss_frame_hex_preview(frame: bytes, *, max_bytes: int = SERIAL_TX_DEBUG_PR
     return f"{head} ... {tail}"
 
 
+def _ascii_preview(payload: bytes, *, max_bytes: int = IGNORED_KISS_DEBUG_PREVIEW_BYTES) -> str:
+    if not payload:
+        return "<empty>"
+    clipped = payload[:max_bytes]
+    text = "".join(chr(byte) if 32 <= byte <= 126 else "." for byte in clipped)
+    if len(payload) > max_bytes:
+        return f"{text}..."
+    return text
+
+
 def _normalize_modem_type(value: Any) -> str:
     modem_type = str(value or "").strip().upper()
     if modem_type == "SERIAL":
@@ -180,6 +190,10 @@ class _TrafficModemRuntime:
         self._ignored_kiss_garbage = 0
         self._ignored_kiss_debug_next_log_at = 0.0
         self._ignored_kiss_debug_suppressed = 0
+        self._missing_fend_debug_next_log_at = 0.0
+        self._missing_fend_debug_suppressed = 0
+        self._discarded_prefix_debug_next_log_at = 0.0
+        self._discarded_prefix_debug_suppressed = 0
         self._mqtt_connected = False
         self._mqtt_subscribed_topic: str | None = None
         self._mqtt_broker_host: str | None = None
@@ -1296,6 +1310,8 @@ class _TrafficModemRuntime:
             try:
                 start = self._kiss_buffer.index(KISS_FEND)
             except ValueError:
+                if self._kiss_buffer:
+                    self._log_missing_kiss_fend(scope="rx", buffered=bytes(self._kiss_buffer))
                 if len(self._kiss_buffer) > 8192:
                     log_event(
                         "DEBUG",
@@ -1309,6 +1325,7 @@ class _TrafficModemRuntime:
                 return
 
             if start > 0:
+                self._log_discarded_kiss_prefix(scope="rx", discarded=bytes(self._kiss_buffer[:start]))
                 del self._kiss_buffer[:start]
 
             if len(self._kiss_buffer) < 2:
@@ -1344,6 +1361,8 @@ class _TrafficModemRuntime:
             try:
                 start = self._proxy_uplink_buffer.index(KISS_FEND)
             except ValueError:
+                if self._proxy_uplink_buffer:
+                    self._log_missing_kiss_fend(scope="proxy_uplink", buffered=bytes(self._proxy_uplink_buffer))
                 if len(self._proxy_uplink_buffer) > 8192:
                     log_event(
                         "DEBUG",
@@ -1357,6 +1376,7 @@ class _TrafficModemRuntime:
                 return
 
             if start > 0:
+                self._log_discarded_kiss_prefix(scope="proxy_uplink", discarded=bytes(self._proxy_uplink_buffer[:start]))
                 del self._proxy_uplink_buffer[:start]
 
             if len(self._proxy_uplink_buffer) < 2:
@@ -1560,6 +1580,52 @@ class _TrafficModemRuntime:
                 f"Ignored KISS {reason} frame on {self._runtime_label()}: "
                 f"port={port} command=0x{command_id:X} len={len(payload)} "
                 f"raw={preview}{suppressed_suffix}"
+            ),
+        )
+
+    def _log_missing_kiss_fend(self, *, scope: str, buffered: bytes) -> None:
+        now = time.monotonic()
+        suppressed = 0
+        with self._lock:
+            if now < self._missing_fend_debug_next_log_at:
+                self._missing_fend_debug_suppressed += 1
+                return
+            suppressed = self._missing_fend_debug_suppressed
+            self._missing_fend_debug_suppressed = 0
+            self._missing_fend_debug_next_log_at = now + IGNORED_KISS_DEBUG_INTERVAL_SECONDS
+        suppressed_suffix = f"; suppressed={suppressed}" if suppressed > 0 else ""
+        log_event(
+            "DEBUG",
+            "traffic",
+            (
+                f"KISS buffer waiting for FEND on {self._runtime_label()}: "
+                f"scope={scope} buffered={len(buffered)} "
+                f"hex={_kiss_frame_hex_preview(buffered, max_bytes=IGNORED_KISS_DEBUG_PREVIEW_BYTES)} "
+                f"ascii={_ascii_preview(buffered)}{suppressed_suffix}"
+            ),
+        )
+
+    def _log_discarded_kiss_prefix(self, *, scope: str, discarded: bytes) -> None:
+        if not discarded:
+            return
+        now = time.monotonic()
+        suppressed = 0
+        with self._lock:
+            if now < self._discarded_prefix_debug_next_log_at:
+                self._discarded_prefix_debug_suppressed += 1
+                return
+            suppressed = self._discarded_prefix_debug_suppressed
+            self._discarded_prefix_debug_suppressed = 0
+            self._discarded_prefix_debug_next_log_at = now + IGNORED_KISS_DEBUG_INTERVAL_SECONDS
+        suppressed_suffix = f"; suppressed={suppressed}" if suppressed > 0 else ""
+        log_event(
+            "DEBUG",
+            "traffic",
+            (
+                f"Discarded non-KISS prefix bytes on {self._runtime_label()}: "
+                f"scope={scope} len={len(discarded)} "
+                f"hex={_kiss_frame_hex_preview(discarded, max_bytes=IGNORED_KISS_DEBUG_PREVIEW_BYTES)} "
+                f"ascii={_ascii_preview(discarded)}{suppressed_suffix}"
             ),
         )
 
