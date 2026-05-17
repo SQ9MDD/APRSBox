@@ -10,7 +10,9 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.mqtt_url import RX_CAPABLE_MODEM_TYPES, TX_CAPABLE_MODEM_TYPES
 
-SOURCE_STEP_TYPES = ("receiver_rf",)
+LOCAL_TX_SOURCE_KIND = "receiver_local_tx"
+LOCAL_TX_SOURCE_REF = "local_tx"
+SOURCE_STEP_TYPES = ("receiver_rf", LOCAL_TX_SOURCE_KIND)
 FILTER_STEP_TYPES = (
     "filter_path",
     "filter_strict",
@@ -25,6 +27,8 @@ FILTER_STEP_TYPES = (
     "filter_rate_limit_per_callsign",
 )
 TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
+LOCAL_TX_ALLOWED_TARGET_KINDS = {"tx_aprsis", "action_log"}
+APRSIS_ALLOWED_SOURCE_KINDS = {"receiver_rf", LOCAL_TX_SOURCE_KIND}
 DIGI_FLOW_EXECUTION_RETENTION_LIMIT = 200
 PACKET_TYPE_FILTER_GROUPS = (
     "position",
@@ -43,6 +47,7 @@ DISTANCE_FILTER_MAX_ZONES = 3
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_rf",
+    LOCAL_TX_SOURCE_KIND,
     "filter_dupe",
     "filter_path",
     "filter_strict",
@@ -76,6 +81,18 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "description": "Receives packets from an APRS-IS input identifier.",
         "config_fields": (
             {"name": "aprsis_source", "label": "APRS-IS Source", "type": "text", "required": True},
+        ),
+    },
+    LOCAL_TX_SOURCE_KIND: {
+        "category": "source",
+        "label": "Local TX",
+        "badge": "Source",
+        "description": (
+            "Local TX includes only frames generated locally by APRSBox, such as beacons, status packets, weather, "
+            "objects, items, bulletins and messages. It does not include RF-received or digipeated frames."
+        ),
+        "config_fields": (
+            {"name": "local_tx_source", "label": "Local TX Source", "type": "text", "required": True},
         ),
     },
     "filter_dupe": {
@@ -336,6 +353,7 @@ LEGACY_DEFAULT_STEP_TITLES = {
 STEP_TYPE_TO_REF_FIELD = {
     "receiver_rf": "rf_port",
     "receiver_aprsis": "aprsis_source",
+    LOCAL_TX_SOURCE_KIND: "local_tx_source",
     "tx_rf": "rf_target",
     "tx_aprsis": "aprsis_target",
     "action_drop": "note",
@@ -574,6 +592,8 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
         return {"rf_port": ref_value}
     if step_type == "receiver_aprsis":
         return {"aprsis_source": ref_value}
+    if step_type == LOCAL_TX_SOURCE_KIND:
+        return {"local_tx_source": ref_value or LOCAL_TX_SOURCE_REF}
     if step_type == "filter_dupe":
         return {"window_sec": DUPLICATE_FILTER_DEFAULT_WINDOW_SEC}
     if step_type == "filter_direct_only":
@@ -619,6 +639,9 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         if not value:
             raise ValueError(_t("Receiver APRS-IS step requires an APRS-IS Source value."))
         return {"aprsis_source": value}
+    if step_type == LOCAL_TX_SOURCE_KIND:
+        value = _normalize_text(config.get("local_tx_source")) or LOCAL_TX_SOURCE_REF
+        return {"local_tx_source": value}
     if step_type == "filter_dupe":
         window_sec = _normalize_number(config.get("window_sec"), label="Listening window", minimum=2)
         if window_sec not in DUPLICATE_FILTER_WINDOW_SECONDS:
@@ -706,6 +729,8 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         return f"RF port: {_normalize_text(config.get('rf_port')) or '-'}"
     if step_type == "receiver_aprsis":
         return f"APRS-IS source: {_normalize_text(config.get('aprsis_source')) or '-'}"
+    if step_type == LOCAL_TX_SOURCE_KIND:
+        return _t("Locally generated APRSBox TX frames")
     if step_type == "filter_dupe":
         return f"Window: {config.get('window_sec', '-')!s} sec"
     if step_type == "filter_digi":
@@ -741,7 +766,7 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
     if step_type == "tx_rf":
         return f"RF target: {_normalize_text(config.get('rf_target')) or '-'}"
     if step_type == "tx_aprsis":
-        return "APRS-IS RX-only uplink"
+        return _t("APRS-IS uplink")
     if step_type == "action_drop":
         note = _normalize_text(config.get("note"))
         return note or "Drop packet"
@@ -797,6 +822,7 @@ def get_digi_flow_reference_options() -> dict[str, list[str]]:
     )
     return {
         "receiver_rf": [str(row["name"]) for row in source_rows if row["name"]],
+        LOCAL_TX_SOURCE_KIND: [LOCAL_TX_SOURCE_REF],
         "tx_rf": [str(row["name"]) for row in target_rows if row["name"]],
         "tx_aprsis": ["aprsis"],
         "action_drop": ["drop"],
@@ -806,9 +832,10 @@ def get_digi_flow_reference_options() -> dict[str, list[str]]:
 
 def get_digi_flow_endpoint_options(
     *,
+    selected_source_selector: str | None = None,
     selected_target_selector: str | None = None,
     current_flow_id: int | None = None,
-) -> dict[str, list[dict[str, str]]]:
+) -> dict[str, Any]:
     source_type_filter = ", ".join(f"'{item}'" for item in RX_CAPABLE_MODEM_TYPES)
     target_type_filter = ", ".join(f"'{item}'" for item in TX_CAPABLE_MODEM_TYPES)
     source_rows = fetch_all(
@@ -830,6 +857,14 @@ def get_digi_flow_endpoint_options(
         for row in source_rows
         if row["name"]
     ]
+    source_options.append(
+        {
+            "value": f"{LOCAL_TX_SOURCE_KIND}::{LOCAL_TX_SOURCE_REF}",
+            "label": _t("Local TX"),
+            "kind": LOCAL_TX_SOURCE_KIND,
+            "ref": LOCAL_TX_SOURCE_REF,
+        }
+    )
     target_options = [
         {"value": f"tx_rf::{row['name']}", "label": str(row["name"]), "kind": "tx_rf", "ref": str(row["name"])}
         for row in target_rows
@@ -838,7 +873,7 @@ def get_digi_flow_endpoint_options(
     target_options.append(
         {
             "value": "tx_aprsis::aprsis",
-            "label": _t("APRS-IS RX-only uplink"),
+            "label": _t("APRS-IS uplink"),
             "kind": "tx_aprsis",
             "ref": "aprsis",
         }
@@ -846,8 +881,15 @@ def get_digi_flow_endpoint_options(
     if str(selected_target_selector or "").strip() == "action_drop::drop":
         target_options.append({"value": "action_drop::drop", "label": _t("Drop"), "kind": "action_drop", "ref": "drop"})
     target_options.append({"value": "action_log::log-only", "label": _t("Black Hole"), "kind": "action_log", "ref": "log-only"})
+    target_by_source_kind = {
+        "receiver_rf": list(target_options),
+        LOCAL_TX_SOURCE_KIND: [
+            option for option in target_options if str(option.get("kind") or "").strip() in LOCAL_TX_ALLOWED_TARGET_KINDS
+        ],
+    }
+    _ = selected_source_selector
     _ = current_flow_id
-    return {"source": source_options, "target": target_options}
+    return {"source": source_options, "target": target_options, "target_by_source_kind": target_by_source_kind}
 
 
 def _serialize_step_row(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
@@ -881,8 +923,10 @@ def _serialize_flow_row(row: sqlite3.Row | dict[str, Any], steps: list[dict[str,
 def _flow_endpoint_display(kind: Any, ref: Any) -> str:
     normalized_kind = _normalize_text(kind)
     normalized_ref = _normalize_text(ref)
+    if normalized_kind == LOCAL_TX_SOURCE_KIND and normalized_ref == LOCAL_TX_SOURCE_REF:
+        return _t("Local TX")
     if normalized_kind == "tx_aprsis":
-        return _t("APRS-IS RX-only uplink")
+        return _t("APRS-IS uplink")
     if normalized_kind == "action_log" and normalized_ref == "log-only":
         return _t("Black Hole")
     if normalized_kind == "action_drop" and normalized_ref == "drop":
@@ -1011,10 +1055,14 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Flow target must be one of the supported target step types."))
     source_ref = _normalize_text(payload.get("source_ref"))
     target_ref = _normalize_text(payload.get("target_ref"))
+    if source_kind == LOCAL_TX_SOURCE_KIND and not source_ref:
+        source_ref = LOCAL_TX_SOURCE_REF
     if target_kind == "tx_aprsis" and not target_ref:
         target_ref = "aprsis"
     if not source_ref:
         raise ValueError(_t("Flow source reference is required."))
+    if source_kind == LOCAL_TX_SOURCE_KIND and target_kind not in LOCAL_TX_ALLOWED_TARGET_KINDS:
+        raise ValueError(_t("Local TX source can target only APRS-IS uplink or Black Hole."))
     if target_kind in {"tx_rf", "tx_aprsis"} and not target_ref:
         raise ValueError(_t("Flow target reference is required."))
 
@@ -1076,8 +1124,8 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     if target_kind != "tx_aprsis" and has_strict_filter:
         raise ValueError(_t("Strict APRS-IS guard can be used only in APRS-IS target flows."))
     if target_kind == "tx_aprsis":
-        if source_kind != "receiver_rf":
-            raise ValueError(_t("APRS-IS RX-only target flow must use Receiver RF as source."))
+        if source_kind not in APRSIS_ALLOWED_SOURCE_KINDS:
+            raise ValueError(_t("APRS-IS target flow must use Receiver RF or Local TX as source."))
         disallowed_filter_steps = [step for step in normalized_steps[1:-1] if step["step_type"] != "filter_strict"]
         if disallowed_filter_steps:
             raise ValueError(_t("APRS-IS target flow cannot include user-defined filters or rules in this step."))
@@ -1377,10 +1425,12 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
         source_kind = str(flow.get("source_kind") or "")
         target_kind = str(flow.get("target_kind") or "")
         flow_steps = list(flow.get("steps") or [])
+        if source_kind == LOCAL_TX_SOURCE_KIND and target_kind not in LOCAL_TX_ALLOWED_TARGET_KINDS:
+            raise ValueError(_t("Local TX source can target only APRS-IS uplink or Black Hole."))
         if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(flow_steps):
             raise ValueError(_t("DIGI Flow with an RF TX target cannot be enabled without an enabled Path rule and DIGI guard step."))
-        if target_kind == "tx_aprsis" and source_kind != "receiver_rf":
-            raise ValueError(_t("APRS-IS RX-only target flow must use Receiver RF as source."))
+        if target_kind == "tx_aprsis" and source_kind not in APRSIS_ALLOWED_SOURCE_KINDS:
+            raise ValueError(_t("APRS-IS target flow must use Receiver RF or Local TX as source."))
         if target_kind == "tx_aprsis" and not _has_enabled_aprsis_strict_guard(flow_steps):
             raise ValueError(_t("DIGI Flow with an APRS-IS target cannot be enabled without a mandatory enabled Strict APRS-IS guard step."))
         with get_connection() as connection:

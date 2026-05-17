@@ -309,7 +309,7 @@ CREATE TABLE IF NOT EXISTS digi_flows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT,
-    source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis')),
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis', 'receiver_local_tx')),
     source_ref TEXT NOT NULL,
     target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
     target_ref TEXT NOT NULL,
@@ -326,6 +326,7 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
     step_type TEXT NOT NULL CHECK (step_type IN (
         'receiver_rf',
         'receiver_aprsis',
+        'receiver_local_tx',
         'filter_dupe',
         'filter_direct_only',
         'filter_digi',
@@ -1720,7 +1721,9 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
     flows_sql = _table_sql(connection, "digi_flows")
     if not flows_sql:
         return
-    if "UNIQUE (source_kind, source_ref, target_kind, target_ref)" not in flows_sql:
+    has_legacy_unique = "UNIQUE (source_kind, source_ref, target_kind, target_ref)" in flows_sql
+    has_local_tx_source = "'receiver_local_tx'" in flows_sql
+    if not has_legacy_unique and has_local_tx_source:
         return
     connection.executescript(
         """
@@ -1729,7 +1732,7 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
-            source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis')),
+            source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis', 'receiver_local_tx')),
             source_ref TEXT NOT NULL,
             target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
             target_ref TEXT NOT NULL,
@@ -1746,7 +1749,7 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
             name,
             description,
             CASE
-                WHEN source_kind IN ('receiver_rf', 'receiver_aprsis') THEN source_kind
+                WHEN source_kind IN ('receiver_rf', 'receiver_aprsis', 'receiver_local_tx') THEN source_kind
                 ELSE 'receiver_rf'
             END,
             COALESCE(source_ref, ''),
@@ -1773,6 +1776,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
     if not steps_sql:
         return
     required_step_types = (
+        "receiver_local_tx",
         "filter_direct_only",
         "filter_digi",
         "filter_icon",
@@ -1793,6 +1797,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
             step_type TEXT NOT NULL CHECK (step_type IN (
                 'receiver_rf',
                 'receiver_aprsis',
+                'receiver_local_tx',
                 'filter_dupe',
                 'filter_direct_only',
                 'filter_digi',

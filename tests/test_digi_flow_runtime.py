@@ -764,6 +764,155 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(fake_client.lines), 1)
             self.assertIn("qAO,SQ9MDD-4", fake_client.lines[0])
 
+    async def test_local_tx_strict_filter_enforces_local_metadata_and_blocks_disallowed_paths(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            create_flow(
+                {
+                    "name": "Local TX APRSIS",
+                    "description": "",
+                    "source_kind": "receiver_local_tx",
+                    "source_ref": "local_tx",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_local_tx", "title": "Local TX", "enabled": 1, "config": {"local_tx_source": "local_tx"}},
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
+                    ],
+                }
+            )
+
+            class FakeAprsisClient:
+                def __init__(self) -> None:
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    return True, "APRS-IS TX queued."
+
+            fake_client = FakeAprsisClient()
+            runtime = DigiFlowRuntimeService(aprsis_client=fake_client)
+            await runtime.start()
+            try:
+                accepted = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS,WIDE1-1:>Local TX allowed",
+                    metadata={"origin": "local_generated", "local_generated": True, "frame_purpose": "beacon"},
+                )
+                missing_meta = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS,WIDE1-1:>Local TX missing metadata",
+                )
+                third_party = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS,WIDE1-1:}SP8ABC-9>APRS,TCPIP:>3rd-party",
+                    metadata={"origin": "local_generated", "local_generated": True},
+                )
+                qconstruct = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS,qAO,SR9ABC:>q construct",
+                    metadata={"origin": "local_generated", "local_generated": True},
+                )
+                tcpip = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS,TCPIP:>tcp reject",
+                    metadata={"origin": "local_generated", "local_generated": True},
+                )
+                nogate = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS,NOGATE:>nogate reject",
+                    metadata={"origin": "local_generated", "local_generated": True},
+                )
+                rfonly = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS,RFONLY:>rfonly reject",
+                    metadata={"origin": "local_generated", "local_generated": True},
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            accepted_rows = event_rows_for_frame(str(accepted["frame_uid"]))
+            missing_meta_rows = event_rows_for_frame(str(missing_meta["frame_uid"]))
+            third_party_rows = event_rows_for_frame(str(third_party["frame_uid"]))
+            qconstruct_rows = event_rows_for_frame(str(qconstruct["frame_uid"]))
+            tcpip_rows = event_rows_for_frame(str(tcpip["frame_uid"]))
+            nogate_rows = event_rows_for_frame(str(nogate["frame_uid"]))
+            rfonly_rows = event_rows_for_frame(str(rfonly["frame_uid"]))
+
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "passed" for row in accepted_rows))
+            self.assertTrue(any(row["event_type"] == "output_action" and row["decision"] == "tx" for row in accepted_rows))
+            self.assertTrue(
+                any(
+                    row["event_type"] == "strict_filter"
+                    and row["decision"] == "rejected"
+                    and "not marked as local-generated APRSBox traffic" in row["message"]
+                    for row in missing_meta_rows
+                )
+            )
+            self.assertTrue(
+                any(
+                    row["event_type"] == "strict_filter"
+                    and row["decision"] == "rejected"
+                    and "third-party encapsulation is not allowed" in row["message"]
+                    for row in third_party_rows
+                )
+            )
+            self.assertTrue(
+                any(
+                    row["event_type"] == "strict_filter"
+                    and row["decision"] == "rejected"
+                    and "q construct token QAO" in row["message"]
+                    for row in qconstruct_rows
+                )
+            )
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "TCPIP" in row["message"] for row in tcpip_rows))
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "NOGATE" in row["message"] for row in nogate_rows))
+            self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "RFONLY" in row["message"] for row in rfonly_rows))
+            self.assertEqual(len(fake_client.lines), 1)
+
+    async def test_receiver_rf_frames_do_not_match_local_tx_source_flow(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Local TX Black Hole",
+                    "description": "",
+                    "source_kind": "receiver_local_tx",
+                    "source_ref": "local_tx",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_local_tx", "title": "Local TX", "enabled": 1, "config": {"local_tx_source": "local_tx"}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                injected = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>RF frame",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = event_rows_for_frame(str(injected["frame_uid"]))
+            self.assertEqual(rows, [])
+            self.assertEqual(get_digi_flow_event_log(flow_id), [])
+
     async def test_path_rule_rejects_when_local_digi_is_already_consumed_in_path(self) -> None:
         with temporary_database():
             set_local_station_identity()
@@ -1122,6 +1271,75 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert traffic_row is not None
             self.assertEqual(traffic_row["source"], "RF-OUT")
             self.assertEqual(traffic_row["line"], "SQ9MDD-4>APRS,SQ9MDD-4*,WIDE2-1:>DIGI outbound test")
+
+    async def test_outbound_service_forwards_local_tx_to_routing_once_per_event_id(self) -> None:
+        with temporary_database():
+            interface_a_id = insert_modem(name="RF-A", device_path="127.0.0.1:9017")
+            interface_b_id = insert_modem(name="RF-B", device_path="127.0.0.1:9018")
+            execute("UPDATE modems SET enabled = 0 WHERE id IN (?, ?)", (interface_a_id, interface_b_id))
+
+            flow_id = create_flow(
+                {
+                    "name": "Local TX LOG",
+                    "description": "",
+                    "source_kind": "receiver_local_tx",
+                    "source_ref": "local_tx",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_local_tx", "title": "Local TX", "enabled": 1, "config": {"local_tx_source": "local_tx"}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            payload_json = json.dumps(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "status_text": "Local TX routing",
+                    "trigger": "manual",
+                    "local_tx_event_id": "evt-local-status-1",
+                    "local_tx_metadata": {
+                        "origin": "local_generated",
+                        "local_generated": True,
+                        "own_station": True,
+                        "frame_purpose": "status",
+                    },
+                },
+                separators=(",", ":"),
+                ensure_ascii=True,
+            )
+            execute(
+                """
+                INSERT INTO outbound_jobs(
+                    kind, interface_id, payload_json, status, scheduled_at,
+                    locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
+                )
+                VALUES
+                    ('status', ?, ?, 'queued', '2026-01-01T00:00:00+00:00', NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'),
+                    ('status', ?, ?, 'queued', '2026-01-01T00:00:01+00:00', NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:01+00:00', '2026-01-01T00:00:01+00:00')
+                """,
+                (interface_a_id, payload_json, interface_b_id, payload_json),
+            )
+
+            runtime = DigiFlowRuntimeService()
+            outbound_service = OutboundService(digi_flow_runtime=runtime)
+            await runtime.start()
+            try:
+                first = claim_next_outbound_job()
+                second = claim_next_outbound_job()
+                assert first is not None
+                assert second is not None
+                await outbound_service._process_job(first)
+                await outbound_service._process_job(second)
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=10)
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0]["final_result"], "LOGGED")
 
     async def test_outbound_service_enforces_min_tx_gap_on_same_interface(self) -> None:
         with temporary_database():

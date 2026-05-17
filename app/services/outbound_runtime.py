@@ -13,7 +13,9 @@ from app.services.messages import (
     register_direct_message_transmission,
     register_query_message_transmission,
 )
+from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, LOCAL_TX_SOURCE_REF
 from app.services.outbound import (
+    LOCAL_TX_ORIGIN,
     OUTBOUND_KIND_DIGI_TX,
     build_beacon_tnc2,
     build_message_tnc2,
@@ -52,12 +54,17 @@ class OutboundService:
         *,
         poll_interval: float = 1.0,
         traffic_monitor: TrafficMonitorService | None = None,
+        digi_flow_runtime: Any | None = None,
         min_tx_gap_seconds: float = 0.35,
     ) -> None:
         self._poll_interval = poll_interval
         self._traffic_monitor = traffic_monitor
+        self._digi_flow_runtime = digi_flow_runtime
         self._min_tx_gap_seconds = max(0.0, float(min_tx_gap_seconds))
         self._last_tx_monotonic_by_interface: dict[int, float] = {}
+        self._local_tx_forwarded_event_ids: set[str] = set()
+        self._local_tx_forwarded_event_order: list[str] = []
+        self._local_tx_forwarded_event_limit = 512
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
@@ -142,6 +149,7 @@ class OutboundService:
                     raise ValueError("DIGI TX outbound job is missing packet line.")
             else:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
+            self._forward_local_tx_to_digi_flow(job=job, kind=kind, payload=payload, tnc2_line=tnc2_line)
             log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
             if kind == "wx":
                 log_event("INFO", "wx", f"Generating WX frame for outbound job #{job_id}")
@@ -345,6 +353,51 @@ class OutboundService:
         except TimeoutError:
             pass
 
+    def _forward_local_tx_to_digi_flow(self, *, job: dict[str, Any], kind: str, payload: dict[str, Any], tnc2_line: str) -> None:
+        if kind == OUTBOUND_KIND_DIGI_TX or self._digi_flow_runtime is None:
+            return
+
+        purpose_by_kind = {
+            "beacon": "beacon",
+            "status": "status",
+            "object": "object",
+            "message": "message",
+            "wx": "wx",
+        }
+        purpose = purpose_by_kind.get(str(kind or "").strip())
+        if not purpose:
+            return
+
+        raw_metadata = payload.get("local_tx_metadata")
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+        metadata["origin"] = str(metadata.get("origin") or LOCAL_TX_ORIGIN).strip() or LOCAL_TX_ORIGIN
+        metadata["local_generated"] = _payload_flag(metadata.get("local_generated"), default=True)
+        metadata["own_station"] = _payload_flag(metadata.get("own_station"), default=True)
+        metadata["frame_purpose"] = str(metadata.get("frame_purpose") or purpose).strip() or purpose
+
+        event_id = str(payload.get("local_tx_event_id") or "").strip()
+        forward_key = event_id or f"legacy:{kind}:{tnc2_line}"
+        if forward_key in self._local_tx_forwarded_event_ids:
+            return
+        self._local_tx_forwarded_event_ids.add(forward_key)
+        self._local_tx_forwarded_event_order.append(forward_key)
+        if len(self._local_tx_forwarded_event_order) > self._local_tx_forwarded_event_limit:
+            stale_key = self._local_tx_forwarded_event_order.pop(0)
+            self._local_tx_forwarded_event_ids.discard(stale_key)
+
+        created_at = str(job.get("scheduled_at") or "").strip() or None
+        try:
+            self._digi_flow_runtime.enqueue_tnc2_frame(
+                source_kind=LOCAL_TX_SOURCE_KIND,
+                source_ref=LOCAL_TX_SOURCE_REF,
+                raw_payload=tnc2_line,
+                created_at=created_at,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            error = str(exc).strip() or exc.__class__.__name__
+            log_event("WARNING", "outbound", f"Failed to enqueue Local TX frame to routing runtime: {error}")
+
     def _resolve_tx_gap_seconds(self, job: dict[str, Any]) -> float:
         try:
             configured = float(job.get("tx_min_gap_seconds"))
@@ -425,6 +478,21 @@ class OutboundService:
             f"len={len(frame)} cmd={command_text} frame={preview}"
         )
         log_event("WARNING", "outbound", message)
+
+
+def _payload_flag(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(int(value))
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 def _skip_reason_for_expired_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:

@@ -21,7 +21,7 @@ from app.services.aprsis import (
     record_aprsis_tx_result,
 )
 from app.services.content import get_station_settings, parse_tnc2_frame
-from app.services.digi_flows import list_enabled_digi_flows, log_digi_flow_event
+from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import enqueue_digi_tx_job
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
@@ -129,6 +129,7 @@ class DigiFlowRuntimeService:
         frame_uid: str | None = None,
         created_at: str | None = None,
         rx_received_monotonic: float | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         enqueue_monotonic = time.monotonic()
         frame = self._build_frame(
@@ -139,6 +140,7 @@ class DigiFlowRuntimeService:
             created_at=created_at,
             enqueue_monotonic=enqueue_monotonic,
             rx_received_monotonic=rx_received_monotonic,
+            metadata=metadata,
         )
         self._queue.put_nowait(frame)
         log_event(
@@ -237,6 +239,7 @@ class DigiFlowRuntimeService:
                 "raw_payload": str(frame["raw_payload"]),
                 "current_line": str(frame["raw_payload"]),
                 "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
+                "metadata": dict(frame.get("metadata") or {}),
             }
             await self._execute_flow(context)
 
@@ -302,7 +305,7 @@ class DigiFlowRuntimeService:
 
     async def _execute_step(self, context: dict[str, Any], step: dict[str, Any], *, step_index: int) -> dict[str, str]:
         step_type = str(step["step_type"])
-        if step_type in {"receiver_rf", "receiver_aprsis"}:
+        if step_type in {"receiver_rf", "receiver_aprsis", LOCAL_TX_SOURCE_KIND}:
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=int(context["flow"]["id"]),
@@ -795,6 +798,25 @@ class DigiFlowRuntimeService:
             if is_aprsis_target:
                 record_aprsis_strict_reject(
                     reason_key=APRSIS_STRICT_REASON_OTHER,
+                    frame_line=str(context.get("current_line") or ""),
+                    reason_message=message,
+                )
+            return {"decision": "drop"}
+
+        local_tx_reject = _local_tx_strict_reject_reason(context, parsed)
+        if local_tx_reject is not None:
+            message, reason_key = local_tx_reject
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="strict_filter",
+                decision="rejected",
+                message=message,
+            )
+            if is_aprsis_target:
+                record_aprsis_strict_reject(
+                    reason_key=reason_key,
                     frame_line=str(context.get("current_line") or ""),
                     reason_message=message,
                 )
@@ -1331,6 +1353,7 @@ class DigiFlowRuntimeService:
         created_at: str | None,
         enqueue_monotonic: float,
         rx_received_monotonic: float | None,
+        metadata: dict[str, Any] | None,
     ) -> dict[str, Any]:
         timestamp = created_at or utc_now()
         line = str(raw_payload or "").rstrip("\r\n")
@@ -1340,10 +1363,23 @@ class DigiFlowRuntimeService:
             "source_ref": str(source_ref or "").strip(),
             "raw_payload": line,
             "parsed": parse_tnc2_frame(line) if line else None,
+            "metadata": _normalize_frame_metadata(metadata),
             "created_at": timestamp,
             "enqueue_monotonic": enqueue_monotonic,
             "rx_received_monotonic": rx_received_monotonic,
         }
+
+
+def _normalize_frame_metadata(metadata: Any) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        key_text = str(key).strip()
+        if not key_text:
+            continue
+        normalized[key_text] = value
+    return normalized
 
 
 def _split_path_tokens(path: str) -> list[str]:
@@ -1409,6 +1445,14 @@ def _find_blocked_strict_path_token(path_tokens: list[str]) -> str | None:
     return None
 
 
+def _find_q_construct_path_token(path_tokens: list[str]) -> str | None:
+    for token in path_tokens:
+        normalized = token.strip().upper().rstrip("*")
+        if len(normalized) == 3 and normalized.startswith("Q") and normalized[1:].isalpha():
+            return normalized
+    return None
+
+
 def _find_blocked_strict_token(parsed: dict[str, Any]) -> dict[str, str] | None:
     outer_path = str(parsed.get("path") or "").strip().upper()
     outer_blocked = _find_blocked_strict_path_token(_split_path_tokens(outer_path))
@@ -1437,6 +1481,48 @@ def _strict_reject_reason_key(blocked_token: str | None) -> str:
     if normalized.startswith("TCPIP") or normalized.startswith("TCPXX"):
         return APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX
     return APRSIS_STRICT_REASON_OTHER
+
+
+def _local_tx_strict_reject_reason(context: dict[str, Any], parsed: dict[str, Any]) -> tuple[str, str] | None:
+    source_kind = str(context.get("source_kind") or "").strip()
+    if source_kind != LOCAL_TX_SOURCE_KIND:
+        return None
+
+    metadata = dict(context.get("metadata") or {})
+    origin = str(metadata.get("origin") or "").strip().lower()
+    local_generated = _metadata_flag(metadata.get("local_generated"))
+    if origin != "local_generated" or not local_generated:
+        return (
+            _t("Strict filter rejected Local TX frame because it is not marked as local-generated APRSBox traffic."),
+            APRSIS_STRICT_REASON_OTHER,
+        )
+
+    if bool(parsed.get("is_third_party")):
+        return (
+            _t("Strict filter rejected Local TX frame because third-party encapsulation is not allowed for APRS-IS uplink."),
+            APRSIS_STRICT_REASON_OTHER,
+        )
+
+    input_path = str(parsed.get("path") or "").strip().upper()
+    blocked_q = _find_q_construct_path_token(_split_path_tokens(input_path))
+    if blocked_q is not None:
+        return (
+            _tf(
+                "Strict filter rejected Local TX frame because path contains q construct token {blocked_token}. Input path: {input_path}",
+                {"blocked_token": blocked_q, "input_path": input_path or "-"},
+            ),
+            APRSIS_STRICT_REASON_OTHER,
+        )
+    return None
+
+
+def _metadata_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(int(value))
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
 
 
 def _callsign_matches_pattern(callsign: str, pattern: str) -> bool:

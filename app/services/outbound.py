@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,6 +29,14 @@ OUTBOUND_STATUS_FAILED = "failed"
 STALE_BEACON_PROCESSING_REASON = "Beacon was not transmitted: APRSBox core restarted while outbound job was processing."
 STALE_WX_PROCESSING_REASON = "WX frame was not transmitted: APRSBox core restarted while outbound job was processing."
 _AX25_CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}$")
+LOCAL_TX_ORIGIN = "local_generated"
+LOCAL_TX_OUTBOUND_PURPOSE_BY_KIND = {
+    OUTBOUND_KIND_BEACON: "beacon",
+    OUTBOUND_KIND_STATUS: "status",
+    OUTBOUND_KIND_OBJECT: "object",
+    OUTBOUND_KIND_MESSAGE: "message",
+    OUTBOUND_KIND_WX: "wx",
+}
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -123,7 +132,8 @@ def _enqueue_jobs_for_modems(
     aprs_message_id: int | None = None,
 ) -> list[int]:
     now_text = utc_now()
-    payload_json = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    stored_payload = _with_local_tx_metadata(kind=kind, payload=payload)
+    payload_json = json.dumps(stored_payload, ensure_ascii=True, separators=(",", ":"))
     job_ids: list[int] = []
     with get_connection() as connection:
         for modem in modems:
@@ -155,6 +165,26 @@ def _format_queue_result(label: str, job_ids: list[int]) -> str:
         return f"{label} queued as job #{job_ids[0]}."
     joined_ids = ", ".join(str(job_id) for job_id in job_ids)
     return f"{label} queued as jobs #{joined_ids}."
+
+
+def _with_local_tx_metadata(*, kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+    purpose = LOCAL_TX_OUTBOUND_PURPOSE_BY_KIND.get(str(kind or "").strip())
+    if not purpose:
+        return dict(payload)
+
+    stored = dict(payload)
+    event_id = str(stored.get("local_tx_event_id") or "").strip()
+    if not event_id:
+        event_id = uuid.uuid4().hex
+    stored["local_tx_event_id"] = event_id
+
+    metadata = dict(stored.get("local_tx_metadata") or {})
+    metadata["origin"] = LOCAL_TX_ORIGIN
+    metadata["local_generated"] = True
+    metadata["own_station"] = True
+    metadata["frame_purpose"] = str(metadata.get("frame_purpose") or purpose).strip() or purpose
+    stored["local_tx_metadata"] = metadata
+    return stored
 
 
 def enqueue_beacon_job(
@@ -490,6 +520,7 @@ def enqueue_wx_job(payload: dict[str, Any]) -> tuple[bool, str]:
         "trigger": str(payload.get("trigger") or "scheduled").strip() or "scheduled",
         "generated_at": str(payload.get("generated_at") or utc_now()).strip(),
     }
+    base_payload = _with_local_tx_metadata(kind=OUTBOUND_KIND_WX, payload=base_payload)
     now_text = utc_now()
     job_ids: list[int] = []
     with get_connection() as connection:

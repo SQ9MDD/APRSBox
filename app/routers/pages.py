@@ -312,6 +312,7 @@ def _digi_flow_editor_context(
         form_data=form_data,
         type_meta=get_digi_flow_type_meta(),
         endpoint_options=get_digi_flow_endpoint_options(
+            selected_source_selector=str(form_data.get("source_selector") or "").strip() or None,
             selected_target_selector=str(form_data.get("target_selector") or "").strip() or None,
             current_flow_id=flow_id,
         ),
