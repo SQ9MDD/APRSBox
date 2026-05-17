@@ -14,7 +14,11 @@ from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
     EVENT_LOG_DEBUG_ENABLED_SETTING_KEY,
     EVENT_LOG_MIN_LEVEL_SETTING_KEY,
+    RUNTIME_MAINTENANCE_RESET_TABLES,
+    VACUUM_RECOMMEND_FREE_BYTES_MIN,
+    VACUUM_RECOMMEND_FREE_RATIO_MIN,
     create_system_job,
+    database_maintenance_snapshot,
     event_log_levels_at_or_above,
     fetch_one,
     fetch_system_job,
@@ -25,6 +29,7 @@ from app.db import (
     mark_system_job_error,
     mark_system_job_running,
     normalize_event_log_level,
+    reset_runtime_operational_data,
     set_app_setting,
     vacuum_database,
 )
@@ -173,10 +178,40 @@ _CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
 _CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
 EVENT_LOG_MIN_LEVEL_OPTIONS: tuple[str, ...] = ("INFO", "WARNING", "ERROR")
 EVENT_LOG_VIEW_LEVEL_OPTIONS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
+DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
+    "event_logs": "Event logs",
+    "traffic_frames": "Traffic frames",
+    "digi_flow_event_log": "DIGI flow event log",
+    "traffic_device_station_device_hourly": "Traffic devices hourly stats",
+    "radio_activity_5m": "Radio activity buckets",
+    "aprsis_uplink_minute_stats": "APRS-IS uplink minute stats",
+    "aprsis_uplink_stats": "APRS-IS uplink counters",
+    "wx_runtime_cache": "WX runtime cache",
+    "band_condition_audibility_buckets": "Band condition audibility buckets",
+    "band_condition_activity_station_buckets": "Band condition station buckets",
+    "band_condition_activity_buckets": "Band condition activity buckets",
+}
 
 
 def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+def _format_size_bytes(size_bytes: int) -> str:
+    value = float(max(0, int(size_bytes)))
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.2f} {unit}"
+        value /= 1024
+    return "0 B"
+
+
+def _format_ratio_percent(ratio: float) -> str:
+    normalized = max(0.0, float(ratio))
+    return f"{normalized * 100:.1f}%"
 
 
 def _section_template_context(
@@ -546,6 +581,31 @@ def _settings_page_context(
 ) -> dict:
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
+    db_maintenance_snapshot = database_maintenance_snapshot()
+    tracked_row_counts = dict(db_maintenance_snapshot.get("tracked_row_counts") or {})
+    reset_targets: list[dict[str, Any]] = []
+    for table_name in RUNTIME_MAINTENANCE_RESET_TABLES:
+        if table_name not in tracked_row_counts:
+            continue
+        reset_targets.append(
+            {
+                "table_name": table_name,
+                "label": DATABASE_MAINTENANCE_TABLE_LABELS.get(table_name, table_name),
+                "row_count": int(tracked_row_counts.get(table_name) or 0),
+            }
+        )
+    reset_total_rows = sum(int(row.get("row_count") or 0) for row in reset_targets)
+    db_quick_check = str(db_maintenance_snapshot.get("quick_check") or "unknown").strip()
+    db_quick_check_ok = db_quick_check.lower() == "ok"
+    db_vacuum_recommended = bool(db_maintenance_snapshot.get("vacuum_recommended"))
+    if not db_quick_check_ok:
+        db_vacuum_recommendation = "Integrity check returned issues. Investigate before maintenance operations."
+    elif db_vacuum_recommended and database_vacuum_blocked:
+        db_vacuum_recommendation = "Recommended now based on reclaimable space, but blocked while any TNC is enabled."
+    elif db_vacuum_recommended:
+        db_vacuum_recommendation = "Recommended now based on reclaimable space."
+    else:
+        db_vacuum_recommendation = "Not required now; reclaimable space is below the recommendation threshold."
     map_sources = list_map_sources()
     map_source_edit = get_map_source(map_source_edit_id) if map_source_edit_id is not None else None
     resolved_map_source_form = (
@@ -590,6 +650,26 @@ def _settings_page_context(
         event_log_debug_enabled=event_log_debug_enabled,
         event_log_min_level_options=[{"value": value, "label": value} for value in EVENT_LOG_MIN_LEVEL_OPTIONS],
         database_vacuum_blocked=database_vacuum_blocked,
+        database_maintenance_snapshot=db_maintenance_snapshot,
+        database_path=str(db_maintenance_snapshot.get("database_path") or ""),
+        database_exists=bool(db_maintenance_snapshot.get("database_exists")),
+        database_file_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("database_file_bytes") or 0)),
+        database_wal_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("wal_file_bytes") or 0)),
+        database_shm_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("shm_file_bytes") or 0)),
+        database_allocated_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("allocated_bytes") or 0)),
+        database_reclaimable_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("reclaimable_bytes") or 0)),
+        database_reclaimable_ratio_label=_format_ratio_percent(float(db_maintenance_snapshot.get("reclaimable_ratio") or 0.0)),
+        database_page_size=int(db_maintenance_snapshot.get("page_size") or 0),
+        database_page_count=int(db_maintenance_snapshot.get("page_count") or 0),
+        database_freelist_count=int(db_maintenance_snapshot.get("freelist_count") or 0),
+        database_quick_check=db_quick_check,
+        database_quick_check_ok=db_quick_check_ok,
+        database_vacuum_recommended=db_vacuum_recommended,
+        database_vacuum_recommendation=db_vacuum_recommendation,
+        database_vacuum_threshold_size_label=_format_size_bytes(VACUUM_RECOMMEND_FREE_BYTES_MIN),
+        database_vacuum_threshold_ratio_label=_format_ratio_percent(VACUUM_RECOMMEND_FREE_RATIO_MIN),
+        database_reset_targets=reset_targets,
+        database_reset_total_rows=reset_total_rows,
         update_channel_selected=selected_update_channel,
         update_channel_stable=stable_update_channel,
         update_channel_is_unstable=selected_update_channel != stable_update_channel,
@@ -1123,6 +1203,29 @@ def settings_vacuum_db(
 
     vacuum_database()
     return JSONResponse({"ok": True, "message": _translate("Database vacuum completed.")})
+
+
+@router.post("/settings/reset-runtime-data")
+def settings_reset_runtime_data(
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    if has_enabled_modem_interface():
+        return JSONResponse(
+            {"ok": False, "error": _translate("Disable all TNC interfaces before clearing runtime logs and traffic history.")},
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    deleted_by_table = reset_runtime_operational_data()
+    deleted_total = sum(int(value) for value in deleted_by_table.values())
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _translate("Runtime logs and traffic history cleared."),
+            "details": {"deleted_total": deleted_total, "deleted_by_table": deleted_by_table},
+            "reload": True,
+        }
+    )
 
 
 @router.get("/settings/config/export")
