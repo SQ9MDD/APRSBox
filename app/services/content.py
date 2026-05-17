@@ -1410,6 +1410,8 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
                 "latitude": snapshot["latitude"],
                 "longitude": snapshot["longitude"],
+                "position_ambiguity_digits": snapshot.get("position_ambiguity_digits"),
+                "position_ambiguous": bool(snapshot.get("position_ambiguous")),
                 "distance_km": snapshot.get("distance_km"),
                 "aprs_device_short": snapshot["aprs_device_short"],
                 "detail_href": build_station_detail_href(snapshot["display_callsign"]),
@@ -1468,6 +1470,8 @@ def get_station_detail(
         "longitude": snapshot["longitude"],
         "latitude_float": latitude,
         "longitude_float": longitude,
+        "position_ambiguity_digits": snapshot.get("position_ambiguity_digits"),
+        "position_ambiguous": bool(snapshot.get("position_ambiguous")),
         "distance_km": snapshot.get("distance_km"),
         "messaging_capable": _messaging_capable(snapshot),
         "aprs_device": dict(snapshot["aprs_device"]) if snapshot.get("aprs_device") else None,
@@ -1748,6 +1752,10 @@ def _build_station_snapshots_from_rows(
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
             station["longitude"] = aprs_data["longitude"]
+        if station.get("position_ambiguity_digits") is None and aprs_data.get("position_ambiguity_digits") is not None:
+            station["position_ambiguity_digits"] = int(aprs_data["position_ambiguity_digits"])
+        if not station.get("position_ambiguous") and aprs_data.get("position_ambiguous"):
+            station["position_ambiguous"] = True
 
     return list(stations.values())[:limit]
 
@@ -1769,9 +1777,12 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
         "aprs_device",
         "aprs_device_short",
         "status_text",
+        "position_ambiguity_digits",
     ):
         if not merged.get(field) and secondary.get(field):
             merged[field] = secondary[field]
+    if not merged.get("position_ambiguous") and secondary.get("position_ambiguous"):
+        merged["position_ambiguous"] = True
     if (not merged.get("data_raw")) and secondary.get("data_raw"):
         merged["data_raw"] = dict(secondary["data_raw"])
     if latest is secondary:
@@ -1834,6 +1845,8 @@ def _new_station_snapshot(
         "data_raw": {},
         "latitude": "",
         "longitude": "",
+        "position_ambiguity_digits": None,
+        "position_ambiguous": False,
         "distance_km": None,
         "aprs_device": None,
         "aprs_device_short": "",
@@ -2374,7 +2387,7 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     if len(destination) != 6 or len(info) < 9:
         return None
 
-    latitude = _decode_mic_e_latitude(destination)
+    latitude, position_ambiguity_digits = _decode_mic_e_latitude(destination)
     longitude = _decode_mic_e_longitude(destination, info)
     if latitude is None or longitude is None:
         return None
@@ -2394,6 +2407,9 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
         "comment": comment,
     }
+    if position_ambiguity_digits > 0:
+        result["position_ambiguity_digits"] = position_ambiguity_digits
+        result["position_ambiguous"] = True
     mic_e_movement = _decode_mic_e_speed_course(info)
     if mic_e_movement:
         result["data"] = mic_e_movement
@@ -2401,18 +2417,34 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     return result
 
 
-def _decode_mic_e_latitude(destination: str) -> str | None:
+def _decode_mic_e_latitude(destination: str) -> tuple[str | None, int]:
     digits: list[int] = []
-    for char in destination:
-        digit = _decode_mic_e_dest_digit(char)
+    ambiguous_positions: list[int] = []
+    for index, char in enumerate(destination):
+        digit, is_ambiguity_space = _decode_mic_e_dest_digit(char)
         if digit is None:
-            return None
+            return None, 0
+        if is_ambiguity_space:
+            ambiguous_positions.append(index)
         digits.append(digit)
+
+    position_ambiguity_digits = 0
+    if ambiguous_positions:
+        first_ambiguous_index = ambiguous_positions[0]
+        expected_ambiguous_positions = list(range(first_ambiguous_index, len(destination)))
+        if ambiguous_positions != expected_ambiguous_positions:
+            return None, 0
+        position_ambiguity_digits = len(ambiguous_positions)
+        # APRS101 Mic-E allows ambiguity-space in destination bytes (e.g. L),
+        # so we decode the latitude as the midpoint of the ambiguous suffix.
+        digits[first_ambiguous_index] = 5
+        for index in range(first_ambiguous_index + 1, len(destination)):
+            digits[index] = 0
 
     latitude = (digits[0] * 10 + digits[1]) + ((digits[2] * 10 + digits[3]) + (digits[4] * 10 + digits[5]) / 100.0) / 60.0
     if not _mic_e_flag(destination[3]):
         latitude *= -1
-    return f"{latitude:.5f}"
+    return f"{latitude:.5f}", position_ambiguity_digits
 
 
 def _decode_mic_e_longitude(destination: str, info: str) -> str | None:
@@ -2460,14 +2492,16 @@ def _decode_mic_e_speed_course(info: str) -> dict[str, int] | None:
     }
 
 
-def _decode_mic_e_dest_digit(char: str) -> int | None:
+def _decode_mic_e_dest_digit(char: str) -> tuple[int | None, bool]:
     if "0" <= char <= "9":
-        return ord(char) - ord("0")
+        return ord(char) - ord("0"), False
     if "A" <= char <= "J":
-        return ord(char) - ord("A")
+        return ord(char) - ord("A"), False
     if "P" <= char <= "Y":
-        return ord(char) - ord("P")
-    return None
+        return ord(char) - ord("P"), False
+    if char in {"K", "L", "Z"}:
+        return 0, True
+    return None, False
 
 
 def _mic_e_flag(char: str) -> bool:

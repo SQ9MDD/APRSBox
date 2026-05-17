@@ -678,6 +678,8 @@ def get_map_station_payload() -> dict[str, Any]:
                 "activity_age_label": station.get("activity_age_label", "Last heard age"),
                 "latitude": latitude,
                 "longitude": longitude,
+                "position_ambiguity_digits": station.get("position_ambiguity_digits"),
+                "position_ambiguous": bool(station.get("position_ambiguous")),
                 "symbol_icon": station["symbol_icon"],
                 "symbol_table": station["symbol_table"],
                 "symbol_code": station["symbol_code"],

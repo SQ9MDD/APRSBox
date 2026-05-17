@@ -54,6 +54,25 @@ def insert_position_frame(line: str, *, created_at: str = "2026-01-01T00:00:00+0
 
 
 class StationDistanceTests(unittest.TestCase):
+    def test_mic_e_position_with_ambiguity_space_appears_in_station_list_and_map(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload())
+            insert_position_frame("SP0DN>UQUQ1L,WIDE1-1,WIDE2-1:`12Xl \x1cy/446.006MHz Dejw wilga. zapraszm do kontaktu i testow_%")
+
+            stations = heard_stations()
+            self.assertEqual(len(stations), 1)
+            self.assertEqual(stations[0]["display_callsign"], "SP0DN")
+            self.assertTrue(bool(stations[0]["latitude"]))
+            self.assertTrue(bool(stations[0]["longitude"]))
+            self.assertEqual(stations[0]["position_ambiguity_digits"], 1)
+            self.assertTrue(bool(stations[0]["position_ambiguous"]))
+
+            map_payload = get_map_station_payload()
+            self.assertEqual(len(map_payload["stations"]), 1)
+            self.assertEqual(map_payload["stations"][0]["display_callsign"], "SP0DN")
+            self.assertEqual(map_payload["stations"][0]["position_ambiguity_digits"], 1)
+            self.assertTrue(bool(map_payload["stations"][0]["position_ambiguous"]))
+
     def test_distance_is_exposed_in_station_list_detail_and_map_payload(self) -> None:
         with temporary_database():
             update_station_settings(station_payload())
