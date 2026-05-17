@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.16.dev - 17.05.2026
+
+### Najważniejsze zmiany
+- `APRS parser / Mic-E`: naprawiono dekodowanie `destination` z dozwolonym `ambiguity-space` (`K/L/Z`) zgodnie z regułami Mic-E, dzięki czemu poprawne ramki (np. `UQUQ1L`) nie są już odrzucane.
+- `APRS parser / Mic-E`: dodano metadane pozycji przybliżonej (`position_ambiguity_digits`, `position_ambiguous`) oraz wyznaczanie współrzędnych jako reprezentacji pozycji nieprecyzyjnej zamiast fałszywej pełnej precyzji.
+- `Stations/Map payload`: przekazano informacje o ambiguity do snapshotów stacji i payloadu mapy bez zmian w istniejącym renderowaniu warstw/markerów.
+- `Testy`: dodano regresje dla poprawnej ramki Mic-E z ambiguity (`UQUQ1L`) oraz przypadek negatywny z niedozwolonym znakiem; utrzymano zielone testy parsera APRS i snapshot/map.
+
 ## 1.8.13.dev - 15.05.2026
 
 ### Najważniejsze zmiany
