@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.17.dev - 17.05.2026
+
+### Najważniejsze zmiany
+- `Routing / źródła`: dodano nowe logiczne źródło `Local TX`, które obejmuje wyłącznie ramki wygenerowane lokalnie przez APRSBox (beacon/status/WX/object/item/bulletin/message), bez mapowania na fizyczny `TNC TX`.
+- `Routing / bezpieczeństwo`: dla `Local TX` dozwolone są tylko targety `APRS-IS uplink` i `Black Hole`; backend odrzuca konfiguracje `Local TX -> RF/TNC` i inne niedozwolone kombinacje.
+- `APRS-IS strict filter`: dla `Local TX -> APRS-IS` utrzymano obowiązkowy strict filter (bez dublowania logiki), rozszerzony o twardy wymóg metadanych `origin=local_generated` + `local_generated=true` oraz blokadę ramek `third-party` i `q constructs`.
+- `Outbound/runtime`: lokalnie generowane ramki otrzymują spójne metadane źródła (`local_generated`) i trafiają do istniejącego pipeline routingu, dzięki czemu uplink APRS-IS działa wyłącznie przez reguły flow (bez bocznego mechanizmu).
+- `UI + I18N + testy`: edytor reguł pokazuje `Local TX` z opisem i zawęża listę targetów; dodano tłumaczenia `PL/EN` oraz testy walidacji i testy runtime dla scenariuszy `Local TX`.
+
 ## 1.8.16.dev - 17.05.2026
 
 ### Najważniejsze zmiany
