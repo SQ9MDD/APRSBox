@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.18.dev - 17.05.2026
+
+### Najważniejsze zmiany
+- `Settings -> Database maintenance`: rozszerzono panel o diagnostykę kondycji SQLite (`DB/WAL/SHM size`, `page_count`, `freelist_count`, `quick_check`) oraz czytelną rekomendację, czy `VACUUM` jest potrzebny.
+- `VACUUM / bezpieczeństwo`: rekomendacja `VACUUM` opiera się na odzyskiwalnej przestrzeni (próg rozmiaru + udział wolnych stron), a uruchomienie pozostaje blokowane, gdy jakikolwiek interfejs `TNC` jest aktywny.
+- `Runtime maintenance`: dodano bezpieczną akcję `Reset runtime logs/data`, która czyści wyłącznie tabele operacyjne (logi/ramki/statystyki runtime) bez modyfikacji tabel konfiguracyjnych (`TNC`, `DIGI flows`, ustawienia stacji/WX, users itp.).
+- `I18N (PL)`: uzupełniono tłumaczenia sekcji konserwacji bazy dla nowych etykiet, opisów, rekomendacji i komunikatów akcji, eliminując mieszanie języka polskiego i angielskiego w GUI.
+- `Testy`: dodano/rozszerzono testy regresyjne dla snapshotu maintenance DB, bezpiecznego resetu runtime oraz nowych akcji/endpointów w `Settings`.
+
 ## 1.8.17.dev - 17.05.2026
 
 ### Najważniejsze zmiany
