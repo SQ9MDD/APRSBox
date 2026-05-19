@@ -975,6 +975,7 @@
   "Vendor": "chovmI'",
   "Valid until (UTC)": "QapmeH poH (UTC)",
   "Valid until date must use YYYY-MM-DD format.": "QapmeH poH, YYYY-MM-DD botlh lo'nIS.",
+  "Valid until date must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.": "QapmeH poH, YYYY-MM-DD pagh YYYY-MM-DD HH:MM botlh lo'nIS.",
   "Verify": "Verify",
   "Verify TLS certificate": "Verify TLS certificate",
   "Version": "mI'",

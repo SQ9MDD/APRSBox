@@ -405,6 +405,7 @@
   "Vendor": "Producent",
   "Valid until (UTC)": "Ważne do (UTC)",
   "Valid until date must use YYYY-MM-DD format.": "Data ważności musi mieć format YYYY-MM-DD.",
+  "Valid until date must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.": "Data ważności musi mieć format YYYY-MM-DD lub YYYY-MM-DD HH:MM.",
   "Version": "Wersja",
   "Viewer": "Podgląd",
   "Yes": "Tak",

@@ -269,12 +269,27 @@
                     </select>
                     {% elif field.type == 'date' %}
                     <span>{{ t(field.label) }}</span>
+                    {% set raw_date_value = edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') %}
+                    {% set input_date_value = raw_date_value|string %}
+                    {% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}
+                    {% if input_date_value %}
+                    {% if input_date_value|length == 10 %}
+                    {% set input_date_value = input_date_value ~ 'T23:59' %}
+                    {% elif ' ' in input_date_value and 'T' not in input_date_value %}
+                    {% set input_date_value = input_date_value.replace(' ', 'T') %}
+                    {% endif %}
+                    {% if input_date_value|length > 16 %}
+                    {% set input_date_value = input_date_value[:16] %}
+                    {% endif %}
+                    {% endif %}
+                    {% endif %}
                     <div class="field-inline-actions">
                         <input
-                            type="date"
+                            type="{% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}datetime-local{% else %}date{% endif %}"
                             id="{{ section.slug }}-{{ field.name }}"
                             name="{{ field.name }}"
-                            value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
+                            value="{{ input_date_value if input_date_value else '' }}"
+                            {% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}step="60"{% endif %}
                             {% if field.required %}required{% endif %}
                         >
                         <button type="button" class="button button-secondary button-inline-control" data-clear-date-target="{{ section.slug }}-{{ field.name }}">

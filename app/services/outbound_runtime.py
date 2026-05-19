@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.db import execute, fetch_one, log_event, utc_now
@@ -550,18 +550,25 @@ def _normalize_payload_id(value: Any) -> int | None:
         return None
 
 
-def _parse_utc_date(value: str | None) -> date | None:
+def _parse_utc_date(value: str | None) -> datetime | None:
     text = str(value or "").strip()
     if not text:
         return None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
     try:
-        return datetime.strptime(text, "%Y-%m-%d").date()
+        parsed_date = datetime.strptime(text, "%Y-%m-%d")
     except ValueError:
         return None
+    # Backward compatibility with legacy date-only records: valid through end of that UTC day.
+    return parsed_date.replace(tzinfo=timezone.utc) + timedelta(days=1)
 
 
 def _is_expired_utc_date(value: str | None, now: datetime) -> bool:
     valid_until = _parse_utc_date(value)
     if valid_until is None:
         return False
-    return now.date() > valid_until
+    return now >= valid_until

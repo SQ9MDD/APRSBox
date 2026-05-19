@@ -3585,10 +3585,16 @@ def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:
     text = str(value or "").strip()
     if not text:
         return None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            return parsed.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
     try:
         parsed = datetime.strptime(text, "%Y-%m-%d")
     except ValueError as exc:
-        raise ValueError(f"{label} must use YYYY-MM-DD format.") from exc
+        raise ValueError(f"{label} must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.") from exc
     return parsed.strftime("%Y-%m-%d")
 
 

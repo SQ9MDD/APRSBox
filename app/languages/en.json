@@ -405,6 +405,7 @@
   "Vendor": "Vendor",
   "Valid until (UTC)": "Valid until (UTC)",
   "Valid until date must use YYYY-MM-DD format.": "Valid until date must use YYYY-MM-DD format.",
+  "Valid until date must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.": "Valid until date must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.",
   "Version": "Version",
   "Viewer": "Viewer",
   "Yes": "Yes",

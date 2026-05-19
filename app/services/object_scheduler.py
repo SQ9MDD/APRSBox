@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.db import execute, fetch_all, get_app_setting, log_event, set_app_setting, utc_now
 from app.services.content import get_station_settings, station_has_tx_target
@@ -99,21 +99,28 @@ def _parse_timestamp(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _parse_utc_date(value: str | None) -> date | None:
+def _parse_utc_date(value: str | None) -> datetime | None:
     text = str(value or "").strip()
     if not text:
         return None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
     try:
-        return datetime.strptime(text, "%Y-%m-%d").date()
+        parsed_date = datetime.strptime(text, "%Y-%m-%d")
     except ValueError:
         return None
+    # Backward compatibility with legacy date-only records: valid through end of that UTC day.
+    return parsed_date.replace(tzinfo=timezone.utc) + timedelta(days=1)
 
 
 def _is_expired_utc_date(value: str | None, now: datetime) -> bool:
     parsed = _parse_utc_date(value)
     if parsed is None:
         return False
-    return now.date() > parsed
+    return now >= parsed
 
 
 def _disable_expired_object(object_id: int, valid_until_utc: str) -> None:
