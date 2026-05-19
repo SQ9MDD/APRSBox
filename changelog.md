@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.19.dev - 19.05.2026
+
+### Najważniejsze zmiany
+- `Objects / Bulletins`: pole `Ważne do (UTC)` obsługuje teraz datę i godzinę (`HH:MM`) w formularzu (`datetime-local`), zamiast samej daty.
+- `Walidacja`: backend akceptuje formaty `YYYY-MM-DD` oraz `YYYY-MM-DD HH:MM` (także `YYYY-MM-DDTHH:MM` z formularza) i normalizuje zapis.
+- `Wygaszanie`: schedulery i runtime wygaszają aktywność obiektu/biuletynu z dokładnością do minuty UTC; dla starych rekordów z samą datą zachowano kompatybilność (ważność do końca dnia UTC).
+- `Testy`: zaktualizowano testy sekcji i flow outbound dla scenariuszy `valid_until_utc` z godziną.
+
 ## 1.8.18.dev - 17.05.2026
 
 ### Najważniejsze zmiany
