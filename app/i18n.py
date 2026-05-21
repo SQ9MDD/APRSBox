@@ -12,6 +12,7 @@ DEFAULT_LANGUAGE = "en"
 SUPPORTED_LANGUAGES: tuple[dict[str, str], ...] = (
     {"code": "en", "label": "English"},
     {"code": "pl", "label": "Polski"},
+    {"code": "es", "label": "Español"},
     {"code": "tlh", "label": "tlhIngan Hol"},
 )
 SUPPORTED_LANGUAGE_CODES = frozenset(item["code"] for item in SUPPORTED_LANGUAGES)

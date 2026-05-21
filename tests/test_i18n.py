@@ -54,6 +54,7 @@ class I18nTests(unittest.TestCase):
             [
                 {"code": "en", "label": "English"},
                 {"code": "pl", "label": "Polski"},
+                {"code": "es", "label": "Español"},
                 {"code": "tlh", "label": "tlhIngan Hol"},
             ],
         )
@@ -62,6 +63,11 @@ class I18nTests(unittest.TestCase):
         english_catalog = json.loads((LANGUAGES_DIR / "en.json").read_text(encoding="utf-8"))
         klingon_catalog = json.loads((LANGUAGES_DIR / "tlh.json").read_text(encoding="utf-8"))
         self.assertEqual(set(klingon_catalog), set(english_catalog))
+
+    def test_spanish_catalog_matches_english_keys(self) -> None:
+        english_catalog = json.loads((LANGUAGES_DIR / "en.json").read_text(encoding="utf-8"))
+        spanish_catalog = json.loads((LANGUAGES_DIR / "es.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(spanish_catalog), set(english_catalog))
 
 
 if __name__ == "__main__":
