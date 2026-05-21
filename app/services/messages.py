@@ -8,6 +8,7 @@ from typing import Any
 from app import get_version
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.i18n import get_app_language, get_translator
+from app.services.content import get_visible_station_snapshots
 from app.services.outbound import (
     _format_aprs_latitude,
     _format_aprs_longitude,
@@ -19,6 +20,7 @@ from app.services.outbound import (
     enqueue_status_job,
     mark_outbound_job_cancelled,
 )
+from app.services.radio_activity import TRAFFIC_STATISTICS_RANGE_24H, get_traffic_direct_heard_statistics
 
 MESSAGE_DIRECTION_RX = "rx"
 MESSAGE_DIRECTION_TX = "tx"
@@ -41,11 +43,12 @@ HEARD_FRESH_SECONDS = 10 * 60
 HEARD_WARN_SECONDS = 30 * 60
 QUERY_RESPONSE_DELAY_SECONDS = 5
 INCOMING_UNNUMBERED_DUPLICATE_WINDOW_SECONDS = 30
+OUTGOING_BURST_DUPLICATE_WINDOW_SECONDS = 5
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
 _MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
-SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSV", "?VER")
+SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSD", "?DX", "?APRSV", "?VER")
 APRS_SERVICE_DESTINATIONS = (
     "ANSRVR",
     "AVRS",
@@ -196,12 +199,22 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     normalized_callsign = normalize_aprs_destination_callsign(callsign)
     normalized_text = normalize_aprs_message_text(message_text)
     normalized_path = normalize_aprs_path(path)
-    message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
-    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND else None
     timestamp = utc_now()
     local_sender = _local_station_identity()
     if not local_sender:
         raise ValueError(_t("Local station callsign is required."))
+    duplicate = _find_recent_outgoing_message_duplicate(
+        sender=local_sender,
+        addressee=normalized_callsign,
+        message_text=normalized_text,
+        path=normalized_path,
+        timestamp=timestamp,
+    )
+    if duplicate is not None:
+        log_event("INFO", "messages", f"Ignored duplicate outbound APRS send burst to {normalized_callsign}")
+        return duplicate
+    message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
+    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND else None
     conversation = create_or_update_conversation(normalized_callsign, path=normalized_path)
     update_conversation_path(int(conversation["id"]), normalized_path)
 
@@ -432,6 +445,24 @@ def register_outbound_job_link(message_id: int, job_id: int) -> None:
         )
 
 
+def _count_message_transmission_rounds(message_id: int) -> int:
+    row = fetch_one(
+        """
+        SELECT COUNT(DISTINCT scheduled_at) AS round_count
+        FROM outbound_jobs
+        WHERE aprs_message_id = ?
+          AND status IN ('processing', 'sent')
+        """,
+        (message_id,),
+    )
+    if row is None:
+        return 0
+    try:
+        return max(0, int(row["round_count"] or 0))
+    except (TypeError, ValueError, KeyError):
+        return 0
+
+
 def _register_outbound_message_transmission(message_id: int, job_id: int, *, allow_retry: bool) -> None:
     message = get_message(message_id)
     if message is None:
@@ -440,7 +471,10 @@ def _register_outbound_message_transmission(message_id: int, job_id: int, *, all
     if current_status not in {MESSAGE_STATUS_QUEUED, MESSAGE_STATUS_SENT}:
         return
     now = utc_now()
-    next_attempt = int(message.get("tx_attempt_count") or 0) + 1
+    next_attempt = max(
+        int(message.get("tx_attempt_count") or 0),
+        _count_message_transmission_rounds(message_id),
+    )
     with get_connection() as connection:
         connection.execute(
             """
@@ -464,8 +498,9 @@ def _register_outbound_message_transmission(message_id: int, job_id: int, *, all
             """,
             (now, int(message["conversation_id"])),
         )
-    if allow_retry and next_attempt < MAX_TX_ATTEMPTS:
-        schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[next_attempt - 1])
+    delay_index = next_attempt - 1
+    if allow_retry and next_attempt < MAX_TX_ATTEMPTS and 0 <= delay_index < len(RETRY_DELAYS_SECONDS):
+        schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[delay_index])
 
 
 def register_direct_message_transmission(message_id: int, job_id: int) -> None:
@@ -529,7 +564,11 @@ def retry_failed_message(message_id: int) -> dict[str, Any]:
     if refreshed is None:
         raise ValueError(_t("Message could not be reloaded."))
     station_settings = _get_station_settings()
-    success, error = enqueue_direct_message_job(refreshed, station_settings, trigger="manual-retry")
+    refreshed_text = str(refreshed.get("message_text") or "").strip()
+    if refreshed_text.startswith("?"):
+        success, error = enqueue_query_message_job(refreshed, station_settings, trigger="manual-retry")
+    else:
+        success, error = enqueue_direct_message_job(refreshed, station_settings, trigger="manual-retry")
     if not success:
         mark_message_failed(message_id, error or "Failed to queue manual retry.")
         raise ValueError(error or _t("Failed to queue manual retry."))
@@ -756,6 +795,26 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
         )
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSS from {sender}: {error or 'status unavailable'}")
+        return
+    if query_type == "?APRSD":
+        enqueue_automatic_query_text_response(
+            sender=sender,
+            station_settings=station_settings,
+            message_text=_build_query_direct_stations_text(),
+            trigger="query-aprsd",
+            scheduled_for=scheduled_for,
+            timestamp=timestamp,
+        )
+        return
+    if query_type == "?DX":
+        enqueue_automatic_query_text_response(
+            sender=sender,
+            station_settings=station_settings,
+            message_text=_build_query_dx_text(),
+            trigger="query-dx",
+            scheduled_for=scheduled_for,
+            timestamp=timestamp,
+        )
         return
     if query_type in {"?APRSV", "?VER"}:
         enqueue_automatic_query_text_response(
@@ -1237,6 +1296,59 @@ def _has_recent_duplicate_ack(*, sender: str, query_number: str, window_seconds:
     return row is not None
 
 
+def _find_recent_outgoing_message_duplicate(
+    *,
+    sender: str,
+    addressee: str,
+    message_text: str,
+    path: str,
+    timestamp: str,
+    window_seconds: int = OUTGOING_BURST_DUPLICATE_WINDOW_SECONDS,
+) -> dict[str, Any] | None:
+    normalized_sender = str(sender or "").strip().upper()
+    normalized_addressee = str(addressee or "").strip().upper()
+    normalized_text = str(message_text or "")
+    normalized_path = normalize_aprs_path(path)
+    if not normalized_sender or not normalized_addressee or not normalized_text:
+        return None
+    reference_timestamp = _parse_iso_timestamp_utc(timestamp) or datetime.now(timezone.utc)
+    window_seconds = max(1, int(window_seconds))
+    window_start = (reference_timestamp - timedelta(seconds=window_seconds)).replace(microsecond=0).isoformat()
+    window_end = reference_timestamp.replace(microsecond=0).isoformat()
+    row = fetch_one(
+        """
+        SELECT id
+        FROM aprs_messages
+        WHERE direction = ?
+          AND sender = ?
+          AND addressee = ?
+          AND message_text = ?
+          AND path = ?
+          AND status IN (?, ?, ?, ?)
+          AND created_at >= ?
+          AND created_at <= ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (
+            MESSAGE_DIRECTION_TX,
+            normalized_sender,
+            normalized_addressee,
+            normalized_text,
+            normalized_path,
+            MESSAGE_STATUS_QUEUED,
+            MESSAGE_STATUS_SENT,
+            MESSAGE_STATUS_ACKED,
+            MESSAGE_STATUS_REJECTED,
+            window_start,
+            window_end,
+        ),
+    )
+    if row is None:
+        return None
+    return get_message(int(row["id"]))
+
+
 def _has_recent_unnumbered_incoming_message_duplicate(
     *,
     sender: str,
@@ -1294,6 +1406,113 @@ def _build_query_position_text(station_settings: dict[str, Any]) -> str:
 
 def _build_query_status_text(station_settings: dict[str, Any]) -> str:
     return f">{str(station_settings.get('status_text') or '').strip()}"
+
+
+def _build_query_direct_stations_text() -> str:
+    direct_station_keys = _query_direct_station_keys(limit=500)
+    if not direct_station_keys:
+        return "Directs= none"
+    return _build_query_callsign_list_message(prefix="Directs= ", callsigns=direct_station_keys, empty_fallback="Directs= none")
+
+
+def _build_query_dx_text() -> str:
+    distance_rows = _query_distance_station_rows(limit=500)
+    if not distance_rows:
+        return "DX: D none A none"
+    direct_keys = set(_query_direct_station_keys(limit=500))
+    farthest_direct = max((row for row in distance_rows if row["callsign"] in direct_keys), key=lambda row: row["distance_km"], default=None)
+    farthest_any = max(distance_rows, key=lambda row: row["distance_km"], default=None)
+    direct_part = _format_dx_part("D", farthest_direct)
+    any_part = _format_dx_part("A", farthest_any)
+    return f"DX: {direct_part} {any_part}"
+
+
+def _build_query_callsign_list_message(*, prefix: str, callsigns: list[str], empty_fallback: str) -> str:
+    if not callsigns:
+        return empty_fallback
+    normalized_prefix = str(prefix or "")
+    selected: list[str] = []
+    for callsign in callsigns:
+        candidate = f"{normalized_prefix}{' '.join([*selected, callsign])}"
+        if len(candidate) > MESSAGE_MAX_LENGTH:
+            break
+        selected.append(callsign)
+    if not selected:
+        return empty_fallback
+    message = f"{normalized_prefix}{' '.join(selected)}"
+    if len(selected) < len(callsigns):
+        ellipsis_candidate = f"{message} ..."
+        if len(ellipsis_candidate) <= MESSAGE_MAX_LENGTH:
+            return ellipsis_candidate
+    return message
+
+
+def _format_dx_part(label: str, row: dict[str, Any] | None) -> str:
+    normalized_label = str(label or "").strip().upper() or "?"
+    if row is None:
+        return f"{normalized_label} none"
+    callsign = str(row.get("callsign") or "").strip().upper()
+    distance = _format_distance_km_compact(row.get("distance_km"))
+    if not callsign or not distance:
+        return f"{normalized_label} none"
+    return f"{normalized_label} {callsign} {distance}km"
+
+
+def _format_distance_km_compact(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return ""
+    return f"{numeric:.1f}".rstrip("0").rstrip(".")
+
+
+def _query_direct_station_keys(*, limit: int) -> list[str]:
+    normalized_limit = max(1, int(limit or 0))
+    try:
+        payload = get_traffic_direct_heard_statistics(
+            range_value=TRAFFIC_STATISTICS_RANGE_24H,
+            top_limit=normalized_limit,
+        )
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load direct-heard statistics for APRSD query: {exc}")
+        return []
+    except Exception as exc:
+        _safe_messages_warning(f"Failed to build APRSD query response: {exc}")
+        return []
+    items = list(payload.get("items") or [])
+    callsigns: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        callsign = str(item.get("key") or "").strip().upper()
+        if not callsign or callsign in seen or _CALLSIGN_RE.fullmatch(callsign) is None:
+            continue
+        seen.add(callsign)
+        callsigns.append(callsign)
+    return callsigns
+
+
+def _query_distance_station_rows(*, limit: int) -> list[dict[str, Any]]:
+    normalized_limit = max(1, int(limit or 0))
+    try:
+        snapshots = get_visible_station_snapshots(limit=normalized_limit)
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load station snapshots for ?DX query: {exc}")
+        return []
+    except Exception as exc:
+        _safe_messages_warning(f"Failed to build ?DX station snapshot list: {exc}")
+        return []
+    rows: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        callsign = str(snapshot.get("display_callsign") or "").strip().upper()
+        if not callsign or _CALLSIGN_RE.fullmatch(callsign) is None:
+            continue
+        distance_raw = snapshot.get("distance_km")
+        try:
+            distance_km = float(distance_raw)
+        except (TypeError, ValueError):
+            continue
+        rows.append({"callsign": callsign, "distance_km": distance_km})
+    return rows
 
 
 def _query_response_scheduled_for(query_number: str | None) -> datetime | None:

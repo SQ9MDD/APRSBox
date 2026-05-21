@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from app.db import log_event, utc_now
+from app.db import fetch_one, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.aprsis import (
     APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY,
@@ -21,12 +21,29 @@ from app.services.aprsis import (
     record_aprsis_tx_result,
 )
 from app.services.content import get_station_settings, parse_tnc2_frame
-from app.services.digi_flows import list_enabled_digi_flows, log_digi_flow_event
+from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import enqueue_digi_tx_job
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
 _DUPLICATE_FILTER_WINDOW_DEFAULT_SEC = 5
 _DUPLICATE_FILTER_WINDOW_ALLOWED = {2, 3, 4, 5, 6, 7}
+DIGI_GUARD_LOCAL_MESSAGE_MY_STATION = "DIGI_GUARD_LOCAL_MESSAGE_MY_STATION"
+DIGI_GUARD_LOCAL_QUERY_MY_STATION = "DIGI_GUARD_LOCAL_QUERY_MY_STATION"
+DIGI_GUARD_LOCAL_MESSAGE_WX = "DIGI_GUARD_LOCAL_MESSAGE_WX"
+DIGI_GUARD_LOCAL_QUERY_WX = "DIGI_GUARD_LOCAL_QUERY_WX"
+DIGI_GUARD_THIRD_PARTY = "DIGI_GUARD_THIRD_PARTY"
+DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL = "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"
+_LOCAL_IDENTITY_MY = "my_station"
+_LOCAL_IDENTITY_WX = "wx_station"
+
+
+def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
+    if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+        return None
+    delta_ms = (float(end) - float(start)) * 1000.0
+    if delta_ms < 0:
+        return 0.0
+    return delta_ms
 
 
 def _t(message: object) -> str:
@@ -111,13 +128,19 @@ class DigiFlowRuntimeService:
         raw_payload: str,
         frame_uid: str | None = None,
         created_at: str | None = None,
+        rx_received_monotonic: float | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        enqueue_monotonic = time.monotonic()
         frame = self._build_frame(
             source_kind=source_kind,
             source_ref=source_ref,
             raw_payload=raw_payload,
             frame_uid=frame_uid,
             created_at=created_at,
+            enqueue_monotonic=enqueue_monotonic,
+            rx_received_monotonic=rx_received_monotonic,
+            metadata=metadata,
         )
         self._queue.put_nowait(frame)
         log_event(
@@ -136,7 +159,14 @@ class DigiFlowRuntimeService:
             "parsed": bool(frame["parsed"]),
         }
 
-    def enqueue_rx_tnc2_frame(self, line: str, *, source_ref: str) -> None:
+    def enqueue_rx_tnc2_frame(
+        self,
+        line: str,
+        *,
+        source_ref: str,
+        rx_received_at: str | None = None,
+        rx_received_monotonic: float | None = None,
+    ) -> None:
         matching_flows = self._matching_flows(source_kind="receiver_rf", source_ref=source_ref)
         if not matching_flows:
             log_event(
@@ -149,6 +179,8 @@ class DigiFlowRuntimeService:
             source_kind="receiver_rf",
             source_ref=source_ref,
             raw_payload=line,
+            created_at=rx_received_at,
+            rx_received_monotonic=rx_received_monotonic,
         )
 
     async def _run(self) -> None:
@@ -200,11 +232,14 @@ class DigiFlowRuntimeService:
                 "flow": flow,
                 "frame_uid": str(frame["frame_uid"]),
                 "created_at": str(frame["created_at"]),
+                "enqueue_monotonic": frame.get("enqueue_monotonic"),
+                "rx_received_monotonic": frame.get("rx_received_monotonic"),
                 "source_kind": str(frame["source_kind"]),
                 "source_ref": str(frame["source_ref"]),
                 "raw_payload": str(frame["raw_payload"]),
                 "current_line": str(frame["raw_payload"]),
                 "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
+                "metadata": dict(frame.get("metadata") or {}),
             }
             await self._execute_flow(context)
 
@@ -270,7 +305,7 @@ class DigiFlowRuntimeService:
 
     async def _execute_step(self, context: dict[str, Any], step: dict[str, Any], *, step_index: int) -> dict[str, str]:
         step_type = str(step["step_type"])
-        if step_type in {"receiver_rf", "receiver_aprsis"}:
+        if step_type in {"receiver_rf", "receiver_aprsis", LOCAL_TX_SOURCE_KIND}:
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=int(context["flow"]["id"]),
@@ -560,6 +595,75 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "drop"}
 
+        local_identities = _local_station_identities()
+        aprs_data = dict(parsed.get("aprs_data") or {})
+        packet_group = str(aprs_data.get("packet_group") or "").strip().casefold()
+        addressee = _canonical_callsign_identity(aprs_data.get("addressee"))
+        addressee_owner = local_identities.get(addressee) if addressee else None
+        info_field = str(parsed.get("info") or "")
+
+        if bool(parsed.get("is_third_party")) or info_field.startswith("}"):
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=_tf(
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS payload starts with third-party encapsulation marker {marker}.",
+                    {"reason_code": DIGI_GUARD_THIRD_PARTY, "marker": "}"},
+                ),
+            )
+            return {"decision": "drop"}
+
+        if packet_group == "message" and addressee_owner:
+            if addressee_owner == _LOCAL_IDENTITY_WX:
+                reason_code = DIGI_GUARD_LOCAL_MESSAGE_WX
+                identity_label = _t("WX station")
+            else:
+                reason_code = DIGI_GUARD_LOCAL_MESSAGE_MY_STATION
+                identity_label = _t("My station")
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=_tf(
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS message is addressed to local {identity_label} {local_identity}.",
+                    {
+                        "reason_code": reason_code,
+                        "identity_label": identity_label,
+                        "local_identity": addressee or "-",
+                    },
+                ),
+            )
+            return {"decision": "drop"}
+
+        if packet_group == "query" and addressee_owner:
+            if addressee_owner == _LOCAL_IDENTITY_WX:
+                reason_code = DIGI_GUARD_LOCAL_QUERY_WX
+                identity_label = _t("WX station")
+            else:
+                reason_code = DIGI_GUARD_LOCAL_QUERY_MY_STATION
+                identity_label = _t("My station")
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=_tf(
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS query is addressed to local {identity_label} {local_identity}.",
+                    {
+                        "reason_code": reason_code,
+                        "identity_label": identity_label,
+                        "local_identity": addressee or "-",
+                    },
+                ),
+            )
+            return {"decision": "drop"}
+
         input_path = str(parsed.get("path") or "").strip().upper()
         path_tokens = _split_path_tokens(input_path)
         if not path_tokens:
@@ -589,7 +693,9 @@ class DigiFlowRuntimeService:
             return {"decision": "drop"}
 
         local_identity = _local_station_identity()
-        if local_identity and _path_has_consumed_local_identity(path_tokens, local_identity):
+        consumed_local = _find_consumed_local_identity(path_tokens, local_identities)
+        if consumed_local is not None:
+            consumed_identity = consumed_local[0]
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
@@ -597,8 +703,12 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule rejected frame because local DIGI {local_identity} already appears as a consumed hop in path {path}.",
-                    {"local_identity": local_identity, "path": input_path or "-"},
+                    "Path rule and DIGI guard rejected frame ({reason_code}) because local identity {local_identity} is already marked as consumed in path {path}.",
+                    {
+                        "reason_code": DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL,
+                        "local_identity": consumed_identity,
+                        "path": input_path or "-",
+                    },
                 ),
             )
             return {"decision": "drop"}
@@ -688,6 +798,25 @@ class DigiFlowRuntimeService:
             if is_aprsis_target:
                 record_aprsis_strict_reject(
                     reason_key=APRSIS_STRICT_REASON_OTHER,
+                    frame_line=str(context.get("current_line") or ""),
+                    reason_message=message,
+                )
+            return {"decision": "drop"}
+
+        local_tx_reject = _local_tx_strict_reject_reason(context, parsed)
+        if local_tx_reject is not None:
+            message, reason_key = local_tx_reject
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="strict_filter",
+                decision="rejected",
+                message=message,
+            )
+            if is_aprsis_target:
+                record_aprsis_strict_reject(
+                    reason_key=reason_key,
                     frame_line=str(context.get("current_line") or ""),
                     reason_message=message,
                 )
@@ -1160,7 +1289,25 @@ class DigiFlowRuntimeService:
             record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
-        success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
+        now_monotonic = time.monotonic()
+        rx_to_igate_enqueue_ms = _monotonic_delta_ms(
+            context.get("rx_received_monotonic"),
+            context.get("enqueue_monotonic"),
+        )
+        igate_queue_wait_ms = _monotonic_delta_ms(
+            context.get("enqueue_monotonic"),
+            now_monotonic,
+        )
+        tx_telemetry = {
+            "frame_uid": str(context.get("frame_uid") or ""),
+            "rx_received_monotonic": context.get("rx_received_monotonic"),
+            "rx_to_igate_enqueue_ms": rx_to_igate_enqueue_ms,
+            "igate_queue_wait_ms": igate_queue_wait_ms,
+        }
+        if isinstance(self._aprsis_client, AprsisClientService):
+            success, detail = await self._aprsis_client.send_tnc2_line(tx_line, telemetry=tx_telemetry)
+        else:
+            success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
         decision = "tx" if success else "drop"
         message = detail or ("APRS-IS TX queued." if success else "APRS-IS TX failed.")
         log_digi_flow_event(
@@ -1204,6 +1351,9 @@ class DigiFlowRuntimeService:
         raw_payload: str,
         frame_uid: str | None,
         created_at: str | None,
+        enqueue_monotonic: float,
+        rx_received_monotonic: float | None,
+        metadata: dict[str, Any] | None,
     ) -> dict[str, Any]:
         timestamp = created_at or utc_now()
         line = str(raw_payload or "").rstrip("\r\n")
@@ -1213,19 +1363,27 @@ class DigiFlowRuntimeService:
             "source_ref": str(source_ref or "").strip(),
             "raw_payload": line,
             "parsed": parse_tnc2_frame(line) if line else None,
+            "metadata": _normalize_frame_metadata(metadata),
             "created_at": timestamp,
+            "enqueue_monotonic": enqueue_monotonic,
+            "rx_received_monotonic": rx_received_monotonic,
         }
+
+
+def _normalize_frame_metadata(metadata: Any) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        key_text = str(key).strip()
+        if not key_text:
+            continue
+        normalized[key_text] = value
+    return normalized
 
 
 def _split_path_tokens(path: str) -> list[str]:
     return [item.strip().upper() for item in path.split(",") if item.strip()]
-
-
-def _path_has_consumed_local_identity(path_tokens: list[str], local_identity: str) -> bool:
-    normalized_identity = str(local_identity or "").strip().upper()
-    if not normalized_identity:
-        return False
-    return any(token.rstrip("*") == normalized_identity and token.endswith("*") for token in path_tokens)
 
 
 def _receiver_source_ref_matches(flow_source_ref: str, runtime_source_ref: str) -> bool:
@@ -1287,6 +1445,14 @@ def _find_blocked_strict_path_token(path_tokens: list[str]) -> str | None:
     return None
 
 
+def _find_q_construct_path_token(path_tokens: list[str]) -> str | None:
+    for token in path_tokens:
+        normalized = token.strip().upper().rstrip("*")
+        if len(normalized) == 3 and normalized.startswith("Q") and normalized[1:].isalpha():
+            return normalized
+    return None
+
+
 def _find_blocked_strict_token(parsed: dict[str, Any]) -> dict[str, str] | None:
     outer_path = str(parsed.get("path") or "").strip().upper()
     outer_blocked = _find_blocked_strict_path_token(_split_path_tokens(outer_path))
@@ -1315,6 +1481,48 @@ def _strict_reject_reason_key(blocked_token: str | None) -> str:
     if normalized.startswith("TCPIP") or normalized.startswith("TCPXX"):
         return APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX
     return APRSIS_STRICT_REASON_OTHER
+
+
+def _local_tx_strict_reject_reason(context: dict[str, Any], parsed: dict[str, Any]) -> tuple[str, str] | None:
+    source_kind = str(context.get("source_kind") or "").strip()
+    if source_kind != LOCAL_TX_SOURCE_KIND:
+        return None
+
+    metadata = dict(context.get("metadata") or {})
+    origin = str(metadata.get("origin") or "").strip().lower()
+    local_generated = _metadata_flag(metadata.get("local_generated"))
+    if origin != "local_generated" or not local_generated:
+        return (
+            _t("Strict filter rejected Local TX frame because it is not marked as local-generated APRSBox traffic."),
+            APRSIS_STRICT_REASON_OTHER,
+        )
+
+    if bool(parsed.get("is_third_party")):
+        return (
+            _t("Strict filter rejected Local TX frame because third-party encapsulation is not allowed for APRS-IS uplink."),
+            APRSIS_STRICT_REASON_OTHER,
+        )
+
+    input_path = str(parsed.get("path") or "").strip().upper()
+    blocked_q = _find_q_construct_path_token(_split_path_tokens(input_path))
+    if blocked_q is not None:
+        return (
+            _tf(
+                "Strict filter rejected Local TX frame because path contains q construct token {blocked_token}. Input path: {input_path}",
+                {"blocked_token": blocked_q, "input_path": input_path or "-"},
+            ),
+            APRSIS_STRICT_REASON_OTHER,
+        )
+    return None
+
+
+def _metadata_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(int(value))
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
 
 
 def _callsign_matches_pattern(callsign: str, pattern: str) -> bool:
@@ -1410,11 +1618,73 @@ def _split_path_tokens_keep_case(path: str) -> list[str]:
 
 def _local_station_identity() -> str:
     station_settings = get_station_settings()
-    callsign = str(station_settings.get("callsign") or "").strip().upper()
-    if not callsign:
+    return _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
+
+
+def _local_station_identities() -> dict[str, str]:
+    station_settings = get_station_settings()
+    identities: dict[str, str] = {}
+    my_identity = _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
+    if my_identity:
+        identities[my_identity] = _LOCAL_IDENTITY_MY
+
+    wx_row = fetch_one("SELECT enabled, callsign, ssid FROM wx_config WHERE id = 1")
+    if not wx_row:
+        return identities
+
+    wx_enabled = int(wx_row["enabled"] or 0) == 1
+    raw_wx_callsign = str(wx_row["callsign"] or "").strip().upper()
+    raw_wx_ssid = str(wx_row["ssid"] or "").strip()
+    wx_has_explicit_identity = bool(raw_wx_callsign or raw_wx_ssid)
+    if not wx_enabled and not wx_has_explicit_identity:
+        return identities
+
+    wx_callsign = raw_wx_callsign or str(station_settings.get("callsign") or "").strip().upper()
+    wx_identity = _build_source_key(wx_callsign, raw_wx_ssid)
+    if wx_identity:
+        identities.setdefault(wx_identity, _LOCAL_IDENTITY_WX)
+    return identities
+
+
+def _find_consumed_local_identity(path_tokens: list[str], local_identities: dict[str, str]) -> tuple[str, str] | None:
+    if not local_identities:
+        return None
+    for token in path_tokens:
+        if not token.endswith("*"):
+            continue
+        consumed_hop = _canonical_callsign_identity(token.rstrip("*"))
+        if not consumed_hop:
+            continue
+        owner = local_identities.get(consumed_hop)
+        if owner:
+            return consumed_hop, owner
+    return None
+
+
+def _build_source_key(callsign: Any, ssid: Any) -> str:
+    callsign_text = str(callsign or "").strip().upper()
+    ssid_text = str(ssid or "").strip()
+    if ssid_text == "0":
+        ssid_text = ""
+    if not callsign_text:
         return ""
-    ssid = str(station_settings.get("ssid") or "").strip()
-    return f"{callsign}-{ssid}" if ssid else callsign
+    return f"{callsign_text}-{ssid_text}" if ssid_text else callsign_text
+
+
+def _canonical_callsign_identity(value: Any) -> str:
+    normalized = str(value or "").strip().upper()
+    if not normalized:
+        return ""
+    base, separator, suffix = normalized.partition("-")
+    base = base.strip().upper()
+    if not base:
+        return ""
+    if not separator:
+        return base
+    normalized_ssid = suffix.strip()
+    if normalized_ssid in {"", "0"}:
+        return base
+    return f"{base}-{normalized_ssid}"
 
 
 def _parse_coordinate(value: Any) -> float | None:

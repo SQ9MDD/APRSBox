@@ -14,8 +14,13 @@ from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
     EVENT_LOG_DEBUG_ENABLED_SETTING_KEY,
     EVENT_LOG_MIN_LEVEL_SETTING_KEY,
+    RUNTIME_MAINTENANCE_RESET_TABLES,
+    VACUUM_RECOMMEND_FREE_BYTES_MIN,
+    VACUUM_RECOMMEND_FREE_RATIO_MIN,
     create_system_job,
+    database_maintenance_snapshot,
     event_log_levels_at_or_above,
+    fetch_one,
     fetch_system_job,
     get_event_log_debug_enabled,
     get_event_log_min_level,
@@ -24,12 +29,21 @@ from app.db import (
     mark_system_job_error,
     mark_system_job_running,
     normalize_event_log_level,
+    reset_runtime_operational_data,
     set_app_setting,
     vacuum_database,
 )
 from app.i18n import get_app_language, get_translator, normalize_language, SUPPORTED_LANGUAGE_CODES
 from app.models import UserIdentity
 from app.sections import SECTION_DEFINITIONS
+from app.services.beacon_pathing import (
+    BEACON_INTERVAL_MODE_FIXED,
+    BEACON_INTERVAL_MODE_PROPORTIONAL,
+    build_proportional_schedule_lines,
+    classify_beacon_path,
+    evaluate_beacon_health,
+    normalize_beacon_interval_mode,
+)
 from app.services.content import (
     dashboard_home_data,
     delete_section_row,
@@ -55,6 +69,7 @@ from app.services.content import (
     safe_update_section_row,
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
+from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -105,6 +120,7 @@ from app.services.aprs_device_identification import (
 from app.services.core_client import restart_core_traffic_monitor
 from app.services.radio_activity import (
     get_dashboard_radio_activity,
+    get_traffic_direct_heard_statistics,
     get_traffic_devices_statistics,
     get_traffic_statistics,
     get_traffic_users_statistics,
@@ -162,10 +178,40 @@ _CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
 _CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
 EVENT_LOG_MIN_LEVEL_OPTIONS: tuple[str, ...] = ("INFO", "WARNING", "ERROR")
 EVENT_LOG_VIEW_LEVEL_OPTIONS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
+DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
+    "event_logs": "Event logs",
+    "traffic_frames": "Traffic frames",
+    "digi_flow_event_log": "DIGI flow event log",
+    "traffic_device_station_device_hourly": "Traffic devices hourly stats",
+    "radio_activity_5m": "Radio activity buckets",
+    "aprsis_uplink_minute_stats": "APRS-IS uplink minute stats",
+    "aprsis_uplink_stats": "APRS-IS uplink counters",
+    "wx_runtime_cache": "WX runtime cache",
+    "band_condition_audibility_buckets": "Band condition audibility buckets",
+    "band_condition_activity_station_buckets": "Band condition station buckets",
+    "band_condition_activity_buckets": "Band condition activity buckets",
+}
 
 
 def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+def _format_size_bytes(size_bytes: int) -> str:
+    value = float(max(0, int(size_bytes)))
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.2f} {unit}"
+        value /= 1024
+    return "0 B"
+
+
+def _format_ratio_percent(ratio: float) -> str:
+    normalized = max(0.0, float(ratio))
+    return f"{normalized * 100:.1f}%"
 
 
 def _section_template_context(
@@ -301,6 +347,7 @@ def _digi_flow_editor_context(
         form_data=form_data,
         type_meta=get_digi_flow_type_meta(),
         endpoint_options=get_digi_flow_endpoint_options(
+            selected_source_selector=str(form_data.get("source_selector") or "").strip() or None,
             selected_target_selector=str(form_data.get("target_selector") or "").strip() or None,
             current_flow_id=flow_id,
         ),
@@ -381,6 +428,10 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
             for code in range(33, 127)
         ],
         "beacon_interval_options": [{"value": value, "label": f"{value}m"} for value in (15, 30, 45, 60)],
+        "beacon_position_interval_options": (
+            [{"value": str(value), "label": f"{value}m"} for value in (15, 30, 45, 60)]
+            + [{"value": BEACON_INTERVAL_MODE_PROPORTIONAL, "label": "Proportional Path"}]
+        ),
     }
 
 
@@ -392,16 +443,44 @@ def _station_page_context(
     flash_success: bool = True,
     station: dict | None = None,
 ) -> dict:
+    resolved_station = dict(station or get_station_settings())
+    raw_interval_value = str(resolved_station.get("beacon_interval_minutes") or "").strip().lower()
+    interval_mode = normalize_beacon_interval_mode(
+        resolved_station.get("beacon_interval_mode"),
+        default=BEACON_INTERVAL_MODE_FIXED,
+    )
+    if raw_interval_value == BEACON_INTERVAL_MODE_PROPORTIONAL:
+        interval_mode = BEACON_INTERVAL_MODE_PROPORTIONAL
+    resolved_station["beacon_interval_mode"] = interval_mode
+
+    interval_minutes: int | None = None
+    try:
+        interval_minutes = int(str(resolved_station.get("beacon_interval_minutes") or "").strip())
+    except ValueError:
+        interval_minutes = None
+
+    beacon_health = evaluate_beacon_health(
+        beacon_interval_mode=interval_mode,
+        beacon_interval_minutes=interval_minutes,
+        beacon_path=str(resolved_station.get("beacon_path") or ""),
+    )
+    beacon_path_value = str(resolved_station.get("beacon_path") or "")
+    beacon_path_classification = classify_beacon_path(beacon_path_value)
+    beacon_schedule_lines = build_proportional_schedule_lines(beacon_path_value)
+
     return build_template_context(
         request,
         page_title="My Settings",
         current_user=current_user,
         active_nav="station",
-        station=station or get_station_settings(),
+        station=resolved_station,
         can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=flash_success,
         beacon_log_rows=recent_station_outbound_jobs(limit=20),
+        beacon_health=beacon_health,
+        beacon_proportional_schedule_lines=beacon_schedule_lines,
+        beacon_proportional_schedule_path=beacon_path_classification.get("normalized_path", ""),
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         **_station_form_options(),
     )
@@ -502,6 +581,31 @@ def _settings_page_context(
 ) -> dict:
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
+    db_maintenance_snapshot = database_maintenance_snapshot()
+    tracked_row_counts = dict(db_maintenance_snapshot.get("tracked_row_counts") or {})
+    reset_targets: list[dict[str, Any]] = []
+    for table_name in RUNTIME_MAINTENANCE_RESET_TABLES:
+        if table_name not in tracked_row_counts:
+            continue
+        reset_targets.append(
+            {
+                "table_name": table_name,
+                "label": DATABASE_MAINTENANCE_TABLE_LABELS.get(table_name, table_name),
+                "row_count": int(tracked_row_counts.get(table_name) or 0),
+            }
+        )
+    reset_total_rows = sum(int(row.get("row_count") or 0) for row in reset_targets)
+    db_quick_check = str(db_maintenance_snapshot.get("quick_check") or "unknown").strip()
+    db_quick_check_ok = db_quick_check.lower() == "ok"
+    db_vacuum_recommended = bool(db_maintenance_snapshot.get("vacuum_recommended"))
+    if not db_quick_check_ok:
+        db_vacuum_recommendation = "Integrity check returned issues. Investigate before maintenance operations."
+    elif db_vacuum_recommended and database_vacuum_blocked:
+        db_vacuum_recommendation = "Recommended now based on reclaimable space, but blocked while any TNC is enabled."
+    elif db_vacuum_recommended:
+        db_vacuum_recommendation = "Recommended now based on reclaimable space."
+    else:
+        db_vacuum_recommendation = "Not required now; reclaimable space is below the recommendation threshold."
     map_sources = list_map_sources()
     map_source_edit = get_map_source(map_source_edit_id) if map_source_edit_id is not None else None
     resolved_map_source_form = (
@@ -546,6 +650,26 @@ def _settings_page_context(
         event_log_debug_enabled=event_log_debug_enabled,
         event_log_min_level_options=[{"value": value, "label": value} for value in EVENT_LOG_MIN_LEVEL_OPTIONS],
         database_vacuum_blocked=database_vacuum_blocked,
+        database_maintenance_snapshot=db_maintenance_snapshot,
+        database_path=str(db_maintenance_snapshot.get("database_path") or ""),
+        database_exists=bool(db_maintenance_snapshot.get("database_exists")),
+        database_file_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("database_file_bytes") or 0)),
+        database_wal_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("wal_file_bytes") or 0)),
+        database_shm_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("shm_file_bytes") or 0)),
+        database_allocated_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("allocated_bytes") or 0)),
+        database_reclaimable_size_label=_format_size_bytes(int(db_maintenance_snapshot.get("reclaimable_bytes") or 0)),
+        database_reclaimable_ratio_label=_format_ratio_percent(float(db_maintenance_snapshot.get("reclaimable_ratio") or 0.0)),
+        database_page_size=int(db_maintenance_snapshot.get("page_size") or 0),
+        database_page_count=int(db_maintenance_snapshot.get("page_count") or 0),
+        database_freelist_count=int(db_maintenance_snapshot.get("freelist_count") or 0),
+        database_quick_check=db_quick_check,
+        database_quick_check_ok=db_quick_check_ok,
+        database_vacuum_recommended=db_vacuum_recommended,
+        database_vacuum_recommendation=db_vacuum_recommendation,
+        database_vacuum_threshold_size_label=_format_size_bytes(VACUUM_RECOMMEND_FREE_BYTES_MIN),
+        database_vacuum_threshold_ratio_label=_format_ratio_percent(VACUUM_RECOMMEND_FREE_RATIO_MIN),
+        database_reset_targets=reset_targets,
+        database_reset_total_rows=reset_total_rows,
         update_channel_selected=selected_update_channel,
         update_channel_stable=stable_update_channel,
         update_channel_is_unstable=selected_update_channel != stable_update_channel,
@@ -811,6 +935,7 @@ def modems_create(
     tx_blocked: str | None = Form(None),
     tx_min_gap_seconds: str = Form("0.35"),
     expose_port_enabled: str | None = Form(None),
+    expose_allow_tx: str | None = Form(None),
     expose_bind_address: str = Form("0.0.0.0"),
     expose_port: int | None = Form(8002),
     expose_whitelist: str = Form(""),
@@ -819,20 +944,29 @@ def modems_create(
     normalized_modem_type = modem_type.strip().upper()
     if normalized_modem_type == "SERIAL":
         normalized_modem_type = "SERIALL"
-    if normalized_modem_type not in {"SERIALL", "TCP"}:
+    if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE}:
         context = _section_template_context(request, current_user, "modems", flash="Unsupported TNC type.")
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    normalized_device_path = device_path.strip()
+    if record_id is not None and normalized_modem_type == OPENWEBRX_MQTT_MODEM_TYPE and "***" in normalized_device_path:
+        existing_row = fetch_one("SELECT modem_type, device_path FROM modems WHERE id = ?", (record_id,))
+        if existing_row is not None:
+            existing_type = str(existing_row["modem_type"] or "").strip().upper()
+            existing_path = str(existing_row["device_path"] or "").strip()
+            if existing_type == OPENWEBRX_MQTT_MODEM_TYPE and mask_mqtt_url(existing_path) == normalized_device_path:
+                normalized_device_path = existing_path
     payload = {
         "name": name.strip(),
         "band": band.strip().lower(),
         "modem_type": normalized_modem_type,
-        "device_path": device_path.strip(),
+        "device_path": normalized_device_path,
         "baud_rate": baud_rate,
         "serial_rx_silence_reconnect_seconds": serial_rx_silence_reconnect_seconds,
         "enabled": enabled,
         "tx_blocked": tx_blocked,
         "tx_min_gap_seconds": tx_min_gap_seconds,
         "expose_port_enabled": expose_port_enabled,
+        "expose_allow_tx": expose_allow_tx,
         "expose_bind_address": expose_bind_address.strip(),
         "expose_port": expose_port,
         "expose_whitelist": expose_whitelist,
@@ -1069,6 +1203,29 @@ def settings_vacuum_db(
 
     vacuum_database()
     return JSONResponse({"ok": True, "message": _translate("Database vacuum completed.")})
+
+
+@router.post("/settings/reset-runtime-data")
+def settings_reset_runtime_data(
+    _: Request,
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    if has_enabled_modem_interface():
+        return JSONResponse(
+            {"ok": False, "error": _translate("Disable all TNC interfaces before clearing runtime logs and traffic history.")},
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    deleted_by_table = reset_runtime_operational_data()
+    deleted_total = sum(int(value) for value in deleted_by_table.values())
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _translate("Runtime logs and traffic history cleared."),
+            "details": {"deleted_total": deleted_total, "deleted_by_table": deleted_by_table},
+            "reload": True,
+        }
+    )
 
 
 @router.get("/settings/config/export")
@@ -2203,6 +2360,8 @@ def station_update(
     beacon_interface_id: str = Form(""),
     beacon_comment: str = Form(""),
     beacon_interval_minutes: str = Form("30"),
+    beacon_interval_mode: str = Form(BEACON_INTERVAL_MODE_FIXED),
+    beacon_interval_minutes_fixed: str = Form("30"),
     beacon_path: str = Form(""),
     status_enabled: str | None = Form(None),
     status_text: str = Form(""),
@@ -2223,6 +2382,8 @@ def station_update(
         "beacon_interface_id": beacon_interface_id.strip(),
         "beacon_comment": beacon_comment.strip(),
         "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_interval_mode": beacon_interval_mode.strip().lower(),
+        "beacon_interval_minutes_fixed": beacon_interval_minutes_fixed.strip(),
         "beacon_path": beacon_path.strip(),
         "status_enabled": status_enabled,
         "status_text": status_text.strip(),
@@ -2252,6 +2413,8 @@ def station_send_beacon(
     beacon_interface_id: str = Form(""),
     beacon_comment: str = Form(""),
     beacon_interval_minutes: str = Form("30"),
+    beacon_interval_mode: str = Form(BEACON_INTERVAL_MODE_FIXED),
+    beacon_interval_minutes_fixed: str = Form("30"),
     beacon_path: str = Form(""),
     status_enabled: str | None = Form(None),
     status_text: str = Form(""),
@@ -2272,6 +2435,8 @@ def station_send_beacon(
         "beacon_interface_id": beacon_interface_id.strip(),
         "beacon_comment": beacon_comment.strip(),
         "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_interval_mode": beacon_interval_mode.strip().lower(),
+        "beacon_interval_minutes_fixed": beacon_interval_minutes_fixed.strip(),
         "beacon_path": beacon_path.strip(),
         "status_enabled": status_enabled,
         "status_text": status_text.strip(),
@@ -2303,6 +2468,8 @@ def station_send_status(
     beacon_interface_id: str = Form(""),
     beacon_comment: str = Form(""),
     beacon_interval_minutes: str = Form("30"),
+    beacon_interval_mode: str = Form(BEACON_INTERVAL_MODE_FIXED),
+    beacon_interval_minutes_fixed: str = Form("30"),
     beacon_path: str = Form(""),
     status_enabled: str | None = Form(None),
     status_text: str = Form(""),
@@ -2323,6 +2490,8 @@ def station_send_status(
         "beacon_interface_id": beacon_interface_id.strip(),
         "beacon_comment": beacon_comment.strip(),
         "beacon_interval_minutes": beacon_interval_minutes.strip(),
+        "beacon_interval_mode": beacon_interval_mode.strip().lower(),
+        "beacon_interval_minutes_fixed": beacon_interval_minutes_fixed.strip(),
         "beacon_path": beacon_path.strip(),
         "status_enabled": status_enabled,
         "status_text": status_text.strip(),
@@ -2415,6 +2584,7 @@ def statistics_page(
     statistics_payload = get_traffic_statistics(range_value="24h")
     statistics_devices_payload = get_traffic_devices_statistics(range_value="24h")
     statistics_users_payload = get_traffic_users_statistics(range_value="24h")
+    statistics_direct_heard_payload = get_traffic_direct_heard_statistics(range_value="24h")
     context = build_template_context(
         request,
         page_title="Statistics",
@@ -2423,6 +2593,7 @@ def statistics_page(
         statistics_payload=statistics_payload,
         statistics_devices_payload=statistics_devices_payload,
         statistics_users_payload=statistics_users_payload,
+        statistics_direct_heard_payload=statistics_direct_heard_payload,
     )
     return templates.TemplateResponse("statistics.html", context)
 
@@ -2589,6 +2760,19 @@ def statistics_users(
 ) -> JSONResponse:
     try:
         payload = get_traffic_users_statistics(range_value=range, shift_windows=shift)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/direct-heard")
+def statistics_direct_heard(
+    range: str = "24h",
+    shift: int = 0,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_traffic_direct_heard_statistics(range_value=range, shift_windows=shift)
     except ValueError as exc:
         return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)

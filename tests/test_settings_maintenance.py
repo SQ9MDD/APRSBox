@@ -60,6 +60,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("Disable all TNC interfaces before running database vacuum.", router_source)
         self.assertIn("status.HTTP_409_CONFLICT", router_source)
 
+    def test_settings_router_blocks_runtime_reset_when_any_tnc_is_enabled(self) -> None:
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        self.assertIn('@router.post("/settings/reset-runtime-data")', router_source)
+        self.assertIn("Disable all TNC interfaces before clearing runtime logs and traffic history.", router_source)
+        self.assertIn("Runtime logs and traffic history cleared.", router_source)
+        self.assertIn("reset_runtime_operational_data()", router_source)
+
     def test_settings_template_contains_configuration_backup_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('{{ t("Configuration backup") }}', template_source)
@@ -73,6 +80,9 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('name="event_log_debug_enabled"', template_source)
         self.assertIn('{{ t("Minimum stored log level") }}', template_source)
         self.assertIn('{{ t("Enable DEBUG logs") }}', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/reset-runtime-data"', template_source)
+        self.assertIn("data-settings-action-id=\"reset-runtime-data\"", template_source)
+        self.assertIn('{{ t("Reset runtime logs/data") }}', template_source)
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
@@ -113,6 +123,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("_CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024", router_source)
         self.assertIn('@router.post("/settings/update-application")', router_source)
         self.assertIn('@router.post("/settings/update-channel")', router_source)
+        self.assertIn('@router.post("/settings/reset-runtime-data")', router_source)
         self.assertIn('@router.post("/settings/restart-services")', router_source)
         self.assertIn('@router.post("/settings/reboot-host")', router_source)
         self.assertIn('@router.post("/settings/poweroff-host")', router_source)

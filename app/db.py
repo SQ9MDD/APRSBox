@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Iterator
 
 from app.config import settings
@@ -16,6 +17,22 @@ _EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LE
 
 _event_log_min_level_cache: str | None = None
 _event_log_debug_enabled_cache: bool | None = None
+
+RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
+    "event_logs",
+    "traffic_frames",
+    "digi_flow_event_log",
+    "traffic_device_station_device_hourly",
+    "radio_activity_5m",
+    "aprsis_uplink_minute_stats",
+    "aprsis_uplink_stats",
+    "wx_runtime_cache",
+    "band_condition_audibility_buckets",
+    "band_condition_activity_station_buckets",
+    "band_condition_activity_buckets",
+)
+VACUUM_RECOMMEND_FREE_BYTES_MIN = 16 * 1024 * 1024
+VACUUM_RECOMMEND_FREE_RATIO_MIN = 0.20
 
 
 def utc_now() -> str:
@@ -122,6 +139,7 @@ CREATE TABLE IF NOT EXISTS modems (
     tx_min_gap_seconds REAL NOT NULL DEFAULT 0.35
         CHECK (tx_min_gap_seconds >= 0.2 AND tx_min_gap_seconds <= 1.2),
     expose_port_enabled INTEGER NOT NULL DEFAULT 0 CHECK (expose_port_enabled IN (0, 1)),
+    expose_allow_tx INTEGER NOT NULL DEFAULT 1 CHECK (expose_allow_tx IN (0, 1)),
     expose_bind_address TEXT NOT NULL DEFAULT '0.0.0.0',
     expose_port INTEGER NOT NULL DEFAULT 8002 CHECK (expose_port BETWEEN 1 AND 65535),
     expose_whitelist TEXT NOT NULL DEFAULT '',
@@ -149,6 +167,7 @@ CREATE TABLE IF NOT EXISTS station_settings (
     beacon_interface_id INTEGER,
     beacon_tx_scope TEXT NOT NULL DEFAULT 'single' CHECK (beacon_tx_scope IN ('single', 'all_active')),
     beacon_comment TEXT,
+    beacon_interval_mode TEXT NOT NULL DEFAULT 'fixed' CHECK (beacon_interval_mode IN ('fixed', 'proportional')),
     beacon_interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (beacon_interval_minutes IN (15, 30, 45, 60)),
     beacon_path TEXT,
     status_enabled INTEGER NOT NULL DEFAULT 0 CHECK (status_enabled IN (0, 1)),
@@ -307,7 +326,7 @@ CREATE TABLE IF NOT EXISTS digi_flows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT,
-    source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis')),
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis', 'receiver_local_tx')),
     source_ref TEXT NOT NULL,
     target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
     target_ref TEXT NOT NULL,
@@ -324,6 +343,7 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
     step_type TEXT NOT NULL CHECK (step_type IN (
         'receiver_rf',
         'receiver_aprsis',
+        'receiver_local_tx',
         'filter_dupe',
         'filter_direct_only',
         'filter_digi',
@@ -513,6 +533,14 @@ CREATE TABLE IF NOT EXISTS traffic_runtime_interfaces (
     expose_bind_address TEXT,
     expose_port INTEGER,
     expose_active_clients INTEGER NOT NULL DEFAULT 0,
+    mqtt_connected INTEGER NOT NULL DEFAULT 0 CHECK (mqtt_connected IN (0, 1)),
+    mqtt_subscribed_topic TEXT,
+    mqtt_broker_host TEXT,
+    mqtt_broker_port INTEGER,
+    mqtt_last_frame_at TEXT,
+    mqtt_frames_received INTEGER NOT NULL DEFAULT 0,
+    mqtt_duplicates_dropped INTEGER NOT NULL DEFAULT 0,
+    mqtt_invalid_json_dropped INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (modem_id) REFERENCES modems(id) ON DELETE CASCADE
@@ -702,6 +730,9 @@ def init_db() -> None:
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
+        traffic_runtime_interface_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_interfaces)").fetchall()
+        }
         digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
         radio_activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_5m)").fetchall()}
         if "last_login_at" not in user_columns:
@@ -725,6 +756,14 @@ def init_db() -> None:
                 ALTER TABLE station_settings
                 ADD COLUMN beacon_interval_minutes INTEGER NOT NULL DEFAULT 30
                 CHECK (beacon_interval_minutes IN (15, 30, 45, 60))
+                """
+            )
+        if "beacon_interval_mode" not in station_columns:
+            connection.execute(
+                """
+                ALTER TABLE station_settings
+                ADD COLUMN beacon_interval_mode TEXT NOT NULL DEFAULT 'fixed'
+                CHECK (beacon_interval_mode IN ('fixed', 'proportional'))
                 """
             )
         if "beacon_path" not in station_columns:
@@ -852,6 +891,14 @@ def init_db() -> None:
                 ALTER TABLE modems
                 ADD COLUMN expose_port_enabled INTEGER NOT NULL DEFAULT 0
                 CHECK (expose_port_enabled IN (0, 1))
+                """
+            )
+        if "expose_allow_tx" not in modem_columns:
+            connection.execute(
+                """
+                ALTER TABLE modems
+                ADD COLUMN expose_allow_tx INTEGER NOT NULL DEFAULT 1
+                CHECK (expose_allow_tx IN (0, 1))
                 """
             )
         if "expose_bind_address" not in modem_columns:
@@ -1046,6 +1093,63 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
                 ADD COLUMN expose_active_clients INTEGER NOT NULL DEFAULT 0
                 """
             )
+        if "mqtt_connected" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_connected INTEGER NOT NULL DEFAULT 0
+                CHECK (mqtt_connected IN (0, 1))
+                """
+            )
+        if "mqtt_subscribed_topic" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_subscribed_topic TEXT
+                """
+            )
+        if "mqtt_broker_host" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_broker_host TEXT
+                """
+            )
+        if "mqtt_broker_port" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_broker_port INTEGER
+                """
+            )
+        if "mqtt_last_frame_at" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_last_frame_at TEXT
+                """
+            )
+        if "mqtt_frames_received" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_frames_received INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "mqtt_duplicates_dropped" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_duplicates_dropped INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "mqtt_invalid_json_dropped" not in traffic_runtime_interface_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_runtime_interfaces
+                ADD COLUMN mqtt_invalid_json_dropped INTEGER NOT NULL DEFAULT 0
+                """
+            )
         connection.execute(
             """
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
@@ -1170,11 +1274,11 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
         connection.execute(
             """
             INSERT INTO station_settings (
-                id, callsign, ssid, beacon_interface_id, beacon_tx_scope, beacon_comment, beacon_interval_minutes, beacon_path,
+                id, callsign, ssid, beacon_interface_id, beacon_tx_scope, beacon_comment, beacon_interval_mode, beacon_interval_minutes, beacon_path,
                 status_enabled, status_text, status_interval_minutes, latitude, longitude,
                 symbol_table, symbol_code, symbol_overlay, default_units, tx_enabled, updated_at
             )
-            VALUES (1, '', '', NULL, 'single', '', 30, '', 0, '', 30, '', '', '/', '>', NULL, 'metric', 0, ?)
+            VALUES (1, '', '', NULL, 'single', '', 'fixed', 30, '', 0, '', 30, '', '', '/', '>', NULL, 'metric', 0, ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (utc_now(),),
@@ -1634,7 +1738,9 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
     flows_sql = _table_sql(connection, "digi_flows")
     if not flows_sql:
         return
-    if "UNIQUE (source_kind, source_ref, target_kind, target_ref)" not in flows_sql:
+    has_legacy_unique = "UNIQUE (source_kind, source_ref, target_kind, target_ref)" in flows_sql
+    has_local_tx_source = "'receiver_local_tx'" in flows_sql
+    if not has_legacy_unique and has_local_tx_source:
         return
     connection.executescript(
         """
@@ -1643,7 +1749,7 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
-            source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis')),
+            source_kind TEXT NOT NULL CHECK (source_kind IN ('receiver_rf', 'receiver_aprsis', 'receiver_local_tx')),
             source_ref TEXT NOT NULL,
             target_kind TEXT NOT NULL CHECK (target_kind IN ('tx_rf', 'tx_aprsis', 'action_drop', 'action_log')),
             target_ref TEXT NOT NULL,
@@ -1660,7 +1766,7 @@ def _migrate_digi_flows_table(connection: sqlite3.Connection) -> None:
             name,
             description,
             CASE
-                WHEN source_kind IN ('receiver_rf', 'receiver_aprsis') THEN source_kind
+                WHEN source_kind IN ('receiver_rf', 'receiver_aprsis', 'receiver_local_tx') THEN source_kind
                 ELSE 'receiver_rf'
             END,
             COALESCE(source_ref, ''),
@@ -1687,6 +1793,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
     if not steps_sql:
         return
     required_step_types = (
+        "receiver_local_tx",
         "filter_direct_only",
         "filter_digi",
         "filter_icon",
@@ -1707,6 +1814,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
             step_type TEXT NOT NULL CHECK (step_type IN (
                 'receiver_rf',
                 'receiver_aprsis',
+                'receiver_local_tx',
                 'filter_dupe',
                 'filter_direct_only',
                 'filter_digi',
@@ -1974,6 +2082,81 @@ def vacuum_database() -> None:
         connection.execute("VACUUM")
     finally:
         connection.close()
+
+
+def database_maintenance_snapshot(*, tracked_tables: tuple[str, ...] = RUNTIME_MAINTENANCE_RESET_TABLES) -> dict[str, Any]:
+    database_path = settings.database_path
+    wal_path = Path(f"{database_path}-wal")
+    shm_path = Path(f"{database_path}-shm")
+
+    db_file_bytes = database_path.stat().st_size if database_path.exists() else 0
+    wal_file_bytes = wal_path.stat().st_size if wal_path.exists() else 0
+    shm_file_bytes = shm_path.stat().st_size if shm_path.exists() else 0
+
+    with get_connection() as connection:
+        page_size_row = connection.execute("PRAGMA page_size").fetchone()
+        page_count_row = connection.execute("PRAGMA page_count").fetchone()
+        freelist_row = connection.execute("PRAGMA freelist_count").fetchone()
+        quick_check_row = connection.execute("PRAGMA quick_check").fetchone()
+
+        page_size = int(page_size_row[0]) if page_size_row else 0
+        page_count = int(page_count_row[0]) if page_count_row else 0
+        freelist_count = int(freelist_row[0]) if freelist_row else 0
+        quick_check = str(quick_check_row[0]) if quick_check_row else "unknown"
+
+        existing_tables = {
+            str(row["name"])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        }
+        tracked_row_counts: dict[str, int] = {}
+        for table_name in tracked_tables:
+            if table_name not in existing_tables:
+                continue
+            row = connection.execute(f'SELECT COUNT(*) AS total FROM "{table_name}"').fetchone()
+            tracked_row_counts[table_name] = int(row["total"]) if row is not None else 0
+
+    allocated_bytes = page_size * page_count
+    reclaimable_bytes = page_size * freelist_count
+    reclaimable_ratio = (reclaimable_bytes / allocated_bytes) if allocated_bytes > 0 else 0.0
+    vacuum_recommended = (
+        reclaimable_bytes >= VACUUM_RECOMMEND_FREE_BYTES_MIN
+        and reclaimable_ratio >= VACUUM_RECOMMEND_FREE_RATIO_MIN
+    )
+
+    return {
+        "database_path": str(database_path),
+        "database_exists": database_path.exists(),
+        "database_file_bytes": db_file_bytes,
+        "wal_file_bytes": wal_file_bytes,
+        "shm_file_bytes": shm_file_bytes,
+        "page_size": page_size,
+        "page_count": page_count,
+        "freelist_count": freelist_count,
+        "allocated_bytes": allocated_bytes,
+        "reclaimable_bytes": reclaimable_bytes,
+        "reclaimable_ratio": reclaimable_ratio,
+        "quick_check": quick_check,
+        "vacuum_recommended": vacuum_recommended,
+        "tracked_row_counts": tracked_row_counts,
+    }
+
+
+def reset_runtime_operational_data(*, table_names: tuple[str, ...] = RUNTIME_MAINTENANCE_RESET_TABLES) -> dict[str, int]:
+    deleted_by_table: dict[str, int] = {}
+    with get_connection() as connection:
+        existing_tables = {
+            str(row["name"])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        }
+        for table_name in table_names:
+            if table_name not in existing_tables:
+                continue
+            before_row = connection.execute(f'SELECT COUNT(*) AS total FROM "{table_name}"').fetchone()
+            before_total = int(before_row["total"]) if before_row is not None else 0
+            if before_total > 0:
+                connection.execute(f'DELETE FROM "{table_name}"')
+            deleted_by_table[table_name] = before_total
+    return deleted_by_table
 
 
 def log_event(level: str, category: str, message: str) -> None:

@@ -3907,8 +3907,36 @@ select:focus-visible,
     grid-template-columns: 5rem minmax(10rem, 14rem) minmax(0, 1fr);
 }
 
+.traffic-summary-stream .traffic-interface-row {
+    grid-template-columns: 5.2rem 5rem minmax(10rem, 14rem) minmax(0, 1fr);
+}
+
 .traffic-summary-stream .traffic-log-source {
     white-space: normal;
+}
+
+.traffic-interface-toggle {
+    justify-self: start;
+}
+
+.traffic-interface-toggle img {
+    width: 0.88rem;
+    height: 0.88rem;
+    filter: var(--icon-filter);
+}
+
+.traffic-interface-toggle:hover {
+    transform: translateY(-1px);
+}
+
+.traffic-interface-toggle[aria-pressed="false"] {
+    background: transparent;
+    border-color: var(--border);
+    opacity: 0.72;
+}
+
+.traffic-interface-row-hidden {
+    opacity: 0.75;
 }
 
 .traffic-log-row {

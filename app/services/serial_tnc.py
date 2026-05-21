@@ -34,21 +34,29 @@ def normalize_serial_baud_rate(value: object, *, label: str = "Baud rate") -> in
 def open_serial_device(path: str, baud_rate: int, *, flush_buffers: bool = True) -> int:
     normalized_path = normalize_serial_device_path(path)
     normalized_baud_rate = normalize_serial_baud_rate(baud_rate)
-    fd = os.open(normalized_path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    open_flags = os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK | int(getattr(os, "O_CLOEXEC", 0))
+    fd = os.open(normalized_path, open_flags)
     try:
         attributes = termios.tcgetattr(fd)
         attributes[0] = 0
         attributes[1] = 0
-        attributes[2] = termios.CLOCAL | termios.CREAD | termios.CS8
+        cflag = termios.CLOCAL | termios.CREAD
+        cflag &= ~int(getattr(termios, "PARENB", 0))
+        cflag &= ~int(getattr(termios, "CSTOPB", 0))
+        cflag &= ~int(getattr(termios, "CSIZE", 0))
+        if hasattr(termios, "CRTSCTS"):
+            cflag &= ~int(termios.CRTSCTS)
+        cflag |= termios.CS8
+        attributes[2] = cflag
         attributes[3] = 0
         attributes[6][termios.VMIN] = 1
         attributes[6][termios.VTIME] = 0
         speed = SUPPORTED_SERIAL_BAUD_RATES[normalized_baud_rate]
         attributes[4] = speed
         attributes[5] = speed
+        termios.tcsetattr(fd, termios.TCSANOW, attributes)
         if flush_buffers:
             termios.tcflush(fd, termios.TCIOFLUSH)
-        termios.tcsetattr(fd, termios.TCSANOW, attributes)
     except Exception:
         os.close(fd)
         raise
@@ -60,7 +68,7 @@ def close_serial_device(
     *,
     drain_timeout: float = 0.2,
     flush_buffers: bool = True,
-    drop_control_lines: bool = True,
+    drop_control_lines: bool = False,
 ) -> None:
     if fd is None:
         return
@@ -83,7 +91,10 @@ def close_serial_device(
 
 
 def read_serial_chunk(fd: int, *, max_bytes: int = 1024, timeout: float = 1.0) -> bytes:
-    readable, _, _ = select.select([fd], [], [], timeout)
+    try:
+        readable, _, _ = select.select([fd], [], [], timeout)
+    except InterruptedError:
+        return b""
     if not readable:
         return b""
     try:
@@ -93,9 +104,16 @@ def read_serial_chunk(fd: int, *, max_bytes: int = 1024, timeout: float = 1.0) -
 
 
 def write_serial_data(fd: int, data: bytes, *, timeout: float = 1.0, drain: bool = False) -> None:
+    deadline = time.monotonic() + timeout
     offset = 0
     while offset < len(data):
-        _, writable, _ = select.select([], [fd], [], timeout)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Serial write timed out.")
+        try:
+            _, writable, _ = select.select([], [fd], [], remaining)
+        except InterruptedError:
+            continue
         if not writable:
             raise TimeoutError("Serial write timed out.")
         try:
@@ -154,10 +172,10 @@ def _best_effort_set_modem_lines(fd: int, *, dtr: bool | None, rts: bool | None)
             clear_bits = array.array("i", [clear_mask])
             fcntl.ioctl(fd, tiocmbic, clear_bits, True)
         except OSError:
-            return
+            pass
     if set_mask:
         try:
             set_bits = array.array("i", [set_mask])
             fcntl.ioctl(fd, tiocmbis, set_bits, True)
         except OSError:
-            return
+            pass

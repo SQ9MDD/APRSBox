@@ -37,6 +37,92 @@
         flex: 0 0 auto;
     }
 
+    .beacon-health-alert {
+        margin-top: calc(var(--space-2) * -0.1);
+        display: grid;
+        gap: 0.18rem;
+    }
+
+    .beacon-health-alert strong {
+        font-size: 0.82rem;
+        line-height: 1.34;
+    }
+
+    .beacon-health-alert p {
+        margin: 0;
+        font-size: 0.79rem;
+        line-height: 1.34;
+    }
+
+    .beacon-health-alert.tone-ok {
+        background: rgba(107, 170, 121, 0.1);
+        border-color: rgba(107, 170, 121, 0.22);
+        color: var(--success);
+    }
+
+    .beacon-health-alert.tone-warning {
+        background: color-mix(in srgb, var(--warning) 18%, transparent);
+        border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+        color: var(--warning);
+    }
+
+    .beacon-health-alert.tone-not-recommended {
+        background: rgba(201, 122, 122, 0.1);
+        border-color: rgba(201, 122, 122, 0.24);
+        color: var(--danger);
+    }
+
+    .beacon-health-alert.tone-neutral {
+        background: color-mix(in srgb, var(--panel-emphasis) 56%, transparent);
+        border-color: var(--border);
+        color: var(--muted);
+    }
+
+    .beacon-schedule-details {
+        margin-top: calc(var(--space-2) * -0.1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--panel-emphasis) 46%, transparent);
+        padding: 0.5rem 0.66rem;
+    }
+
+    .beacon-schedule-details[hidden] {
+        display: none !important;
+    }
+
+    .beacon-schedule-details summary {
+        cursor: pointer;
+        color: var(--text);
+        font-size: 0.81rem;
+        line-height: 1.34;
+        font-weight: 600;
+    }
+
+    .beacon-schedule-details[open] {
+        display: grid;
+        gap: var(--space-2);
+    }
+
+    .beacon-schedule-lines {
+        margin: 0;
+        padding: 0.46rem 0.54rem;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--panel-soft) 58%, transparent);
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        line-height: 1.36;
+        color: var(--text);
+        white-space: pre;
+        overflow-x: auto;
+    }
+
+    .beacon-schedule-note {
+        margin: 0;
+        font-size: 0.77rem;
+        line-height: 1.36;
+    }
+
     .phg-generator-modal[hidden] {
         display: none !important;
     }
@@ -105,6 +191,62 @@
         justify-content: flex-end;
     }
 
+    .beacon-confirm-modal[hidden] {
+        display: none !important;
+    }
+
+    .beacon-confirm-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1300;
+    }
+
+    .beacon-confirm-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.58);
+    }
+
+    .beacon-confirm-dialog {
+        position: relative;
+        width: min(30rem, calc(100vw - 2rem));
+        margin: clamp(1rem, 10vh, 5.5rem) auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: var(--shadow-lg);
+        display: grid;
+        gap: var(--space-3);
+        padding: var(--space-3);
+    }
+
+    .beacon-confirm-dialog h3 {
+        margin: 0;
+        font-size: 0.94rem;
+    }
+
+    .beacon-confirm-copy {
+        display: grid;
+        gap: var(--space-2);
+    }
+
+    .beacon-confirm-copy p,
+    .beacon-confirm-copy ul {
+        margin: 0;
+    }
+
+    .beacon-confirm-copy ul {
+        padding-left: 1.1rem;
+        display: grid;
+        gap: 0.16rem;
+    }
+
+    .beacon-confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-2);
+    }
+
     @media (max-width: 640px) {
         .beacon-comment-input {
             width: 100%;
@@ -123,6 +265,9 @@
         {% set selected_beacon_interface_id = '__ALL_ACTIVE__' if station.beacon_tx_scope == 'all_active' else (station.beacon_interface_id|string if station.beacon_interface_id is not none else '') %}
         {% set beacon_comment_max = beacon_comment_max|default(43) %}
         {% set status_text_max = status_text_max|default(62) %}
+        {% set beacon_interval_mode = station.beacon_interval_mode if station.beacon_interval_mode in ['fixed', 'proportional'] else 'fixed' %}
+        {% set selected_beacon_interval_value = 'proportional' if beacon_interval_mode == 'proportional' else (station.beacon_interval_minutes|string) %}
+        {% set beacon_interval_fixed_value = station.beacon_interval_minutes_fixed|default(station.beacon_interval_minutes)|string %}
         {% if flash %}
         <div class="alert {% if flash_success is not defined or flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -181,16 +326,44 @@
                     </label>
                     <label>
                         <span>{{ t("Beacon at every") }}</span>
-                        <select name="beacon_interval_minutes">
-                            {% for option in beacon_interval_options %}
-                            <option value="{{ option.value }}" {% if station.beacon_interval_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
+                        <select name="beacon_interval_minutes" id="station-beacon-interval">
+                            {% for option in beacon_position_interval_options %}
+                            <option value="{{ option.value }}" {% if (selected_beacon_interval_value|string) == (option.value|string) %}selected{% endif %}>{{ t(option.label) }}</option>
                             {% endfor %}
                         </select>
                     </label>
                     <label>
                         <span>{{ t("Beacon Path") }}</span>
-                        <input type="text" name="beacon_path" value="{{ station.beacon_path }}">
+                        <input type="text" name="beacon_path" id="station-beacon-path" value="{{ station.beacon_path }}">
                     </label>
+                    <input type="hidden" name="beacon_interval_mode" id="station-beacon-interval-mode" value="{{ beacon_interval_mode }}">
+                    <input type="hidden" name="beacon_interval_minutes_fixed" id="station-beacon-interval-fixed" value="{{ beacon_interval_fixed_value }}">
+                    <div class="full">
+                        <div
+                            class="alert beacon-health-alert tone-{{ beacon_health.tone|replace('_', '-') }}"
+                            id="station-beacon-health"
+                            data-initial-tone="{{ beacon_health.tone }}"
+                        >
+                            <strong>{{ t(beacon_health.headline) }}</strong>
+                            {% for line in beacon_health.details %}
+                            <p>{{ t(line) }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="full">
+                        <details class="beacon-schedule-details" id="station-beacon-schedule" {% if beacon_interval_mode != 'proportional' %}hidden{% endif %}>
+                            <summary id="station-beacon-schedule-summary">
+                                {% if beacon_proportional_schedule_path %}
+                                {{ tf("Effective schedule for {path}:", {"path": beacon_proportional_schedule_path}) }}
+                                {% else %}
+                                {{ t("Effective schedule:") }}
+                                {% endif %}
+                            </summary>
+                            <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines">{% for line in beacon_proportional_schedule_lines %}{{ t(line|replace("(first run)", t("(first run)"))) }}{% if not loop.last %}
+{% endif %}{% endfor %}</pre>
+                            <p class="muted beacon-schedule-note" id="station-beacon-schedule-note">{{ t("Proportional Path sends frequent local beacons and rarer wide-path beacons to reduce RF channel load.") }}</p>
+                        </details>
+                    </div>
                     <label class="full">
                         <span>{{ t("Get location") }}</span>
                         <button type="button" class="button button-secondary location-picker-button" id="station-open-map-picker">
@@ -391,13 +564,32 @@
                 </div>
             </div>
         </div>
+        <div class="beacon-confirm-modal" id="station-beacon-confirm-modal" hidden>
+            <div class="beacon-confirm-backdrop" data-close-beacon-confirm></div>
+            <div class="beacon-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="station-beacon-confirm-title">
+                <h3 id="station-beacon-confirm-title">{{ t("This setting can significantly increase RF channel load.") }}</h3>
+                <div class="beacon-confirm-copy">
+                    <p>{{ t("Beacon path is wide while the transmission interval is short.") }}</p>
+                    <p>{{ t("Recommendation:") }}</p>
+                    <ul>
+                        <li>{{ t("use a longer interval") }}</li>
+                        <li>{{ t("or select Proportional Path") }}</li>
+                    </ul>
+                    <p>{{ t("Are you sure you want to save this configuration?") }}</p>
+                </div>
+                <div class="beacon-confirm-actions">
+                    <button type="button" class="button button-secondary" data-close-beacon-confirm>{{ t("Cancel") }}</button>
+                    <button type="button" class="button" id="station-beacon-confirm-accept">{{ t("Save despite warning") }}</button>
+                </div>
+            </div>
+        </div>
         {% else %}
         <dl class="details-grid">
             <dt>{{ t("Callsign") }}</dt><dd>{{ station.callsign }}</dd>
             <dt>{{ t("SSID") }}</dt><dd>{{ station.ssid }}</dd>
             <dt>{{ t("Interface") }}</dt><dd>{% for option in interface_options %}{% if option.value == selected_beacon_interface_id %}{{ t(option.label) }}{% endif %}{% endfor %}</dd>
             <dt>{{ t("Beacon Comment") }}</dt><dd>{{ station.beacon_comment }}</dd>
-            <dt>{{ t("Beacon at every") }}</dt><dd>{{ station.beacon_interval_minutes }}m</dd>
+            <dt>{{ t("Beacon at every") }}</dt><dd>{% if beacon_interval_mode == 'proportional' %}{{ t("Proportional Path") }}{% else %}{{ station.beacon_interval_minutes }}m{% endif %}</dd>
             <dt>{{ t("Beacon path") }}</dt><dd>{{ station.beacon_path }}</dd>
             <dt>{{ t("APRS Status enabled") }}</dt><dd>{{ station.status_enabled }}</dd>
             <dt>{{ t("APRS Status text") }}</dt><dd>{{ station.status_text }}</dd>
@@ -588,6 +780,360 @@
             };
 
             inputs.forEach(bindLengthCounter);
+        };
+
+        const initBeaconPathHealth = () => {
+            const form = document.getElementById("station-form");
+            if (!(form instanceof HTMLFormElement)) {
+                return;
+            }
+
+            const intervalSelect = document.getElementById("station-beacon-interval");
+            const pathInput = document.getElementById("station-beacon-path");
+            const modeInput = document.getElementById("station-beacon-interval-mode");
+            const fixedInput = document.getElementById("station-beacon-interval-fixed");
+            const healthNode = document.getElementById("station-beacon-health");
+            const scheduleDetails = document.getElementById("station-beacon-schedule");
+            const scheduleSummaryNode = document.getElementById("station-beacon-schedule-summary");
+            const scheduleLinesNode = document.getElementById("station-beacon-schedule-lines");
+            const scheduleNoteNode = document.getElementById("station-beacon-schedule-note");
+            const confirmModal = document.getElementById("station-beacon-confirm-modal");
+            const confirmAcceptButton = document.getElementById("station-beacon-confirm-accept");
+            const confirmCloseButtons = confirmModal ? confirmModal.querySelectorAll("[data-close-beacon-confirm]") : [];
+
+            if (
+                !(intervalSelect instanceof HTMLSelectElement)
+                || !(pathInput instanceof HTMLInputElement)
+                || !(modeInput instanceof HTMLInputElement)
+                || !(fixedInput instanceof HTMLInputElement)
+                || !(healthNode instanceof HTMLElement)
+                || !(scheduleDetails instanceof HTMLElement)
+                || !(scheduleSummaryNode instanceof HTMLElement)
+                || !(scheduleLinesNode instanceof HTMLElement)
+                || !(scheduleNoteNode instanceof HTMLElement)
+                || !(confirmModal instanceof HTMLElement)
+                || !(confirmAcceptButton instanceof HTMLButtonElement)
+            ) {
+                return;
+            }
+
+            const i18n = {
+                proportionalMode: "proportional",
+                toneOkHeadline: {{ t("Recommended: frequent local beacons, rarer full-path beacons.")|tojson|safe }},
+                toneNeutralHeadline: {{ t("No recommendation available for this beacon path.")|tojson|safe }},
+                directWarningHeadline: {{ t("Consider: direct path with interval shorter than 10m may increase RF traffic.")|tojson|safe }},
+                directWarningDetail: {{ t("Use 10m or longer.")|tojson|safe }},
+                directOkHeadline: {{ t("Recommended: direct path with interval 10m or longer.")|tojson|safe }},
+                hop1WarningHeadline: {{ t("Consider: 1-hop path with interval shorter than 30m may increase RF traffic.")|tojson|safe }},
+                hopWarningDetail: {{ t("Use 30m or Proportional Path.")|tojson|safe }},
+                hop1OkHeadline: {{ t("Recommended: 1-hop path with interval 30m or longer.")|tojson|safe }},
+                hop2WarningHeadline: {{ t("Not recommended: 2-hop path with interval shorter than 60m.")|tojson|safe }},
+                hop2WarningDetail: {{ t("Use 60m or Proportional Path.")|tojson|safe }},
+                hop2OkHeadline: {{ t("Recommended: 2-hop path with interval 60m or longer.")|tojson|safe }},
+                scheduleHeaderWithPath: {{ t("Effective schedule for {path}:")|tojson|safe }},
+                scheduleHeaderNoPath: {{ t("Effective schedule:")|tojson|safe }},
+                firstRunLabel: {{ t("(first run)")|tojson|safe }},
+                cycleRepeat10: {{ t("Then cycle repeats every 10 minutes (DIRECT).")|tojson|safe }},
+                cycleRepeat30: {{ t("Then cycle repeats every 30 minutes (full path every third beacon).")|tojson|safe }},
+                cycleRepeat60: {{ t("Then cycle repeats every 60 minutes (WIDE1-1 at +30m, full path at +60m).")|tojson|safe }},
+                proportionalExplain: {{ t("Proportional Path sends frequent local beacons and rarer wide-path beacons to reduce RF channel load.")|tojson|safe }},
+            };
+
+            let pendingSubmitter = null;
+            let bypassConfirmation = false;
+
+            const splitPathTokens = (pathValue) => String(pathValue || "")
+                .split(",")
+                .map((token) => token.trim().toUpperCase())
+                .filter((token) => token.length > 0);
+
+            const classifyPath = (pathValue) => {
+                const normalizedPath = String(pathValue || "").trim().toUpperCase();
+                const tokens = splitPathTokens(normalizedPath);
+                if (!tokens.length || tokens.every((token) => token === "DIRECT")) {
+                    return { hopClass: 0, normalizedPath: "" };
+                }
+
+                const parsedHops = [];
+                for (const token of tokens) {
+                    const normalizedToken = token.replace(/\*+$/g, "");
+                    if (normalizedToken === "DIRECT") {
+                        continue;
+                    }
+                    const match = normalizedToken.match(/-(\d+)$/);
+                    if (!match) {
+                        continue;
+                    }
+                    const hops = Number.parseInt(match[1], 10);
+                    if (Number.isInteger(hops) && hops >= 0) {
+                        parsedHops.push(hops);
+                    }
+                }
+
+                if (!parsedHops.length) {
+                    return { hopClass: "unknown", normalizedPath };
+                }
+                const maxHops = Math.max(...parsedHops);
+                const totalHops = parsedHops.reduce((sum, value) => sum + value, 0);
+                return {
+                    hopClass: Math.min(3, Math.max(maxHops, totalHops)),
+                    normalizedPath,
+                };
+            };
+
+            const resolveMode = () => {
+                const selected = String(intervalSelect.value || "").trim().toLowerCase();
+                return selected === i18n.proportionalMode ? i18n.proportionalMode : "fixed";
+            };
+
+            const resolveIntervalMinutes = (mode) => {
+                if (mode === i18n.proportionalMode) {
+                    const parsedFixed = Number.parseInt(String(fixedInput.value || "30"), 10);
+                    return Number.isInteger(parsedFixed) ? parsedFixed : 30;
+                }
+                const parsed = Number.parseInt(String(intervalSelect.value || "0"), 10);
+                return Number.isInteger(parsed) ? parsed : 0;
+            };
+
+            const evaluateHealth = () => {
+                const mode = resolveMode();
+                const interval = resolveIntervalMinutes(mode);
+                const classification = classifyPath(pathInput.value);
+                const hopClass = classification.hopClass;
+
+                if (mode === i18n.proportionalMode) {
+                    return {
+                        tone: "ok",
+                        headline: i18n.toneOkHeadline,
+                        details: [],
+                        requiresConfirmation: false,
+                        classification,
+                    };
+                }
+
+                if (!Number.isInteger(hopClass)) {
+                    return {
+                        tone: "neutral",
+                        headline: i18n.toneNeutralHeadline,
+                        details: [],
+                        requiresConfirmation: false,
+                        classification,
+                    };
+                }
+
+                if (hopClass <= 0) {
+                    if (interval < 10) {
+                        return {
+                            tone: "warning",
+                            headline: i18n.directWarningHeadline,
+                            details: [i18n.directWarningDetail],
+                            requiresConfirmation: false,
+                            classification,
+                        };
+                    }
+                    return {
+                        tone: "ok",
+                        headline: i18n.directOkHeadline,
+                        details: [],
+                        requiresConfirmation: false,
+                        classification,
+                    };
+                }
+
+                if (hopClass === 1) {
+                    if (interval < 30) {
+                        return {
+                            tone: "warning",
+                            headline: i18n.hop1WarningHeadline,
+                            details: [i18n.hopWarningDetail],
+                            requiresConfirmation: interval < 10,
+                            classification,
+                        };
+                    }
+                    return {
+                        tone: "ok",
+                        headline: i18n.hop1OkHeadline,
+                        details: [],
+                        requiresConfirmation: false,
+                        classification,
+                    };
+                }
+
+                const requiresConfirmation = interval < 30 || (hopClass >= 3 && interval < 60);
+                if (interval < 60) {
+                    return {
+                        tone: "not-recommended",
+                        headline: i18n.hop2WarningHeadline,
+                        details: [i18n.hop2WarningDetail],
+                        requiresConfirmation,
+                        classification,
+                    };
+                }
+                return {
+                    tone: "ok",
+                    headline: i18n.hop2OkHeadline,
+                    details: [],
+                    requiresConfirmation: false,
+                    classification,
+                };
+            };
+
+            const buildScheduleLines = (classification) => {
+                if (!Number.isInteger(classification.hopClass) || classification.hopClass <= 0) {
+                    return [
+                        `00:00  DIRECT ${i18n.firstRunLabel}`,
+                        "00:10  DIRECT",
+                        "00:20  DIRECT",
+                        "00:30  DIRECT",
+                        "",
+                        i18n.cycleRepeat10,
+                    ];
+                }
+                if (classification.hopClass === 1) {
+                    return [
+                        `00:00  DIRECT ${i18n.firstRunLabel}`,
+                        "00:10  DIRECT",
+                        "00:20  DIRECT",
+                        `00:30  ${classification.normalizedPath}`,
+                        "00:40  DIRECT",
+                        "00:50  DIRECT",
+                        `01:00  ${classification.normalizedPath}`,
+                        "01:10  DIRECT",
+                        "",
+                        i18n.cycleRepeat30,
+                    ];
+                }
+                return [
+                    `00:00  DIRECT ${i18n.firstRunLabel}`,
+                    "00:10  DIRECT",
+                    "00:20  DIRECT",
+                    "00:30  WIDE1-1",
+                    "00:40  DIRECT",
+                    "00:50  DIRECT",
+                    `01:00  ${classification.normalizedPath}`,
+                    "01:10  DIRECT",
+                    "01:20  DIRECT",
+                    "01:30  WIDE1-1",
+                    "01:40  DIRECT",
+                    "01:50  DIRECT",
+                    `02:00  ${classification.normalizedPath}`,
+                    "02:10  DIRECT",
+                    "",
+                    i18n.cycleRepeat60,
+                ];
+            };
+
+            const syncSchedulePanel = () => {
+                const classification = classifyPath(pathInput.value);
+                const header = classification.normalizedPath
+                    ? i18n.scheduleHeaderWithPath.replace("{path}", classification.normalizedPath)
+                    : i18n.scheduleHeaderNoPath;
+                const lines = buildScheduleLines(classification);
+                const isProportional = resolveMode() === i18n.proportionalMode;
+
+                scheduleDetails.hidden = !isProportional;
+                if (!isProportional) {
+                    scheduleDetails.open = false;
+                    return;
+                }
+
+                scheduleSummaryNode.textContent = header;
+                scheduleLinesNode.textContent = lines.join("\n");
+                scheduleNoteNode.textContent = i18n.proportionalExplain;
+            };
+
+            const syncModeInputs = () => {
+                const selected = String(intervalSelect.value || "").trim().toLowerCase();
+                if (selected === i18n.proportionalMode) {
+                    modeInput.value = i18n.proportionalMode;
+                    return;
+                }
+                modeInput.value = "fixed";
+                fixedInput.value = selected || fixedInput.value || "30";
+            };
+
+            const renderHealth = () => {
+                const health = evaluateHealth();
+                const toneClass = health.tone === "not-recommended" ? "tone-not-recommended" : `tone-${health.tone}`;
+                healthNode.className = `alert beacon-health-alert ${toneClass}`;
+                healthNode.innerHTML = "";
+
+                const headline = document.createElement("strong");
+                headline.textContent = health.headline;
+                healthNode.appendChild(headline);
+                for (const detailLine of health.details) {
+                    const detailNode = document.createElement("p");
+                    detailNode.textContent = detailLine;
+                    healthNode.appendChild(detailNode);
+                }
+            };
+
+            const closeConfirmModal = () => {
+                confirmModal.hidden = true;
+                document.body.classList.remove("modal-open");
+                pendingSubmitter = null;
+            };
+
+            const openConfirmModal = (submitter) => {
+                pendingSubmitter = submitter;
+                confirmModal.hidden = false;
+                document.body.classList.add("modal-open");
+            };
+
+            intervalSelect.addEventListener("change", () => {
+                syncModeInputs();
+                renderHealth();
+                syncSchedulePanel();
+            });
+            pathInput.addEventListener("input", () => {
+                renderHealth();
+                syncSchedulePanel();
+            });
+
+            confirmCloseButtons.forEach((button) => {
+                button.addEventListener("click", closeConfirmModal);
+            });
+
+            confirmAcceptButton.addEventListener("click", () => {
+                if (!pendingSubmitter) {
+                    closeConfirmModal();
+                    return;
+                }
+                bypassConfirmation = true;
+                form.requestSubmit(pendingSubmitter);
+                bypassConfirmation = false;
+                closeConfirmModal();
+            });
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && !confirmModal.hidden) {
+                    closeConfirmModal();
+                }
+            });
+
+            form.addEventListener("submit", (event) => {
+                syncModeInputs();
+                if (bypassConfirmation) {
+                    return;
+                }
+                const submitter = event.submitter instanceof HTMLButtonElement ? event.submitter : null;
+                const submitterAction = submitter ? (submitter.getAttribute("formaction") || "") : "";
+                const action = submitterAction || form.getAttribute("action") || "";
+                const isSaveAction = !action || action.endsWith("/station");
+                if (!isSaveAction) {
+                    return;
+                }
+                const health = evaluateHealth();
+                if (!health.requiresConfirmation) {
+                    return;
+                }
+                event.preventDefault();
+                openConfirmModal(submitter);
+            });
+
+            syncModeInputs();
+            renderHealth();
+            syncSchedulePanel();
         };
 
         const initLocationPicker = () => {
@@ -905,6 +1451,7 @@
 
         initSymbolPicker();
         initLengthCounters();
+        initBeaconPathHealth();
         initLocationPicker();
         initPhgGenerator();
     })();

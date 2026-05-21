@@ -99,6 +99,57 @@ def sample_rf_flow_payload(*, name: str, source_ref: str, target_ref: str, enabl
     }
 
 
+def sample_local_tx_flow_payload(
+    *,
+    name: str,
+    target_kind: str = "tx_aprsis",
+    target_ref: str = "aprsis",
+    enabled: int = 1,
+) -> dict:
+    source_step = {
+        "step_type": "receiver_local_tx",
+        "title": "Local TX",
+        "enabled": 1,
+        "config": {"local_tx_source": "local_tx"},
+    }
+    if target_kind == "tx_aprsis":
+        steps = [
+            source_step,
+            {
+                "step_type": "filter_strict",
+                "title": "Strict Filter",
+                "enabled": 1,
+                "config": {},
+            },
+            {
+                "step_type": "tx_aprsis",
+                "title": "TX APRS-IS",
+                "enabled": 1,
+                "config": {"aprsis_target": target_ref},
+            },
+        ]
+    else:
+        steps = [
+            source_step,
+            {
+                "step_type": "action_log",
+                "title": "Black Hole",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+    return {
+        "name": name,
+        "description": "Local TX flow",
+        "source_kind": "receiver_local_tx",
+        "source_ref": "local_tx",
+        "target_kind": target_kind,
+        "target_ref": target_ref,
+        "enabled": enabled,
+        "steps": steps,
+    }
+
+
 class DigiFlowsTests(unittest.TestCase):
     def test_init_db_creates_digi_flow_tables_and_allows_duplicate_route_pairs(self) -> None:
         with temporary_database():
@@ -318,6 +369,46 @@ class DigiFlowsTests(unittest.TestCase):
                 )["target"]
             }
             self.assertIn("tx_rf::TNC-70cm", preserved_values)
+
+    def test_openwebrx_mqtt_is_available_as_source_but_not_as_tx_target(self) -> None:
+        with temporary_database():
+            connection = connect()
+            try:
+                connection.executemany(
+                    """
+                    INSERT INTO modems (
+                        name, modem_type, band, device_path, baud_rate, enabled,
+                        expose_port_enabled, expose_bind_address, expose_port, expose_whitelist,
+                        notes, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, NULL, 1, 0, '127.0.0.1', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    (
+                        ("OpenWebRX-1", "OPENWEBRX_MQTT", "2m", "mqtt://127.0.0.1:1883/rxqwe/APRS"),
+                        ("TNC-TX", "TCP", "2m", "127.0.0.1:9001"),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            options = get_digi_flow_endpoint_options()
+            source_values = {option["value"] for option in options["source"]}
+            target_values = {option["value"] for option in options["target"]}
+
+            self.assertIn("receiver_rf::OpenWebRX-1", source_values)
+            self.assertNotIn("tx_rf::OpenWebRX-1", target_values)
+            self.assertIn("tx_rf::TNC-TX", target_values)
+
+    def test_endpoint_options_include_local_tx_source_with_restricted_target_set(self) -> None:
+        with temporary_database():
+            options = get_digi_flow_endpoint_options()
+            source_values = {option["value"] for option in options["source"]}
+            self.assertIn("receiver_local_tx::local_tx", source_values)
+
+            by_source_kind = options.get("target_by_source_kind") or {}
+            local_targets = {option["kind"] for option in by_source_kind.get("receiver_local_tx") or []}
+            self.assertEqual(local_targets, {"tx_aprsis", "action_log"})
 
     def test_type_meta_exposes_runtime_status_for_filters(self) -> None:
         with temporary_database():
@@ -829,6 +920,50 @@ class DigiFlowsTests(unittest.TestCase):
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["target_kind"], "tx_rf")
 
+    def test_local_tx_to_aprsis_and_black_hole_are_valid(self) -> None:
+        with temporary_database():
+            aprsis_normalized = normalize_digi_flow_payload(
+                sample_local_tx_flow_payload(name="Local uplink", target_kind="tx_aprsis", target_ref="aprsis")
+            )
+            self.assertEqual(aprsis_normalized["source_kind"], "receiver_local_tx")
+            self.assertEqual(aprsis_normalized["target_kind"], "tx_aprsis")
+            self.assertEqual([step["step_type"] for step in aprsis_normalized["steps"]], ["receiver_local_tx", "filter_strict", "tx_aprsis"])
+
+            black_hole_normalized = normalize_digi_flow_payload(
+                sample_local_tx_flow_payload(name="Local blackhole", target_kind="action_log", target_ref="log-only")
+            )
+            self.assertEqual(black_hole_normalized["source_kind"], "receiver_local_tx")
+            self.assertEqual(black_hole_normalized["target_kind"], "action_log")
+            self.assertEqual([step["step_type"] for step in black_hole_normalized["steps"]], ["receiver_local_tx", "action_log"])
+
+    def test_local_tx_rejects_rf_and_drop_targets(self) -> None:
+        with temporary_database():
+            rf_payload = sample_local_tx_flow_payload(name="Local to RF", target_kind="tx_rf", target_ref="RF-OUT")
+            rf_payload["steps"] = [
+                rf_payload["steps"][0],
+                {
+                    "step_type": "tx_rf",
+                    "title": "TX RF",
+                    "enabled": 1,
+                    "config": {"rf_target": "RF-OUT"},
+                },
+            ]
+            with self.assertRaisesRegex(ValueError, "Local TX source can target only APRS-IS uplink or Black Hole"):
+                normalize_digi_flow_payload(rf_payload)
+
+            drop_payload = sample_local_tx_flow_payload(name="Local drop", target_kind="action_drop", target_ref="drop")
+            drop_payload["steps"] = [
+                drop_payload["steps"][0],
+                {
+                    "step_type": "action_drop",
+                    "title": "Drop",
+                    "enabled": 1,
+                    "config": {"note": "drop"},
+                },
+            ]
+            with self.assertRaisesRegex(ValueError, "Local TX source can target only APRS-IS uplink or Black Hole"):
+                normalize_digi_flow_payload(drop_payload)
+
     def test_create_enabled_rf_flow_allows_shared_target_when_source_differs(self) -> None:
         with temporary_database():
             create_digi_flow(sample_rf_flow_payload(name="2m to 70cm", source_ref="TNC-2m", target_ref="TNC-70cm"))
@@ -908,6 +1043,76 @@ class DigiFlowsTests(unittest.TestCase):
                             "Receiver RF",
                             1,
                             '{"rf_port":"TNC-1"}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            flow_id,
+                            2,
+                            "filter_strict",
+                            "Strict Filter",
+                            0,
+                            '{}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            flow_id,
+                            3,
+                            "tx_aprsis",
+                            "TX APRS-IS",
+                            1,
+                            '{"aprsis_target":"aprsis"}',
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            with self.assertRaisesRegex(ValueError, "cannot be enabled without a mandatory enabled Strict APRS-IS guard step"):
+                set_digi_flow_enabled(flow_id, True)
+
+    def test_enabling_local_tx_aprsis_flow_without_enabled_strict_guard_is_blocked(self) -> None:
+        with temporary_database():
+            connection = connect()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO digi_flows (
+                        name, description, source_kind, source_ref, target_kind, target_ref, enabled, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "Legacy Local TX flow",
+                        "",
+                        "receiver_local_tx",
+                        "local_tx",
+                        "tx_aprsis",
+                        "aprsis",
+                        0,
+                        "2026-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
+                flow_id = int(connection.execute("SELECT id FROM digi_flows WHERE name = 'Legacy Local TX flow'").fetchone()["id"])
+                connection.executemany(
+                    """
+                    INSERT INTO digi_flow_steps (
+                        flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        (
+                            flow_id,
+                            1,
+                            "receiver_local_tx",
+                            "Local TX",
+                            1,
+                            '{"local_tx_source":"local_tx"}',
                             "2026-01-01T00:00:00+00:00",
                             "2026-01-01T00:00:00+00:00",
                         ),

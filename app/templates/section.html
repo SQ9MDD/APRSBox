@@ -109,7 +109,7 @@
                     <thead>
                         <tr>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'serial_rx_silence_reconnect_seconds', 'tx_min_gap_seconds', 'expose_bind_address', 'expose_port', 'expose_whitelist'] %}
+                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'serial_rx_silence_reconnect_seconds', 'tx_min_gap_seconds', 'expose_allow_tx', 'expose_bind_address', 'expose_port', 'expose_whitelist'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <th>{{ t("Status") }}</th>
                             {% elif section.slug == 'modems' and field.name == 'tx_blocked' %}
@@ -132,7 +132,7 @@
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             {% for field in section.fields %}
-                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'serial_rx_silence_reconnect_seconds', 'tx_min_gap_seconds', 'expose_bind_address', 'expose_port', 'expose_whitelist'] %}
+                            {% if section.slug == 'modems' and field.name in ['band', 'modem_type', 'device_path', 'baud_rate', 'serial_rx_silence_reconnect_seconds', 'tx_min_gap_seconds', 'expose_allow_tx', 'expose_bind_address', 'expose_port', 'expose_whitelist'] %}
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <td class="modems-summary-icon-cell">
                                 <span
@@ -239,10 +239,11 @@
                     {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
                     {% if section.slug == 'bulletins' and field.name == 'group_name' %}id="bulletins-group-row"{% endif %}
                     {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-toggle-row"{% endif %}
+                    {% if section.slug == 'modems' and field.name == 'expose_allow_tx' %}id="modems-expose-allow-tx-row"{% endif %}
                     {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-row"{% endif %}
                     {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port-row"{% endif %}
                     {% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist-row"{% endif %}
-                    {% if section.slug == 'modems' and field.name in ['expose_bind_address', 'expose_port', 'expose_whitelist'] and not (edit_row and edit_row.expose_port_enabled) %}hidden{% endif %}
+                    {% if section.slug == 'modems' and field.name in ['expose_allow_tx', 'expose_bind_address', 'expose_port', 'expose_whitelist'] and not (edit_row and edit_row.expose_port_enabled) %}hidden{% endif %}
                 >
                     {% if field.type == 'textarea' %}
                     <span>{{ t(field.label) }}</span>
@@ -268,12 +269,27 @@
                     </select>
                     {% elif field.type == 'date' %}
                     <span>{{ t(field.label) }}</span>
+                    {% set raw_date_value = edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') %}
+                    {% set input_date_value = raw_date_value|string %}
+                    {% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}
+                    {% if input_date_value %}
+                    {% if input_date_value|length == 10 %}
+                    {% set input_date_value = input_date_value ~ 'T23:59' %}
+                    {% elif ' ' in input_date_value and 'T' not in input_date_value %}
+                    {% set input_date_value = input_date_value.replace(' ', 'T') %}
+                    {% endif %}
+                    {% if input_date_value|length > 16 %}
+                    {% set input_date_value = input_date_value[:16] %}
+                    {% endif %}
+                    {% endif %}
+                    {% endif %}
                     <div class="field-inline-actions">
                         <input
-                            type="date"
+                            type="{% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}datetime-local{% else %}date{% endif %}"
                             id="{{ section.slug }}-{{ field.name }}"
                             name="{{ field.name }}"
-                            value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
+                            value="{{ input_date_value if input_date_value else '' }}"
+                            {% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}step="60"{% endif %}
                             {% if field.required %}required{% endif %}
                         >
                         <button type="button" class="button button-secondary button-inline-control" data-clear-date-target="{{ section.slug }}-{{ field.name }}">
@@ -505,6 +521,7 @@
             const baudInput = modemForm.querySelector('input[name="baud_rate"]');
             const exposeToggle = document.getElementById("modems-expose-port-enabled");
             const exposeRows = [
+                document.getElementById("modems-expose-allow-tx-row"),
                 document.getElementById("modems-expose-bind-row"),
                 document.getElementById("modems-expose-port-row"),
                 document.getElementById("modems-expose-whitelist-row"),
@@ -512,13 +529,25 @@
             if (typeSelect && baudInput) {
                 const syncModemFields = () => {
                     const isTcp = typeSelect.value === "TCP";
-                    baudInput.disabled = isTcp;
-                    if (isTcp) {
+                    const isOpenWebRxMqtt = typeSelect.value === "OPENWEBRX_MQTT";
+                    const disableBaud = isTcp || isOpenWebRxMqtt;
+                    baudInput.disabled = disableBaud;
+                    if (disableBaud) {
                         baudInput.value = "";
                     }
-                    const showExposeFields = Boolean(exposeToggle && exposeToggle.checked);
+                    if (exposeToggle) {
+                        exposeToggle.disabled = isOpenWebRxMqtt;
+                        if (isOpenWebRxMqtt) {
+                            exposeToggle.checked = false;
+                        }
+                    }
+                    const showExposeFields = Boolean(!isOpenWebRxMqtt && exposeToggle && exposeToggle.checked);
                     for (const row of exposeRows) {
                         row.hidden = !showExposeFields;
+                        const rowInputs = row.querySelectorAll("input, textarea, select");
+                        for (const input of rowInputs) {
+                            input.disabled = !showExposeFields;
+                        }
                     }
                 };
 

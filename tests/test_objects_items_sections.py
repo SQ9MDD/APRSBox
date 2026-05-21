@@ -159,7 +159,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "symbol_table": "/",
                     "symbol_code": "r",
                     "interval_minutes": "45",
-                    "valid_until_utc": "2026-12-31",
+                    "valid_until_utc": "2026-12-31T23:45",
                     "path": "WIDE2-2",
                     "is_enabled": "1",
                     "comment": "Local voice repeater",
@@ -169,7 +169,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertIsNone(error)
             row = fetch_one("SELECT valid_until_utc FROM aprs_objects WHERE name = ?", ("VOICE",))
             assert row is not None
-            self.assertEqual(row["valid_until_utc"], "2026-12-31")
+            self.assertEqual(row["valid_until_utc"], "2026-12-31 23:45")
 
     def test_object_valid_until_utc_requires_yyyy_mm_dd_format(self) -> None:
         with temporary_database():
@@ -190,7 +190,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
                 },
             )
             self.assertFalse(success)
-            self.assertEqual(error, "Valid until date must use YYYY-MM-DD format.")
+            self.assertEqual(error, "Valid until date must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.")
 
     def test_object_name_longer_than_nine_characters_is_rejected(self) -> None:
         with temporary_database():
@@ -673,7 +673,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                     "bulletin_code": "1",
                     "group_name": "",
                     "interval_minutes": "30",
-                    "valid_until_utc": "2026-12-31",
+                    "valid_until_utc": "2026-12-31 23:45",
                     "path": "",
                     "message_text": "Wind 15 km/h",
                 },
@@ -682,7 +682,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             self.assertIsNone(error)
             row = fetch_one("SELECT valid_until_utc FROM bulletins ORDER BY id DESC LIMIT 1")
             assert row is not None
-            self.assertEqual(row["valid_until_utc"], "2026-12-31")
+            self.assertEqual(row["valid_until_utc"], "2026-12-31 23:45")
 
     def test_bulletin_valid_until_utc_requires_yyyy_mm_dd_format(self) -> None:
         with temporary_database():
@@ -699,12 +699,13 @@ class BulletinAndMessageFormTests(unittest.TestCase):
                 },
             )
             self.assertFalse(success)
-            self.assertEqual(error, "Valid until date must use YYYY-MM-DD format.")
+            self.assertEqual(error, "Valid until date must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.")
 
     def test_bulletins_template_includes_counter_and_menu_label(self) -> None:
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         self.assertIn('id="bulletins-message-count"', template_source)
         self.assertIn('id="bulletins-message-error"', template_source)
+        self.assertIn("datetime-local", template_source)
         self.assertIn("Bulletins TX Log", template_source)
         self.assertIn("No bulletin outbound jobs yet.", template_source)
 

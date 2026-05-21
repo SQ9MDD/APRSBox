@@ -1,5 +1,126 @@
 # Changelog
 
+## 1.8.20 - 21.05.2026
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- zmiany od 1.8.1.dev do 1.8.19.dev
+
+### Najważniejsze zmiany
+- `OpenWebRX MQTT (RX only)`: dodano nowy interfejs RX z obsługą `APRS/SONDE/ADSB`, lokalną deduplikacją i rozszerzoną diagnostyką runtime.
+- `Routing / APRS-IS`: dodano źródło `Local TX` z bezpiecznym routowaniem wyłącznie do `APRS-IS uplink` lub `Black Hole` oraz twardymi guardami strict-filter.
+- `APRS parser`: rozszerzono obsługę pogodową o `Xxxx` (promieniowanie) oraz naprawiono dekodowanie Mic-E z ambiguity (`K/L/Z`) wraz z metadanymi niejednoznaczności pozycji.
+- `Beacon / valid-until`: dodano tryb `Proportional Path` dla beaconu pozycji oraz rozszerzono `Ważne do (UTC)` dla obiektów/biuletynów o dokładność do minuty (`YYYY-MM-DD HH:MM`).
+- `Traffic / Messages`: dodano lokalne filtry per interfejs TNC w `Traffic Monitor`, nowe zapytania `?APRSD` i `?DX` oraz guardy DIGI dla ramek `message/query`, `third-party` i już powtórzonych lokalnie.
+- `Runtime / maintenance`: wzmocniono niezawodność warstwy `TNC SERIAL` (I/O, timeouty, init/close) oraz dodano diagnostykę konserwacji SQLite i bezpieczny reset danych runtime.
+
+## 1.8.19.dev - 19.05.2026
+
+### Najważniejsze zmiany
+- `Objects / Bulletins`: pole `Ważne do (UTC)` obsługuje teraz datę i godzinę (`HH:MM`) w formularzu (`datetime-local`), zamiast samej daty.
+- `Walidacja`: backend akceptuje formaty `YYYY-MM-DD` oraz `YYYY-MM-DD HH:MM` (także `YYYY-MM-DDTHH:MM` z formularza) i normalizuje zapis.
+- `Wygaszanie`: schedulery i runtime wygaszają aktywność obiektu/biuletynu z dokładnością do minuty UTC; dla starych rekordów z samą datą zachowano kompatybilność (ważność do końca dnia UTC).
+- `Testy`: zaktualizowano testy sekcji i flow outbound dla scenariuszy `valid_until_utc` z godziną.
+
+## 1.8.18.dev - 17.05.2026
+
+### Najważniejsze zmiany
+- `Settings -> Database maintenance`: rozszerzono panel o diagnostykę kondycji SQLite (`DB/WAL/SHM size`, `page_count`, `freelist_count`, `quick_check`) oraz czytelną rekomendację, czy `VACUUM` jest potrzebny.
+- `VACUUM / bezpieczeństwo`: rekomendacja `VACUUM` opiera się na odzyskiwalnej przestrzeni (próg rozmiaru + udział wolnych stron), a uruchomienie pozostaje blokowane, gdy jakikolwiek interfejs `TNC` jest aktywny.
+- `Runtime maintenance`: dodano bezpieczną akcję `Reset runtime logs/data`, która czyści wyłącznie tabele operacyjne (logi/ramki/statystyki runtime) bez modyfikacji tabel konfiguracyjnych (`TNC`, `DIGI flows`, ustawienia stacji/WX, users itp.).
+- `I18N (PL)`: uzupełniono tłumaczenia sekcji konserwacji bazy dla nowych etykiet, opisów, rekomendacji i komunikatów akcji, eliminując mieszanie języka polskiego i angielskiego w GUI.
+- `Testy`: dodano/rozszerzono testy regresyjne dla snapshotu maintenance DB, bezpiecznego resetu runtime oraz nowych akcji/endpointów w `Settings`.
+
+## 1.8.17.dev - 17.05.2026
+
+### Najważniejsze zmiany
+- `Routing / źródła`: dodano nowe logiczne źródło `Local TX`, które obejmuje wyłącznie ramki wygenerowane lokalnie przez APRSBox (beacon/status/WX/object/item/bulletin/message), bez mapowania na fizyczny `TNC TX`.
+- `Routing / bezpieczeństwo`: dla `Local TX` dozwolone są tylko targety `APRS-IS uplink` i `Black Hole`; backend odrzuca konfiguracje `Local TX -> RF/TNC` i inne niedozwolone kombinacje.
+- `APRS-IS strict filter`: dla `Local TX -> APRS-IS` utrzymano obowiązkowy strict filter (bez dublowania logiki), rozszerzony o twardy wymóg metadanych `origin=local_generated` + `local_generated=true` oraz blokadę ramek `third-party` i `q constructs`.
+- `Outbound/runtime`: lokalnie generowane ramki otrzymują spójne metadane źródła (`local_generated`) i trafiają do istniejącego pipeline routingu, dzięki czemu uplink APRS-IS działa wyłącznie przez reguły flow (bez bocznego mechanizmu).
+- `UI + I18N + testy`: edytor reguł pokazuje `Local TX` z opisem i zawęża listę targetów; dodano tłumaczenia `PL/EN` oraz testy walidacji i testy runtime dla scenariuszy `Local TX`.
+
+## 1.8.16.dev - 17.05.2026
+
+### Najważniejsze zmiany
+- `APRS parser / Mic-E`: naprawiono dekodowanie `destination` z dozwolonym `ambiguity-space` (`K/L/Z`) zgodnie z regułami Mic-E, dzięki czemu poprawne ramki (np. `UQUQ1L`) nie są już odrzucane.
+- `APRS parser / Mic-E`: dodano metadane pozycji przybliżonej (`position_ambiguity_digits`, `position_ambiguous`) oraz wyznaczanie współrzędnych jako reprezentacji pozycji nieprecyzyjnej zamiast fałszywej pełnej precyzji.
+- `Stations/Map payload`: przekazano informacje o ambiguity do snapshotów stacji i payloadu mapy bez zmian w istniejącym renderowaniu warstw/markerów.
+- `Testy`: dodano regresje dla poprawnej ramki Mic-E z ambiguity (`UQUQ1L`) oraz przypadek negatywny z niedozwolonym znakiem; utrzymano zielone testy parsera APRS i snapshot/map.
+
+## 1.8.13.dev - 15.05.2026
+
+### Najważniejsze zmiany
+- `TNC SERIAL / close`: domyślnie wyłączono opuszczanie linii sterujących DTR/RTS przy zamknięciu portu (`drop_control_lines=False`), aby ograniczyć nieplanowane resety części urządzeń USB-serial.
+- `TNC SERIAL / open`: dodano defensywne `O_CLOEXEC` (jeśli wspierane przez system) oraz doprecyzowano konfigurację portu do trybu raw `8N1` bez hardware/software flow control.
+- `TNC SERIAL / flush`: zmieniono kolejność inicjalizacji portu: najpierw `tcsetattr`, potem opcjonalny `tcflush`, żeby czyścić bufory już po przełączeniu w docelowy tryb.
+- `TNC SERIAL / IO`: `read_serial_chunk()` zwraca teraz `b""` po `InterruptedError` z `select`, a `write_serial_data()` używa jednego deadline dla całej operacji zapisu (z retry po `InterruptedError`), co stabilizuje timeouty pod obciążeniem.
+- `Testy`: dodano testy niskopoziomowe modułu serial (`open/close/read/write`, `O_CLOEXEC`, `CRTSCTS`, semantyka timeoutów), bez wymogu fizycznego portu.
+
+## 1.8.11.dev - 11.05.2026
+
+### Najważniejsze zmiany
+- `Messages / APRS queries`: dodano obsługę `?APRSD` z odpowiedzią `Directs= ...` (stacje słyszane bezpośrednio, bez zużytych hopów digi).
+- `Messages / APRS queries`: dodano obsługę `?DX` z krótkim raportem `DX: D ... A ...` (najdalsza stacja direct oraz najdalsza stacja ogółem).
+- `Messages / query list`: odpowiedź na `?APRS` została rozszerzona o nowe pozycje `?APRSD` i `?DX`.
+
+## 1.8.10.dev - 11.05.2026
+
+### Najważniejsze zmiany
+- `Traffic Monitor / interfejsy`: dodano lokalny filtr widoczności ramek per interfejs TNC w GUI (`Pokaż/Ukryj` dla każdego aktywnego interfejsu), bez zmian w API i schemacie bazy.
+- `Traffic Monitor / UX`: przełączniki filtrów interfejsów zmieniono na ikonowe (`eye` / `eye-off`) z zachowaniem `aria-label` i `title` dla dostępności.
+- `Traffic Monitor / licznik`: licznik `entries` prezentuje teraz liczbę wpisów widocznych po aktywnych filtrach interfejsów.
+- `Zakres zmian`: filtr działa wyłącznie po stronie frontend (stan sesyjny; po odświeżeniu strony wraca domyślny widok wszystkich interfejsów).
+
+## 1.8.8.dev - 11.05.2026
+
+### Najważniejsze zmiany
+- `DIGI / Path rule`: obowiązkowy krok `Reguła ścieżki` rozszerzono o wbudowane guardy blokujące wejście ramki do kolejki DIGI/TX dla: `message/query` do lokalnych stacji (`My station`, `WX station`), ramek `third-party` (`}`) oraz ramek już powtórzonych przez lokalną stację (`CALL-SSID*` w path).
+- `UI / nazewnictwo`: zmieniono nazwę kroku na `Reguła ścieżki i ochrona DIGI` (`Path rule and DIGI guard`) oraz dodano krótki opis i listę przypadków blokowanych przez guardy w edytorze reguł.
+- `Diagnostyka`: dodano jednoznaczne kody przyczyny odrzucenia (`DIGI_GUARD_*`) w logu wykonania DIGI Flow.
+- `Testy`: dodano regresyjne testy scenariuszy local `message/query`, `third-party`, `already repeated by local` oraz przypadków, które nie powinny być blokowane przez nowe guardy.
+
+## 1.8.7.dev - 10.05.2026
+
+### Najważniejsze zmiany
+- `Nowy interfejs RX`: dodano typ `OpenWebRX MQTT (RX only)` z konfiguracją pełnym URL (`mqtt://`/`mqtts://`) i topiciem pobieranym ze ścieżki URL.
+- `Bezpieczeństwo danych`: hasło w URL jest maskowane w UI i diagnostyce (`***`); pełny URL z hasłem nie trafia do logów/statusów błędów.
+- `Runtime RX`: dodano odbiór ramek APRS z MQTT (JSON), akceptację `mode=APRS` (jeśli `mode` istnieje), odrzucanie invalid JSON z licznikiem oraz mapowanie do wspólnego pipeline TNC2.
+- `OpenWebRX SONDE`: dodano obsługę `mode=SONDE` przez bezpieczne mapowanie do ramki `APRS Object` (źródło: lokalny `CALLSIGN-SSID` z `My Settings`), z zachowaniem danych telemetrycznych w komentarzu i symbolem balonu.
+- `OpenWebRX ADSB`: dodano obsługę `mode=ADSB` przez bezpieczne mapowanie do ramki `APRS Object` (źródło: lokalny `CALLSIGN-SSID`), z ikoną samolotu i metadanymi lotu (`ICAO/flight/alt/speed/course/vspeed`) w komentarzu.
+- `Deduplikacja wejściowa`: dla OpenWebRX MQTT dodano lokalne dedupe (okno 3 s) oraz licznik `duplicates_dropped` (`APRS`: `source+destination+path+raw+freq`, `SONDE/ADSB`: fingerprint telemetrii pozycyjnej/czasu).
+- `Routing`: źródło `OpenWebRX MQTT` jest dostępne jako `source` w regułach DIGI, ale nie jest dostępne jako target TX (`tx_rf`); nie dodano auto-iGate, auto-DIGI ani TX przez MQTT.
+- `Diagnostyka`: rozszerzono statusy/health runtime interfejsu o `connected`, `subscribed topic`, `broker host/port`, `last frame time`, `frames received`, `duplicates dropped`, `invalid JSON dropped`, `last error`.
+- `Monitor ruchu / kolorowanie`: ujednolicono reguły kolorowania ramek tak, aby wszystkie ramki `TX` miały klasę koloru; `query (?)` i `telemetry` są traktowane jak kategoria wiadomości, a `object/item` jak kategoria pozycji/beacon.
+- `Monitor ruchu / proxy`: ramki wysyłane przez udostępniony port TNC (`TX-PROXY`) mają własny kolor także wtedy, gdy źródłowy callsign jest lokalny.
+- `Monitor ruchu / RX własne`: własne ramki odebrane (`RX`) zachowują ten sam podział kategorii co `TX`, z jaśniejszym wariantem kolorów.
+- `Testy`: dodano testy regresyjne kolorowania dla `query`, `object` oraz `TX-PROXY`.
+
+## 1.8.3.dev - 09.05.2026
+
+### Najważniejsze zmiany
+- `Beacon / Proportional Path`: dodano tryb `Proportional Path` w `My Settings -> Position Beacon`, aby promować prawidłową pracę RF (częste beacony lokalne, rzadsze szerokie ścieżki).
+- `Beacon scheduler`: dla własnego beaconu pozycji dodano deterministyczny harmonogram efektywnej ścieżki (DIRECT / 1-hop / pełna), bez wysyłania kilku beaconów naraz w jednym ticku.
+- `Health check konfiguracji`: dodano dynamiczną ocenę pary `Beacon co` + `Ścieżka beaconu` (`Zalecane`, `Do rozważenia`, `Niezalecane`) jako ostrzeżenie edukacyjne, bez twardej blokady zapisu.
+- `UX bezpieczeństwa`: przy bardzo agresywnych ustawieniach dodano potwierdzenie przy zapisie konfiguracji; dla `Proportional Path` dodano tooltip z efektywnym harmonogramem zależnym od wybranej ścieżki.
+- `Kompatybilność`: zachowano zgodność wsteczną istniejących konfiguracji interwału liczbowego (`fixed`), a nowy tryb działa jako rozszerzenie bez zmiany logiki DIGI/iGate/messages.
+
+## 1.8.2.dev - 08.05.2026
+
+### Najważniejsze zmiany
+- `iGate RX-only / hot path`: przyspieszono tor `RF -> APRS-IS` przez wcześniejsze enqueue do runtime DIGI/APRS-IS (przed cięższymi efektami ubocznymi: DB/statystyki/band-condition/messages), aby ograniczyć opóźnienie względem innych iGate.
+- `APRS-IS TX`: dodano krótki timeout `drain()` po stronie uplinku APRS-IS, żeby problemy sieciowe nie blokowały długo workera runtime.
+- `Diagnostyka opóźnień`: dodano lekkie metryki czasu w logach debug (`rx_to_igate_enqueue_ms`, `igate_queue_wait_ms`, `rx_to_aprsis_write_ms`, `rx_to_db_commit_ms`) dla ramek RX.
+- `Bezpieczeństwo routingu`: zachowano dotychczasową semantykę filtrów i guardów (`TCPIP/TCPXX`, `NOGATE/RFONLY`, third-party strict), bez zmian logiki DIGI RF TX i bez zmian formatu bazy.
+- `Testy`: dodano test kolejności hot path (`enqueue` przed ciężkimi side-effectami) oraz test timeoutu `APRS-IS drain`; testy regresyjne modułów `traffic/aprsis/digi_flow_runtime` przechodzą.
+
+## 1.8.1.dev - 08.05.2026
+
+### Najważniejsze zmiany
+- `APRS WX / parser`: dodano obsługę pola promieniowania `Xxxx` (nSv/h) zgodnie z `APRS-SPEC/weather-new.txt`; wartość nie trafia już do komentarza i jest prezentowana jako metryka `Promieniowanie` w szczegółach stacji.
+
 ## 1.8.0
 
 ### Stable release

@@ -236,7 +236,7 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_object_scheduler_disables_expired_object_without_queueing(self) -> None:
         with temporary_database():
-            object_id = insert_object(valid_until_utc="2000-01-01")
+            object_id = insert_object(valid_until_utc="2000-01-01 00:00")
             insert_modem()
             update_station_settings(
                 {
@@ -266,7 +266,7 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_outbound_runtime_skips_expired_object_job_and_disables_source(self) -> None:
         with temporary_database():
             insert_modem(device_path="127.0.0.1:9003")
-            object_id = insert_object(lifetime="permanent", interval_minutes=30, valid_until_utc="2099-12-31")
+            object_id = insert_object(lifetime="permanent", interval_minutes=30, valid_until_utc="2099-12-31 23:59")
             update_station_settings(
                 {
                     "callsign": "SQ9MDD",
@@ -288,7 +288,7 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             scheduler._tick()
             job = claim_next_outbound_job()
             assert job is not None
-            execute("UPDATE aprs_objects SET valid_until_utc = '2000-01-01', is_enabled = 1 WHERE id = ?", (object_id,))
+            execute("UPDATE aprs_objects SET valid_until_utc = '2000-01-01 00:00', is_enabled = 1 WHERE id = ?", (object_id,))
 
             outbound_service = OutboundService()
             with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
@@ -298,7 +298,7 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             job_row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
             assert job_row is not None
             self.assertEqual(job_row["status"], "sent")
-            self.assertIn("expired on 2000-01-01 UTC", str(job_row["last_error"]))
+            self.assertIn("expired on 2000-01-01 00:00 UTC", str(job_row["last_error"]))
             source_row = fetch_one("SELECT is_enabled FROM aprs_objects WHERE id = ?", (object_id,))
             assert source_row is not None
             self.assertEqual(int(source_row["is_enabled"]), 0)

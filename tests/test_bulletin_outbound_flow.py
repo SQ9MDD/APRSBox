@@ -188,7 +188,7 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_bulletin_scheduler_disables_expired_row_without_queueing(self) -> None:
         with temporary_database():
             insert_modem()
-            bulletin_id = insert_message_record(valid_until_utc="2000-01-01")
+            bulletin_id = insert_message_record(valid_until_utc="2000-01-01 00:00")
             update_station_settings(
                 {
                     "callsign": "SQ9MDD",
@@ -217,7 +217,7 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_outbound_runtime_skips_expired_bulletin_job_and_disables_source(self) -> None:
         with temporary_database():
             insert_modem(device_path="127.0.0.1:9015")
-            bulletin_id = insert_message_record(message_kind="announcement", valid_until_utc="2099-12-31")
+            bulletin_id = insert_message_record(message_kind="announcement", valid_until_utc="2099-12-31 23:59")
             update_station_settings(
                 {
                     "callsign": "SQ9MDD",
@@ -239,7 +239,7 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             scheduler._tick()
             job = claim_next_outbound_job()
             assert job is not None
-            execute("UPDATE bulletins SET valid_until_utc = '2000-01-01', is_enabled = 1 WHERE id = ?", (bulletin_id,))
+            execute("UPDATE bulletins SET valid_until_utc = '2000-01-01 00:00', is_enabled = 1 WHERE id = ?", (bulletin_id,))
 
             outbound_service = OutboundService()
             with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
@@ -249,7 +249,7 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             job_row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
             assert job_row is not None
             self.assertEqual(job_row["status"], "sent")
-            self.assertIn("expired on 2000-01-01 UTC", str(job_row["last_error"]))
+            self.assertIn("expired on 2000-01-01 00:00 UTC", str(job_row["last_error"]))
             source_row = fetch_one("SELECT is_enabled FROM bulletins WHERE id = ?", (bulletin_id,))
             assert source_row is not None
             self.assertEqual(int(source_row["is_enabled"]), 0)

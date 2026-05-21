@@ -15,6 +15,12 @@ from app.config import settings
 from app.datetime_utils import format_display_datetime
 from app.db import event_log_levels_at_or_above, fetch_all, fetch_one, get_connection, log_event, normalize_event_log_level, utc_now
 from app.i18n import get_app_language, get_translator
+from app.services.beacon_pathing import (
+    BEACON_INTERVAL_MODE_FIXED,
+    BEACON_INTERVAL_MODE_PROPORTIONAL,
+    normalize_beacon_interval_mode,
+)
+from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, TX_CAPABLE_MODEM_TYPES, mask_mqtt_url, parse_mqtt_url
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
     lookup_aprs_device_identification,
@@ -103,6 +109,9 @@ def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None) -> dict[str, Any]:
     result = dict(row)
+    modem_type = str(result.get("modem_type") or "").strip().upper()
+    if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
+        result["device_path"] = mask_mqtt_url(result.get("device_path"))
     if not bool(result.get("enabled")):
         result["modem_runtime_status"] = "disabled"
         result["modem_runtime_label"] = "Disabled"
@@ -209,6 +218,10 @@ def get_station_settings() -> dict[str, Any]:
     result.setdefault("beacon_interface_id", None)
     result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     result.setdefault("default_units", "metric")
+    result["beacon_interval_mode"] = normalize_beacon_interval_mode(
+        result.get("beacon_interval_mode"),
+        default=BEACON_INTERVAL_MODE_FIXED,
+    )
     result.setdefault("beacon_interval_minutes", 30)
     result.setdefault("beacon_path", "")
     result.setdefault("status_enabled", 0)
@@ -230,12 +243,13 @@ def get_configured_modem_interfaces() -> list[dict[str, Any]]:
 
 
 def get_active_tnc_interfaces() -> list[dict[str, Any]]:
+    modem_type_filter = ", ".join(f"'{item}'" for item in TX_CAPABLE_MODEM_TYPES)
     rows = fetch_all(
-        """
+        f"""
         SELECT id, name, modem_type, band, device_path, enabled
         FROM modems
         WHERE enabled = 1
-          AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+          AND modem_type IN ({modem_type_filter})
         ORDER BY name COLLATE NOCASE ASC, id ASC
         """
     )
@@ -243,11 +257,12 @@ def get_active_tnc_interfaces() -> list[dict[str, Any]]:
 
 
 def has_enabled_modem_interface() -> bool:
+    modem_type_filter = ", ".join(f"'{item}'" for item in TX_CAPABLE_MODEM_TYPES)
     row = fetch_one(
-        """
+        f"""
         SELECT 1
         FROM modems
-        WHERE enabled = 1 AND modem_type IN ('TCP', 'SERIALL', 'SERIAL')
+        WHERE enabled = 1 AND modem_type IN ({modem_type_filter})
         LIMIT 1
         """
     )
@@ -265,6 +280,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
                 beacon_interface_id = :beacon_interface_id,
                 beacon_tx_scope = :beacon_tx_scope,
                 beacon_comment = :beacon_comment,
+                beacon_interval_mode = :beacon_interval_mode,
                 beacon_interval_minutes = :beacon_interval_minutes,
                 beacon_path = :beacon_path,
                 status_enabled = :status_enabled,
@@ -321,7 +337,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
             beacon_interface_id = None
     if beacon_tx_scope == TX_SCOPE_ALL_ACTIVE:
         beacon_interface_id = None
-    beacon_interval_minutes = _normalize_station_interval(payload.get("beacon_interval_minutes"), label="Beacon interval")
+    beacon_interval_mode, beacon_interval_minutes = _normalize_station_beacon_interval_config(payload)
     status_interval_minutes = _normalize_station_interval(payload.get("status_interval_minutes"), label="Status interval")
     status_enabled = int(bool(payload.get("status_enabled")))
     beacon_comment = _normalize_station_text_field(
@@ -345,6 +361,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "beacon_interface_id": beacon_interface_id,
         "beacon_tx_scope": beacon_tx_scope,
         "beacon_comment": beacon_comment,
+        "beacon_interval_mode": beacon_interval_mode,
         "beacon_interval_minutes": beacon_interval_minutes,
         "beacon_path": payload.get("beacon_path", ""),
         "status_enabled": status_enabled,
@@ -385,7 +402,7 @@ def recent_event_logs(limit: int = 100, *, min_level: str = "DEBUG") -> list[dic
         f"""
         SELECT id, level, category, message, created_at
         FROM event_logs
-        WHERE category NOT IN ('outbound', 'digi_flow_runtime', 'traffic', 'aprsis', 'aprs', 'messages')
+        WHERE category NOT IN ('outbound', 'digi_flow_runtime', 'aprsis', 'aprs', 'messages')
           AND level IN ({level_placeholders})
         ORDER BY id DESC
         LIMIT ?
@@ -550,6 +567,14 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             expose_bind_address,
             expose_port,
             expose_active_clients,
+            mqtt_connected,
+            mqtt_subscribed_topic,
+            mqtt_broker_host,
+            mqtt_broker_port,
+            mqtt_last_frame_at,
+            mqtt_frames_received,
+            mqtt_duplicates_dropped,
+            mqtt_invalid_json_dropped,
             last_error,
             updated_at
         FROM traffic_runtime_interfaces
@@ -605,6 +630,14 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "status_detail": row["status_detail"] or "",
                 "last_error": row["last_error"],
                 "updated_at": _format_monitor_timestamp(row["updated_at"]),
+                "connected": bool(row["mqtt_connected"]) if row["mqtt_connected"] is not None else str(row["status"] or "").strip().lower() == "connected",
+                "subscribed_topic": str(row["mqtt_subscribed_topic"] or "").strip(),
+                "broker_host": str(row["mqtt_broker_host"] or "").strip(),
+                "broker_port": int(row["mqtt_broker_port"]) if row["mqtt_broker_port"] is not None else None,
+                "last_frame_time": _format_monitor_timestamp(row["mqtt_last_frame_at"]),
+                "frames_received": int(row["mqtt_frames_received"]) if row["mqtt_frames_received"] is not None else 0,
+                "duplicates_dropped": int(row["mqtt_duplicates_dropped"]) if row["mqtt_duplicates_dropped"] is not None else 0,
+                "invalid_json_dropped": int(row["mqtt_invalid_json_dropped"]) if row["mqtt_invalid_json_dropped"] is not None else 0,
                 "expose": expose,
             }
         )
@@ -945,39 +978,40 @@ def _traffic_frame_row_class(
     source_callsign = str(parsed.get("source_callsign") or "").strip().upper()
 
     aprs_data = parsed.get("aprs_data") or {}
+    info_field = str(parsed.get("logical_info") or parsed.get("info") or "")
     packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
-    packet_type_code = str(aprs_data.get("packet_type_code") or "").strip().lower()
     symbol = str(aprs_data.get("symbol") or "").strip()
     is_weather = packet_group == "weather" or symbol.endswith("_")
-    is_beacon_or_status = packet_group in {"position", "status"} and not is_weather
-    is_message_or_bulletin = packet_group == "message" and packet_type_code in {
-        "message",
-        "bulletin",
-        "announcement",
-        "group_bulletin",
-    }
+    is_position_like = packet_group in {"position", "status", "object", "item"} and not is_weather
+    is_message_like = packet_group in {"message", "query", "telemetry"} or (not packet_group and info_field.startswith("?"))
     is_own_station_source = bool(station_source_key) and source_key == station_source_key
     is_own_wx_source = bool(wx_source_key) and source_key == wx_source_key
     is_own_callsign = bool(station_callsign) and source_callsign == station_callsign
 
     if normalized_direction == "TX":
-        if is_proxy_tx and source_key and source_key not in {station_source_key, wx_source_key}:
+        if is_proxy_tx:
             classes.append("traffic-log-row-proxy-tx")
         elif (is_own_wx_source or is_own_callsign) and is_weather:
             classes.append("traffic-log-row-own-wx-tx")
-        elif is_own_station_source and is_beacon_or_status:
-            classes.append("traffic-log-row-own-beacon-tx")
-        elif is_own_station_source and is_message_or_bulletin:
-            classes.append("traffic-log-row-own-message-tx")
-        elif source_key and source_key not in {station_source_key, wx_source_key}:
+        elif is_own_station_source:
+            if is_position_like:
+                classes.append("traffic-log-row-own-beacon-tx")
+            elif is_message_like:
+                classes.append("traffic-log-row-own-message-tx")
+            else:
+                classes.append("traffic-log-row-own-beacon-tx")
+        elif source_key:
             classes.append("traffic-log-row-repeated-tx")
     elif normalized_direction == "RX":
         if (is_own_wx_source or is_own_callsign) and is_weather:
             classes.append("traffic-log-row-own-wx-rx")
-        elif is_own_station_source and is_beacon_or_status:
-            classes.append("traffic-log-row-own-beacon-rx")
-        elif is_own_station_source and is_message_or_bulletin:
-            classes.append("traffic-log-row-own-message-rx")
+        elif is_own_station_source:
+            if is_position_like:
+                classes.append("traffic-log-row-own-beacon-rx")
+            elif is_message_like:
+                classes.append("traffic-log-row-own-message-rx")
+            else:
+                classes.append("traffic-log-row-own-beacon-rx")
 
     return " ".join(classes)
 
@@ -1376,6 +1410,8 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
                 "latitude": snapshot["latitude"],
                 "longitude": snapshot["longitude"],
+                "position_ambiguity_digits": snapshot.get("position_ambiguity_digits"),
+                "position_ambiguous": bool(snapshot.get("position_ambiguous")),
                 "distance_km": snapshot.get("distance_km"),
                 "aprs_device_short": snapshot["aprs_device_short"],
                 "detail_href": build_station_detail_href(snapshot["display_callsign"]),
@@ -1434,6 +1470,8 @@ def get_station_detail(
         "longitude": snapshot["longitude"],
         "latitude_float": latitude,
         "longitude_float": longitude,
+        "position_ambiguity_digits": snapshot.get("position_ambiguity_digits"),
+        "position_ambiguous": bool(snapshot.get("position_ambiguous")),
         "distance_km": snapshot.get("distance_km"),
         "messaging_capable": _messaging_capable(snapshot),
         "aprs_device": dict(snapshot["aprs_device"]) if snapshot.get("aprs_device") else None,
@@ -1714,6 +1752,10 @@ def _build_station_snapshots_from_rows(
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
             station["longitude"] = aprs_data["longitude"]
+        if station.get("position_ambiguity_digits") is None and aprs_data.get("position_ambiguity_digits") is not None:
+            station["position_ambiguity_digits"] = int(aprs_data["position_ambiguity_digits"])
+        if not station.get("position_ambiguous") and aprs_data.get("position_ambiguous"):
+            station["position_ambiguous"] = True
 
     return list(stations.values())[:limit]
 
@@ -1735,9 +1777,12 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
         "aprs_device",
         "aprs_device_short",
         "status_text",
+        "position_ambiguity_digits",
     ):
         if not merged.get(field) and secondary.get(field):
             merged[field] = secondary[field]
+    if not merged.get("position_ambiguous") and secondary.get("position_ambiguous"):
+        merged["position_ambiguous"] = True
     if (not merged.get("data_raw")) and secondary.get("data_raw"):
         merged["data_raw"] = dict(secondary["data_raw"])
     if latest is secondary:
@@ -1800,6 +1845,8 @@ def _new_station_snapshot(
         "data_raw": {},
         "latitude": "",
         "longitude": "",
+        "position_ambiguity_digits": None,
+        "position_ambiguous": False,
         "distance_km": None,
         "aprs_device": None,
         "aprs_device_short": "",
@@ -2340,7 +2387,7 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     if len(destination) != 6 or len(info) < 9:
         return None
 
-    latitude = _decode_mic_e_latitude(destination)
+    latitude, position_ambiguity_digits = _decode_mic_e_latitude(destination)
     longitude = _decode_mic_e_longitude(destination, info)
     if latitude is None or longitude is None:
         return None
@@ -2360,6 +2407,9 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
         "comment": comment,
     }
+    if position_ambiguity_digits > 0:
+        result["position_ambiguity_digits"] = position_ambiguity_digits
+        result["position_ambiguous"] = True
     mic_e_movement = _decode_mic_e_speed_course(info)
     if mic_e_movement:
         result["data"] = mic_e_movement
@@ -2367,18 +2417,34 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     return result
 
 
-def _decode_mic_e_latitude(destination: str) -> str | None:
+def _decode_mic_e_latitude(destination: str) -> tuple[str | None, int]:
     digits: list[int] = []
-    for char in destination:
-        digit = _decode_mic_e_dest_digit(char)
+    ambiguous_positions: list[int] = []
+    for index, char in enumerate(destination):
+        digit, is_ambiguity_space = _decode_mic_e_dest_digit(char)
         if digit is None:
-            return None
+            return None, 0
+        if is_ambiguity_space:
+            ambiguous_positions.append(index)
         digits.append(digit)
+
+    position_ambiguity_digits = 0
+    if ambiguous_positions:
+        first_ambiguous_index = ambiguous_positions[0]
+        expected_ambiguous_positions = list(range(first_ambiguous_index, len(destination)))
+        if ambiguous_positions != expected_ambiguous_positions:
+            return None, 0
+        position_ambiguity_digits = len(ambiguous_positions)
+        # APRS101 Mic-E allows ambiguity-space in destination bytes (e.g. L),
+        # so we decode the latitude as the midpoint of the ambiguous suffix.
+        digits[first_ambiguous_index] = 5
+        for index in range(first_ambiguous_index + 1, len(destination)):
+            digits[index] = 0
 
     latitude = (digits[0] * 10 + digits[1]) + ((digits[2] * 10 + digits[3]) + (digits[4] * 10 + digits[5]) / 100.0) / 60.0
     if not _mic_e_flag(destination[3]):
         latitude *= -1
-    return f"{latitude:.5f}"
+    return f"{latitude:.5f}", position_ambiguity_digits
 
 
 def _decode_mic_e_longitude(destination: str, info: str) -> str | None:
@@ -2426,14 +2492,16 @@ def _decode_mic_e_speed_course(info: str) -> dict[str, int] | None:
     }
 
 
-def _decode_mic_e_dest_digit(char: str) -> int | None:
+def _decode_mic_e_dest_digit(char: str) -> tuple[int | None, bool]:
     if "0" <= char <= "9":
-        return ord(char) - ord("0")
+        return ord(char) - ord("0"), False
     if "A" <= char <= "J":
-        return ord(char) - ord("A")
+        return ord(char) - ord("A"), False
     if "P" <= char <= "Y":
-        return ord(char) - ord("P")
-    return None
+        return ord(char) - ord("P"), False
+    if char in {"K", "L", "Z"}:
+        return 0, True
+    return None, False
 
 
 def _mic_e_flag(char: str) -> bool:
@@ -2667,6 +2735,7 @@ def _parse_weather_fields(text: str) -> dict[str, float | int] | None:
     rain_midnight = _match_group(text, r"P(\d{3})")
     humidity = _match_group(text, r"h(\d{2})")
     pressure = _match_group(text, r"b(\d{5})")
+    radiation = _match_group(text, r"[Xx](\d{3})")
 
     if wind_dir:
         metrics["wind_dir"] = int(wind_dir)
@@ -2687,6 +2756,10 @@ def _parse_weather_fields(text: str) -> dict[str, float | int] | None:
         metrics["humidity_percent"] = humidity_value
     if pressure:
         metrics["pressure_hpa"] = int(pressure) / 10
+    if radiation:
+        mantissa = int(radiation[:2])
+        exponent = int(radiation[2])
+        metrics["radiation_nsv_h"] = float(mantissa * (10**exponent))
 
     return metrics or None
 
@@ -2858,7 +2931,7 @@ def _clean_decoded_tokens(text: str, *, preserve_qsy_callsign: bool = False) -> 
     cleaned = re.sub(r"^_?\d{8}", "", cleaned)
     cleaned = re.sub(r"\|[!-{]{4,14}\|", " ", cleaned)
     cleaned = re.sub(r"![Ww][!-{]{2}!", " ", cleaned)
-    cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5})", " ", cleaned)
+    cleaned = re.sub(r"(?:c\d{3}|s\d{3}|g\d{3}|t-?\d{3}|r\d{3}|p\d{3}|P\d{3}|h\d{2}|b\d{5}|[Xx]\d{3})", " ", cleaned)
     cleaned = re.sub(r"PHG\d{4}", " ", cleaned)
     cleaned = re.sub(r"(?<!\d)\d{3}/\d{3}(?!\d)", " ", cleaned)
     cleaned = re.sub(r"(?:^|[\s/])A=\d{6}", " ", cleaned)
@@ -2940,6 +3013,17 @@ def _format_decoded_data_for_display(metrics: dict[str, float | int | str], unit
     pressure_hpa = metrics.get("pressure_hpa")
     if pressure_hpa is not None:
         items.append(_weather_item("gauge.svg", "Ciśnienie", f"{float(pressure_hpa):.1f} hPa"))
+
+    radiation_nsv_h = metrics.get("radiation_nsv_h")
+    if radiation_nsv_h is not None:
+        radiation_value = float(radiation_nsv_h)
+        if radiation_value >= 1_000_000:
+            value = f"{radiation_value / 1_000_000:.3f} mSv/h"
+        elif radiation_value >= 1_000:
+            value = f"{radiation_value / 1_000:.2f} µSv/h"
+        else:
+            value = f"{radiation_value:.0f} nSv/h"
+        items.append(_weather_item("radioactive.svg", "Promieniowanie", value))
 
     phg_power_w = metrics.get("phg_power_w")
     if phg_power_w is not None:
@@ -3211,6 +3295,29 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     modem_type = str(payload.get("modem_type") or "").strip().upper()
     if modem_type == "SERIAL":
         modem_type = "SERIALL"
+    supported_modem_types = set(TX_CAPABLE_MODEM_TYPES) | {OPENWEBRX_MQTT_MODEM_TYPE}
+    if modem_type not in supported_modem_types:
+        raise ValueError("Unsupported TNC type.")
+
+    normalized["modem_type"] = modem_type
+    normalized["name"] = str(payload.get("name") or "").strip()
+    normalized["band"] = str(payload.get("band") or "").strip().lower()
+    if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
+        endpoint = parse_mqtt_url(payload.get("device_path"), label="OpenWebRX MQTT URL")
+        normalized["device_path"] = endpoint.normalized_url
+        normalized["baud_rate"] = None
+        normalized["tx_blocked"] = 1
+        normalized["expose_port_enabled"] = 0
+        normalized["expose_allow_tx"] = 0
+        normalized["expose_bind_address"] = "0.0.0.0"
+        normalized["expose_port"] = 8002
+        normalized["expose_whitelist"] = ""
+        normalized["tx_min_gap_seconds"] = _normalize_modem_tx_min_gap_seconds(payload.get("tx_min_gap_seconds"))
+        normalized["serial_rx_silence_reconnect_seconds"] = _normalize_serial_rx_silence_timeout_seconds(
+            payload.get("serial_rx_silence_reconnect_seconds")
+        )
+        return normalized
+
     expose_port_enabled = int(bool(payload.get("expose_port_enabled")))
     expose_bind_address = _normalize_ipv4_address(
         payload.get("expose_bind_address"),
@@ -3220,13 +3327,10 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     expose_port = _normalize_tcp_port(payload.get("expose_port"), default=8002, label="Expose port")
     expose_whitelist = _normalize_ip_whitelist(payload.get("expose_whitelist"))
 
-    normalized["modem_type"] = modem_type
     normalized["expose_port_enabled"] = expose_port_enabled
     normalized["expose_bind_address"] = expose_bind_address
     normalized["expose_port"] = expose_port
     normalized["expose_whitelist"] = expose_whitelist
-    normalized["name"] = str(payload.get("name") or "").strip()
-    normalized["band"] = str(payload.get("band") or "").strip().lower()
     if modem_type == "SERIALL":
         normalized["device_path"] = normalize_serial_device_path(payload.get("device_path"))
         normalized["baud_rate"] = normalize_serial_baud_rate(payload.get("baud_rate"))
@@ -3429,6 +3533,28 @@ def _normalize_station_interval(value: Any, *, label: str) -> int:
     return interval_minutes
 
 
+def _normalize_station_beacon_interval_config(payload: dict[str, Any]) -> tuple[str, int]:
+    raw_interval = str(payload.get("beacon_interval_minutes") or "").strip()
+    mode = normalize_beacon_interval_mode(payload.get("beacon_interval_mode"), default=BEACON_INTERVAL_MODE_FIXED)
+    if raw_interval.lower() == BEACON_INTERVAL_MODE_PROPORTIONAL:
+        mode = BEACON_INTERVAL_MODE_PROPORTIONAL
+    elif mode == BEACON_INTERVAL_MODE_PROPORTIONAL and "beacon_interval_minutes_fixed" in payload:
+        # Defensive fallback for form submissions: if select sends numeric value,
+        # treat it as fixed interval even when stale hidden mode says proportional.
+        mode = BEACON_INTERVAL_MODE_FIXED
+
+    if mode == BEACON_INTERVAL_MODE_PROPORTIONAL:
+        fallback_value = payload.get("beacon_interval_minutes_fixed")
+        fallback_text = str(fallback_value or "").strip()
+        if not fallback_text and raw_interval.lower() != BEACON_INTERVAL_MODE_PROPORTIONAL:
+            fallback_text = raw_interval
+        if not fallback_text:
+            fallback_text = "30"
+        return mode, _normalize_station_interval(fallback_text, label="Beacon interval")
+
+    return BEACON_INTERVAL_MODE_FIXED, _normalize_station_interval(raw_interval, label="Beacon interval")
+
+
 def _normalize_serial_rx_silence_timeout_seconds(value: Any) -> int:
     raw = str(value if value is not None else SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS).strip()
     if not raw:
@@ -3459,10 +3585,16 @@ def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:
     text = str(value or "").strip()
     if not text:
         return None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            return parsed.strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
     try:
         parsed = datetime.strptime(text, "%Y-%m-%d")
     except ValueError as exc:
-        raise ValueError(f"{label} must use YYYY-MM-DD format.") from exc
+        raise ValueError(f"{label} must use YYYY-MM-DD or YYYY-MM-DD HH:MM format.") from exc
     return parsed.strftime("%Y-%m-%d")
 
 

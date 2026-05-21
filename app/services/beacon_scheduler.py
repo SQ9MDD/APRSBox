@@ -4,12 +4,22 @@ import asyncio
 from datetime import datetime, timezone
 
 from app.db import get_app_setting, log_event, set_app_setting
+from app.services.beacon_pathing import (
+    BEACON_INTERVAL_MODE_FIXED,
+    BEACON_INTERVAL_MODE_PROPORTIONAL,
+    PROPORTIONAL_BEACON_INTERVAL_MINUTES,
+    normalize_beacon_interval_mode,
+    proportional_path_signature,
+    resolve_proportional_beacon_path,
+)
 from app.services.content import get_station_settings
 from app.services.outbound import enqueue_beacon_job, enqueue_status_job, pending_beacon_job_count, pending_status_job_count
 
 
 LAST_SCHEDULED_BEACON_AT_KEY = "scheduler.beacon.last_enqueued_at"
 LAST_SCHEDULED_STATUS_AT_KEY = "scheduler.status.last_enqueued_at"
+PROPORTIONAL_BEACON_STEP_KEY = "scheduler.beacon.proportional.step"
+PROPORTIONAL_BEACON_SIGNATURE_KEY = "scheduler.beacon.proportional.signature"
 
 
 class BeaconSchedulerService:
@@ -50,6 +60,14 @@ class BeaconSchedulerService:
         self._schedule_status(station_settings, now)
 
     def _schedule_beacon(self, station_settings: dict[str, object], now: datetime) -> None:
+        interval_mode = normalize_beacon_interval_mode(
+            station_settings.get("beacon_interval_mode"),
+            default=BEACON_INTERVAL_MODE_FIXED,
+        )
+        if interval_mode == BEACON_INTERVAL_MODE_PROPORTIONAL:
+            self._schedule_proportional_beacon(station_settings, now)
+            return
+
         interval_minutes = int(station_settings.get("beacon_interval_minutes") or 30)
         if interval_minutes <= 0:
             return
@@ -65,6 +83,39 @@ class BeaconSchedulerService:
             log_event("INFO", "outbound", "Beacon scheduler enqueued scheduled beacon")
         else:
             log_event("WARNING", "outbound", f"Beacon scheduler failed to enqueue beacon: {message}")
+
+    def _schedule_proportional_beacon(self, station_settings: dict[str, object], now: datetime) -> None:
+        if pending_beacon_job_count() > 0:
+            log_event("INFO", "outbound", "Beacon scheduler skipped enqueue because a beacon job is already pending")
+            return
+        if not _is_schedule_due(LAST_SCHEDULED_BEACON_AT_KEY, PROPORTIONAL_BEACON_INTERVAL_MINUTES, now):
+            return
+
+        configured_path = str(station_settings.get("beacon_path") or "").strip().upper()
+        signature = proportional_path_signature(configured_path)
+        stored_signature = str(get_app_setting(PROPORTIONAL_BEACON_SIGNATURE_KEY) or "").strip()
+        step_index = _parse_proportional_step(get_app_setting(PROPORTIONAL_BEACON_STEP_KEY))
+        if stored_signature != signature:
+            step_index = 0
+
+        effective_path = resolve_proportional_beacon_path(configured_path, step_index)
+        success, message = enqueue_beacon_job(
+            station_settings,
+            trigger="scheduled",
+            beacon_path_override=effective_path,
+        )
+        if success:
+            set_app_setting(LAST_SCHEDULED_BEACON_AT_KEY, now.replace(microsecond=0).isoformat())
+            set_app_setting(PROPORTIONAL_BEACON_STEP_KEY, str(step_index + 1))
+            set_app_setting(PROPORTIONAL_BEACON_SIGNATURE_KEY, signature)
+            path_label = effective_path or "DIRECT"
+            log_event(
+                "INFO",
+                "outbound",
+                f"Beacon scheduler enqueued proportional beacon step={step_index} path={path_label}",
+            )
+        else:
+            log_event("WARNING", "outbound", f"Beacon scheduler failed to enqueue proportional beacon: {message}")
 
     def _schedule_status(self, station_settings: dict[str, object], now: datetime) -> None:
         if not bool(station_settings.get("status_enabled")):
@@ -110,3 +161,11 @@ def _is_schedule_due(setting_key: str, interval_minutes: int, now: datetime) -> 
         return True
     elapsed_seconds = (now - last_enqueued_at).total_seconds()
     return elapsed_seconds >= interval_minutes * 60
+
+
+def _parse_proportional_step(value: str | None) -> int:
+    try:
+        parsed = int(str(value or "").strip())
+    except ValueError:
+        return 0
+    return parsed if parsed >= 0 else 0

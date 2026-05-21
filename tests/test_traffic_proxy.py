@@ -62,6 +62,7 @@ def insert_modem(
     device_path: str,
     baud_rate: int | None = None,
     expose_port_enabled: int = 0,
+    expose_allow_tx: int = 1,
     expose_bind_address: str = "127.0.0.1",
     expose_port: int = 8002,
     expose_whitelist: str = "",
@@ -70,12 +71,22 @@ def insert_modem(
         """
         INSERT INTO modems(
             name, modem_type, band, device_path, baud_rate, enabled,
-            expose_port_enabled, expose_bind_address, expose_port, expose_whitelist,
+            expose_port_enabled, expose_allow_tx, expose_bind_address, expose_port, expose_whitelist,
             notes, created_at, updated_at
         )
-        VALUES (?, ?, '2m', ?, ?, 1, ?, ?, ?, ?, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        VALUES (?, ?, '2m', ?, ?, 1, ?, ?, ?, ?, ?, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
         """,
-        (name, modem_type, device_path, baud_rate, expose_port_enabled, expose_bind_address, expose_port, expose_whitelist),
+        (
+            name,
+            modem_type,
+            device_path,
+            baud_rate,
+            expose_port_enabled,
+            expose_allow_tx,
+            expose_bind_address,
+            expose_port,
+            expose_whitelist,
+        ),
     )
     row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
     assert row is not None
@@ -105,6 +116,7 @@ class TrafficProxyValidationTests(unittest.TestCase):
                     "baud_rate": None,
                     "enabled": "1",
                     "expose_port_enabled": "1",
+                    "expose_allow_tx": "1",
                     "expose_bind_address": "0.0.0.0",
                     "expose_port": "8002",
                     "expose_whitelist": "192.168.1.10, 192.168.1.0/24",
@@ -116,6 +128,7 @@ class TrafficProxyValidationTests(unittest.TestCase):
             row = get_section_row("modems", 1)
             assert row is not None
             self.assertEqual(int(row["expose_port_enabled"]), 1)
+            self.assertEqual(int(row["expose_allow_tx"]), 1)
             self.assertEqual(row["expose_bind_address"], "0.0.0.0")
             self.assertEqual(int(row["expose_port"]), 8002)
             self.assertEqual(row["expose_whitelist"], "192.168.1.10\n192.168.1.0/24")
@@ -407,6 +420,92 @@ class TrafficProxyRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNotNone(station)
                 assert station is not None
                 self.assertEqual(station["origin"], "local_tx")
+            finally:
+                if client_writer is not None:
+                    client_writer.close()
+                    try:
+                        await client_writer.wait_closed()
+                    except OSError:
+                        pass
+                if tnc_writer is not None:
+                    tnc_writer.close()
+                    try:
+                        await tnc_writer.wait_closed()
+                    except OSError:
+                        pass
+                await service.stop()
+                tnc_server.close()
+                await tnc_server.wait_closed()
+
+    async def test_proxy_rejects_client_tx_when_remote_tx_is_disabled(self) -> None:
+        with temporary_database():
+            tnc_port = free_tcp_port()
+            expose_port = free_tcp_port()
+            interface_id = insert_modem(
+                device_path=f"127.0.0.1:{tnc_port}",
+                expose_port_enabled=1,
+                expose_allow_tx=0,
+                expose_bind_address="127.0.0.1",
+                expose_port=expose_port,
+            )
+
+            tnc_reader_queue: asyncio.Queue[bytes] = asyncio.Queue()
+            connection_ready: asyncio.Future[asyncio.StreamWriter] = asyncio.get_running_loop().create_future()
+
+            async def handle_tnc_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+                if not connection_ready.done():
+                    connection_ready.set_result(writer)
+                try:
+                    while True:
+                        chunk = await reader.read(1024)
+                        if not chunk:
+                            break
+                        await tnc_reader_queue.put(chunk)
+                finally:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
+
+            tnc_server = await asyncio.start_server(handle_tnc_client, host="127.0.0.1", port=tnc_port)
+            service = TrafficMonitorService(reconnect_delay=0.1)
+            client_reader: asyncio.StreamReader | None = None
+            client_writer: asyncio.StreamWriter | None = None
+            tnc_writer: asyncio.StreamWriter | None = None
+            try:
+                await service.start()
+                await wait_until(
+                    lambda: service.snapshot()["status"] == "connected" and service.snapshot()["expose"]["enabled"],
+                    timeout=3.0,
+                )
+                tnc_writer = await asyncio.wait_for(connection_ready, timeout=1.0)
+                client_reader, client_writer = await asyncio.open_connection("127.0.0.1", expose_port)
+
+                client_payload = build_tnc2_kiss_frame("SP8XYZ-9>APRS:>Should be blocked")
+                client_writer.write(client_payload)
+                await client_writer.drain()
+
+                with self.assertRaises(TimeoutError):
+                    await asyncio.wait_for(tnc_reader_queue.get(), timeout=0.5)
+
+                tx_row = fetch_one(
+                    """
+                    SELECT id
+                    FROM traffic_frames
+                    WHERE interface_id = ? AND direction = 'tx' AND command = 'TX-PROXY'
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (interface_id,),
+                )
+                self.assertIsNone(tx_row)
+
+                tnc_payload = b"\xC0\x00ABC\xC0"
+                tnc_writer.write(tnc_payload)
+                await tnc_writer.drain()
+                assert client_reader is not None
+                self.assertEqual(await asyncio.wait_for(client_reader.readexactly(len(tnc_payload)), timeout=1.0), tnc_payload)
             finally:
                 if client_writer is not None:
                     client_writer.close()

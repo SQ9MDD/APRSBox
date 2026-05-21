@@ -417,14 +417,37 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Database maintenance") }}</h2>
-                <p class="section-lead">{{ t("Event logs are pruned automatically after midnight. Database vacuum remains a manual action.") }}</p>
+                <p class="section-lead">{{ t("Event logs are pruned automatically after midnight. Database vacuum and runtime history reset remain manual actions.") }}</p>
             </div>
         </div>
+        {% if not database_quick_check_ok %}
+        <div class="alert">{{ t("Database integrity check returned a non-OK result. Review storage before running maintenance actions.") }}</div>
+        {% endif %}
         <dl class="details-grid">
+            <dt>{{ t("Database path") }}</dt>
+            <dd><code>{{ database_path }}</code></dd>
+            <dt>{{ t("Database file size") }}</dt>
+            <dd>{{ database_file_size_label }}</dd>
+            <dt>{{ t("WAL file size") }}</dt>
+            <dd>{{ database_wal_size_label }}</dd>
+            <dt>{{ t("SHM file size") }}</dt>
+            <dd>{{ database_shm_size_label }}</dd>
+            <dt>{{ t("Allocated database size") }}</dt>
+            <dd>{{ database_allocated_size_label }}</dd>
+            <dt>{{ t("Reclaimable space") }}</dt>
+            <dd>{{ database_reclaimable_size_label }} ({{ database_reclaimable_ratio_label }})</dd>
+            <dt>{{ t("Page geometry") }}</dt>
+            <dd>{{ tf("page_size={size} B, page_count={count}, freelist_count={free}", {"size": database_page_size, "count": database_page_count, "free": database_freelist_count}) }}</dd>
+            <dt>{{ t("Integrity check") }}</dt>
+            <dd><code>{{ database_quick_check }}</code></dd>
             <dt>{{ t("Automatic pruning") }}</dt>
             <dd>{{ t("Enabled") }}</dd>
             <dt>{{ t("Policy") }}</dt>
             <dd>{{ tf("Keep newest {count} rows in event logs after midnight.", {"count": event_log_keep_rows}) }}</dd>
+            <dt>{{ t("VACUUM recommendation") }}</dt>
+            <dd>{{ t(database_vacuum_recommendation) }}</dd>
+            <dt>{{ t("Recommendation threshold") }}</dt>
+            <dd>{{ tf("At least {size} reclaimable and {ratio} free-page ratio.", {"size": database_vacuum_threshold_size_label, "ratio": database_vacuum_threshold_ratio_label}) }}</dd>
             <dt>{{ t("VACUUM availability") }}</dt>
             <dd>
                 {% if database_vacuum_blocked %}
@@ -434,16 +457,47 @@
                 {% endif %}
             </dd>
         </dl>
+        <div class="table-wrap">
+            <table class="data-table compact-table">
+                <thead>
+                    <tr>
+                        <th>{{ t("Runtime table") }}</th>
+                        <th>{{ t("Rows") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for target in database_reset_targets %}
+                    <tr>
+                        <td>{{ t(target.label) }}</td>
+                        <td>{{ target.row_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="muted">{{ tf("Rows selected for runtime reset: {count}.", {"count": database_reset_total_rows}) }}</p>
+        <p class="muted">{{ t("Runtime reset clears only operational history tables. Configuration tables (TNC, DIGI flows, station/WX settings, objects/items/bulletins, map sources, users) and APRS message history are not modified.") }}</p>
         {% if can_manage_database_maintenance %}
-        <form
-            method="post"
-            action="{{ request.scope.root_path }}/settings/vacuum-db"
-            class="form-stack"
-            data-settings-action-id="vacuum-db"
-            onsubmit="return confirm({{ t('Run database vacuum now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
-        >
-            <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
-        </form>
+        <div class="settings-update-actions">
+            <form
+                method="post"
+                action="{{ request.scope.root_path }}/settings/vacuum-db"
+                class="form-stack"
+                data-settings-action-id="vacuum-db"
+                onsubmit="return confirm({{ t('Run database vacuum now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+            >
+                <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
+            </form>
+            <form
+                method="post"
+                action="{{ request.scope.root_path }}/settings/reset-runtime-data"
+                class="form-stack"
+                data-settings-action-id="reset-runtime-data"
+                onsubmit="return confirm({{ t('Clear runtime logs and traffic history now? Configuration tables will not be changed.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'reset-runtime-data', message: {{ t('Clearing runtime logs and traffic history...')|tojson|forceescape }}, busyLabel: {{ t('Clearing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+            >
+                <button type="submit" class="button button-secondary" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before clearing runtime logs and traffic history.') }}"{% endif %}>{{ t("Reset runtime logs/data") }}</button>
+            </form>
+        </div>
         {% else %}
         <p class="muted">{{ t("Your role can view database maintenance status but cannot start maintenance actions.") }}</p>
         {% endif %}

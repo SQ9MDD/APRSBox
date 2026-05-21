@@ -10,6 +10,7 @@ from app.db import connect, execute, fetch_one, init_db
 from app.services.radio_activity import (
     _floor_to_bucket_start,
     get_dashboard_radio_activity,
+    get_traffic_direct_heard_statistics,
     get_traffic_devices_statistics,
     get_traffic_users_statistics,
     record_traffic_device_station_observation,
@@ -1078,6 +1079,60 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             self.assertEqual(str(items[0].get("key") or ""), "SP8AAA-1")
             self.assertEqual(int(items[0].get("count") or 0), 5)
 
+    def test_traffic_direct_heard_statistics_counts_only_frames_without_consumed_hops(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            base_time = now_utc - timedelta(minutes=10)
+
+            for index in range(5):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP1AAA-1>QZ1234,WIDE1-1:>direct",
+                    created_at=(base_time + timedelta(seconds=index)).isoformat(),
+                )
+            for index in range(3):
+                insert_frame(
+                    source="Main TNC",
+                    interface_id=1,
+                    direction="RX",
+                    frame_format="TNC2",
+                    line="SP2BBB-2>QZ1234,SR9XYZ*,WIDE1-1:>digipeated",
+                    created_at=(base_time + timedelta(seconds=20 + index)).isoformat(),
+                )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP3CCC-3>QZ1234:>direct-no-path",
+                created_at=(base_time + timedelta(seconds=40)).isoformat(),
+            )
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="TX",
+                frame_format="TNC2-TX",
+                line="SP9TX-1>TX9999:>tx",
+                command="TX",
+                created_at=(base_time + timedelta(seconds=50)).isoformat(),
+            )
+
+            payload = get_traffic_direct_heard_statistics(range_value="24h")
+            self.assertEqual(payload.get("count_basis"), "frames_rx_tnc2_direct_heard")
+            self.assertEqual(int(payload.get("total") or 0), 6)
+            items = list(payload.get("items") or [])
+            self.assertGreaterEqual(len(items), 2)
+            self.assertEqual(str(items[0].get("key") or ""), "SP1AAA-1")
+            self.assertEqual(int(items[0].get("count") or 0), 5)
+            self.assertEqual(str(items[1].get("key") or ""), "SP3CCC-3")
+            self.assertEqual(int(items[1].get("count") or 0), 1)
+
+            shifted_payload = get_traffic_direct_heard_statistics(range_value="24h", shift_windows=1)
+            self.assertEqual(int(shifted_payload.get("total") or 0), 0)
+
     def test_statistics_devices_api_supports_main_range_windows(self) -> None:
         if not FASTAPI_AVAILABLE:
             self.skipTest("fastapi is not installed in this environment")
@@ -1194,6 +1249,17 @@ class RadioActivityAggregatorTests(unittest.TestCase):
 
                 users_hour_response = client.get("/api/statistics/users?range=1h")
                 self.assertEqual(users_hour_response.status_code, 200)
+
+                direct_heard_response = client.get("/api/statistics/direct-heard?range=24h")
+                self.assertEqual(direct_heard_response.status_code, 200)
+                direct_heard_payload = direct_heard_response.json()
+                self.assertEqual(direct_heard_payload.get("count_basis"), "frames_rx_tnc2_direct_heard")
+                self.assertEqual(int(direct_heard_payload.get("total") or 0), 24)
+
+                direct_heard_shifted_response = client.get("/api/statistics/direct-heard?range=24h&shift=1")
+                self.assertEqual(direct_heard_shifted_response.status_code, 200)
+                direct_heard_shifted_payload = direct_heard_shifted_response.json()
+                self.assertEqual(int(direct_heard_shifted_payload.get("total") or 0), 0)
 
                 invalid_window = client.get("/api/statistics/devices?range=24h&window=invalid")
                 self.assertEqual(invalid_window.status_code, 400)

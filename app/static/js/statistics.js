@@ -3,6 +3,7 @@
     const payloadNode = document.getElementById("statistics-data");
     const devicesPayloadNode = document.getElementById("statistics-devices-data");
     const usersPayloadNode = document.getElementById("statistics-users-data");
+    const directHeardPayloadNode = document.getElementById("statistics-direct-heard-data");
     const rangeSelect = document.getElementById("statistics-range");
     const backButton = document.getElementById("statistics-back");
     const forwardButton = document.getElementById("statistics-forward");
@@ -11,11 +12,13 @@
     const actionsCanvas = document.getElementById("statistics-actions-chart");
     const devicesCanvas = document.getElementById("statistics-devices-chart");
     const usersListNode = document.getElementById("statistics-users-list");
+    const directHeardListNode = document.getElementById("statistics-direct-heard-list");
     const frameEmptyNode = document.getElementById("statistics-frame-types-empty");
     const heardEmptyNode = document.getElementById("statistics-heard-empty");
     const actionsEmptyNode = document.getElementById("statistics-actions-empty");
     const devicesEmptyNode = document.getElementById("statistics-devices-empty");
     const usersEmptyNode = document.getElementById("statistics-users-empty");
+    const directHeardEmptyNode = document.getElementById("statistics-direct-heard-empty");
     const frameStepNode = document.getElementById("statistics-frame-types-step");
     const heardStepNode = document.getElementById("statistics-heard-step");
     const actionsStepNode = document.getElementById("statistics-actions-step");
@@ -37,6 +40,7 @@
     const apiUrl = String(root.dataset.apiUrl || "").trim();
     const devicesApiUrl = String(root.dataset.devicesApiUrl || "").trim();
     const usersApiUrl = String(root.dataset.usersApiUrl || "").trim();
+    const directHeardApiUrl = String(root.dataset.directHeardApiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
     const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
@@ -646,9 +650,54 @@
         renderUsersList(hasData ? items : [], colors);
     };
 
+    const renderDirectHeardList = (items, colors) => {
+        if (!(directHeardListNode instanceof HTMLElement)) {
+            return;
+        }
+        directHeardListNode.textContent = "";
+        for (let index = 0; index < items.length; index += 1) {
+            const item = items[index];
+            const row = document.createElement("li");
+            row.className = "statistics-users-list-item";
+
+            const indexNode = document.createElement("span");
+            indexNode.className = "statistics-list-index";
+            indexNode.textContent = String(index + 1);
+
+            const labelNode = document.createElement("span");
+            labelNode.className = "statistics-users-list-label";
+            const markerNode = document.createElement("span");
+            markerNode.className = "statistics-devices-color-marker";
+            markerNode.style.backgroundColor = String((Array.isArray(colors) && colors[index]) || "#8a8a8a");
+            const labelTextNode = document.createElement("span");
+            labelTextNode.textContent = String(item.label || item.key || "").trim().toUpperCase();
+            labelNode.appendChild(markerNode);
+            labelNode.appendChild(labelTextNode);
+
+            const valueNode = document.createElement("span");
+            valueNode.className = "statistics-users-list-value";
+            valueNode.textContent = `${Math.round(Number(item.count) || 0)} (${(Number(item.percent) || 0).toFixed(1)}%)`;
+
+            row.appendChild(indexNode);
+            row.appendChild(labelNode);
+            row.appendChild(valueNode);
+            directHeardListNode.appendChild(row);
+        }
+    };
+
+    const renderDirectHeard = (payloadValue) => {
+        const total = Math.max(0, Number(payloadValue && payloadValue.total) || 0);
+        const items = normalizeUserItems(payloadValue && payloadValue.items, total);
+        const hasData = total > 0 && items.length > 0;
+        toggleEmptyState(directHeardEmptyNode, !hasData);
+        const colors = hasData ? buildDeviceColors(items) : [];
+        renderDirectHeardList(hasData ? items : [], colors);
+    };
+
     let payload = parseJsonPayload(payloadNode);
     let devicesPayload = parseJsonPayload(devicesPayloadNode);
     let usersPayload = parseJsonPayload(usersPayloadNode);
+    let directHeardPayload = parseJsonPayload(directHeardPayloadNode);
 
     let activeRange = normalizeRange(payload && payload.range);
     let activeShift = normalizeShift(payload && payload.shift_windows);
@@ -722,6 +771,32 @@
         }
     };
 
+    const loadDirectHeardPayload = async (rangeValue, shiftValue) => {
+        if (!directHeardApiUrl) {
+            return;
+        }
+        const normalizedRange = normalizeRange(rangeValue);
+        const normalizedShift = normalizeShift(shiftValue);
+
+        try {
+            const response = await fetch(
+                `${directHeardApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}`,
+                {
+                    method: "GET",
+                    headers: { "Accept": "application/json" },
+                },
+            );
+            if (!response.ok) {
+                return;
+            }
+            const nextPayload = await response.json();
+            directHeardPayload = nextPayload;
+            renderDirectHeard(nextPayload);
+        } catch (_) {
+            return;
+        }
+    };
+
     const loadRangePayload = async (rangeValue, shiftValue) => {
         const normalizedRange = normalizeRange(rangeValue);
         const normalizedShift = normalizeShift(shiftValue);
@@ -751,6 +826,7 @@
             renderCharts(nextPayload);
             await loadDevicesPayload(activeRange, activeShift);
             await loadUsersPayload(activeRange, activeShift);
+            await loadDirectHeardPayload(activeRange, activeShift);
         } catch (_) {
             return;
         } finally {
@@ -781,6 +857,7 @@
     renderCharts(payload);
     renderDevices(devicesPayload);
     renderUsers(usersPayload);
+    renderDirectHeard(directHeardPayload);
     setControlsDisabled(false);
 
     if (activeRange !== normalizeRange(payload && payload.range)) {
@@ -805,6 +882,16 @@
             )
         ) {
             void loadUsersPayload(activeRange, activeShift);
+        }
+        if (
+            !(
+                directHeardPayload
+                && Array.isArray(directHeardPayload.items)
+                && directHeardPayload.range === activeRange
+                && normalizeShift(directHeardPayload.shift_windows) === activeShift
+            )
+        ) {
+            void loadDirectHeardPayload(activeRange, activeShift);
         }
     }
 })();

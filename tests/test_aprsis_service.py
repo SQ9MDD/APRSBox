@@ -1,6 +1,8 @@
 import contextlib
+import asyncio
 import os
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,6 +13,7 @@ from app.services.aprsis import (
     APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX,
     APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY,
     APRSIS_STRICT_REASON_OTHER,
+    AprsisClientService,
     get_aprsis_diagnostics,
     persist_aprsis_runtime_status,
     record_aprsis_strict_reject,
@@ -169,6 +172,39 @@ class AprsisDiagnosticsTests(unittest.TestCase):
             self.assertIsNotNone(diagnostics["reconnects"]["last_connected_at"])
             self.assertEqual(diagnostics["reconnects"]["warning_total"], 1)
             self.assertEqual(diagnostics["reconnects"]["warning_24h"], 1)
+
+
+class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_send_tnc2_line_times_out_writer_drain_and_disconnects(self) -> None:
+        class HangingWriter:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def write(self, _data: bytes) -> None:
+                return None
+
+            async def drain(self) -> None:
+                await asyncio.sleep(10)
+
+            def close(self) -> None:
+                self.closed = True
+
+            async def wait_closed(self) -> None:
+                return None
+
+        with temporary_database():
+            service = AprsisClientService(reconnect_delay=0.1)
+            service._writer = HangingWriter()  # type: ignore[assignment]
+            service._connected_config = ("rotate.aprs2.net", 14580, "SQ9MDD-4", "12345")
+            service._connected_since = utc_now()
+            started = time.monotonic()
+            success, detail = await service.send_tnc2_line("SQ9MDD-4>APRS,WIDE1-1:>Timeout test")
+            elapsed = time.monotonic() - started
+
+            self.assertFalse(success)
+            self.assertIn("APRS-IS TX failed", detail)
+            self.assertLess(elapsed, 1.0)
+            self.assertIsNone(service._writer)
 
 
 if __name__ == "__main__":

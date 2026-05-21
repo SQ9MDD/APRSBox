@@ -160,6 +160,17 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("frame_type"), "S")
         self.assertEqual((parsed or {}).get("classification"), "fixed")
 
+    def test_parse_tnc2_frame_decodes_weather_radiation_extension_and_cleans_comment(self) -> None:
+        parsed = parse_tnc2_frame("SQ9MDD-3>APBOX0,RFONLY:=5215.03N/02055.60E_.../...t050h75b10161X111")
+        self.assertIsNotNone(parsed)
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        metrics = dict(aprs_data.get("data") or {})
+        self.assertEqual(aprs_data.get("comment"), "")
+        self.assertEqual(metrics.get("temperature_f"), 50)
+        self.assertEqual(metrics.get("humidity_percent"), 75)
+        self.assertEqual(metrics.get("pressure_hpa"), 1016.1)
+        self.assertEqual(metrics.get("radiation_nsv_h"), 110.0)
+
     def test_parse_tnc2_frame_decodes_mic_e_position(self) -> None:
         parsed = parse_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!')
         aprs_data = (parsed or {}).get("aprs_data") or {}
@@ -173,6 +184,26 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
         self.assertEqual(aprs_data.get("latitude"), "52.78550")
         self.assertEqual(aprs_data.get("longitude"), "21.41200")
+
+    def test_parse_tnc2_frame_accepts_mic_e_destination_with_ambiguity_space(self) -> None:
+        line = "SP0DN>UQUQ1L,WIDE1-1,WIDE2-1:`12Xl \x1cy/446.006MHz Dejw wilga. zapraszm do kontaktu i testow_%"
+        parsed = parse_tnc2_frame(line)
+        self.assertIsNotNone(parsed)
+        self.assertEqual((parsed or {}).get("source_callsign"), "SP0DN")
+        aprs_data = (parsed or {}).get("aprs_data")
+        self.assertIsNotNone(aprs_data)
+        aprs_data = aprs_data or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
+        self.assertTrue(bool(aprs_data.get("latitude")))
+        self.assertTrue(bool(aprs_data.get("longitude")))
+        self.assertEqual(aprs_data.get("position_ambiguity_digits"), 1)
+        self.assertTrue(bool(aprs_data.get("position_ambiguous")))
+
+    def test_parse_tnc2_frame_rejects_mic_e_destination_with_invalid_character(self) -> None:
+        line = "SP0DN>UQUQ1M,WIDE1-1,WIDE2-1:`12Xl \x1cy/446.006MHz Dejw wilga. zapraszm do kontaktu i testow_%"
+        parsed = parse_tnc2_frame(line)
+        self.assertIsNotNone(parsed)
+        self.assertIsNone((parsed or {}).get("aprs_data"))
 
     def test_parse_tnc2_frame_exposes_packet_group_for_status_query_telemetry_and_item(self) -> None:
         status = parse_tnc2_frame("SP8ABC-9>APRS:>Station online")
