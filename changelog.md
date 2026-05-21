@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.21.dev - 21.05.2026
+
+### Najważniejsze zmiany
+- `I18N / języki GUI`: dodano nową paczkę językową `es` (`Español`) i rejestrację języka w `SUPPORTED_LANGUAGES`, dzięki czemu hiszpański jest dostępny do wyboru w `Settings -> Global Settings`.
+- `I18N / katalog tłumaczeń`: dodano pełny katalog `app/languages/es.json` (spójny kluczami z `en.json`) dla tłumaczeń interfejsu.
+- `APRS/AX.25 terminology (ES)`: w tłumaczeniach hiszpańskich doprecyzowano słownictwo operatorskie (m.in. `baliza`, `trama`, `trayectoria`, `salto`, `indicativo`, `digipeater`/`digirrepetidor`, `APRS-IS`, `iGate`) dla lepszego odwzorowania realnych pojęć w pracy APRS.
+- `Testy I18N`: rozszerzono testy o walidację zgodności kluczy katalogu `es` względem `en` oraz zaktualizowano asercję listy obsługiwanych języków.
+
 ## 1.8.20 - 21.05.2026
 
 ### Stable release
