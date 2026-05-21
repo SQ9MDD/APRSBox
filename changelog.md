@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.8.20 - 21.05.2026
+
+### Stable release
+- Wydanie stabilne z linii `dev`.
+
+### Included development snapshots
+- zmiany od 1.8.1.dev do 1.8.19.dev
+
+### Najważniejsze zmiany
+- `OpenWebRX MQTT (RX only)`: dodano nowy interfejs RX z obsługą `APRS/SONDE/ADSB`, lokalną deduplikacją i rozszerzoną diagnostyką runtime.
+- `Routing / APRS-IS`: dodano źródło `Local TX` z bezpiecznym routowaniem wyłącznie do `APRS-IS uplink` lub `Black Hole` oraz twardymi guardami strict-filter.
+- `APRS parser`: rozszerzono obsługę pogodową o `Xxxx` (promieniowanie) oraz naprawiono dekodowanie Mic-E z ambiguity (`K/L/Z`) wraz z metadanymi niejednoznaczności pozycji.
+- `Beacon / valid-until`: dodano tryb `Proportional Path` dla beaconu pozycji oraz rozszerzono `Ważne do (UTC)` dla obiektów/biuletynów o dokładność do minuty (`YYYY-MM-DD HH:MM`).
+- `Traffic / Messages`: dodano lokalne filtry per interfejs TNC w `Traffic Monitor`, nowe zapytania `?APRSD` i `?DX` oraz guardy DIGI dla ramek `message/query`, `third-party` i już powtórzonych lokalnie.
+- `Runtime / maintenance`: wzmocniono niezawodność warstwy `TNC SERIAL` (I/O, timeouty, init/close) oraz dodano diagnostykę konserwacji SQLite i bezpieczny reset danych runtime.
+
 ## 1.8.19.dev - 19.05.2026
 
 ### Najważniejsze zmiany
