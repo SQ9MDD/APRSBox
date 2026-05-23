@@ -1420,6 +1420,13 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
     return stations
 
 
+def format_decoded_data_for_display(
+    metrics: dict[str, float | int | str],
+    unit_system: str,
+) -> list[dict[str, str]]:
+    return _format_decoded_data_for_display(metrics, unit_system)
+
+
 def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
     return visible_stations(limit=limit, unit_system=unit_system)
 

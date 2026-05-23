@@ -5,7 +5,13 @@ from typing import Any
 from urllib.parse import quote, unquote
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
-from app.services.content import build_station_detail_href, get_station_settings, get_visible_station_snapshots, parse_tnc2_frame
+from app.services.content import (
+    build_station_detail_href,
+    format_decoded_data_for_display,
+    get_station_settings,
+    get_visible_station_snapshots,
+    parse_tnc2_frame,
+)
 
 DEFAULT_STATION_ZOOM = 10
 DETAIL_STATION_ZOOM = 14
@@ -662,6 +668,8 @@ def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
 
 
 def get_map_station_payload() -> dict[str, Any]:
+    station_settings = get_station_settings()
+    unit_system = str(station_settings.get("default_units") or "metric")
     stations: list[dict[str, Any]] = []
     for station in get_visible_station_snapshots():
         latitude = _parse_coordinate(station.get("latitude"))
@@ -684,6 +692,7 @@ def get_map_station_payload() -> dict[str, Any]:
                 "symbol_table": station["symbol_table"],
                 "symbol_code": station["symbol_code"],
                 "comment": station["comment"],
+                "data": format_decoded_data_for_display(station["data_raw"], unit_system),
                 "path": station["path"],
                 "source": station["source"],
                 "last_heard_at": station["last_heard_at"],

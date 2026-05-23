@@ -519,6 +519,25 @@
         return `${distanceKm} km`;
     }
 
+    function renderDecodedData(dataItems) {
+        if (!Array.isArray(dataItems) || !dataItems.length) {
+            return "";
+        }
+        const chips = dataItems
+            .filter((item) => item && item.icon && item.label && item.value)
+            .map((item) => (
+                `<span class="weather-chip" title="${escapeHtml(item.label)}: ${escapeHtml(item.value)}">`
+                    + `<img src="${staticRoot}icons/${escapeHtml(item.icon)}" alt="${escapeHtml(item.label)}">`
+                    + `<span>${escapeHtml(item.value)}</span>`
+                + "</span>"
+            ))
+            .join("");
+        if (!chips) {
+            return "";
+        }
+        return `<div class="weather-inline">${chips}</div>`;
+    }
+
     function normalizeBearing(bearingDeg) {
         return (bearingDeg + 360) % 360;
     }
@@ -792,9 +811,6 @@
         if (station.path) {
             lines.push(`<span><strong>${escapeHtml(i18n.path)}:</strong> ${escapeHtml(station.path)}</span>`);
         }
-        if (station.destination) {
-            lines.push(`<span><strong>${escapeHtml(i18n.destination)}:</strong> ${escapeHtml(station.destination)}</span>`);
-        }
         if (Number.isFinite(station.distance_km)) {
             lines.push(`<span><strong>${escapeHtml(i18n.distance)}:</strong> ${escapeHtml(formatDistance(station.distance_km))}</span>`);
         }
@@ -810,8 +826,9 @@
         if (Number.isFinite(station.altitude)) {
             lines.push(`<span><strong>${escapeHtml(i18n.altitude)}:</strong> ${escapeHtml(`${station.altitude} m`)}</span>`);
         }
-        if (station.packet_type) {
-            lines.push(`<span><strong>${escapeHtml(i18n.packetType)}:</strong> ${escapeHtml(station.packet_type)}</span>`);
+        const decodedData = renderDecodedData(station.data);
+        if (decodedData) {
+            lines.push(decodedData);
         }
         return `<div class="map-station-tooltip">${lines.join("")}</div>`;
     }
@@ -854,6 +871,7 @@
             station.comment || "",
             station.distance_km,
             station.stale,
+            (station.data || []).map((item) => `${item.label}:${item.value}`).join("|"),
         ])));
     }
 
