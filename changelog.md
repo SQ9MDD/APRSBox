@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.22.dev - 23.05.2026
+
+### Najważniejsze zmiany
+- `Mapa / tooltip stacji`: usunięto z tooltipa pola `Destination` i `Packet type`.
+- `Mapa / tooltip stacji`: dodano na końcu sekcję zdekodowanych danych w formie badge'y, analogicznie do kolumny `Data` w zakładce `Stacje`.
+- `Mapa / tooltip stacji`: usunięto duplikację `Prędkość` i `Kurs` w części tekstowej tooltipa (pozostają wyłącznie w badge'ach danych).
+- `UX`: dodano dodatkowy odstęp między podstawowymi polami tooltipa a sekcją zdekodowanych badge'y dla lepszej czytelności.
+
 ## 1.8.21.dev - 21.05.2026
 
 ### Najważniejsze zmiany

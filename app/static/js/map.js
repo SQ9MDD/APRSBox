@@ -817,18 +817,12 @@
         if (station.comment) {
             lines.push(`<span><strong>${escapeHtml(i18n.comment)}:</strong> ${escapeHtml(station.comment)}</span>`);
         }
-        if (Number.isFinite(station.speed)) {
-            lines.push(`<span><strong>${escapeHtml(i18n.speed)}:</strong> ${escapeHtml(`${station.speed} km/h`)}</span>`);
-        }
-        if (Number.isFinite(station.course)) {
-            lines.push(`<span><strong>${escapeHtml(i18n.course)}:</strong> ${escapeHtml(`${station.course}°`)}</span>`);
-        }
         if (Number.isFinite(station.altitude)) {
             lines.push(`<span><strong>${escapeHtml(i18n.altitude)}:</strong> ${escapeHtml(`${station.altitude} m`)}</span>`);
         }
         const decodedData = renderDecodedData(station.data);
         if (decodedData) {
-            lines.push(decodedData);
+            lines.push(`<div class="map-station-tooltip-data-section">${decodedData}</div>`);
         }
         return `<div class="map-station-tooltip">${lines.join("")}</div>`;
     }

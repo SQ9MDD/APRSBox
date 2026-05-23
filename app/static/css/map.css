@@ -255,6 +255,10 @@
     color: var(--text);
 }
 
+.map-station-tooltip-data-section {
+    margin-top: 0.52rem;
+}
+
 .map-station-link {
     color: inherit;
     text-decoration: none;
