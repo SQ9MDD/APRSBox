@@ -66,8 +66,6 @@
         tileProviderRecovered: root.dataset.i18nTileProviderRecovered || "Tile provider recovered",
         show: root.dataset.i18nShow || "Show",
         hide: root.dataset.i18nHide || "Hide",
-        interfaces: root.dataset.i18nInterfaces || "Interfaces",
-        noInterfaceData: root.dataset.i18nNoInterfaceData || "No interface data available yet.",
     });
     const stationLayer = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
@@ -622,15 +620,13 @@
         }
         const resolvedInterfaces = Array.isArray(interfaces) ? interfaces : [];
         if (resolvedInterfaces.length === 0) {
-            mapInterfaceFilters.innerHTML = `<span class="map-interface-filters-empty muted">${escapeHtml(i18n.noInterfaceData)}</span>`;
+            mapInterfaceFilters.textContent = "";
+            mapInterfaceFilters.hidden = true;
             return;
         }
 
+        mapInterfaceFilters.hidden = false;
         mapInterfaceFilters.textContent = "";
-        const title = document.createElement("span");
-        title.className = "map-interface-filter-title";
-        title.textContent = `${i18n.interfaces}:`;
-        mapInterfaceFilters.appendChild(title);
 
         for (const item of resolvedInterfaces) {
             const key = interfaceKey(item);

@@ -63,8 +63,7 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("data-i18n-latest-packet", template_source)
         self.assertIn("/static/js/map-latest-overlay.js", template_source)
         self.assertIn('id="map-interface-filters"', template_source)
-        self.assertIn("data-i18n-interfaces", template_source)
-        self.assertIn("data-i18n-no-interface-data", template_source)
+        self.assertLess(template_source.find('id="map-interface-filters"'), template_source.find('class="map-info-strip"'))
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
