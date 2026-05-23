@@ -52,6 +52,10 @@
             data-i18n-hide-ruler="{{ t('Hide ruler') }}"
             data-i18n-tile-provider-unavailable="{{ t('Tile provider unavailable') }}"
             data-i18n-tile-provider-recovered="{{ t('Tile provider recovered') }}"
+            data-i18n-show="{{ t('Show') }}"
+            data-i18n-hide="{{ t('Hide') }}"
+            data-i18n-interfaces="{{ t('Interfaces') }}"
+            data-i18n-no-interface-data="{{ t('No interface data available yet.') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -118,6 +122,7 @@
                     <span><strong>{{ t("Zoom") }}:</strong> <span id="map-zoom">--</span></span>
                 </div>
             </div>
+            <div id="map-interface-filters" class="map-interface-filters" aria-live="polite"></div>
             <div id="map-stage" class="map-stage">
                 <div id="map-canvas" class="map-canvas" aria-label="{{ t('Map viewer') }}"></div>
                 <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>

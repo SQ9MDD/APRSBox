@@ -8,6 +8,7 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.content import (
     build_station_detail_href,
     format_decoded_data_for_display,
+    get_configured_modem_interfaces,
     get_station_settings,
     get_visible_station_snapshots,
     parse_tnc2_frame,
@@ -695,6 +696,7 @@ def get_map_station_payload() -> dict[str, Any]:
                 "data": format_decoded_data_for_display(station["data_raw"], unit_system),
                 "path": station["path"],
                 "source": station["source"],
+                "interface_id": _normalize_interface_id(station.get("interface_id")),
                 "last_heard_at": station["last_heard_at"],
                 "last_heard_age_s": station["last_heard_age_s"],
                 "distance_km": station.get("distance_km"),
@@ -717,9 +719,11 @@ def get_map_station_payload() -> dict[str, Any]:
                 "detail_href": build_station_detail_href(station["display_callsign"]),
             }
         )
+    mobile_tracks = _build_mobile_station_tracks(stations)
     return {
         "stations": stations,
-        "mobile_tracks": _build_mobile_station_tracks(stations),
+        "mobile_tracks": mobile_tracks,
+        "interfaces": _build_map_interfaces(stations, mobile_tracks),
     }
 
 
@@ -773,6 +777,54 @@ def _parse_coordinate(value: Any) -> float | None:
         return float(str(value).strip())
     except (TypeError, ValueError):
         return None
+
+
+def _normalize_interface_id(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_map_interfaces(stations: list[dict[str, Any]], mobile_tracks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    interface_ids: set[int] = set()
+    for station in stations:
+        interface_id = _normalize_interface_id(station.get("interface_id"))
+        if interface_id is not None:
+            interface_ids.add(interface_id)
+    for track in mobile_tracks:
+        for point in track.get("points") or []:
+            interface_id = _normalize_interface_id(point.get("interface_id"))
+            if interface_id is not None:
+                interface_ids.add(interface_id)
+
+    if not interface_ids:
+        return []
+
+    configured_modems = get_configured_modem_interfaces()
+    modem_by_id: dict[int, dict[str, Any]] = {}
+    for row in configured_modems:
+        modem_id = _normalize_interface_id(row.get("id"))
+        if modem_id is None:
+            continue
+        modem_by_id[modem_id] = row
+
+    interfaces: list[dict[str, Any]] = []
+    for interface_id in sorted(interface_ids):
+        modem = modem_by_id.get(interface_id)
+        interfaces.append(
+            {
+                "modem_id": interface_id,
+                "name": (
+                    str(modem.get("name") or "").strip()
+                    if modem is not None
+                    else f"#{interface_id}"
+                ),
+                "band": str((modem or {}).get("band") or "").strip(),
+                "enabled": bool((modem or {}).get("enabled", 1)),
+            }
+        )
+    return interfaces
 
 
 def _speed_kmh(metrics: dict[str, Any]) -> int | None:
@@ -875,9 +927,9 @@ def _build_mobile_track_points_by_station_keys(
 
     rows = fetch_all(
         """
-        SELECT line, created_at
+        SELECT line, interface_id, created_at
         FROM (
-            SELECT line, created_at, id
+            SELECT line, interface_id, created_at, id
             FROM traffic_frames
             WHERE format IN ('TNC2', 'TNC2-TX')
             ORDER BY created_at DESC, id DESC
@@ -915,6 +967,7 @@ def _build_mobile_track_points_by_station_keys(
             {
                 "latitude": latitude,
                 "longitude": longitude,
+                "interface_id": _normalize_interface_id(row["interface_id"]),
                 "heard_at": str(row["created_at"] or ""),
             }
         )

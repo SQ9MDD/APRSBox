@@ -54,6 +54,55 @@
     font-weight: 600;
 }
 
+.map-interface-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.38rem;
+    flex-wrap: wrap;
+    min-height: 1.7rem;
+}
+
+.map-interface-filters-empty {
+    font-size: 0.74rem;
+}
+
+.map-interface-filter-title {
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.map-interface-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.18rem 0.36rem 0.18rem 0.24rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+}
+
+.map-interface-filter-chip[data-visible="false"] {
+    opacity: 0.72;
+}
+
+.map-interface-filter-toggle img {
+    width: 0.84rem;
+    height: 0.84rem;
+    filter: var(--icon-filter);
+}
+
+.map-interface-filter-band {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.map-interface-filter-name {
+    color: var(--text);
+    font-size: 0.74rem;
+}
+
 .map-stage {
     position: relative;
     height: clamp(24rem, calc(100vh - 12.5rem), 72rem);

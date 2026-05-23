@@ -1663,7 +1663,7 @@ def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[
     placeholders = ", ".join("?" for _ in formats)
     rows = fetch_all(
         f"""
-        SELECT source, line, created_at
+        SELECT source, interface_id, line, created_at
         FROM traffic_frames
         WHERE format IN ({placeholders})
         ORDER BY created_at DESC, id DESC
@@ -1672,6 +1672,13 @@ def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[
         formats + (row_limit,),
     )
     return [dict(row) for row in rows]
+
+
+def _normalize_interface_id(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _build_station_snapshots_from_rows(
@@ -1716,6 +1723,7 @@ def _build_station_snapshots_from_rows(
                 str(parsed.get("logical_destination") or parsed.get("destination") or ""),
                 str(parsed.get("logical_path") or parsed.get("path") or ""),
                 row["line"],
+                _normalize_interface_id(row.get("interface_id")),
                 origin=origin,
             )
             station_key_index[station_key_folded] = station_key
@@ -1806,6 +1814,7 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
             "destination",
             "path",
             "raw_text",
+            "interface_id",
         ):
             merged[field] = secondary.get(field)
     return merged
@@ -1818,6 +1827,7 @@ def _new_station_snapshot(
     destination: str,
     path: str,
     raw_text: str,
+    interface_id: int | None,
     *,
     origin: str,
 ) -> dict[str, Any]:
@@ -1840,6 +1850,7 @@ def _new_station_snapshot(
         "destination": destination,
         "path": path,
         "raw_text": raw_text,
+        "interface_id": interface_id,
         "entity_class": "",
         "frame_type": "",
         "frame_type_label": "",

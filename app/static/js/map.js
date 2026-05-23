@@ -26,6 +26,7 @@
     const tileSourceOutput = document.getElementById("map-tile-source");
     const tileStatusOutput = document.getElementById("map-tile-status");
     const mapCanvas = document.getElementById("map-canvas");
+    const mapInterfaceFilters = document.getElementById("map-interface-filters");
     const resetButton = document.getElementById("map-reset-view");
     const toggleTracksButton = document.getElementById("map-toggle-tracks");
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
@@ -63,6 +64,10 @@
         hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
         tileProviderUnavailable: root.dataset.i18nTileProviderUnavailable || "Tile provider unavailable",
         tileProviderRecovered: root.dataset.i18nTileProviderRecovered || "Tile provider recovered",
+        show: root.dataset.i18nShow || "Show",
+        hide: root.dataset.i18nHide || "Hide",
+        interfaces: root.dataset.i18nInterfaces || "Interfaces",
+        noInterfaceData: root.dataset.i18nNoInterfaceData || "No interface data available yet.",
     });
     const stationLayer = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
@@ -84,6 +89,8 @@
     let coverageOutlineOpacity = 1;
     let latestStations = [];
     let latestMobileTracks = [];
+    let latestInterfaces = [];
+    const interfaceVisibilityByKey = new Map();
     let rulerState = null;
     let tileErrorActive = false;
     let tileErrorCount = 0;
@@ -94,6 +101,8 @@
     let lastTileErrorReportedAt = 0;
     let lastTileRecoveryReportedAt = 0;
     const tileEventReportIntervalMs = 120000;
+    const visibleIconPath = `${staticRoot}icons/eye.svg`;
+    const hiddenIconPath = `${staticRoot}icons/eye-off.svg`;
 
     function currentThemeName() {
         return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -519,6 +528,166 @@
         return `${distanceKm} km`;
     }
 
+    function normalizeInterfaceId(value) {
+        const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+        return Number.isInteger(parsed) ? parsed : null;
+    }
+
+    function interfaceKey(item) {
+        const interfaceId = normalizeInterfaceId(item && item.modem_id);
+        if (interfaceId !== null) {
+            return `modem:${interfaceId}`;
+        }
+        return `fallback:${String((item && item.name) || "").trim()}:${String((item && item.band) || "").trim()}`;
+    }
+
+    function syncInterfaceVisibility(interfaces) {
+        const currentKeys = new Set();
+        for (const item of interfaces || []) {
+            const key = interfaceKey(item);
+            currentKeys.add(key);
+            if (!interfaceVisibilityByKey.has(key)) {
+                interfaceVisibilityByKey.set(key, true);
+            }
+        }
+        for (const key of Array.from(interfaceVisibilityByKey.keys())) {
+            if (!currentKeys.has(key)) {
+                interfaceVisibilityByKey.delete(key);
+            }
+        }
+    }
+
+    function interfaceVisibilityContext(interfaces) {
+        const interfacesById = new Map();
+        const visibleInterfaceIds = new Set();
+        for (const item of interfaces || []) {
+            const interfaceId = normalizeInterfaceId(item && item.modem_id);
+            if (interfaceId === null) {
+                continue;
+            }
+            interfacesById.set(interfaceId, item);
+            if (interfaceVisibilityByKey.get(interfaceKey(item)) !== false) {
+                visibleInterfaceIds.add(interfaceId);
+            }
+        }
+        return { interfacesById, visibleInterfaceIds };
+    }
+
+    function isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds) {
+        if (!Number.isInteger(interfaceId)) {
+            return true;
+        }
+        if (!interfacesById.has(interfaceId)) {
+            return true;
+        }
+        return visibleInterfaceIds.has(interfaceId);
+    }
+
+    function filteredStations(stations, interfacesById, visibleInterfaceIds) {
+        return (stations || []).filter((station) => {
+            const interfaceId = normalizeInterfaceId(station && station.interface_id);
+            return isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds);
+        });
+    }
+
+    function filteredMobileTracks(mobileTracks, interfacesById, visibleInterfaceIds) {
+        const filteredTracks = [];
+        for (const track of mobileTracks || []) {
+            const filteredPoints = (track.points || []).filter((point) => {
+                const interfaceId = normalizeInterfaceId(point && point.interface_id);
+                return isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds);
+            });
+            if (filteredPoints.length < 2) {
+                continue;
+            }
+            filteredTracks.push({
+                ...track,
+                points: filteredPoints,
+            });
+        }
+        return filteredTracks;
+    }
+
+    function filteredMapData(stations, mobileTracks, interfaces) {
+        const { interfacesById, visibleInterfaceIds } = interfaceVisibilityContext(interfaces);
+        return {
+            stations: filteredStations(stations, interfacesById, visibleInterfaceIds),
+            mobileTracks: filteredMobileTracks(mobileTracks, interfacesById, visibleInterfaceIds),
+        };
+    }
+
+    function renderInterfaceFilters(interfaces) {
+        if (!mapInterfaceFilters) {
+            return;
+        }
+        const resolvedInterfaces = Array.isArray(interfaces) ? interfaces : [];
+        if (resolvedInterfaces.length === 0) {
+            mapInterfaceFilters.innerHTML = `<span class="map-interface-filters-empty muted">${escapeHtml(i18n.noInterfaceData)}</span>`;
+            return;
+        }
+
+        mapInterfaceFilters.textContent = "";
+        const title = document.createElement("span");
+        title.className = "map-interface-filter-title";
+        title.textContent = `${i18n.interfaces}:`;
+        mapInterfaceFilters.appendChild(title);
+
+        for (const item of resolvedInterfaces) {
+            const key = interfaceKey(item);
+            const isVisible = interfaceVisibilityByKey.get(key) !== false;
+            const chip = document.createElement("div");
+            chip.className = "map-interface-filter-chip";
+            chip.dataset.visible = isVisible ? "true" : "false";
+
+            const toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "table-icon-button map-interface-filter-toggle";
+            toggle.setAttribute("aria-pressed", isVisible ? "true" : "false");
+            toggle.setAttribute("aria-label", isVisible ? i18n.hide : i18n.show);
+            toggle.setAttribute("title", isVisible ? i18n.hide : i18n.show);
+            const icon = document.createElement("img");
+            icon.src = isVisible ? visibleIconPath : hiddenIconPath;
+            icon.alt = "";
+            toggle.appendChild(icon);
+            toggle.addEventListener("click", function () {
+                const currentVisible = interfaceVisibilityByKey.get(key) !== false;
+                interfaceVisibilityByKey.set(key, !currentVisible);
+                applyLatestMapData({ forceRender: true });
+            });
+
+            const bandNode = document.createElement("span");
+            bandNode.className = "map-interface-filter-band";
+            bandNode.textContent = String(item.band || "-");
+
+            const nameNode = document.createElement("span");
+            nameNode.className = "map-interface-filter-name";
+            nameNode.textContent = String(item.name || "-");
+
+            chip.append(toggle, bandNode, nameNode);
+            mapInterfaceFilters.appendChild(chip);
+        }
+    }
+
+    function applyLatestMapData({ forceRender = false } = {}) {
+        syncInterfaceVisibility(latestInterfaces);
+        renderInterfaceFilters(latestInterfaces);
+        const filtered = filteredMapData(latestStations, latestMobileTracks, latestInterfaces);
+        root.dispatchEvent(new window.CustomEvent(mapStationsRefreshEventName, {
+            detail: {
+                stations: filtered.stations,
+                mobileTracks: filtered.mobileTracks,
+                stationLatitude: defaultView.latitude,
+                stationLongitude: defaultView.longitude,
+            },
+        }));
+        const nextSignature = `${stationsSignature(filtered.stations)}|${mobileTracksSignature(filtered.mobileTracks)}`;
+        if (!forceRender && nextSignature === lastStationsSignature) {
+            return;
+        }
+        lastStationsSignature = nextSignature;
+        renderStations(filtered.stations, filtered.mobileTracks);
+    }
+
     function renderDecodedData(dataItems) {
         if (!Array.isArray(dataItems) || !dataItems.length) {
             return "";
@@ -742,28 +911,28 @@
     if (coverageFillOpacitySelect) {
         coverageFillOpacitySelect.addEventListener("change", function () {
             applyCoverageFillOpacity(Number.parseInt(coverageFillOpacitySelect.value || "", 10));
-            renderStations(latestStations, latestMobileTracks);
+            applyLatestMapData({ forceRender: true });
         });
     }
     applyCoverageOutlineOpacity(resolveDefaultCoverageOutlineOpacity());
     if (coverageOutlineOpacitySelect) {
         coverageOutlineOpacitySelect.addEventListener("change", function () {
             applyCoverageOutlineOpacity(Number.parseInt(coverageOutlineOpacitySelect.value || "", 10));
-            renderStations(latestStations, latestMobileTracks);
+            applyLatestMapData({ forceRender: true });
         });
     }
     applyTracksToggleState(resolveTracksVisible());
     if (toggleTracksButton) {
         toggleTracksButton.addEventListener("click", function () {
             applyTracksToggleState(!tracksVisible);
-            renderStations(latestStations, latestMobileTracks);
+            applyLatestMapData({ forceRender: true });
         });
     }
     applyCoverageToggleState(resolveCoverageVisible());
     if (toggleCoverageButton) {
         toggleCoverageButton.addEventListener("click", function () {
             applyCoverageToggleState(!coverageVisible);
-            renderStations(latestStations, latestMobileTracks);
+            applyLatestMapData({ forceRender: true });
         });
     }
     applyRulerToggleState(resolveRulerVisible());
@@ -857,6 +1026,7 @@
         return JSON.stringify((stations || []).map((station) => ([
             station.display_callsign || station.callsign || "",
             station.last_heard_at || "",
+            station.interface_id,
             station.latitude,
             station.longitude,
             station.symbol_icon || "",
@@ -873,6 +1043,7 @@
         return JSON.stringify((mobileTracks || []).map((track) => ([
             track.display_callsign || "",
             (track.points || []).map((point) => ([
+                point.interface_id,
                 point.latitude,
                 point.longitude,
                 point.heard_at || "",
@@ -1099,22 +1270,11 @@
             const payload = await response.json();
             const stations = payload.stations || [];
             const mobileTracks = payload.mobile_tracks || [];
+            const interfaces = payload.interfaces || [];
             latestStations = stations;
             latestMobileTracks = mobileTracks;
-            root.dispatchEvent(new window.CustomEvent(mapStationsRefreshEventName, {
-                detail: {
-                    stations,
-                    mobileTracks,
-                    stationLatitude: defaultView.latitude,
-                    stationLongitude: defaultView.longitude,
-                },
-            }));
-            const nextSignature = `${stationsSignature(stations)}|${mobileTracksSignature(mobileTracks)}`;
-            if (nextSignature === lastStationsSignature) {
-                return;
-            }
-            lastStationsSignature = nextSignature;
-            renderStations(stations, mobileTracks);
+            latestInterfaces = Array.isArray(interfaces) ? interfaces : [];
+            applyLatestMapData();
         } catch (_error) {
         }
     }

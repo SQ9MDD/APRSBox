@@ -62,6 +62,9 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("data-i18n-qsy", template_source)
         self.assertIn("data-i18n-latest-packet", template_source)
         self.assertIn("/static/js/map-latest-overlay.js", template_source)
+        self.assertIn('id="map-interface-filters"', template_source)
+        self.assertIn("data-i18n-interfaces", template_source)
+        self.assertIn("data-i18n-no-interface-data", template_source)
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -86,6 +89,15 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function buildPhgCardioidPoints(station, azimuthDeg, radiusMeters)", script_source)
         self.assertIn("window.L.polygon(", script_source)
         self.assertIn("window.L.circle([station.latitude, station.longitude]", script_source)
+
+    def test_map_script_supports_interface_filtering(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("const mapInterfaceFilters = document.getElementById(\"map-interface-filters\");", script_source)
+        self.assertIn("const interfaceVisibilityByKey = new Map();", script_source)
+        self.assertIn("function syncInterfaceVisibility(interfaces)", script_source)
+        self.assertIn("function renderInterfaceFilters(interfaces)", script_source)
+        self.assertIn("function filteredMapData(stations, mobileTracks, interfaces)", script_source)
+        self.assertIn("interface_id", script_source)
 
     def test_station_detail_map_script_renders_station_track(self) -> None:
         script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.db import execute, init_db
+from app.db import execute, fetch_one, init_db
 from app.services.content import get_station_detail, heard_stations, update_station_settings
 from app.services.map_service import get_map_station_payload, get_station_detail_track_payload
 
@@ -43,14 +43,32 @@ def station_payload(latitude: str = "52.2297", longitude: str = "21.0122") -> di
     }
 
 
-def insert_position_frame(line: str, *, created_at: str = "2026-01-01T00:00:00+00:00") -> None:
+def insert_position_frame(
+    line: str,
+    *,
+    created_at: str = "2026-01-01T00:00:00+00:00",
+    interface_id: int | None = None,
+) -> None:
     execute(
         """
         INSERT INTO traffic_frames(source, interface_id, direction, band, format, line, port, command, length, hex, created_at)
-        VALUES (?, NULL, 'RX', '2m', 'TNC2', ?, '', '', ?, '', ?)
+        VALUES (?, ?, 'RX', '2m', 'TNC2', ?, '', '', ?, '', ?)
         """,
-        ("rf", line, len(line), created_at),
+        ("rf", interface_id, line, len(line), created_at),
     )
+
+
+def insert_modem(*, name: str, band: str) -> int:
+    execute(
+        """
+        INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
+        VALUES (?, 'TCP', ?, '127.0.0.1:9001', 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        """,
+        (name, band),
+    )
+    row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
+    assert row is not None
+    return int(row["id"])
 
 
 class StationDistanceTests(unittest.TestCase):
@@ -100,16 +118,52 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(len(stations), 1)
             self.assertIsNone(stations[0]["distance_km"])
 
+    def test_map_payload_exposes_interface_metadata_for_map_filtering(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload(latitude="51.1000", longitude="20.1000"))
+            first_interface_id = insert_modem(name="VHF RX", band="2m")
+            second_interface_id = insert_modem(name="UHF RX", band="70cm")
+            insert_position_frame(
+                "SP8AAA-9>APRS:!5218.37N\\02104.87E>Station one",
+                created_at="2026-01-01T00:00:00+00:00",
+                interface_id=first_interface_id,
+            )
+            insert_position_frame(
+                "SP8BBB-9>APRS:!5219.00N\\02105.30E>Station two",
+                created_at="2026-01-01T00:05:00+00:00",
+                interface_id=second_interface_id,
+            )
+
+            map_payload = get_map_station_payload()
+            station_by_callsign = {
+                str(item.get("display_callsign") or ""): item
+                for item in map_payload["stations"]
+            }
+            self.assertEqual(station_by_callsign["SP8AAA-9"]["interface_id"], first_interface_id)
+            self.assertEqual(station_by_callsign["SP8BBB-9"]["interface_id"], second_interface_id)
+
+            interfaces = map_payload.get("interfaces") or []
+            interface_ids = {int(item["modem_id"]) for item in interfaces}
+            self.assertEqual(interface_ids, {first_interface_id, second_interface_id})
+            by_id = {int(item["modem_id"]): item for item in interfaces}
+            self.assertEqual(by_id[first_interface_id]["name"], "VHF RX")
+            self.assertEqual(by_id[first_interface_id]["band"], "2m")
+            self.assertEqual(by_id[second_interface_id]["name"], "UHF RX")
+            self.assertEqual(by_id[second_interface_id]["band"], "70cm")
+
     def test_map_payload_exposes_mobile_tracks_for_station_history(self) -> None:
         with temporary_database():
             update_station_settings(station_payload())
+            interface_id = insert_modem(name="Track TNC", band="2m")
             insert_position_frame(
                 "SP8ABC-9>APRS:!5218.37N\\02104.87Eu243/002/A=000278Back on track!",
                 created_at="2026-01-01T00:00:00+00:00",
+                interface_id=interface_id,
             )
             insert_position_frame(
                 "SP8ABC-9>APRS:!5219.00N\\02105.30Eu240/010/A=000300Moving east",
                 created_at="2026-01-01T00:05:00+00:00",
+                interface_id=interface_id,
             )
 
             map_payload = get_map_station_payload()
@@ -118,6 +172,8 @@ class StationDistanceTests(unittest.TestCase):
             track = map_payload["mobile_tracks"][0]
             self.assertEqual(track["display_callsign"], "SP8ABC-9")
             self.assertEqual(len(track["points"]), 2)
+            self.assertEqual(track["points"][0]["interface_id"], interface_id)
+            self.assertEqual(track["points"][1]["interface_id"], interface_id)
             self.assertEqual(track["points"][0]["heard_at"], "2026-01-01T00:00:00+00:00")
             self.assertEqual(track["points"][1]["heard_at"], "2026-01-01T00:05:00+00:00")
 
