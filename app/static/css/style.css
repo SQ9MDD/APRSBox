@@ -3659,6 +3659,16 @@ select:focus-visible,
     min-width: 0;
 }
 
+.station-detail-decoded {
+    margin-top: 0.55rem;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.station-detail-decoded[hidden] {
+    display: none !important;
+}
+
 .station-packets-table {
     table-layout: auto;
 }

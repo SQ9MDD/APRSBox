@@ -6,6 +6,7 @@
     const title = document.getElementById("station-detail-title");
     const meta = document.getElementById("station-detail-meta");
     const fields = document.getElementById("station-detail-fields");
+    const decodedData = document.getElementById("station-detail-decoded");
     const devicePanel = document.getElementById("station-device-identification-panel");
     const deviceRoot = document.getElementById("station-device-identification");
     const recentPackets = document.getElementById("station-recent-packets");
@@ -42,6 +43,7 @@
         destination: pageRoot.dataset.i18nDestination || "Destination",
         rawPacket: pageRoot.dataset.i18nRawPacket || "Raw packet",
         latestRawPacket: pageRoot.dataset.i18nLatestRawPacket || "Latest raw packet",
+        data: pageRoot.dataset.i18nData || "Data",
     });
     let map = null;
     let marker = null;
@@ -104,6 +106,34 @@
             <dt>${escapeHtml(field.label)}</dt>
             <dd>${field.label === i18n.latestRawPacket ? `<code>${escapeHtml(field.value)}</code>` : escapeHtml(field.value)}</dd>
         `).join("");
+    }
+
+    function renderDecodedData(items) {
+        if (!decodedData) return;
+        if (!Array.isArray(items) || !items.length) {
+            decodedData.hidden = true;
+            decodedData.innerHTML = "";
+            return;
+        }
+        const chips = items
+            .filter((item) => item && item.icon && item.label && item.value)
+            .map((item) => (
+                `<span class="weather-chip" title="${escapeHtml(item.label)}: ${escapeHtml(item.value)}">`
+                    + `<img src="${staticRoot}icons/${escapeHtml(item.icon)}" alt="${escapeHtml(item.label)}">`
+                    + `<span>${escapeHtml(item.value)}</span>`
+                + "</span>"
+            ))
+            .join("");
+        if (!chips) {
+            decodedData.hidden = true;
+            decodedData.innerHTML = "";
+            return;
+        }
+        decodedData.innerHTML = `
+            <span class="muted station-detail-decoded-label">${escapeHtml(i18n.data)}</span>
+            <div class="weather-inline">${chips}</div>
+        `;
+        decodedData.hidden = false;
     }
 
     function renderAprsDevice(device) {
@@ -516,6 +546,7 @@
             }
             renderMeta(station);
             renderFields(station);
+            renderDecodedData(station.data || []);
             renderAprsDevice(station.aprs_device || null);
             renderRecentPackets(payload.recent_packets || []);
             renderRelatedSsids(station, payload.related_ssids || []);
