@@ -42,4 +42,4 @@ jobs:
           push: true
           tags: |
             sq9mddpl/aprsbox:${{ steps.version.outputs.version }}
-            sq9mddpl/aprsbox:latest
+    
