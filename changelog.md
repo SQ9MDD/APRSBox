@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.23.dev - 24.05.2026
+
+### Najważniejsze zmiany
+- `Mapa / filtry interfejsów`: dodano filtrowanie widoku mapy per interfejs TNC (`show/hide`) dla markerów stacji, pokrycia PHG i śladów.
+- `Mapa / toolbar`: przełączniki interfejsów przeniesiono do górnej belki z ikonami mapy (bez osobnego wiersza pod paskiem narzędzi).
+- `API mapy`: payload `/api/map/stations` rozszerzono o `stations[*].interface_id`, `mobile_tracks[*].points[*].interface_id` oraz listę `interfaces` używaną przez filtr frontend.
+
 ## 1.8.22.dev - 23.05.2026
 
 ### Najważniejsze zmiany
