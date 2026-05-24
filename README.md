@@ -21,7 +21,7 @@ docker run -d \
   -p 8000:8000 \
   -v aprsbox_data:/opt/aprsbox/data \
   -v aprsbox_logs:/opt/aprsbox/logs \
-  sq9mddpl/aprsbox:1.8.0
+  sq9mddpl/aprsbox:1.8.25.dev
 ```
 Open the web interface: http://127.0.0.1:8000
 
