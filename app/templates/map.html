@@ -52,6 +52,8 @@
             data-i18n-hide-ruler="{{ t('Hide ruler') }}"
             data-i18n-tile-provider-unavailable="{{ t('Tile provider unavailable') }}"
             data-i18n-tile-provider-recovered="{{ t('Tile provider recovered') }}"
+            data-i18n-show="{{ t('Show') }}"
+            data-i18n-hide="{{ t('Hide') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -107,6 +109,7 @@
                             {% endfor %}
                         </select>
                     </label>
+                    <div id="map-interface-filters" class="map-interface-filters" aria-live="polite"></div>
                 </div>
                 <div class="map-info-strip" aria-live="polite">
                     <span>

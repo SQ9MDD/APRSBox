@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.8.23.dev - 24.05.2026
+
+### Najważniejsze zmiany
+- `Mapa / filtry interfejsów`: dodano filtrowanie widoku mapy per interfejs TNC (`show/hide`) dla markerów stacji, pokrycia PHG i śladów.
+- `Mapa / toolbar`: przełączniki interfejsów przeniesiono do górnej belki z ikonami mapy (bez osobnego wiersza pod paskiem narzędzi).
+- `API mapy`: payload `/api/map/stations` rozszerzono o `stations[*].interface_id`, `mobile_tracks[*].points[*].interface_id` oraz listę `interfaces` używaną przez filtr frontend.
+
+## 1.8.22.dev - 23.05.2026
+
+### Najważniejsze zmiany
+- `Mapa / tooltip stacji`: usunięto z tooltipa pola `Destination` i `Packet type`.
+- `Mapa / tooltip stacji`: dodano na końcu sekcję zdekodowanych danych w formie badge'y, analogicznie do kolumny `Data` w zakładce `Stacje`.
+- `Mapa / tooltip stacji`: usunięto duplikację `Prędkość` i `Kurs` w części tekstowej tooltipa (pozostają wyłącznie w badge'ach danych).
+- `UX`: dodano dodatkowy odstęp między podstawowymi polami tooltipa a sekcją zdekodowanych badge'y dla lepszej czytelności.
+
+## 1.8.21.dev - 21.05.2026
+
+### Najważniejsze zmiany
+- `I18N / języki GUI`: dodano nową paczkę językową `es` (`Español`) i rejestrację języka w `SUPPORTED_LANGUAGES`, dzięki czemu hiszpański jest dostępny do wyboru w `Settings -> Global Settings`.
+- `I18N / katalog tłumaczeń`: dodano pełny katalog `app/languages/es.json` (spójny kluczami z `en.json`) dla tłumaczeń interfejsu.
+- `APRS/AX.25 terminology (ES)`: w tłumaczeniach hiszpańskich doprecyzowano słownictwo operatorskie (m.in. `baliza`, `trama`, `trayectoria`, `salto`, `indicativo`, `digipeater`/`digirrepetidor`, `APRS-IS`, `iGate`) dla lepszego odwzorowania realnych pojęć w pracy APRS.
+- `Testy I18N`: rozszerzono testy o walidację zgodności kluczy katalogu `es` względem `en` oraz zaktualizowano asercję listy obsługiwanych języków.
+
 ## 1.8.20 - 21.05.2026
 
 ### Stable release

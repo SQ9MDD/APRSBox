@@ -1420,6 +1420,13 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
     return stations
 
 
+def format_decoded_data_for_display(
+    metrics: dict[str, float | int | str],
+    unit_system: str,
+) -> list[dict[str, str]]:
+    return _format_decoded_data_for_display(metrics, unit_system)
+
+
 def heard_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
     return visible_stations(limit=limit, unit_system=unit_system)
 
@@ -1656,7 +1663,7 @@ def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[
     placeholders = ", ".join("?" for _ in formats)
     rows = fetch_all(
         f"""
-        SELECT source, line, created_at
+        SELECT source, interface_id, line, created_at
         FROM traffic_frames
         WHERE format IN ({placeholders})
         ORDER BY created_at DESC, id DESC
@@ -1665,6 +1672,13 @@ def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[
         formats + (row_limit,),
     )
     return [dict(row) for row in rows]
+
+
+def _normalize_interface_id(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _build_station_snapshots_from_rows(
@@ -1709,6 +1723,7 @@ def _build_station_snapshots_from_rows(
                 str(parsed.get("logical_destination") or parsed.get("destination") or ""),
                 str(parsed.get("logical_path") or parsed.get("path") or ""),
                 row["line"],
+                _normalize_interface_id(row.get("interface_id")),
                 origin=origin,
             )
             station_key_index[station_key_folded] = station_key
@@ -1799,6 +1814,7 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
             "destination",
             "path",
             "raw_text",
+            "interface_id",
         ):
             merged[field] = secondary.get(field)
     return merged
@@ -1811,6 +1827,7 @@ def _new_station_snapshot(
     destination: str,
     path: str,
     raw_text: str,
+    interface_id: int | None,
     *,
     origin: str,
 ) -> dict[str, Any]:
@@ -1833,6 +1850,7 @@ def _new_station_snapshot(
         "destination": destination,
         "path": path,
         "raw_text": raw_text,
+        "interface_id": interface_id,
         "entity_class": "",
         "frame_type": "",
         "frame_type_label": "",
@@ -2087,8 +2105,7 @@ def _messaging_capable(snapshot: dict[str, Any]) -> bool | None:
     return None
 
 
-def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[dict[str, str]]:
-    metrics = dict(snapshot.get("data_raw", {}) or {})
+def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[dict[str, str]]:
     fields: list[dict[str, str]] = []
     display_callsign = snapshot.get("display_callsign")
     if display_callsign:
@@ -2099,8 +2116,6 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
         fields.append({"label": _t("SSID"), "value": str(snapshot["ssid"])})
     if snapshot.get("source"):
         fields.append({"label": _t("Source"), "value": str(snapshot["source"])})
-    if snapshot.get("destination"):
-        fields.append({"label": _t("Destination"), "value": str(snapshot["destination"])})
     if snapshot.get("last_heard_date"):
         fields.append({"label": str(snapshot.get("activity_label") or _t("Last heard")), "value": str(snapshot["last_heard_date"])})
     if snapshot.get("last_heard_relative"):
@@ -2118,30 +2133,12 @@ def _station_detail_fields(snapshot: dict[str, Any], unit_system: str) -> list[d
     fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
     if snapshot.get("path"):
         fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
-    if snapshot.get("frame_type"):
-        fields.append({"label": _t("Packet type"), "value": str(snapshot["frame_type"])})
-
-    speed_knots = metrics.get("speed_knots")
-    if speed_knots is not None:
-        speed_value = f"{int(round(float(speed_knots) * 1.15078))} mph" if unit_system == "imperial" else f"{int(round(float(speed_knots) * 1.852))} km/h"
-        fields.append({"label": _t("Speed"), "value": speed_value})
-    course_deg = metrics.get("course_deg")
-    if course_deg is not None:
-        fields.append({"label": _t("Course"), "value": f"{int(course_deg)}°"})
-    altitude_ft = metrics.get("altitude_ft")
-    if altitude_ft is not None:
-        altitude_value = f"{int(altitude_ft)} ft" if unit_system == "imperial" else f"{int(round(float(altitude_ft) * 0.3048))} m"
-        fields.append({"label": _t("Altitude"), "value": altitude_value})
 
     messaging_capable = _messaging_capable(snapshot)
     if messaging_capable is not None:
         fields.append({"label": _t("Messaging capability"), "value": _t("Yes") if messaging_capable else _t("No")})
     if snapshot.get("raw_text"):
         fields.append({"label": _t("Latest raw packet"), "value": str(snapshot["raw_text"])})
-
-    for item in _format_decoded_data_for_display(metrics, unit_system):
-        if item.get("value"):
-            fields.append({"label": item["label"], "value": item["value"]})
     return fields
 
 

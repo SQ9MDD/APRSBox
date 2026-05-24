@@ -32,6 +32,7 @@
     data-i18n-destination="{{ t('Destination') }}"
     data-i18n-raw-packet="{{ t('Raw packet') }}"
     data-i18n-latest-raw-packet="{{ t('Latest raw packet') }}"
+    data-i18n-data="{{ t('Data') }}"
 >
 <section class="panel">
     <div class="panel-body">
@@ -77,6 +78,17 @@
                 </dd>
                 {% endfor %}
             </dl>
+            <div class="station-detail-decoded" id="station-detail-decoded" {% if not station.data %}hidden{% endif %}>
+                <span class="muted station-detail-decoded-label">{{ t("Data") }}</span>
+                <div class="weather-inline">
+                    {% for item in station.data %}
+                    <span class="weather-chip" title="{{ item.label }}: {{ item.value }}">
+                        <img src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="{{ item.label }}">
+                        <span>{{ item.value }}</span>
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
     </article>
 
