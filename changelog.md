@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.25.dev - 24.05.2026
+
+### Najważniejsze zmiany
+- `Docker mode / detekcja`: dodano centralną flagę `is_container_mode` opartą o `APRSBOX_CONTAINER=1`.
+- `Settings -> Application update`: w trybie Docker ukryto akcję `Update application` i pozostawiono `Check version` wyłącznie jako operację informacyjną (bez sugerowania aktualizacji przez GUI).
+- `Settings -> Danger zone`: w trybie Docker sekcję akcji systemowych zastąpiono komunikatem o wyłączeniu akcji hosta oraz instrukcją użycia komend Docker.
+- `Backend/API / hard guard`: endpointy `POST /settings/update-application`, `POST /settings/restart-services`, `POST /settings/reboot-host` i `POST /settings/poweroff-host` odmawiają działania w Docker mode (`HTTP 409`, kontrolowany JSON, bez 500/tracebacków).
+- `System scripts`: w Docker mode nie są uruchamiane skrypty `update.sh`, `restart-services.sh`, `reboot-host.sh`, `poweroff-host.sh`.
+- `Settings -> Configuration backup`: backup/restore konfiguracji pozostają aktywne w Docker mode; komunikat po imporcie wskazuje restart/recreate kontenera komendami Docker.
+- `Docker docs`: doprecyzowano `README` — aktualizacja kontenera przez pull nowego obrazu i recreate kontenera z tymi samymi wolumenami.
+- `Testy`: rozszerzono testy regresyjne `Settings` o guardy Docker mode (UI + router) oraz asercję braku uruchamiania skryptów systemowych.
+
 ## 1.8.24 - 24.05.2026
 
 ### Stable release

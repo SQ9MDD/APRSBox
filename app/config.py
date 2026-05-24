@@ -11,6 +11,18 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized = str(raw_value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off", ""}:
+        return False
+    return default
+
+
 @dataclass(slots=True)
 class Settings:
     app_name: str = "APRSBox"
@@ -99,6 +111,10 @@ class Settings:
         if override:
             return override.rstrip("/")
         return f"http://{self.core_host}:{self.core_port}"
+
+    @property
+    def is_container_mode(self) -> bool:
+        return _env_flag("APRSBOX_CONTAINER", default=False)
 
 
 settings = Settings()

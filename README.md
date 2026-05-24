@@ -25,6 +25,23 @@ docker run -d \
 ```
 Open the web interface: http://127.0.0.1:8000
 
+Docker installation detected. In-app system actions are disabled. Update APRSBox by pulling a newer Docker image and recreating the container with the same volumes. Restart or stop APRSBox using Docker commands.
+
+Example update flow:
+
+```bash
+docker pull sq9mddpl/aprsbox:<new-tag>
+docker stop aprsbox
+docker rm aprsbox
+docker run -d \
+  --name aprsbox \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  -v aprsbox_data:/opt/aprsbox/data \
+  -v aprsbox_logs:/opt/aprsbox/logs \
+  sq9mddpl/aprsbox:<new-tag>
+```
+
 
 ## Fast Install
 

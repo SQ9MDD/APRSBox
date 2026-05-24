@@ -145,8 +145,10 @@ from app.services.map_service import (
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job, enqueue_status_job
 from app.services.system import (
+    container_system_actions_disabled_message,
     current_update_channel,
     current_gui_version,
+    is_container_mode,
     latest_gui_version,
     list_update_channels,
     read_update_log,
@@ -195,6 +197,13 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
 
 def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+def _container_mode_system_action_denied_response() -> JSONResponse:
+    return JSONResponse(
+        {"ok": False, "error": _translate(container_system_actions_disabled_message())},
+        status_code=status.HTTP_409_CONFLICT,
+    )
 
 
 def _format_size_bytes(size_bytes: int) -> str:
@@ -579,6 +588,7 @@ def _settings_page_context(
     map_source_edit_id: int | None = None,
     map_source_form: dict[str, Any] | None = None,
 ) -> dict:
+    container_mode = is_container_mode()
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
     db_maintenance_snapshot = database_maintenance_snapshot()
@@ -680,6 +690,7 @@ def _settings_page_context(
         update_log_content=str(update_log_snapshot.get("content") or ""),
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
+        is_container_mode=container_mode,
         map_sources=map_sources,
         map_source_form=resolved_map_source_form,
         map_source_edit_id=resolved_map_source_form.get("record_id"),
@@ -1040,6 +1051,8 @@ def settings_update_application(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("update-application", message=_translate("Queued."))
     result = start_application_update_job(job_id=job_id)
     if not result.get("ok"):
@@ -1114,6 +1127,8 @@ def settings_restart_services(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("restart-services", message=_translate("Queued."))
     result = start_service_restart_job(job_id=job_id)
     if not result.get("ok"):
@@ -1136,6 +1151,8 @@ def settings_reboot_host(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("reboot-host", message=_translate("Queued."))
     result = start_host_reboot_job(job_id=job_id)
     if not result.get("ok"):
@@ -1158,6 +1175,8 @@ def settings_poweroff_host(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("poweroff-host", message=_translate("Queued."))
     result = start_host_poweroff_job(job_id=job_id)
     if not result.get("ok"):
