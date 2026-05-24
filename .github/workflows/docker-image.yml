@@ -48,7 +48,6 @@ jobs:
             {
               echo "tags<<EOF"
               echo "sq9mddpl/aprsbox:${VERSION}"
-              echo "sq9mddpl/aprsbox:latest"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
 
@@ -56,7 +55,6 @@ jobs:
             {
               echo "tags<<EOF"
               echo "sq9mddpl/aprsbox:${VERSION}"
-              echo "sq9mddpl/aprsbox:latest"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
 
