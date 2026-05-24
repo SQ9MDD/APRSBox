@@ -15,7 +15,13 @@ The project is no longer "GUI only". It already includes a working SQLite-backed
 If you want to install APRSBox container just use this command:
 
 ```bash
-docker run -d --name aprsbox -p 8000:8000 sq9mddpl/aprsbox:1.8.0
+docker run -d \
+  --name aprsbox \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  -v aprsbox_data:/opt/aprsbox/data \
+  -v aprsbox_logs:/opt/aprsbox/logs \
+  sq9mddpl/aprsbox:1.8.0
 ```
 Open the web interface: http://127.0.0.1:8000
 
