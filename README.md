@@ -10,6 +10,16 @@ The project is no longer "GUI only". It already includes a working SQLite-backed
 <img width="1702" height="1147" alt="APRSBox" src="https://github.com/user-attachments/assets/cfa35f80-3db4-4601-af37-ad8fb9f1f4ce" />
 
 
+## Run Docker Container
+
+If you want to install APRSBox container just use this command:
+
+```bash
+docker run -d --name aprsbox -p 8000:8000 sq9mddpl/aprsbox:1.8.0
+```
+Open the web interface: http://127.0.0.1:8000
+
+
 ## Fast Install
 
 If you want to install APRSBox on a target Linux machine, the fastest path is a single installer command.
