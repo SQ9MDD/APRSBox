@@ -30,18 +30,49 @@ jobs:
         id: docker_tags
         shell: bash
         run: |
+          VERSION="$(cat VERSION | tr -d '[:space:]')"
+
+          if [[ -z "${VERSION}" ]]; then
+            echo "VERSION file is empty or missing"
+            exit 1
+          fi
+
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+            if [[ "${TAG_VERSION}" != "${VERSION}" ]]; then
+              echo "Git tag version (${TAG_VERSION}) does not match VERSION file (${VERSION})"
+              exit 1
+            fi
+
             {
               echo "tags<<EOF"
               echo "sq9mddpl/aprsbox:${VERSION}"
               echo "sq9mddpl/aprsbox:latest"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
+
+          elif [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            {
+              echo "tags<<EOF"
+              echo "sq9mddpl/aprsbox:${VERSION}"
+              echo "sq9mddpl/aprsbox:latest"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+
+          elif [[ "${GITHUB_REF_NAME}" == "dev" ]]; then
+            {
+              echo "tags<<EOF"
+              echo "sq9mddpl/aprsbox:${VERSION}"
+              echo "sq9mddpl/aprsbox:dev"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+
           else
             BRANCH_TAG="${GITHUB_REF_NAME//\//-}"
             {
               echo "tags<<EOF"
+              echo "sq9mddpl/aprsbox:${VERSION}"
               echo "sq9mddpl/aprsbox:${BRANCH_TAG}"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
