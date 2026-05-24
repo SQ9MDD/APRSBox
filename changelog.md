@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.24 - 24.05.2026
+
+### Stable release
+- Migracja wydania z gałęzi `dev` do `main`.
+
+### Included development snapshots
+- zmiany od `1.8.21.dev` do `1.8.23.dev`
+
+### Najważniejsze zmiany
+- `I18N / języki GUI`: dodano pełne wsparcie języka hiszpańskiego (`es`) i rejestrację w `SUPPORTED_LANGUAGES`.
+- `Mapa / tooltip stacji`: uproszczono tooltip (usunięto `Destination` i `Packet type`), dodano sekcję zdekodowanych danych w formie badge'y oraz poprawiono czytelność odstępami.
+- `Mapa / filtry interfejsów`: dodano filtrowanie widoku mapy per interfejs TNC (`show/hide`) dla markerów stacji, pokrycia PHG i śladów oraz przeniesiono przełączniki do górnej belki mapy.
+- `API mapy`: rozszerzono payload `/api/map/stations` o `stations[*].interface_id`, `mobile_tracks[*].points[*].interface_id` i listę `interfaces` dla filtrowania frontend.
+
 ## 1.8.23.dev - 24.05.2026
 
 ### Najważniejsze zmiany
