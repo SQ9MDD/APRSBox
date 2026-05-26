@@ -25,6 +25,7 @@
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
     const tileStatusOutput = document.getElementById("map-tile-status");
+    const mapStage = document.getElementById("map-stage");
     const mapCanvas = document.getElementById("map-canvas");
     const mapInterfaceFilters = document.getElementById("map-interface-filters");
     const resetButton = document.getElementById("map-reset-view");
@@ -948,9 +949,42 @@
     });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
+    let mapResizeFrameRequest = null;
+    function scheduleMapInvalidateSize() {
+        if (mapResizeFrameRequest !== null) {
+            return;
+        }
+        mapResizeFrameRequest = window.requestAnimationFrame(function () {
+            mapResizeFrameRequest = null;
+            map.invalidateSize();
+        });
+    }
+
     window.addEventListener("resize", function () {
-        map.invalidateSize();
+        scheduleMapInvalidateSize();
     });
+
+    if (mapStage && typeof window.ResizeObserver === "function") {
+        let previousWidth = mapStage.clientWidth;
+        let previousHeight = mapStage.clientHeight;
+        const stageResizeObserver = new window.ResizeObserver(function () {
+            const nextWidth = mapStage.clientWidth;
+            const nextHeight = mapStage.clientHeight;
+            if (nextWidth <= 0 || nextHeight <= 0) {
+                return;
+            }
+            if (nextWidth === previousWidth && nextHeight === previousHeight) {
+                return;
+            }
+            previousWidth = nextWidth;
+            previousHeight = nextHeight;
+            scheduleMapInvalidateSize();
+        });
+        stageResizeObserver.observe(mapStage);
+        window.addEventListener("beforeunload", function () {
+            stageResizeObserver.disconnect();
+        }, { once: true });
+    }
 
     function tooltipHtml(station) {
         const lines = [];
@@ -1292,7 +1326,7 @@
     });
     map.whenReady(function () {
         window.setTimeout(function () {
-            map.invalidateSize();
+            scheduleMapInvalidateSize();
             initializeRuler();
         }, 0);
     });

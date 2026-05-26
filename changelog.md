@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.26.dev - 26.05.2026
+
+### Najważniejsze zmiany
+- `Map / layout`: usunięto stałe wyliczanie wysokości mapy (`clamp(...100vh...)`) i przełączono kartę mapy na układ flex-fill, żeby mapa wypełniała dostępne miejsce do dołu viewportu bez dokładania drugiego scrolla strony (desktop).
+- `Map / kontenery`: dodano łańcuch `min-height: 0` dla `content -> map-panel -> panel-body -> map-page -> map-stage`, przy zachowaniu naturalnej wysokości toolbara oraz `height: 100%` dla elementu Leaflet względem wrappera.
+- `Map / resize`: dodano obserwację rozmiaru kontenera mapy (`ResizeObserver`) i zdławione wywołanie `map.invalidateSize()`, bez zmian logiki APRS, warstw, tooltipów i SSE.
+
 ## 1.8.25.dev - 24.05.2026
 
 ### Najważniejsze zmiany

@@ -1,7 +1,28 @@
+.content {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.map-panel {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.map-panel .panel-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .map-page {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
     gap: var(--space-2);
+    min-height: 0;
     min-width: 0;
 }
 
@@ -94,8 +115,8 @@
 
 .map-stage {
     position: relative;
-    height: clamp(24rem, calc(100vh - 12.5rem), 72rem);
-    min-height: 24rem;
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
     border-radius: var(--radius);
     overflow: hidden;
@@ -106,6 +127,9 @@
 
 .map-canvas {
     --map-mask-layer-opacity: 0;
+    height: 100%;
+    min-height: 0;
+    width: 100%;
     position: absolute;
     inset: 0;
     background: var(--panel-soft);
@@ -206,6 +230,11 @@
 .leaflet-container {
     font: inherit;
     background: var(--panel-soft);
+}
+
+.map-canvas.leaflet-container {
+    height: 100%;
+    width: 100%;
 }
 
 .map-station-icon {
@@ -372,10 +401,6 @@
 }
 
 @media (max-width: 900px) {
-    .map-stage {
-        height: clamp(22rem, calc(100vh - 10rem), 60rem);
-    }
-
     .map-toolbar,
     .map-toolbar-actions,
     .map-info-strip {
@@ -387,5 +412,11 @@
         right: 0.65rem;
         width: 22rem;
         max-width: calc(100% - 1.3rem);
+    }
+}
+
+@media (max-width: 980px) {
+    .main-area {
+        min-height: 100vh;
     }
 }
