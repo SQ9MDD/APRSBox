@@ -2047,6 +2047,7 @@ def map_page(
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_stations_endpoint=_path(request, "/api/map/stations"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
+        map_traffic_stream_endpoint=_path(request, "/api/traffic/stream"),
     )
     return templates.TemplateResponse("map.html", context)
 

@@ -151,13 +151,22 @@
     transition: opacity var(--transition-fast);
 }
 
-.map-latest-overlay {
+.map-overlay-stack {
     position: absolute;
     top: 0.78rem;
     right: 0.78rem;
+    bottom: 0;
     z-index: 900;
     width: 22rem;
     max-width: calc(100% - 1.56rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.78rem;
+    pointer-events: none;
+}
+
+.map-latest-overlay {
+    width: 100%;
     padding: 0.55rem 0.64rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -165,6 +174,7 @@
     color: var(--text);
     box-shadow: var(--shadow);
     backdrop-filter: blur(5px);
+    pointer-events: auto;
 }
 
 .map-latest-overlay-title {
@@ -213,6 +223,65 @@
     color: var(--muted);
     font-size: 0.74rem;
     line-height: 1.24;
+}
+
+.map-scroller-overlay {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(5px);
+    pointer-events: auto;
+}
+
+.map-scroller-empty {
+    margin: 0;
+    padding: 0.6rem;
+    color: var(--muted);
+    font-size: 0.74rem;
+    line-height: 1.24;
+}
+
+.map-scroller-row {
+    display: grid;
+    grid-template-columns: 5rem minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.34rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.72rem;
+    line-height: 1.22;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.map-scroller-row:last-child {
+    border-bottom: 0;
+}
+
+.map-scroller-time {
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.map-scroller-digi,
+.map-scroller-station {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.map-scroller-digi {
+    color: var(--muted);
+}
+
+.map-scroller-station {
+    color: var(--text);
+    font-weight: 600;
 }
 
 .map-mask-opacity-control {
@@ -407,11 +476,12 @@
         align-items: flex-start;
     }
 
-    .map-latest-overlay {
+    .map-overlay-stack {
         top: 0.65rem;
         right: 0.65rem;
         width: 22rem;
         max-width: calc(100% - 1.3rem);
+        gap: 0.65rem;
     }
 }
 
