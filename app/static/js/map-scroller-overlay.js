@@ -224,7 +224,14 @@
         if (!normalized) {
             return "-";
         }
-        return `${baseCallsignKey(normalized) || normalized}*`;
+        const dashIndex = normalized.indexOf("-");
+        if (dashIndex > 0) {
+            const ssid = normalized.slice(dashIndex + 1);
+            if (ssid === "0") {
+                return `${normalized.slice(0, dashIndex)}*`;
+            }
+        }
+        return `${normalized}*`;
     }
 
     function resolveLastDigipeater(pathText) {
