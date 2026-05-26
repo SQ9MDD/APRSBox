@@ -8,6 +8,24 @@
     overflow: hidden;
 }
 
+@media (min-width: 981px) {
+    .app-shell {
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+    }
+
+    .sidebar {
+        min-height: 0;
+        height: 100%;
+        overflow-y: auto;
+    }
+
+    .main-area {
+        overflow: hidden;
+    }
+}
+
 .map-panel {
     display: flex;
     flex: 1 1 auto;
