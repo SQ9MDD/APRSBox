@@ -7,7 +7,10 @@
 - `Map / kontenery`: dodano łańcuch `min-height: 0` dla `content -> map-panel -> panel-body -> map-page -> map-stage`, przy zachowaniu naturalnej wysokości toolbara oraz `height: 100%` dla elementu Leaflet względem wrappera.
 - `Map / resize`: dodano obserwację rozmiaru kontenera mapy (`ResizeObserver`) i zdławione wywołanie `map.invalidateSize()`, bez zmian logiki APRS, warstw, tooltipów i SSE.
 - `Map / scroller`: dodano widżet pod `Latest packet` (układ `ikonka | znak | ostatni digi`) z aktualizacją na żywo z tego samego strumienia ruchu (`/api/traffic/stream`) oraz przełącznikiem `show/hide` na toolbarze mapy.
-- `Map / scroller / APRS`: kolumna `digi` pokazuje ostatni rzeczywisty digi, który powtórzył ramkę (z pominięciem aliasów typu `WIDE*/TRACE*` i `q*`), z obsługą monitorów oznaczających `*` tylko na ostatnim użytym hopie; przy znaku stacji dodano oznaczenia `*`, `#`, `@` oraz kolorowanie tekstu wg odległości względem bieżącej skali mapy (czarny dla stacji bez pozycji).
+- `Map / scroller / APRS`: kolumna `digi` pokazuje ostatni rzeczywisty digi, który powtórzył ramkę (z pominięciem aliasów typu `WIDE*/TRACE*` i `q*`) z obsługą monitorów oznaczających `*` tylko na ostatnim hopie; zachowano pełny znak digi z SSID (normalizacja tylko `-0`).
+- `Map / scroller / oznaczenia`: przy znaku stacji dodano znaczniki `*` (direct RF), `#` (third-party iGate->RF), `@` (powtórzone przez lokalną stację); własne ramki lokalnej stacji są widoczne także dla `TX`.
+- `Map / scroller / kolor`: kolor znaku stacji skaluje się wg odległości i bieżącej skali mapy (`czerwony -> żółty -> zielony`), a dla stacji bez pozycji używany jest kolor czarny.
+- `Map / viewport`: domknięto desktopowy layout mapy do wysokości viewportu (bez wyciekania mapy pod dolną krawędź strony) oraz ukryto wizualny pasek scrolla sidebara na zakładce Map.
 
 ## 1.8.25.dev - 24.05.2026
 
