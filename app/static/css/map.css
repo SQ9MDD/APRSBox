@@ -248,7 +248,7 @@
 
 .map-scroller-row {
     display: grid;
-    grid-template-columns: 5rem minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 1.2rem minmax(0, 1.25fr) minmax(0, 1fr);
     gap: 0.35rem;
     align-items: center;
     padding: 0.34rem 0.5rem;
@@ -262,9 +262,18 @@
     border-bottom: 0;
 }
 
-.map-scroller-time {
-    color: var(--muted);
-    white-space: nowrap;
+.map-scroller-icon-wrap {
+    width: 1rem;
+    height: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.map-scroller-icon {
+    width: 1rem;
+    height: 1rem;
+    image-rendering: pixelated;
 }
 
 .map-scroller-digi,

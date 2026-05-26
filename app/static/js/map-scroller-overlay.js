@@ -10,6 +10,8 @@
     const toggleIcon = document.getElementById("map-toggle-scroller-icon");
     const staticRoot = root.dataset.staticRoot || "/static/";
     const scrollerVisibleStorageKey = "aprsbox-map-scroller-visible";
+    const stationsRefreshEventName = "aprsbox:map-stations-refreshed";
+    const fallbackStationIconPath = `${staticRoot}icons/verG/x.gif`;
     const maxEntries = 120;
 
     const i18n = Object.freeze({
@@ -20,8 +22,10 @@
     });
 
     const tnc2Regex = /^(?<source>[^>]+?)\s*>\s*(?<destination>[^,:]+?)(?:\s*,\s*(?<path>[^:]+))?\s*:(?<info>.*)$/;
+    const stationIconByCallsignKey = new Map();
     let scrollerVisible = true;
     let lastSnapshotSignature = "";
+    let lastSnapshotPayload = null;
     let eventSource = null;
 
     function escapeHtml(value) {
@@ -65,6 +69,30 @@
         }
         const match = text.match(/(\d{2}:\d{2}(?::\d{2})?)/);
         return match ? match[1] : text;
+    }
+
+    function normalizeCallsignKey(value) {
+        return String(value || "").trim().toUpperCase();
+    }
+
+    function updateStationIconLookup(stations) {
+        stationIconByCallsignKey.clear();
+        const resolvedStations = Array.isArray(stations) ? stations : [];
+        for (const station of resolvedStations) {
+            const symbolIcon = String(station && station.symbol_icon || "").trim();
+            if (!symbolIcon) {
+                continue;
+            }
+            const iconPath = `${staticRoot}${symbolIcon}`;
+            const displayCallsign = normalizeCallsignKey(station && station.display_callsign);
+            const baseCallsign = normalizeCallsignKey(station && station.callsign);
+            if (displayCallsign) {
+                stationIconByCallsignKey.set(displayCallsign, iconPath);
+            }
+            if (baseCallsign) {
+                stationIconByCallsignKey.set(baseCallsign, iconPath);
+            }
+        }
     }
 
     function pathDigipeater(pathText) {
@@ -121,6 +149,7 @@
                 timestamp: shortTimestamp(frame && frame.timestamp),
                 station: parsed.source,
                 digipeater: parsed.digipeater,
+                stationIconPath: stationIconByCallsignKey.get(normalizeCallsignKey(parsed.source)) || fallbackStationIconPath,
             });
             if (entries.length >= maxEntries) {
                 break;
@@ -136,14 +165,17 @@
         }
         overlay.innerHTML = entries.map((entry) => (
             `<div class="map-scroller-row">`
-                + `<span class="map-scroller-time">${escapeHtml(entry.timestamp)}</span>`
-                + `<span class="map-scroller-digi">${escapeHtml(entry.digipeater)}</span>`
+                + `<span class="map-scroller-icon-wrap" title="${escapeHtml(entry.timestamp)}">`
+                    + `<img class="map-scroller-icon" src="${escapeHtml(entry.stationIconPath)}" alt="">`
+                + `</span>`
                 + `<span class="map-scroller-station">${escapeHtml(entry.station)}</span>`
+                + `<span class="map-scroller-digi">${escapeHtml(entry.digipeater)}</span>`
             + `</div>`
         )).join("");
     }
 
     function applySnapshot(snapshot) {
+        lastSnapshotPayload = snapshot;
         const entries = buildScrollerEntries(snapshot);
         const signature = entries.map((entry) => `${entry.timestamp}|${entry.digipeater}|${entry.station}`).join("||");
         if (signature === lastSnapshotSignature) {
@@ -175,6 +207,15 @@
             applyScrollerToggleState(!scrollerVisible);
         });
     }
+
+    root.addEventListener(stationsRefreshEventName, function (event) {
+        const detail = event && event.detail ? event.detail : {};
+        updateStationIconLookup(detail.stations);
+        if (lastSnapshotPayload) {
+            lastSnapshotSignature = "";
+            applySnapshot(lastSnapshotPayload);
+        }
+    });
 
     connectTrafficStream();
 
