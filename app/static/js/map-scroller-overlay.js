@@ -346,6 +346,25 @@
         return "*";
     }
 
+    function isOwnStationCallsign(callsign) {
+        const full = normalizeCallsignKey(callsign);
+        const base = baseCallsignKey(full);
+        if (stationSourceKey && (full === stationSourceKey || base === stationSourceKey)) {
+            return true;
+        }
+        if (stationSourceCallsign && (full === stationSourceCallsign || base === stationSourceCallsign)) {
+            return true;
+        }
+        return false;
+    }
+
+    function resolveMarker(parsedFrame, direction) {
+        if (direction === "TX" && isOwnStationCallsign(parsedFrame.station)) {
+            return "@";
+        }
+        return ingressMarker(parsedFrame);
+    }
+
     function stationIconPath(stationCallsign) {
         const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign))
             || stationByCallsignKey.get(baseCallsignKey(stationCallsign));
@@ -357,14 +376,15 @@
         const entries = [];
         for (const frame of frames) {
             const direction = String((frame && frame.direction) || "").trim().toUpperCase();
-            if (direction !== "RX") {
-                continue;
-            }
             const parsed = parseFrameLine(frame && frame.line);
             if (!parsed) {
                 continue;
             }
-            const marker = ingressMarker(parsed);
+            const isOwn = isOwnStationCallsign(parsed.station);
+            if (direction !== "RX" && !(direction === "TX" && isOwn)) {
+                continue;
+            }
+            const marker = resolveMarker(parsed, direction);
             const stationLabel = `${parsed.station}${marker}`;
             entries.push({
                 timestamp: shortTimestamp(frame && frame.timestamp),
