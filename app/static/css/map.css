@@ -1,6 +1,11 @@
+.main-area {
+    min-height: 0;
+}
+
 .content {
     flex: 1 1 auto;
     min-height: 0;
+    overflow: hidden;
 }
 
 .map-panel {
@@ -496,6 +501,6 @@
 
 @media (max-width: 980px) {
     .main-area {
-        min-height: 100vh;
+        min-height: 0;
     }
 }
