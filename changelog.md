@@ -6,6 +6,8 @@
 - `Map / layout`: usunięto stałe wyliczanie wysokości mapy (`clamp(...100vh...)`) i przełączono kartę mapy na układ flex-fill, żeby mapa wypełniała dostępne miejsce do dołu viewportu bez dokładania drugiego scrolla strony (desktop).
 - `Map / kontenery`: dodano łańcuch `min-height: 0` dla `content -> map-panel -> panel-body -> map-page -> map-stage`, przy zachowaniu naturalnej wysokości toolbara oraz `height: 100%` dla elementu Leaflet względem wrappera.
 - `Map / resize`: dodano obserwację rozmiaru kontenera mapy (`ResizeObserver`) i zdławione wywołanie `map.invalidateSize()`, bez zmian logiki APRS, warstw, tooltipów i SSE.
+- `Map / scroller`: dodano widżet pod `Latest packet` (układ `ikonka | znak | ostatni digi`) z aktualizacją na żywo z tego samego strumienia ruchu (`/api/traffic/stream`) oraz przełącznikiem `show/hide` na toolbarze mapy.
+- `Map / scroller / APRS`: kolumna `digi` pokazuje ostatni rzeczywisty digi, który powtórzył ramkę (z pominięciem aliasów typu `WIDE*/TRACE*` i `q*`), z obsługą monitorów oznaczających `*` tylko na ostatnim użytym hopie; przy znaku stacji dodano oznaczenia `*`, `#`, `@` oraz kolorowanie tekstu wg odległości względem bieżącej skali mapy (czarny dla stacji bez pozycji).
 
 ## 1.8.25.dev - 24.05.2026
 

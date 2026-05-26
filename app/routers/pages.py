@@ -2039,12 +2039,21 @@ def map_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
+    station_settings = get_station_settings()
+    station_callsign = str(station_settings.get("callsign") or "").strip().upper()
+    station_ssid = str(station_settings.get("ssid") or "").strip()
+    if station_ssid == "0":
+        station_ssid = ""
+    map_station_source_key = station_callsign
+    if station_callsign and station_ssid:
+        map_station_source_key = f"{station_callsign}-{station_ssid}"
     context = build_template_context(
         request,
         page_title="Map",
         current_user=current_user,
         active_nav="map",
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
+        map_station_source_key=map_station_source_key,
         map_stations_endpoint=_path(request, "/api/map/stations"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
         map_traffic_stream_endpoint=_path(request, "/api/traffic/stream"),

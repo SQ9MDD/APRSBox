@@ -77,6 +77,7 @@
     const mapCoverageFillOpacityStorageKey = "aprsbox-map-coverage-fill-opacity";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
+    const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
@@ -466,6 +467,26 @@
 
     function formatCoordinate(value) {
         return Number.isFinite(value) ? value.toFixed(5) : "--";
+    }
+
+    function visibleMapRadiusKm() {
+        const center = map.getCenter();
+        const size = map.getSize();
+        if (!Number.isFinite(center.lat) || !Number.isFinite(center.lng)) {
+            return NaN;
+        }
+        if (!size || size.x <= 0 || size.y <= 0) {
+            return NaN;
+        }
+        const centerPoint = map.latLngToContainerPoint(center);
+        const radiusPixels = Math.max(1, Math.floor(Math.min(size.x, size.y) / 2));
+        const edgePoint = window.L.point(centerPoint.x, Math.max(0, centerPoint.y - radiusPixels));
+        const edgeLatLng = map.containerPointToLatLng(edgePoint);
+        const radiusMeters = map.distance(center, edgeLatLng);
+        if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
+            return NaN;
+        }
+        return radiusMeters / 1000;
     }
 
     function parseUtcDate(value) {
@@ -880,6 +901,14 @@
         if (zoomOutput) {
             zoomOutput.textContent = String(map.getZoom());
         }
+        root.dispatchEvent(new window.CustomEvent(mapViewRefreshEventName, {
+            detail: {
+                center_latitude: center.lat,
+                center_longitude: center.lng,
+                visible_radius_km: visibleMapRadiusKm(),
+                zoom: map.getZoom(),
+            },
+        }));
     }
 
     function persistView() {
@@ -1323,6 +1352,7 @@
     });
     map.on("resize", function () {
         anchorRulerToFrameIfIdle();
+        syncStatus();
     });
     map.whenReady(function () {
         window.setTimeout(function () {
