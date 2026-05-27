@@ -287,11 +287,13 @@
         if (isThirdParty) {
             digipeater = formatDigipeaterLabel(outer.source);
         }
+        const usedPathTokens = tokenizeUsedPath(outer.path);
         return {
             station,
             digipeater,
             isThirdParty,
             digipeatedByLocal,
+            isDirectRf: !isThirdParty && usedPathTokens.length === 0,
         };
     }
 
@@ -343,7 +345,10 @@
         if (parsedFrame.isThirdParty) {
             return "#";
         }
-        return "*";
+        if (parsedFrame.isDirectRf) {
+            return "*";
+        }
+        return "";
     }
 
     function isOwnStationCallsign(callsign) {
