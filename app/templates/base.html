@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}">
     {% block extra_head %}{% endblock %}
 </head>
-<body class="app-shell">
+<body class="app-shell{% if body_class %} {{ body_class }}{% endif %}">
     {% if current_user %}
     <aside class="sidebar">
         <div class="brand">

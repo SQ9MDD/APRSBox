@@ -1,21 +1,21 @@
-.main-area {
+.page-map .main-area {
     min-height: 0;
 }
 
-.content {
+.page-map .content {
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
 }
 
 @media (min-width: 981px) {
-    .app-shell {
+    .page-map.app-shell {
         height: 100vh;
         height: 100dvh;
         overflow: hidden;
     }
 
-    .sidebar {
+    .page-map .sidebar {
         min-height: 0;
         height: 100%;
         overflow-y: auto;
@@ -23,12 +23,12 @@
         -ms-overflow-style: none;
     }
 
-    .sidebar::-webkit-scrollbar {
+    .page-map .sidebar::-webkit-scrollbar {
         width: 0;
         height: 0;
     }
 
-    .main-area {
+    .page-map .main-area {
         overflow: hidden;
     }
 }
@@ -525,7 +525,7 @@
 }
 
 @media (max-width: 980px) {
-    .main-area {
+    .page-map .main-area {
         min-height: 0;
     }
 }

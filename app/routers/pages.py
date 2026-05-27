@@ -2052,6 +2052,7 @@ def map_page(
         page_title="Map",
         current_user=current_user,
         active_nav="map",
+        body_class="page-map",
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_station_source_key=map_station_source_key,
         map_stations_endpoint=_path(request, "/api/map/stations"),
