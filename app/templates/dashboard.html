@@ -15,23 +15,26 @@
                         <p>{{ t(dashboard_home.hero.summary) }}</p>
                         {% endif %}
                     </div>
-                    <div class="dashboard-hero-summary">
+                    <dl class="dashboard-hero-runtime-list">
                         {% for item in dashboard_home.hero_summary %}
-                        <div class="dashboard-hero-summary-item">
-                            <span class="muted">{{ t(item.label) }}</span>
-                            <strong class="{% if item.tone == 'ok' %}dashboard-status-ok{% elif item.tone == 'error' %}dashboard-status-error{% elif item.tone == 'warn' %}dashboard-status-warn{% endif %}">{{ t(item.value) }}</strong>
+                        <div class="dashboard-hero-runtime-row">
+                            <dt>{{ t(item.label) }}</dt>
+                            <dd class="{% if item.tone == 'ok' %}dashboard-status-ok{% elif item.tone == 'error' %}dashboard-status-error{% elif item.tone == 'warn' %}dashboard-status-warn{% endif %}">
+                                <span class="dashboard-indicator dashboard-indicator-{{ item.tone }}"></span>
+                                {{ t(item.value) }}
+                            </dd>
                         </div>
                         {% endfor %}
-                    </div>
+                    </dl>
                 </div>
-                <div class="dashboard-kpi-grid">
+                <ul class="dashboard-inline-metrics">
                     {% for item in dashboard_home.stats %}
-                    <div class="metric-card dashboard-kpi-card">
-                        <span class="metric-label">{{ t(item.label) }}</span>
-                        <span class="metric-value">{{ item.value if item.suffix else t(item.value) }}{% if item.suffix %} {{ t(item.suffix) }}{% endif %}</span>
-                    </div>
+                    <li class="dashboard-inline-metric">
+                        <span class="dashboard-inline-metric-label">{{ t(item.label) }}</span>
+                        <strong class="dashboard-inline-metric-value">{{ item.value if item.suffix else t(item.value) }}{% if item.suffix %} {{ t(item.suffix) }}{% endif %}</strong>
+                    </li>
                     {% endfor %}
-                </div>
+                </ul>
             </div>
         </section>
 
@@ -71,17 +74,34 @@
                         <h2>{{ t("Station Readiness") }}</h2>
                     </div>
                 </div>
-                <div class="dashboard-checks">
+                <div class="dashboard-readiness-groups">
                     {% for item in dashboard_home.checks %}
-                    <div class="dashboard-check dashboard-check-{{ item.state }}{% if item.show_state_badge is defined and not item.show_state_badge %} dashboard-check-no-summary-badge{% endif %}">
-                        <div class="dashboard-check-body">
-                            <strong>{{ t(item.label) }}</strong>
+                    <section class="dashboard-readiness-group dashboard-readiness-group-{{ item.state }}{% if item.show_state_badge is defined and item.show_state_badge %} dashboard-readiness-group-primary{% else %} dashboard-readiness-group-secondary{% endif %}">
+                        <header class="dashboard-readiness-group-header">
+                            <h3>{{ t(item.label) }}</h3>
+                            {% if item.show_state_badge is defined and item.show_state_badge %}
+                            <span class="dashboard-readiness-state dashboard-status-{{ item.state }}">
+                                <span class="dashboard-indicator dashboard-indicator-{{ 'warn' if item.state == 'warn' else item.state }}"></span>
+                                {% if item.state == "ok" %}
+                                {{ t("OK") }}
+                                {% elif item.state == "error" %}
+                                {{ t("Error") }}
+                                {% else %}
+                                {{ t("Needs attention") }}
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        </header>
+                        <div class="dashboard-readiness-group-body">
                             {% if item.entries %}
-                            <ul class="dashboard-check-list">
+                            <ul class="dashboard-kv-list">
                                 {% for entry in item.entries %}
                                 <li>
-                                    <span>{{ t(entry.name) }}</span>
-                                    <span class="status-pill dashboard-entry-badge {% if entry.tone == 'ok' %}status-running{% elif entry.tone == 'error' %}status-stopped{% elif entry.tone == 'warn' %}status-unknown{% endif %}">{{ t(entry.status) }}</span>
+                                    <span class="dashboard-kv-key">{{ t(entry.name) }}</span>
+                                    <span class="dashboard-kv-value {% if entry.tone == 'ok' %}dashboard-status-ok{% elif entry.tone == 'error' %}dashboard-status-error{% elif entry.tone == 'warn' %}dashboard-status-warn{% endif %}">
+                                        <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                                        {{ t(entry.status) }}
+                                    </span>
                                 </li>
                                 {% endfor %}
                             </ul>
@@ -92,18 +112,7 @@
                             <p class="dashboard-check-note">{{ t(item.note) }}</p>
                             {% endif %}
                         </div>
-                        {% if item.show_state_badge is not defined or item.show_state_badge %}
-                        <span class="status-pill {% if item.state == 'ok' %}status-running{% elif item.state == 'error' %}status-stopped{% else %}status-unknown{% endif %}">
-                            {% if item.state == "ok" %}
-                            {{ t("OK") }}
-                            {% elif item.state == "error" %}
-                            {{ t("Error") }}
-                            {% else %}
-                            {{ t("Needs attention") }}
-                            {% endif %}
-                        </span>
-                        {% endif %}
-                    </div>
+                    </section>
                     {% endfor %}
                 </div>
             </div>
@@ -118,11 +127,14 @@
                     </div>
                 </div>
                 {% if dashboard_home.interface_entries %}
-                <ul class="dashboard-check-list">
+                <ul class="dashboard-kv-list">
                     {% for entry in dashboard_home.interface_entries %}
-                    <li>
-                        <span>{{ t(entry.name) }}</span>
-                        <span class="status-pill dashboard-entry-badge {% if entry.tone == 'ok' %}status-running{% elif entry.tone == 'error' %}status-stopped{% elif entry.tone == 'warn' %}status-unknown{% endif %}">{{ t(entry.status) }}</span>
+                    <li class="{% if entry.tone == 'neutral' %}dashboard-row-muted{% endif %}">
+                        <span class="dashboard-kv-key">{{ t(entry.name) }}</span>
+                        <span class="dashboard-kv-value {% if entry.tone == 'ok' %}dashboard-status-ok{% elif entry.tone == 'error' %}dashboard-status-error{% elif entry.tone == 'warn' %}dashboard-status-warn{% endif %}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                            {{ t(entry.status) }}
+                        </span>
                     </li>
                     {% endfor %}
                 </ul>
@@ -139,14 +151,13 @@
                     </div>
                 </div>
                 {% if dashboard_home.last_rf_activity %}
-                <ul class="dashboard-activity-list">
+                <ul class="dashboard-kv-list dashboard-rf-kv-list">
                     {% for item in dashboard_home.last_rf_activity %}
                     <li>
-                        <span>{{ t(item.name) }}</span>
-                        <span>{{ t(item.value) }}</span>
-                        {% if item.note %}
-                        <span class="muted small">{{ t(item.note) }}</span>
-                        {% endif %}
+                        <span class="dashboard-kv-key">{{ t(item.name) }}</span>
+                        <span class="dashboard-kv-value">
+                            {{ t(item.value) }}{% if item.note %}, <span class="muted">{{ t(item.note) }}</span>{% endif %}
+                        </span>
                     </li>
                     {% endfor %}
                 </ul>
@@ -162,16 +173,15 @@
                     <div class="panel-header-copy">
                         <h2>{{ t("Recent important events") }}</h2>
                     </div>
+                    <a class="dashboard-subtle-link" href="{{ request.scope.root_path }}/logs">{{ t("More") }}</a>
                 </div>
                 {% if dashboard_home.recent_events %}
-                <ul class="dashboard-event-list">
-                    {% for event in dashboard_home.recent_events %}
+                <ul class="dashboard-event-feed">
+                    {% for event in (dashboard_home.recent_events or [])[:5] %}
                     <li>
-                        <div class="dashboard-event-main">
-                            <span class="dashboard-event-message">{{ t(event.message) }}</span>
-                            <span class="status-pill dashboard-entry-badge {% if event.tone == 'ok' %}status-running{% elif event.tone == 'error' %}status-stopped{% else %}status-unknown{% endif %}">{{ t(event.level) }}</span>
-                        </div>
-                        <span class="muted small">{{ event.timestamp }}</span>
+                        <time class="dashboard-event-time">{{ event.timestamp }}</time>
+                        <span class="dashboard-event-message">{{ t(event.message) }}</span>
+                        <span class="dashboard-indicator dashboard-indicator-{{ event.tone }}" aria-label="{{ t(event.level) }}" title="{{ t(event.level) }}"></span>
                     </li>
                     {% endfor %}
                 </ul>
@@ -217,22 +227,10 @@
                 </section>
             </div>
             <div class="dashboard-activity-totals">
-                <div class="metric-card dashboard-kpi-card">
-                    <span class="metric-label">{{ t("All frames") }}</span>
-                    <span class="metric-value" id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</span>
-                </div>
-                <div class="metric-card dashboard-kpi-card">
-                    <span class="metric-label">{{ t("Received (RX)") }}</span>
-                    <span class="metric-value" id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</span>
-                </div>
-                <div class="metric-card dashboard-kpi-card">
-                    <span class="metric-label">{{ t("Sent (TX)") }}</span>
-                    <span class="metric-value" id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</span>
-                </div>
-                <div class="metric-card dashboard-kpi-card">
-                    <span class="metric-label">{{ t("Repeated TX") }}</span>
-                    <span class="metric-value" id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</span>
-                </div>
+                <span>{{ t("All frames") }}: <strong id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</strong></span>
+                <span>{{ t("Received (RX)") }}: <strong id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</strong></span>
+                <span>{{ t("Sent (TX)") }}: <strong id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</strong></span>
+                <span>{{ t("Repeated TX") }}: <strong id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</strong></span>
             </div>
         </div>
     </section>
