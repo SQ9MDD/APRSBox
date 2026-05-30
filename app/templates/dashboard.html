@@ -16,10 +16,12 @@
                         {% endif %}
                     </div>
                     <div class="dashboard-hero-summary">
+                        {% for item in dashboard_home.hero_summary %}
                         <div class="dashboard-hero-summary-item">
-                            <span class="muted">{{ t("Callsign") }}</span>
-                            <strong>{{ t(dashboard_home.station_callsign) }}</strong>
+                            <span class="muted">{{ t(item.label) }}</span>
+                            <strong class="{% if item.tone == 'ok' %}dashboard-status-ok{% elif item.tone == 'error' %}dashboard-status-error{% elif item.tone == 'warn' %}dashboard-status-warn{% endif %}">{{ t(item.value) }}</strong>
                         </div>
+                        {% endfor %}
                     </div>
                 </div>
                 <div class="dashboard-kpi-grid">
@@ -39,6 +41,7 @@
                     <div class="panel-header-copy">
                         <h2>{{ t("Band Condition") }}</h2>
                         <p class="section-lead">{% if dashboard_band %}{{ t("Current estimate for") }} {{ dashboard_band.band_label }}.{% else %}{{ t("No band data yet.") }}{% endif %}</p>
+                        <p class="muted small">{{ t("Updated") }} {{ dashboard_home.band_updated_at }}</p>
                     </div>
                     <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">{{ t("Open") }}</a>
                 </div>
@@ -61,75 +64,12 @@
     </section>
 
     <section class="dashboard-detail-grid">
-        <section class="panel dashboard-activity-panel">
-            <div class="panel-body">
-                <div class="panel-header">
-                    <div class="panel-header-copy">
-                        <h2>{{ t("Activity Charts") }}</h2>
-                        <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
-                    </div>
-                    <div class="dashboard-activity-controls">
-                        <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
-                        <select id="dashboard-activity-range" name="dashboard_activity_range">
-                            <option value="1h">1h</option>
-                            <option value="3h">3h</option>
-                            <option value="6h">6h</option>
-                            <option value="12h">12h</option>
-                            <option value="24h" selected>24h</option>
-                            <option value="7d">7d</option>
-                            <option value="30d">30d</option>
-                            <option value="365d">365d</option>
-                        </select>
-                        <span class="muted small dashboard-activity-zoom-hint">{{ t("Drag to zoom, double click to reset.") }}</span>
-                    </div>
-                </div>
-                <div class="dashboard-activity-grid">
-                    <section class="dashboard-activity-card" id="dashboard-main-activity-chart-card">
-                        <div class="dashboard-activity-card-header">
-                            <h3>{{ t("All / mobile / messages / queries") }}</h3>
-                            <span class="muted small" id="dashboard-main-activity-window">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
-                        </div>
-                        <div class="dashboard-activity-canvas">
-                            <canvas id="dashboard-main-activity-chart"></canvas>
-                        </div>
-                    </section>
-                    <section class="dashboard-activity-card" id="dashboard-direction-activity-chart-card">
-                        <div class="dashboard-activity-card-header">
-                            <h3>{{ t("RX / TX / repeats") }}</h3>
-                            <span class="muted small" id="dashboard-direction-activity-step">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
-                        </div>
-                        <div class="dashboard-activity-canvas">
-                            <canvas id="dashboard-direction-activity-chart"></canvas>
-                        </div>
-                    </section>
-                </div>
-                <div class="dashboard-activity-totals">
-                    <div class="metric-card dashboard-kpi-card">
-                        <span class="metric-label">{{ t("All frames") }}</span>
-                        <span class="metric-value" id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</span>
-                    </div>
-                    <div class="metric-card dashboard-kpi-card">
-                        <span class="metric-label">{{ t("Received (RX)") }}</span>
-                        <span class="metric-value" id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</span>
-                    </div>
-                    <div class="metric-card dashboard-kpi-card">
-                        <span class="metric-label">{{ t("Sent (TX)") }}</span>
-                        <span class="metric-value" id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</span>
-                    </div>
-                    <div class="metric-card dashboard-kpi-card">
-                        <span class="metric-label">{{ t("Repeated TX") }}</span>
-                        <span class="metric-value" id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <section class="panel">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Station Readiness") }}</h2>
-                        <p class="section-lead">{{ t("Quick operational checklist.") }}</p>
+                        <p class="section-lead">{{ t("Runtime checks first, configuration second.") }}</p>
                     </div>
                 </div>
                 <div class="dashboard-checks">
@@ -142,7 +82,7 @@
                                 {% for entry in item.entries %}
                                 <li>
                                     <span>{{ t(entry.name) }}</span>
-                                    <span class="status-pill dashboard-entry-badge {% if entry.tone == 'ok' %}status-running{% elif entry.tone == 'error' %}status-stopped{% else %}status-unknown{% endif %}">{{ t(entry.status) }}</span>
+                                    <span class="status-pill dashboard-entry-badge {% if entry.tone == 'ok' %}status-running{% elif entry.tone == 'error' %}status-stopped{% elif entry.tone == 'warn' %}status-unknown{% endif %}">{{ t(entry.status) }}</span>
                                 </li>
                                 {% endfor %}
                             </ul>
@@ -169,10 +109,141 @@
                 </div>
             </div>
         </section>
+
+        <section class="panel">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>{{ t("Interfaces") }}</h2>
+                        <p class="section-lead">{{ t(dashboard_home.interface_summary) }}</p>
+                    </div>
+                </div>
+                {% if dashboard_home.interface_entries %}
+                <ul class="dashboard-check-list">
+                    {% for entry in dashboard_home.interface_entries %}
+                    <li>
+                        <span>{{ t(entry.name) }}</span>
+                        <span class="status-pill dashboard-entry-badge {% if entry.tone == 'ok' %}status-running{% elif entry.tone == 'error' %}status-stopped{% elif entry.tone == 'warn' %}status-unknown{% endif %}">{{ t(entry.status) }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="notice">{{ t("No interfaces configured.") }}</div>
+                {% endif %}
+            </div>
+        </section>
+    </section>
+
+    <section class="dashboard-detail-grid">
+        <section class="panel">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>{{ t("Last RF activity") }}</h2>
+                        <p class="section-lead">{{ t("Recent station RF highlights.") }}</p>
+                    </div>
+                </div>
+                {% if dashboard_home.last_rf_activity %}
+                <ul class="dashboard-activity-list">
+                    {% for item in dashboard_home.last_rf_activity %}
+                    <li>
+                        <span>{{ t(item.name) }}</span>
+                        <span>{{ t(item.value) }}</span>
+                        {% if item.note %}
+                        <span class="muted small">{{ t(item.note) }}</span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="notice">{{ t("No RF activity yet.") }}</div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>{{ t("Recent important events") }}</h2>
+                        <p class="section-lead">{{ t("Operational events from runtime logs.") }}</p>
+                    </div>
+                </div>
+                {% if dashboard_home.recent_events %}
+                <ul class="dashboard-event-list">
+                    {% for event in dashboard_home.recent_events %}
+                    <li>
+                        <div class="dashboard-event-main">
+                            <span class="dashboard-event-message">{{ t(event.message) }}</span>
+                            <span class="status-pill dashboard-entry-badge {% if event.tone == 'ok' %}status-running{% elif event.tone == 'error' %}status-stopped{% else %}status-unknown{% endif %}">{{ t(event.level) }}</span>
+                        </div>
+                        <span class="muted small">{{ event.timestamp }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="notice">{{ t("No important events yet.") }}</div>
+                {% endif %}
+            </div>
+        </section>
+    </section>
+
+    <section class="panel dashboard-activity-panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>{{ t("Activity Charts") }}</h2>
+                    <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
+                </div>
+                <div class="dashboard-activity-controls">
+                    <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
+                    <select id="dashboard-activity-range" name="dashboard_activity_range">
+                        <option value="1h">1h</option>
+                        <option value="3h">3h</option>
+                        <option value="6h">6h</option>
+                        <option value="12h">12h</option>
+                        <option value="24h" selected>24h</option>
+                        <option value="7d">7d</option>
+                        <option value="30d">30d</option>
+                        <option value="365d">365d</option>
+                    </select>
+                    <span class="muted small dashboard-activity-zoom-hint">{{ t("Drag to zoom, double click to reset.") }}</span>
+                </div>
+            </div>
+            <div class="dashboard-activity-grid">
+                <section class="dashboard-activity-card" id="dashboard-direction-activity-chart-card">
+                    <div class="dashboard-activity-card-header">
+                        <h3>{{ t("RX / TX / repeats / APRS-IS uplink") }}</h3>
+                        <span class="muted small" id="dashboard-main-activity-window">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
+                        <span class="muted small" id="dashboard-direction-activity-step">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
+                    </div>
+                    <div class="dashboard-activity-canvas">
+                        <canvas id="dashboard-direction-activity-chart"></canvas>
+                    </div>
+                </section>
+            </div>
+            <div class="dashboard-activity-totals">
+                <div class="metric-card dashboard-kpi-card">
+                    <span class="metric-label">{{ t("All frames") }}</span>
+                    <span class="metric-value" id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</span>
+                </div>
+                <div class="metric-card dashboard-kpi-card">
+                    <span class="metric-label">{{ t("Received (RX)") }}</span>
+                    <span class="metric-value" id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</span>
+                </div>
+                <div class="metric-card dashboard-kpi-card">
+                    <span class="metric-label">{{ t("Sent (TX)") }}</span>
+                    <span class="metric-value" id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</span>
+                </div>
+                <div class="metric-card dashboard-kpi-card">
+                    <span class="metric-label">{{ t("Repeated TX") }}</span>
+                    <span class="metric-value" id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</span>
+                </div>
+            </div>
+        </div>
     </section>
 </div>
 {% endblock %}
-
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/vendor/chart.umd.min.js?v={{ app_version }}"></script>
 <script type="application/json" id="dashboard-activity-data">{{ dashboard_home.activity_chart|tojson }}</script>
@@ -190,7 +261,6 @@
         const totalRepeatedNode = document.getElementById("dashboard-total-repeated");
         if (
             !(payloadNode instanceof HTMLScriptElement)
-            || !(mainCanvas instanceof HTMLCanvasElement)
             || !(directionCanvas instanceof HTMLCanvasElement)
         ) return;
 
@@ -351,6 +421,7 @@
             const mobileSeries = toSeries(sourceSeries.mobile, labels.length);
             const messageSeries = toSeries(sourceSeries.message, labels.length);
             const querySeries = toSeries(sourceSeries.query, labels.length);
+            const aprsisSeries = Array.from({ length: labels.length }, () => 0);
             return {
                 range: "legacy",
                 outputBucketMinutes: Number(rawPayload?.bucket_minutes || 5),
@@ -363,6 +434,7 @@
                     rx: rxSeries,
                     tx: txSeries,
                     repeated_tx: repeatedSeries,
+                    aprsis_uplink: aprsisSeries,
                 },
                 totals: {
                     total: totalSeries.reduce((acc, value) => acc + value, 0),
@@ -383,6 +455,7 @@
             const mobileSeries = toSeries(sourceSeries.mobile_total, labels.length);
             const messageSeries = toSeries(sourceSeries.messages_total, labels.length);
             const querySeries = toSeries(sourceSeries.queries_total, labels.length);
+            const aprsisSeries = toSeries(sourceSeries.gated_to_aprsis_total, labels.length);
             return {
                 range: String(rawPayload?.range || "").trim().toLowerCase(),
                 outputBucketMinutes: Number(rawPayload?.output_bucket_minutes || 5),
@@ -396,6 +469,7 @@
                     rx: rxSeries,
                     tx: txSeries,
                     repeated_tx: repeatedSeries,
+                    aprsis_uplink: aprsisSeries,
                 },
                 totals: {
                     total: totalSeries.reduce((acc, value) => acc + value, 0),
@@ -639,7 +713,7 @@
                 directionChart = null;
             }
 
-            const mainContext = mainCanvas.getContext("2d");
+            const mainContext = mainCanvas instanceof HTMLCanvasElement ? mainCanvas.getContext("2d") : null;
             if (mainContext) {
                 mainChart = new window.Chart(mainContext, {
                     type: "line",
@@ -709,6 +783,14 @@
                                 borderDash: [6, 4],
                                 fill: false,
                             },
+                            {
+                                label: {{ t("APRS-IS uplink")|tojson }},
+                                data: toSeries(series.aprsis_uplink, labels.length),
+                                borderColor: chartPalette.trafficColorOwnWxTx,
+                                backgroundColor: withAlpha(chartPalette.trafficColorOwnWxTx, 0.16),
+                                borderDash: [4, 3],
+                                fill: false,
+                            },
                         ],
                     },
                     options: buildSharedOptions(),
@@ -747,7 +829,9 @@
         zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(fallbackPayload.labels) ? fallbackPayload.labels.length : 0);
         renderCharts(fallbackPayload);
 
-        bindMouseZoomForCanvas(mainCanvas, () => mainChart);
+        if (mainCanvas instanceof HTMLCanvasElement) {
+            bindMouseZoomForCanvas(mainCanvas, () => mainChart);
+        }
         bindMouseZoomForCanvas(directionCanvas, () => directionChart);
 
         const loadRangePayload = async (rangeValue) => {

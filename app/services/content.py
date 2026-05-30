@@ -1033,7 +1033,7 @@ def dashboard_summary() -> dict[str, Any]:
     return metrics
 
 
-def dashboard_traffic_summary() -> dict[str, Any]:
+def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     total_frames_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames")
     decoded_frames_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames WHERE format = 'TNC2'")
     unique_sources_row = fetch_one(
@@ -1048,7 +1048,7 @@ def dashboard_traffic_summary() -> dict[str, Any]:
         "received_frames": total_frames_row["total"] if total_frames_row else 0,
         "decoded_aprs": decoded_frames_row["total"] if decoded_frames_row else 0,
         "unique_sources": unique_sources_row["total"] if unique_sources_row else 0,
-        "heard_stations": len(get_heard_station_snapshots()),
+        "heard_stations": len(heard_snapshots) if heard_snapshots is not None else len(get_heard_station_snapshots()),
     }
 
 
@@ -1183,14 +1183,116 @@ def has_enabled_digi_rf_to_rf_flow() -> bool:
     return row is not None
 
 
+def _dashboard_age_seconds(timestamp: str | None) -> int | None:
+    parsed = _parse_iso_timestamp_utc(str(timestamp or "").strip())
+    if parsed is None:
+        return None
+    return max(0, int((datetime.now(timezone.utc) - parsed).total_seconds()))
+
+
+def _dashboard_last_rf_rx_at() -> str | None:
+    row = fetch_one(
+        """
+        SELECT created_at
+        FROM traffic_frames
+        WHERE UPPER(COALESCE(direction, '')) = 'RX'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """
+    )
+    if row is None:
+        return None
+    return str(row["created_at"] or "").strip() or None
+
+
+def _dashboard_last_rf_tx_at() -> str | None:
+    row = fetch_one(
+        """
+        SELECT created_at
+        FROM traffic_frames
+        WHERE (
+            UPPER(COALESCE(direction, '')) = 'TX'
+            OR UPPER(COALESCE(format, '')) LIKE '%-TX'
+        )
+          AND UPPER(COALESCE(command, '')) NOT LIKE 'TX-SKIP%'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        """
+    )
+    if row is None:
+        return None
+    return str(row["created_at"] or "").strip() or None
+
+
+def _dashboard_recent_important_events(limit: int = 6) -> list[dict[str, str]]:
+    rows = fetch_all(
+        """
+        SELECT level, category, message, created_at
+        FROM event_logs
+        WHERE category IN ('traffic', 'outbound', 'aprsis', 'wx')
+        ORDER BY id DESC
+        LIMIT 180
+        """
+    )
+    events: list[dict[str, str]] = []
+    for row in rows:
+        level = str(row["level"] or "").strip().upper()
+        category = str(row["category"] or "").strip().lower()
+        message = str(row["message"] or "").strip()
+        if not message:
+            continue
+        lower_message = message.lower()
+        is_relevant = False
+        if level in {"WARNING", "ERROR"}:
+            is_relevant = True
+        elif category == "aprsis":
+            is_relevant = "connected aprs-is uplink" in lower_message or "aprs-is" in lower_message
+        elif category == "outbound":
+            is_relevant = (
+                "scheduler" in lower_message
+                or ("sent" in lower_message and "outbound job" in lower_message)
+                or "skipped" in lower_message
+                or "failed" in lower_message
+                or "queued" in lower_message
+            )
+        elif category == "wx":
+            is_relevant = "scheduler" in lower_message or "sent wx" in lower_message or "skipped wx" in lower_message
+        elif category == "traffic":
+            is_relevant = "connect" in lower_message or "error" in lower_message or "failed" in lower_message
+        if not is_relevant:
+            continue
+        if level == "ERROR":
+            tone = "error"
+            level_label = "Error"
+        elif level == "WARNING":
+            tone = "warn"
+            level_label = "Warning"
+        else:
+            tone = "ok"
+            level_label = "Info"
+        events.append(
+            {
+                "level": level_label,
+                "tone": tone,
+                "message": message,
+                "timestamp": _format_monitor_timestamp(str(row["created_at"] or "")),
+            }
+        )
+        if len(events) >= limit:
+            break
+    return events
+
+
 def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[str, Any]:
-    from app.services.aprsis import has_enabled_aprsis_target_flow
+    from app.services.aprsis import get_aprsis_runtime_status, has_enabled_aprsis_target_flow
     from app.services.wx import get_wx_config
 
     station_settings = get_station_settings()
-    traffic = dashboard_traffic_summary()
+    heard_snapshots = get_heard_station_snapshots(limit=500)
+    traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
+    disabled_interfaces_count = max(0, len(interfaces) - len(enabled_interfaces))
 
     runtime_rows = fetch_all(
         """
@@ -1207,10 +1309,12 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         except (TypeError, ValueError):
             continue
 
-    recent_tx_jobs = recent_station_outbound_jobs(limit=1)
-    latest_station_tx_display = "Never"
+    recent_tx_jobs = recent_station_outbound_jobs(limit=5)
+    latest_station_tx_at = None
+    latest_station_tx_display = "No RF TX yet"
     if recent_tx_jobs:
         latest_tx = recent_tx_jobs[0]
+        latest_station_tx_at = str(latest_tx.get("display_time") or "").strip() or None
         latest_tx_time = _format_monitor_timestamp(str(latest_tx.get("display_time") or ""))
         if latest_tx_time and latest_tx_time != "-":
             latest_station_tx_display = latest_tx_time
@@ -1224,10 +1328,13 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     wx_callsign = str(wx_config.get("full_callsign") or "").strip().upper()
     digi_routine_enabled = has_enabled_digi_rf_to_rf_flow()
     igate_enabled = has_enabled_aprsis_target_flow()
+    aprsis_runtime = get_aprsis_runtime_status() if igate_enabled else {}
+    aprsis_runtime_status = str((aprsis_runtime or {}).get("status") or "").strip().lower()
     location_configured = bool(station_settings.get("latitude")) and bool(station_settings.get("longitude"))
 
     interface_entries: list[dict[str, str]] = []
     any_interface_error = False
+    interface_connecting = 0
     for interface in interfaces:
         try:
             interface_id = int(interface.get("id"))
@@ -1240,7 +1347,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         enabled = bool(interface.get("enabled"))
         if not enabled:
             status_label = "Disabled"
-            status_tone = "warn"
+            status_tone = "neutral"
         elif runtime_error or runtime_status == "error":
             status_label = "Error"
             status_tone = "error"
@@ -1248,85 +1355,237 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         elif runtime_status == "connecting":
             status_label = "Connecting"
             status_tone = "warn"
+            interface_connecting += 1
         elif runtime_status in {"connected", "running", "idle"}:
             status_label = "Enabled"
             status_tone = "ok"
         elif runtime_status in {"disabled", "stopped"}:
             status_label = "Disabled"
-            status_tone = "warn"
+            status_tone = "neutral"
         elif runtime_status:
             status_label = "Unknown"
             status_tone = "warn"
         else:
             status_label = "Unknown"
             status_tone = "warn"
-        interface_entries.append({"name": interface_name, "status": status_label, "tone": status_tone})
+        interface_entries.append(
+            {
+                "name": interface_name,
+                "status": status_label,
+                "tone": status_tone,
+                "enabled": "1" if enabled else "0",
+            }
+        )
+    interface_entries.sort(key=lambda item: (item.get("enabled") != "1", str(item.get("name") or "").casefold()))
 
-    if not interfaces or not enabled_interfaces:
-        interface_check_state = "warn"
-    elif any_interface_error:
-        interface_check_state = "error"
+    if not interfaces:
+        interface_summary = "No interfaces configured"
     else:
-        interface_check_state = "ok"
+        interface_summary = f"{len(enabled_interfaces)} enabled / {disabled_interfaces_count} disabled"
+        if any_interface_error:
+            interface_summary = f"{interface_summary} • runtime error detected"
+        elif interface_connecting > 0:
+            interface_summary = f"{interface_summary} • connecting {interface_connecting}"
+
+    last_rf_rx_at = _dashboard_last_rf_rx_at()
+    last_rf_tx_at = _dashboard_last_rf_tx_at()
+    if last_rf_tx_at is None and latest_station_tx_at:
+        last_rf_tx_at = latest_station_tx_at
+    last_rf_rx_display = _format_monitor_timestamp(last_rf_rx_at) if last_rf_rx_at else "No RF RX yet"
+    last_rf_tx_display = _format_monitor_timestamp(last_rf_tx_at) if last_rf_tx_at else "No RF TX yet"
+    last_rf_rx_age_s = _dashboard_age_seconds(last_rf_rx_at)
+    last_rf_tx_age_s = _dashboard_age_seconds(last_rf_tx_at)
+
+    if not enabled_interfaces:
+        rx_runtime_status = "No enabled interfaces"
+        rx_runtime_tone = "neutral"
+    elif last_rf_rx_age_s is None:
+        rx_runtime_status = "No RF RX yet"
+        rx_runtime_tone = "warn"
+    elif last_rf_rx_age_s <= 15 * 60:
+        rx_runtime_status = "Fresh"
+        rx_runtime_tone = "ok"
+    else:
+        rx_runtime_status = "Stale"
+        rx_runtime_tone = "warn"
+
+    tx_enabled_flag = bool(station_settings.get("tx_enabled"))
+    if not tx_enabled_flag:
+        tx_runtime_status = "TX disabled"
+        tx_runtime_tone = "neutral"
+    elif not enabled_interfaces:
+        tx_runtime_status = "No enabled interfaces"
+        tx_runtime_tone = "neutral"
+    elif last_rf_tx_age_s is None:
+        tx_runtime_status = "No RF TX yet"
+        tx_runtime_tone = "warn"
+    elif last_rf_tx_age_s <= 60 * 60:
+        tx_runtime_status = "Fresh"
+        tx_runtime_tone = "ok"
+    else:
+        tx_runtime_status = "Stale"
+        tx_runtime_tone = "warn"
+
+    aprsis_last_sent_row = fetch_one("SELECT last_sent_at FROM aprsis_uplink_stats WHERE id = 1")
+    aprsis_last_sent_at = str(aprsis_last_sent_row["last_sent_at"] or "").strip() if aprsis_last_sent_row is not None else ""
+    aprsis_last_sent_at = aprsis_last_sent_at or None
+    aprsis_last_sent_display = _format_monitor_timestamp(aprsis_last_sent_at) if aprsis_last_sent_at else "No APRS-IS uplink yet"
+    aprsis_last_sent_age_s = _dashboard_age_seconds(aprsis_last_sent_at)
+    if not igate_enabled:
+        aprsis_runtime_label = "Not configured"
+        aprsis_runtime_tone = "neutral"
+    elif aprsis_runtime_status == "connected" and aprsis_last_sent_age_s is not None and aprsis_last_sent_age_s <= 60 * 60:
+        aprsis_runtime_label = "Connected"
+        aprsis_runtime_tone = "ok"
+    elif aprsis_runtime_status == "connecting":
+        aprsis_runtime_label = "Connecting"
+        aprsis_runtime_tone = "warn"
+    elif aprsis_runtime_status == "error":
+        aprsis_runtime_label = "Error"
+        aprsis_runtime_tone = "error"
+    elif aprsis_last_sent_age_s is None:
+        aprsis_runtime_label = "No APRS-IS uplink yet"
+        aprsis_runtime_tone = "warn"
+    else:
+        aprsis_runtime_label = "Stale"
+        aprsis_runtime_tone = "warn"
+
+    queue_row = fetch_one(
+        """
+        SELECT
+            COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0) AS queued_total,
+            COALESCE(SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END), 0) AS processing_total
+        FROM outbound_jobs
+        WHERE status IN ('queued', 'processing')
+        """
+    )
+    queued_total = int(queue_row["queued_total"] or 0) if queue_row is not None else 0
+    processing_total = int(queue_row["processing_total"] or 0) if queue_row is not None else 0
+    if processing_total > 0:
+        queue_status_label = f"Processing ({processing_total})"
+        queue_status_tone = "ok"
+    elif queued_total == 0:
+        queue_status_label = "Idle"
+        queue_status_tone = "ok"
+    elif queued_total <= 3:
+        queue_status_label = f"Queued ({queued_total})"
+        queue_status_tone = "ok"
+    else:
+        queue_status_label = f"Backlog ({queued_total})"
+        queue_status_tone = "warn"
+
+    scheduler_row = fetch_one(
+        """
+        SELECT level, created_at
+        FROM event_logs
+        WHERE category IN ('outbound', 'wx')
+          AND message LIKE '%scheduler%'
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    )
+    if scheduler_row is None:
+        scheduler_status_label = "No scheduler events yet"
+        scheduler_status_tone = "neutral"
+    else:
+        scheduler_level = str(scheduler_row["level"] or "").strip().upper()
+        scheduler_time = _format_monitor_timestamp(str(scheduler_row["created_at"] or ""))
+        if scheduler_level == "ERROR":
+            scheduler_status_label = f"Error at {scheduler_time}"
+            scheduler_status_tone = "error"
+        elif scheduler_level == "WARNING":
+            scheduler_status_label = f"Warning at {scheduler_time}"
+            scheduler_status_tone = "warn"
+        else:
+            scheduler_status_label = f"Active at {scheduler_time}"
+            scheduler_status_tone = "ok"
+
+    database_ready = fetch_one("SELECT 1 AS ok") is not None
+    database_status_label = "Available" if database_ready else "Unavailable"
+    database_status_tone = "ok" if database_ready else "error"
+
+    runtime_entries = [
+        {"name": "RF RX freshness", "status": rx_runtime_status, "tone": rx_runtime_tone},
+        {"name": "RF TX freshness", "status": tx_runtime_status, "tone": tx_runtime_tone},
+        {"name": "APRS-IS/iGate uplink", "status": aprsis_runtime_label, "tone": aprsis_runtime_tone},
+        {"name": "TX queue", "status": queue_status_label, "tone": queue_status_tone},
+        {"name": "Schedulers", "status": scheduler_status_label, "tone": scheduler_status_tone},
+        {"name": "Database", "status": database_status_label, "tone": database_status_tone},
+    ]
+    runtime_check_state = "ok"
+    if any(item["tone"] == "error" for item in runtime_entries):
+        runtime_check_state = "error"
+    elif any(item["tone"] == "warn" for item in runtime_entries):
+        runtime_check_state = "warn"
+
+    config_entries = [
+        {
+            "name": "Main callsign",
+            "status": "Configured" if main_callsign else "Not set",
+            "tone": "ok" if main_callsign else "warn",
+        },
+        {
+            "name": "WX callsign",
+            "status": "Configured" if wx_callsign else "Not set",
+            "tone": "ok" if wx_callsign else "neutral",
+        },
+        {
+            "name": "Location",
+            "status": "Configured" if location_configured else "Missing coordinates",
+            "tone": "ok" if location_configured else "warn",
+        },
+    ]
+    configuration_ready = bool(main_callsign) and location_configured
+    configuration_state = "ok" if configuration_ready else "warn"
+
+    service_entries = [
+        {
+            "name": "Beacon enabled",
+            "status": "Enabled" if tx_enabled_flag else "Disabled",
+            "tone": "ok" if tx_enabled_flag else "neutral",
+        },
+        {
+            "name": "Status enabled",
+            "status": "Enabled" if bool(station_settings.get("status_enabled")) else "Disabled",
+            "tone": "ok" if bool(station_settings.get("status_enabled")) else "neutral",
+        },
+        {
+            "name": "WX enabled",
+            "status": "Enabled" if bool(wx_config.get("enabled")) else "Disabled",
+            "tone": "ok" if bool(wx_config.get("enabled")) else "neutral",
+        },
+        {
+            "name": "Digi routine",
+            "status": "Enabled" if digi_routine_enabled else "Disabled",
+            "tone": "ok" if digi_routine_enabled else "neutral",
+        },
+        {
+            "name": "iGate enabled",
+            "status": "Enabled" if igate_enabled else "Disabled",
+            "tone": "ok" if igate_enabled else "neutral",
+        },
+    ]
 
     checks = [
         {
-            "label": "Main callsign",
-            "state": "ok" if main_callsign else "warn",
-            "value": main_callsign or "Not set",
-            "blocks": not callsign,
+            "label": "Runtime readiness",
+            "state": runtime_check_state,
+            "entries": runtime_entries,
+            "show_state_badge": True,
+            "blocks": runtime_check_state == "error",
+            "note": "Runtime checks are evaluated from recent activity and current runtime state.",
         },
         {
-            "label": "WX callsign",
-            "state": "ok" if wx_callsign else "warn",
-            "value": wx_callsign or "Not set",
-            "blocks": False,
-        },
-        {
-            "label": "Location",
-            "state": "ok" if location_configured else "warn",
-            "value": "Configured" if location_configured else "Missing coordinates",
-            "blocks": not location_configured,
-        },
-        {
-            "label": "Active interfaces",
-            "state": interface_check_state,
-            "value": "No interfaces configured" if not interfaces else ("Disabled" if not enabled_interfaces else ""),
-            "entries": interface_entries,
+            "label": "Configuration checklist",
+            "state": configuration_state,
+            "entries": config_entries,
             "show_state_badge": False,
-            "blocks": not enabled_interfaces,
+            "blocks": not configuration_ready,
         },
         {
             "label": "Enabled services",
             "state": "ok",
-            "value": "",
-            "entries": [
-                {
-                    "name": "Beacon enabled",
-                    "status": "Enabled" if bool(station_settings.get("tx_enabled")) else "Disabled",
-                    "tone": "ok" if bool(station_settings.get("tx_enabled")) else "warn",
-                },
-                {
-                    "name": "Status enabled",
-                    "status": "Enabled" if bool(station_settings.get("status_enabled")) else "Disabled",
-                    "tone": "ok" if bool(station_settings.get("status_enabled")) else "warn",
-                },
-                {
-                    "name": "WX enabled",
-                    "status": "Enabled" if bool(wx_config.get("enabled")) else "Disabled",
-                    "tone": "ok" if bool(wx_config.get("enabled")) else "warn",
-                },
-                {
-                    "name": "Digi routine",
-                    "status": "Enabled" if digi_routine_enabled else "Disabled",
-                    "tone": "ok" if digi_routine_enabled else "warn",
-                },
-                {
-                    "name": "iGate enabled",
-                    "status": "Enabled" if igate_enabled else "Disabled",
-                    "tone": "ok" if igate_enabled else "warn",
-                },
-            ],
+            "entries": service_entries,
             "show_state_badge": False,
             "blocks": False,
         },
@@ -1334,7 +1593,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     next_steps = [item for item in checks if item["blocks"] and item["state"] != "ok"]
     beacon_ready = len(next_steps) == 0
 
-    if traffic["heard_stations"] > 0 and traffic["decoded_aprs"] > 0:
+    if last_rf_rx_age_s is not None and last_rf_rx_age_s <= 15 * 60:
         hero = {
             "kind": "receiving",
             "tone": "good",
@@ -1342,6 +1601,14 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "status": "Receiving",
             "heard_stations": traffic["heard_stations"],
             "decoded_aprs": traffic["decoded_aprs"],
+        }
+    elif tx_enabled_flag and last_rf_tx_age_s is not None and last_rf_tx_age_s <= 60 * 60:
+        hero = {
+            "kind": "ready",
+            "tone": "neutral",
+            "title": "Station is transmitting",
+            "summary": "Station TX activity was observed recently.",
+            "status": "Transmitting",
         }
     elif beacon_ready:
         hero = {
@@ -1367,19 +1634,78 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     else:
         band_summary = "Band condition is not available yet."
 
+    last_heard_station = heard_snapshots[0] if heard_snapshots else None
+    last_mobile_station = next((item for item in heard_snapshots if str(item.get("entity_class") or "").strip().lower() == "mobile"), None)
+    last_object_station = next((item for item in heard_snapshots if str(item.get("entity_class") or "").strip().lower() == "object"), None)
+    last_wx_station = next((item for item in heard_snapshots if str(item.get("frame_type") or "").strip().upper() == "W"), None)
+    last_rf_activity: list[dict[str, str]] = []
+    if last_heard_station:
+        last_rf_activity.append(
+            {
+                "name": "Last heard station",
+                "value": str(last_heard_station.get("display_callsign") or "-"),
+                "note": str(last_heard_station.get("last_heard_date") or ""),
+            }
+        )
+    last_rf_activity.append({"name": "Last RF frame time", "value": last_rf_rx_display, "note": ""})
+    if last_mobile_station:
+        last_rf_activity.append(
+            {
+                "name": "Last mobile station",
+                "value": str(last_mobile_station.get("display_callsign") or "-"),
+                "note": str(last_mobile_station.get("last_heard_date") or ""),
+            }
+        )
+    if last_object_station:
+        last_rf_activity.append(
+            {
+                "name": "Last object/item",
+                "value": str(last_object_station.get("display_callsign") or "-"),
+                "note": str(last_object_station.get("last_heard_date") or ""),
+            }
+        )
+    if last_wx_station:
+        last_rf_activity.append(
+            {
+                "name": "Last WX packet",
+                "value": str(last_wx_station.get("display_callsign") or "-"),
+                "note": str(last_wx_station.get("last_heard_date") or ""),
+            }
+        )
+    last_rf_activity.append({"name": "Last own TX", "value": latest_station_tx_display, "note": ""})
+
+    hero_summary = [
+        {"label": "Callsign", "value": main_callsign or "Not set", "tone": "neutral"},
+        {"label": "RF RX", "value": rx_runtime_status, "tone": rx_runtime_tone},
+        {"label": "RF TX", "value": tx_runtime_status, "tone": tx_runtime_tone},
+    ]
+    if igate_enabled:
+        hero_summary.append({"label": "APRS-IS", "value": aprsis_runtime_label, "tone": aprsis_runtime_tone})
+
+    stats = [
+        {"label": "Heard stations", "value": str(traffic["heard_stations"]), "suffix": ""},
+        {"label": "APRS frames", "value": str(traffic["decoded_aprs"]), "suffix": ""},
+        {"label": "Interfaces", "value": f"{len(enabled_interfaces)} / {len(interfaces)}", "suffix": ""},
+        {"label": "Last RF RX", "value": last_rf_rx_display, "suffix": ""},
+        {"label": "Last RF TX", "value": last_rf_tx_display, "suffix": ""},
+    ]
+    if igate_enabled:
+        stats.append({"label": "Last APRS-IS uplink", "value": aprsis_last_sent_display, "suffix": ""})
+
     return {
         "hero": hero,
-        "stats": [
-            {"label": "Heard stations", "value": str(traffic["heard_stations"]), "suffix": "in last h"},
-            {"label": "APRS frames", "value": str(traffic["decoded_aprs"]), "suffix": "/ h"},
-            {"label": "Active interfaces", "value": str(len(enabled_interfaces)), "suffix": ""},
-            {"label": "Last station TX", "value": latest_station_tx_display, "suffix": ""},
-        ],
+        "hero_summary": hero_summary,
+        "stats": stats,
         "activity_chart": dashboard_activity_series(),
         "checks": checks,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,
         "station_callsign": main_callsign or "Not set",
+        "interface_summary": interface_summary,
+        "interface_entries": interface_entries,
+        "last_rf_activity": last_rf_activity,
+        "recent_events": _dashboard_recent_important_events(limit=6),
+        "band_updated_at": _format_monitor_timestamp(utc_now()),
         "band_summary": band_summary,
     }
 

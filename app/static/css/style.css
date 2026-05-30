@@ -1092,6 +1092,18 @@ body {
     background: rgba(0, 0, 0, 0.08);
 }
 
+.dashboard-status-ok {
+    color: var(--success);
+}
+
+.dashboard-status-error {
+    color: var(--danger);
+}
+
+.dashboard-status-warn {
+    color: var(--warning);
+}
+
 .dashboard-kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1198,6 +1210,41 @@ body {
     color: var(--muted);
     font-size: 0.78rem;
     line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-activity-list,
+.dashboard-event-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.38rem;
+}
+
+.dashboard-activity-list li,
+.dashboard-event-list li {
+    display: grid;
+    gap: 0.12rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.48rem 0.58rem;
+    background: var(--panel-alt);
+}
+
+.dashboard-activity-list li span:nth-child(2) {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.dashboard-event-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.dashboard-event-message {
     overflow-wrap: anywhere;
 }
 
@@ -1371,7 +1418,7 @@ body {
 
 .dashboard-activity-canvas {
     position: relative;
-    min-height: 152px;
+    min-height: 128px;
 }
 
 .dashboard-activity-canvas canvas {
