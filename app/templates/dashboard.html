@@ -63,13 +63,12 @@
         </section>
     </section>
 
-    <section class="dashboard-detail-grid">
-        <section class="panel">
+    <section class="dashboard-detail-grid dashboard-detail-grid-compact">
+        <section class="panel dashboard-readiness-card">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Station Readiness") }}</h2>
-                        <p class="section-lead">{{ t("Runtime checks first, configuration second.") }}</p>
                     </div>
                 </div>
                 <div class="dashboard-checks">
@@ -110,12 +109,12 @@
             </div>
         </section>
 
-        <section class="panel">
+        <section class="panel dashboard-interfaces-card">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Interfaces") }}</h2>
-                        <p class="section-lead">{{ t(dashboard_home.interface_summary) }}</p>
+                        <p class="muted small">{{ t(dashboard_home.interface_summary) }}</p>
                     </div>
                 </div>
                 {% if dashboard_home.interface_entries %}
@@ -132,15 +131,11 @@
                 {% endif %}
             </div>
         </section>
-    </section>
-
-    <section class="dashboard-detail-grid">
-        <section class="panel">
+        <section class="panel dashboard-last-rf-card">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Last RF activity") }}</h2>
-                        <p class="section-lead">{{ t("Recent station RF highlights.") }}</p>
                     </div>
                 </div>
                 {% if dashboard_home.last_rf_activity %}
@@ -161,12 +156,11 @@
             </div>
         </section>
 
-        <section class="panel">
+        <section class="panel dashboard-events-card">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Recent important events") }}</h2>
-                        <p class="section-lead">{{ t("Operational events from runtime logs.") }}</p>
                     </div>
                 </div>
                 {% if dashboard_home.recent_events %}

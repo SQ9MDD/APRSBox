@@ -1011,13 +1011,13 @@ body {
 
 .dashboard-layout {
     display: grid;
-    gap: var(--space-3);
+    gap: var(--space-2);
 }
 
 .dashboard-overview-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 0.95fr);
-    gap: var(--space-3);
+    gap: var(--space-2);
     align-items: stretch;
 }
 
@@ -1028,7 +1028,40 @@ body {
 .dashboard-detail-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 0.95fr);
-    gap: var(--space-3);
+    gap: var(--space-2);
+}
+
+.dashboard-layout .panel {
+    padding: var(--space-3);
+}
+
+.dashboard-layout .panel-body {
+    gap: var(--space-2);
+}
+
+.dashboard-detail-grid-compact {
+    grid-template-columns: minmax(0, 1.4fr) minmax(17rem, 1fr) minmax(17rem, 1fr);
+    align-items: start;
+}
+
+.dashboard-readiness-card {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+}
+
+.dashboard-interfaces-card {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.dashboard-last-rf-card {
+    grid-column: 3;
+    grid-row: 1;
+}
+
+.dashboard-events-card {
+    grid-column: 2 / span 2;
+    grid-row: 2;
 }
 
 .dashboard-hero-panel .panel-body {
@@ -1038,9 +1071,9 @@ body {
 .dashboard-hero {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.6rem;
+    gap: 0.48rem;
     align-items: center;
-    padding: 0.72rem 0.82rem;
+    padding: 0.56rem 0.66rem;
     border-radius: var(--radius-md);
 }
 
@@ -1063,7 +1096,7 @@ body {
 
 .dashboard-hero-copy h2 {
     margin: 0;
-    font-size: 1.08rem;
+    font-size: 1rem;
     line-height: 1.15;
 }
 
@@ -1071,6 +1104,8 @@ body {
     margin: 0;
     color: var(--text);
     max-width: 54ch;
+    font-size: 0.82rem;
+    line-height: 1.3;
 }
 
 .dashboard-hero-status {
@@ -1079,14 +1114,14 @@ body {
 
 .dashboard-hero-summary {
     display: grid;
-    gap: 0.3rem;
-    min-width: 11rem;
+    gap: 0.22rem;
+    min-width: 9.8rem;
 }
 
 .dashboard-hero-summary-item {
     display: grid;
-    gap: 0.12rem;
-    padding: 0.42rem 0.55rem;
+    gap: 0.08rem;
+    padding: 0.3rem 0.42rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.08);
@@ -1106,14 +1141,25 @@ body {
 
 .dashboard-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.45rem;
-    padding: 0 0.82rem 0.82rem;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 0.34rem;
+    padding: 0 0.66rem 0.66rem;
 }
 
 .dashboard-kpi-card {
-    min-height: 3.55rem;
+    min-height: 2.85rem;
     align-content: start;
+    padding: 0.44rem 0.56rem;
+}
+
+.dashboard-kpi-card .metric-label {
+    font-size: 0.68rem;
+    line-height: 1.2;
+}
+
+.dashboard-kpi-card .metric-value {
+    font-size: 1rem;
+    line-height: 1.15;
 }
 
 .dashboard-action-row {
@@ -1125,7 +1171,7 @@ body {
 
 .dashboard-checks {
     display: grid;
-    gap: 0.42rem;
+    gap: 0.32rem;
 }
 
 .dashboard-check {
@@ -1133,7 +1179,7 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    padding: 0.5rem 0.62rem;
+    padding: 0.4rem 0.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--panel-alt);
@@ -1154,10 +1200,15 @@ body {
 
 .dashboard-check-list {
     list-style: none;
-    margin: 0.2rem 0 0;
+    margin: 0.14rem 0 0;
     padding: 0;
     display: grid;
-    gap: 0.12rem;
+    gap: 0.1rem;
+}
+
+.dashboard-readiness-card .dashboard-check-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 0.62rem;
 }
 
 .dashboard-check-list li {
@@ -1173,9 +1224,9 @@ body {
 }
 
 .dashboard-entry-badge {
-    min-width: 5.1rem;
-    padding: 0.18rem 0.44rem;
-    font-size: 0.7rem;
+    min-width: 4.5rem;
+    padding: 0.16rem 0.38rem;
+    font-size: 0.66rem;
     letter-spacing: 0.03em;
 }
 
@@ -1219,16 +1270,16 @@ body {
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 0.38rem;
+    gap: 0.24rem;
 }
 
 .dashboard-activity-list li,
 .dashboard-event-list li {
     display: grid;
-    gap: 0.12rem;
+    gap: 0.08rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 0.48rem 0.58rem;
+    padding: 0.34rem 0.46rem;
     background: var(--panel-alt);
 }
 
@@ -1398,9 +1449,9 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--panel-alt);
-    padding: 0.52rem 0.6rem;
+    padding: 0.44rem 0.52rem;
     display: grid;
-    gap: 0.42rem;
+    gap: 0.28rem;
 }
 
 .dashboard-activity-card-header {
@@ -1418,7 +1469,7 @@ body {
 
 .dashboard-activity-canvas {
     position: relative;
-    min-height: 128px;
+    min-height: 112px;
 }
 
 .dashboard-activity-canvas canvas {
@@ -1446,8 +1497,8 @@ body {
 
 .dashboard-activity-totals {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.45rem;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.34rem;
 }
 
 .metric-value {
@@ -1474,6 +1525,20 @@ body {
     gap: var(--space-2);
     height: 100%;
     align-content: start;
+}
+
+@media (max-width: 1480px) {
+    .dashboard-detail-grid-compact {
+        grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    }
+
+    .dashboard-readiness-card,
+    .dashboard-interfaces-card,
+    .dashboard-last-rf-card,
+    .dashboard-events-card {
+        grid-column: auto;
+        grid-row: auto;
+    }
 }
 
 @media (max-width: 1180px) {
@@ -5125,6 +5190,10 @@ button.message-delivery-badge {
         padding-left: 0;
         padding-right: 0;
         padding-bottom: 0;
+    }
+
+    .dashboard-readiness-card .dashboard-check-list {
+        grid-template-columns: 1fr;
     }
 
     .dashboard-activity-grid,
