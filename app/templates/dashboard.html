@@ -1,63 +1,114 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="dashboard-layout">
-    <section class="dashboard-overview-grid">
-        <section class="panel dashboard-hero-panel">
+{% set runtime_check = dashboard_home.checks[0] if dashboard_home.checks and dashboard_home.checks|length > 0 else none %}
+{% set service_check = dashboard_home.checks[2] if dashboard_home.checks and dashboard_home.checks|length > 2 else none %}
+{% set station = namespace(callsign="Not set", rx_tone="neutral", rx_value="Unknown", tx_tone="neutral", tx_value="Unknown", aprsis_tone="neutral", aprsis_value="Not configured", last_rf="-") %}
+{% for item in dashboard_home.hero_summary %}
+    {% if item.label == "Callsign" %}
+        {% set station.callsign = item.value %}
+    {% elif item.label == "RF RX" %}
+        {% set station.rx_tone = item.tone %}
+        {% set station.rx_value = item.value %}
+    {% elif item.label == "RF TX" %}
+        {% set station.tx_tone = item.tone %}
+        {% set station.tx_value = item.value %}
+    {% elif item.label == "APRS-IS" %}
+        {% set station.aprsis_tone = item.tone %}
+        {% set station.aprsis_value = item.value %}
+    {% endif %}
+{% endfor %}
+{% for item in dashboard_home.last_rf_activity %}
+    {% if item.name == "Last RF frame time" %}
+        {% set station.last_rf = item.value %}
+    {% endif %}
+{% endfor %}
+{% set health = namespace(label="DEGRADED", tone="warn") %}
+{% set runtime_state = runtime_check.state if runtime_check else "warn" %}
+{% if runtime_state == "error" or station.rx_value == "Stale" %}
+    {% set health.label = "OFFLINE / ATTENTION" %}
+    {% set health.tone = "error" %}
+{% elif station.rx_tone == "ok" and runtime_state == "ok" %}
+    {% set health.label = "ONLINE" %}
+    {% set health.tone = "ok" %}
+{% endif %}
+{% set kpi = namespace(heard="-", frames="-", interfaces="-", last_rx="-", last_tx="-", aprsis="Not configured") %}
+{% for item in dashboard_home.stats %}
+    {% if item.label == "Heard stations" %}
+        {% set kpi.heard = item.value %}
+    {% elif item.label == "APRS frames" %}
+        {% set kpi.frames = item.value %}
+    {% elif item.label == "Interfaces" %}
+        {% set kpi.interfaces = item.value %}
+    {% elif item.label == "Last RF RX" %}
+        {% set kpi.last_rx = item.value %}
+    {% elif item.label == "Last RF TX" %}
+        {% set kpi.last_tx = item.value %}
+    {% elif item.label == "Last APRS-IS uplink" %}
+        {% set kpi.aprsis = item.value %}
+    {% endif %}
+{% endfor %}
+{% set has_activity_chart = dashboard_home.activity_chart.labels and dashboard_home.activity_chart.labels|length > 0 %}
+<div class="dashboard-layout dashboard-v2">
+    <section class="dashboard-v2-top-grid">
+        <section class="panel dashboard-v2-station-panel">
             <div class="panel-body">
-                <div class="dashboard-hero dashboard-hero-{{ dashboard_home.hero.tone }}">
-                    <div class="dashboard-hero-copy">
-                        <span class="status-pill dashboard-hero-status">{{ t(dashboard_home.hero.status) }}</span>
+                <div class="dashboard-v2-station-header">
+                    <div class="panel-header-copy">
+                        <span class="status-pill dashboard-v2-health dashboard-v2-health-{{ health.tone }}">{{ health.label }}</span>
                         <h2>{{ t(dashboard_home.hero.title) }}</h2>
-                        {% if dashboard_home.hero.kind == "receiving" %}
-                        <p>{{ t("Heard") }} {{ dashboard_home.hero.heard_stations }} {{ t("stations and decoded") }} {{ dashboard_home.hero.decoded_aprs }} {{ t("APRS frames.") }}</p>
-                        {% else %}
-                        <p>{{ t(dashboard_home.hero.summary) }}</p>
-                        {% endif %}
+                        <p class="muted small">{{ t("Last RF activity") }}: {{ t(station.last_rf) }}</p>
                     </div>
-                    <dl class="dashboard-hero-runtime-list">
-                        {% for item in dashboard_home.hero_summary %}
-                        <div class="dashboard-hero-runtime-row">
-                            <dt>{{ t(item.label) }}</dt>
-                            <dd class="{% if item.tone == 'ok' %}dashboard-status-ok{% elif item.tone == 'error' %}dashboard-status-error{% elif item.tone == 'warn' %}dashboard-status-warn{% endif %}">
-                                <span class="dashboard-indicator dashboard-indicator-{{ item.tone }}"></span>
-                                {{ t(item.value) }}
-                            </dd>
-                        </div>
-                        {% endfor %}
-                    </dl>
                 </div>
-                <ul class="dashboard-inline-metrics">
-                    {% for item in dashboard_home.stats %}
-                    <li class="dashboard-inline-metric">
-                        <span class="dashboard-inline-metric-label">{{ t(item.label) }}</span>
-                        <strong class="dashboard-inline-metric-value">{{ item.value if item.suffix else t(item.value) }}{% if item.suffix %} {{ t(item.suffix) }}{% endif %}</strong>
+                <ul class="dashboard-v2-station-facts">
+                    <li class="dashboard-v2-fact">
+                        <span class="dashboard-v2-fact-label">{{ t("Callsign") }}</span>
+                        <span class="dashboard-v2-fact-value">{{ station.callsign if station.callsign != "Not set" else t("Not set") }}</span>
                     </li>
-                    {% endfor %}
+                    <li class="dashboard-v2-fact">
+                        <span class="dashboard-v2-fact-label">{{ t("RF RX freshness") }}</span>
+                        <span class="dashboard-v2-fact-value dashboard-v2-state dashboard-v2-state-{{ station.rx_tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ station.rx_tone }}"></span>
+                            {{ t(station.rx_value) }}
+                        </span>
+                    </li>
+                    <li class="dashboard-v2-fact">
+                        <span class="dashboard-v2-fact-label">{{ t("RF TX freshness") }}</span>
+                        <span class="dashboard-v2-fact-value dashboard-v2-state dashboard-v2-state-{{ station.tx_tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ station.tx_tone }}"></span>
+                            {{ t(station.tx_value) }}
+                        </span>
+                    </li>
+                    <li class="dashboard-v2-fact">
+                        <span class="dashboard-v2-fact-label">{{ t("APRS-IS/iGate uplink") }}</span>
+                        <span class="dashboard-v2-fact-value dashboard-v2-state dashboard-v2-state-{{ station.aprsis_tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ station.aprsis_tone }}"></span>
+                            {{ t(station.aprsis_value) }}
+                        </span>
+                    </li>
                 </ul>
             </div>
         </section>
-
-        <section class="panel dashboard-band-panel">
+        <section class="panel dashboard-v2-band-panel">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Band Condition") }}</h2>
-                        <p class="section-lead">{% if dashboard_band %}{{ t("Current estimate for") }} {{ dashboard_band.band_label }}.{% else %}{{ t("No band data yet.") }}{% endif %}</p>
+                        <p class="section-lead">
+                            {% if dashboard_band %}
+                            {{ t("Current estimate for") }} {{ dashboard_band.band_label }}.
+                            {% else %}
+                            {{ t("No band data yet.") }}
+                            {% endif %}
+                        </p>
                         <p class="muted small">{{ t("Updated") }} {{ dashboard_home.band_updated_at }}</p>
                     </div>
                     <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">{{ t("Open") }}</a>
                 </div>
                 {% if dashboard_band %}
-                <section class="band-condition-hero band-condition-hero-{{ dashboard_band.diagnosis_tone }}">
-                    <div class="band-condition-hero-copy">
-                        <strong>{{ t(dashboard_band.diagnosis_title) }}</strong>
-                        <p>{{ t(dashboard_home.band_summary) }}</p>
-                    </div>
-                    <div class="band-condition-hero-score">
-                        <span class="muted">{{ dashboard_band.band_label }}</span>
-                        <strong>{{ t(dashboard_band.label) }}</strong>
-                    </div>
+                <section class="dashboard-v2-band-summary dashboard-v2-band-summary-{{ dashboard_band.diagnosis_tone }}">
+                    <strong>{{ t(dashboard_band.label) }}</strong>
+                    <p>{{ t(dashboard_home.band_summary) }}</p>
                 </section>
                 {% else %}
                 <div class="notice">{{ t("Band condition is not available yet.") }}</div>
@@ -66,108 +117,77 @@
         </section>
     </section>
 
-    <section class="dashboard-detail-grid dashboard-detail-grid-compact">
-        <section class="panel dashboard-readiness-card">
-            <div class="panel-body">
-                <div class="panel-header">
-                    <div class="panel-header-copy">
-                        <h2>{{ t("Station Readiness") }}</h2>
-                    </div>
-                </div>
-                <div class="dashboard-readiness-groups">
-                    {% for item in dashboard_home.checks %}
-                    <section class="dashboard-readiness-group dashboard-readiness-group-{{ item.state }}{% if item.show_state_badge is defined and item.show_state_badge %} dashboard-readiness-group-primary{% else %} dashboard-readiness-group-secondary{% endif %}">
-                        <header class="dashboard-readiness-group-header">
-                            <h3>{{ t(item.label) }}</h3>
-                            {% if item.show_state_badge is defined and item.show_state_badge %}
-                            <span class="dashboard-readiness-state dashboard-status-{{ item.state }}">
-                                <span class="dashboard-indicator dashboard-indicator-{{ 'warn' if item.state == 'warn' else item.state }}"></span>
-                                {% if item.state == "ok" %}
-                                {{ t("OK") }}
-                                {% elif item.state == "error" %}
-                                {{ t("Error") }}
-                                {% else %}
-                                {{ t("Needs attention") }}
-                                {% endif %}
-                            </span>
-                            {% endif %}
-                        </header>
-                        <div class="dashboard-readiness-group-body">
-                            {% if item.entries %}
-                            <ul class="dashboard-kv-list">
-                                {% for entry in item.entries %}
-                                <li>
-                                    <span class="dashboard-kv-key">{{ t(entry.name) }}</span>
-                                    <span class="dashboard-kv-value {% if entry.tone == 'ok' %}dashboard-status-ok{% elif entry.tone == 'error' %}dashboard-status-error{% elif entry.tone == 'warn' %}dashboard-status-warn{% endif %}">
-                                        <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
-                                        {{ t(entry.status) }}
-                                    </span>
-                                </li>
-                                {% endfor %}
-                            </ul>
-                            {% elif item.value %}
-                            <p>{{ t(item.value) }}</p>
-                            {% endif %}
-                            {% if item.note %}
-                            <p class="dashboard-check-note">{{ t(item.note) }}</p>
-                            {% endif %}
-                        </div>
-                    </section>
-                    {% endfor %}
-                </div>
-            </div>
-        </section>
+    <section class="dashboard-v2-kpi-strip" aria-label="dashboard-kpis">
+        <article class="dashboard-v2-kpi-tile">
+            <span class="dashboard-v2-kpi-label">{{ t("Heard stations") }}</span>
+            <strong class="dashboard-v2-kpi-value">{{ kpi.heard }}</strong>
+        </article>
+        <article class="dashboard-v2-kpi-tile">
+            <span class="dashboard-v2-kpi-label">{{ t("APRS frames") }}</span>
+            <strong class="dashboard-v2-kpi-value">{{ kpi.frames }}</strong>
+        </article>
+        <article class="dashboard-v2-kpi-tile">
+            <span class="dashboard-v2-kpi-label">{{ t("Interfaces") }}</span>
+            <strong class="dashboard-v2-kpi-value">{{ kpi.interfaces }}</strong>
+        </article>
+        <article class="dashboard-v2-kpi-tile">
+            <span class="dashboard-v2-kpi-label">{{ t("Last RF RX") }}</span>
+            <strong class="dashboard-v2-kpi-value">{{ t(kpi.last_rx) }}</strong>
+        </article>
+        <article class="dashboard-v2-kpi-tile">
+            <span class="dashboard-v2-kpi-label">{{ t("Last RF TX") }}</span>
+            <strong class="dashboard-v2-kpi-value">{{ t(kpi.last_tx) }}</strong>
+        </article>
+        <article class="dashboard-v2-kpi-tile">
+            <span class="dashboard-v2-kpi-label">{{ t("Last APRS-IS uplink") }}</span>
+            <strong class="dashboard-v2-kpi-value">{{ t(kpi.aprsis) }}</strong>
+        </article>
+    </section>
 
-        <section class="panel dashboard-interfaces-card">
+    <section class="dashboard-v2-middle-grid">
+        <section class="panel dashboard-v2-activity-panel">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
-                        <h2>{{ t("Interfaces") }}</h2>
-                        <p class="muted small">{{ t(dashboard_home.interface_summary) }}</p>
+                        <h2>{{ t("Activity Charts") }}</h2>
+                        <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
+                    </div>
+                    <div class="dashboard-activity-controls">
+                        <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
+                        <select id="dashboard-activity-range" name="dashboard_activity_range">
+                            <option value="1h">1h</option>
+                            <option value="3h">3h</option>
+                            <option value="6h">6h</option>
+                            <option value="12h">12h</option>
+                            <option value="24h" selected>24h</option>
+                            <option value="7d">7d</option>
+                            <option value="30d">30d</option>
+                            <option value="365d">365d</option>
+                        </select>
+                        <span class="muted small dashboard-activity-zoom-hint">{{ t("Drag to zoom, double click to reset.") }}</span>
                     </div>
                 </div>
-                {% if dashboard_home.interface_entries %}
-                <ul class="dashboard-kv-list">
-                    {% for entry in dashboard_home.interface_entries %}
-                    <li class="{% if entry.tone == 'neutral' %}dashboard-row-muted{% endif %}">
-                        <span class="dashboard-kv-key">{{ t(entry.name) }}</span>
-                        <span class="dashboard-kv-value {% if entry.tone == 'ok' %}dashboard-status-ok{% elif entry.tone == 'error' %}dashboard-status-error{% elif entry.tone == 'warn' %}dashboard-status-warn{% endif %}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
-                            {{ t(entry.status) }}
-                        </span>
-                    </li>
-                    {% endfor %}
-                </ul>
+                <div class="dashboard-v2-chart-header">
+                    <h3>{{ t("RX / TX / repeats / APRS-IS uplink") }}</h3>
+                    <span class="muted small" id="dashboard-main-activity-window">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
+                    <span class="muted small" id="dashboard-direction-activity-step">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
+                </div>
+                {% if has_activity_chart %}
+                <div class="dashboard-activity-canvas">
+                    <canvas id="dashboard-direction-activity-chart"></canvas>
+                </div>
+                <div class="dashboard-activity-totals dashboard-v2-activity-totals">
+                    <span>{{ t("All frames") }}: <strong id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</strong></span>
+                    <span>{{ t("Received (RX)") }}: <strong id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</strong></span>
+                    <span>{{ t("Sent (TX)") }}: <strong id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</strong></span>
+                    <span>{{ t("Repeated TX") }}: <strong id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</strong></span>
+                </div>
                 {% else %}
-                <div class="notice">{{ t("No interfaces configured.") }}</div>
+                <div class="notice">{{ t("Recent activity data will appear here.") }}</div>
                 {% endif %}
             </div>
         </section>
-        <section class="panel dashboard-last-rf-card">
-            <div class="panel-body">
-                <div class="panel-header">
-                    <div class="panel-header-copy">
-                        <h2>{{ t("Last RF activity") }}</h2>
-                    </div>
-                </div>
-                {% if dashboard_home.last_rf_activity %}
-                <ul class="dashboard-kv-list dashboard-rf-kv-list">
-                    {% for item in dashboard_home.last_rf_activity %}
-                    <li>
-                        <span class="dashboard-kv-key">{{ t(item.name) }}</span>
-                        <span class="dashboard-kv-value">
-                            {{ t(item.value) }}{% if item.note %}, <span class="muted">{{ t(item.note) }}</span>{% endif %}
-                        </span>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="notice">{{ t("No RF activity yet.") }}</div>
-                {% endif %}
-            </div>
-        </section>
-
-        <section class="panel dashboard-events-card">
+        <section class="panel dashboard-v2-events-panel">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
@@ -176,12 +196,12 @@
                     <a class="dashboard-subtle-link" href="{{ request.scope.root_path }}/logs">{{ t("More") }}</a>
                 </div>
                 {% if dashboard_home.recent_events %}
-                <ul class="dashboard-event-feed">
+                <ul class="dashboard-v2-event-feed">
                     {% for event in (dashboard_home.recent_events or [])[:5] %}
                     <li>
-                        <time class="dashboard-event-time">{{ event.timestamp }}</time>
-                        <span class="dashboard-event-message">{{ t(event.message) }}</span>
-                        <span class="dashboard-indicator dashboard-indicator-{{ event.tone }}" aria-label="{{ t(event.level) }}" title="{{ t(event.level) }}"></span>
+                        <time class="dashboard-v2-event-time">{{ event.timestamp }}</time>
+                        <span class="dashboard-v2-event-message">{{ t(event.message) }}</span>
+                        <span class="dashboard-v2-event-level dashboard-v2-event-level-{{ event.tone }}">{{ t(event.level) }}</span>
                     </li>
                     {% endfor %}
                 </ul>
@@ -192,47 +212,91 @@
         </section>
     </section>
 
-    <section class="panel dashboard-activity-panel">
-        <div class="panel-body">
-            <div class="panel-header">
-                <div class="panel-header-copy">
-                    <h2>{{ t("Activity Charts") }}</h2>
-                    <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
+    <section class="dashboard-v2-bottom-grid">
+        <section class="panel dashboard-v2-readiness-panel">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>{{ t("Station Readiness") }}</h2>
+                    </div>
                 </div>
-                <div class="dashboard-activity-controls">
-                    <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
-                    <select id="dashboard-activity-range" name="dashboard_activity_range">
-                        <option value="1h">1h</option>
-                        <option value="3h">3h</option>
-                        <option value="6h">6h</option>
-                        <option value="12h">12h</option>
-                        <option value="24h" selected>24h</option>
-                        <option value="7d">7d</option>
-                        <option value="30d">30d</option>
-                        <option value="365d">365d</option>
-                    </select>
-                    <span class="muted small dashboard-activity-zoom-hint">{{ t("Drag to zoom, double click to reset.") }}</span>
-                </div>
+                <ul class="dashboard-v2-readiness-list">
+                    {% for entry in (runtime_check.entries if runtime_check and runtime_check.entries else []) %}
+                        {% if entry.name in ["RF RX freshness", "RF TX freshness", "APRS-IS/iGate uplink", "TX queue", "Schedulers", "Database"] %}
+                            {% set check_label = entry.name %}
+                            {% if entry.name == "RF RX freshness" %}
+                                {% set check_label = "RF RX" %}
+                            {% elif entry.name == "RF TX freshness" %}
+                                {% set check_label = "RF TX" %}
+                            {% endif %}
+                    <li>
+                        <span class="dashboard-v2-check-label">{{ t(check_label) }}</span>
+                        <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                            {{ t(entry.status) }}
+                        </span>
+                    </li>
+                        {% endif %}
+                    {% endfor %}
+                    {% for entry in (service_check.entries if service_check and service_check.entries else []) %}
+                        {% if entry.name in ["Beacon enabled", "WX enabled", "Digi routine"] %}
+                            {% set check_label = entry.name %}
+                    <li>
+                        <span class="dashboard-v2-check-label">{{ t(check_label) }}</span>
+                        <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                            {{ t(entry.status) }}
+                        </span>
+                    </li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
             </div>
-            <div class="dashboard-activity-grid">
-                <section class="dashboard-activity-card" id="dashboard-direction-activity-chart-card">
-                    <div class="dashboard-activity-card-header">
-                        <h3>{{ t("RX / TX / repeats / APRS-IS uplink") }}</h3>
-                        <span class="muted small" id="dashboard-main-activity-window">{{ dashboard_home.activity_chart.window_minutes }} {{ t("min") }}</span>
-                        <span class="muted small" id="dashboard-direction-activity-step">{{ dashboard_home.activity_chart.bucket_minutes }} {{ t("min step") }}</span>
-                    </div>
-                    <div class="dashboard-activity-canvas">
-                        <canvas id="dashboard-direction-activity-chart"></canvas>
-                    </div>
+        </section>
+        <section class="panel dashboard-v2-summary-panel">
+            <div class="panel-body">
+                <section class="dashboard-v2-summary-block">
+                    <h3>{{ t("Interfaces") }}</h3>
+                    {% if dashboard_home.interface_entries %}
+                    <ul class="dashboard-v2-compact-list">
+                        {% for entry in dashboard_home.interface_entries %}
+                        <li>
+                            <span class="dashboard-v2-check-label">{{ t(entry.name) }}</span>
+                            <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
+                                <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                                {{ t(entry.status) }}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="notice">{{ t("No interfaces configured.") }}</div>
+                    {% endif %}
+                </section>
+                <section class="dashboard-v2-summary-block">
+                    <h3>{{ t("Last RF activity") }}</h3>
+                    {% if dashboard_home.last_rf_activity %}
+                    <ul class="dashboard-v2-compact-list">
+                        {% for item in dashboard_home.last_rf_activity %}
+                            {% if item.name in ["Last heard station", "Last mobile station", "Last object/item", "Last own TX"] %}
+                        <li>
+                            <span class="dashboard-v2-check-label">{{ t(item.name) }}</span>
+                            <span class="dashboard-v2-check-value">
+                                {{ t(item.value) }}
+                                {% if item.note %}
+                                <span class="dashboard-v2-inline-note">{{ t(item.note) }}</span>
+                                {% endif %}
+                            </span>
+                        </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="notice">{{ t("No RF activity yet.") }}</div>
+                    {% endif %}
                 </section>
             </div>
-            <div class="dashboard-activity-totals">
-                <span>{{ t("All frames") }}: <strong id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</strong></span>
-                <span>{{ t("Received (RX)") }}: <strong id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</strong></span>
-                <span>{{ t("Sent (TX)") }}: <strong id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</strong></span>
-                <span>{{ t("Repeated TX") }}: <strong id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</strong></span>
-            </div>
-        </div>
+        </section>
     </section>
 </div>
 {% endblock %}
