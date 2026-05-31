@@ -940,6 +940,12 @@
         });
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
         loadRangePayload(activeRange);
+        const dashboardRefreshTimer = window.setInterval(() => {
+            window.location.reload();
+        }, 30000);
+        window.addEventListener("beforeunload", () => {
+            window.clearInterval(dashboardRefreshTimer);
+        });
     })();
 </script>
 {% endblock %}
