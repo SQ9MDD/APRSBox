@@ -4,11 +4,12 @@
 
 ### Najważniejsze zmiany
 - `My Station / TX target`: dodano nową opcję `Internal TX` jako neutralny tryb bez fizycznego nadajnika RF.
-- `UX / warunkowa widoczność`: opcja `Internal TX` pojawia się do wyboru tylko gdy istnieje aktywna reguła routingu `Local TX -> APRS-IS uplink` (z zachowaniem bieżącego wyboru w formularzu).
-- `Walidacja backend`: zapis ustawień stacji odrzuca `Internal TX`, jeśli brak aktywnej reguły `Local TX -> APRS-IS uplink`.
+- `UX / dostępność`: opcja `Internal TX` jest dostępna stale na liście interfejsów nadajnika, niezależnie od konfiguracji flow.
+- `UX / komunikaty`: w formularzu `My Station` dodano kontekstowy komunikat dla `Internal TX` z aktywnym `Local TX -> APRS-IS` (ramki mogą być przekazywane do APRS-IS).
+- `UX / komunikaty`: w formularzu `My Station` dodano kontekstowy komunikat dla `Internal TX` bez aktywnego flow (`Internal TX` działa lokalnie jak `black hole`).
 - `Outbound/runtime`: dla `Internal TX` joby są oznaczane jako `internal_tx_only`, nie wykonują transportu RF/TCP/serial, ale nadal generują ramkę i przekazują ją do pipeline `Local TX` (routing decyduje o dalszym losie, np. APRS-IS).
 - `Logi i podgląd`: wpisy `Station TX Log` dla tego trybu pokazują interfejs `Internal TX` zamiast `Unknown interface`.
-- `Testy`: dodano regresje dla walidacji `Internal TX`, kolejkowania bez `interface_id` oraz ścieżki runtime bez prób transportu RF.
+- `Testy`: dodano regresje dla `Internal TX` bez aktywnego APRS-IS flow, kolejkowania bez `interface_id` oraz ścieżki runtime bez prób transportu RF.
 
 ## 1.8.26.dev - 26.05.2026
 

@@ -299,6 +299,18 @@
                             {% endfor %}
                         </select>
                     </label>
+                    {% if selected_beacon_interface_id == '__INTERNAL_TX__' %}
+                    <div class="full">
+                        <div class="alert {% if internal_tx_routing_active %}success{% endif %}">
+                            <p>{{ t("Internal TX does not use physical RF transport. Frames are generated locally and handled by Local TX routing rules.") }}</p>
+                            {% if internal_tx_routing_active %}
+                            <p>{{ t("Local TX -> APRS-IS routing is active. Internal TX frames can be forwarded to APRS-IS.") }}</p>
+                            {% else %}
+                            <p>{{ t("No active Local TX -> APRS-IS routing found. Internal TX currently behaves like a local black hole.") }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
                     <label>
                         <span>
                             {{ t("Beacon Comment") }}

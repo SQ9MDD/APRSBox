@@ -25,7 +25,6 @@ from app.db import (
     utc_now,
 )
 from app.i18n import get_app_language, get_translator
-from app.services.digi_flows import has_enabled_local_tx_aprsis_flow
 from app.services.beacon_pathing import (
     BEACON_INTERVAL_MODE_FIXED,
     BEACON_INTERVAL_MODE_PROPORTIONAL,
@@ -355,8 +354,6 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
     if raw_beacon_interface == INTERNAL_TX_INTERFACE_OPTION_VALUE or (
         bool(payload.get("beacon_internal_tx")) and raw_beacon_interface in {"", None}
     ):
-        if not has_enabled_local_tx_aprsis_flow():
-            raise ValueError("Internal TX requires an enabled Local TX -> APRS-IS uplink DIGI Flow.")
         beacon_internal_tx = True
         raw_beacon_interface = ""
     if raw_beacon_interface == ALL_ACTIVE_INTERFACE_OPTION_VALUE:

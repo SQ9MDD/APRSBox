@@ -408,9 +408,6 @@ def _dashboard_band_condition_card() -> dict | None:
 
 
 def _station_form_options(
-    *,
-    allow_internal_tx_option: bool = False,
-    keep_selected_internal_tx: bool = False,
 ) -> dict[str, list[dict[str, str | int]]]:
     interface_options = [
         {
@@ -420,8 +417,7 @@ def _station_form_options(
         for item in get_active_tnc_interfaces()
     ]
     interface_options.append({"value": ALL_ACTIVE_INTERFACE_OPTION_VALUE, "label": "Transmit on all active interfaces"})
-    if (allow_internal_tx_option and has_enabled_local_tx_aprsis_flow()) or keep_selected_internal_tx:
-        interface_options.append({"value": INTERNAL_TX_INTERFACE_OPTION_VALUE, "label": "Internal TX"})
+    interface_options.append({"value": INTERNAL_TX_INTERFACE_OPTION_VALUE, "label": "Internal TX"})
     return {
         "interface_options": [{"value": "", "label": "Select interface"}] + interface_options,
         "ssid_options": [{"value": "", "label": "Select SSID"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
@@ -460,13 +456,8 @@ def _station_page_context(
     station: dict | None = None,
 ) -> dict:
     resolved_station = dict(station or get_station_settings())
-    keep_selected_internal_tx = bool(resolved_station.get("beacon_internal_tx")) or (
-        str(resolved_station.get("beacon_interface_id") or "").strip() == INTERNAL_TX_INTERFACE_OPTION_VALUE
-    )
-    station_form_options = _station_form_options(
-        allow_internal_tx_option=True,
-        keep_selected_internal_tx=keep_selected_internal_tx,
-    )
+    station_form_options = _station_form_options()
+    internal_tx_routing_active = has_enabled_local_tx_aprsis_flow()
     raw_interval_value = str(resolved_station.get("beacon_interval_minutes") or "").strip().lower()
     interval_mode = normalize_beacon_interval_mode(
         resolved_station.get("beacon_interval_mode"),
@@ -504,6 +495,7 @@ def _station_page_context(
         beacon_health=beacon_health,
         beacon_proportional_schedule_lines=beacon_schedule_lines,
         beacon_proportional_schedule_path=beacon_path_classification.get("normalized_path", ""),
+        internal_tx_routing_active=internal_tx_routing_active,
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         **station_form_options,
     )

@@ -304,14 +304,17 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
                 for row in fetch_all("SELECT interface_id FROM outbound_jobs WHERE kind IN ('beacon', 'status')")
             })
 
-    def test_internal_tx_requires_enabled_local_tx_aprsis_flow(self) -> None:
+    def test_internal_tx_without_aprsis_flow_is_allowed(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
             payload = station_payload(interface_id, tx_enabled="1")
             payload["beacon_interface_id"] = INTERNAL_TX_INTERFACE_OPTION_VALUE
             success, error = safe_update_station_settings(payload)
-            self.assertFalse(success)
-            self.assertEqual(error, "Internal TX requires an enabled Local TX -> APRS-IS uplink DIGI Flow.")
+            self.assertTrue(success, error)
+
+            station_settings = get_station_settings()
+            self.assertTrue(bool(station_settings.get("beacon_internal_tx")))
+            self.assertIsNone(station_settings.get("beacon_interface_id"))
 
     def test_internal_tx_scope_enqueues_station_jobs_without_rf_interface(self) -> None:
         with temporary_database():
