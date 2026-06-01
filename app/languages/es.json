@@ -391,6 +391,7 @@
   "Beacon interface": "Interfaz de baliza",
   "Active interfaces": "Interfaces activas",
   "Transmit on all active interfaces": "Transmitir en todas las interfaces activas",
+  "Internal TX": "TX interno",
   "Not selected": "No seleccionado",
   "Not set": "No establecido",
   "in last h": "en la última hora",

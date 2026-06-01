@@ -965,6 +965,22 @@ def list_enabled_digi_flows(*, source_kind: str | None = None, source_ref: str |
     return [_serialize_flow_row(row, steps=get_digi_flow_steps(int(row["id"]))) for row in rows]
 
 
+def has_enabled_local_tx_aprsis_flow() -> bool:
+    row = fetch_one(
+        """
+        SELECT 1
+        FROM digi_flows
+        WHERE enabled = 1
+          AND source_kind = ?
+          AND source_ref = ?
+          AND target_kind = 'tx_aprsis'
+        LIMIT 1
+        """,
+        (LOCAL_TX_SOURCE_KIND, LOCAL_TX_SOURCE_REF),
+    )
+    return row is not None
+
+
 def get_digi_flow_steps(flow_id: int) -> list[dict[str, Any]]:
     rows = fetch_all(
         """

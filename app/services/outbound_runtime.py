@@ -153,6 +153,20 @@ class OutboundService:
             log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
             if kind == "wx":
                 log_event("INFO", "wx", f"Generating WX frame for outbound job #{job_id}")
+            if kind != OUTBOUND_KIND_DIGI_TX and _payload_flag(payload.get("internal_tx_only"), default=False):
+                mark_outbound_job_sent(job_id)
+                message_kind = str(payload.get("message_kind") or "").strip()
+                if kind == "message" and payload.get("aprs_message_id") is not None:
+                    if message_kind == "direct_message":
+                        register_direct_message_transmission(int(payload["aprs_message_id"]), job_id)
+                    elif message_kind == QUERY_MESSAGE_KIND:
+                        register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                elif kind in {"beacon", "status"} and payload.get("aprs_message_id") is not None:
+                    register_query_message_transmission(int(payload["aprs_message_id"]), job_id)
+                log_event("INFO", "outbound", f"Sent {kind} outbound job #{job_id} via Internal TX routing")
+                if kind == "wx":
+                    log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via Internal TX routing")
+                return
             frame = build_tnc2_kiss_frame(tnc2_line)
             if job.get("interface_enabled") in {0, "0", False}:
                 skip_reason = f"TX skipped: interface {interface_name} is disabled in configuration."

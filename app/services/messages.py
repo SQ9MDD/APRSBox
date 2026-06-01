@@ -44,6 +44,7 @@ HEARD_WARN_SECONDS = 30 * 60
 QUERY_RESPONSE_DELAY_SECONDS = 5
 INCOMING_UNNUMBERED_DUPLICATE_WINDOW_SECONDS = 30
 OUTGOING_BURST_DUPLICATE_WINDOW_SECONDS = 5
+STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -1726,7 +1727,12 @@ def _get_station_settings() -> dict[str, Any]:
         WHERE id = 1
         """
     )
-    return dict(row) if row else {}
+    if row is None:
+        return {}
+    result = dict(row)
+    internal_mode = str(get_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY) or "").strip().lower()
+    result["beacon_internal_tx"] = internal_mode in {"1", "true", "yes", "on"}
+    return result
 
 
 def _local_station_identity() -> str:

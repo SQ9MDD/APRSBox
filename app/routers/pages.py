@@ -68,7 +68,7 @@ from app.services.content import (
     safe_create_section_row,
     safe_update_section_row,
 )
-from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
@@ -82,6 +82,7 @@ from app.services.digi_flows import (
     get_digi_flow,
     get_digi_flow_reference_options,
     get_digi_flow_type_meta,
+    has_enabled_local_tx_aprsis_flow,
     list_digi_flows,
     safe_move_digi_flow,
     safe_create_digi_flow,
@@ -406,7 +407,11 @@ def _dashboard_band_condition_card() -> dict | None:
     return preferred or bands[0]
 
 
-def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
+def _station_form_options(
+    *,
+    allow_internal_tx_option: bool = False,
+    keep_selected_internal_tx: bool = False,
+) -> dict[str, list[dict[str, str | int]]]:
     interface_options = [
         {
             "value": str(item["id"]),
@@ -415,6 +420,8 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
         for item in get_active_tnc_interfaces()
     ]
     interface_options.append({"value": ALL_ACTIVE_INTERFACE_OPTION_VALUE, "label": "Transmit on all active interfaces"})
+    if (allow_internal_tx_option and has_enabled_local_tx_aprsis_flow()) or keep_selected_internal_tx:
+        interface_options.append({"value": INTERNAL_TX_INTERFACE_OPTION_VALUE, "label": "Internal TX"})
     return {
         "interface_options": [{"value": "", "label": "Select interface"}] + interface_options,
         "ssid_options": [{"value": "", "label": "Select SSID"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
@@ -453,6 +460,13 @@ def _station_page_context(
     station: dict | None = None,
 ) -> dict:
     resolved_station = dict(station or get_station_settings())
+    keep_selected_internal_tx = bool(resolved_station.get("beacon_internal_tx")) or (
+        str(resolved_station.get("beacon_interface_id") or "").strip() == INTERNAL_TX_INTERFACE_OPTION_VALUE
+    )
+    station_form_options = _station_form_options(
+        allow_internal_tx_option=True,
+        keep_selected_internal_tx=keep_selected_internal_tx,
+    )
     raw_interval_value = str(resolved_station.get("beacon_interval_minutes") or "").strip().lower()
     interval_mode = normalize_beacon_interval_mode(
         resolved_station.get("beacon_interval_mode"),
@@ -491,7 +505,7 @@ def _station_page_context(
         beacon_proportional_schedule_lines=beacon_schedule_lines,
         beacon_proportional_schedule_path=beacon_path_classification.get("normalized_path", ""),
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
-        **_station_form_options(),
+        **station_form_options,
     )
 
 

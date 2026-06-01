@@ -13,8 +13,19 @@ from urllib.parse import quote
 
 from app.config import settings
 from app.datetime_utils import format_display_datetime
-from app.db import event_log_levels_at_or_above, fetch_all, fetch_one, get_connection, log_event, normalize_event_log_level, utc_now
+from app.db import (
+    event_log_levels_at_or_above,
+    fetch_all,
+    fetch_one,
+    get_app_setting,
+    get_connection,
+    log_event,
+    normalize_event_log_level,
+    set_app_setting,
+    utc_now,
+)
 from app.i18n import get_app_language, get_translator
+from app.services.digi_flows import has_enabled_local_tx_aprsis_flow
 from app.services.beacon_pathing import (
     BEACON_INTERVAL_MODE_FIXED,
     BEACON_INTERVAL_MODE_PROPORTIONAL,
@@ -29,6 +40,7 @@ from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_o
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
 from app.services.tx_scope import (
     ALL_ACTIVE_INTERFACE_OPTION_VALUE,
+    INTERNAL_TX_INTERFACE_OPTION_VALUE,
     TX_SCOPE_ALL_ACTIVE,
     TX_SCOPE_SINGLE,
     normalize_tx_scope,
@@ -59,10 +71,22 @@ MODEM_TX_MIN_GAP_SECONDS_MIN = 0.2
 MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 DASHBOARD_ACTIVITY_WINDOW_MINUTES = 60
 DASHBOARD_ACTIVITY_BUCKET_MINUTES = 5
+STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
 
 
 def _t(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+def _setting_flag(value: Any) -> bool:
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
+
+
+def _is_internal_tx_payload(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return bool(payload.get("internal_tx_only"))
 
 
 def get_section_rows(slug: str) -> list[dict[str, Any]]:
@@ -217,6 +241,7 @@ def get_station_settings() -> dict[str, Any]:
     result = dict(row)
     result.setdefault("beacon_interface_id", None)
     result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
+    result["beacon_internal_tx"] = _setting_flag(get_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY))
     result.setdefault("default_units", "metric")
     result["beacon_interval_mode"] = normalize_beacon_interval_mode(
         result.get("beacon_interval_mode"),
@@ -271,6 +296,7 @@ def has_enabled_modem_interface() -> bool:
 
 def update_station_settings(payload: dict[str, Any]) -> None:
     values = normalize_station_settings_payload(payload)
+    internal_tx_enabled = bool(values.pop("beacon_internal_tx", False))
     with get_connection() as connection:
         connection.execute(
             """
@@ -298,6 +324,7 @@ def update_station_settings(payload: dict[str, Any]) -> None:
             """,
             values,
         )
+    set_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY, "1" if internal_tx_enabled else "0")
     log_event(
         "INFO",
         "config",
@@ -324,9 +351,18 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         default_units = "metric"
     beacon_tx_scope = normalize_tx_scope(payload.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     raw_beacon_interface = str(payload.get("beacon_interface_id") or "").strip()
+    beacon_internal_tx = False
+    if raw_beacon_interface == INTERNAL_TX_INTERFACE_OPTION_VALUE or (
+        bool(payload.get("beacon_internal_tx")) and raw_beacon_interface in {"", None}
+    ):
+        if not has_enabled_local_tx_aprsis_flow():
+            raise ValueError("Internal TX requires an enabled Local TX -> APRS-IS uplink DIGI Flow.")
+        beacon_internal_tx = True
+        raw_beacon_interface = ""
     if raw_beacon_interface == ALL_ACTIVE_INTERFACE_OPTION_VALUE:
         beacon_tx_scope = TX_SCOPE_ALL_ACTIVE
         raw_beacon_interface = ""
+        beacon_internal_tx = False
     try:
         beacon_interface_id = int(raw_beacon_interface) if raw_beacon_interface not in {"", None} else None
     except (TypeError, ValueError):
@@ -360,6 +396,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "ssid": payload.get("ssid", ""),
         "beacon_interface_id": beacon_interface_id,
         "beacon_tx_scope": beacon_tx_scope,
+        "beacon_internal_tx": beacon_internal_tx,
         "beacon_comment": beacon_comment,
         "beacon_interval_mode": beacon_interval_mode,
         "beacon_interval_minutes": beacon_interval_minutes,
@@ -380,6 +417,8 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
 
 def station_has_tx_target(station_settings: dict[str, Any] | None = None) -> bool:
     resolved_settings = station_settings or get_station_settings()
+    if bool(resolved_settings.get("beacon_internal_tx")):
+        return True
     scope = normalize_tx_scope(resolved_settings.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     if scope == TX_SCOPE_ALL_ACTIVE:
         return bool(get_active_tnc_interfaces())
@@ -443,7 +482,7 @@ def recent_station_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
             item["line"] = build_status_tnc2(payload)
         else:
             item["line"] = ""
-        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        item["interface_name"] = item.get("interface_name") or ("Internal TX" if _is_internal_tx_payload(payload) else "Unknown interface")
         skip_reason = str(item.get("last_error") or "").strip()
         item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
         item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
@@ -487,7 +526,7 @@ def recent_object_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
         else:
             item["line"] = ""
         item["display_kind"] = "Object"
-        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        item["interface_name"] = item.get("interface_name") or ("Internal TX" if _is_internal_tx_payload(payload) else "Unknown interface")
         skip_reason = str(item.get("last_error") or "").strip()
         item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
         item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
@@ -535,7 +574,7 @@ def recent_bulletin_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
             "announcement": "Announcement",
             "group_bulletin": "Group Bulletin",
         }.get(message_kind, "Bulletin")
-        item["interface_name"] = item.get("interface_name") or "Unknown interface"
+        item["interface_name"] = item.get("interface_name") or ("Internal TX" if _is_internal_tx_payload(payload) else "Unknown interface")
         skip_reason = str(item.get("last_error") or "").strip()
         item["is_tx_skipped"] = bool(skip_reason) and skip_reason.startswith("TX skipped:")
         item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
