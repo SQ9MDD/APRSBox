@@ -177,7 +177,12 @@ from app.services.wx import (
 
 router = APIRouter()
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
-_CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
+_CHANGELOG_FILES_BY_LANGUAGE: dict[str, Path] = {
+    "pl": _REPO_ROOT_DIR / "changelog.md",
+    "en": _REPO_ROOT_DIR / "changelog.en.md",
+    "es": _REPO_ROOT_DIR / "changelog.es.md",
+}
+_CHANGELOG_FALLBACK_LANGUAGE_ORDER: tuple[str, ...] = ("pl", "en")
 _CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
 EVENT_LOG_MIN_LEVEL_OPTIONS: tuple[str, ...] = ("INFO", "WARNING", "ERROR")
 EVENT_LOG_VIEW_LEVEL_OPTIONS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
@@ -301,11 +306,20 @@ def _safe_positive_int(value: Any) -> int:
     return parsed if parsed >= 0 else 0
 
 
-def _read_changelog_markdown() -> str:
-    try:
-        return _CHANGELOG_PATH.read_text(encoding="utf-8")
-    except OSError:
-        return "# Changelog\n\nUnable to read changelog.md."
+def _read_changelog_markdown(language: str | None = None) -> str:
+    resolved_language = normalize_language(language if language is not None else get_app_language())
+    language_order = (resolved_language, *_CHANGELOG_FALLBACK_LANGUAGE_ORDER)
+    checked_paths: list[Path] = []
+    for language_code in language_order:
+        path = _CHANGELOG_FILES_BY_LANGUAGE.get(language_code)
+        if path is None or path in checked_paths:
+            continue
+        checked_paths.append(path)
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return "# Changelog\n\nUnable to read changelog file."
 
 
 def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:

@@ -1,16 +1,19 @@
 # Changelog
 
-## 1.8.30.dev - 01.06.2026
+## 1.8.30.dev - 2026-06-01
 
-### Najważniejsze zmiany
-- `My Station / TX target`: dodano nową opcję `Internal TX` jako neutralny tryb bez fizycznego nadajnika RF.
-- `Changelog / I18N`: dodano obsługę wielojęzycznych plików changeloga (`PL/EN/ES`) z automatycznym wyborem treści na podstawie aktualnego języka GUI.
-- `UX / dostępność`: opcja `Internal TX` jest dostępna stale na liście interfejsów nadajnika, niezależnie od konfiguracji flow.
-- `UX / komunikaty`: w formularzu `My Station` dodano kontekstowy komunikat dla `Internal TX` z aktywnym `Local TX -> APRS-IS` (ramki mogą być przekazywane do APRS-IS).
-- `UX / komunikaty`: w formularzu `My Station` dodano kontekstowy komunikat dla `Internal TX` bez aktywnego flow (`Internal TX` działa lokalnie jak `black hole`).
-- `Outbound/runtime`: dla `Internal TX` joby są oznaczane jako `internal_tx_only`, nie wykonują transportu RF/TCP/serial, ale nadal generują ramkę i przekazują ją do pipeline `Local TX` (routing decyduje o dalszym losie, np. APRS-IS).
-- `Logi i podgląd`: wpisy `Station TX Log` dla tego trybu pokazują interfejs `Internal TX` zamiast `Unknown interface`.
-- `Testy`: dodano regresje dla `Internal TX` bez aktywnego APRS-IS flow, kolejkowania bez `interface_id` oraz ścieżki runtime bez prób transportu RF.
+### Highlights
+- `My Station / TX target`: added a new `Internal TX` option as a neutral mode without a physical RF transmitter.
+- `Changelog / I18N`: added multilingual changelog files (`PL/EN/ES`) with automatic content selection based on the current GUI language.
+- `UX / availability`: the `Internal TX` option is always visible in the transmitter interface list, regardless of flow configuration.
+- `UX / messaging`: added a contextual message in `My Station` for `Internal TX` with active `Local TX -> APRS-IS` flow (frames may be forwarded to APRS-IS).
+- `UX / messaging`: added a contextual message in `My Station` for `Internal TX` without an active flow (`Internal TX` behaves locally like a `black hole`).
+- `Outbound/runtime`: for `Internal TX`, jobs are marked as `internal_tx_only`; they do not perform RF/TCP/serial transport, but still build a frame and pass it to the `Local TX` pipeline (routing decides what happens next, e.g. APRS-IS).
+- `Logs and preview`: `Station TX Log` entries for this mode now show `Internal TX` instead of `Unknown interface`.
+- `Tests`: added regressions for `Internal TX` without active APRS-IS flow, queueing without `interface_id`, and runtime path without RF transport attempts.
+
+### Notes
+- Older entries are still in Polish. They are included below until full translation is completed.
 
 ## 1.8.26.dev - 26.05.2026
 
