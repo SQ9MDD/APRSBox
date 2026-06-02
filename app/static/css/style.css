@@ -4747,8 +4747,8 @@ code {
     gap: 0.35rem;
 }
 
-[data-activation-group][hidden] {
-    display: none;
+.activation-group-inactive {
+    opacity: 0.48;
 }
 
 .activation-summary-panel {
