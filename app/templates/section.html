@@ -239,6 +239,9 @@
                 </label>
                 {% endif %}
                 {% if field.form_visible|default(true) %}
+                {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}
+                <div class="full activation-date-grid">
+                {% endif %}
                 <label
                     class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}"
                     {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
@@ -402,6 +405,12 @@
                     <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.") }}</small>
                     {% endif %}
                 </label>
+                {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
+                </div>
+                {% endif %}
+                {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'activation_mode' %}
+                <div class="activation-grid-spacer" aria-hidden="true"></div>
+                {% endif %}
                 {% endif %}
                 {% endfor %}
                 {% if section.slug in ['objects', 'items', 'bulletins'] %}
