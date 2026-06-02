@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from app.db import execute, fetch_one, log_event, utc_now
+from app.services.activation_schedule import compute_activation_state
 from app.services.messages import (
     QUERY_MESSAGE_KIND,
     expire_direct_message_timeouts,
@@ -128,7 +129,7 @@ class OutboundService:
 
             kind = str(job.get("kind") or "").strip()
             payload = job.get("payload") or {}
-            skip_reason = _skip_reason_for_expired_aprs_content(kind=kind, payload=payload, now=datetime.now(timezone.utc))
+            skip_reason = _skip_reason_for_inactive_aprs_content(kind=kind, payload=payload, now=datetime.now(timezone.utc))
             if skip_reason:
                 mark_outbound_job_skipped(job_id, skip_reason)
                 log_event("INFO", "outbound", f"Skipped {kind} outbound job #{job_id}: {skip_reason}")
@@ -509,50 +510,58 @@ def _payload_flag(value: Any, *, default: bool) -> bool:
     return default
 
 
-def _skip_reason_for_expired_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:
+def _skip_reason_for_inactive_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:
     if kind == "object":
         object_id = _normalize_payload_id(payload.get("object_id"))
         if object_id is None:
             return None
-        row = fetch_one("SELECT valid_until_utc FROM aprs_objects WHERE id = ?", (object_id,))
+        row = fetch_one("SELECT * FROM aprs_objects WHERE id = ?", (object_id,))
         if row is None:
             return None
-        valid_until_utc = str(row["valid_until_utc"] or "").strip()
-        if not _is_expired_utc_date(valid_until_utc, now):
+        record = dict(row)
+        activation_state = compute_activation_state(record, now)
+        if activation_state.active_now:
             return None
-        execute(
-            """
-            UPDATE aprs_objects
-            SET is_enabled = 0,
-                updated_at = ?
-            WHERE id = ?
-              AND is_enabled = 1
-            """,
-            (utc_now(), object_id),
-        )
-        return f"TX skipped: object #{object_id} expired on {valid_until_utc} UTC."
+        if activation_state.reason == "manual_expired":
+            valid_until_utc = str(record.get("valid_until_utc") or "").strip()
+            execute(
+                """
+                UPDATE aprs_objects
+                SET is_enabled = 0,
+                    updated_at = ?
+                WHERE id = ?
+                  AND is_enabled = 1
+                """,
+                (utc_now(), object_id),
+            )
+            return f"TX skipped: object #{object_id} expired on {valid_until_utc} UTC."
+        return f"TX skipped: object #{object_id} is outside its activation window ({activation_state.reason})."
 
     if kind == "message":
         message_id = _normalize_payload_id(payload.get("message_id"))
         if message_id is None:
             return None
-        row = fetch_one("SELECT valid_until_utc FROM bulletins WHERE id = ?", (message_id,))
+        row = fetch_one("SELECT * FROM bulletins WHERE id = ?", (message_id,))
         if row is None:
             return None
-        valid_until_utc = str(row["valid_until_utc"] or "").strip()
-        if not _is_expired_utc_date(valid_until_utc, now):
+        record = dict(row)
+        activation_state = compute_activation_state(record, now)
+        if activation_state.active_now:
             return None
-        execute(
-            """
-            UPDATE bulletins
-            SET is_enabled = 0,
-                updated_at = ?
-            WHERE id = ?
-              AND is_enabled = 1
-            """,
-            (utc_now(), message_id),
-        )
-        return f"TX skipped: bulletin #{message_id} expired on {valid_until_utc} UTC."
+        if activation_state.reason == "manual_expired":
+            valid_until_utc = str(record.get("valid_until_utc") or "").strip()
+            execute(
+                """
+                UPDATE bulletins
+                SET is_enabled = 0,
+                    updated_at = ?
+                WHERE id = ?
+                  AND is_enabled = 1
+                """,
+                (utc_now(), message_id),
+            )
+            return f"TX skipped: bulletin #{message_id} expired on {valid_until_utc} UTC."
+        return f"TX skipped: bulletin #{message_id} is outside its activation window ({activation_state.reason})."
 
     return None
 
@@ -562,27 +571,3 @@ def _normalize_payload_id(value: Any) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
-
-
-def _parse_utc_date(value: str | None) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
-        try:
-            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    try:
-        parsed_date = datetime.strptime(text, "%Y-%m-%d")
-    except ValueError:
-        return None
-    # Backward compatibility with legacy date-only records: valid through end of that UTC day.
-    return parsed_date.replace(tzinfo=timezone.utc) + timedelta(days=1)
-
-
-def _is_expired_utc_date(value: str | None, now: datetime) -> bool:
-    valid_until = _parse_utc_date(value)
-    if valid_until is None:
-        return False
-    return now >= valid_until

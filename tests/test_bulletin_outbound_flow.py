@@ -214,6 +214,45 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             assert row is not None
             self.assertEqual(int(row["is_enabled"]), 0)
 
+    async def test_bulletin_scheduler_skips_scheduled_row_before_start_without_disabling_it(self) -> None:
+        with temporary_database():
+            insert_modem()
+            bulletin_id = insert_message_record()
+            execute(
+                """
+                UPDATE bulletins
+                SET activation_mode = 'scheduled',
+                    active_from_utc = '2099-01-01 18:00',
+                    active_until_utc = '2099-01-01 21:00'
+                WHERE id = ?
+                """,
+                (bulletin_id,),
+            )
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            BulletinSchedulerService()._tick()
+
+            queued_job = fetch_one("SELECT id FROM outbound_jobs WHERE kind = 'message' ORDER BY id DESC LIMIT 1")
+            self.assertIsNone(queued_job)
+            row = fetch_one("SELECT is_enabled FROM bulletins WHERE id = ?", (bulletin_id,))
+            assert row is not None
+            self.assertEqual(int(row["is_enabled"]), 1)
+
     async def test_outbound_runtime_skips_expired_bulletin_job_and_disables_source(self) -> None:
         with temporary_database():
             insert_modem(device_path="127.0.0.1:9015")

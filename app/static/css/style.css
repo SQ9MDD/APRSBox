@@ -4718,6 +4718,10 @@ code {
     width: 5.5rem;
 }
 
+.prepared-entity-col-schedule {
+    width: 12rem;
+}
+
 .prepared-entity-col-interval {
     width: 4.5rem;
     white-space: nowrap;
@@ -4735,6 +4739,26 @@ code {
     display: block;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.activation-summary-panel,
+.activation-warning-list {
+    display: grid;
+    gap: 0.35rem;
+}
+
+[data-activation-group][hidden] {
+    display: none;
+}
+
+.activation-summary-panel {
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.field-validation-warning {
+    color: var(--warning, #b7791f);
 }
 
 .modems-summary-table {

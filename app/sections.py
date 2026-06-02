@@ -8,6 +8,40 @@ SERIAL_RX_SILENCE_TIMEOUT_OPTIONS = [
     for seconds in range(0, 601, 30)
 ]
 
+ACTIVATION_SCHEDULE_FIELDS = [
+    {
+        "name": "activation_mode",
+        "label": "Activation",
+        "type": "select",
+        "required": True,
+        "default": "manual",
+        "options": [
+            {"value": "manual", "label": "Manual"},
+            {"value": "scheduled", "label": "Scheduled"},
+            {"value": "recurring", "label": "Recurring"},
+        ],
+    },
+    {"name": "active_from_utc", "label": "Active from (UTC)", "type": "date", "required": False},
+    {"name": "active_until_utc", "label": "Active until (UTC)", "type": "date", "required": False},
+    {"name": "first_activation_utc", "label": "First activation (UTC)", "type": "date", "required": False},
+    {"name": "recurrence_duration_minutes", "label": "Active for (minutes)", "type": "number", "required": False},
+    {"name": "recurrence_interval_value", "label": "Repeat every", "type": "number", "required": False},
+    {
+        "name": "recurrence_interval_unit",
+        "label": "Repeat unit",
+        "type": "select",
+        "required": False,
+        "options": [
+            {"value": "", "label": "Select"},
+            {"value": "day", "label": "Day(s)"},
+            {"value": "week", "label": "Week(s)"},
+            {"value": "month", "label": "Month(s)"},
+            {"value": "year", "label": "Year(s)"},
+        ],
+    },
+    {"name": "recurrence_until_utc", "label": "Repeat until (UTC)", "type": "date", "required": False},
+]
+
 
 SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
     "modems": SectionDefinition(
@@ -186,6 +220,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 "default": "30",
             },
             {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
             {"name": "comment", "label": "Comment", "type": "textarea", "required": True, "maxlength": 43, "placeholder": "Local voice repeater"},
@@ -255,6 +290,8 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
+            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
             {"name": "comment", "label": "Comment", "type": "textarea", "required": False, "maxlength": 43, "placeholder": "First aid station"},
@@ -303,6 +340,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 "default": "30",
             },
             {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "message_text", "label": "Message Text", "type": "textarea", "required": True, "maxlength": 67, "placeholder": "Net starts at 19:30 UTC"},

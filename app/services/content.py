@@ -35,6 +35,13 @@ from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
     lookup_aprs_device_identification,
 )
+from app.services.activation_schedule import (
+    compute_activation_state,
+    normalize_activation_schedule,
+    schedule_short_label,
+    schedule_summary,
+    schedule_warnings,
+)
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_object_tnc2, build_status_tnc2, resolve_message_addressee
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
 from app.services.tx_scope import (
@@ -3754,6 +3761,7 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
     normalized["interval_minutes"] = interval_minutes
     normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
+    normalized.update(normalize_activation_schedule(payload))
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -3802,6 +3810,7 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
 
     normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
+    normalized.update(normalize_activation_schedule(payload))
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -4031,6 +4040,7 @@ def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
     symbol_code = str(result.get("symbol_code") or ">")
     result["symbol_icon"] = get_aprs_symbol_icon_path(f"{symbol_table}{symbol_code}")
     result["raw_frame_preview"] = _build_aprs_entity_preview(slug, result)
+    _decorate_activation_schedule(result)
     return result
 
 
@@ -4043,7 +4053,18 @@ def _decorate_aprs_message_row(row: dict[str, Any]) -> dict[str, Any]:
         "group_bulletin": "Group Bulletin",
     }.get(str(result.get("message_kind") or ""), "Bulletin")
     result["raw_frame_preview"] = _build_aprs_message_preview(result)
+    _decorate_activation_schedule(result)
     return result
+
+
+def _decorate_activation_schedule(row: dict[str, Any]) -> None:
+    now = datetime.now(timezone.utc)
+    state = compute_activation_state(row, now)
+    row["activation_active_now"] = state.active_now
+    row["activation_reason"] = state.reason
+    row["activation_summary"] = schedule_summary(row, now)
+    row["activation_short_label"] = schedule_short_label(row, now)
+    row["activation_warnings"] = schedule_warnings(row)
 
 
 def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:

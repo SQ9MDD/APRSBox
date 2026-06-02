@@ -390,6 +390,14 @@ CREATE TABLE IF NOT EXISTS aprs_objects (
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
     valid_until_utc TEXT,
+    activation_mode TEXT NOT NULL DEFAULT 'manual' CHECK (activation_mode IN ('manual', 'scheduled', 'recurring')),
+    active_from_utc TEXT,
+    active_until_utc TEXT,
+    first_activation_utc TEXT,
+    recurrence_duration_minutes INTEGER,
+    recurrence_interval_value INTEGER,
+    recurrence_interval_unit TEXT,
+    recurrence_until_utc TEXT,
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -406,6 +414,15 @@ CREATE TABLE IF NOT EXISTS aprs_items (
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+    valid_until_utc TEXT,
+    activation_mode TEXT NOT NULL DEFAULT 'manual' CHECK (activation_mode IN ('manual', 'scheduled', 'recurring')),
+    active_from_utc TEXT,
+    active_until_utc TEXT,
+    first_activation_utc TEXT,
+    recurrence_duration_minutes INTEGER,
+    recurrence_interval_value INTEGER,
+    recurrence_interval_unit TEXT,
+    recurrence_until_utc TEXT,
     latitude TEXT,
     longitude TEXT,
     symbol_table TEXT,
@@ -425,6 +442,14 @@ CREATE TABLE IF NOT EXISTS bulletins (
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
     valid_until_utc TEXT,
+    activation_mode TEXT NOT NULL DEFAULT 'manual' CHECK (activation_mode IN ('manual', 'scheduled', 'recurring')),
+    active_from_utc TEXT,
+    active_until_utc TEXT,
+    first_activation_utc TEXT,
+    recurrence_duration_minutes INTEGER,
+    recurrence_interval_value INTEGER,
+    recurrence_interval_unit TEXT,
+    recurrence_until_utc TEXT,
     path TEXT,
     message_text TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -1255,6 +1280,13 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 ADD COLUMN symbol_overlay TEXT
                 """
             )
+        if "valid_until_utc" not in item_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_items
+                ADD COLUMN valid_until_utc TEXT
+                """
+            )
         if "valid_until_utc" not in bulletin_columns:
             connection.execute(
                 """
@@ -1262,6 +1294,8 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
                 ADD COLUMN valid_until_utc TEXT
                 """
             )
+        for table_name in ("aprs_objects", "aprs_items", "bulletins"):
+            _ensure_activation_schedule_columns(connection, table_name)
         connection.execute(
             """
             UPDATE modems
@@ -1420,11 +1454,30 @@ def _migrate_system_jobs_table(connection: sqlite3.Connection) -> None:
     connection.execute("CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC)")
 
 
+def _ensure_activation_schedule_columns(connection: sqlite3.Connection, table_name: str) -> None:
+    columns = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()}
+    definitions = {
+        "activation_mode": "TEXT NOT NULL DEFAULT 'manual' CHECK (activation_mode IN ('manual', 'scheduled', 'recurring'))",
+        "active_from_utc": "TEXT",
+        "active_until_utc": "TEXT",
+        "first_activation_utc": "TEXT",
+        "recurrence_duration_minutes": "INTEGER",
+        "recurrence_interval_value": "INTEGER",
+        "recurrence_interval_unit": "TEXT",
+        "recurrence_until_utc": "TEXT",
+    }
+    for column_name, definition in definitions.items():
+        if column_name in columns:
+            continue
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+
 def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None:
     objects_sql = _table_sql(connection, "aprs_objects")
     if objects_sql and "interval_minutes IN (5, 10, 15, 30, 45, 60)" not in objects_sql:
         object_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         object_overlay_select = "symbol_overlay" if "symbol_overlay" in object_columns else "NULL"
+        object_valid_until_select = "valid_until_utc" if "valid_until_utc" in object_columns else "NULL"
         connection.executescript(
             f"""
             ALTER TABLE aprs_objects RENAME TO aprs_objects_old;
@@ -1435,6 +1488,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                valid_until_utc TEXT,
                 latitude TEXT,
                 longitude TEXT,
                 symbol_table TEXT,
@@ -1445,7 +1499,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 updated_at TEXT NOT NULL
             );
             INSERT INTO aprs_objects (
-                id, name, lifetime, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
+                id, name, lifetime, state, is_enabled, interval_minutes, valid_until_utc, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
             )
             SELECT
                 id,
@@ -1457,6 +1511,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                     WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes
                     ELSE 30
                 END,
+                {object_valid_until_select},
                 latitude,
                 longitude,
                 symbol_table,
@@ -1473,6 +1528,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
     if items_sql and "interval_minutes IN (5, 10, 15, 30, 45, 60)" not in items_sql:
         item_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         item_overlay_select = "symbol_overlay" if "symbol_overlay" in item_columns else "NULL"
+        item_valid_until_select = "valid_until_utc" if "valid_until_utc" in item_columns else "NULL"
         connection.executescript(
             f"""
             ALTER TABLE aprs_items RENAME TO aprs_items_old;
@@ -1482,6 +1538,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                valid_until_utc TEXT,
                 latitude TEXT,
                 longitude TEXT,
                 symbol_table TEXT,
@@ -1492,7 +1549,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 updated_at TEXT NOT NULL
             );
             INSERT INTO aprs_items (
-                id, name, state, is_enabled, interval_minutes, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
+                id, name, state, is_enabled, interval_minutes, valid_until_utc, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
             )
             SELECT
                 id,
@@ -1503,6 +1560,7 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                     WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes
                     ELSE 30
                 END,
+                {item_valid_until_select},
                 latitude,
                 longitude,
                 symbol_table,
@@ -1615,9 +1673,10 @@ def _migrate_aprs_messages_table(connection: sqlite3.Connection) -> None:
 def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
     bulletins_sql = _table_sql(connection, "bulletins")
     bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
+    bulletin_valid_until_select = "valid_until_utc" if "valid_until_utc" in bulletin_columns else "NULL"
     if bulletins_sql and "message_kind" not in bulletins_sql:
         connection.executescript(
-            """
+            f"""
             ALTER TABLE bulletins RENAME TO bulletins_old;
             CREATE TABLE bulletins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1627,12 +1686,13 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 group_name TEXT,
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                valid_until_utc TEXT,
                 path TEXT,
                 message_text TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
             INSERT INTO bulletins (
-                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, path, message_text, updated_at
+                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
             )
             SELECT
                 id,
@@ -1645,6 +1705,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                     WHEN cadence_minutes IN (5, 10, 15, 30, 45, 60) THEN cadence_minutes
                     ELSE 30
                 END,
+                {bulletin_valid_until_select},
                 NULL,
                 SUBSTR(COALESCE(body, ''), 1, 67),
                 updated_at
@@ -1654,7 +1715,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
         )
     elif bulletins_sql and "path" not in bulletin_columns:
         connection.executescript(
-            """
+            f"""
             ALTER TABLE bulletins RENAME TO bulletins_old;
             CREATE TABLE bulletins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1664,12 +1725,13 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 group_name TEXT,
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                valid_until_utc TEXT,
                 path TEXT,
                 message_text TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
             INSERT INTO bulletins (
-                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, path, message_text, updated_at
+                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
             )
             SELECT
                 id,
@@ -1685,6 +1747,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                     WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes
                     ELSE 30
                 END,
+                {bulletin_valid_until_select},
                 NULL,
                 SUBSTR(COALESCE(message_text, ''), 1, 67),
                 updated_at
@@ -1694,7 +1757,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
         )
     elif bulletins_sql and "message_kind IN ('bulletin', 'announcement', 'group_bulletin')" not in bulletins_sql:
         connection.executescript(
-            """
+            f"""
             ALTER TABLE bulletins RENAME TO bulletins_old;
             CREATE TABLE bulletins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1704,12 +1767,13 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 group_name TEXT,
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
+                valid_until_utc TEXT,
                 path TEXT,
                 message_text TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
             INSERT INTO bulletins (
-                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, path, message_text, updated_at
+                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
             )
             SELECT
                 id,
@@ -1725,6 +1789,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                     WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes
                     ELSE 30
                 END,
+                {bulletin_valid_until_select},
                 COALESCE(path, NULL),
                 SUBSTR(COALESCE(message_text, ''), 1, 67),
                 updated_at
