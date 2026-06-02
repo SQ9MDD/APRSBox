@@ -1,10 +1,12 @@
 import contextlib
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_one, init_db
+from app.sections import SECTION_DEFINITIONS
 from app.services.content import get_section_row, safe_create_section_row, safe_update_section_row, update_station_settings
 
 
@@ -25,6 +27,42 @@ def temporary_database() -> Path:
 
 
 class ObjectAndItemFormTests(unittest.TestCase):
+    def test_object_item_translation_keys_are_present_in_en_pl_es(self) -> None:
+        required_keys = [
+            "Item List",
+            "Active now",
+            "Inactive now",
+            "Activation",
+            "Manual activation.",
+            "Manual activation. Valid until: {validUntil} UTC.",
+            "Active from {fromDate} UTC to {toDate} UTC.",
+            "Active every {value} {unit} from {fromDate} UTC for {duration}.",
+            "Every {value} {unit}",
+            "Next activation: {date} UTC.",
+            "Scheduled",
+            "Scheduled: active now",
+            "Scheduled: inactive",
+            "Scheduled: starts {date} UTC",
+            "{prefix}: active now",
+            "{prefix}: inactive",
+            "{prefix}: next {date} UTC",
+            "Repeat until {repeatUntil} UTC.",
+            "Recurring schedule has no end date.",
+            "Record will be active for more than 24h per cycle.",
+            "WIDE2-2 with interval below 60m is not recommended.",
+            "Direct path is recommended for local/simple records.",
+            "Day(s)",
+            "Week(s)",
+            "Month(s)",
+            "Year(s)",
+            "Select",
+        ]
+        self.assertEqual(SECTION_DEFINITIONS["items"].list_title, "Item List")
+        for language in ("en", "pl", "es"):
+            catalog = json.loads((Path("app/languages") / f"{language}.json").read_text())
+            for key in required_keys:
+                self.assertIn(key, catalog, msg=f"Missing {key!r} in {language}.json")
+
     def test_object_row_contains_symbol_icon_and_raw_frame_preview(self) -> None:
         with temporary_database():
             update_station_settings(

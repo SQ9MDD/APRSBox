@@ -571,6 +571,25 @@
         for (const slug of ["objects", "items", "bulletins"]) {
             const form = document.getElementById(`${slug}-form`);
             if (!form) continue;
+            const i18n = Object.freeze({
+                activeFrom: {{ t('Active from {fromDate} UTC to {toDate} UTC.')|tojson }},
+                activeEvery: {{ t('Active every {value} {unit} from {fromDate} UTC for {duration}.')|tojson }},
+                repeatUntil: {{ t('Repeat until {repeatUntil} UTC.')|tojson }},
+                manualActivation: {{ t('Manual activation.')|tojson }},
+                manualActivationWithUntil: {{ t('Manual activation. Valid until: {validUntil} UTC.')|tojson }},
+                scheduledActiveNow: {{ t('Scheduled: active now')|tojson }},
+                scheduledInactive: {{ t('Scheduled: inactive')|tojson }},
+                scheduledStarts: {{ t('Scheduled: starts {date} UTC')|tojson }},
+                every: {{ t('Every {value} {unit}')|tojson }},
+                recurringNoEndDate: {{ t('Recurring schedule has no end date.')|tojson }},
+                recurringLong: {{ t('Record will be active for more than 24h per cycle.')|tojson }},
+                wide2Warning: {{ t('WIDE2-2 with interval below 60m is not recommended.')|tojson }},
+                directPathWarning: {{ t('Direct path is recommended for local/simple records.')|tojson }},
+                day: {{ t('Day(s)')|tojson }},
+                week: {{ t('Week(s)')|tojson }},
+                month: {{ t('Month(s)')|tojson }},
+                year: {{ t('Year(s)')|tojson }},
+            });
             const modeSelect = form.querySelector("[data-activation-mode]");
             const summaryNode = form.querySelector("[data-activation-summary]");
             const warningList = form.querySelector("[data-activation-warnings]");
@@ -579,16 +598,19 @@
             const field = (name) => form.querySelector(`[name="${name}"]`);
             const value = (name) => String(field(name)?.value || "").trim();
             const displayDate = (name) => value(name).replace("T", " ");
+            const formatMessage = (template, params = {}) => template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => (
+                Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match
+            ));
+            const recurrenceUnitLabel = (unit) => ({
+                day: i18n.day,
+                week: i18n.week,
+                month: i18n.month,
+                year: i18n.year,
+            }[unit] || unit || "?");
             const durationLabel = () => {
-                const hours = Number.parseInt(value("recurrence_duration_minutes"), 10);
-                if (!Number.isInteger(hours) || hours <= 0) return "?";
-                return `${hours}h`;
-            };
-            const unitLabel = () => {
-                const interval = Number.parseInt(value("recurrence_interval_value"), 10);
-                const unit = value("recurrence_interval_unit");
-                if (!unit) return "?";
-                return interval === 1 ? unit : `${unit}s`;
+                const minutes = Number.parseInt(value("recurrence_duration_minutes"), 10);
+                if (!Number.isInteger(minutes) || minutes <= 0) return "?";
+                return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
             };
 
             const syncActivationFields = () => {
@@ -614,32 +636,45 @@
 
                 if (summaryNode) {
                     if (mode === "scheduled") {
-                        summaryNode.textContent = `Active from ${displayDate("active_from_utc") || "?"} UTC to ${displayDate("active_until_utc") || "?"} UTC.`;
+                        summaryNode.textContent = formatMessage(i18n.activeFrom, {
+                            fromDate: displayDate("active_from_utc") || "?",
+                            toDate: displayDate("active_until_utc") || "?",
+                        });
                     } else if (mode === "recurring") {
                         const repeatUntil = displayDate("active_until_utc");
-                        summaryNode.textContent = `Active every ${value("recurrence_interval_value") || "?"} ${unitLabel() || "?"} from ${displayDate("active_from_utc") || "?"} UTC for ${durationLabel()}.${repeatUntil ? ` Repeat until ${repeatUntil} UTC.` : ""}`;
+                        summaryNode.textContent = formatMessage(i18n.activeEvery, {
+                            value: value("recurrence_interval_value") || "?",
+                            unit: recurrenceUnitLabel(value("recurrence_interval_unit")),
+                            fromDate: displayDate("active_from_utc") || "?",
+                            duration: durationLabel(),
+                        });
+                        if (repeatUntil) {
+                            summaryNode.textContent += ` ${formatMessage(i18n.repeatUntil, { repeatUntil })}`;
+                        }
                     } else {
                         const validUntil = displayDate("active_until_utc");
-                        summaryNode.textContent = validUntil ? `Manual activation. Valid until: ${validUntil} UTC.` : "Manual activation.";
+                        summaryNode.textContent = validUntil
+                            ? formatMessage(i18n.manualActivationWithUntil, { validUntil })
+                            : i18n.manualActivation;
                     }
                 }
 
                 if (warningList) {
                     const warnings = [];
                     if (mode === "recurring" && !value("active_until_utc")) {
-                        warnings.push("Recurring schedule has no end date.");
+                        warnings.push(i18n.recurringNoEndDate);
                     }
                     const duration = Number.parseInt(value("recurrence_duration_minutes"), 10);
                     if (mode === "recurring" && Number.isInteger(duration) && duration > 1440) {
-                        warnings.push("Record will be active for more than 24h per cycle.");
+                        warnings.push(i18n.recurringLong);
                     }
                     const path = value("path").toUpperCase();
                     const interval = Number.parseInt(value("interval_minutes"), 10);
                     if (path.includes("WIDE2-2") && Number.isInteger(interval) && interval < 60) {
-                        warnings.push("WIDE2-2 with interval below 60m is not recommended.");
+                        warnings.push(i18n.wide2Warning);
                     }
                     if (path) {
-                        warnings.push("Direct path is recommended for local/simple records.");
+                        warnings.push(i18n.directPathWarning);
                     }
                     warningList.replaceChildren(...warnings.map((warning) => {
                         const node = document.createElement("small");

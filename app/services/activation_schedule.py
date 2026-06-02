@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
+from app.i18n import get_app_language, get_translator
+
 
 ACTIVATION_MODE_MANUAL = "manual"
 ACTIVATION_MODE_SCHEDULED = "scheduled"
@@ -203,64 +205,73 @@ def parse_utc_datetime(value: Any, *, legacy_date_end_of_day: bool = False) -> d
 
 
 def schedule_summary(record: Mapping[str, Any], now: datetime) -> str:
+    t = get_translator(get_app_language())
     state = compute_activation_state(record, now)
     mode = str(record.get("activation_mode") or ACTIVATION_MODE_MANUAL).strip().lower()
     if mode == ACTIVATION_MODE_MANUAL:
         valid_until = str(record.get("valid_until_utc") or "").strip()
-        return f"Manual activation. Valid until: {valid_until} UTC." if valid_until else "Manual activation."
+        return t("Manual activation. Valid until: {validUntil} UTC.").format(validUntil=valid_until) if valid_until else t("Manual activation.")
     if mode == ACTIVATION_MODE_SCHEDULED:
         active_from = str(record.get("active_from_utc") or "").strip()
         active_until = str(record.get("active_until_utc") or "").strip()
-        return f"Active from {active_from} UTC to {active_until} UTC."
+        return t("Active from {fromDate} UTC to {toDate} UTC.").format(fromDate=active_from, toDate=active_until)
     if mode == ACTIVATION_MODE_RECURRING:
         interval_value = _positive_int(record.get("recurrence_interval_value")) or 0
         interval_unit = str(record.get("recurrence_interval_unit") or "").strip().lower()
         duration = _positive_int(record.get("recurrence_duration_minutes")) or 0
-        summary = f"Active every {interval_value} {_pluralize(interval_unit, interval_value)} for {_duration_label(duration)}."
+        first_activation = str(record.get("first_activation_utc") or "").strip()
+        summary = t("Active every {value} {unit} from {fromDate} UTC for {duration}.").format(
+            value=interval_value,
+            unit=_recurrence_unit_label(interval_unit, t),
+            fromDate=first_activation,
+            duration=_duration_label(duration, t),
+        )
         if state.next_activation_utc is not None:
-            summary += f" Next activation: {_format_utc(state.next_activation_utc)} UTC."
+            summary += " " + t("Next activation: {date} UTC.").format(date=_format_utc(state.next_activation_utc))
         return summary
-    return "Invalid activation schedule."
+    return t("Invalid activation schedule.")
 
 
 def schedule_short_label(record: Mapping[str, Any], now: datetime) -> str:
+    t = get_translator(get_app_language())
     state = compute_activation_state(record, now)
     mode = str(record.get("activation_mode") or ACTIVATION_MODE_MANUAL).strip().lower()
     if mode == ACTIVATION_MODE_MANUAL:
-        return "Manual"
+        return t("Manual")
     if mode == ACTIVATION_MODE_SCHEDULED:
         if state.active_now:
-            return "Scheduled: active now"
+            return t("Scheduled: active now")
         if state.next_activation_utc is not None:
-            return f"Scheduled: starts {_format_utc(state.next_activation_utc)} UTC"
-        return "Scheduled: inactive"
+            return t("Scheduled: starts {date} UTC").format(date=_format_utc(state.next_activation_utc))
+        return t("Scheduled: inactive")
     if mode == ACTIVATION_MODE_RECURRING:
         interval_value = _positive_int(record.get("recurrence_interval_value")) or 0
         interval_unit = str(record.get("recurrence_interval_unit") or "").strip().lower()
-        prefix = f"Every {interval_value} {_pluralize(interval_unit, interval_value)}"
+        prefix = t("Every {value} {unit}").format(value=interval_value, unit=_recurrence_unit_label(interval_unit, t))
         if state.active_now:
-            return f"{prefix}: active now"
+            return t("{prefix}: active now").format(prefix=prefix)
         if state.next_activation_utc is not None:
-            return f"{prefix}: next {_format_utc(state.next_activation_utc)} UTC"
-        return f"{prefix}: inactive"
-    return "Invalid schedule"
+            return t("{prefix}: next {date} UTC").format(prefix=prefix, date=_format_utc(state.next_activation_utc))
+        return t("{prefix}: inactive").format(prefix=prefix)
+    return t("Invalid schedule")
 
 
 def schedule_warnings(record: Mapping[str, Any]) -> list[str]:
+    t = get_translator(get_app_language())
     warnings: list[str] = []
     mode = str(record.get("activation_mode") or ACTIVATION_MODE_MANUAL).strip().lower()
     if mode == ACTIVATION_MODE_RECURRING:
         if not str(record.get("recurrence_until_utc") or "").strip():
-            warnings.append("Recurring schedule has no end date.")
+            warnings.append(t("Recurring schedule has no end date."))
         duration = _positive_int(record.get("recurrence_duration_minutes"))
         if duration is not None and duration > 24 * 60:
-            warnings.append("Record will be active for more than 24h per cycle.")
+            warnings.append(t("Record will be active for more than 24h per cycle."))
     path = str(record.get("path") or "").strip().upper()
     interval = _positive_int(record.get("interval_minutes"))
     if "WIDE2-2" in path and interval is not None and interval < 60:
-        warnings.append("WIDE2-2 with interval below 60m is not recommended.")
+        warnings.append(t("WIDE2-2 with interval below 60m is not recommended."))
     if path:
-        warnings.append("Direct path is recommended for local/simple records.")
+        warnings.append(t("Direct path is recommended for local/simple records."))
     return warnings
 
 
@@ -374,14 +385,20 @@ def _format_utc(value: datetime) -> str:
     return _as_utc(value).strftime("%Y-%m-%d %H:%M")
 
 
-def _duration_label(minutes: int) -> str:
+def _duration_label(minutes: int, translate) -> str:
     if minutes > 0 and minutes % 60 == 0:
         return f"{minutes // 60}h"
     return f"{minutes}m"
 
 
-def _pluralize(unit: str, value: int) -> str:
-    return unit if value == 1 else f"{unit}s"
+def _recurrence_unit_label(unit: str, translate) -> str:
+    labels = {
+        "day": translate("Day(s)"),
+        "week": translate("Week(s)"),
+        "month": translate("Month(s)"),
+        "year": translate("Year(s)"),
+    }
+    return labels.get(unit, unit or "?")
 
 
 def _field_label(field: str) -> str:
