@@ -346,6 +346,15 @@
                     </div>
                     {% else %}
                     <span>{{ t(field.label) }}</span>
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'recurrence_duration_minutes' %}
+                    <input
+                        type="number"
+                        data-recurrence-duration-hours
+                        {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['recurrence_duration_minutes', 'recurrence_interval_value'] %}min="1" step="1"{% endif %}
+                        value="{{ ((edit_row[field.name]|int) / 60)|int if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
+                        {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
+                    >
+                    {% else %}
                     <input
                         type="{{ field.type }}"
                         name="{{ field.name }}"
@@ -354,10 +363,10 @@
                         {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'tx_min_gap_seconds' %}min="0.2" max="1.2" step="0.01"{% endif %}
                         {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['recurrence_duration_minutes', 'recurrence_interval_value'] %}min="1" step="1"{% endif %}
-                        {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'recurrence_duration_minutes' %}data-recurrence-duration-hours{% endif %}
-                        value="{{ ((edit_row[field.name]|int) / 60)|int if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}" 
+                        value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
                         {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
                     >
+                    {% endif %}
                     {% if section.slug == 'items' and field.name == 'longitude' %}
                     <button type="button" class="button button-secondary location-picker-button" id="{{ section.slug }}-open-map-picker">
                         <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
@@ -637,15 +646,23 @@
             form.addEventListener("change", syncActivationFields);
             syncActivationFields();
 
-            form.addEventListener("submit", (event) => {
+            form.addEventListener("submit", function(event) {
                 const durationHoursInput = form.querySelector("[data-recurrence-duration-hours]");
-                if (durationHoursInput) {
-                    const hours = Number.parseInt(durationHoursInput.value || "0", 10);
+                if (durationHoursInput && durationHoursInput.value) {
+                    const hours = Number.parseInt(durationHoursInput.value, 10);
                     if (Number.isInteger(hours) && hours > 0) {
-                        durationHoursInput.value = hours * 60;
+                        // Create hidden field with minutes value for backend
+                        let hiddenInput = form.querySelector("input[name='recurrence_duration_minutes']");
+                        if (!hiddenInput) {
+                            hiddenInput = document.createElement("input");
+                            hiddenInput.type = "hidden";
+                            hiddenInput.name = "recurrence_duration_minutes";
+                            form.appendChild(hiddenInput);
+                        }
+                        hiddenInput.value = hours * 60;
                     }
                 }
-            });
+            }, true);
         }
 
         const modemForm = document.getElementById("modems-form");
