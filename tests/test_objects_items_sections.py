@@ -100,6 +100,69 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["is_enabled"], 1)
 
+    def test_object_edit_post_redirects_back_to_edit_page_with_data(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "30",
+                    "path": "WIDE2-2",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+
+            try:
+                from fastapi.testclient import TestClient
+            except ModuleNotFoundError:
+                self.skipTest("fastapi is not installed in this environment")
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="tester",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                response = client.post(
+                    "/objects",
+                    data={
+                        "record_id": str(int(row["id"])),
+                        "name": "VOICE",
+                        "lifetime": "temporary",
+                        "state": "live",
+                        "latitude": "52.2297",
+                        "longitude": "21.0122",
+                        "symbol_table": "/",
+                        "symbol_code": "r",
+                        "interval_minutes": "30",
+                        "path": "WIDE2-2",
+                        "comment": "Updated voice repeater",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("/objects?edit=", str(response.url))
+                self.assertIn('value="VOICE"', response.text)
+                self.assertIn("Updated voice repeater", response.text)
+                self.assertIn("Edit Object", response.text)
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
     def test_object_preview_uses_overlay_for_alternate_symbol_table(self) -> None:
         with temporary_database():
             update_station_settings(

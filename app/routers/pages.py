@@ -274,6 +274,13 @@ def _section_template_context(
     return context
 
 
+def _section_edit_redirect(request: Request, slug: str, record_id: int) -> RedirectResponse:
+    return RedirectResponse(
+        url=_path(request, f"/{slug}?edit={record_id}"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
 def _station_detail_context(callsign: str, unit_system: str, *, root_path: str = "") -> dict | None:
     snapshots = get_visible_station_snapshots()
     detail = get_station_detail(callsign, unit_system=unit_system, snapshots=snapshots)
@@ -1917,9 +1924,15 @@ def objects_create(
     }
     if record_id is None:
         success, error = safe_create_section_row("objects", payload)
+        if success:
+            created_row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", (payload["name"],))
+            if created_row is not None:
+                return _section_edit_redirect(request, "objects", int(created_row["id"]))
         edit_row = None
     else:
         success, error = safe_update_section_row("objects", record_id, payload)
+        if success:
+            return _section_edit_redirect(request, "objects", record_id)
         edit_row = get_section_row("objects", record_id) if error else None
     context = _section_template_context(request, current_user, "objects", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
@@ -1981,9 +1994,15 @@ def items_create(
     }
     if record_id is None:
         success, error = safe_create_section_row("items", payload)
+        if success:
+            created_row = fetch_one("SELECT id FROM aprs_items WHERE name = ?", (payload["name"],))
+            if created_row is not None:
+                return _section_edit_redirect(request, "items", int(created_row["id"]))
         edit_row = None
     else:
         success, error = safe_update_section_row("items", record_id, payload)
+        if success:
+            return _section_edit_redirect(request, "items", record_id)
         edit_row = get_section_row("items", record_id) if error else None
     context = _section_template_context(request, current_user, "items", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
