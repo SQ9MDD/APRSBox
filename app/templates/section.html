@@ -60,23 +60,21 @@
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
                             <td class="prepared-entity-col-active">
-                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.is_enabled else 'tnc-badge-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
-                                    <span>{{ t('Enabled' if row.is_enabled else 'Disabled') }}</span>
                                 </span>
                             </td>
                             {% if section.slug == 'objects' %}
                             <td class="prepared-entity-col-active">
-                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.activation_active_now else 'tnc-badge-disabled' }}" title="{{ row.activation_summary }}">
-                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
-                                    <span>{{ t('Active now' if row.activation_active_now else 'Inactive now') }}</span>
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.activation_active_now else 'tnc-status-icon-disabled' }}" title="{{ row.activation_summary }}" aria-label="{{ t('Active now' if row.activation_active_now else 'Inactive now') }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'play-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
                                 </span>
                             </td>
                             {% endif %}
                             <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
                             <td class="prepared-entity-col-name">{{ row.name }}</td>
-                            <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
+                            <td class="prepared-entity-col-raw" title="{{ row.raw_frame_preview }}"><code title="{{ row.raw_frame_preview }}">{{ row.raw_frame_preview }}</code></td>
                         </tr>
                         {% else %}
                         <tr>

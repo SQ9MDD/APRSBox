@@ -4700,8 +4700,8 @@ code {
 }
 
 .section-symbol-preview {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     image-rendering: pixelated;
 }
 
@@ -4710,12 +4710,12 @@ code {
 }
 
 .prepared-entity-col-icon {
-    width: 3.5rem;
+    width: 2.75rem;
     text-align: center;
 }
 
 .prepared-entity-col-active {
-    width: 5.5rem;
+    width: 2.75rem;
 }
 
 .prepared-entity-col-schedule {
@@ -4737,8 +4737,9 @@ code {
 
 .prepared-entity-col-raw code {
     display: block;
-    white-space: pre-wrap;
-    word-break: break-word;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .activation-summary-panel,
