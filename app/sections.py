@@ -24,7 +24,7 @@ ACTIVATION_SCHEDULE_FIELDS = [
     {"name": "active_from_utc", "label": "Active from (UTC)", "type": "date", "required": False},
     {"name": "active_until_utc", "label": "Active until (UTC)", "type": "date", "required": False},
     {"name": "first_activation_utc", "label": "First activation (UTC)", "type": "date", "required": False, "form_visible": False},
-    {"name": "recurrence_duration_minutes", "label": "Active for (minutes)", "type": "number", "required": False},
+    {"name": "recurrence_duration_minutes", "label": "Active for (hours)", "type": "number", "required": False},
     {"name": "recurrence_interval_value", "label": "Repeat every", "type": "number", "required": False},
     {
         "name": "recurrence_interval_unit",

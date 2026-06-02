@@ -354,7 +354,8 @@
                         {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'tx_min_gap_seconds' %}min="0.2" max="1.2" step="0.01"{% endif %}
                         {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['recurrence_duration_minutes', 'recurrence_interval_value'] %}min="1" step="1"{% endif %}
-                        value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
+                        {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'recurrence_duration_minutes' %}data-recurrence-duration-hours{% endif %}
+                        value="{{ (edit_row[field.name] / 60)|int if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}" 
                         {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
                     >
                     {% if section.slug == 'items' and field.name == 'longitude' %}
@@ -561,9 +562,9 @@
             const value = (name) => String(field(name)?.value || "").trim();
             const displayDate = (name) => value(name).replace("T", " ");
             const durationLabel = () => {
-                const minutes = Number.parseInt(value("recurrence_duration_minutes"), 10);
-                if (!Number.isInteger(minutes) || minutes <= 0) return "?";
-                return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
+                const hours = Number.parseInt(value("recurrence_duration_minutes"), 10);
+                if (!Number.isInteger(hours) || hours <= 0) return "?";
+                return `${hours}h`;
             };
             const unitLabel = () => {
                 const interval = Number.parseInt(value("recurrence_interval_value"), 10);
@@ -635,6 +636,16 @@
             form.addEventListener("input", syncActivationFields);
             form.addEventListener("change", syncActivationFields);
             syncActivationFields();
+
+            form.addEventListener("submit", (event) => {
+                const durationHoursInput = form.querySelector("[data-recurrence-duration-hours]");
+                if (durationHoursInput) {
+                    const hours = Number.parseInt(durationHoursInput.value || "0", 10);
+                    if (Number.isInteger(hours) && hours > 0) {
+                        durationHoursInput.value = hours * 60;
+                    }
+                }
+            });
         }
 
         const modemForm = document.getElementById("modems-form");

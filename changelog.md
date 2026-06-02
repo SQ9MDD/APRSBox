@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.31.dev - 02.06.2026
+- `Edit object`: zmiany w formularzu wysyłki obiektów, Manual z data waznosci, sheduler albo recurring
+
 ## 1.8.30.dev - 01.06.2026
 
 ### Najważniejsze zmiany
