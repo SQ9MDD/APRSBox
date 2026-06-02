@@ -171,6 +171,78 @@ class ObjectAndItemFormTests(unittest.TestCase):
             assert row is not None
             self.assertEqual(row["valid_until_utc"], "2026-12-31 23:45")
 
+    def test_object_manual_form_reuses_active_until_as_valid_until(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "45",
+                    "activation_mode": "manual",
+                    "active_until_utc": "2026-12-31T23:45",
+                    "path": "",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id, valid_until_utc, active_until_utc FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+            self.assertEqual(row["valid_until_utc"], "2026-12-31 23:45")
+            self.assertEqual(row["active_until_utc"], "2026-12-31 23:45")
+            decorated = get_section_row("objects", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["activation_form_active_until_utc"], "2026-12-31 23:45")
+
+    def test_object_recurring_form_reuses_active_dates_for_storage_model(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "45",
+                    "activation_mode": "recurring",
+                    "active_from_utc": "2026-06-09T18:00",
+                    "active_until_utc": "2026-12-31T23:45",
+                    "recurrence_duration_minutes": "180",
+                    "recurrence_interval_value": "1",
+                    "recurrence_interval_unit": "week",
+                    "path": "",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one(
+                """
+                SELECT id, active_from_utc, active_until_utc, first_activation_utc, recurrence_until_utc
+                FROM aprs_objects
+                WHERE name = ?
+                """,
+                ("VOICE",),
+            )
+            assert row is not None
+            self.assertEqual(row["active_from_utc"], "2026-06-09 18:00")
+            self.assertEqual(row["active_until_utc"], "2026-12-31 23:45")
+            self.assertEqual(row["first_activation_utc"], "2026-06-09 18:00")
+            self.assertEqual(row["recurrence_until_utc"], "2026-12-31 23:45")
+            decorated = get_section_row("objects", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["activation_form_active_from_utc"], "2026-06-09 18:00")
+            self.assertEqual(decorated["activation_form_active_until_utc"], "2026-12-31 23:45")
+
     def test_object_valid_until_utc_requires_yyyy_mm_dd_format(self) -> None:
         with temporary_database():
             success, error = safe_create_section_row(

@@ -23,7 +23,7 @@ ACTIVATION_SCHEDULE_FIELDS = [
     },
     {"name": "active_from_utc", "label": "Active from (UTC)", "type": "date", "required": False},
     {"name": "active_until_utc", "label": "Active until (UTC)", "type": "date", "required": False},
-    {"name": "first_activation_utc", "label": "First activation (UTC)", "type": "date", "required": False},
+    {"name": "first_activation_utc", "label": "First activation (UTC)", "type": "date", "required": False, "form_visible": False},
     {"name": "recurrence_duration_minutes", "label": "Active for (minutes)", "type": "number", "required": False},
     {"name": "recurrence_interval_value", "label": "Repeat every", "type": "number", "required": False},
     {
@@ -39,7 +39,7 @@ ACTIVATION_SCHEDULE_FIELDS = [
             {"value": "year", "label": "Year(s)"},
         ],
     },
-    {"name": "recurrence_until_utc", "label": "Repeat until (UTC)", "type": "date", "required": False},
+    {"name": "recurrence_until_utc", "label": "Repeat until (UTC)", "type": "date", "required": False, "form_visible": False},
 ]
 
 
@@ -219,7 +219,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
-            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False, "form_visible": False},
             *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
@@ -290,7 +290,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
-            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False, "form_visible": False},
             *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
@@ -339,7 +339,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
-            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False, "form_visible": False},
             *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},

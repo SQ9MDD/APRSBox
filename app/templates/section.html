@@ -238,6 +238,7 @@
                     </button>
                 </label>
                 {% endif %}
+                {% if field.form_visible|default(true) %}
                 <label
                     class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}"
                     {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
@@ -248,9 +249,8 @@
                     {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port-row"{% endif %}
                     {% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist-row"{% endif %}
                     {% if section.slug == 'modems' and field.name in ['expose_allow_tx', 'expose_bind_address', 'expose_port', 'expose_whitelist'] and not (edit_row and edit_row.expose_port_enabled) %}hidden{% endif %}
-                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'valid_until_utc' %}data-activation-group="manual"{% endif %}
-                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['active_from_utc', 'active_until_utc'] %}data-activation-group="scheduled"{% endif %}
-                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['first_activation_utc', 'recurrence_duration_minutes', 'recurrence_interval_value', 'recurrence_interval_unit', 'recurrence_until_utc'] %}data-activation-group="recurring"{% endif %}
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}data-activation-modes="scheduled recurring"{% endif %}
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['recurrence_duration_minutes', 'recurrence_interval_value', 'recurrence_interval_unit'] %}data-activation-modes="recurring"{% endif %}
                 >
                     {% if field.type == 'textarea' %}
                     <span>{{ t(field.label) }}</span>
@@ -277,9 +277,15 @@
                     </select>
                     {% elif field.type == 'date' %}
                     <span>{{ t(field.label) }}</span>
+                    {% if edit_row and section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}
+                    {% set raw_date_value = edit_row.activation_form_active_from_utc %}
+                    {% elif edit_row and section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
+                    {% set raw_date_value = edit_row.activation_form_active_until_utc %}
+                    {% else %}
                     {% set raw_date_value = edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') %}
+                    {% endif %}
                     {% set input_date_value = raw_date_value|string %}
-                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['valid_until_utc', 'active_from_utc', 'active_until_utc', 'first_activation_utc', 'recurrence_until_utc'] %}
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['active_from_utc', 'active_until_utc'] %}
                     {% if input_date_value %}
                     {% if input_date_value|length == 10 %}
                     {% set input_date_value = input_date_value ~ 'T23:59' %}
@@ -293,11 +299,11 @@
                     {% endif %}
                     <div class="field-inline-actions">
                         <input
-                            type="{% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['valid_until_utc', 'active_from_utc', 'active_until_utc', 'first_activation_utc', 'recurrence_until_utc'] %}datetime-local{% else %}date{% endif %}"
+                            type="{% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['active_from_utc', 'active_until_utc'] %}datetime-local{% else %}date{% endif %}"
                             id="{{ section.slug }}-{{ field.name }}"
                             name="{{ field.name }}"
                             value="{{ input_date_value if input_date_value else '' }}"
-                            {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['valid_until_utc', 'active_from_utc', 'active_until_utc', 'first_activation_utc', 'recurrence_until_utc'] %}step="60"{% endif %}
+                            {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['active_from_utc', 'active_until_utc'] %}step="60"{% endif %}
                             {% if field.required %}required{% endif %}
                         >
                         <button type="button" class="button button-secondary button-inline-control" data-clear-date-target="{{ section.slug }}-{{ field.name }}">
@@ -367,12 +373,10 @@
                     <small class="muted">{{ t("Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
                     <small class="muted">{{ t("Uses the same outbound queue and scheduler path as beacon, status and objects.") }}</small>
-                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'valid_until_utc' %}
-                    <small class="muted">{{ t("Leave empty to keep sending until manually disabled.") }}</small>
                     {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'activation_mode' %}
                     <small class="muted">{{ t("Activation schedule controls when sending is allowed. Send interval remains separate.") }}</small>
-                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'recurrence_until_utc' %}
-                    <small class="muted">{{ t("Optional. Leaving this empty repeats the schedule without an end date.") }}</small>
+                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
+                    <small class="muted">{{ t("Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.") }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
@@ -398,6 +402,7 @@
                     <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.") }}</small>
                     {% endif %}
                 </label>
+                {% endif %}
                 {% endfor %}
                 {% if section.slug in ['objects', 'items', 'bulletins'] %}
                 <div class="full activation-summary-panel">
@@ -560,8 +565,8 @@
 
             const syncActivationFields = () => {
                 const mode = modeSelect.value || "manual";
-                for (const row of form.querySelectorAll("[data-activation-group]")) {
-                    const active = row.getAttribute("data-activation-group") === mode;
+                for (const row of form.querySelectorAll("[data-activation-modes]")) {
+                    const active = String(row.getAttribute("data-activation-modes") || "").split(" ").includes(mode);
                     row.classList.toggle("activation-group-inactive", !active);
                     row.setAttribute("aria-disabled", String(!active));
                     for (const input of row.querySelectorAll("input, select, textarea, button")) {
@@ -572,9 +577,9 @@
                 const requiredNames = mode === "scheduled"
                     ? ["active_from_utc", "active_until_utc"]
                     : mode === "recurring"
-                        ? ["first_activation_utc", "recurrence_duration_minutes", "recurrence_interval_value", "recurrence_interval_unit"]
+                        ? ["active_from_utc", "recurrence_duration_minutes", "recurrence_interval_value", "recurrence_interval_unit"]
                         : [];
-                for (const name of ["active_from_utc", "active_until_utc", "first_activation_utc", "recurrence_duration_minutes", "recurrence_interval_value", "recurrence_interval_unit"]) {
+                for (const name of ["active_from_utc", "active_until_utc", "recurrence_duration_minutes", "recurrence_interval_value", "recurrence_interval_unit"]) {
                     const input = field(name);
                     if (input) input.required = requiredNames.includes(name);
                 }
@@ -583,16 +588,17 @@
                     if (mode === "scheduled") {
                         summaryNode.textContent = `Active from ${displayDate("active_from_utc") || "?"} UTC to ${displayDate("active_until_utc") || "?"} UTC.`;
                     } else if (mode === "recurring") {
-                        summaryNode.textContent = `Active every ${value("recurrence_interval_value") || "?"} ${unitLabel() || "?"} for ${durationLabel()}.`;
+                        const repeatUntil = displayDate("active_until_utc");
+                        summaryNode.textContent = `Active every ${value("recurrence_interval_value") || "?"} ${unitLabel() || "?"} from ${displayDate("active_from_utc") || "?"} UTC for ${durationLabel()}.${repeatUntil ? ` Repeat until ${repeatUntil} UTC.` : ""}`;
                     } else {
-                        const validUntil = displayDate("valid_until_utc");
+                        const validUntil = displayDate("active_until_utc");
                         summaryNode.textContent = validUntil ? `Manual activation. Valid until: ${validUntil} UTC.` : "Manual activation.";
                     }
                 }
 
                 if (warningList) {
                     const warnings = [];
-                    if (mode === "recurring" && !value("recurrence_until_utc")) {
+                    if (mode === "recurring" && !value("active_until_utc")) {
                         warnings.push("Recurring schedule has no end date.");
                     }
                     const duration = Number.parseInt(value("recurrence_duration_minutes"), 10);

@@ -3760,8 +3760,9 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
     if interval_minutes not in {5, 10, 15, 30, 45, 60}:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
     normalized["interval_minutes"] = interval_minutes
-    normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
-    normalized.update(normalize_activation_schedule(payload))
+    valid_until_utc, activation_schedule = _normalize_aprs_activation_payload(payload)
+    normalized["valid_until_utc"] = valid_until_utc
+    normalized.update(activation_schedule)
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -3809,8 +3810,9 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if interval_minutes not in {5, 10, 15, 30, 45, 60}:
         raise ValueError("Send interval must be one of: 5, 10, 15, 30, 45, 60 minutes.")
 
-    normalized["valid_until_utc"] = _normalize_optional_utc_date(payload.get("valid_until_utc"), label="Valid until date")
-    normalized.update(normalize_activation_schedule(payload))
+    valid_until_utc, activation_schedule = _normalize_aprs_activation_payload(payload)
+    normalized["valid_until_utc"] = valid_until_utc
+    normalized.update(activation_schedule)
 
     path = _normalize_printable_ascii(str(payload.get("path") or "").strip().upper())
     if len(path) > 64:
@@ -3966,6 +3968,21 @@ def _normalize_optional_utc_date(value: Any, *, label: str) -> str | None:
     return parsed.strftime("%Y-%m-%d")
 
 
+def _normalize_aprs_activation_payload(payload: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    schedule_payload = dict(payload)
+    mode = str(payload.get("activation_mode") or "manual").strip().lower()
+    if mode == "manual" and "active_until_utc" in payload:
+        schedule_payload["valid_until_utc"] = payload.get("active_until_utc")
+    elif mode == "recurring":
+        if "active_from_utc" in payload:
+            schedule_payload["first_activation_utc"] = payload.get("active_from_utc")
+        if "active_until_utc" in payload:
+            schedule_payload["recurrence_until_utc"] = payload.get("active_until_utc")
+    valid_until_label = "Active until date" if "active_until_utc" in payload else "Valid until date"
+    valid_until_utc = _normalize_optional_utc_date(schedule_payload.get("valid_until_utc"), label=valid_until_label)
+    return valid_until_utc, normalize_activation_schedule(schedule_payload)
+
+
 def _normalize_ipv4_address(value: Any, *, default: str, label: str) -> str:
     text = str(value or "").strip() or default
     try:
@@ -4065,6 +4082,16 @@ def _decorate_activation_schedule(row: dict[str, Any]) -> None:
     row["activation_summary"] = schedule_summary(row, now)
     row["activation_short_label"] = schedule_short_label(row, now)
     row["activation_warnings"] = schedule_warnings(row)
+    mode = str(row.get("activation_mode") or "manual").strip().lower()
+    if mode == "manual":
+        row["activation_form_active_from_utc"] = None
+        row["activation_form_active_until_utc"] = row.get("valid_until_utc")
+    elif mode == "recurring":
+        row["activation_form_active_from_utc"] = row.get("first_activation_utc")
+        row["activation_form_active_until_utc"] = row.get("recurrence_until_utc")
+    else:
+        row["activation_form_active_from_utc"] = row.get("active_from_utc")
+        row["activation_form_active_until_utc"] = row.get("active_until_utc")
 
 
 def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
