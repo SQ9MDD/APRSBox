@@ -222,7 +222,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False, "form_visible": False},
             *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
-            {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
+            {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "comment", "label": "Comment", "type": "textarea", "required": True, "maxlength": 43, "placeholder": "Local voice repeater"},
         ],
     ),
