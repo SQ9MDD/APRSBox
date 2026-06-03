@@ -2539,6 +2539,7 @@ def notifications_settings_update(
     messages_enabled: str | None = Form(None),
     messages_include_content: str | None = Form(None),
     radar_enabled: str | None = Form(None),
+    radar_ignored_patterns: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
     success, error = safe_save_notification_settings(
@@ -2546,6 +2547,7 @@ def notifications_settings_update(
             "messages_enabled": messages_enabled,
             "messages_include_content": messages_include_content,
             "radar_enabled": radar_enabled,
+            "radar_ignored_patterns": radar_ignored_patterns,
         }
     )
     context = _notifications_page_context(

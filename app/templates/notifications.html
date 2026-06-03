@@ -145,6 +145,11 @@
                 <input type="checkbox" name="radar_enabled" value="1" {% if notification_settings.radar_enabled %}checked{% endif %}>
                 <span>{{ t("Enable radar notifications") }}</span>
             </label>
+            <label class="full">
+                <span>{{ t("Ignored radar patterns") }}</span>
+                <textarea name="radar_ignored_patterns" rows="3" placeholder="SR*, SQ2IBK-3, SQ9MDD*">{{ notification_settings.radar_ignored_patterns }}</textarea>
+            </label>
+            <p class="muted full">{{ t("Use commas or line breaks. Wildcards are supported.") }}</p>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save") }}</button>
             </div>
@@ -157,6 +162,8 @@
             <dd>{{ t("Yes") if notification_settings.messages_include_content else t("No") }}</dd>
             <dt>{{ t("Enable radar notifications") }}</dt>
             <dd>{{ t("Yes") if notification_settings.radar_enabled else t("No") }}</dd>
+            <dt>{{ t("Ignored radar patterns") }}</dt>
+            <dd>{{ notification_settings.radar_ignored_patterns or "-" }}</dd>
         </dl>
         {% endif %}
     </div>

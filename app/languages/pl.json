@@ -1448,6 +1448,8 @@
   "Enable APRS message notifications": "Włącz powiadomienia o wiadomościach APRS",
   "Include message content": "Dołącz treść wiadomości",
   "Enable radar notifications": "Włącz powiadomienia radaru",
+  "Ignored radar patterns": "Ignorowane wzorce radaru",
+  "Use commas or line breaks. Wildcards are supported.": "Użyj przecinków lub nowych linii. Wildcardy są obsługiwane.",
   "Distance is measured from My Station coordinates.": "Odległość jest liczona od współrzędnych My Station.",
   "Transport": "Transport",
   "Radar rule": "Reguła radaru",

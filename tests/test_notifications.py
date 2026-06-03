@@ -12,6 +12,7 @@ from app.services.notifications import (
     build_radar_station_match_event,
     evaluate_radar_notifications,
     get_notifications_page_data,
+    get_notification_settings,
     normalize_notification_distance_m,
     pattern_matches_callsign,
     save_notification_settings,
@@ -216,6 +217,38 @@ class NotificationTests(unittest.TestCase):
                 "app.services.notifications.get_wx_config",
                 return_value={"enabled": True, "full_callsign": "SQ0BOX-2"},
             ), patch("app.services.notifications.get_visible_station_snapshots", return_value=snapshots):
+                events = evaluate_radar_notifications(timestamp="2026-01-01T00:00:00+00:00")
+
+            self.assertEqual(events, [])
+            state = fetch_one(
+                "SELECT COUNT(*) AS total FROM notification_radar_state WHERE rule_id = ?",
+                (rule_id,),
+            )
+            assert state is not None
+            self.assertEqual(int(state["total"]), 0)
+
+    def test_radar_ignored_patterns_skip_matching_stations(self) -> None:
+        with temporary_database():
+            ok, error, rule_id = safe_save_notification_radar_rule({"enabled": True, "pattern": "*", "distance_m": 200})
+            self.assertTrue(ok, error)
+            assert rule_id is not None
+            save_notification_settings(
+                {
+                    "radar_enabled": True,
+                    "radar_ignored_patterns": "SR*,SQ2IBK-3, SQ9MDD*",
+                }
+            )
+            self.assertEqual(get_notification_settings()["radar_ignored_patterns"], "SR*, SQ2IBK-3, SQ9MDD*")
+
+            station_settings = {"callsign": "SQ0BOX", "ssid": "1", "latitude": "50.0", "longitude": "19.0"}
+            snapshots = [
+                {"origin": "heard", "display_callsign": "SR1ABC-1", "latitude": "50.0001", "longitude": "19.0001"},
+                {"origin": "heard", "display_callsign": "SQ2IBK-3", "latitude": "50.0001", "longitude": "19.0001"},
+                {"origin": "heard", "display_callsign": "SQ9MDD-7", "latitude": "50.0001", "longitude": "19.0001"},
+            ]
+            with patch("app.services.notifications.get_station_settings", return_value=station_settings), patch(
+                "app.services.notifications.get_visible_station_snapshots", return_value=snapshots
+            ):
                 events = evaluate_radar_notifications(timestamp="2026-01-01T00:00:00+00:00")
 
             self.assertEqual(events, [])

@@ -21,6 +21,7 @@ NOTIFICATION_TRANSPORT_TYPE_TELEGRAM = "telegram"
 NOTIFICATION_MESSAGES_ENABLED_KEY = "messages_enabled"
 NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY = "messages_include_content"
 NOTIFICATION_RADAR_ENABLED_KEY = "radar_enabled"
+NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY = "radar_ignored_patterns"
 NOTIFICATION_HTTP_TIMEOUT_SECONDS_DEFAULT = 5
 NOTIFICATION_RADAR_EVENT_LOG_CATEGORY = "notifications_radar"
 
@@ -36,9 +37,10 @@ def ensure_notification_defaults() -> None:
         NOTIFICATION_MESSAGES_ENABLED_KEY,
         NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY,
         NOTIFICATION_RADAR_ENABLED_KEY,
+        NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY,
     ):
         if get_app_setting(key) is None:
-            set_app_setting(key, "0")
+            set_app_setting(key, "" if key == NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY else "0")
 
 
 def get_notification_settings() -> dict[str, bool]:
@@ -47,6 +49,7 @@ def get_notification_settings() -> dict[str, bool]:
         "messages_enabled": _setting_flag(get_app_setting(NOTIFICATION_MESSAGES_ENABLED_KEY)),
         "messages_include_content": _setting_flag(get_app_setting(NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY)),
         "radar_enabled": _setting_flag(get_app_setting(NOTIFICATION_RADAR_ENABLED_KEY)),
+        "radar_ignored_patterns": _normalize_radar_ignored_patterns(get_app_setting(NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY)),
     }
 
 
@@ -55,12 +58,14 @@ def save_notification_settings(payload: dict[str, Any]) -> None:
     messages_enabled = _setting_flag(payload.get("messages_enabled"))
     messages_include_content = _setting_flag(payload.get("messages_include_content"))
     radar_enabled = _setting_flag(payload.get("radar_enabled"))
+    radar_ignored_patterns = _normalize_radar_ignored_patterns(payload.get("radar_ignored_patterns"))
     set_app_setting(NOTIFICATION_MESSAGES_ENABLED_KEY, "1" if messages_enabled else "0")
     set_app_setting(
         NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY,
         "1" if messages_include_content else "0",
     )
     set_app_setting(NOTIFICATION_RADAR_ENABLED_KEY, "1" if radar_enabled else "0")
+    set_app_setting(NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY, radar_ignored_patterns)
     if not radar_enabled:
         clear_radar_notification_history()
     log_event("INFO", "notifications", "Updated notification settings")
@@ -448,7 +453,11 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
         return []
 
     station_settings = get_station_settings()
-    ignored_station_keys = _notification_radar_ignored_station_keys(station_settings)
+    settings = get_notification_settings()
+    ignored_patterns = _parse_radar_ignored_patterns(settings.get("radar_ignored_patterns"))
+    ignored_station_keys = _notification_radar_ignored_station_keys(
+        station_settings,
+    )
     reference_latitude = _parse_coordinate(station_settings.get("latitude"))
     reference_longitude = _parse_coordinate(station_settings.get("longitude"))
     reference_station = _reference_station_label(station_settings)
@@ -479,6 +488,8 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
                 if not station_key or not pattern_matches_callsign(rule_pattern, station_key):
                     continue
                 if station_key.casefold() in ignored_station_keys:
+                    continue
+                if _station_matches_ignored_patterns(station_key, ignored_patterns):
                     continue
                 distance_m = _snapshot_distance_m(snapshot, reference_latitude, reference_longitude)
                 if threshold_m > 0 and (distance_m is None or distance_m > threshold_m):
@@ -867,6 +878,32 @@ def _format_notification_distance(distance_m: int | None) -> str:
         distance_km = distance_value / 1000.0
         return f"{distance_km:.1f}".rstrip("0").rstrip(".") + " km"
     return f"{distance_value} m"
+
+
+def _parse_radar_ignored_patterns(value: object) -> list[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    patterns: list[str] = []
+    seen: set[str] = set()
+    for part in re.split(r"[\n,]+", raw):
+        pattern = normalize_notification_pattern(part)
+        if not pattern or pattern in seen:
+            continue
+        seen.add(pattern)
+        patterns.append(pattern)
+    return patterns
+
+
+def _normalize_radar_ignored_patterns(value: object) -> str:
+    patterns = _parse_radar_ignored_patterns(value)
+    return ", ".join(patterns)
+
+
+def _station_matches_ignored_patterns(station_key: str, ignored_patterns: list[str]) -> bool:
+    if not ignored_patterns:
+        return False
+    return any(pattern_matches_callsign(pattern, station_key) for pattern in ignored_patterns)
 
 
 def _build_radar_message_text(*, station: str, distance_m: int | None, threshold_m: int) -> str:
