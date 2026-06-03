@@ -16,7 +16,8 @@
 - Las entradas antiguas siguen en polaco. Se incluyen abajo hasta completar la traducción total.
 
 ## 1.8.31.dev - 2026-06-02
-- `Objects / Items`: se corrigieron las traducciones de formularios y listas, se separó `Enabled` de `Active now`, se añadieron tooltips en la tabla y se completaron las traducciones de `Active from / until / for`.
+- `Objects / Items`: se añadió el envío programado y recurrente de objetos (`issue #31`, SQ2FRG).
+- `I18N`: se añadieron traducciones al polaco.
 
 ## 1.8.26.dev - 26.05.2026
 

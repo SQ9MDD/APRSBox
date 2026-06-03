@@ -1,7 +1,8 @@
 # Changelog
 
 ## 1.8.31.dev - 02.06.2026
-- `Objects / Items`: poprawiono tłumaczenia formularzy i list, rozdzielono `Enabled` od `Active now`, dodano tooltipy w tabeli oraz pełne tłumaczenia pól `Active from / until / for`.
+- `Objects / Items`: dodano wysyłkę obiektów zaplanowanych i cyklicznych (`issue #31`, SQ2FRG).
+- `I18N`: dodano tłumaczenia polskie.
 
 ## 1.8.30.dev - 01.06.2026
 

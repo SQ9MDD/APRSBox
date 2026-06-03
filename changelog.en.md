@@ -16,7 +16,8 @@
 - Older entries are still in Polish. They are included below until full translation is completed.
 
 ## 1.8.31.dev - 2026-06-02
-- `Objects / Items`: fixed form and list translations, split `Enabled` from `Active now`, added table tooltips, and completed translations for `Active from / until / for`.
+- `Objects / Items`: added scheduled and recurring object transmission (`issue #31`, SQ2FRG).
+- `I18N`: added Polish translations.
 
 ## 1.8.26.dev - 26.05.2026
 
