@@ -32,6 +32,8 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Item List",
             "Active from (UTC)",
             "Active until (UTC)",
+            "Active from",
+            "Active until",
             "Active for (hours)",
             "Active now",
             "Inactive now",

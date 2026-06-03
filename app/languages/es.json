@@ -591,6 +591,8 @@
   "Active from (UTC)": "Activo desde (UTC)",
   "Active until (UTC)": "Activo hasta (UTC)",
   "Active for (hours)": "Activo durante (horas)",
+  "Active from": "Activo desde",
+  "Active until": "Activo hasta",
   "Day(s)": "Día(s)",
   "Disabled": "Desactivado",
   "Direct path is recommended for local/simple records.": "Se recomienda la ruta directa para registros locales/simples.",

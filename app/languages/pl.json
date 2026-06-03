@@ -586,6 +586,8 @@
   "Active from (UTC)": "Aktywne od (UTC)",
   "Active until (UTC)": "Aktywne do",
   "Active for (hours)": "Aktywne przez (godziny)",
+  "Active from": "Aktywne od",
+  "Active until": "Aktywne do",
   "Active from {fromDate} UTC to {toDate} UTC.": "Aktywne od {fromDate} UTC do {toDate} UTC.",
   "Active every {value} {unit} from {fromDate} UTC for {duration}.": "Aktywne co {value} {unit} od {fromDate} UTC przez {duration}.",
   "Active now": "Aktywne teraz",

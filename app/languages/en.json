@@ -591,6 +591,8 @@
   "Active from (UTC)": "Active from (UTC)",
   "Active until (UTC)": "Active until (UTC)",
   "Active for (hours)": "Active for (hours)",
+  "Active from": "Active from",
+  "Active until": "Active until",
   "Activation": "Activation",
   "Active now": "Active now",
   "Inactive now": "Inactive now",
