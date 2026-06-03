@@ -50,12 +50,17 @@ def get_notification_settings() -> dict[str, bool]:
 
 def save_notification_settings(payload: dict[str, Any]) -> None:
     ensure_notification_defaults()
-    set_app_setting(NOTIFICATION_MESSAGES_ENABLED_KEY, "1" if _setting_flag(payload.get("messages_enabled")) else "0")
+    messages_enabled = _setting_flag(payload.get("messages_enabled"))
+    messages_include_content = _setting_flag(payload.get("messages_include_content"))
+    radar_enabled = _setting_flag(payload.get("radar_enabled"))
+    set_app_setting(NOTIFICATION_MESSAGES_ENABLED_KEY, "1" if messages_enabled else "0")
     set_app_setting(
         NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY,
-        "1" if _setting_flag(payload.get("messages_include_content")) else "0",
+        "1" if messages_include_content else "0",
     )
-    set_app_setting(NOTIFICATION_RADAR_ENABLED_KEY, "1" if _setting_flag(payload.get("radar_enabled")) else "0")
+    set_app_setting(NOTIFICATION_RADAR_ENABLED_KEY, "1" if radar_enabled else "0")
+    if not radar_enabled:
+        clear_radar_notification_history()
     log_event("INFO", "notifications", "Updated notification settings")
 
 
@@ -276,6 +281,22 @@ def delete_notification_radar_rule(rule_id: int) -> None:
     with get_connection() as connection:
         connection.execute("DELETE FROM notification_radar_rules WHERE id = ?", (rule_id,))
     log_event("INFO", "notifications", f"Deleted radar rule {rule_id}")
+
+
+def clear_radar_notification_history() -> None:
+    with get_connection() as connection:
+        connection.execute("DELETE FROM notification_radar_state")
+        connection.execute(
+            """
+            DELETE FROM event_logs
+            WHERE category = 'notifications'
+              AND (
+                    message LIKE '%wyslano powiadomienie%'
+                 OR message LIKE '%wyszedl z zasiegu%'
+                 OR message LIKE 'Radar:%'
+              )
+            """
+        )
 
 
 def get_notifications_page_data(*, edit_transport_id: int | None = None, edit_rule_id: int | None = None) -> dict[str, Any]:

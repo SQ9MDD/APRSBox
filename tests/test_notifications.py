@@ -13,6 +13,7 @@ from app.services.notifications import (
     get_notifications_page_data,
     normalize_notification_distance_m,
     pattern_matches_callsign,
+    save_notification_settings,
     queue_aprs_message_notification,
     queue_radar_notifications,
     safe_save_notification_radar_rule,
@@ -175,6 +176,43 @@ class NotificationTests(unittest.TestCase):
             )
             assert state is not None
             self.assertEqual(int(state["total"]), 0)
+
+    def test_disabling_radar_clears_block_state_and_radar_logs(self) -> None:
+        with temporary_database():
+            ok, error, rule_id = safe_save_notification_radar_rule({"enabled": True, "pattern": "*", "distance_m": 0})
+            self.assertTrue(ok, error)
+            assert rule_id is not None
+            set_app_setting("radar_enabled", "1")
+
+            station_settings = {"callsign": "SQ0BOX", "ssid": "1", "latitude": "50.0", "longitude": "19.0"}
+            snapshot = {
+                "origin": "heard",
+                "display_callsign": "SQ6ODL-9",
+                "latitude": "50.01",
+                "longitude": "19.01",
+            }
+            with patch("app.services.notifications.get_station_settings", return_value=station_settings), patch(
+                "app.services.notifications.get_visible_station_snapshots", return_value=[snapshot]
+            ):
+                evaluate_radar_notifications(timestamp="2026-01-01T00:00:00+00:00")
+
+            save_notification_settings({"radar_enabled": False, "messages_enabled": False, "messages_include_content": False})
+
+            state_rows = fetch_all("SELECT COUNT(*) AS total FROM notification_radar_state")
+            self.assertEqual(int(state_rows[0]["total"]), 0)
+            radar_logs = fetch_all(
+                """
+                SELECT COUNT(*) AS total
+                FROM event_logs
+                WHERE category = 'notifications'
+                  AND (
+                        message LIKE '%wyslano powiadomienie%'
+                     OR message LIKE '%wyszedl z zasiegu%'
+                     OR message LIKE 'Radar:%'
+                  )
+                """
+            )
+            self.assertEqual(int(radar_logs[0]["total"]), 0)
 
     def test_radar_evaluates_local_tx_frames_from_other_ssids(self) -> None:
         with temporary_database():
