@@ -10,6 +10,7 @@ from app.services.notifications import (
     _send_notification_event,
     build_aprs_message_event,
     evaluate_radar_notifications,
+    get_notifications_page_data,
     normalize_notification_distance_m,
     pattern_matches_callsign,
     queue_aprs_message_notification,
@@ -128,7 +129,7 @@ class NotificationTests(unittest.TestCase):
             ]
             with patch("app.services.notifications.get_station_settings", return_value=station_settings), patch(
                 "app.services.notifications.get_wx_config",
-                return_value={"full_callsign": "SQ0BOX-2"},
+                return_value={"enabled": True, "full_callsign": "SQ0BOX-2"},
             ), patch("app.services.notifications.get_visible_station_snapshots", return_value=snapshots):
                 events = evaluate_radar_notifications(timestamp="2026-01-01T00:00:00+00:00")
 
@@ -139,6 +140,26 @@ class NotificationTests(unittest.TestCase):
             )
             assert state is not None
             self.assertEqual(int(state["total"]), 0)
+
+    def test_radar_evaluates_local_tx_frames_from_other_ssids(self) -> None:
+        with temporary_database():
+            ok, error, rule_id = safe_save_notification_radar_rule({"enabled": True, "pattern": "*", "distance_m": 0})
+            self.assertTrue(ok, error)
+            assert rule_id is not None
+            set_app_setting("radar_enabled", "1")
+
+            station_settings = {"callsign": "SQ0BOX", "ssid": "1", "latitude": "50.0", "longitude": "19.0"}
+            snapshots = [
+                {"origin": "local_tx", "display_callsign": "SQ0BOX-7", "latitude": "50.01", "longitude": "19.01"},
+            ]
+            with patch("app.services.notifications.get_station_settings", return_value=station_settings), patch(
+                "app.services.notifications.get_wx_config",
+                return_value={"enabled": False, "full_callsign": "SQ0BOX"},
+            ), patch("app.services.notifications.get_visible_station_snapshots", return_value=snapshots):
+                events = evaluate_radar_notifications(timestamp="2026-01-01T00:00:00+00:00")
+
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["data"]["station"], "SQ0BOX-7")
 
     def test_aprs_message_event_omits_content_when_disabled(self) -> None:
         event = build_aprs_message_event(
@@ -175,6 +196,23 @@ class NotificationTests(unittest.TestCase):
             with patch("app.services.notifications._deliver_event_to_transport") as deliver_mock:
                 _send_notification_event(event)
             deliver_mock.assert_not_called()
+
+    def test_telegram_bot_token_is_loaded_for_editing(self) -> None:
+        with temporary_database():
+            ok, error, transport_id = safe_save_notification_transport(
+                {
+                    "name": "Telegram transport",
+                    "transport_type": "telegram",
+                    "enabled": True,
+                    "bot_token": "123456:ABCDEF",
+                    "chat_id": "-100123",
+                }
+            )
+            self.assertTrue(ok, error)
+            assert transport_id is not None
+
+            page_data = get_notifications_page_data(edit_transport_id=transport_id)
+            self.assertEqual(page_data["notification_transport_form"]["bot_token"], "123456:ABCDEF")
 
     def test_disabled_message_and_radar_notifications_do_not_queue(self) -> None:
         with temporary_database():

@@ -391,11 +391,7 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
     reference_latitude = _parse_coordinate(station_settings.get("latitude"))
     reference_longitude = _parse_coordinate(station_settings.get("longitude"))
     reference_station = _reference_station_label(station_settings)
-    snapshots = [
-        snapshot
-        for snapshot in get_visible_station_snapshots(limit=500)
-        if str(snapshot.get("origin") or "").strip().lower() == "heard"
-    ]
+    snapshots = get_visible_station_snapshots(limit=500)
 
     state_rows = fetch_all(
         """
@@ -618,7 +614,7 @@ def _build_transport_form(transport: dict[str, Any] | None) -> dict[str, Any]:
         "url": str(item.get("url") or ""),
         "secret_header_name": str(item.get("secret_header_name") or ""),
         "secret_token": "",
-        "bot_token": "",
+        "bot_token": str((transport or {}).get("bot_token") or ""),
         "chat_id": str(item.get("chat_id") or ""),
         "timeout_s": str(item.get("timeout_s") or NOTIFICATION_HTTP_TIMEOUT_SECONDS_DEFAULT),
     }
@@ -774,9 +770,11 @@ def _notification_radar_ignored_station_keys(station_settings: dict[str, Any]) -
     main_station_key = _reference_station_label(station_settings).strip().casefold()
     if main_station_key and main_station_key != "my station":
         ignored_keys.add(main_station_key)
-    wx_station_key = str(get_wx_config().get("full_callsign") or "").strip().upper().casefold()
-    if wx_station_key:
-        ignored_keys.add(wx_station_key)
+    wx_config = get_wx_config()
+    if bool(wx_config.get("enabled")):
+        wx_station_key = str(wx_config.get("full_callsign") or "").strip().upper().casefold()
+        if wx_station_key:
+            ignored_keys.add(wx_station_key)
     return ignored_keys
 
 

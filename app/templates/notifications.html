@@ -103,7 +103,7 @@
                 </label>
                 <label data-notification-telegram-only>
                     <span>{{ t("Bot token") }}</span>
-                    <input type="password" name="bot_token" value="{{ notification_transport_form.bot_token }}" {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
+                    <input type="text" name="bot_token" value="{{ notification_transport_form.bot_token }}" {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
                 </label>
                 <label data-notification-telegram-only>
                     <span>{{ t("Chat ID") }}</span>
