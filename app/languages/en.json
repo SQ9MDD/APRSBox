@@ -1452,6 +1452,7 @@
   "Radar event log": "Radar event log",
   "Time (UTC)": "Time (UTC)",
   "Message": "Message",
+  "Radar: {station} is nearby ({distance}, rule {rule})": "Radar: {station} is nearby ({distance}, rule {rule})",
   "Webhook": "Webhook",
   "Telegram": "Telegram",
   "Bot token": "Bot token",

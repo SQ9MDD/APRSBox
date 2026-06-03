@@ -9,6 +9,7 @@ from app.db import fetch_all, fetch_one, init_db, set_app_setting
 from app.services.notifications import (
     _send_notification_event,
     build_aprs_message_event,
+    build_radar_station_match_event,
     evaluate_radar_notifications,
     get_notifications_page_data,
     normalize_notification_distance_m,
@@ -78,6 +79,23 @@ class NotificationTests(unittest.TestCase):
             assert state is not None
             self.assertEqual(int(state["is_inside"]), 1)
 
+    def test_radar_notification_message_uses_selected_language(self) -> None:
+        with temporary_database():
+            set_app_setting("app_language", "pl")
+            event = build_radar_station_match_event(
+                station="SQ9MDD-9",
+                matched_rule={"id": 7, "pattern": "*"},
+                distance_m=1500,
+                threshold_m=2000,
+                latitude="50.0",
+                longitude="19.0",
+                reference_latitude="49.0",
+                reference_longitude="18.0",
+                reference_station="SQ9MDD-0",
+                timestamp="2026-01-01T00:00:00+00:00",
+            )
+            self.assertEqual(event["message"], "Radar: SQ9MDD-9 jest w pobliżu (1.5 km, reguła *)")
+
     def test_radar_state_transitions_send_once_and_reset(self) -> None:
         with temporary_database():
             ok, error, rule_id = safe_save_notification_radar_rule({"enabled": True, "pattern": "SQ6ODL*", "distance_m": 5000})
@@ -141,7 +159,7 @@ class NotificationTests(unittest.TestCase):
                 """
                 SELECT message
                 FROM event_logs
-                WHERE category = 'notifications'
+                WHERE category = 'notifications_radar'
                   AND message LIKE 'SQ6ODL-9 %'
                 ORDER BY id ASC
                 """
@@ -204,7 +222,7 @@ class NotificationTests(unittest.TestCase):
                 """
                 SELECT COUNT(*) AS total
                 FROM event_logs
-                WHERE category = 'notifications'
+                WHERE category = 'notifications_radar'
                   AND (
                         message LIKE '%wyslano powiadomienie%'
                      OR message LIKE '%wyszedl z zasiegu%'

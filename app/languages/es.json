@@ -1415,6 +1415,7 @@
   "Radar event log": "Registro de eventos de radar",
   "Time (UTC)": "Hora (UTC)",
   "Message": "Mensaje",
+  "Radar: {station} is nearby ({distance}, rule {rule})": "Radar: {station} está cerca ({distance}, regla {rule})",
   "Webhook": "Webhook",
   "Telegram": "Telegram",
   "Bot token": "Token del bot",

@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from app.db import fetch_all, fetch_one, get_connection, get_app_setting, log_event, set_app_setting, utc_now
+from app.i18n import get_app_language, get_translator
 from app.services.content import get_station_settings, get_visible_station_snapshots
 from app.services.wx import get_wx_config
 
@@ -21,6 +22,7 @@ NOTIFICATION_MESSAGES_ENABLED_KEY = "messages_enabled"
 NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY = "messages_include_content"
 NOTIFICATION_RADAR_ENABLED_KEY = "radar_enabled"
 NOTIFICATION_HTTP_TIMEOUT_SECONDS_DEFAULT = 5
+NOTIFICATION_RADAR_EVENT_LOG_CATEGORY = "notifications_radar"
 
 _NOTIFICATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aprsbox-notify")
 
@@ -222,12 +224,11 @@ def list_notification_radar_event_logs(limit: int = 20) -> list[dict[str, Any]]:
         """
         SELECT id, message, created_at
         FROM event_logs
-        WHERE category = 'notifications'
-          AND message LIKE 'Radar:%'
+        WHERE category = ?
         ORDER BY id DESC
         LIMIT ?
         """,
-        (limit,),
+        (NOTIFICATION_RADAR_EVENT_LOG_CATEGORY, limit),
     )
     return [dict(row) for row in rows]
 
@@ -289,13 +290,9 @@ def clear_radar_notification_history() -> None:
         connection.execute(
             """
             DELETE FROM event_logs
-            WHERE category = 'notifications'
-              AND (
-                    message LIKE '%wyslano powiadomienie%'
-                 OR message LIKE '%wyszedl z zasiegu%'
-                 OR message LIKE 'Radar:%'
-              )
-            """
+            WHERE category = ?
+            """,
+            (NOTIFICATION_RADAR_EVENT_LOG_CATEGORY,),
         )
 
 
@@ -372,9 +369,14 @@ def build_radar_station_match_event(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     station_name = str(station or "").strip().upper()
-    distance_part = f"{distance_m} m" if distance_m is not None else "unknown distance"
+    distance_part = _format_notification_distance(distance_m)
     rule_pattern = str(matched_rule.get("pattern") or "").strip().upper() or "*"
-    message = f"Radar: {station_name or 'unknown'} is nearby ({distance_part}, rule {rule_pattern})"
+    translator = get_translator(get_app_language())
+    message = translator("Radar: {station} is nearby ({distance}, rule {rule})").format(
+        station=station_name or "unknown",
+        distance=distance_part,
+        rule=rule_pattern,
+    )
     return {
         "event_type": "radar_station_match",
         "timestamp": timestamp or utc_now(),
@@ -540,7 +542,7 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
                     last_matched_at=None,
                 )
     for message in pending_logs:
-        log_event("INFO", "notifications", message)
+        log_event("INFO", NOTIFICATION_RADAR_EVENT_LOG_CATEGORY, message)
     return events
 
 
@@ -857,6 +859,16 @@ def _notification_node_payload() -> dict[str, Any]:
         "ssid": str(station_settings.get("ssid") or "").strip(),
         "full_callsign": _reference_station_label(station_settings),
     }
+
+
+def _format_notification_distance(distance_m: int | None) -> str:
+    if distance_m is None:
+        return "-"
+    distance_value = int(distance_m)
+    if distance_value >= 1000:
+        distance_km = distance_value / 1000.0
+        return f"{distance_km:.1f}".rstrip("0").rstrip(".") + " km"
+    return f"{distance_value} m"
 
 
 def _format_utc_log_timestamp(value: str | None) -> str:
