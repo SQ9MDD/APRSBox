@@ -99,6 +99,15 @@ from app.services.messages import (
     retry_failed_message,
     update_conversation_path,
 )
+from app.services.notifications import (
+    delete_notification_radar_rule,
+    delete_notification_transport,
+    get_notifications_page_data,
+    safe_save_notification_radar_rule,
+    safe_save_notification_settings,
+    safe_save_notification_transport,
+    test_notification_transport,
+)
 from app.services.band_condition import (
     build_station_key,
     delete_reference_station,
@@ -542,6 +551,60 @@ def _wx_page_context(
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         interface_options=_station_form_options()["interface_options"],
         **get_wx_page_data(edit_source_id=edit_source_id, source_discovery=source_discovery),
+    )
+
+
+def _notification_transport_form_from_payload(payload: dict[str, Any], *, transport_id: int | None) -> dict[str, Any]:
+    timeout_value = payload.get("timeout_s")
+    return {
+        "id": transport_id,
+        "name": str(payload.get("name") or ""),
+        "transport_type": str(payload.get("transport_type") or ""),
+        "enabled": bool(payload.get("enabled")),
+        "url": str(payload.get("url") or ""),
+        "secret_header_name": str(payload.get("secret_header_name") or ""),
+        "secret_token": "",
+        "bot_token": "",
+        "chat_id": str(payload.get("chat_id") or ""),
+        "timeout_s": str(timeout_value) if timeout_value not in {None, ""} else "5",
+    }
+
+
+def _notification_radar_rule_form_from_payload(payload: dict[str, Any], *, rule_id: int | None) -> dict[str, Any]:
+    distance_value = payload.get("distance_m")
+    return {
+        "id": rule_id,
+        "enabled": bool(payload.get("enabled")),
+        "pattern": str(payload.get("pattern") or ""),
+        "distance_m": str(distance_value) if distance_value not in {None, ""} else "",
+    }
+
+
+def _notifications_page_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    flash: str | None = None,
+    flash_success: bool = True,
+    edit_transport_id: int | None = None,
+    edit_rule_id: int | None = None,
+    notification_transport_form: dict[str, Any] | None = None,
+    notification_radar_rule_form: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    context = get_notifications_page_data(edit_transport_id=edit_transport_id, edit_rule_id=edit_rule_id)
+    if notification_transport_form is not None:
+        context["notification_transport_form"] = notification_transport_form
+    if notification_radar_rule_form is not None:
+        context["notification_radar_rule_form"] = notification_radar_rule_form
+    return build_template_context(
+        request,
+        page_title="Notifications",
+        current_user=current_user,
+        active_nav="notifications",
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_notifications=current_user.role in {"admin", "operator"},
+        **context,
     )
 
 
@@ -2450,6 +2513,167 @@ def wx_source_discover(
         source_discovery=result if result.get("ok") else None,
     )
     return templates.TemplateResponse("wx.html", context, status_code=200 if result.get("ok") else status.HTTP_400_BAD_REQUEST)
+
+
+@router.get("/notifications")
+def notifications_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+    edit_transport: int | None = None,
+    edit_rule: int | None = None,
+) -> object:
+    templates = request.app.state.templates
+    context = _notifications_page_context(
+        request,
+        current_user,
+        edit_transport_id=edit_transport,
+        edit_rule_id=edit_rule,
+    )
+    return templates.TemplateResponse("notifications.html", context)
+
+
+@router.post("/notifications/settings")
+def notifications_settings_update(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    messages_enabled: str | None = Form(None),
+    messages_include_content: str | None = Form(None),
+    radar_enabled: str | None = Form(None),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_save_notification_settings(
+        {
+            "messages_enabled": messages_enabled,
+            "messages_include_content": messages_include_content,
+            "radar_enabled": radar_enabled,
+        }
+    )
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification settings updated." if success else error,
+        flash_success=success,
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/transports")
+def notifications_transport_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    transport_id: int | None = Form(None),
+    name: str = Form(""),
+    transport_type: str = Form("webhook"),
+    enabled: str | None = Form(None),
+    url: str = Form(""),
+    secret_header_name: str = Form(""),
+    secret_token: str = Form(""),
+    bot_token: str = Form(""),
+    chat_id: str = Form(""),
+    timeout_s: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "name": name,
+        "transport_type": transport_type,
+        "enabled": enabled,
+        "url": url,
+        "secret_header_name": secret_header_name,
+        "secret_token": secret_token,
+        "bot_token": bot_token,
+        "chat_id": chat_id,
+        "timeout_s": timeout_s,
+    }
+    success, error, _saved_transport_id = safe_save_notification_transport(payload, transport_id=transport_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification transport saved." if success else error,
+        flash_success=success,
+        edit_transport_id=None if success else transport_id,
+        notification_transport_form=None if success else _notification_transport_form_from_payload(payload, transport_id=transport_id),
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/transports/{transport_id}/test")
+def notifications_transport_test(
+    transport_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = test_notification_transport(transport_id)
+    success = bool(result.get("ok"))
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification transport test succeeded." if success else str(result.get("error") or "Notification transport test failed."),
+        flash_success=success,
+        edit_transport_id=transport_id,
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/transports/{transport_id}/delete")
+def notifications_transport_delete(
+    transport_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    delete_notification_transport(transport_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification transport deleted.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("notifications.html", context)
+
+
+@router.post("/notifications/radar-rules")
+def notifications_radar_rule_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    rule_id: int | None = Form(None),
+    enabled: str | None = Form(None),
+    pattern: str = Form(""),
+    distance_m: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "enabled": enabled,
+        "pattern": pattern,
+        "distance_m": distance_m,
+    }
+    success, error, _saved_rule_id = safe_save_notification_radar_rule(payload, rule_id=rule_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Radar rule saved." if success else error,
+        flash_success=success,
+        edit_rule_id=None if success else rule_id,
+        notification_radar_rule_form=None if success else _notification_radar_rule_form_from_payload(payload, rule_id=rule_id),
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/radar-rules/{rule_id}/delete")
+def notifications_radar_rule_delete(
+    rule_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    delete_notification_radar_rule(rule_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Radar rule deleted.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("notifications.html", context)
 
 
 @router.post("/station")

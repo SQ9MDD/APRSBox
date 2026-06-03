@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if flash %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
+    </div>
+</section>
+{% endif %}
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Notification transports") }}</h2>
+            </div>
+        </div>
+        <div class="grid two">
+            <div class="table-wrap">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t("Name") }}</th>
+                            <th>{{ t("Type") }}</th>
+                            <th>{{ t("Enabled") }}</th>
+                            {% if can_manage_notifications %}
+                            <th>{{ t("Actions") }}</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transport in notification_transports %}
+                        <tr>
+                            <td>{{ transport.name }}</td>
+                            <td>{{ t(transport.transport_type_label) }}</td>
+                            <td>{{ t("Yes") if transport.enabled else t("No") }}</td>
+                            {% if can_manage_notifications %}
+                            <td>
+                                <div class="table-actions table-actions-start">
+                                    <form method="post" action="{{ request.scope.root_path }}/notifications/transports/{{ transport.id }}/test" class="table-action-form">
+                                        <button type="submit" class="table-icon-button" title="{{ t('Test') }}" aria-label="{{ t('Test') }} {{ transport.name }}">
+                                            <img src="{{ request.scope.root_path }}/static/icons/test-tube-empty.svg" alt="">
+                                        </button>
+                                    </form>
+                                    <a href="{{ request.scope.root_path }}/notifications?edit_transport={{ transport.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
+                                    </a>
+                                    <form method="post" action="{{ request.scope.root_path }}/notifications/transports/{{ transport.id }}/delete" class="table-action-form">
+                                        <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} {{ transport.name }}" onclick="return confirm({{ t('Delete this entry?')|tojson|forceescape }});">
+                                            <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 4 if can_manage_notifications else 3 }}">{{ t("No records yet.") }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if can_manage_notifications %}
+            <form method="post" action="{{ request.scope.root_path }}/notifications/transports" class="form-grid">
+                {% if notification_transport_form.id %}
+                <input type="hidden" name="transport_id" value="{{ notification_transport_form.id }}">
+                {% endif %}
+                <label>
+                    <span>{{ t("Transport") }}</span>
+                    <input type="text" name="name" value="{{ notification_transport_form.name }}" required>
+                </label>
+                <label>
+                    <span>{{ t("Type") }}</span>
+                    <select name="transport_type" required>
+                        {% for option in notification_transport_type_options %}
+                        <option value="{{ option.value }}" {% if notification_transport_form.transport_type == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="full checkbox-row">
+                    <input type="checkbox" name="enabled" value="1" {% if notification_transport_form.enabled %}checked{% endif %}>
+                    <span>{{ t("Enabled") }}</span>
+                </label>
+                <label class="full">
+                    <span>{{ t("URL") }}</span>
+                    <input type="url" name="url" value="{{ notification_transport_form.url }}" placeholder="https://example.com/webhook">
+                </label>
+                <label>
+                    <span>{{ t("Timeout") }}</span>
+                    <input type="number" name="timeout_s" min="1" max="60" value="{{ notification_transport_form.timeout_s }}">
+                </label>
+                <label>
+                    <span>{{ t("Secret header name") }}</span>
+                    <input type="text" name="secret_header_name" value="{{ notification_transport_form.secret_header_name }}">
+                </label>
+                <label>
+                    <span>{{ t("Secret token") }}</span>
+                    <input type="password" name="secret_token" value="{{ notification_transport_form.secret_token }}">
+                </label>
+                <label>
+                    <span>{{ t("Bot token") }}</span>
+                    <input type="password" name="bot_token" value="{{ notification_transport_form.bot_token }}">
+                </label>
+                <label>
+                    <span>{{ t("Chat ID") }}</span>
+                    <input type="text" name="chat_id" value="{{ notification_transport_form.chat_id }}">
+                </label>
+                <p class="muted full">{{ t("Leave blank to keep the existing secret.") }}</p>
+                <div class="form-actions">
+                    <button type="submit" class="button">{{ t("Save") }}</button>
+                    {% if notification_transport_form.id %}
+                    <a href="{{ request.scope.root_path }}/notifications" class="button button-secondary">{{ t("Cancel") }}</a>
+                    {% endif %}
+                </div>
+            </form>
+            {% else %}
+            <p class="muted">{{ t("Your role can view notification configuration but cannot change it.") }}</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Notification settings") }}</h2>
+            </div>
+        </div>
+        {% if can_manage_notifications %}
+        <form method="post" action="{{ request.scope.root_path }}/notifications/settings" class="form-grid">
+            <label class="full checkbox-row">
+                <input type="checkbox" name="messages_enabled" value="1" {% if notification_settings.messages_enabled %}checked{% endif %}>
+                <span>{{ t("Enable APRS message notifications") }}</span>
+            </label>
+            <label class="full checkbox-row">
+                <input type="checkbox" name="messages_include_content" value="1" {% if notification_settings.messages_include_content %}checked{% endif %}>
+                <span>{{ t("Include message content") }}</span>
+            </label>
+            <label class="full checkbox-row">
+                <input type="checkbox" name="radar_enabled" value="1" {% if notification_settings.radar_enabled %}checked{% endif %}>
+                <span>{{ t("Enable radar notifications") }}</span>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button">{{ t("Save") }}</button>
+            </div>
+        </form>
+        {% else %}
+        <dl class="details-grid">
+            <dt>{{ t("Enable APRS message notifications") }}</dt>
+            <dd>{{ t("Yes") if notification_settings.messages_enabled else t("No") }}</dd>
+            <dt>{{ t("Include message content") }}</dt>
+            <dd>{{ t("Yes") if notification_settings.messages_include_content else t("No") }}</dd>
+            <dt>{{ t("Enable radar notifications") }}</dt>
+            <dd>{{ t("Yes") if notification_settings.radar_enabled else t("No") }}</dd>
+        </dl>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Radar rules") }}</h2>
+                <p class="section-lead">{{ t("Distance is measured from My Station coordinates.") }}</p>
+            </div>
+        </div>
+        <div class="grid two">
+            <div class="table-wrap">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t("Enabled") }}</th>
+                            <th>{{ t("Pattern") }}</th>
+                            <th>{{ t("Distance (m)") }}</th>
+                            {% if can_manage_notifications %}
+                            <th>{{ t("Actions") }}</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rule in notification_radar_rules %}
+                        <tr>
+                            <td>{{ t("Yes") if rule.enabled else t("No") }}</td>
+                            <td><code>{{ rule.pattern }}</code></td>
+                            <td>{{ rule.distance_m }}</td>
+                            {% if can_manage_notifications %}
+                            <td>
+                                <div class="table-actions table-actions-start">
+                                    <a href="{{ request.scope.root_path }}/notifications?edit_rule={{ rule.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
+                                    </a>
+                                    <form method="post" action="{{ request.scope.root_path }}/notifications/radar-rules/{{ rule.id }}/delete" class="table-action-form">
+                                        <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} {{ rule.pattern }}" onclick="return confirm({{ t('Delete this entry?')|tojson|forceescape }});">
+                                            <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 4 if can_manage_notifications else 3 }}">{{ t("No records yet.") }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if can_manage_notifications %}
+            <form method="post" action="{{ request.scope.root_path }}/notifications/radar-rules" class="form-grid">
+                {% if notification_radar_rule_form.id %}
+                <input type="hidden" name="rule_id" value="{{ notification_radar_rule_form.id }}">
+                {% endif %}
+                <label class="full">
+                    <span>{{ t("Radar rule") }}</span>
+                    <input type="text" name="pattern" value="{{ notification_radar_rule_form.pattern }}" required placeholder="SQ6ODL-*">
+                </label>
+                <label>
+                    <span>{{ t("Distance (m)") }}</span>
+                    <input type="number" name="distance_m" min="0" step="1" value="{{ notification_radar_rule_form.distance_m }}" required>
+                </label>
+                <label class="full checkbox-row">
+                    <input type="checkbox" name="enabled" value="1" {% if notification_radar_rule_form.enabled %}checked{% endif %}>
+                    <span>{{ t("Enabled") }}</span>
+                </label>
+                <div class="form-actions">
+                    <button type="submit" class="button">{{ t("Save") }}</button>
+                    {% if notification_radar_rule_form.id %}
+                    <a href="{{ request.scope.root_path }}/notifications" class="button button-secondary">{{ t("Cancel") }}</a>
+                    {% endif %}
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}
