@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 from app.db import fetch_all, fetch_one, get_connection, get_app_setting, log_event, set_app_setting, utc_now
 from app.services.content import get_station_settings, get_visible_station_snapshots
+from app.services.wx import get_wx_config
 
 NOTIFICATION_TRANSPORT_TYPE_WEBHOOK = "webhook"
 NOTIFICATION_TRANSPORT_TYPE_TELEGRAM = "telegram"
@@ -386,6 +387,7 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
         return []
 
     station_settings = get_station_settings()
+    ignored_station_keys = _notification_radar_ignored_station_keys(station_settings)
     reference_latitude = _parse_coordinate(station_settings.get("latitude"))
     reference_longitude = _parse_coordinate(station_settings.get("longitude"))
     reference_station = _reference_station_label(station_settings)
@@ -415,8 +417,10 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
             threshold_m = int(rule.get("distance_m") or 0)
             current_matches: dict[str, dict[str, Any]] = {}
             for snapshot in snapshots:
-                station_key = str(snapshot.get("display_callsign") or "").strip().upper()
+                station_key = str(snapshot.get("display_callsign") or snapshot.get("callsign") or "").strip().upper()
                 if not station_key or not pattern_matches_callsign(rule_pattern, station_key):
+                    continue
+                if station_key.casefold() in ignored_station_keys:
                     continue
                 distance_m = _snapshot_distance_m(snapshot, reference_latitude, reference_longitude)
                 if threshold_m > 0 and (distance_m is None or distance_m > threshold_m):
@@ -763,6 +767,17 @@ def _reference_station_label(station_settings: dict[str, Any]) -> str:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
     return f"{callsign}-{ssid}" if callsign and ssid else callsign or "My Station"
+
+
+def _notification_radar_ignored_station_keys(station_settings: dict[str, Any]) -> set[str]:
+    ignored_keys: set[str] = set()
+    main_station_key = _reference_station_label(station_settings).strip().casefold()
+    if main_station_key and main_station_key != "my station":
+        ignored_keys.add(main_station_key)
+    wx_station_key = str(get_wx_config().get("full_callsign") or "").strip().upper().casefold()
+    if wx_station_key:
+        ignored_keys.add(wx_station_key)
+    return ignored_keys
 
 
 def _notification_node_payload() -> dict[str, Any]:

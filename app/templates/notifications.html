@@ -65,17 +65,17 @@
             </div>
 
             {% if can_manage_notifications %}
-            <form method="post" action="{{ request.scope.root_path }}/notifications/transports" class="form-grid">
+            <form method="post" action="{{ request.scope.root_path }}/notifications/transports" class="form-grid" data-notification-transport-form>
                 {% if notification_transport_form.id %}
                 <input type="hidden" name="transport_id" value="{{ notification_transport_form.id }}">
                 {% endif %}
                 <label>
-                    <span>{{ t("Transport") }}</span>
+                    <span>{{ t("Name") }}</span>
                     <input type="text" name="name" value="{{ notification_transport_form.name }}" required>
                 </label>
                 <label>
                     <span>{{ t("Type") }}</span>
-                    <select name="transport_type" required>
+                    <select name="transport_type" required data-notification-transport-type>
                         {% for option in notification_transport_type_options %}
                         <option value="{{ option.value }}" {% if notification_transport_form.transport_type == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                         {% endfor %}
@@ -85,29 +85,29 @@
                     <input type="checkbox" name="enabled" value="1" {% if notification_transport_form.enabled %}checked{% endif %}>
                     <span>{{ t("Enabled") }}</span>
                 </label>
-                <label class="full">
+                <label class="full" data-notification-webhook-only>
                     <span>{{ t("URL") }}</span>
-                    <input type="url" name="url" value="{{ notification_transport_form.url }}" placeholder="https://example.com/webhook">
+                    <input type="url" name="url" value="{{ notification_transport_form.url }}" placeholder="https://example.com/webhook" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label>
+                <label data-notification-webhook-only>
                     <span>{{ t("Timeout") }}</span>
-                    <input type="number" name="timeout_s" min="1" max="60" value="{{ notification_transport_form.timeout_s }}">
+                    <input type="number" name="timeout_s" min="1" max="60" value="{{ notification_transport_form.timeout_s }}" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label>
+                <label data-notification-webhook-only>
                     <span>{{ t("Secret header name") }}</span>
-                    <input type="text" name="secret_header_name" value="{{ notification_transport_form.secret_header_name }}">
+                    <input type="text" name="secret_header_name" value="{{ notification_transport_form.secret_header_name }}" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label>
+                <label data-notification-webhook-only>
                     <span>{{ t("Secret token") }}</span>
-                    <input type="password" name="secret_token" value="{{ notification_transport_form.secret_token }}">
+                    <input type="password" name="secret_token" value="{{ notification_transport_form.secret_token }}" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label>
+                <label data-notification-telegram-only>
                     <span>{{ t("Bot token") }}</span>
-                    <input type="password" name="bot_token" value="{{ notification_transport_form.bot_token }}">
+                    <input type="password" name="bot_token" value="{{ notification_transport_form.bot_token }}" {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
                 </label>
-                <label>
+                <label data-notification-telegram-only>
                     <span>{{ t("Chat ID") }}</span>
-                    <input type="text" name="chat_id" value="{{ notification_transport_form.chat_id }}">
+                    <input type="text" name="chat_id" value="{{ notification_transport_form.chat_id }}" {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
                 </label>
                 <p class="muted full">{{ t("Leave blank to keep the existing secret.") }}</p>
                 <div class="form-actions">
@@ -241,4 +241,33 @@
         </div>
     </div>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (() => {
+        const form = document.querySelector("[data-notification-transport-form]");
+        const typeSelect = form instanceof HTMLFormElement ? form.querySelector("[data-notification-transport-type]") : null;
+        if (!(form instanceof HTMLFormElement) || !(typeSelect instanceof HTMLSelectElement)) {
+            return;
+        }
+
+        const telegramOnlyFields = Array.from(form.querySelectorAll("[data-notification-telegram-only] input"));
+        const webhookOnlyFields = Array.from(form.querySelectorAll("[data-notification-webhook-only] input"));
+
+        const syncFields = () => {
+            const isTelegram = String(typeSelect.value || "").toLowerCase() === "telegram";
+            const isWebhook = String(typeSelect.value || "").toLowerCase() === "webhook";
+            for (const field of telegramOnlyFields) {
+                field.disabled = !isTelegram;
+            }
+            for (const field of webhookOnlyFields) {
+                field.disabled = !isWebhook;
+            }
+        };
+
+        syncFields();
+        typeSelect.addEventListener("change", syncFields);
+    })();
+</script>
 {% endblock %}
