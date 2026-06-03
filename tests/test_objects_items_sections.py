@@ -30,6 +30,9 @@ class ObjectAndItemFormTests(unittest.TestCase):
     def test_object_item_translation_keys_are_present_in_en_pl_es(self) -> None:
         required_keys = [
             "Item List",
+            "Active from (UTC)",
+            "Active until (UTC)",
+            "Active for (hours)",
             "Active now",
             "Inactive now",
             "Activation",
@@ -58,7 +61,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Select",
         ]
         self.assertEqual(SECTION_DEFINITIONS["items"].list_title, "Item List")
-        for language in ("en", "pl", "es"):
+        for language in ("en", "pl", "es", "tlh"):
             catalog = json.loads((Path("app/languages") / f"{language}.json").read_text())
             for key in required_keys:
                 self.assertIn(key, catalog, msg=f"Missing {key!r} in {language}.json")

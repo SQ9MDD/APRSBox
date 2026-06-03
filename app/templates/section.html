@@ -44,15 +44,15 @@
                 <table class="data-table prepared-entity-table">
                     <thead>
                         <tr>
-                            <th class="prepared-entity-col-icon">{{ t("Icon") }}</th>
-                            <th class="prepared-entity-col-active">{{ t("Enabled") if section.slug == 'objects' else t("Active") }}</th>
+                            <th class="prepared-entity-col-icon" title="{{ t('Icon') }}">{{ t("Icon") }}</th>
+                            <th class="prepared-entity-col-active" title="{{ t('Enabled') if section.slug == 'objects' else t('Active') }}">{{ t("Enabled") if section.slug == 'objects' else t("Active") }}</th>
                             {% if section.slug == 'objects' %}
-                            <th class="prepared-entity-col-active">{{ t("Active now") }}</th>
+                            <th class="prepared-entity-col-active" title="{{ t('Active now') }}">{{ t("Active now") }}</th>
                             {% endif %}
-                            <th class="prepared-entity-col-schedule">{{ t("Schedule") }}</th>
-                            <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
-                            <th class="prepared-entity-col-name">{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}</th>
-                            <th class="prepared-entity-col-raw">{{ t("Raw Frame Preview") }}</th>
+                            <th class="prepared-entity-col-schedule" title="{{ t('Schedule') }}">{{ t("Schedule") }}</th>
+                            <th class="prepared-entity-col-interval" title="{{ t('Every') }}">{{ t("Every") }}</th>
+                            <th class="prepared-entity-col-name" title="{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}">{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}</th>
+                            <th class="prepared-entity-col-raw" title="{{ t('Raw Frame Preview') }}">{{ t("Raw Frame Preview") }}</th>
                         </tr>
                     </thead>
                     <tbody>

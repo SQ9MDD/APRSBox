@@ -4709,6 +4709,12 @@ code {
     table-layout: fixed;
 }
 
+.prepared-entity-table thead th {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .prepared-entity-col-icon {
     width: 2.75rem;
     text-align: center;
