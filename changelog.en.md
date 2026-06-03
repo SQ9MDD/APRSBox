@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.32.dev - 2026-06-03
+- `Notifications / Telegram / webhooks`: implemented Telegram webhook notifications for messages and station radar.
+
 ## 1.8.30.dev - 2026-06-01
 
 ### Highlights

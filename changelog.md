@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.32.dev - 03.06.2026
+- `Powiadomienia / Telegram / webhooks`: zaimplementowano powiadomienia Telegram przez webhooki dla wiadomości i radaru stacji.
+
 ## 1.8.31.dev - 02.06.2026
 - `Objects / Items`: dodano wysyłkę obiektów zaplanowanych i cyklicznych (`issue #31`, SQ2FRG).
 - `I18N`: dodano tłumaczenia polskie.
