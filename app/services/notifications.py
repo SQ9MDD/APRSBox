@@ -369,13 +369,11 @@ def build_radar_station_match_event(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     station_name = str(station or "").strip().upper()
-    distance_part = _format_notification_distance(distance_m)
     rule_pattern = str(matched_rule.get("pattern") or "").strip().upper() or "*"
-    translator = get_translator(get_app_language())
-    message = translator("Radar: {station} is nearby ({distance}, rule {rule})").format(
+    message = _build_radar_message_text(
         station=station_name or "unknown",
-        distance=distance_part,
-        rule=rule_pattern,
+        distance_m=distance_m,
+        threshold_m=threshold_m,
     )
     return {
         "event_type": "radar_station_match",
@@ -869,6 +867,24 @@ def _format_notification_distance(distance_m: int | None) -> str:
         distance_km = distance_value / 1000.0
         return f"{distance_km:.1f}".rstrip("0").rstrip(".") + " km"
     return f"{distance_value} m"
+
+
+def _build_radar_message_text(*, station: str, distance_m: int | None, threshold_m: int) -> str:
+    translator = get_translator(get_app_language())
+    if distance_m is None:
+        return translator("Radar: detected {station}").format(station=station)
+    distance_text = _format_notification_distance(distance_m)
+    if threshold_m > 0:
+        threshold_text = _format_notification_distance(threshold_m)
+        return translator("Radar: {station} in range {threshold}, currently {distance}").format(
+            station=station,
+            threshold=threshold_text,
+            distance=distance_text,
+        )
+    return translator("Radar: detected {station}, currently {distance}").format(
+        station=station,
+        distance=distance_text,
+    )
 
 
 def _format_utc_log_timestamp(value: str | None) -> str:

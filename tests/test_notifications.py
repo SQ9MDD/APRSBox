@@ -83,10 +83,10 @@ class NotificationTests(unittest.TestCase):
         with temporary_database():
             set_app_setting("app_language", "pl")
             event = build_radar_station_match_event(
-                station="SQ9MDD-9",
+                station="SQ9MDD-7",
                 matched_rule={"id": 7, "pattern": "*"},
-                distance_m=1500,
-                threshold_m=2000,
+                distance_m=41,
+                threshold_m=500,
                 latitude="50.0",
                 longitude="19.0",
                 reference_latitude="49.0",
@@ -94,7 +94,38 @@ class NotificationTests(unittest.TestCase):
                 reference_station="SQ9MDD-0",
                 timestamp="2026-01-01T00:00:00+00:00",
             )
-            self.assertEqual(event["message"], "Radar: SQ9MDD-9 jest w pobliżu (1.5 km, reguła *)")
+            self.assertEqual(event["message"], "Radar: SQ9MDD-7 w zasięgu 500 m, obecnie 41 m")
+            self.assertNotIn("rule", event["message"].lower())
+            self.assertNotIn("reguła", event["message"].lower())
+
+            set_app_setting("app_language", "en")
+            distant_event = build_radar_station_match_event(
+                station="SQ6ODL-9",
+                matched_rule={"id": 7, "pattern": "*"},
+                distance_m=18200,
+                threshold_m=0,
+                latitude="50.0",
+                longitude="19.0",
+                reference_latitude="49.0",
+                reference_longitude="18.0",
+                reference_station="SQ9MDD-0",
+                timestamp="2026-01-01T00:00:00+00:00",
+            )
+            self.assertEqual(distant_event["message"], "Radar: detected SQ6ODL-9, currently 18.2 km")
+
+            no_distance_event = build_radar_station_match_event(
+                station="SQ6ODL-9",
+                matched_rule={"id": 7, "pattern": "*"},
+                distance_m=None,
+                threshold_m=0,
+                latitude="50.0",
+                longitude="19.0",
+                reference_latitude="49.0",
+                reference_longitude="18.0",
+                reference_station="SQ9MDD-0",
+                timestamp="2026-01-01T00:00:00+00:00",
+            )
+            self.assertEqual(no_distance_event["message"], "Radar: detected SQ6ODL-9")
 
     def test_radar_state_transitions_send_once_and_reset(self) -> None:
         with temporary_database():
