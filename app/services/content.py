@@ -445,7 +445,7 @@ def recent_event_logs(limit: int = 100, *, min_level: str = "DEBUG") -> list[dic
         f"""
         SELECT id, level, category, message, created_at
         FROM event_logs
-        WHERE category NOT IN ('outbound', 'digi_flow_runtime', 'aprsis', 'aprs', 'messages')
+        WHERE category NOT IN ('outbound', 'digi_flow_runtime', 'aprsis', 'aprs', 'messages', 'notifications_radar')
           AND level IN ({level_placeholders})
         ORDER BY id DESC
         LIMIT ?

@@ -13,6 +13,7 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_rete
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
 from app.services.band_condition import process_incoming_frame
 from app.services.messages import process_incoming_tnc2_message
+from app.services.notifications import queue_radar_notifications
 from app.services.outbound import build_object_tnc2, persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
 from app.services.serial_broker import SerialKissTcpBroker
@@ -2167,6 +2168,7 @@ class _TrafficModemRuntime:
         if entry["format"] == "TNC2":
             process_incoming_frame(entry["line"], band=active_band, timestamp=timestamp)
             process_incoming_tnc2_message(entry["line"], timestamp=timestamp)
+            queue_radar_notifications(timestamp=timestamp)
 
     async def _sleep(self, delay: float) -> None:
         try:

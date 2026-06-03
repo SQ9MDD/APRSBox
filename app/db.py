@@ -27,6 +27,7 @@ RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "aprsis_uplink_minute_stats",
     "aprsis_uplink_stats",
     "wx_runtime_cache",
+    "notification_radar_state",
     "band_condition_audibility_buckets",
     "band_condition_activity_station_buckets",
     "band_condition_activity_buckets",
@@ -249,6 +250,44 @@ CREATE TABLE IF NOT EXISTS wx_runtime_cache (
     last_error TEXT,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (source_id) REFERENCES wx_sources(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS notification_transports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    transport_type TEXT NOT NULL CHECK (transport_type IN ('webhook', 'telegram')),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    url TEXT NOT NULL DEFAULT '',
+    secret_header_name TEXT NOT NULL DEFAULT '',
+    secret_token TEXT NOT NULL DEFAULT '',
+    bot_token TEXT NOT NULL DEFAULT '',
+    chat_id TEXT NOT NULL DEFAULT '',
+    timeout_s INTEGER NOT NULL DEFAULT 5 CHECK (timeout_s BETWEEN 1 AND 60),
+    last_test_status TEXT NOT NULL DEFAULT '' CHECK (last_test_status IN ('', 'ok', 'error')),
+    last_test_error TEXT NOT NULL DEFAULT '',
+    last_test_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notification_radar_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    pattern TEXT NOT NULL,
+    distance_m INTEGER NOT NULL DEFAULT 0 CHECK (distance_m >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notification_radar_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id INTEGER NOT NULL,
+    station_key TEXT NOT NULL,
+    is_inside INTEGER NOT NULL DEFAULT 0 CHECK (is_inside IN (0, 1)),
+    last_matched_at TEXT,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (rule_id) REFERENCES notification_radar_rules(id) ON DELETE CASCADE,
+    UNIQUE (rule_id, station_key)
 );
 
 CREATE TABLE IF NOT EXISTS outbound_jobs (
