@@ -611,6 +611,7 @@
   "Scheduled: starts {date} UTC": "Scheduled: starts {date} UTC",
   "Manual activation.": "Manual activation.",
   "Manual activation. Valid until: {validUntil} UTC.": "Manual activation. Valid until: {validUntil} UTC.",
+  "Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.": "Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.",
   "Active from {fromDate} UTC to {toDate} UTC.": "Active from {fromDate} UTC to {toDate} UTC.",
   "Active every {value} {unit} from {fromDate} UTC for {duration}.": "Active every {value} {unit} from {fromDate} UTC for {duration}.",
   "Every {value} {unit}": "Every {value} {unit}",

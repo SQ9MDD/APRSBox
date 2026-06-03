@@ -610,6 +610,7 @@
   "Recurring": "Cykliczny",
   "Manual activation.": "Aktywacja ręczna.",
   "Manual activation. Valid until: {validUntil} UTC.": "Aktywacja ręczna. Ważne do: {validUntil} UTC.",
+  "Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.": "Ręczny: zostaw puste, aby nadawanie trwało do ręcznego wyłączenia. Zaplanowany: wymagany koniec. Cykliczny: opcjonalny koniec powtarzania.",
   "Next activation: {date} UTC.": "Następna aktywacja: {date} UTC.",
   "Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.": "Jeśli chcesz zwykły raport itemu bez dodatkowych rozszerzeń danych, utrzymaj komentarz w limicie 43 drukowalnych znaków ASCII.",
   "Keep the comment within 43 printable ASCII characters if you want a plain object report without extra data extensions.": "Jeśli chcesz zwykły raport obiektu bez dodatkowych rozszerzeń danych, utrzymaj komentarz w limicie 43 drukowalnych znaków ASCII.",

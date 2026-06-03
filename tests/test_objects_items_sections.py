@@ -35,6 +35,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Active from",
             "Active until",
             "Active for (hours)",
+            "Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.",
             "Active now",
             "Inactive now",
             "Activation",
