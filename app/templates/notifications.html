@@ -178,6 +178,8 @@
                             <th>{{ t("Enabled") }}</th>
                             <th>{{ t("Pattern") }}</th>
                             <th>{{ t("Distance (m)") }}</th>
+                            <th>{{ t("Last send") }}</th>
+                            <th>{{ t("Repeat blocked") }}</th>
                             {% if can_manage_notifications %}
                             <th>{{ t("Actions") }}</th>
                             {% endif %}
@@ -189,6 +191,8 @@
                             <td>{{ t("Yes") if rule.enabled else t("No") }}</td>
                             <td><code>{{ rule.pattern }}</code></td>
                             <td>{{ rule.distance_m }}</td>
+                            <td>{{ format_datetime(rule.last_sent_at, use_utc=True) if rule.last_sent_at else "-" }}</td>
+                            <td>{{ t("Yes") if rule.repeat_send_blocked else t("No") }}</td>
                             {% if can_manage_notifications %}
                             <td>
                                 <div class="table-actions table-actions-start">
@@ -206,7 +210,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{{ 4 if can_manage_notifications else 3 }}">{{ t("No records yet.") }}</td>
+                            <td colspan="{{ 6 if can_manage_notifications else 5 }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -187,7 +187,29 @@ def list_notification_radar_rules() -> list[dict[str, Any]]:
         ORDER BY id ASC
         """
     )
-    return [_serialize_radar_rule_row(dict(row)) for row in rows]
+    state_rows = fetch_all(
+        """
+        SELECT rule_id, is_inside, last_matched_at
+        FROM notification_radar_state
+        """
+    )
+    state_by_rule: dict[int, dict[str, Any]] = {}
+    for row in state_rows:
+        rule_id = int(row["rule_id"])
+        state = state_by_rule.setdefault(rule_id, {"last_sent_at": None, "repeat_send_blocked": False})
+        last_matched_at = str(row["last_matched_at"] or "").strip()
+        if last_matched_at and (state["last_sent_at"] is None or last_matched_at > str(state["last_sent_at"])):
+            state["last_sent_at"] = last_matched_at
+        if bool(int(row["is_inside"] or 0)):
+            state["repeat_send_blocked"] = True
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = _serialize_radar_rule_row(dict(row))
+        status = state_by_rule.get(int(item.get("id") or 0), {})
+        item["last_sent_at"] = status.get("last_sent_at")
+        item["repeat_send_blocked"] = bool(status.get("repeat_send_blocked"))
+        items.append(item)
+    return items
 
 
 def get_notification_radar_rule(rule_id: int | None) -> dict[str, Any] | None:
@@ -437,12 +459,13 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
 
             for station_key, match in current_matches.items():
                 was_inside = station_key in previous_inside_keys
+                last_matched_at = now if not was_inside else None
                 _upsert_radar_state(
                     connection,
                     rule_id=rule_id,
                     station_key=match["station_key"],
                     is_inside=1,
-                    last_matched_at=now,
+                    last_matched_at=last_matched_at,
                 )
                 if not was_inside and bool(int(rule.get("enabled") or 0)):
                     snapshot = match["snapshot"]

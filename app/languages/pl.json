@@ -1453,6 +1453,8 @@
   "Radar rule": "Reguła radaru",
   "Pattern": "Wzorzec",
   "Distance (m)": "Odległość (m)",
+  "Last send": "Ostatnia wysyłka",
+  "Repeat blocked": "Ponowna wysyłka zablokowana",
   "Webhook": "Webhook",
   "Telegram": "Telegram",
   "Bot token": "Token bota",

@@ -96,24 +96,45 @@ class NotificationTests(unittest.TestCase):
             ) as snapshots_mock:
                 snapshots_mock.return_value = [snapshot]
                 first_events = evaluate_radar_notifications(timestamp="2026-01-01T00:00:00+00:00")
+                state_after_first = fetch_one(
+                    "SELECT is_inside, last_matched_at FROM notification_radar_state WHERE rule_id = ? AND station_key = ?",
+                    (rule_id, "SQ6ODL-9"),
+                )
                 snapshots_mock.return_value = [snapshot]
                 second_events = evaluate_radar_notifications(timestamp="2026-01-01T00:01:00+00:00")
+                state_after_second = fetch_one(
+                    "SELECT is_inside, last_matched_at FROM notification_radar_state WHERE rule_id = ? AND station_key = ?",
+                    (rule_id, "SQ6ODL-9"),
+                )
                 snapshots_mock.return_value = []
                 third_events = evaluate_radar_notifications(timestamp="2026-01-01T00:02:00+00:00")
+                state_after_third = fetch_one(
+                    "SELECT is_inside, last_matched_at FROM notification_radar_state WHERE rule_id = ? AND station_key = ?",
+                    (rule_id, "SQ6ODL-9"),
+                )
                 snapshots_mock.return_value = [snapshot]
                 fourth_events = evaluate_radar_notifications(timestamp="2026-01-01T00:03:00+00:00")
+                state_after_fourth = fetch_one(
+                    "SELECT is_inside, last_matched_at FROM notification_radar_state WHERE rule_id = ? AND station_key = ?",
+                    (rule_id, "SQ6ODL-9"),
+                )
 
             self.assertEqual(len(first_events), 1)
             self.assertEqual(len(second_events), 0)
             self.assertEqual(len(third_events), 0)
             self.assertEqual(len(fourth_events), 1)
-
-            state = fetch_one(
-                "SELECT is_inside FROM notification_radar_state WHERE rule_id = ? AND station_key = ?",
-                (rule_id, "SQ6ODL-9"),
-            )
-            assert state is not None
-            self.assertEqual(int(state["is_inside"]), 1)
+            assert state_after_first is not None
+            assert state_after_second is not None
+            assert state_after_third is not None
+            assert state_after_fourth is not None
+            self.assertEqual(int(state_after_first["is_inside"]), 1)
+            self.assertEqual(state_after_first["last_matched_at"], "2026-01-01T00:00:00+00:00")
+            self.assertEqual(int(state_after_second["is_inside"]), 1)
+            self.assertEqual(state_after_second["last_matched_at"], "2026-01-01T00:00:00+00:00")
+            self.assertEqual(int(state_after_third["is_inside"]), 0)
+            self.assertEqual(state_after_third["last_matched_at"], "2026-01-01T00:00:00+00:00")
+            self.assertEqual(int(state_after_fourth["is_inside"]), 1)
+            self.assertEqual(state_after_fourth["last_matched_at"], "2026-01-01T00:03:00+00:00")
 
     def test_radar_ignores_my_station_and_wx_pairs(self) -> None:
         with temporary_database():

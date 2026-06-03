@@ -1447,6 +1447,8 @@
   "Radar rule": "Radar rule",
   "Pattern": "Pattern",
   "Distance (m)": "Distance (m)",
+  "Last send": "Last send",
+  "Repeat blocked": "Repeat blocked",
   "Webhook": "Webhook",
   "Telegram": "Telegram",
   "Bot token": "Bot token",
