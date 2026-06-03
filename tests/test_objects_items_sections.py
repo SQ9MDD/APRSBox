@@ -36,6 +36,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Active now",
             "Inactive now",
             "Activation",
+            "Recurring",
             "Manual activation.",
             "Manual activation. Valid until: {validUntil} UTC.",
             "Active from {fromDate} UTC to {toDate} UTC.",
