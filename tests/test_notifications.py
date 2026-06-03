@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.db import fetch_one, init_db, set_app_setting
+from app.db import fetch_all, fetch_one, init_db, set_app_setting
 from app.services.notifications import (
     _send_notification_event,
     build_aprs_message_event,
@@ -135,6 +135,20 @@ class NotificationTests(unittest.TestCase):
             self.assertEqual(state_after_third["last_matched_at"], "2026-01-01T00:00:00+00:00")
             self.assertEqual(int(state_after_fourth["is_inside"]), 1)
             self.assertEqual(state_after_fourth["last_matched_at"], "2026-01-01T00:03:00+00:00")
+
+            radar_logs = fetch_all(
+                """
+                SELECT message
+                FROM event_logs
+                WHERE category = 'notifications'
+                  AND message LIKE 'SQ6ODL-9 %'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(radar_logs), 3)
+            self.assertIn("wyslano powiadomienie; zalozono blokade ponownej wysylki", radar_logs[0]["message"])
+            self.assertIn("wyszedl z zasiegu / wyespirowal czas; zdejmuje blokade", radar_logs[1]["message"])
+            self.assertIn("wyslano powiadomienie; zalozono blokade ponownej wysylki", radar_logs[2]["message"])
 
     def test_radar_ignores_my_station_and_wx_pairs(self) -> None:
         with temporary_database():

@@ -243,6 +243,34 @@
             </form>
             {% endif %}
         </div>
+
+        <div class="table-wrap" style="margin-top: 1rem;">
+            <div class="panel-header" style="padding: 0 0 0.75rem 0;">
+                <div class="panel-header-copy">
+                    <h3 style="margin: 0; font-size: 1.1rem;">{{ t("Radar event log") }}</h3>
+                </div>
+            </div>
+            <table class="data-table compact-table">
+                <thead>
+                    <tr>
+                        <th>{{ t("Time (UTC)") }}</th>
+                        <th>{{ t("Message") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log_row in notification_radar_event_logs %}
+                    <tr>
+                        <td>{{ format_datetime(log_row.created_at, use_utc=True) }}</td>
+                        <td><code>{{ log_row.message }}</code></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="2">{{ t("No records yet.") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </section>
 {% endblock %}

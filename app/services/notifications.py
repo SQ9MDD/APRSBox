@@ -212,6 +212,21 @@ def list_notification_radar_rules() -> list[dict[str, Any]]:
     return items
 
 
+def list_notification_radar_event_logs(limit: int = 20) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT id, message, created_at
+        FROM event_logs
+        WHERE category = 'notifications'
+          AND message LIKE 'Radar:%'
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in rows]
+
+
 def get_notification_radar_rule(rule_id: int | None) -> dict[str, Any] | None:
     if rule_id is None:
         return None
@@ -269,6 +284,7 @@ def get_notifications_page_data(*, edit_transport_id: int | None = None, edit_ru
     rule = get_notification_radar_rule(edit_rule_id)
     transports = list_notification_transports()
     rules = list_notification_radar_rules()
+    radar_logs = list_notification_radar_event_logs()
     settings = get_notification_settings()
     return {
         "notification_settings": settings,
@@ -280,8 +296,10 @@ def get_notifications_page_data(*, edit_transport_id: int | None = None, edit_ru
         "notification_transport_form": _build_transport_form(transport),
         "notification_radar_rules": rules,
         "notification_radar_rule_form": _build_radar_rule_form(rule),
+        "notification_radar_event_logs": radar_logs,
         "notification_has_transports": bool(transports),
         "notification_has_radar_rules": bool(rules),
+        "notification_has_radar_event_logs": bool(radar_logs),
     }
 
 
@@ -428,6 +446,7 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
 
     now = timestamp or utc_now()
     events: list[dict[str, Any]] = []
+    pending_logs: list[str] = []
     with get_connection() as connection:
         for rule in rules:
             rule_id = int(rule["id"])
@@ -469,6 +488,9 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
                 )
                 if not was_inside and bool(int(rule.get("enabled") or 0)):
                     snapshot = match["snapshot"]
+                    pending_logs.append(
+                        f"{match['station_key']} {_format_utc_log_timestamp(now)} wyslano powiadomienie; zalozono blokade ponownej wysylki"
+                    )
                     events.append(
                         build_radar_station_match_event(
                             station=match["station_key"],
@@ -485,13 +507,19 @@ def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[s
                     )
 
             for station_key in previous_inside_keys - current_inside_keys:
+                station_label = previous_states[station_key]["station_key"] if station_key in previous_states else station_key
+                pending_logs.append(
+                    f"{station_label} {_format_utc_log_timestamp(now)} wyszedl z zasiegu / wyespirowal czas; zdejmuje blokade"
+                )
                 _upsert_radar_state(
                     connection,
                     rule_id=rule_id,
-                    station_key=previous_states[station_key]["station_key"] if station_key in previous_states else station_key,
+                    station_key=station_label,
                     is_inside=0,
                     last_matched_at=None,
                 )
+    for message in pending_logs:
+        log_event("INFO", "notifications", message)
     return events
 
 
@@ -808,6 +836,16 @@ def _notification_node_payload() -> dict[str, Any]:
         "ssid": str(station_settings.get("ssid") or "").strip(),
         "full_callsign": _reference_station_label(station_settings),
     }
+
+
+def _format_utc_log_timestamp(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return str(value)
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _upsert_radar_state(
