@@ -13,9 +13,11 @@
             class="map-page"
             data-station-latitude="{{ map_config.station_latitude }}"
             data-station-longitude="{{ map_config.station_longitude }}"
+            data-station-source-key="{{ map_station_source_key }}"
             data-default-zoom="{{ map_config.default_zoom }}"
             data-stations-endpoint="{{ map_stations_endpoint }}"
             data-map-tile-events-endpoint="{{ map_tile_events_endpoint }}"
+            data-traffic-stream-endpoint="{{ map_traffic_stream_endpoint }}"
             data-tile-url="{{ map_config.tile_url }}"
             data-tile-attribution="{{ map_config.tile_attribution }}"
             data-tile-source-name="{{ map_config.tile_source_name }}"
@@ -42,6 +44,8 @@
             data-i18n-distance-azimuth="{{ t('Distance and azimuth') }}"
             data-i18n-qsy="{{ t('QSY') }}"
             data-i18n-no-stations="{{ t('No decoded APRS stations available yet.') }}"
+            data-i18n-no-frames="{{ t('No frames received yet.') }}"
+            data-i18n-traffic-monitor="{{ t('Traffic Monitor') }}"
             data-i18n-show-tracks="{{ t('Show tracks') }}"
             data-i18n-hide-tracks="{{ t('Hide tracks') }}"
             data-i18n-show-coverage="{{ t('Show coverage') }}"
@@ -96,6 +100,15 @@
                     <button
                         type="button"
                         class="button button-secondary button-icon"
+                        id="map-toggle-scroller"
+                        aria-label="{{ t('Hide') }} {{ t('Traffic Monitor') }}"
+                        title="{{ t('Hide') }} {{ t('Traffic Monitor') }}"
+                    >
+                        <img id="map-toggle-scroller-icon" src="{{ request.scope.root_path }}/static/icons/format-list-bulleted.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
                         id="map-toggle-ruler"
                         aria-label="{{ t('Hide ruler') }}"
                         title="{{ t('Hide ruler') }}"
@@ -123,7 +136,10 @@
             </div>
             <div id="map-stage" class="map-stage">
                 <div id="map-canvas" class="map-canvas" aria-label="{{ t('Map viewer') }}"></div>
-                <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>
+                <div id="map-overlay-stack" class="map-overlay-stack">
+                    <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>
+                    <aside id="map-scroller-overlay" class="map-scroller-overlay" aria-live="polite"></aside>
+                </div>
             </div>
         </div>
     </div>
@@ -133,5 +149,6 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}"></script>
 {% endblock %}

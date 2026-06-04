@@ -306,6 +306,29 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
         bucket_start_utc = datetime.fromtimestamp(epoch_value, tz=timezone.utc)
         row_by_bucket_start[bucket_start_utc.isoformat()] = dict(row)
 
+    aprsis_rows = fetch_all(
+        """
+        SELECT
+            CAST((CAST(strftime('%s', bucket_minute_utc) AS INTEGER) / ?) AS INTEGER) * ? AS bucket_epoch,
+            SUM(tx_count) AS gated_to_aprsis_total
+        FROM aprsis_uplink_minute_stats
+        WHERE bucket_minute_utc >= ?
+          AND bucket_minute_utc < ?
+        GROUP BY bucket_epoch
+        ORDER BY bucket_epoch ASC
+        """,
+        (output_bucket_seconds, output_bucket_seconds, window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+    aprsis_by_bucket_start: dict[str, dict[str, Any]] = {}
+    for row in aprsis_rows:
+        epoch_raw = row["bucket_epoch"]
+        try:
+            epoch_value = int(epoch_raw)
+        except (TypeError, ValueError):
+            continue
+        bucket_start_utc = datetime.fromtimestamp(epoch_value, tz=timezone.utc)
+        aprsis_by_bucket_start[bucket_start_utc.isoformat()] = dict(row)
+
     bucket_starts: list[str] = []
     labels: list[str] = []
     series: dict[str, list[int]] = {
@@ -328,6 +351,7 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
         "invalid_total": [],
         "parse_error_total": [],
         "duplicate_total": [],
+        "gated_to_aprsis_total": [],
     }
     totals = {key: 0 for key in series}
 
@@ -337,8 +361,12 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
         bucket_starts.append(bucket_start_key)
         labels.append(_format_radio_activity_label(bucket_start_utc, output_bucket_minutes=output_bucket_minutes))
         row = row_by_bucket_start.get(bucket_start_key) or {}
+        aprsis_row = aprsis_by_bucket_start.get(bucket_start_key) or {}
         for key in series:
-            value = int(row.get(key) or 0)
+            if key == "gated_to_aprsis_total":
+                value = int(aprsis_row.get(key) or 0)
+            else:
+                value = int(row.get(key) or 0)
             series[key].append(value)
             totals[key] += value
 

@@ -68,7 +68,7 @@ from app.services.content import (
     safe_create_section_row,
     safe_update_section_row,
 )
-from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
@@ -82,6 +82,7 @@ from app.services.digi_flows import (
     get_digi_flow,
     get_digi_flow_reference_options,
     get_digi_flow_type_meta,
+    has_enabled_local_tx_aprsis_flow,
     list_digi_flows,
     safe_move_digi_flow,
     safe_create_digi_flow,
@@ -97,6 +98,15 @@ from app.services.messages import (
     queue_outgoing_message,
     retry_failed_message,
     update_conversation_path,
+)
+from app.services.notifications import (
+    delete_notification_radar_rule,
+    delete_notification_transport,
+    get_notifications_page_data,
+    safe_save_notification_radar_rule,
+    safe_save_notification_settings,
+    safe_save_notification_transport,
+    test_notification_transport,
 )
 from app.services.band_condition import (
     build_station_key,
@@ -145,8 +155,10 @@ from app.services.map_service import (
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job, enqueue_status_job
 from app.services.system import (
+    container_system_actions_disabled_message,
     current_update_channel,
     current_gui_version,
+    is_container_mode,
     latest_gui_version,
     list_update_channels,
     read_update_log,
@@ -174,7 +186,12 @@ from app.services.wx import (
 
 router = APIRouter()
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
-_CHANGELOG_PATH = _REPO_ROOT_DIR / "changelog.md"
+_CHANGELOG_FILES_BY_LANGUAGE: dict[str, Path] = {
+    "pl": _REPO_ROOT_DIR / "changelog.md",
+    "en": _REPO_ROOT_DIR / "changelog.en.md",
+    "es": _REPO_ROOT_DIR / "changelog.es.md",
+}
+_CHANGELOG_FALLBACK_LANGUAGE_ORDER: tuple[str, ...] = ("pl", "en")
 _CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
 EVENT_LOG_MIN_LEVEL_OPTIONS: tuple[str, ...] = ("INFO", "WARNING", "ERROR")
 EVENT_LOG_VIEW_LEVEL_OPTIONS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
@@ -195,6 +212,13 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
 
 def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+def _container_mode_system_action_denied_response() -> JSONResponse:
+    return JSONResponse(
+        {"ok": False, "error": _translate(container_system_actions_disabled_message())},
+        status_code=status.HTTP_409_CONFLICT,
+    )
 
 
 def _format_size_bytes(size_bytes: int) -> str:
@@ -259,6 +283,13 @@ def _section_template_context(
     return context
 
 
+def _section_edit_redirect(request: Request, slug: str, record_id: int) -> RedirectResponse:
+    return RedirectResponse(
+        url=_path(request, f"/{slug}?edit={record_id}"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
 def _station_detail_context(callsign: str, unit_system: str, *, root_path: str = "") -> dict | None:
     snapshots = get_visible_station_snapshots()
     detail = get_station_detail(callsign, unit_system=unit_system, snapshots=snapshots)
@@ -291,11 +322,20 @@ def _safe_positive_int(value: Any) -> int:
     return parsed if parsed >= 0 else 0
 
 
-def _read_changelog_markdown() -> str:
-    try:
-        return _CHANGELOG_PATH.read_text(encoding="utf-8")
-    except OSError:
-        return "# Changelog\n\nUnable to read changelog.md."
+def _read_changelog_markdown(language: str | None = None) -> str:
+    resolved_language = normalize_language(language if language is not None else get_app_language())
+    language_order = (resolved_language, *_CHANGELOG_FALLBACK_LANGUAGE_ORDER)
+    checked_paths: list[Path] = []
+    for language_code in language_order:
+        path = _CHANGELOG_FILES_BY_LANGUAGE.get(language_code)
+        if path is None or path in checked_paths:
+            continue
+        checked_paths.append(path)
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return "# Changelog\n\nUnable to read changelog file."
 
 
 def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:
@@ -397,7 +437,8 @@ def _dashboard_band_condition_card() -> dict | None:
     return preferred or bands[0]
 
 
-def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
+def _station_form_options(
+) -> dict[str, list[dict[str, str | int]]]:
     interface_options = [
         {
             "value": str(item["id"]),
@@ -406,6 +447,7 @@ def _station_form_options() -> dict[str, list[dict[str, str | int]]]:
         for item in get_active_tnc_interfaces()
     ]
     interface_options.append({"value": ALL_ACTIVE_INTERFACE_OPTION_VALUE, "label": "Transmit on all active interfaces"})
+    interface_options.append({"value": INTERNAL_TX_INTERFACE_OPTION_VALUE, "label": "Internal TX"})
     return {
         "interface_options": [{"value": "", "label": "Select interface"}] + interface_options,
         "ssid_options": [{"value": "", "label": "Select SSID"}] + [{"value": str(value), "label": str(value)} for value in range(16)],
@@ -444,6 +486,8 @@ def _station_page_context(
     station: dict | None = None,
 ) -> dict:
     resolved_station = dict(station or get_station_settings())
+    station_form_options = _station_form_options()
+    internal_tx_routing_active = has_enabled_local_tx_aprsis_flow()
     raw_interval_value = str(resolved_station.get("beacon_interval_minutes") or "").strip().lower()
     interval_mode = normalize_beacon_interval_mode(
         resolved_station.get("beacon_interval_mode"),
@@ -481,8 +525,9 @@ def _station_page_context(
         beacon_health=beacon_health,
         beacon_proportional_schedule_lines=beacon_schedule_lines,
         beacon_proportional_schedule_path=beacon_path_classification.get("normalized_path", ""),
+        internal_tx_routing_active=internal_tx_routing_active,
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
-        **_station_form_options(),
+        **station_form_options,
     )
 
 
@@ -506,6 +551,60 @@ def _wx_page_context(
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         interface_options=_station_form_options()["interface_options"],
         **get_wx_page_data(edit_source_id=edit_source_id, source_discovery=source_discovery),
+    )
+
+
+def _notification_transport_form_from_payload(payload: dict[str, Any], *, transport_id: int | None) -> dict[str, Any]:
+    timeout_value = payload.get("timeout_s")
+    return {
+        "id": transport_id,
+        "name": str(payload.get("name") or ""),
+        "transport_type": str(payload.get("transport_type") or ""),
+        "enabled": bool(payload.get("enabled")),
+        "url": str(payload.get("url") or ""),
+        "secret_header_name": str(payload.get("secret_header_name") or ""),
+        "secret_token": "",
+        "bot_token": "",
+        "chat_id": str(payload.get("chat_id") or ""),
+        "timeout_s": str(timeout_value) if timeout_value not in {None, ""} else "5",
+    }
+
+
+def _notification_radar_rule_form_from_payload(payload: dict[str, Any], *, rule_id: int | None) -> dict[str, Any]:
+    distance_value = payload.get("distance_m")
+    return {
+        "id": rule_id,
+        "enabled": bool(payload.get("enabled")),
+        "pattern": str(payload.get("pattern") or ""),
+        "distance_m": str(distance_value) if distance_value not in {None, ""} else "",
+    }
+
+
+def _notifications_page_context(
+    request: Request,
+    current_user: UserIdentity,
+    *,
+    flash: str | None = None,
+    flash_success: bool = True,
+    edit_transport_id: int | None = None,
+    edit_rule_id: int | None = None,
+    notification_transport_form: dict[str, Any] | None = None,
+    notification_radar_rule_form: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    context = get_notifications_page_data(edit_transport_id=edit_transport_id, edit_rule_id=edit_rule_id)
+    if notification_transport_form is not None:
+        context["notification_transport_form"] = notification_transport_form
+    if notification_radar_rule_form is not None:
+        context["notification_radar_rule_form"] = notification_radar_rule_form
+    return build_template_context(
+        request,
+        page_title="Notifications",
+        current_user=current_user,
+        active_nav="notifications",
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_notifications=current_user.role in {"admin", "operator"},
+        **context,
     )
 
 
@@ -579,6 +678,7 @@ def _settings_page_context(
     map_source_edit_id: int | None = None,
     map_source_form: dict[str, Any] | None = None,
 ) -> dict:
+    container_mode = is_container_mode()
     station_settings = get_station_settings()
     database_vacuum_blocked = has_enabled_modem_interface()
     db_maintenance_snapshot = database_maintenance_snapshot()
@@ -680,6 +780,7 @@ def _settings_page_context(
         update_log_content=str(update_log_snapshot.get("content") or ""),
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
+        is_container_mode=container_mode,
         map_sources=map_sources,
         map_source_form=resolved_map_source_form,
         map_source_edit_id=resolved_map_source_form.get("record_id"),
@@ -1040,6 +1141,8 @@ def settings_update_application(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("update-application", message=_translate("Queued."))
     result = start_application_update_job(job_id=job_id)
     if not result.get("ok"):
@@ -1114,6 +1217,8 @@ def settings_restart_services(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("restart-services", message=_translate("Queued."))
     result = start_service_restart_job(job_id=job_id)
     if not result.get("ok"):
@@ -1136,6 +1241,8 @@ def settings_reboot_host(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("reboot-host", message=_translate("Queued."))
     result = start_host_reboot_job(job_id=job_id)
     if not result.get("ok"):
@@ -1158,6 +1265,8 @@ def settings_poweroff_host(
     _: Request,
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
     job_id = create_system_job("poweroff-host", message=_translate("Queued."))
     result = start_host_poweroff_job(job_id=job_id)
     if not result.get("ok"):
@@ -1845,7 +1954,12 @@ def objects_create(
     symbol_code: str = Form(">"),
     symbol_overlay: str = Form(""),
     interval_minutes: str = Form("30"),
-    valid_until_utc: str = Form(""),
+    activation_mode: str = Form("manual"),
+    active_from_utc: str = Form(""),
+    active_until_utc: str = Form(""),
+    recurrence_duration_minutes: str = Form(""),
+    recurrence_interval_value: str = Form(""),
+    recurrence_interval_unit: str = Form(""),
     path: str = Form(""),
     is_enabled: str | None = Form(None),
     comment: str = Form(""),
@@ -1861,16 +1975,27 @@ def objects_create(
         "symbol_code": symbol_code.strip(),
         "symbol_overlay": symbol_overlay.strip(),
         "interval_minutes": interval_minutes.strip(),
-        "valid_until_utc": valid_until_utc.strip(),
+        "activation_mode": activation_mode.strip(),
+        "active_from_utc": active_from_utc.strip(),
+        "active_until_utc": active_until_utc.strip(),
+        "recurrence_duration_minutes": recurrence_duration_minutes.strip(),
+        "recurrence_interval_value": recurrence_interval_value.strip(),
+        "recurrence_interval_unit": recurrence_interval_unit.strip(),
         "path": path.strip(),
         "is_enabled": is_enabled,
         "comment": comment.strip(),
     }
     if record_id is None:
         success, error = safe_create_section_row("objects", payload)
+        if success:
+            created_row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", (payload["name"],))
+            if created_row is not None:
+                return _section_edit_redirect(request, "objects", int(created_row["id"]))
         edit_row = None
     else:
         success, error = safe_update_section_row("objects", record_id, payload)
+        if success:
+            return _section_edit_redirect(request, "objects", record_id)
         edit_row = get_section_row("objects", record_id) if error else None
     context = _section_template_context(request, current_user, "objects", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
@@ -1900,6 +2025,12 @@ def items_create(
     symbol_code: str = Form(">"),
     symbol_overlay: str = Form(""),
     interval_minutes: str = Form("30"),
+    activation_mode: str = Form("manual"),
+    active_from_utc: str = Form(""),
+    active_until_utc: str = Form(""),
+    recurrence_duration_minutes: str = Form(""),
+    recurrence_interval_value: str = Form(""),
+    recurrence_interval_unit: str = Form(""),
     path: str = Form(""),
     is_enabled: str | None = Form(None),
     comment: str = Form(""),
@@ -1914,15 +2045,27 @@ def items_create(
         "symbol_code": symbol_code.strip(),
         "symbol_overlay": symbol_overlay.strip(),
         "interval_minutes": interval_minutes.strip(),
+        "activation_mode": activation_mode.strip(),
+        "active_from_utc": active_from_utc.strip(),
+        "active_until_utc": active_until_utc.strip(),
+        "recurrence_duration_minutes": recurrence_duration_minutes.strip(),
+        "recurrence_interval_value": recurrence_interval_value.strip(),
+        "recurrence_interval_unit": recurrence_interval_unit.strip(),
         "path": path.strip(),
         "is_enabled": is_enabled,
         "comment": comment.strip(),
     }
     if record_id is None:
         success, error = safe_create_section_row("items", payload)
+        if success:
+            created_row = fetch_one("SELECT id FROM aprs_items WHERE name = ?", (payload["name"],))
+            if created_row is not None:
+                return _section_edit_redirect(request, "items", int(created_row["id"]))
         edit_row = None
     else:
         success, error = safe_update_section_row("items", record_id, payload)
+        if success:
+            return _section_edit_redirect(request, "items", record_id)
         edit_row = get_section_row("items", record_id) if error else None
     context = _section_template_context(request, current_user, "items", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
@@ -1968,7 +2111,12 @@ def bulletins_create(
     bulletin_code: str = Form(""),
     group_name: str = Form(""),
     interval_minutes: str = Form("30"),
-    valid_until_utc: str = Form(""),
+    activation_mode: str = Form("manual"),
+    active_from_utc: str = Form(""),
+    active_until_utc: str = Form(""),
+    recurrence_duration_minutes: str = Form(""),
+    recurrence_interval_value: str = Form(""),
+    recurrence_interval_unit: str = Form(""),
     path: str = Form(""),
     is_enabled: str | None = Form(None),
     message_text: str = Form(...),
@@ -1979,7 +2127,12 @@ def bulletins_create(
         "bulletin_code": bulletin_code.strip(),
         "group_name": group_name.strip(),
         "interval_minutes": interval_minutes.strip(),
-        "valid_until_utc": valid_until_utc.strip(),
+        "activation_mode": activation_mode.strip(),
+        "active_from_utc": active_from_utc.strip(),
+        "active_until_utc": active_until_utc.strip(),
+        "recurrence_duration_minutes": recurrence_duration_minutes.strip(),
+        "recurrence_interval_value": recurrence_interval_value.strip(),
+        "recurrence_interval_unit": recurrence_interval_unit.strip(),
         "path": path.strip(),
         "is_enabled": is_enabled,
         "message_text": message_text.strip(),
@@ -2020,14 +2173,25 @@ def map_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
+    station_settings = get_station_settings()
+    station_callsign = str(station_settings.get("callsign") or "").strip().upper()
+    station_ssid = str(station_settings.get("ssid") or "").strip()
+    if station_ssid == "0":
+        station_ssid = ""
+    map_station_source_key = station_callsign
+    if station_callsign and station_ssid:
+        map_station_source_key = f"{station_callsign}-{station_ssid}"
     context = build_template_context(
         request,
         page_title="Map",
         current_user=current_user,
         active_nav="map",
+        body_class="page-map",
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
+        map_station_source_key=map_station_source_key,
         map_stations_endpoint=_path(request, "/api/map/stations"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
+        map_traffic_stream_endpoint=_path(request, "/api/traffic/stream"),
     )
     return templates.TemplateResponse("map.html", context)
 
@@ -2349,6 +2513,169 @@ def wx_source_discover(
         source_discovery=result if result.get("ok") else None,
     )
     return templates.TemplateResponse("wx.html", context, status_code=200 if result.get("ok") else status.HTTP_400_BAD_REQUEST)
+
+
+@router.get("/notifications")
+def notifications_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+    edit_transport: int | None = None,
+    edit_rule: int | None = None,
+) -> object:
+    templates = request.app.state.templates
+    context = _notifications_page_context(
+        request,
+        current_user,
+        edit_transport_id=edit_transport,
+        edit_rule_id=edit_rule,
+    )
+    return templates.TemplateResponse("notifications.html", context)
+
+
+@router.post("/notifications/settings")
+def notifications_settings_update(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    messages_enabled: str | None = Form(None),
+    messages_include_content: str | None = Form(None),
+    radar_enabled: str | None = Form(None),
+    radar_ignored_patterns: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    success, error = safe_save_notification_settings(
+        {
+            "messages_enabled": messages_enabled,
+            "messages_include_content": messages_include_content,
+            "radar_enabled": radar_enabled,
+            "radar_ignored_patterns": radar_ignored_patterns,
+        }
+    )
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification settings updated." if success else error,
+        flash_success=success,
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/transports")
+def notifications_transport_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    transport_id: int | None = Form(None),
+    name: str = Form(""),
+    transport_type: str = Form("webhook"),
+    enabled: str | None = Form(None),
+    url: str = Form(""),
+    secret_header_name: str = Form(""),
+    secret_token: str = Form(""),
+    bot_token: str = Form(""),
+    chat_id: str = Form(""),
+    timeout_s: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "name": name,
+        "transport_type": transport_type,
+        "enabled": enabled,
+        "url": url,
+        "secret_header_name": secret_header_name,
+        "secret_token": secret_token,
+        "bot_token": bot_token,
+        "chat_id": chat_id,
+        "timeout_s": timeout_s,
+    }
+    success, error, _saved_transport_id = safe_save_notification_transport(payload, transport_id=transport_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification transport saved." if success else error,
+        flash_success=success,
+        edit_transport_id=None if success else transport_id,
+        notification_transport_form=None if success else _notification_transport_form_from_payload(payload, transport_id=transport_id),
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/transports/{transport_id}/test")
+def notifications_transport_test(
+    transport_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    result = test_notification_transport(transport_id)
+    success = bool(result.get("ok"))
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification transport test succeeded." if success else str(result.get("error") or "Notification transport test failed."),
+        flash_success=success,
+        edit_transport_id=transport_id,
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/transports/{transport_id}/delete")
+def notifications_transport_delete(
+    transport_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    delete_notification_transport(transport_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Notification transport deleted.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("notifications.html", context)
+
+
+@router.post("/notifications/radar-rules")
+def notifications_radar_rule_save(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    rule_id: int | None = Form(None),
+    enabled: str | None = Form(None),
+    pattern: str = Form(""),
+    distance_m: str = Form(""),
+) -> object:
+    templates = request.app.state.templates
+    payload = {
+        "enabled": enabled,
+        "pattern": pattern,
+        "distance_m": distance_m,
+    }
+    success, error, _saved_rule_id = safe_save_notification_radar_rule(payload, rule_id=rule_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Radar rule saved." if success else error,
+        flash_success=success,
+        edit_rule_id=None if success else rule_id,
+        notification_radar_rule_form=None if success else _notification_radar_rule_form_from_payload(payload, rule_id=rule_id),
+    )
+    return templates.TemplateResponse("notifications.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
+
+
+@router.post("/notifications/radar-rules/{rule_id}/delete")
+def notifications_radar_rule_delete(
+    rule_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    delete_notification_radar_rule(rule_id)
+    context = _notifications_page_context(
+        request,
+        current_user,
+        flash="Radar rule deleted.",
+        flash_success=True,
+    )
+    return templates.TemplateResponse("notifications.html", context)
 
 
 @router.post("/station")

@@ -16,10 +16,27 @@ from app.db import get_app_setting, set_app_setting
 UPDATE_CHANNEL_SETTING_KEY = "gui_update_branch"
 UPDATE_LOG_FILE_NAME = "application-update.log"
 _UPDATE_CHANNEL_RE = re.compile(r"^[A-Za-z0-9._/-]{1,128}$")
+CONTAINER_SYSTEM_ACTIONS_DISABLED_MESSAGE = (
+    "Docker installation detected. In-app system actions are disabled. "
+    "Update APRSBox by pulling a newer Docker image and recreating the container with the same volumes. "
+    "Restart or stop APRSBox using Docker commands."
+)
 
 
 def current_gui_version() -> str:
     return get_version()
+
+
+def is_container_mode() -> bool:
+    return bool(settings.is_container_mode)
+
+
+def container_system_actions_disabled_message() -> str:
+    return CONTAINER_SYSTEM_ACTIONS_DISABLED_MESSAGE
+
+
+def _container_mode_action_blocked_result() -> dict[str, Any]:
+    return {"ok": False, "error": CONTAINER_SYSTEM_ACTIONS_DISABLED_MESSAGE, "status_code": 409}
 
 
 def _default_update_channel() -> str:
@@ -259,6 +276,8 @@ def _start_background_script(
 
 
 def start_application_update() -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     update_channel = current_update_channel()
     return _start_background_script(
         script_name="update.sh",
@@ -272,6 +291,8 @@ def start_application_update() -> dict[str, Any]:
 
 
 def start_application_update_job(*, job_id: int) -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     update_channel = current_update_channel()
     return _start_background_script(
         script_name="update.sh",
@@ -286,6 +307,8 @@ def start_application_update_job(*, job_id: int) -> dict[str, Any]:
 
 
 def start_service_restart() -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     return _start_background_script(
         script_name="restart-services.sh",
         log_filename="service-restart.log",
@@ -293,6 +316,8 @@ def start_service_restart() -> dict[str, Any]:
 
 
 def start_service_restart_job(*, job_id: int) -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     return _start_background_script(
         script_name="restart-services.sh",
         log_filename="service-restart.log",
@@ -301,6 +326,8 @@ def start_service_restart_job(*, job_id: int) -> dict[str, Any]:
 
 
 def start_host_reboot() -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     return _start_background_script(
         script_name="reboot-host.sh",
         log_filename="host-reboot.log",
@@ -308,6 +335,8 @@ def start_host_reboot() -> dict[str, Any]:
 
 
 def start_host_reboot_job(*, job_id: int) -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     return _start_background_script(
         script_name="reboot-host.sh",
         log_filename="host-reboot.log",
@@ -316,6 +345,8 @@ def start_host_reboot_job(*, job_id: int) -> dict[str, Any]:
 
 
 def start_host_poweroff() -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     return _start_background_script(
         script_name="poweroff-host.sh",
         log_filename="host-poweroff.log",
@@ -323,6 +354,8 @@ def start_host_poweroff() -> dict[str, Any]:
 
 
 def start_host_poweroff_job(*, job_id: int) -> dict[str, Any]:
+    if is_container_mode():
+        return _container_mode_action_blocked_result()
     return _start_background_script(
         script_name="poweroff-host.sh",
         log_filename="host-poweroff.log",

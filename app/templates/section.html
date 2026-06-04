@@ -44,11 +44,15 @@
                 <table class="data-table prepared-entity-table">
                     <thead>
                         <tr>
-                            <th class="prepared-entity-col-icon">{{ t("Icon") }}</th>
-                            <th class="prepared-entity-col-active">{{ t("Active") }}</th>
-                            <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
-                            <th class="prepared-entity-col-name">{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}</th>
-                            <th class="prepared-entity-col-raw">{{ t("Raw Frame Preview") }}</th>
+                            <th class="prepared-entity-col-icon" title="{{ t('Icon') }}">{{ t("Icon") }}</th>
+                            <th class="prepared-entity-col-active" title="{{ t('Enabled') if section.slug == 'objects' else t('Active') }}">{{ t("Enabled") if section.slug == 'objects' else t("Active") }}</th>
+                            {% if section.slug == 'objects' %}
+                            <th class="prepared-entity-col-active" title="{{ t('Active now') }}">{{ t("Active now") }}</th>
+                            {% endif %}
+                            <th class="prepared-entity-col-schedule" title="{{ t('Schedule') }}">{{ t("Schedule") }}</th>
+                            <th class="prepared-entity-col-interval" title="{{ t('Every') }}">{{ t("Every") }}</th>
+                            <th class="prepared-entity-col-name" title="{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}">{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}</th>
+                            <th class="prepared-entity-col-raw" title="{{ t('Raw Frame Preview') }}">{{ t("Raw Frame Preview") }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -56,18 +60,25 @@
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
                             <td class="prepared-entity-col-active">
-                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.is_enabled else 'tnc-badge-disabled' }}">
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
-                                    <span>{{ t('On' if row.is_enabled else 'Off') }}</span>
                                 </span>
                             </td>
+                            {% if section.slug == 'objects' %}
+                            <td class="prepared-entity-col-active">
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.activation_active_now else 'tnc-status-icon-disabled' }}" title="{{ row.activation_summary }}" aria-label="{{ t('Active now' if row.activation_active_now else 'Inactive now') }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'play-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
+                                </span>
+                            </td>
+                            {% endif %}
+                            <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
                             <td class="prepared-entity-col-name">{{ row.name }}</td>
-                            <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
+                            <td class="prepared-entity-col-raw" title="{{ row.raw_frame_preview }}"><code title="{{ row.raw_frame_preview }}">{{ row.raw_frame_preview }}</code></td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5">{{ t("No records yet.") }}</td>
+                            <td colspan="{{ 7 if section.slug == 'objects' else 6 }}">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -77,6 +88,7 @@
                     <thead>
                         <tr>
                             <th class="prepared-entity-col-active">{{ t("Active") }}</th>
+                            <th class="prepared-entity-col-schedule">{{ t("Schedule") }}</th>
                             <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
                             <th class="message-entry-col-type">{{ t("Type") }}</th>
                             <th class="message-entry-col-target">{{ t("Target") }}</th>
@@ -87,11 +99,12 @@
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-active">
-                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.is_enabled else 'tnc-badge-disabled' }}">
-                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
-                                    <span>{{ t('On' if row.is_enabled else 'Off') }}</span>
+                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.activation_active_now else 'tnc-badge-disabled' }}" title="{{ row.activation_summary }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
+                                    <span>{{ t('On' if row.activation_active_now else 'Off') }}</span>
                                 </span>
                             </td>
+                            <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
                             <td class="message-entry-col-type">{{ t(row.type_label) }}</td>
                             <td class="message-entry-col-target"><code>{{ row.target_display }}</code></td>
@@ -99,7 +112,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5">{{ t("No records yet.") }}</td>
+                            <td colspan="6">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -234,6 +247,10 @@
                     </button>
                 </label>
                 {% endif %}
+                {% if field.form_visible|default(true) %}
+                {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}
+                <div class="full activation-date-grid">
+                {% endif %}
                 <label
                     class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}"
                     {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
@@ -244,6 +261,8 @@
                     {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port-row"{% endif %}
                     {% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist-row"{% endif %}
                     {% if section.slug == 'modems' and field.name in ['expose_allow_tx', 'expose_bind_address', 'expose_port', 'expose_whitelist'] and not (edit_row and edit_row.expose_port_enabled) %}hidden{% endif %}
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}data-activation-modes="scheduled recurring"{% endif %}
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['recurrence_duration_minutes', 'recurrence_interval_value', 'recurrence_interval_unit'] %}data-activation-modes="recurring"{% endif %}
                 >
                     {% if field.type == 'textarea' %}
                     <span>{{ t(field.label) }}</span>
@@ -258,6 +277,7 @@
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_overlay' %}id="{{ section.slug }}-symbol-overlay"{% endif %}
                         {% if section.slug == 'bulletins' and field.name == 'message_kind' %}id="bulletins-message-kind"{% endif %}
+                        {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'activation_mode' %}data-activation-mode{% endif %}
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_overlay' and not (edit_row and edit_row.symbol_table == '\\') %}disabled{% endif %}
                         {% if field.required %}required{% endif %}
                     >
@@ -269,9 +289,15 @@
                     </select>
                     {% elif field.type == 'date' %}
                     <span>{{ t(field.label) }}</span>
+                    {% if edit_row and section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}
+                    {% set raw_date_value = edit_row.activation_form_active_from_utc %}
+                    {% elif edit_row and section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
+                    {% set raw_date_value = edit_row.activation_form_active_until_utc %}
+                    {% else %}
                     {% set raw_date_value = edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') %}
+                    {% endif %}
                     {% set input_date_value = raw_date_value|string %}
-                    {% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['active_from_utc', 'active_until_utc'] %}
                     {% if input_date_value %}
                     {% if input_date_value|length == 10 %}
                     {% set input_date_value = input_date_value ~ 'T23:59' %}
@@ -285,11 +311,11 @@
                     {% endif %}
                     <div class="field-inline-actions">
                         <input
-                            type="{% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}datetime-local{% else %}date{% endif %}"
+                            type="{% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['active_from_utc', 'active_until_utc'] %}datetime-local{% else %}date{% endif %}"
                             id="{{ section.slug }}-{{ field.name }}"
                             name="{{ field.name }}"
                             value="{{ input_date_value if input_date_value else '' }}"
-                            {% if section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}step="60"{% endif %}
+                            {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['active_from_utc', 'active_until_utc'] %}step="60"{% endif %}
                             {% if field.required %}required{% endif %}
                         >
                         <button type="button" class="button button-secondary button-inline-control" data-clear-date-target="{{ section.slug }}-{{ field.name }}">
@@ -329,6 +355,15 @@
                     </div>
                     {% else %}
                     <span>{{ t(field.label) }}</span>
+                    {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'recurrence_duration_minutes' %}
+                    <input
+                        type="number"
+                        data-recurrence-duration-hours
+                        {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['recurrence_duration_minutes', 'recurrence_interval_value'] %}min="1" step="1"{% endif %}
+                        value="{{ ((edit_row[field.name]|int) / 60)|int if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
+                        {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
+                    >
+                    {% else %}
                     <input
                         type="{{ field.type }}"
                         name="{{ field.name }}"
@@ -336,9 +371,11 @@
                         {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-address"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'tx_min_gap_seconds' %}min="0.2" max="1.2" step="0.01"{% endif %}
+                        {% if section.slug in ['objects', 'items', 'bulletins'] and field.name in ['recurrence_duration_minutes', 'recurrence_interval_value'] %}min="1" step="1"{% endif %}
                         value="{{ edit_row[field.name] if edit_row and edit_row[field.name] is not none else (field.default if field.default is defined else '') }}"
                         {% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}
                     >
+                    {% endif %}
                     {% if section.slug == 'items' and field.name == 'longitude' %}
                     <button type="button" class="button button-secondary location-picker-button" id="{{ section.slug }}-open-map-picker">
                         <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
@@ -358,8 +395,10 @@
                     <small class="muted">{{ t("Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
                     <small class="muted">{{ t("Uses the same outbound queue and scheduler path as beacon, status and objects.") }}</small>
-                    {% elif section.slug in ['objects', 'bulletins'] and field.name == 'valid_until_utc' %}
-                    <small class="muted">{{ t("Leave empty to keep sending until manually disabled.") }}</small>
+                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'activation_mode' %}
+                    <small class="muted">{{ t("Activation schedule controls when sending is allowed. Send interval remains separate.") }}</small>
+                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
+                    <small class="muted">{{ t("Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.") }}</small>
                     {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
@@ -385,7 +424,21 @@
                     <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.") }}</small>
                     {% endif %}
                 </label>
+                {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
+                </div>
+                {% endif %}
+                {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'activation_mode' %}
+                <div class="activation-grid-spacer" aria-hidden="true"></div>
+                {% endif %}
+                {% endif %}
                 {% endfor %}
+                {% if section.slug in ['objects', 'items', 'bulletins'] %}
+                <div class="full activation-summary-panel">
+                    <strong>{{ t("Activation summary") }}</strong>
+                    <span class="muted" data-activation-summary>{{ edit_row.activation_summary if edit_row else t("Manual activation.") }}</span>
+                    <div class="activation-warning-list" data-activation-warnings></div>
+                </div>
+                {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
                     {% if section.supports_editing and edit_row %}
@@ -513,6 +566,147 @@
                 input.dispatchEvent(new Event("input", { bubbles: true }));
                 input.dispatchEvent(new Event("change", { bubbles: true }));
             });
+        }
+
+        for (const slug of ["objects", "items", "bulletins"]) {
+            const form = document.getElementById(`${slug}-form`);
+            if (!form) continue;
+            const i18n = Object.freeze({
+                activeFrom: {{ t('Active from {fromDate} UTC to {toDate} UTC.')|tojson }},
+                activeEvery: {{ t('Active every {value} {unit} from {fromDate} UTC for {duration}.')|tojson }},
+                repeatUntil: {{ t('Repeat until {repeatUntil} UTC.')|tojson }},
+                manualActivation: {{ t('Manual activation.')|tojson }},
+                manualActivationWithUntil: {{ t('Manual activation. Valid until: {validUntil} UTC.')|tojson }},
+                scheduledActiveNow: {{ t('Scheduled: active now')|tojson }},
+                scheduledInactive: {{ t('Scheduled: inactive')|tojson }},
+                scheduledStarts: {{ t('Scheduled: starts {date} UTC')|tojson }},
+                every: {{ t('Every {value} {unit}')|tojson }},
+                recurringNoEndDate: {{ t('Recurring schedule has no end date.')|tojson }},
+                recurringLong: {{ t('Record will be active for more than 24h per cycle.')|tojson }},
+                wide2Warning: {{ t('WIDE2-2 with interval below 60m is not recommended.')|tojson }},
+                directPathWarning: {{ t('Direct path is recommended for local/simple records.')|tojson }},
+                day: {{ t('Day(s)')|tojson }},
+                week: {{ t('Week(s)')|tojson }},
+                month: {{ t('Month(s)')|tojson }},
+                year: {{ t('Year(s)')|tojson }},
+            });
+            const modeSelect = form.querySelector("[data-activation-mode]");
+            const summaryNode = form.querySelector("[data-activation-summary]");
+            const warningList = form.querySelector("[data-activation-warnings]");
+            if (!(modeSelect instanceof HTMLSelectElement)) continue;
+
+            const field = (name) => form.querySelector(`[name="${name}"]`);
+            const value = (name) => String(field(name)?.value || "").trim();
+            const displayDate = (name) => value(name).replace("T", " ");
+            const formatMessage = (template, params = {}) => template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => (
+                Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match
+            ));
+            const recurrenceUnitLabel = (unit) => ({
+                day: i18n.day,
+                week: i18n.week,
+                month: i18n.month,
+                year: i18n.year,
+            }[unit] || unit || "?");
+            const durationLabel = () => {
+                const minutes = Number.parseInt(value("recurrence_duration_minutes"), 10);
+                if (!Number.isInteger(minutes) || minutes <= 0) return "?";
+                return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
+            };
+
+            const syncActivationFields = () => {
+                const mode = modeSelect.value || "manual";
+                for (const row of form.querySelectorAll("[data-activation-modes]")) {
+                    const active = String(row.getAttribute("data-activation-modes") || "").split(" ").includes(mode);
+                    row.classList.toggle("activation-group-inactive", !active);
+                    row.setAttribute("aria-disabled", String(!active));
+                    for (const input of row.querySelectorAll("input, select, textarea, button")) {
+                        input.disabled = !active;
+                    }
+                }
+
+                const requiredNames = mode === "scheduled"
+                    ? ["active_from_utc", "active_until_utc"]
+                    : mode === "recurring"
+                        ? ["active_from_utc", "recurrence_duration_minutes", "recurrence_interval_value", "recurrence_interval_unit"]
+                        : [];
+                for (const name of ["active_from_utc", "active_until_utc", "recurrence_duration_minutes", "recurrence_interval_value", "recurrence_interval_unit"]) {
+                    const input = field(name);
+                    if (input) input.required = requiredNames.includes(name);
+                }
+
+                if (summaryNode) {
+                    if (mode === "scheduled") {
+                        summaryNode.textContent = formatMessage(i18n.activeFrom, {
+                            fromDate: displayDate("active_from_utc") || "?",
+                            toDate: displayDate("active_until_utc") || "?",
+                        });
+                    } else if (mode === "recurring") {
+                        const repeatUntil = displayDate("active_until_utc");
+                        summaryNode.textContent = formatMessage(i18n.activeEvery, {
+                            value: value("recurrence_interval_value") || "?",
+                            unit: recurrenceUnitLabel(value("recurrence_interval_unit")),
+                            fromDate: displayDate("active_from_utc") || "?",
+                            duration: durationLabel(),
+                        });
+                        if (repeatUntil) {
+                            summaryNode.textContent += ` ${formatMessage(i18n.repeatUntil, { repeatUntil })}`;
+                        }
+                    } else {
+                        const validUntil = displayDate("active_until_utc");
+                        summaryNode.textContent = validUntil
+                            ? formatMessage(i18n.manualActivationWithUntil, { validUntil })
+                            : i18n.manualActivation;
+                    }
+                }
+
+                if (warningList) {
+                    const warnings = [];
+                    if (mode === "recurring" && !value("active_until_utc")) {
+                        warnings.push(i18n.recurringNoEndDate);
+                    }
+                    const duration = Number.parseInt(value("recurrence_duration_minutes"), 10);
+                    if (mode === "recurring" && Number.isInteger(duration) && duration > 1440) {
+                        warnings.push(i18n.recurringLong);
+                    }
+                    const path = value("path").toUpperCase();
+                    const interval = Number.parseInt(value("interval_minutes"), 10);
+                    if (path.includes("WIDE2-2") && Number.isInteger(interval) && interval < 60) {
+                        warnings.push(i18n.wide2Warning);
+                    }
+                    if (path) {
+                        warnings.push(i18n.directPathWarning);
+                    }
+                    warningList.replaceChildren(...warnings.map((warning) => {
+                        const node = document.createElement("small");
+                        node.className = "field-validation-warning";
+                        node.textContent = warning;
+                        return node;
+                    }));
+                }
+            };
+
+            modeSelect.addEventListener("change", syncActivationFields);
+            form.addEventListener("input", syncActivationFields);
+            form.addEventListener("change", syncActivationFields);
+            syncActivationFields();
+
+            form.addEventListener("submit", function(event) {
+                const durationHoursInput = form.querySelector("[data-recurrence-duration-hours]");
+                if (durationHoursInput && durationHoursInput.value) {
+                    const hours = Number.parseInt(durationHoursInput.value, 10);
+                    if (Number.isInteger(hours) && hours > 0) {
+                        // Create hidden field with minutes value for backend
+                        let hiddenInput = form.querySelector("input[name='recurrence_duration_minutes']");
+                        if (!hiddenInput) {
+                            hiddenInput = document.createElement("input");
+                            hiddenInput.type = "hidden";
+                            hiddenInput.name = "recurrence_duration_minutes";
+                            form.appendChild(hiddenInput);
+                        }
+                        hiddenInput.value = hours * 60;
+                    }
+                }
+            }, true);
         }
 
         const modemForm = document.getElementById("modems-form");

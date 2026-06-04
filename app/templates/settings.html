@@ -104,10 +104,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Application update") }}</h2>
+                {% if is_container_mode %}
+                <p class="section-lead">{{ t("Docker installation detected. In-app system actions are disabled. Update APRSBox by pulling a newer Docker image and recreating the container with the same volumes. Restart or stop APRSBox using Docker commands.") }}</p>
+                {% else %}
                 <p class="section-lead">{{ t("Configure the update channel and run application update from the configured repository.") }}</p>
+                {% endif %}
             </div>
         </div>
-        {% if can_manage_updates %}
+        {% if is_container_mode %}
+        <div class="alert">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</div>
+        {% elif can_manage_updates %}
         <form
             method="post"
             action="{{ request.scope.root_path }}/settings/update-channel"
@@ -131,14 +137,16 @@
         {% else %}
         <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
         {% endif %}
-        {% if update_channels_fetch_error %}
+        {% if not is_container_mode and update_channels_fetch_error %}
         <div class="alert">{{ t("Update channel list could not be refreshed. Using saved channel.") }}</div>
         <p class="muted"><code>{{ update_channels_fetch_error }}</code></p>
         {% endif %}
-        {% if update_channel_is_unstable %}
+        {% if not is_container_mode and update_channel_is_unstable %}
         <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
         {% endif %}
+        {% if not is_container_mode %}
         <p class="muted">{{ t("Update fetches code from the selected channel, runs init-db, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end. GUI may temporarily lose connection.")|safe }}</p>
+        {% endif %}
         <div class="settings-update-actions">
             <form
                 method="post"
@@ -150,7 +158,7 @@
             >
                 <button type="submit" class="button button-secondary">{{ t("Check version") }}</button>
             </form>
-            {% if can_manage_updates %}
+            {% if can_manage_updates and not is_container_mode %}
             <form
                 method="post"
                 action="{{ request.scope.root_path }}/settings/update-application"
@@ -164,7 +172,11 @@
             {% endif %}
         </div>
         <div id="settings-version-result">
+            {% if is_container_mode %}
+            <p class="muted">{{ t("Check version can be used for informational comparison only. Docker mode updates must be done through Docker image pull and container recreate.") }}</p>
+            {% else %}
             <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
+            {% endif %}
         </div>
     </div>
 </section>
@@ -401,7 +413,11 @@
                 <span>{{ t("Backup file") }}</span>
                 <input type="file" name="backup_file" accept=".json,application/json" required>
             </label>
+            {% if is_container_mode %}
+            <p class="muted full">{{ t("Import rewrites current configuration tables. Keep an exported file before restoring another snapshot. After import, restart or recreate APRSBox container using Docker commands.") }}</p>
+            {% else %}
             <p class="muted full">{{ t("Import rewrites current configuration tables. Keep an exported file before restoring another snapshot. After import, restart services from Danger zone.") }}</p>
+            {% endif %}
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Import configuration backup") }}</button>
             </div>
@@ -509,10 +525,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Danger zone") }}</h2>
+                {% if is_container_mode %}
+                <p class="section-lead">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</p>
+                {% else %}
                 <p class="section-lead">{{ t("Administrative operations that can interrupt service or shut down the host.") }}</p>
+                {% endif %}
             </div>
         </div>
-        {% if can_manage_updates %}
+        {% if is_container_mode %}
+        <div class="alert">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</div>
+        {% elif can_manage_updates %}
         <div class="danger-zone-actions">
             <div class="danger-zone-item">
                 <h3>{{ t("Restart services") }}</h3>
@@ -797,7 +819,7 @@
             versionChannel: {{ t("Channel")|tojson }},
             versionStatus: {{ t("Status")|tojson }},
             versionUpToDate: {{ t("Up to date")|tojson }},
-            versionUpdateAvailable: {{ t("Update available")|tojson }},
+            versionUpdateAvailable: {{ (t("Newer repository version detected. Use Docker image update flow.") if is_container_mode else t("Update available"))|tojson }},
             closeButton: {{ t("OK")|tojson }},
             unsupportedActionMode: {{ t("Unsupported action mode.")|tojson }},
         };

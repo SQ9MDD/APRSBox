@@ -262,7 +262,7 @@
 {% block content %}
 <section class="panel">
     <div class="panel-body">
-        {% set selected_beacon_interface_id = '__ALL_ACTIVE__' if station.beacon_tx_scope == 'all_active' else (station.beacon_interface_id|string if station.beacon_interface_id is not none else '') %}
+        {% set selected_beacon_interface_id = '__INTERNAL_TX__' if station.beacon_internal_tx else ('__ALL_ACTIVE__' if station.beacon_tx_scope == 'all_active' else (station.beacon_interface_id|string if station.beacon_interface_id is not none else '')) %}
         {% set beacon_comment_max = beacon_comment_max|default(43) %}
         {% set status_text_max = status_text_max|default(62) %}
         {% set beacon_interval_mode = station.beacon_interval_mode if station.beacon_interval_mode in ['fixed', 'proportional'] else 'fixed' %}
@@ -299,6 +299,18 @@
                             {% endfor %}
                         </select>
                     </label>
+                    {% if selected_beacon_interface_id == '__INTERNAL_TX__' %}
+                    <div class="full">
+                        <div class="alert {% if internal_tx_routing_active %}success{% endif %}">
+                            <p>{{ t("Internal TX does not use physical RF transport. Frames are generated locally and handled by Local TX routing rules.") }}</p>
+                            {% if internal_tx_routing_active %}
+                            <p>{{ t("Local TX -> APRS-IS routing is active. Internal TX frames can be forwarded to APRS-IS.") }}</p>
+                            {% else %}
+                            <p>{{ t("No active Local TX -> APRS-IS routing found. Internal TX currently behaves like a local black hole.") }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
                     <label>
                         <span>
                             {{ t("Beacon Comment") }}

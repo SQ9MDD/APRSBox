@@ -263,6 +263,45 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             assert row is not None
             self.assertEqual(int(row["is_enabled"]), 0)
 
+    async def test_object_scheduler_skips_scheduled_object_before_start_without_disabling_it(self) -> None:
+        with temporary_database():
+            object_id = insert_object()
+            insert_modem()
+            execute(
+                """
+                UPDATE aprs_objects
+                SET activation_mode = 'scheduled',
+                    active_from_utc = '2099-01-01 18:00',
+                    active_until_utc = '2099-01-01 21:00'
+                WHERE id = ?
+                """,
+                (object_id,),
+            )
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            ObjectSchedulerService()._tick()
+
+            queued_job = fetch_one("SELECT id FROM outbound_jobs WHERE kind = 'object' ORDER BY id DESC LIMIT 1")
+            self.assertIsNone(queued_job)
+            row = fetch_one("SELECT is_enabled FROM aprs_objects WHERE id = ?", (object_id,))
+            assert row is not None
+            self.assertEqual(int(row["is_enabled"]), 1)
+
     async def test_outbound_runtime_skips_expired_object_job_and_disables_source(self) -> None:
         with temporary_database():
             insert_modem(device_path="127.0.0.1:9003")
@@ -302,6 +341,55 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             source_row = fetch_one("SELECT is_enabled FROM aprs_objects WHERE id = ?", (object_id,))
             assert source_row is not None
             self.assertEqual(int(source_row["is_enabled"]), 0)
+
+    async def test_outbound_runtime_skips_object_job_that_left_activation_window(self) -> None:
+        with temporary_database():
+            insert_modem(device_path="127.0.0.1:9004")
+            object_id = insert_object(lifetime="permanent", interval_minutes=30)
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            ObjectSchedulerService()._tick()
+            job = claim_next_outbound_job()
+            assert job is not None
+            execute(
+                """
+                UPDATE aprs_objects
+                SET activation_mode = 'scheduled',
+                    active_from_utc = '2099-01-01 18:00',
+                    active_until_utc = '2099-01-01 21:00',
+                    is_enabled = 1
+                WHERE id = ?
+                """,
+                (object_id,),
+            )
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
+                await outbound_service._process_job(job)
+
+            open_connection_mock.assert_not_called()
+            job_row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert job_row is not None
+            self.assertEqual(job_row["status"], "sent")
+            self.assertIn("outside its activation window", str(job_row["last_error"]))
+            source_row = fetch_one("SELECT is_enabled FROM aprs_objects WHERE id = ?", (object_id,))
+            assert source_row is not None
+            self.assertEqual(int(source_row["is_enabled"]), 1)
 
 
 if __name__ == "__main__":

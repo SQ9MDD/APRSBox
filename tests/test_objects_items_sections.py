@@ -1,10 +1,12 @@
 import contextlib
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_one, init_db
+from app.sections import SECTION_DEFINITIONS
 from app.services.content import get_section_row, safe_create_section_row, safe_update_section_row, update_station_settings
 
 
@@ -25,6 +27,67 @@ def temporary_database() -> Path:
 
 
 class ObjectAndItemFormTests(unittest.TestCase):
+    def test_object_item_translation_keys_are_present_in_en_pl_es(self) -> None:
+        required_keys = [
+            "Item List",
+            "Active from (UTC)",
+            "Active until (UTC)",
+            "Active from",
+            "Active until",
+            "Active for (hours)",
+            "Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.",
+            "Active now",
+            "Inactive now",
+            "Activation",
+            "Recurring",
+            "Activation summary",
+            "Activation schedule controls when sending is allowed. Send interval remains separate.",
+            "Manual activation.",
+            "Manual activation. Valid until: {validUntil} UTC.",
+            "Active from {fromDate} UTC to {toDate} UTC.",
+            "Active every {value} {unit} from {fromDate} UTC for {duration}.",
+            "Every {value} {unit}",
+            "First activation (UTC)",
+            "Delete this bulletin?",
+            "Delete this object?",
+            "Object transmission is not implemented yet. APRS object names are stored unpadded here, but will later be encoded into the fixed 9-character APRS object field with an automatic timestamp.",
+            "Prepare APRS object records with protocol-safe names, status, position, symbol and future RF path.",
+            "Repeat until (UTC)",
+            "Next activation: {date} UTC.",
+            "Scheduled",
+            "Scheduled: active now",
+            "Scheduled: inactive",
+            "Scheduled: starts {date} UTC",
+            "Announcement",
+            "Bulletins / Announcements",
+            "Bulletins / Announcements List",
+            "Add Bulletin / Announcement",
+            "Edit Bulletin / Announcement",
+            "General Bulletin",
+            "Group Bulletin",
+            "Prepare APRS message-format frames for bulletins and announcements.",
+            "Type must be bulletin, announcement or group bulletin.",
+            "Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.",
+            "{prefix}: active now",
+            "{prefix}: inactive",
+            "{prefix}: next {date} UTC",
+            "Repeat until {repeatUntil} UTC.",
+            "Recurring schedule has no end date.",
+            "Record will be active for more than 24h per cycle.",
+            "WIDE2-2 with interval below 60m is not recommended.",
+            "Direct path is recommended for local/simple records.",
+            "Day(s)",
+            "Week(s)",
+            "Month(s)",
+            "Year(s)",
+            "Select",
+        ]
+        self.assertEqual(SECTION_DEFINITIONS["items"].list_title, "Item List")
+        for language in ("en", "pl", "es", "tlh"):
+            catalog = json.loads((Path("app/languages") / f"{language}.json").read_text())
+            for key in required_keys:
+                self.assertIn(key, catalog, msg=f"Missing {key!r} in {language}.json")
+
     def test_object_row_contains_symbol_icon_and_raw_frame_preview(self) -> None:
         with temporary_database():
             update_station_settings(
@@ -100,6 +163,69 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["is_enabled"], 1)
 
+    def test_object_edit_post_redirects_back_to_edit_page_with_data(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "30",
+                    "path": "WIDE2-2",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+
+            try:
+                from fastapi.testclient import TestClient
+            except ModuleNotFoundError:
+                self.skipTest("fastapi is not installed in this environment")
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="tester",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                response = client.post(
+                    "/objects",
+                    data={
+                        "record_id": str(int(row["id"])),
+                        "name": "VOICE",
+                        "lifetime": "temporary",
+                        "state": "live",
+                        "latitude": "52.2297",
+                        "longitude": "21.0122",
+                        "symbol_table": "/",
+                        "symbol_code": "r",
+                        "interval_minutes": "30",
+                        "path": "WIDE2-2",
+                        "comment": "Updated voice repeater",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("/objects?edit=", str(response.url))
+                self.assertIn('value="VOICE"', response.text)
+                self.assertIn("Updated voice repeater", response.text)
+                self.assertIn("Edit Object", response.text)
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
     def test_object_preview_uses_overlay_for_alternate_symbol_table(self) -> None:
         with temporary_database():
             update_station_settings(
@@ -170,6 +296,78 @@ class ObjectAndItemFormTests(unittest.TestCase):
             row = fetch_one("SELECT valid_until_utc FROM aprs_objects WHERE name = ?", ("VOICE",))
             assert row is not None
             self.assertEqual(row["valid_until_utc"], "2026-12-31 23:45")
+
+    def test_object_manual_form_reuses_active_until_as_valid_until(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "45",
+                    "activation_mode": "manual",
+                    "active_until_utc": "2026-12-31T23:45",
+                    "path": "",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id, valid_until_utc, active_until_utc FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+            self.assertEqual(row["valid_until_utc"], "2026-12-31 23:45")
+            self.assertEqual(row["active_until_utc"], "2026-12-31 23:45")
+            decorated = get_section_row("objects", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["activation_form_active_until_utc"], "2026-12-31 23:45")
+
+    def test_object_recurring_form_reuses_active_dates_for_storage_model(self) -> None:
+        with temporary_database():
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "45",
+                    "activation_mode": "recurring",
+                    "active_from_utc": "2026-06-09T18:00",
+                    "active_until_utc": "2026-12-31T23:45",
+                    "recurrence_duration_minutes": "180",
+                    "recurrence_interval_value": "1",
+                    "recurrence_interval_unit": "week",
+                    "path": "",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one(
+                """
+                SELECT id, active_from_utc, active_until_utc, first_activation_utc, recurrence_until_utc
+                FROM aprs_objects
+                WHERE name = ?
+                """,
+                ("VOICE",),
+            )
+            assert row is not None
+            self.assertEqual(row["active_from_utc"], "2026-06-09 18:00")
+            self.assertEqual(row["active_until_utc"], "2026-12-31 23:45")
+            self.assertEqual(row["first_activation_utc"], "2026-06-09 18:00")
+            self.assertEqual(row["recurrence_until_utc"], "2026-12-31 23:45")
+            decorated = get_section_row("objects", int(row["id"]))
+            assert decorated is not None
+            self.assertEqual(decorated["activation_form_active_from_utc"], "2026-06-09 18:00")
+            self.assertEqual(decorated["activation_form_active_until_utc"], "2026-12-31 23:45")
 
     def test_object_valid_until_utc_requires_yyyy_mm_dd_format(self) -> None:
         with temporary_database():

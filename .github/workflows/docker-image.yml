@@ -75,7 +75,7 @@ jobs:
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi
-
+          
       - name: Build and push multiarch image
         uses: docker/build-push-action@v6
         with:

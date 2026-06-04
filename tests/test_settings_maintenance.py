@@ -8,7 +8,14 @@ from unittest.mock import patch
 
 from app.db import execute, init_db
 from app.services.content import has_enabled_modem_interface
-from app.services.system import save_update_channel, start_application_update_job
+from app.services.system import (
+    container_system_actions_disabled_message,
+    save_update_channel,
+    start_application_update_job,
+    start_host_poweroff_job,
+    start_host_reboot_job,
+    start_service_restart_job,
+)
 
 
 @contextlib.contextmanager
@@ -97,6 +104,12 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertNotIn('{{ t("Update log") }}', template_source)
         self.assertNotIn("update-log-preview", template_source)
 
+    def test_settings_template_contains_container_mode_guards(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("{% if is_container_mode %}", template_source)
+        self.assertIn("Docker installation detected. System actions are disabled inside Docker.", template_source)
+        self.assertIn("Check version can be used for informational comparison only.", template_source)
+
     def test_settings_template_uses_shared_async_action_handler(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("window.aprsboxSubmitSettingsAction", template_source)
@@ -133,6 +146,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('@router.get("/api/settings/update/log")', router_source)
         self.assertIn('@router.get("/api/settings/jobs/{job_id}")', router_source)
 
+    def test_settings_router_blocks_danger_zone_endpoints_in_container_mode(self) -> None:
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        self.assertIn("def _container_mode_system_action_denied_response()", router_source)
+        self.assertIn("container_system_actions_disabled_message()", router_source)
+        self.assertIn("if is_container_mode():", router_source)
+        self.assertIn("status.HTTP_409_CONFLICT", router_source)
+
     def test_settings_template_escapes_tojson_in_onsubmit_attributes(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         unescaped_tojson = re.findall(r'onsubmit="[^"]*\|tojson(?!\|forceescape)', template_source)
@@ -157,6 +177,27 @@ class SettingsMaintenanceTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             kwargs = runner.call_args.kwargs
             self.assertEqual(kwargs.get("extra_args"), ["--git-branch", "dev"])
+
+    def test_system_actions_are_rejected_in_container_mode_without_starting_scripts(self) -> None:
+        with patch("app.services.system.is_container_mode", return_value=True), patch(
+            "app.services.system._start_background_script"
+        ) as runner:
+            denied = [
+                start_application_update_job(job_id=1),
+                start_service_restart_job(job_id=2),
+                start_host_reboot_job(job_id=3),
+                start_host_poweroff_job(job_id=4),
+            ]
+
+        runner.assert_not_called()
+        for result in denied:
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["status_code"], 409)
+            self.assertEqual(result["error"], container_system_actions_disabled_message())
+
+    def test_dockerfile_sets_container_env_flag(self) -> None:
+        dockerfile_source = Path("Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("ENV APRSBOX_CONTAINER=1", dockerfile_source)
 
     def test_update_script_accepts_git_branch_argument(self) -> None:
         script_source = Path("scripts/update.sh").read_text(encoding="utf-8")

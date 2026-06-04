@@ -5,6 +5,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from app.db import execute, fetch_all, get_app_setting, log_event, set_app_setting, utc_now
+from app.services.activation_schedule import compute_activation_state
 from app.services.content import get_station_settings, station_has_tx_target
 from app.services.outbound import enqueue_message_job, latest_message_dispatch_at
 
@@ -50,15 +51,21 @@ class BulletinSchedulerService:
         due_rows = []
         for row in fetch_all(
             """
-            SELECT id, message_kind, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
+            SELECT id, message_kind, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc,
+                   activation_mode, active_from_utc, active_until_utc, first_activation_utc,
+                   recurrence_duration_minutes, recurrence_interval_value, recurrence_interval_unit, recurrence_until_utc,
+                   path, message_text, updated_at
             FROM bulletins
             WHERE is_enabled = 1
             ORDER BY id ASC
             """
         ):
             bulletin = dict(row)
-            if _is_expired_utc_date(bulletin.get("valid_until_utc"), now):
+            activation_state = compute_activation_state(bulletin, now)
+            if activation_state.reason == "manual_expired":
                 _disable_expired_bulletin(int(bulletin["id"]), str(bulletin.get("valid_until_utc") or ""))
+                continue
+            if not activation_state.active_now:
                 continue
             interval_minutes = int(bulletin.get("interval_minutes") or 30)
             last_enqueued = _parse_timestamp(get_app_setting(f"{BULLETIN_LAST_ENQUEUED_KEY_PREFIX}{bulletin['id']}"))
@@ -97,30 +104,6 @@ def _parse_timestamp(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-
-
-def _parse_utc_date(value: str | None) -> datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
-        try:
-            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    try:
-        parsed_date = datetime.strptime(text, "%Y-%m-%d")
-    except ValueError:
-        return None
-    # Backward compatibility with legacy date-only records: valid through end of that UTC day.
-    return parsed_date.replace(tzinfo=timezone.utc) + timedelta(days=1)
-
-
-def _is_expired_utc_date(value: str | None, now: datetime) -> bool:
-    parsed = _parse_utc_date(value)
-    if parsed is None:
-        return False
-    return now >= parsed
 
 
 def _disable_expired_bulletin(bulletin_id: int, valid_until_utc: str) -> None:

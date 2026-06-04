@@ -107,14 +107,17 @@ class DashboardHomeTests(unittest.TestCase):
             view = dashboard_home_data()
             checks = {item["label"]: item for item in view["checks"]}
 
-            self.assertEqual(checks["Main callsign"]["value"], "SQ9MDD-4")
-            self.assertEqual(checks["WX callsign"]["value"], "SQ9MDD")
-            self.assertNotIn("Beacon interface", checks)
-            self.assertNotIn("TX Block", checks)
-            self.assertNotIn("TX Enabled", checks)
-            self.assertNotIn("APRS Status enabled", checks)
+            self.assertIn("Runtime readiness", checks)
+            self.assertIn("Configuration checklist", checks)
+            self.assertIn("Enabled services", checks)
+            self.assertEqual(view.get("interface_summary"), "1 enabled / 1 disabled")
 
-            interfaces = {entry["name"]: entry["status"] for entry in checks["Active interfaces"].get("entries") or []}
+            config_entries = {entry["name"]: entry["status"] for entry in checks["Configuration checklist"].get("entries") or []}
+            self.assertEqual(config_entries["Main callsign"], "Configured")
+            self.assertEqual(config_entries["WX callsign"], "Configured")
+            self.assertEqual(config_entries["Location"], "Configured")
+
+            interfaces = {entry["name"]: entry["status"] for entry in view.get("interface_entries") or []}
             self.assertEqual(interfaces["Main TNC"], "Unknown")
             self.assertEqual(interfaces["Backup TNC"], "Disabled")
 
@@ -136,7 +139,7 @@ class DashboardHomeTests(unittest.TestCase):
             checks = {item["label"]: item for item in view["checks"]}
             self.assertNotIn("Traffic Monitor", checks)
 
-    def test_dashboard_exposes_last_station_tx_time_in_stats(self) -> None:
+    def test_dashboard_exposes_last_rf_tx_time_in_stats(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="TX TNC", enabled=1, tx_blocked=0)
             update_station_settings(station_payload(interface_id))
@@ -168,7 +171,7 @@ class DashboardHomeTests(unittest.TestCase):
             view = dashboard_home_data()
             stats = {item["label"]: item for item in view["stats"]}
 
-            self.assertNotEqual(stats["Last station TX"]["value"], "Never")
+            self.assertNotEqual(stats["Last RF TX"]["value"], "No RF TX yet")
 
     def test_dashboard_digi_routine_ignores_black_hole_and_checks_tnc_to_tnc(self) -> None:
         with temporary_database():

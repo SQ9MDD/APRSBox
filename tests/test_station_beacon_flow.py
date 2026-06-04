@@ -15,7 +15,7 @@ from app.services.beacon_scheduler import (
 from app.services.content import get_station_settings, safe_update_station_settings, update_station_settings
 from app.services.outbound import build_beacon_tnc2, build_status_tnc2, claim_next_outbound_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
-from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, TX_SCOPE_ALL_ACTIVE
+from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE, TX_SCOPE_ALL_ACTIVE
 
 
 @contextlib.contextmanager
@@ -78,6 +78,21 @@ def station_payload(
     if tx_enabled is not None:
         payload["tx_enabled"] = tx_enabled
     return payload
+
+
+def insert_local_tx_aprsis_flow(*, name: str = "Local TX APRSIS") -> int:
+    execute(
+        """
+        INSERT INTO digi_flows(
+            name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
+        )
+        VALUES (?, '', 'receiver_local_tx', 'local_tx', 'tx_aprsis', 'aprsis', 1, 0, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        """,
+        (name,),
+    )
+    row = fetch_one("SELECT id FROM digi_flows WHERE name = ?", (name,))
+    assert row is not None
+    return int(row["id"])
 
 
 class StationSettingsAndSchedulerTests(unittest.TestCase):
@@ -289,6 +304,50 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
                 for row in fetch_all("SELECT interface_id FROM outbound_jobs WHERE kind IN ('beacon', 'status')")
             })
 
+    def test_internal_tx_without_aprsis_flow_is_allowed(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["beacon_interface_id"] = INTERNAL_TX_INTERFACE_OPTION_VALUE
+            success, error = safe_update_station_settings(payload)
+            self.assertTrue(success, error)
+
+            station_settings = get_station_settings()
+            self.assertTrue(bool(station_settings.get("beacon_internal_tx")))
+            self.assertIsNone(station_settings.get("beacon_interface_id"))
+
+    def test_internal_tx_scope_enqueues_station_jobs_without_rf_interface(self) -> None:
+        with temporary_database():
+            insert_local_tx_aprsis_flow()
+            payload = station_payload(insert_modem(), tx_enabled="1")
+            payload["beacon_interface_id"] = INTERNAL_TX_INTERFACE_OPTION_VALUE
+            payload["status_enabled"] = "1"
+            payload["status_interval_minutes"] = "15"
+            success, error = safe_update_station_settings(payload)
+            self.assertTrue(success, error)
+
+            station_settings = get_station_settings()
+            self.assertTrue(bool(station_settings.get("beacon_internal_tx")))
+            self.assertIsNone(station_settings.get("beacon_interface_id"))
+
+            scheduler = BeaconSchedulerService()
+            scheduler._tick()
+
+            rows = fetch_all(
+                """
+                SELECT kind, interface_id, payload_json
+                FROM outbound_jobs
+                WHERE kind IN ('beacon', 'status')
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(rows), 2)
+            for row in rows:
+                self.assertIsNone(row["interface_id"])
+                payload_json = str(row["payload_json"] or "{}")
+                payload_data = json.loads(payload_json)
+                self.assertTrue(bool(payload_data.get("internal_tx_only")))
+
     def test_scheduler_uses_proportional_path_for_scheduled_beacons(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
@@ -352,6 +411,35 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
 
 
 class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_internal_tx_job_is_marked_sent_without_rf_transport(self) -> None:
+        with temporary_database():
+            insert_local_tx_aprsis_flow()
+            payload = station_payload(insert_modem(device_path="127.0.0.1:9000"), tx_enabled="1")
+            payload["beacon_interface_id"] = INTERNAL_TX_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            scheduler = BeaconSchedulerService()
+            scheduler._tick()
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "beacon")
+            self.assertIsNone(job.get("interface_id"))
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
+                await outbound_service._process_job(job)
+                open_connection_mock.assert_not_called()
+
+            job_row = fetch_one("SELECT status, last_error FROM outbound_jobs WHERE id = ?", (int(job["id"]),))
+            assert job_row is not None
+            self.assertEqual(job_row["status"], "sent")
+            self.assertIn(job_row["last_error"], (None, ""))
+
+            stored = get_outbound_job(int(job["id"]))
+            assert stored is not None
+            self.assertTrue(bool(stored["payload"].get("internal_tx_only")))
+
     async def test_scheduled_beacon_flows_from_saved_flag_to_runtime_send(self) -> None:
         with temporary_database():
             interface_id = insert_modem(device_path="127.0.0.1:9001")

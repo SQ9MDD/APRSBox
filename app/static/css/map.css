@@ -1,7 +1,58 @@
+.page-map .main-area {
+    min-height: 0;
+}
+
+.page-map .content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+@media (min-width: 981px) {
+    .page-map.app-shell {
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+    }
+
+    .page-map .sidebar {
+        min-height: 0;
+        height: 100%;
+        overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .page-map .sidebar::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+    }
+
+    .page-map .main-area {
+        overflow: hidden;
+    }
+}
+
+.map-panel {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.map-panel .panel-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .map-page {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
     gap: var(--space-2);
+    min-height: 0;
     min-width: 0;
 }
 
@@ -94,8 +145,8 @@
 
 .map-stage {
     position: relative;
-    height: clamp(24rem, calc(100vh - 12.5rem), 72rem);
-    min-height: 24rem;
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
     border-radius: var(--radius);
     overflow: hidden;
@@ -106,6 +157,9 @@
 
 .map-canvas {
     --map-mask-layer-opacity: 0;
+    height: 100%;
+    min-height: 0;
+    width: 100%;
     position: absolute;
     inset: 0;
     background: var(--panel-soft);
@@ -127,13 +181,22 @@
     transition: opacity var(--transition-fast);
 }
 
-.map-latest-overlay {
+.map-overlay-stack {
     position: absolute;
     top: 0.78rem;
     right: 0.78rem;
+    bottom: 0;
     z-index: 900;
     width: 22rem;
     max-width: calc(100% - 1.56rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.78rem;
+    pointer-events: none;
+}
+
+.map-latest-overlay {
+    width: 100%;
     padding: 0.55rem 0.64rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -141,6 +204,7 @@
     color: var(--text);
     box-shadow: var(--shadow);
     backdrop-filter: blur(5px);
+    pointer-events: auto;
 }
 
 .map-latest-overlay-title {
@@ -191,6 +255,74 @@
     line-height: 1.24;
 }
 
+.map-scroller-overlay {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(5px);
+    pointer-events: auto;
+}
+
+.map-scroller-empty {
+    margin: 0;
+    padding: 0.6rem;
+    color: var(--muted);
+    font-size: 0.74rem;
+    line-height: 1.24;
+}
+
+.map-scroller-row {
+    display: grid;
+    grid-template-columns: 1.2rem minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.34rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.72rem;
+    line-height: 1.22;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.map-scroller-row:last-child {
+    border-bottom: 0;
+}
+
+.map-scroller-icon-wrap {
+    width: 1rem;
+    height: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.map-scroller-icon {
+    width: 1rem;
+    height: 1rem;
+    image-rendering: pixelated;
+}
+
+.map-scroller-digi,
+.map-scroller-station {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.map-scroller-digi {
+    color: var(--muted);
+}
+
+.map-scroller-station {
+    color: var(--text);
+    font-weight: 600;
+}
+
 .map-mask-opacity-control {
     display: inline-flex;
     align-items: center;
@@ -206,6 +338,11 @@
 .leaflet-container {
     font: inherit;
     background: var(--panel-soft);
+}
+
+.map-canvas.leaflet-container {
+    height: 100%;
+    width: 100%;
 }
 
 .map-station-icon {
@@ -372,20 +509,23 @@
 }
 
 @media (max-width: 900px) {
-    .map-stage {
-        height: clamp(22rem, calc(100vh - 10rem), 60rem);
-    }
-
     .map-toolbar,
     .map-toolbar-actions,
     .map-info-strip {
         align-items: flex-start;
     }
 
-    .map-latest-overlay {
+    .map-overlay-stack {
         top: 0.65rem;
         right: 0.65rem;
         width: 22rem;
         max-width: calc(100% - 1.3rem);
+        gap: 0.65rem;
+    }
+}
+
+@media (max-width: 980px) {
+    .page-map .main-area {
+        min-height: 0;
     }
 }

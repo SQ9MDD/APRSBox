@@ -25,6 +25,7 @@
     const zoomOutput = document.getElementById("map-zoom");
     const tileSourceOutput = document.getElementById("map-tile-source");
     const tileStatusOutput = document.getElementById("map-tile-status");
+    const mapStage = document.getElementById("map-stage");
     const mapCanvas = document.getElementById("map-canvas");
     const mapInterfaceFilters = document.getElementById("map-interface-filters");
     const resetButton = document.getElementById("map-reset-view");
@@ -76,6 +77,7 @@
     const mapCoverageFillOpacityStorageKey = "aprsbox-map-coverage-fill-opacity";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
+    const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const aprsIconSize = [20, 20];
     const aprsIconAnchor = [10, 10];
     let refreshTimer = null;
@@ -465,6 +467,26 @@
 
     function formatCoordinate(value) {
         return Number.isFinite(value) ? value.toFixed(5) : "--";
+    }
+
+    function visibleMapRadiusKm() {
+        const center = map.getCenter();
+        const size = map.getSize();
+        if (!Number.isFinite(center.lat) || !Number.isFinite(center.lng)) {
+            return NaN;
+        }
+        if (!size || size.x <= 0 || size.y <= 0) {
+            return NaN;
+        }
+        const centerPoint = map.latLngToContainerPoint(center);
+        const radiusPixels = Math.max(1, Math.floor(Math.min(size.x, size.y) / 2));
+        const edgePoint = window.L.point(centerPoint.x, Math.max(0, centerPoint.y - radiusPixels));
+        const edgeLatLng = map.containerPointToLatLng(edgePoint);
+        const radiusMeters = map.distance(center, edgeLatLng);
+        if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
+            return NaN;
+        }
+        return radiusMeters / 1000;
     }
 
     function parseUtcDate(value) {
@@ -879,6 +901,14 @@
         if (zoomOutput) {
             zoomOutput.textContent = String(map.getZoom());
         }
+        root.dispatchEvent(new window.CustomEvent(mapViewRefreshEventName, {
+            detail: {
+                center_latitude: center.lat,
+                center_longitude: center.lng,
+                visible_radius_km: visibleMapRadiusKm(),
+                zoom: map.getZoom(),
+            },
+        }));
     }
 
     function persistView() {
@@ -948,9 +978,42 @@
     });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
+    let mapResizeFrameRequest = null;
+    function scheduleMapInvalidateSize() {
+        if (mapResizeFrameRequest !== null) {
+            return;
+        }
+        mapResizeFrameRequest = window.requestAnimationFrame(function () {
+            mapResizeFrameRequest = null;
+            map.invalidateSize();
+        });
+    }
+
     window.addEventListener("resize", function () {
-        map.invalidateSize();
+        scheduleMapInvalidateSize();
     });
+
+    if (mapStage && typeof window.ResizeObserver === "function") {
+        let previousWidth = mapStage.clientWidth;
+        let previousHeight = mapStage.clientHeight;
+        const stageResizeObserver = new window.ResizeObserver(function () {
+            const nextWidth = mapStage.clientWidth;
+            const nextHeight = mapStage.clientHeight;
+            if (nextWidth <= 0 || nextHeight <= 0) {
+                return;
+            }
+            if (nextWidth === previousWidth && nextHeight === previousHeight) {
+                return;
+            }
+            previousWidth = nextWidth;
+            previousHeight = nextHeight;
+            scheduleMapInvalidateSize();
+        });
+        stageResizeObserver.observe(mapStage);
+        window.addEventListener("beforeunload", function () {
+            stageResizeObserver.disconnect();
+        }, { once: true });
+    }
 
     function tooltipHtml(station) {
         const lines = [];
@@ -1289,10 +1352,11 @@
     });
     map.on("resize", function () {
         anchorRulerToFrameIfIdle();
+        syncStatus();
     });
     map.whenReady(function () {
         window.setTimeout(function () {
-            map.invalidateSize();
+            scheduleMapInvalidateSize();
             initializeRuler();
         }, 0);
     });

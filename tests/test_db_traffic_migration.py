@@ -326,6 +326,10 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
                 self.assertIn("symbol_overlay", object_columns)
                 self.assertIn("symbol_overlay", item_columns)
+                self.assertIn("activation_mode", object_columns)
+                self.assertIn("activation_mode", item_columns)
+                self.assertIn("first_activation_utc", object_columns)
+                self.assertIn("first_activation_utc", item_columns)
                 index_row = connection.execute(
                     """
                     SELECT name

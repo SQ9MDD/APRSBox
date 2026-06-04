@@ -30,6 +30,7 @@ STALE_BEACON_PROCESSING_REASON = "Beacon was not transmitted: APRSBox core resta
 STALE_WX_PROCESSING_REASON = "WX frame was not transmitted: APRSBox core restarted while outbound job was processing."
 _AX25_CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 LOCAL_TX_ORIGIN = "local_generated"
+INTERNAL_TX_INTERFACE_NAME = "Internal TX"
 LOCAL_TX_OUTBOUND_PURPOSE_BY_KIND = {
     OUTBOUND_KIND_BEACON: "beacon",
     OUTBOUND_KIND_STATUS: "status",
@@ -65,6 +66,19 @@ def _get_modem_by_id(interface_id: int) -> dict[str, Any] | None:
 
 
 def _resolve_station_target_modems(station_settings: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    if bool(station_settings.get("beacon_internal_tx")):
+        return [
+            {
+                "id": None,
+                "name": INTERNAL_TX_INTERFACE_NAME,
+                "modem_type": "",
+                "band": "",
+                "device_path": "",
+                "enabled": 1,
+                "internal_tx_only": True,
+            }
+        ], None
+
     scope = normalize_tx_scope(station_settings.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
     if scope == TX_SCOPE_ALL_ACTIVE:
         modems = _list_active_tnc_modems()
@@ -133,10 +147,19 @@ def _enqueue_jobs_for_modems(
 ) -> list[int]:
     now_text = utc_now()
     stored_payload = _with_local_tx_metadata(kind=kind, payload=payload)
-    payload_json = json.dumps(stored_payload, ensure_ascii=True, separators=(",", ":"))
     job_ids: list[int] = []
     with get_connection() as connection:
         for modem in modems:
+            internal_tx_only = bool(modem.get("internal_tx_only"))
+            interface_id_value = modem.get("id")
+            try:
+                interface_id = int(interface_id_value) if interface_id_value not in {None, ""} else None
+            except (TypeError, ValueError):
+                interface_id = None
+            payload_per_job = dict(stored_payload)
+            if internal_tx_only:
+                payload_per_job["internal_tx_only"] = True
+            payload_json = json.dumps(payload_per_job, ensure_ascii=True, separators=(",", ":"))
             cursor = connection.execute(
                 """
                 INSERT INTO outbound_jobs(
@@ -147,7 +170,7 @@ def _enqueue_jobs_for_modems(
                 """,
                 (
                     kind,
-                    int(modem["id"]),
+                    interface_id,
                     aprs_message_id,
                     payload_json,
                     OUTBOUND_STATUS_QUEUED,

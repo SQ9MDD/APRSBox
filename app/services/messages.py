@@ -20,6 +20,7 @@ from app.services.outbound import (
     enqueue_status_job,
     mark_outbound_job_cancelled,
 )
+from app.services.notifications import queue_aprs_message_notification
 from app.services.radio_activity import TRAFFIC_STATISTICS_RANGE_24H, get_traffic_direct_heard_statistics
 
 MESSAGE_DIRECTION_RX = "rx"
@@ -44,6 +45,7 @@ HEARD_WARN_SECONDS = 30 * 60
 QUERY_RESPONSE_DELAY_SECONDS = 5
 INCOMING_UNNUMBERED_DUPLICATE_WINDOW_SECONDS = 30
 OUTGOING_BURST_DUPLICATE_WINDOW_SECONDS = 5
+STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
@@ -1033,7 +1035,7 @@ def store_incoming_message(
         )
     if existing is None and not duplicate_unnumbered:
         with get_connection() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 """
                 INSERT INTO aprs_messages(
                     conversation_id, direction, sender, addressee, message_text, path, message_number,
@@ -1055,7 +1057,16 @@ def store_incoming_message(
                     timestamp,
                 ),
             )
+            message_id = int(cursor.lastrowid)
         log_event("INFO", "messages", f"Stored incoming APRS message from {sender} to {addressee}")
+        queue_aprs_message_notification(
+            sender=sender,
+            destination=addressee,
+            text=message_text,
+            message_id=message_id,
+            message_number=message_number,
+            timestamp=timestamp,
+        )
     ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else message_number)
     if not ack_number_for_tx:
         return
@@ -1726,7 +1737,12 @@ def _get_station_settings() -> dict[str, Any]:
         WHERE id = 1
         """
     )
-    return dict(row) if row else {}
+    if row is None:
+        return {}
+    result = dict(row)
+    internal_mode = str(get_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY) or "").strip().lower()
+    result["beacon_internal_tx"] = internal_mode in {"1", "true", "yes", "on"}
+    return result
 
 
 def _local_station_identity() -> str:

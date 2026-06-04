@@ -24,6 +24,7 @@ PRIMARY_NAV = [
     {"key": "station", "label": "My Station", "href": "/station", "roles": ("admin", "operator", "viewer"), "icon": "antenna.svg"},
     {"key": "wx", "label": "WX", "href": "/wx", "roles": ("admin", "operator", "viewer"), "icon": "weather-partly-snowy.svg"},
     {"key": "messages", "label": "Messages", "href": "/messages", "roles": ("admin", "operator", "viewer"), "icon": "message-reply-text-outline.svg"},
+    {"key": "notifications", "label": "Notifications", "href": "/notifications", "roles": ("admin", "operator", "viewer"), "icon": "bell-outline.svg"},
     {"key": "objects", "label": "Objects / Items", "href": "/objects", "roles": ("admin", "operator", "viewer"), "icon": "crosshairs.svg"},
     {"key": "bulletins", "label": "Bulletins", "href": "/bulletins", "roles": ("admin", "operator", "viewer"), "icon": "message-text-outline.svg"},
     {"key": "digi-flows", "label": "Packet Routing", "href": "/digi-flows", "roles": ("admin", "operator", "viewer"), "icon": "source-branch-check.svg"},

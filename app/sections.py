@@ -8,6 +8,40 @@ SERIAL_RX_SILENCE_TIMEOUT_OPTIONS = [
     for seconds in range(0, 601, 30)
 ]
 
+ACTIVATION_SCHEDULE_FIELDS = [
+    {
+        "name": "activation_mode",
+        "label": "Activation",
+        "type": "select",
+        "required": True,
+        "default": "manual",
+        "options": [
+            {"value": "manual", "label": "Manual"},
+            {"value": "scheduled", "label": "Scheduled"},
+            {"value": "recurring", "label": "Recurring"},
+        ],
+    },
+    {"name": "active_from_utc", "label": "Active from", "type": "date", "required": False},
+    {"name": "active_until_utc", "label": "Active until", "type": "date", "required": False},
+    {"name": "first_activation_utc", "label": "First activation (UTC)", "type": "date", "required": False, "form_visible": False},
+    {"name": "recurrence_duration_minutes", "label": "Active for (hours)", "type": "number", "required": False},
+    {"name": "recurrence_interval_value", "label": "Repeat every", "type": "number", "required": False},
+    {
+        "name": "recurrence_interval_unit",
+        "label": "Repeat unit",
+        "type": "select",
+        "required": False,
+        "options": [
+            {"value": "", "label": "Select"},
+            {"value": "day", "label": "Day(s)"},
+            {"value": "week", "label": "Week(s)"},
+            {"value": "month", "label": "Month(s)"},
+            {"value": "year", "label": "Year(s)"},
+        ],
+    },
+    {"name": "recurrence_until_utc", "label": "Repeat until (UTC)", "type": "date", "required": False, "form_visible": False},
+]
+
 
 SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
     "modems": SectionDefinition(
@@ -185,9 +219,10 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
-            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False, "form_visible": False},
+            *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
-            {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
+            {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "comment", "label": "Comment", "type": "textarea", "required": True, "maxlength": 43, "placeholder": "Local voice repeater"},
         ],
     ),
@@ -198,7 +233,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
         table_name="aprs_items",
         nav_key="items",
         readonly_message="Item transmission is not implemented yet. APRS item names must be 3-9 printable ASCII characters and item format is historically less interoperable on RF than objects.",
-        list_title="Object List",
+        list_title="Item List",
         create_title="Add Item",
         edit_title="Edit Item",
         supports_editing=True,
@@ -255,6 +290,8 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
+            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False, "form_visible": False},
+            *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Active", "type": "checkbox", "required": False},
             {"name": "comment", "label": "Comment", "type": "textarea", "required": False, "maxlength": 43, "placeholder": "First aid station"},
@@ -302,7 +339,8 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "30",
             },
-            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False},
+            {"name": "valid_until_utc", "label": "Valid until (UTC)", "type": "date", "required": False, "form_visible": False},
+            *ACTIVATION_SCHEDULE_FIELDS,
             {"name": "path", "label": "Path", "type": "text", "required": False, "maxlength": 64},
             {"name": "is_enabled", "label": "Enabled", "type": "checkbox", "required": False},
             {"name": "message_text", "label": "Message Text", "type": "textarea", "required": True, "maxlength": 67, "placeholder": "Net starts at 19:30 UTC"},
