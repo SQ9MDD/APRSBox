@@ -105,10 +105,6 @@
             return;
         }
         stationByCallsignKey.set(normalized, stationInfo);
-        const base = baseCallsignKey(normalized);
-        if (base) {
-            stationByCallsignKey.set(base, stationInfo);
-        }
     }
 
     function updateStationLookup(stations) {
@@ -122,7 +118,9 @@
                 longitude: Number((station && station.longitude)),
             };
             registerStationLookupEntry(station && station.display_callsign, stationInfo);
-            registerStationLookupEntry(station && station.callsign, stationInfo);
+            if (!String((station && station.display_callsign) || "").trim()) {
+                registerStationLookupEntry(station && station.callsign, stationInfo);
+            }
         }
     }
 
@@ -314,8 +312,7 @@
     }
 
     function stationTextColor(stationCallsign) {
-        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign))
-            || stationByCallsignKey.get(baseCallsignKey(stationCallsign));
+        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign));
         if (!station || !Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
             return "#000000";
         }
@@ -371,8 +368,7 @@
     }
 
     function stationIconPath(stationCallsign) {
-        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign))
-            || stationByCallsignKey.get(baseCallsignKey(stationCallsign));
+        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign));
         return (station && station.iconPath) || fallbackStationIconPath;
     }
 
