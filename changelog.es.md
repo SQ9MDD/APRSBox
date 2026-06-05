@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.33.dev - 2026-06-05
+- `Mapa / lista de estaciones`: se corrigió la mezcla de iconos y colores en el scroller derecho del mapa al eliminar la búsqueda por base callsign; ahora las entradas usan el `display_callsign` exacto.
+
 ## 1.8.32.dev - 2026-06-03
 - `Notificaciones / Telegram / webhooks`: se implementaron notificaciones de Telegram mediante webhooks para mensajes y radar de estaciones.
 
