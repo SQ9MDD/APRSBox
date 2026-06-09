@@ -1934,10 +1934,21 @@ def objects_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
     edit: int | None = None,
+    flash: str | None = None,
+    success: str | None = None,
 ) -> object:
     templates = request.app.state.templates
     edit_row = get_section_row("objects", edit) if edit is not None else None
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "objects", edit_row=edit_row))
+    context = _section_template_context(
+        request,
+        current_user,
+        "objects",
+        flash=flash,
+        edit_row=edit_row,
+    )
+    if success is not None:
+        context["flash_success"] = str(success).strip() not in {"0", "false", "False"}
+    return templates.TemplateResponse("section.html", context)
 
 
 @router.post("/objects")
@@ -2007,22 +2018,19 @@ def objects_send_now(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
-    templates = request.app.state.templates
     row = get_section_row("objects", record_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found.")
 
     station_settings = get_station_settings()
     success, flash = enqueue_object_job(row, station_settings, trigger="manual", force_send=True)
-    context = _section_template_context(
-        request,
-        current_user,
-        "objects",
-        flash=flash,
-        flash_success=success,
-        edit_row=row,
+    return RedirectResponse(
+        url=_path(
+            request,
+            f"/objects?edit={record_id}&flash={quote(str(flash or '') )}&success={'1' if success else '0'}",
+        ),
+        status_code=status.HTTP_303_SEE_OTHER,
     )
-    return templates.TemplateResponse("section.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.get("/items")
