@@ -2058,6 +2058,7 @@ def _build_station_snapshots_from_rows(
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
     station_key_index: dict[str, str] = {}
+    killed_station_keys: set[str] = set()
     pending_status_by_station_key: dict[str, str] = {}
     device_database = get_aprs_device_identification_database()
 
@@ -2071,6 +2072,13 @@ def _build_station_snapshots_from_rows(
         station_key = (aprs_data.get("entity_name") or callsign).strip()
         station_key_folded = station_key.casefold()
         packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+        if packet_group == "object" and str(aprs_data.get("state") or "").strip().lower() == "killed":
+            existing_key = station_key_index.get(station_key_folded)
+            if existing_key is None:
+                killed_station_keys.add(station_key_folded)
+            continue
+        if station_key_folded in killed_station_keys:
+            continue
         status_comment = str(aprs_data.get("comment") or "").strip()
         if packet_group == "status" and station_key and status_comment:
             existing_key = station_key_index.get(station_key_folded)
@@ -2899,6 +2907,7 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
     if not name:
         return None
 
+    state = "killed" if info[10] == "_" else "live"
     latitude = _parse_latitude(info[18:26])
     symbol_table = info[26]
     longitude = _parse_longitude(info[27:36])
@@ -2914,6 +2923,7 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
         "packet_group": "object",
         "packet_group_label": _packet_group_label("object"),
         "packet_type_code": "object",
+        "state": state,
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",

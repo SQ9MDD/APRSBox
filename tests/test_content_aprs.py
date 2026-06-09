@@ -220,6 +220,13 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual((item or {}).get("aprs_data", {}).get("packet_group"), "item")
         self.assertEqual((item or {}).get("aprs_data", {}).get("packet_type_code"), "item")
 
+    def test_parse_tnc2_frame_decodes_object_state_marker(self) -> None:
+        live = parse_tnc2_frame("SP8ABC-9>APRS:;OBJTEST  *010203z5228.23N/02101.28E#Object")
+        killed = parse_tnc2_frame("SP8ABC-9>APRS:;OBJTEST  _010203z5228.23N/02101.28E#Object")
+
+        self.assertEqual((live or {}).get("aprs_data", {}).get("state"), "live")
+        self.assertEqual((killed or {}).get("aprs_data", {}).get("state"), "killed")
+
     def test_parse_tnc2_frame_exposes_message_group_for_bulletin_and_ack(self) -> None:
         bulletin = parse_tnc2_frame("SP8ABC-9>APRS::BLN1     :System bulletin")
         ack = parse_tnc2_frame("SP8ABC-9>APRS::SQ9MDD-4:ack12")

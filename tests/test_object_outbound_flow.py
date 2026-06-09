@@ -176,6 +176,60 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             assert traffic_row is not None
             self.assertIn(";T2WARSPL *111111z", traffic_row["line"])
 
+    async def test_outbound_runtime_sends_killed_object_jobs_with_underscore_state_marker(self) -> None:
+        with temporary_database():
+            insert_modem()
+            object_id = insert_object(lifetime="permanent", interval_minutes=30)
+            execute("UPDATE aprs_objects SET state = 'killed' WHERE id = ?", (object_id,))
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            scheduler = ObjectSchedulerService()
+            scheduler._tick()
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "object")
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    _ = data
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9001)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await outbound_service._process_job(job)
+
+            traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
+            assert traffic_row is not None
+            self.assertIn(";T2WARSPL _111111z", traffic_row["line"])
+
     async def test_outbound_runtime_applies_overlay_for_alternate_object_symbol(self) -> None:
         with temporary_database():
             insert_modem()

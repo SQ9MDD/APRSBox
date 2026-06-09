@@ -123,6 +123,33 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
         self.assertEqual(heard_mock.call_count, 1)
         self.assertEqual(local_mock.call_count, 1)
 
+    def test_visible_station_snapshots_omits_killed_object_packets(self) -> None:
+        with temporary_database():
+            killed_line = "SP8ABC-9>APRS:;OBJTEST  _010203z5228.23N/02101.28E#Object"
+            live_line = "SP8ABC-9>APRS:;OBJTEST  *010203z5228.23N/02101.28E#Object"
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'rx', '2m', 'TNC2', ?, '0', 'RX', ?, '', ?)
+                """,
+                ("TNC-2m", killed_line, len(killed_line), "2026-01-01T00:01:00+00:00"),
+            )
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, NULL, 'rx', '2m', 'TNC2', ?, '0', 'RX', ?, '', ?)
+                """,
+                ("TNC-2m", live_line, len(live_line), "2026-01-01T00:00:00+00:00"),
+            )
+
+            snapshots = get_visible_station_snapshots(limit=50)
+            display_callsigns = {str(item.get("display_callsign") or "") for item in snapshots}
+            self.assertNotIn("OBJTEST", display_callsigns)
+
     def test_heard_station_snapshots_map_third_party_position_to_inner_sender(self) -> None:
         with temporary_database():
             line = "SR0DZ>APDW16,SR5NWA*,WIDE1*:}SQ2IBK>U2QU28,TCPIP,SR0DZ*:`0SZl4{[/>145.575MHz&"
