@@ -153,7 +153,7 @@ from app.services.map_service import (
     get_station_detail_track_payload,
 )
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
-from app.services.outbound import enqueue_beacon_job, enqueue_status_job
+from app.services.outbound import enqueue_beacon_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
     container_system_actions_disabled_message,
     current_update_channel,
@@ -1999,6 +1999,30 @@ def objects_create(
         edit_row = get_section_row("objects", record_id) if error else None
     context = _section_template_context(request, current_user, "objects", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/settings/objects/{record_id}/send")
+def objects_send_now(
+    record_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    row = get_section_row("objects", record_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found.")
+
+    station_settings = get_station_settings()
+    success, flash = enqueue_object_job(row, station_settings, trigger="manual", force_send=True)
+    context = _section_template_context(
+        request,
+        current_user,
+        "objects",
+        flash=flash,
+        flash_success=success,
+        edit_row=row,
+    )
+    return templates.TemplateResponse("section.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.get("/items")

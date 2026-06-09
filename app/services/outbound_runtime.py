@@ -512,6 +512,8 @@ def _payload_flag(value: Any, *, default: bool) -> bool:
 
 def _skip_reason_for_inactive_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:
     if kind == "object":
+        if _payload_flag(payload.get("force_send"), default=False):
+            return None
         object_id = _normalize_payload_id(payload.get("object_id"))
         if object_id is None:
             return None

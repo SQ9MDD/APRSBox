@@ -441,6 +441,9 @@
                 {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
+                    {% if section.slug == 'objects' and edit_row %}
+                    <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/settings/objects/{{ edit_row.id }}/send" formmethod="post">{{ t("Send now") }}</button>
+                    {% endif %}
                     {% if section.supports_editing and edit_row %}
                     <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% if section.supports_delete %}

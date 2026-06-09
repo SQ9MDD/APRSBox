@@ -428,6 +428,7 @@ def enqueue_object_job(
     *,
     trigger: str = "scheduled",
     scheduled_for: datetime | None = None,
+    force_send: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -460,6 +461,7 @@ def enqueue_object_job(
         "path": str(obj.get("path") or "").strip(),
         "object_timestamp": _object_timestamp(str(obj.get("lifetime") or "temporary")),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
+        "force_send": bool(force_send),
     }
     scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now())
     job_ids = _enqueue_jobs_for_modems(
