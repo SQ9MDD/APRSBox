@@ -79,8 +79,9 @@
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
-    const aprsIconSize = [20, 20];
-    const aprsIconAnchor = [10, 10];
+    const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
+    const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
+    const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;

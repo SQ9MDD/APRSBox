@@ -360,6 +360,11 @@
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
+:root[data-aprs-symbol-set="modern"] .map-station-aprs-icon {
+    width: 32px;
+    height: 32px;
+}
+
 .map-station-aprs-overlay {
     position: absolute;
     left: 10px;
@@ -376,6 +381,11 @@
     line-height: 0.64rem;
     text-align: center;
     pointer-events: none;
+}
+
+:root[data-aprs-symbol-set="modern"] .map-station-aprs-overlay {
+    left: 16px;
+    top: 16px;
 }
 
 .map-station-icon-stale .map-station-aprs-overlay {
@@ -398,6 +408,10 @@
     letter-spacing: 0.01em;
     white-space: nowrap;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+}
+
+:root[data-aprs-symbol-set="modern"] .map-station-label {
+    left: 34px;
 }
 
 :root[data-theme="light"] .map-station-label {

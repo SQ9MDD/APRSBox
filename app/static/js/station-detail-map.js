@@ -22,8 +22,9 @@
     const aprsSymbolIconFallback = window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif";
     const refreshMs = Number.parseInt(pageRoot.dataset.refreshMs || "30000", 10);
     const legacyMaskOpacityStorageKey = "aprsbox-map-mask-opacity";
-    const aprsIconSize = [20, 20];
-    const aprsIconAnchor = [10, 10];
+    const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
+    const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
+    const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
     const i18n = Object.freeze({
         tocall: pageRoot.dataset.i18nTocall || "TOCALL",
         micE: pageRoot.dataset.i18nMicE || "Mic-E",
