@@ -9,10 +9,11 @@
     const toggleButton = document.getElementById("map-toggle-scroller");
     const toggleIcon = document.getElementById("map-toggle-scroller-icon");
     const staticRoot = root.dataset.staticRoot || "/static/";
+    const aprsSymbolIconFallback = window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif";
     const scrollerVisibleStorageKey = "aprsbox-map-scroller-visible";
     const stationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
-    const fallbackStationIconPath = `${staticRoot}icons/verG/x.gif`;
+    const fallbackStationIconPath = `${staticRoot}${aprsSymbolIconFallback}`;
     const maxEntries = 120;
     const stationSourceKey = normalizeCallsignKey(root.dataset.stationSourceKey || "");
     const stationSourceCallsign = baseCallsignKey(stationSourceKey);

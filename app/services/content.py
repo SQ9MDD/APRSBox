@@ -78,6 +78,55 @@ MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 DASHBOARD_ACTIVITY_WINDOW_MINUTES = 60
 DASHBOARD_ACTIVITY_BUCKET_MINUTES = 5
 STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
+APRS_SYMBOL_SET_SETTING_KEY = "aprs_symbol_set"
+APRS_SYMBOL_SET_LEGACY = "legacy"
+APRS_SYMBOL_SET_MODERN = "modern"
+
+
+def _normalize_aprs_symbol_set(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized == APRS_SYMBOL_SET_MODERN:
+        return APRS_SYMBOL_SET_MODERN
+    return APRS_SYMBOL_SET_LEGACY
+
+
+def _aprs_symbol_icon_set_parts(symbol_set: str) -> tuple[str, str]:
+    if symbol_set == APRS_SYMBOL_SET_MODERN:
+        return "aprs-symbols", "png"
+    return "verG", "gif"
+
+
+def get_aprs_symbol_set() -> str:
+    return _normalize_aprs_symbol_set(get_app_setting(APRS_SYMBOL_SET_SETTING_KEY))
+
+
+def _aprs_symbol_icon_path_for_set(symbol: str, symbol_set: str) -> str | None:
+    icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
+
+    if len(symbol) != 2:
+        filename = f"x.{extension}"
+    else:
+        table, code = symbol[0], symbol[1]
+        index = ord(code) - 33
+        if index < 0 or index > 93:
+            filename = f"x.{extension}"
+        else:
+            filename = f"{index:02d}.{extension}" if table == "/" else f"a{index:02d}.{extension}"
+
+    candidate = settings.static_dir / "icons" / icon_dir / filename
+    if candidate.exists():
+        return f"icons/{icon_dir}/{filename}"
+    return None
+
+
+def get_aprs_symbol_icon_fallback_path() -> str:
+    current_set = get_aprs_symbol_set()
+    for symbol_set in (current_set, APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN):
+        icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
+        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
+        if candidate.exists():
+            return f"icons/{icon_dir}/x.{extension}"
+    return "icons/verG/x.gif"
 
 
 def _t(message: object) -> str:
@@ -2234,7 +2283,7 @@ def _new_station_snapshot(
         "symbol": "",
         "symbol_table": "",
         "symbol_code": "",
-        "symbol_icon": "icons/verG/x.gif",
+        "symbol_icon": get_aprs_symbol_icon_fallback_path(),
         "comment": "",
         "status_text": "",
         "data_raw": {},
@@ -3524,19 +3573,13 @@ def _base91_value(value: str) -> int:
 
 
 def _aprs_symbol_icon_path(symbol: str) -> str:
-    if len(symbol) != 2:
-        return "icons/verG/x.gif"
-
-    table, code = symbol[0], symbol[1]
-    index = ord(code) - 33
-    if index < 0 or index > 93:
-        return "icons/verG/x.gif"
-
-    filename = f"{index:02d}.gif" if table == "/" else f"a{index:02d}.gif"
-    candidate = settings.static_dir / "icons" / "verG" / filename
-    if candidate.exists():
-        return f"icons/verG/{filename}"
-    return "icons/verG/x.gif"
+    current_set = get_aprs_symbol_set()
+    alternate_set = APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN
+    for symbol_set in (current_set, alternate_set):
+        candidate = _aprs_symbol_icon_path_for_set(symbol, symbol_set)
+        if candidate is not None:
+            return candidate
+    return get_aprs_symbol_icon_fallback_path()
 
 
 def get_aprs_symbol_icon_path(symbol: str) -> str:

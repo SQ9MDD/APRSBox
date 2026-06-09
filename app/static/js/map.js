@@ -39,6 +39,7 @@
     const coverageFillOpacitySelect = document.getElementById("map-coverage-fill-opacity");
     const coverageOutlineOpacitySelect = document.getElementById("map-coverage-outline-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
+    const aprsSymbolIconFallback = window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif";
     const rootPath = root.dataset.rootPath || "";
     const locale = document.documentElement.lang || undefined;
     const relativeTimeFormatter = (typeof Intl !== "undefined" && typeof Intl.RelativeTimeFormat === "function")
@@ -1065,7 +1066,7 @@
 
     function buildStationIcon(station) {
         const staleClass = station.stale ? " map-station-icon-stale" : "";
-        const iconPath = station.symbol_icon ? `${staticRoot}${station.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
+        const iconPath = station.symbol_icon ? `${staticRoot}${station.symbol_icon}` : `${staticRoot}${aprsSymbolIconFallback}`;
         const iconAlt = station.symbol_table || station.symbol_code ? `${station.symbol_table || ""}${station.symbol_code || ""}` : "";
         const overlay = resolveSymbolOverlay(station.symbol_table);
         return window.L.divIcon({

@@ -786,7 +786,7 @@
             const selected = symbolCodeOptions.find((option) => option.value === code) || null;
             const iconPathValue = selected
                 ? `${rootPath}/static/${table === "\\" ? selected.alternate_icon : selected.primary_icon}`
-                : `${rootPath}/static/icons/verG/x.gif`;
+                : `${rootPath}/static/${window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
             return {
                 value: normalized,
                 label: selected ? selected.label : normalized || i18n.none,
@@ -1117,14 +1117,14 @@
                     const selected = symbolCodeOptions.find((option) => option.value === pickerState.symbolCode) || symbolCodeOptions[0];
                     const useAlternate = pickerState.symbolTable === "\\";
                     const icon = useAlternate ? selected.alternate_icon : selected.primary_icon;
-                    triggerImage.src = `${rootPath}/static/${icon || "icons/verG/x.gif"}`;
+                    triggerImage.src = `${rootPath}/static/${icon || window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
                     triggerText.textContent = selected.label || i18n.selectSymbol;
                     for (const optionButton of symbolMenu.querySelectorAll(".station-symbol-option")) {
                         const useAlt = pickerState.symbolTable === "\\";
                         const image = optionButton.querySelector(".station-symbol-option-image");
                         const optionIcon = useAlt ? optionButton.dataset.alternateIcon : optionButton.dataset.primaryIcon;
                         if (image) {
-                            image.src = optionIcon || `${rootPath}/static/icons/verG/x.gif`;
+                            image.src = optionIcon || `${rootPath}/static/${window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
                         }
                         const isActive = optionButton.dataset.value === selected.value;
                         optionButton.classList.toggle("active", isActive);

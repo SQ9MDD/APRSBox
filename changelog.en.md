@@ -3,6 +3,7 @@
 ## 1.8.34.dev - 2026-06-09
 - `Objects / inbound-outbound`: killed objects no longer appear in the visible list/map, while outbound frames still use `_` for killed object packets.
 - `Objects / manual TX`: added a `Send now` button in object edit mode to force a manual object transmission.
+- `GUI / icons`: added a global APRS icon set selector (`legacy` / `modern`) and wired the local PNG symbol directory into the whole GUI.
 
 ## 1.8.33.dev - 2026-06-05
 - `Map / station list`: fixed icon and color mixing in the right map scroller by removing base-callsign lookup; entries now use the exact `display_callsign`.

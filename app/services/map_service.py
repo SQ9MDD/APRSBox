@@ -8,6 +8,7 @@ from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.content import (
     build_station_detail_href,
     format_decoded_data_for_display,
+    get_aprs_symbol_icon_fallback_path,
     get_configured_modem_interfaces,
     get_station_settings,
     get_visible_station_snapshots,
@@ -740,7 +741,7 @@ def get_station_detail_map_config(station: dict[str, Any], *, root_path: str = "
         "tile_max_zoom": tile_layer["tile_max_zoom"],
         "tile_subdomains": tile_layer["tile_subdomains"],
         "display_callsign": station.get("display_callsign", ""),
-        "symbol_icon": station.get("symbol_icon", "icons/verG/x.gif"),
+        "symbol_icon": station.get("symbol_icon", get_aprs_symbol_icon_fallback_path()),
         "symbol_table": station.get("symbol_table", ""),
         "symbol_code": station.get("symbol_code", ""),
         "detail_href": station.get("detail_href", ""),

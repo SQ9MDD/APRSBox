@@ -151,6 +151,7 @@
     const stationsSnapshotUrl = {{ stations_snapshot_url|tojson }};
     const staticRoot = {{ static_root|tojson }};
     const rootPath = {{ root_path|tojson }};
+    const aprsSymbolIconFallback = {{ aprs_symbol_icon_fallback|tojson }};
     const initialStations = {{ stations|tojson }};
 
     const summaryTotal = document.getElementById("summary-total");
@@ -225,7 +226,7 @@
         const overlay = resolveSymbolOverlay(row.symbol_table);
         return `
             <span class="aprs-symbol-icon-stack">
-                <img class="aprs-symbol-icon" src="${staticRoot}${escapeHtml(row.symbol_icon || "icons/verG/x.gif")}" alt="${escapeHtml(row.symbol)}">
+                <img class="aprs-symbol-icon" src="${staticRoot}${escapeHtml(row.symbol_icon || aprsSymbolIconFallback)}" alt="${escapeHtml(row.symbol)}">
                 ${overlay ? `<span class="aprs-symbol-overlay" aria-hidden="true">${escapeHtml(overlay)}</span>` : ""}
             </span>
         `;

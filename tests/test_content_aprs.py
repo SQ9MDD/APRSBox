@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from app.services.content import (
     _clean_decoded_tokens,
@@ -6,6 +7,8 @@ from app.services.content import (
     _parse_position_with_timestamp,
     _parse_position_without_timestamp,
     _parse_qsy_fields,
+    get_aprs_symbol_icon_fallback_path,
+    get_aprs_symbol_icon_path,
     parse_tnc2_frame,
 )
 
@@ -219,6 +222,12 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual((telemetry or {}).get("aprs_data", {}).get("packet_type_code"), "telemetry")
         self.assertEqual((item or {}).get("aprs_data", {}).get("packet_group"), "item")
         self.assertEqual((item or {}).get("aprs_data", {}).get("packet_type_code"), "item")
+
+    def test_get_aprs_symbol_icon_path_switches_to_modern_png_set(self) -> None:
+        with patch("app.services.content.get_app_setting", return_value="modern"):
+            self.assertEqual(get_aprs_symbol_icon_path("/!"), "icons/aprs-symbols/00.png")
+            self.assertEqual(get_aprs_symbol_icon_path("\\!"), "icons/aprs-symbols/a00.png")
+            self.assertEqual(get_aprs_symbol_icon_fallback_path(), "icons/aprs-symbols/x.png")
 
     def test_parse_tnc2_frame_decodes_object_state_marker(self) -> None:
         live = parse_tnc2_frame("SP8ABC-9>APRS:;OBJTEST  *010203z5228.23N/02101.28E#Object")
