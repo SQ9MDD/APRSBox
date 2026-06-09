@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.34.dev - 09.06.2026
+- `Objects / inbound-outbound`: obiekty `killed` nie trafiają już do widocznej listy/mapy, a ramki outbound nadal używają znacznika `_` dla killed object.
+
 ## 1.8.33.dev - 05.06.2026
 - `Mapa / lista stacji`: usunięto mieszanie ikonek i kolorów w prawym scrollerze mapy przez lookup po bazowym znaku; wpisy korzystają teraz z dokładnego `display_callsign`.
 

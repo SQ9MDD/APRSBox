@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.34.dev - 2026-06-09
+- `Objects / inbound-outbound`: los objetos `killed` ya no aparecen en la lista/mapa visibles, mientras que las tramas outbound siguen usando `_` para los killed object.
+
 ## 1.8.33.dev - 2026-06-05
 - `Mapa / lista de estaciones`: se corrigió la mezcla de iconos y colores en el scroller derecho del mapa al eliminar la búsqueda por base callsign; ahora las entradas usan el `display_callsign` exacto.
 
