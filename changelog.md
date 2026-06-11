@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.36.dev - 11.06.2026
+- `Outbound/TX queue`: naprawiono pacing lokalnych ramek, tak aby opóźnione pakiety były ostatecznie nadawane zamiast być odkładane w nieskończoność.
+- `DIGI / rename TNC`: zmiana nazwy TNC propaguje się teraz do referencji source/target w flowach DIGI oraz do konfiguracji kroków RF, więc routing dalej wskazuje ten sam interfejs.
+
 ## 1.8.35.dev - 11.06.2026
 - `Outbound/TX queue`: dodano per-TNC pacing dla lokalnie generowanych ramek APRSBox, aby obiekty, biuletyny, beacon, WX, status i ręczny TX były rozkładane w czasie przed fizycznym nadaniem zamiast nadawania jeden po drugim.
 

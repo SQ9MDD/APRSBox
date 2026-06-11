@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.36.dev - 2026-06-11
+- `Outbound/TX queue`: fixed local-generated pacing so delayed frames are eventually transmitted instead of being rescheduled indefinitely.
+- `DIGI / TNC rename`: renaming a TNC now propagates to DIGI flow source/target references and RF step configs, so routing keeps pointing at the same interface.
+
 ## 1.8.35.dev - 2026-06-11
 - `Outbound/TX queue`: added per-TNC pacing for locally generated APRSBox frames so objects, bulletins, beacons, WX, status and manual TX are spaced out before physical transmission instead of being sent back-to-back.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.36.dev - 2026-06-11
+- `Outbound/TX queue`: se corrigió el pacing de tramas locales para que las tramas retrasadas se transmitan finalmente en lugar de volver a reprogramarse indefinidamente.
+- `DIGI / rename TNC`: al cambiar el nombre de un TNC, ahora se propaga a las referencias source/target de los flows DIGI y a la configuración de los pasos RF, manteniendo el routing apuntando al mismo interfaz.
+
 ## 1.8.35.dev - 2026-06-11
 - `Outbound/TX queue`: se añadió un pacing por TNC para las tramas generadas localmente por APRSBox, de modo que objects, bulletins, beacons, WX, status y TX manual se espacien antes de la transmisión física en vez de salir seguidas.
 
