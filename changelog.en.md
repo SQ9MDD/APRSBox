@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.37.dev - 2026-06-11
+- `Objects / timestamp`: temporary objects now compute the APRS timestamp only at the moment of a real frame transmission (`DDHHMMz`), while permanent objects still use the fixed `111111z`.
+
 ## 1.8.36.dev - 2026-06-11
 - `Outbound/TX queue`: fixed local-generated pacing so delayed frames are eventually transmitted instead of being rescheduled indefinitely.
 - `DIGI / TNC rename`: renaming a TNC now propagates to DIGI flow source/target references and RF step configs, so routing keeps pointing at the same interface.

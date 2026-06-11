@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.37.dev - 2026-06-11
+- `Objects / timestamp`: los objetos temporales ahora calculan el timestamp APRS solo en el momento de la transmisión real de la trama (`DDHHMMz`), mientras que los objetos permanentes siguen usando el fijo `111111z`.
+
 ## 1.8.36.dev - 2026-06-11
 - `Outbound/TX queue`: se corrigió el pacing de tramas locales para que las tramas retrasadas se transmitan finalmente en lugar de volver a reprogramarse indefinidamente.
 - `DIGI / rename TNC`: al cambiar el nombre de un TNC, ahora se propaga a las referencias source/target de los flows DIGI y a la configuración de los pasos RF, manteniendo el routing apuntando al mismo interfaz.

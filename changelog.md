@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.37.dev - 11.06.2026
+- `Objects / timestamp`: dla obiektów tymczasowych timestamp APRS jest teraz liczony dopiero przy realnym nadaniu ramki (`DDHHMMz`), a obiekty permanentne nadal używają stałego `111111z`.
+
 ## 1.8.36.dev - 11.06.2026
 - `Outbound/TX queue`: naprawiono pacing lokalnych ramek, tak aby opóźnione pakiety były ostatecznie nadawane zamiast być odkładane w nieskończoność.
 - `DIGI / rename TNC`: zmiana nazwy TNC propaguje się teraz do referencji source/target w flowach DIGI oraz do konfiguracji kroków RF, więc routing dalej wskazuje ten sam interfejs.

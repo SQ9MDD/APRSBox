@@ -473,12 +473,13 @@ def enqueue_object_job(
     symbol_table = _normalize_symbol_table(obj.get("symbol_table"))
     symbol_overlay = _normalize_symbol_overlay(obj.get("symbol_overlay"), symbol_table=symbol_table)
 
+    lifetime = str(obj.get("lifetime") or "temporary").strip().lower()
     payload = {
         "object_id": int(obj["id"]),
         "callsign": callsign,
         "ssid": ssid,
         "name": str(obj.get("name") or ""),
-        "lifetime": str(obj.get("lifetime") or "temporary"),
+        "lifetime": lifetime,
         "state": str(obj.get("state") or "live"),
         "latitude": latitude,
         "longitude": longitude,
@@ -487,10 +488,11 @@ def enqueue_object_job(
         "symbol_overlay": symbol_overlay,
         "comment": str(obj.get("comment") or "").strip(),
         "path": str(obj.get("path") or "").strip(),
-        "object_timestamp": _object_timestamp(str(obj.get("lifetime") or "temporary")),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
         "force_send": bool(force_send),
     }
+    if lifetime == "permanent":
+        payload["object_timestamp"] = _object_timestamp(lifetime)
     scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now())
     job_ids = _enqueue_jobs_for_modems(
         kind=OUTBOUND_KIND_OBJECT,
@@ -1062,7 +1064,14 @@ def _build_beacon_info(payload: dict[str, Any]) -> str:
 def _build_object_info(payload: dict[str, Any]) -> str:
     name = str(payload.get("name") or "")[:9].ljust(9)
     state_marker = "*" if str(payload.get("state") or "live") == "live" else "_"
-    timestamp = str(payload.get("object_timestamp") or _object_timestamp(str(payload.get("lifetime") or "temporary")))
+    lifetime = str(payload.get("lifetime") or "temporary").strip().lower()
+    object_timestamp = payload.get("object_timestamp")
+    if payload.get("object_id") is not None:
+        timestamp = _object_timestamp(lifetime)
+    elif object_timestamp:
+        timestamp = str(object_timestamp)
+    else:
+        timestamp = _object_timestamp(lifetime)
     latitude = _format_aprs_latitude(float(payload["latitude"]))
     longitude = _format_aprs_longitude(float(payload["longitude"]))
     symbol_table = _normalize_symbol_table(payload.get("symbol_table"))
