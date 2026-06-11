@@ -255,6 +255,17 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
 def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
     definition = SECTION_DEFINITIONS[slug]
     normalized_payload = _normalize_section_payload(slug, payload)
+    previous_row: dict[str, Any] | None = None
+    if slug == "modems":
+        row = fetch_one(
+            """
+            SELECT id, name
+            FROM modems
+            WHERE id = ?
+            """,
+            (row_id,),
+        )
+        previous_row = dict(row) if row is not None else None
     values: dict[str, Any] = {}
     for field in definition.fields:
         name = field["name"]
@@ -279,7 +290,72 @@ def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
             """,
             values,
         )
+        if slug == "modems" and previous_row is not None:
+            previous_name = str(previous_row.get("name") or "").strip()
+            current_name = str(values.get("name") or "").strip()
+            if previous_name and current_name and previous_name != current_name:
+                _propagate_modem_rename_to_digi_flows(
+                    connection=connection,
+                    previous_name=previous_name,
+                    current_name=current_name,
+                )
     log_event("INFO", "config", f"Updated record {row_id} in {definition.table_name}")
+
+
+def _propagate_modem_rename_to_digi_flows(
+    *,
+    connection: sqlite3.Connection,
+    previous_name: str,
+    current_name: str,
+) -> None:
+    timestamp = utc_now()
+    connection.execute(
+        """
+        UPDATE digi_flows
+        SET source_ref = ?, updated_at = ?
+        WHERE source_kind = 'receiver_rf'
+          AND source_ref = ?
+        """,
+        (current_name, timestamp, previous_name),
+    )
+    connection.execute(
+        """
+        UPDATE digi_flows
+        SET target_ref = ?, updated_at = ?
+        WHERE target_kind = 'tx_rf'
+          AND target_ref = ?
+        """,
+        (current_name, timestamp, previous_name),
+    )
+    rows = connection.execute(
+        """
+        SELECT id, step_type, config_json
+        FROM digi_flow_steps
+        WHERE step_type IN ('receiver_rf', 'tx_rf')
+        """,
+    ).fetchall()
+    for row in rows:
+        try:
+            config = json.loads(str(row["config_json"] or "{}"))
+        except json.JSONDecodeError:
+            continue
+        step_type = str(row["step_type"] or "")
+        updated = False
+        if step_type == "receiver_rf" and str(config.get("rf_port") or "").strip() == previous_name:
+            config["rf_port"] = current_name
+            updated = True
+        elif step_type == "tx_rf" and str(config.get("rf_target") or "").strip() == previous_name:
+            config["rf_target"] = current_name
+            updated = True
+        if updated:
+            connection.execute(
+                """
+                UPDATE digi_flow_steps
+                SET config_json = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (json.dumps(config, ensure_ascii=True, separators=(",", ":")), timestamp, int(row["id"])),
+            )
 
 
 def delete_section_row(slug: str, row_id: int) -> None:

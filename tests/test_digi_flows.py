@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from app.db import connect, fetch_one, init_db
+from app.services.content import get_section_row, safe_update_section_row
 from app.services.digi_flows import (
     create_digi_flow,
     get_digi_flow,
@@ -369,6 +370,47 @@ class DigiFlowsTests(unittest.TestCase):
                 )["target"]
             }
             self.assertIn("tx_rf::TNC-70cm", preserved_values)
+
+    def test_renaming_tnc_updates_digi_flow_references(self) -> None:
+        with temporary_database():
+            connection = connect()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO modems (
+                        name, modem_type, band, device_path, baud_rate, enabled,
+                        expose_port_enabled, expose_bind_address, expose_port, expose_whitelist,
+                        notes, created_at, updated_at
+                    )
+                    VALUES (?, 'TCP', '2m', '127.0.0.1:9001', NULL, 1, 0, '127.0.0.1', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    ("TNC-A",),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            flow_id = create_digi_flow(sample_rf_flow_payload(name="2m loop", source_ref="TNC-A", target_ref="TNC-A"))
+            modem_row = get_section_row("modems", 1)
+            assert modem_row is not None
+            modem_payload = dict(modem_row)
+            modem_payload["name"] = "TNC-B"
+            success, error = safe_update_section_row("modems", 1, modem_payload)
+            self.assertTrue(success, msg=error or "")
+
+            flow = get_digi_flow(flow_id)
+            assert flow is not None
+            self.assertEqual(flow["source_ref"], "TNC-B")
+            self.assertEqual(flow["target_ref"], "TNC-B")
+            self.assertEqual(flow["steps"][0]["config"]["rf_port"], "TNC-B")
+            self.assertEqual(flow["steps"][-1]["config"]["rf_target"], "TNC-B")
+
+            source_values = {option["value"] for option in get_digi_flow_endpoint_options()["source"]}
+            target_values = {option["value"] for option in get_digi_flow_endpoint_options()["target"]}
+            self.assertIn("receiver_rf::TNC-B", source_values)
+            self.assertIn("tx_rf::TNC-B", target_values)
+            self.assertNotIn("receiver_rf::TNC-A", source_values)
+            self.assertNotIn("tx_rf::TNC-A", target_values)
 
     def test_openwebrx_mqtt_is_available_as_source_but_not_as_tx_target(self) -> None:
         with temporary_database():
