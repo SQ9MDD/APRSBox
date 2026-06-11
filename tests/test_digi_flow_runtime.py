@@ -5,14 +5,21 @@ import os
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import app.services.digi_flows as digi_flows
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
-from app.services.outbound import claim_next_outbound_job, enqueue_digi_tx_job, get_outbound_job
+from app.services.outbound import (
+    claim_next_outbound_job,
+    enqueue_digi_tx_job,
+    enqueue_direct_message_job,
+    enqueue_object_job,
+    get_outbound_job,
+)
 from app.services.outbound_runtime import OutboundService
 from app.services.traffic import TrafficMonitorService
 
@@ -73,6 +80,13 @@ def insert_modem(*, name: str = "RF-OUT", device_path: str = "127.0.0.1:9001") -
     row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
     assert row is not None
     return int(row["id"])
+
+
+def parse_utc_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def event_rows_for_frame(frame_uid: str) -> list[dict]:
@@ -1385,6 +1399,229 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(write_timestamps), 2)
             self.assertGreaterEqual(write_timestamps[1] - write_timestamps[0], 0.30)
+
+    async def test_local_generated_object_jobs_are_tagged_and_paced_on_same_interface(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9016")
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": str(interface_id),
+            }
+            for object_id, name in ((101, "OBJ-A"), (102, "OBJ-B")):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    station_settings,
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=5.0,
+                local_tx_jitter_seconds=0.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            first_record = get_outbound_job(int(first_job["id"]))
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert first_record is not None
+            assert second_record is not None
+
+            self.assertEqual(first_record["status"], "sent")
+            self.assertEqual(first_record["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(first_record["payload"]["tx_kind"], "object")
+            self.assertEqual(second_record["status"], "queued")
+            self.assertEqual(second_record["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(second_record["payload"]["tx_kind"], "object")
+            self.assertIn("tx_pacing_next_allowed_at", second_record["payload"])
+
+            spacing_seconds = (parse_utc_timestamp(second_record["scheduled_at"]) - parse_utc_timestamp(first_record["sent_at"])).total_seconds()
+            self.assertGreaterEqual(spacing_seconds, 5.0)
+
+    @patch("app.services.outbound_runtime.random.uniform", return_value=3.0)
+    async def test_local_generated_object_jitter_is_bounded(self, _uniform: object) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9017")
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": str(interface_id),
+            }
+            for object_id, name in ((201, "OBJ-C"), (202, "OBJ-D")):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    station_settings,
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=5.0,
+                local_tx_jitter_seconds=3.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            first_record = get_outbound_job(int(first_job["id"]))
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert first_record is not None
+            assert second_record is not None
+
+            spacing_seconds = (parse_utc_timestamp(second_record["scheduled_at"]) - parse_utc_timestamp(first_record["sent_at"])).total_seconds()
+            self.assertGreaterEqual(spacing_seconds, 5.0)
+            self.assertLessEqual(spacing_seconds, 8.0)
+
+    async def test_local_generated_object_jobs_on_different_interfaces_are_paced_independently(self) -> None:
+        with temporary_database():
+            interface_a_id = insert_modem(name="RF-A", device_path="127.0.0.1:9018")
+            interface_b_id = insert_modem(name="RF-B", device_path="127.0.0.1:9019")
+            for interface_id, object_id, name in (
+                (interface_a_id, 301, "OBJ-E"),
+                (interface_b_id, 302, "OBJ-F"),
+            ):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    {
+                        "callsign": "SQ9MDD",
+                        "ssid": "4",
+                        "beacon_interface_id": str(interface_id),
+                    },
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=0.5,
+                local_tx_jitter_seconds=0.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            first_record = get_outbound_job(int(first_job["id"]))
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert first_record is not None
+            assert second_record is not None
+
+            self.assertEqual(first_record["status"], "sent")
+            self.assertEqual(second_record["status"], "sent")
+            self.assertEqual(first_record["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(second_record["payload"]["tx_origin"], "local_generated")
+
+    def test_digi_tx_jobs_are_tagged_as_routed(self) -> None:
+        with temporary_database():
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9020")
+            success, _ = enqueue_digi_tx_job(
+                interface_name="RF-OUT",
+                line="SQ9MDD-4>APRS:>Routed TX",
+                flow_id=99,
+                frame_uid="frame-routed",
+            )
+            self.assertTrue(success)
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            stored_job = get_outbound_job(int(job["id"]))
+            assert stored_job is not None
+
+            self.assertEqual(stored_job["payload"]["tx_origin"], "routed")
+            self.assertEqual(stored_job["payload"]["tx_kind"], "routed")
+            self.assertNotEqual(stored_job["payload"]["tx_origin"], "local_generated")
+
+    def test_manual_message_jobs_are_tagged_as_manual(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9021")
+            success, _ = enqueue_direct_message_job(
+                {
+                    "id": 401,
+                    "addressee": "SQ9ABC",
+                    "message_text": "Manual TX",
+                    "path": "",
+                    "message_number": "A1",
+                },
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": str(interface_id),
+                },
+                trigger="manual",
+            )
+            self.assertTrue(success)
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            stored_job = get_outbound_job(int(job["id"]))
+            assert stored_job is not None
+
+            self.assertEqual(stored_job["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(stored_job["payload"]["tx_kind"], "manual")
+            self.assertNotEqual(stored_job["payload"]["tx_origin"], "routed")
 
     def test_claim_next_outbound_job_prioritizes_digi_tx_over_non_digi_jobs(self) -> None:
         with temporary_database():

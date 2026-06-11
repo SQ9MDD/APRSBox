@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.35.dev - 2026-06-11
+- `Outbound/TX queue`: se añadió un pacing por TNC para las tramas generadas localmente por APRSBox, de modo que objects, bulletins, beacons, WX, status y TX manual se espacien antes de la transmisión física en vez de salir seguidas.
+
 ## 1.8.34.dev - 2026-06-09
 - `Objects / inbound-outbound`: los objetos `killed` ya no aparecen en la lista/mapa visibles, mientras que las tramas outbound siguen usando `_` para los killed object.
 - `Objects / manual TX`: se añadió un botón `Send now` en la edición del objeto para forzar el envío manual del objeto.

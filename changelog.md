@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.35.dev - 11.06.2026
+- `Outbound/TX queue`: dodano per-TNC pacing dla lokalnie generowanych ramek APRSBox, aby obiekty, biuletyny, beacon, WX, status i ręczny TX były rozkładane w czasie przed fizycznym nadaniem zamiast nadawania jeden po drugim.
+
 ## 1.8.34.dev - 09.06.2026
 - `Objects / inbound-outbound`: obiekty `killed` nie trafiają już do widocznej listy/mapy, a ramki outbound nadal używają znacznika `_` dla killed object.
 - `Objects / manual TX`: w edycji obiektu dodano przycisk `Wyślij`, który wymusza ręczne nadanie obiektu.

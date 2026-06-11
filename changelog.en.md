@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.35.dev - 2026-06-11
+- `Outbound/TX queue`: added per-TNC pacing for locally generated APRSBox frames so objects, bulletins, beacons, WX, status and manual TX are spaced out before physical transmission instead of being sent back-to-back.
+
 ## 1.8.34.dev - 2026-06-09
 - `Objects / inbound-outbound`: killed objects no longer appear in the visible list/map, while outbound frames still use `_` for killed object packets.
 - `Objects / manual TX`: added a `Send now` button in object edit mode to force a manual object transmission.
