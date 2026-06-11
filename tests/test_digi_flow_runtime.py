@@ -1461,6 +1461,61 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             spacing_seconds = (parse_utc_timestamp(second_record["scheduled_at"]) - parse_utc_timestamp(first_record["sent_at"])).total_seconds()
             self.assertGreaterEqual(spacing_seconds, 5.0)
 
+    async def test_delayed_local_generated_object_job_eventually_sends_when_due(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9022")
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": str(interface_id),
+            }
+            for object_id, name in ((501, "OBJ-G"), (502, "OBJ-H")):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    station_settings,
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=0.05,
+                local_tx_jitter_seconds=0.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            await asyncio.sleep(0.08)
+            next_job = claim_next_outbound_job()
+            assert next_job is not None
+            self.assertEqual(int(next_job["id"]), int(second_job["id"]))
+            await outbound_service._process_job(next_job)
+
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert second_record is not None
+            self.assertEqual(second_record["status"], "sent")
+
     @patch("app.services.outbound_runtime.random.uniform", return_value=3.0)
     async def test_local_generated_object_jitter_is_bounded(self, _uniform: object) -> None:
         with temporary_database():

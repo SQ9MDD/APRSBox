@@ -453,6 +453,20 @@ class OutboundService:
             return False
 
         now = datetime.now(timezone.utc)
+        job_release_at = self._parse_timestamp(str(payload.get("tx_pacing_next_allowed_at") or ""))
+        if job_release_at is None:
+            raw_metadata = payload.get("local_tx_metadata")
+            metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+            job_release_at = self._parse_timestamp(str(metadata.get("tx_pacing_next_allowed_at") or ""))
+        if job_release_at is not None and job_release_at <= now:
+            spacing_seconds = self._compute_local_tx_spacing_seconds()
+            updated_next_allowed_at = now + timedelta(seconds=spacing_seconds)
+            current_next_allowed_at = self._local_tx_next_allowed_at_by_interface.get(interface_id)
+            if current_next_allowed_at is None or updated_next_allowed_at > current_next_allowed_at:
+                self._local_tx_next_allowed_at_by_interface[interface_id] = updated_next_allowed_at
+            self._local_tx_last_physical_at_by_interface[interface_id] = now
+            return False
+
         next_allowed_at = self._local_tx_next_allowed_at_by_interface.get(interface_id)
         if next_allowed_at is None:
             next_allowed_at = self._load_local_tx_next_allowed_at_from_db(interface_id=interface_id)
@@ -462,6 +476,8 @@ class OutboundService:
             last_physical_at = self._local_tx_last_physical_at_by_interface.get(interface_id)
             if last_physical_at is not None:
                 next_allowed_at = last_physical_at + timedelta(seconds=self._compute_local_tx_spacing_seconds())
+        if next_allowed_at is None and job_release_at is not None:
+            next_allowed_at = job_release_at
 
         if next_allowed_at is not None and next_allowed_at > now:
             delay_seconds = (next_allowed_at - now).total_seconds()
@@ -533,7 +549,7 @@ class OutboundService:
         spacing_seconds = self._compute_local_tx_spacing_seconds()
         updated_next_allowed_at = next_allowed_at + timedelta(seconds=spacing_seconds)
         updated_payload = dict(payload)
-        updated_payload["tx_pacing_next_allowed_at"] = self._format_timestamp(updated_next_allowed_at)
+        updated_payload["tx_pacing_next_allowed_at"] = self._format_timestamp(next_allowed_at)
         metadata = dict(updated_payload.get("local_tx_metadata") or {})
         metadata["tx_pacing_next_allowed_at"] = updated_payload["tx_pacing_next_allowed_at"]
         updated_payload["local_tx_metadata"] = metadata
