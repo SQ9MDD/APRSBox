@@ -218,6 +218,59 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(any(row["event_type"] == "output_action" for row in second_rows))
             self.assertTrue(any("duplicate seen within 2s" in row["message"] for row in second_rows if row["event_type"] == "filter_dupe"))
 
+    async def test_rate_limit_filter_blocks_until_limit_expires_and_keeps_last_passed_timestamp(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Rate limited RF TX",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_rate_limit",
+                            "title": "Rate Limit Filter",
+                            "enabled": 1,
+                            "config": {"rate_limit_seconds": 5},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            rate_limit_step = fetch_one(
+                """
+                SELECT id
+                FROM digi_flow_steps
+                WHERE flow_id = ? AND step_type = 'filter_rate_limit'
+                """,
+                (flow_id,),
+            )
+            assert rate_limit_step is not None
+            step = {"id": int(rate_limit_step["id"]), "config": {"rate_limit_seconds": 5}}
+            context = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-frame", "current_line": ""}
+            runtime = DigiFlowRuntimeService()
+            with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0, 105.5]):
+                first = runtime._execute_rate_limit_filter(context, step)
+                second = runtime._execute_rate_limit_filter(context, step)
+                third = runtime._execute_rate_limit_filter(context, step)
+
+            self.assertEqual(first["decision"], "continue")
+            self.assertEqual(second["decision"], "drop")
+            self.assertEqual(third["decision"], "continue")
+            rows = event_rows_for_frame("rate-limit-frame")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in rows))
+            self.assertTrue(any("limit is 5s" in row["message"] for row in rows if row["event_type"] == "filter_rate_limit"))
+
     async def test_duplicate_filter_viscous_delay_waits_then_allows_unique_fingerprints(self) -> None:
         with temporary_database():
             create_flow(

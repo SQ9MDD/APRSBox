@@ -358,6 +358,7 @@
             symbolCode: {{ t("Symbol Code")|tojson }},
             symbolTable: {{ t("Symbol Table")|tojson }},
             duplicateFilterUsed: {{ t("Duplicate filter (viscous-delay) is already used in this flow.")|tojson }},
+            rateLimitFilterUsed: {{ t("Rate limit filter is already used in this flow.")|tojson }},
             distanceFilterUsed: {{ t("Distance filter is already used in this flow.")|tojson }},
             latitude: {{ t("Latitude")|tojson }},
             longitude: {{ t("Longitude")|tojson }},
@@ -459,7 +460,7 @@
             if (stepType === "filter_packet_type") return { mode: "allow", packet_types: [] };
             if (stepType === "filter_icon") return { mode: "allow", icons: [] };
             if (stepType === "filter_distance") return { zones: [{ latitude: "", longitude: "", radius_km: "" }] };
-            if (stepType === "filter_rate_limit") return { packets_per_minute: 60 };
+            if (stepType === "filter_rate_limit") return { rate_limit_seconds: 60 };
             if (stepType === "filter_rate_limit_per_callsign") return { packets_per_minute: 30 };
             if (stepType === "tx_rf") return { rf_target: refValue || "" };
             if (stepType === "tx_aprsis") return { aprsis_target: refValue || "" };
@@ -522,7 +523,7 @@
             }
             if (step.step_type === "filter_icon") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.icons}: ${(config.icons || []).join(", ") || i18n.none}`;
             if (step.step_type === "filter_distance") return `${i18n.distanceZones}: ${normalizeDistanceZones(config.zones).length}`;
-            if (step.step_type === "filter_rate_limit") return `${i18n.rate}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
+            if (step.step_type === "filter_rate_limit") return `${i18n.rate}: ${config.rate_limit_seconds || config.packets_per_minute || "-"} ${i18n.sec}`;
             if (step.step_type === "filter_rate_limit_per_callsign") return `${i18n.perCallsign}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
             if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
             if (step.step_type === "tx_aprsis") return `${i18n.aprsisTarget}: ${config.aprsis_target || "-"}`;
@@ -560,12 +561,16 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
+        const isRateLimitStepType = (stepType) => stepType === "filter_rate_limit";
         const isTxRfTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_rf";
-        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && (stepType === "filter_dupe" || stepType === "filter_path");
+        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
         const isDistanceFilterStepType = (stepType) => stepType === "filter_distance";
         const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
         const hasViscousDelayStep = () => steps.some(
             (step, index) => index > 0 && index < steps.length - 1 && isViscousDelayStepType(step.step_type),
+        );
+        const hasRateLimitStep = () => steps.some(
+            (step, index) => index > 0 && index < steps.length - 1 && isRateLimitStepType(step.step_type),
         );
         const hasDistanceFilterStep = () => steps.some(
             (step, index) => index > 0 && index < steps.length - 1 && isDistanceFilterStepType(step.step_type),
@@ -576,8 +581,8 @@
             if (!Array.isArray(steps) || steps.length < 2) {
                 return;
             }
-            const sourceStep = { ...steps[0] };
-            const targetStep = { ...steps[steps.length - 1] };
+            const sourceStep = steps[0];
+            const targetStep = steps[steps.length - 1];
             if (!isAprsisTargetFlow()) {
                 const middle = steps
                     .slice(1, -1)
@@ -601,6 +606,12 @@
 
         const enforceTxRfFlowRestrictions = () => {
             if (!Array.isArray(steps) || steps.length < 2 || !isTxRfTargetFlow()) {
+                if (Array.isArray(steps) && steps.length >= 2) {
+                    const sourceStep = steps[0];
+                    const targetStep = steps[steps.length - 1];
+                    const middleSteps = steps.slice(1, -1).filter((step) => String(step.step_type || "").trim() !== "filter_rate_limit");
+                    steps = [sourceStep, ...middleSteps, targetStep];
+                }
                 return;
             }
             const sourceStep = steps[0];
@@ -609,14 +620,16 @@
             const viscousDelaySteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_dupe");
             const otherSteps = middleSteps.filter((step) => {
                 const stepType = String(step.step_type || "").trim();
-                return stepType !== "filter_dupe" && stepType !== "filter_path";
+                return stepType !== "filter_dupe" && stepType !== "filter_rate_limit" && stepType !== "filter_path";
             });
+            const rateLimitSteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_rate_limit");
             const pathSteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_path");
-            steps = [sourceStep, ...viscousDelaySteps, ...otherSteps, ...pathSteps, targetStep];
+            steps = [sourceStep, ...viscousDelaySteps, ...otherSteps, ...rateLimitSteps, ...pathSteps, targetStep];
         };
 
         const syncPaletteState = () => {
             const hasViscous = hasViscousDelayStep();
+            const hasRateLimit = hasRateLimitStep();
             const hasDistanceFilter = hasDistanceFilterStep();
             const aprsisTarget = isAprsisTargetFlow();
             for (const button of paletteButtons) {
@@ -625,6 +638,12 @@
                     button.disabled = true;
                     button.title = i18n.aprsisSystemFlowLocked;
                     button.setAttribute("aria-label", i18n.aprsisSystemFlowLocked);
+                    continue;
+                }
+                if (isRateLimitStepType(stepType) && !isTxRfTargetFlow()) {
+                    button.disabled = true;
+                    button.removeAttribute("title");
+                    button.removeAttribute("aria-label");
                     continue;
                 }
                 if (stepType === "filter_strict") {
@@ -638,6 +657,17 @@
                     if (hasViscous) {
                         button.title = i18n.duplicateFilterUsed;
                         button.setAttribute("aria-label", i18n.duplicateFilterUsed);
+                    } else {
+                        button.removeAttribute("title");
+                        button.removeAttribute("aria-label");
+                    }
+                    continue;
+                }
+                if (isRateLimitStepType(stepType)) {
+                    button.disabled = hasRateLimit;
+                    if (hasRateLimit) {
+                        button.title = i18n.rateLimitFilterUsed;
+                        button.setAttribute("aria-label", i18n.rateLimitFilterUsed);
                     } else {
                         button.removeAttribute("title");
                         button.removeAttribute("aria-label");
@@ -1578,6 +1608,15 @@
             if (normalized.step_type === "filter_distance") {
                 ensureDistanceFilterConfig(normalized);
             }
+            if (normalized.step_type === "filter_rate_limit") {
+                if (!normalized.config || typeof normalized.config !== "object") {
+                    normalized.config = {};
+                }
+                if (normalized.config.rate_limit_seconds == null || String(normalized.config.rate_limit_seconds).trim() === "") {
+                    normalized.config.rate_limit_seconds = String(normalized.config.packets_per_minute ?? 60);
+                }
+                delete normalized.config.packets_per_minute;
+            }
             return normalized;
         });
 
@@ -1590,13 +1629,25 @@
                 if (isAprsisTargetFlow() || stepType === "filter_strict") {
                     return;
                 }
+                if (isRateLimitStepType(stepType) && !isTxRfTargetFlow()) {
+                    return;
+                }
                 if (isViscousDelayStepType(stepType) && hasViscousDelayStep()) {
+                    return;
+                }
+                if (isRateLimitStepType(stepType) && hasRateLimitStep()) {
                     return;
                 }
                 if (isDistanceFilterStepType(stepType) && hasDistanceFilterStep()) {
                     return;
                 }
-                const insertIndex = isViscousDelayStepType(stepType) ? 1 : steps.length - 1;
+                let insertIndex = steps.length - 1;
+                if (isViscousDelayStepType(stepType)) {
+                    insertIndex = 1;
+                } else if (isRateLimitStepType(stepType)) {
+                    const pathStepIndex = steps.findIndex((step, index) => index > 0 && index < steps.length - 1 && String(step.step_type || "").trim() === "filter_path");
+                    insertIndex = pathStepIndex > 0 ? pathStepIndex : steps.length - 1;
+                }
                 steps.splice(insertIndex, 0, {
                     step_type: stepType,
                     title: stepLabel(stepType),

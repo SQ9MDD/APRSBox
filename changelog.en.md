@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.38.dev - 2026-06-14
+- `DIGI / Rate limit filter`: activated the existing `Rate limit filter` block for flows with `TX = tnc radio`; the filter keeps the last passed frame per instance, drops subsequent frames until the configured 5-60 s limit expires, and logs the block together with the active limit.
+- `DIGI / Path rule`: for RF flows, the forced order remains in place so `Rate limit filter` is always placed directly before `Path rule and DIGI guard`.
+
 ## 1.8.37.dev - 2026-06-11
 - `Objects / timestamp`: temporary objects now compute the APRS timestamp only at the moment of a real frame transmission (`DDHHMMz`), while permanent objects still use the fixed `111111z`.
 - `DIGI / Path rule`: the `Paths (TRACE / traced)` field description now includes example paths `WIDE1-1`, `WIDE2-1` and `WIDE2-2`, and for flows with `TX = tnc radio` the order is enforced strictly: `Duplicate Filter (viscous-delay)` is always first and `Path rule and DIGI guard` is always last.

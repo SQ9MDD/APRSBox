@@ -22,6 +22,7 @@ from app.services.aprsis import (
 )
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, list_enabled_digi_flows, log_digi_flow_event
+from app.services.digi_flows import RATE_LIMIT_SECONDS_ALLOWED, RATE_LIMIT_SECONDS_DEFAULT
 from app.services.outbound import enqueue_digi_tx_job
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
@@ -79,6 +80,7 @@ class DigiFlowRuntimeService:
         self._viscous_delay_lock = asyncio.Lock()
         self._viscous_delay_entries: dict[tuple[int, int, str, str], _ViscousDelayEntry] = {}
         self._pending_viscous_wait_count = 0
+        self._rate_limit_last_passed: dict[tuple[int, int], float] = {}
 
     async def start(self) -> None:
         if self._task is not None:
@@ -97,6 +99,7 @@ class DigiFlowRuntimeService:
             ]
             self._viscous_delay_entries.clear()
             self._pending_viscous_wait_count = 0
+            self._rate_limit_last_passed.clear()
         for task in cleanup_tasks:
             task.cancel()
         for task in cleanup_tasks:
@@ -333,6 +336,8 @@ class DigiFlowRuntimeService:
             return self._execute_icon_filter(context, step)
         if step_type == "filter_distance":
             return self._execute_distance_filter(context, step)
+        if step_type == "filter_rate_limit":
+            return self._execute_rate_limit_filter(context, step)
         if step_type == "action_log":
             return self._execute_log_only(context, step)
         if step_type == "action_drop":
@@ -1174,6 +1179,73 @@ class DigiFlowRuntimeService:
             message=_t("distance_filter: outside all zones, dropped"),
         )
         return {"decision": "drop"}
+
+    def _execute_rate_limit_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        config = dict(step.get("config") or {})
+        raw_seconds = config.get("rate_limit_seconds")
+        if raw_seconds is None or not str(raw_seconds).strip():
+            raw_seconds = config.get("packets_per_minute")
+        try:
+            rate_limit_seconds = int(str(raw_seconds).strip())
+        except (TypeError, ValueError):
+            rate_limit_seconds = RATE_LIMIT_SECONDS_DEFAULT
+        if rate_limit_seconds not in RATE_LIMIT_SECONDS_ALLOWED:
+            rate_limit_seconds = RATE_LIMIT_SECONDS_DEFAULT
+
+        now = time.monotonic()
+        state_key = (flow_id, step_id)
+        last_passed = self._rate_limit_last_passed.get(state_key)
+        if last_passed is not None:
+            elapsed_seconds = now - last_passed
+            if elapsed_seconds <= rate_limit_seconds:
+                log_digi_flow_event(
+                    frame_uid=context["frame_uid"],
+                    flow_id=flow_id,
+                    step_id=step_id,
+                    event_type="filter_rate_limit",
+                    decision="rejected",
+                    message=_tf(
+                        "Rate limit filter blocked frame because only {elapsed_seconds}s elapsed since the last passed frame; limit is {rate_limit_seconds}s.",
+                        {
+                            "elapsed_seconds": f"{elapsed_seconds:.1f}".rstrip("0").rstrip("."),
+                            "rate_limit_seconds": rate_limit_seconds,
+                        },
+                    ),
+                )
+                return {"decision": "drop"}
+
+            self._rate_limit_last_passed[state_key] = now
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_rate_limit",
+                decision="passed",
+                message=_tf(
+                    "Rate limit filter passed after {elapsed_seconds}s since the last passed frame; limit is {rate_limit_seconds}s.",
+                    {
+                        "elapsed_seconds": f"{elapsed_seconds:.1f}".rstrip("0").rstrip("."),
+                        "rate_limit_seconds": rate_limit_seconds,
+                    },
+                ),
+            )
+            return {"decision": "continue"}
+
+        self._rate_limit_last_passed[state_key] = now
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="filter_rate_limit",
+            decision="passed",
+            message=_tf(
+                "Rate limit filter passed because no previous frame has been allowed yet; limit is {rate_limit_seconds}s.",
+                {"rate_limit_seconds": rate_limit_seconds},
+            ),
+        )
+        return {"decision": "continue"}
 
     def _execute_log_only(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         config = dict(step.get("config") or {})

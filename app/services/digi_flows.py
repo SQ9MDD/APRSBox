@@ -43,6 +43,8 @@ PACKET_TYPE_FILTER_GROUPS = (
 PACKET_TYPE_FILTER_LEGACY_CODES = {"M", "S", "O", "W"}
 DUPLICATE_FILTER_WINDOW_SECONDS = (2, 3, 4, 5, 6, 7)
 DUPLICATE_FILTER_DEFAULT_WINDOW_SEC = 5
+RATE_LIMIT_SECONDS_ALLOWED = tuple(range(5, 61, 5))
+RATE_LIMIT_SECONDS_DEFAULT = 60
 DISTANCE_FILTER_MAX_ZONES = 3
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
@@ -57,6 +59,7 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "filter_packet_type",
     "filter_icon",
     "filter_distance",
+    "filter_rate_limit",
     "tx_rf",
     "tx_aprsis",
     "action_drop",
@@ -298,9 +301,15 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Rate Limit Filter",
         "badge": "Filter",
-        "description": "Stores a packet rate limit.",
+        "description": "Blocks frames until the configured number of seconds has elapsed since the last passed frame.",
         "config_fields": (
-            {"name": "packets_per_minute", "label": "Packets / Minute", "type": "number", "required": True},
+            {
+                "name": "rate_limit_seconds",
+                "label": "Rate limit (seconds)",
+                "type": "select",
+                "required": True,
+                "options": tuple(str(item) for item in RATE_LIMIT_SECONDS_ALLOWED),
+            },
         ),
     },
     "filter_rate_limit_per_callsign": {
@@ -508,6 +517,18 @@ def _normalize_multiline_list(value: Any) -> list[str]:
     return lines
 
 
+def _normalize_rate_limit_seconds(value: Any) -> int:
+    seconds = _normalize_number(value, label="Rate limit seconds", minimum=5)
+    if seconds not in RATE_LIMIT_SECONDS_ALLOWED:
+        raise ValueError(
+            _tf(
+                "Rate limit seconds must be one of: {values}.",
+                {"values": ", ".join(str(item) for item in RATE_LIMIT_SECONDS_ALLOWED)},
+            )
+        )
+    return seconds
+
+
 def _normalize_packet_type_filter_value(value: Any) -> str:
     normalized = str(value or "").strip()
     if not normalized:
@@ -581,13 +602,14 @@ def _normalize_tx_rf_flow_step_order(steps: list[dict[str, Any]]) -> None:
     target_step = steps[-1]
     middle_steps = list(steps[1:-1])
     viscous_delay_steps = [step for step in middle_steps if step["step_type"] == "filter_dupe"]
+    rate_limit_steps = [step for step in middle_steps if step["step_type"] == "filter_rate_limit"]
     other_steps = [
         step
         for step in middle_steps
-        if step["step_type"] not in {"filter_dupe", "filter_path"}
+        if step["step_type"] not in {"filter_dupe", "filter_rate_limit", "filter_path"}
     ]
     path_steps = [step for step in middle_steps if step["step_type"] == "filter_path"]
-    steps[:] = [source_step, *viscous_delay_steps, *other_steps, *path_steps, target_step]
+    steps[:] = [source_step, *viscous_delay_steps, *other_steps, *rate_limit_steps, *path_steps, target_step]
     _reindex_steps(steps)
 
 
@@ -636,7 +658,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "filter_distance":
         return {"zones": [{"latitude": "", "longitude": "", "radius_km": ""}]}
     if step_type == "filter_rate_limit":
-        return {"packets_per_minute": 60}
+        return {"rate_limit_seconds": RATE_LIMIT_SECONDS_DEFAULT}
     if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": 30}
     if step_type == "tx_rf":
@@ -720,7 +742,10 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == "filter_distance":
         return {"zones": _normalize_distance_filter_zones(config.get("zones"))}
     if step_type == "filter_rate_limit":
-        return {"packets_per_minute": _normalize_number(config.get("packets_per_minute"), label="Packets per minute", minimum=1)}
+        raw_seconds = config.get("rate_limit_seconds")
+        if raw_seconds is None or not _normalize_text(raw_seconds):
+            raw_seconds = config.get("packets_per_minute")
+        return {"rate_limit_seconds": _normalize_rate_limit_seconds(raw_seconds)}
     if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": _normalize_number(config.get("packets_per_minute"), label="Packets per minute", minimum=1)}
     if step_type == "tx_rf":
@@ -783,7 +808,10 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         zones = config.get("zones") or []
         return _tf("Distance zones: {count}.", {"count": len(zones)})
     if step_type == "filter_rate_limit":
-        return f"Rate: {config.get('packets_per_minute', '-')!s} pkt/min"
+        rate_limit_seconds = config.get("rate_limit_seconds")
+        if rate_limit_seconds in {None, ""}:
+            rate_limit_seconds = config.get("packets_per_minute")
+        return f"Rate: {rate_limit_seconds or '-'} sec"
     if step_type == "filter_rate_limit_per_callsign":
         return f"Per callsign: {config.get('packets_per_minute', '-')!s} pkt/min"
     if step_type == "tx_rf":
@@ -1154,12 +1182,18 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     duplicate_filter_positions = [index for index, step in enumerate(normalized_steps) if step["step_type"] == "filter_dupe"]
     if len(duplicate_filter_positions) > 1:
         raise ValueError(_t("Duplicate filter (viscous-delay) can be used only once in a flow."))
+    rate_limit_positions = [index for index, step in enumerate(normalized_steps) if step["step_type"] == "filter_rate_limit"]
+    if len(rate_limit_positions) > 1:
+        raise ValueError(_t("Rate limit filter can be used only once in a flow."))
     distance_filter_count = sum(1 for step in normalized_steps if step["step_type"] == "filter_distance")
     if distance_filter_count > 1:
         raise ValueError(_t("Distance filter can be used only once in a flow."))
     has_strict_filter = any(step["step_type"] == "filter_strict" for step in normalized_steps[1:-1])
     if target_kind != "tx_aprsis" and has_strict_filter:
         raise ValueError(_t("Strict APRS-IS guard can be used only in APRS-IS target flows."))
+    has_rate_limit = any(step["step_type"] == "filter_rate_limit" for step in normalized_steps[1:-1])
+    if target_kind != "tx_rf" and has_rate_limit:
+        raise ValueError(_t("Rate limit filter can be used only in RF TX target flows."))
     if target_kind == "tx_rf":
         _normalize_tx_rf_flow_step_order(normalized_steps)
     elif duplicate_filter_positions and duplicate_filter_positions[0] != 1:

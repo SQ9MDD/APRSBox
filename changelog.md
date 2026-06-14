@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.38.dev - 14.06.2026
+- `DIGI / Rate limit filter`: aktywowano istniejący bloczek `Filtr limitu tempa` dla flowów z `TX = tnc radio`; filtr przechowuje ostatnio przepuszczoną ramkę per instancja, odrzuca kolejne ramki przed upływem ustawionego limitu 5-60 s i loguje blokadę wraz z limitem.
+- `DIGI / Path rule`: dla flowów RF zachowano wymuszoną kolejność, tak aby `Filtr limitu tempa` był zawsze bezpośrednio przed `Reguła ścieżki i ochrony digi`.
+
 ## 1.8.37.dev - 11.06.2026
 - `Objects / timestamp`: dla obiektów tymczasowych timestamp APRS jest teraz liczony dopiero przy realnym nadaniu ramki (`DDHHMMz`), a obiekty permanentne nadal używają stałego `111111z`.
 - `DIGI / Path rule`: opis pola `Paths (TRACE / traced)` uzupełniono o przykładowe ścieżki `WIDE1-1`, `WIDE2-1` i `WIDE2-2`, a dla flowów z `TX = tnc radio` wymuszono sztywno kolejność: `Duplicate Filter (viscous-delay)` zawsze pierwszy, `Path rule and DIGI guard` zawsze ostatni.

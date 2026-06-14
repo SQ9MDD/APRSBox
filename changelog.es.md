@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.38.dev - 2026-06-14
+- `DIGI / Rate limit filter`: se activó el bloque existente `Rate limit filter` para flujos con `TX = tnc radio`; el filtro guarda la última trama permitida por instancia, descarta las siguientes hasta que expire el límite configurado de 5-60 s y registra el bloqueo junto con el límite activo.
+- `DIGI / Path rule`: en los flujos RF se mantiene el orden forzado, de modo que `Rate limit filter` siempre queda justo antes de `Path rule and DIGI guard`.
+
 ## 1.8.37.dev - 2026-06-11
 - `Objects / timestamp`: los objetos temporales ahora calculan el timestamp APRS solo en el momento de la transmisión real de la trama (`DDHHMMz`), mientras que los objetos permanentes siguen usando el fijo `111111z`.
 - `DIGI / Path rule`: la descripción del campo `Paths (TRACE / traced)` ahora incluye las rutas de ejemplo `WIDE1-1`, `WIDE2-1` y `WIDE2-2`, y para los flujos con `TX = tnc radio` se fuerza estrictamente el orden: `Duplicate Filter (viscous-delay)` siempre primero y `Path rule and DIGI guard` siempre último.
