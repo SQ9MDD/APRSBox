@@ -78,6 +78,7 @@
                     </div>
                     <div class="digi-step-palette" id="digi-step-palette">
                         {% for step_type in filter_step_types %}
+                        {% if step_type != "filter_rate_limit_per_callsign" %}
                         <button
                             type="button"
                             class="digi-palette-button"
@@ -104,6 +105,7 @@
                                 <span class="muted small">{{ type_meta[step_type].description }}</span>
                             </span>
                         </button>
+                        {% endif %}
                         {% endfor %}
                     </div>
                 </aside>
