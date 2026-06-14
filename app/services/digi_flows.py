@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
@@ -43,8 +44,8 @@ PACKET_TYPE_FILTER_GROUPS = (
 PACKET_TYPE_FILTER_LEGACY_CODES = {"M", "S", "O", "W"}
 DUPLICATE_FILTER_WINDOW_SECONDS = (2, 3, 4, 5, 6, 7)
 DUPLICATE_FILTER_DEFAULT_WINDOW_SEC = 5
-RATE_LIMIT_SECONDS_ALLOWED = tuple(range(5, 61, 5))
 RATE_LIMIT_SECONDS_DEFAULT = 60
+_RATE_LIMIT_RULE_LINE_RE = re.compile(r"^(?P<pattern>.+?)\s*(?:-\s*|\s+)(?P<limit>\S+)$")
 DISTANCE_FILTER_MAX_ZONES = 3
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
@@ -301,27 +302,20 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Rate Limit Filter",
         "badge": "Filter",
-        "description": "Blocks matching source callsigns until the configured number of seconds has elapsed since the last passed frame.",
+        "description": "Blocks matching source callsigns until their configured per-line limits have elapsed since the last passed frame.",
         "editor_help_lines": (
-            "The mask is matched against the source callsign of the packet.",
-            "Wildcard * is supported; use * to apply the limit to every source callsign.",
-            "The filter keeps one timer per flow step and matched mask.",
+            "Enter one rule per line in the format CALL_OR_PATTERN - LIMIT.",
+            "LIMIT accepts 30, 30s or 30S and must be between 5 and 300 seconds in 5-second steps.",
+            "Wildcard * is supported; use it anywhere in the pattern, for example SQ* - 30s.",
         ),
         "config_fields": (
             {
-                "name": "rate_limit_seconds",
-                "label": "Rate limit (seconds)",
-                "type": "select",
+                "name": "rate_limit_rules_text",
+                "label": "Source callsign limits (one per line)",
+                "type": "textarea",
                 "required": True,
-                "options": tuple(str(item) for item in RATE_LIMIT_SECONDS_ALLOWED),
-            },
-            {
-                "name": "source_callsign_pattern",
-                "label": "Source callsign mask",
-                "type": "text",
-                "required": False,
-                "placeholder": "*",
-                "help_text": "Wildcard * is supported.",
+                "placeholder": "SQ9MDD-7 - 30s\nSQ2IDB* - 10s\nSP5XYZ - 60s\n* - 20s",
+                "help_text": "Format: CALL_OR_PATTERN - LIMIT. LIMIT can be written as 30, 30s or 30S.",
             },
         ),
     },
@@ -530,16 +524,87 @@ def _normalize_multiline_list(value: Any) -> list[str]:
     return lines
 
 
-def _normalize_rate_limit_seconds(value: Any) -> int:
-    seconds = _normalize_number(value, label="Rate limit seconds", minimum=5)
-    if seconds not in RATE_LIMIT_SECONDS_ALLOWED:
+def _normalize_rate_limit_seconds(value: Any, *, line_number: int | None = None) -> int:
+    text = _normalize_text(value)
+    if not text:
+        label = _tf("Rate limit line #{line_number}", {"line_number": line_number}) if line_number is not None else _t("Rate limit seconds")
+        raise ValueError(_tf("{label} is required.", {"label": label}))
+    folded = text.casefold()
+    if folded.endswith("s"):
+        text = text[:-1].strip()
+    if not text:
+        label = _tf("Rate limit line #{line_number}", {"line_number": line_number}) if line_number is not None else _t("Rate limit seconds")
+        raise ValueError(_tf("{label} is invalid.", {"label": label}))
+    seconds = _normalize_number(text, label="Rate limit seconds", minimum=5)
+    if seconds > 300 or seconds % 5 != 0:
         raise ValueError(
-            _tf(
-                "Rate limit seconds must be one of: {values}.",
-                {"values": ", ".join(str(item) for item in RATE_LIMIT_SECONDS_ALLOWED)},
-            )
+            _t("Rate limit seconds must be between 5 and 300 in 5-second steps.")
         )
     return seconds
+
+
+def _parse_rate_limit_rule_line(raw_line: str, *, line_number: int) -> dict[str, Any]:
+    line = str(raw_line or "").strip()
+    if not line or line.startswith("#"):
+        return {}
+    match = _RATE_LIMIT_RULE_LINE_RE.fullmatch(line)
+    if match is None:
+        raise ValueError(_tf("Rate limit line #{line_number} is invalid: expected CALL_OR_PATTERN - LIMIT.", {"line_number": line_number}))
+    pattern = _normalize_text(match.group("pattern"))
+    if not pattern:
+        raise ValueError(_tf("Rate limit line #{line_number} is invalid: pattern is required.", {"line_number": line_number}))
+    try:
+        rate_limit_seconds = _normalize_rate_limit_seconds(match.group("limit"), line_number=line_number)
+    except ValueError as exc:
+        raise ValueError(
+            _tf(
+                "Rate limit line #{line_number} is invalid: {reason}.",
+                {"line_number": line_number, "reason": str(exc)},
+            )
+        ) from exc
+    return {
+        "source_callsign_pattern": pattern.upper(),
+        "rate_limit_seconds": rate_limit_seconds,
+    }
+
+
+def _normalize_rate_limit_rules(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        normalized_rules: list[dict[str, Any]] = []
+        for index, item in enumerate(value, start=1):
+            if isinstance(item, dict):
+                pattern = _normalize_text(item.get("source_callsign_pattern") or item.get("pattern"))
+                if not pattern:
+                    raise ValueError(_tf("Rate limit line #{line_number} is invalid: pattern is required.", {"line_number": index}))
+                try:
+                    seconds = _normalize_rate_limit_seconds(item.get("rate_limit_seconds") or item.get("seconds") or item.get("limit"), line_number=index)
+                except ValueError as exc:
+                    raise ValueError(
+                        _tf(
+                            "Rate limit line #{line_number} is invalid: {reason}.",
+                            {"line_number": index, "reason": str(exc)},
+                        )
+                    ) from exc
+                normalized_rules.append({"source_callsign_pattern": pattern.upper(), "rate_limit_seconds": seconds})
+                continue
+            if isinstance(item, str):
+                parsed = _parse_rate_limit_rule_line(item, line_number=index)
+                if parsed:
+                    normalized_rules.append(parsed)
+                continue
+            raise ValueError(_tf("Rate limit line #{line_number} is invalid.", {"line_number": index}))
+        if not normalized_rules:
+            raise ValueError(_t("Rate limit filter requires at least one rule."))
+        return normalized_rules
+
+    normalized_rules = []
+    for line_number, raw_line in enumerate(str(value or "").splitlines(), start=1):
+        parsed = _parse_rate_limit_rule_line(raw_line, line_number=line_number)
+        if parsed:
+            normalized_rules.append(parsed)
+    if not normalized_rules:
+        raise ValueError(_t("Rate limit filter requires at least one rule."))
+    return normalized_rules
 
 
 def _normalize_packet_type_filter_value(value: Any) -> str:
@@ -671,7 +736,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "filter_distance":
         return {"zones": [{"latitude": "", "longitude": "", "radius_km": ""}]}
     if step_type == "filter_rate_limit":
-        return {"source_callsign_pattern": "*", "rate_limit_seconds": RATE_LIMIT_SECONDS_DEFAULT}
+        return {"rate_limit_rules_text": "* - 60s"}
     if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": 30}
     if step_type == "tx_rf":
@@ -755,14 +820,17 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == "filter_distance":
         return {"zones": _normalize_distance_filter_zones(config.get("zones"))}
     if step_type == "filter_rate_limit":
-        raw_seconds = config.get("rate_limit_seconds")
-        if raw_seconds is None or not _normalize_text(raw_seconds):
-            raw_seconds = config.get("packets_per_minute")
-        pattern = _normalize_text(config.get("source_callsign_pattern")) or "*"
-        return {
-            "source_callsign_pattern": pattern.upper(),
-            "rate_limit_seconds": _normalize_rate_limit_seconds(raw_seconds),
-        }
+        raw_rules = config.get("rate_limit_rules_text")
+        if raw_rules is None or not _normalize_text(raw_rules):
+            if config.get("rate_limit_rules"):
+                raw_rules = config.get("rate_limit_rules")
+            else:
+                raw_pattern = _normalize_text(config.get("source_callsign_pattern")) or "*"
+                raw_seconds = config.get("rate_limit_seconds")
+                if raw_seconds is None or not _normalize_text(raw_seconds):
+                    raw_seconds = config.get("packets_per_minute")
+                raw_rules = f"{raw_pattern} - {raw_seconds or RATE_LIMIT_SECONDS_DEFAULT}s"
+        return {"rate_limit_rules": _normalize_rate_limit_rules(raw_rules)}
     if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": _normalize_number(config.get("packets_per_minute"), label="Packets per minute", minimum=1)}
     if step_type == "tx_rf":
@@ -825,11 +893,13 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         zones = config.get("zones") or []
         return _tf("Distance zones: {count}.", {"count": len(zones)})
     if step_type == "filter_rate_limit":
-        rate_limit_seconds = config.get("rate_limit_seconds")
-        if rate_limit_seconds in {None, ""}:
-            rate_limit_seconds = config.get("packets_per_minute")
-        pattern = str(config.get("source_callsign_pattern") or "*").strip() or "*"
-        return f"Source: {pattern}, Rate: {rate_limit_seconds or '-'} sec"
+        rules = config.get("rate_limit_rules")
+        if isinstance(rules, list) and rules:
+            rule_count = len(rules)
+        else:
+            text = str(config.get("rate_limit_rules_text") or "").strip()
+            rule_count = len([line for line in text.splitlines() if line.strip() and not line.strip().startswith("#")])
+        return f"Rules: {rule_count or '-'}"
     if step_type == "filter_rate_limit_per_callsign":
         return f"Per callsign: {config.get('packets_per_minute', '-')!s} pkt/min"
     if step_type == "tx_rf":

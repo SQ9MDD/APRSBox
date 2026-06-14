@@ -469,8 +469,7 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_distance"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_distance"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_rate_limit"]["runtime_status"], "implemented")
-            self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][0]["name"], "rate_limit_seconds")
-            self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][1]["name"], "source_callsign_pattern")
+            self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][0]["name"], "rate_limit_rules_text")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():
@@ -1020,7 +1019,7 @@ class DigiFlowsTests(unittest.TestCase):
                 "step_type": "filter_rate_limit",
                 "title": "Rate Limit Filter",
                 "enabled": 1,
-                "config": {"rate_limit_seconds": 15},
+                "config": {"rate_limit_rules_text": "SQ9MDD* - 15s"},
             },
             {
                 "step_type": "tx_rf",
@@ -1032,7 +1031,10 @@ class DigiFlowsTests(unittest.TestCase):
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual([step["step_type"] for step in normalized["steps"]], ["receiver_rf", "filter_rate_limit", "filter_path", "tx_rf"])
-            self.assertEqual(normalized["steps"][1]["config"], {"rate_limit_seconds": 15, "source_callsign_pattern": "*"})
+            self.assertEqual(
+                normalized["steps"][1]["config"],
+                {"rate_limit_rules": [{"source_callsign_pattern": "SQ9MDD*", "rate_limit_seconds": 15}]},
+            )
 
     def test_rate_limit_filter_rejects_invalid_seconds(self) -> None:
         payload = sample_flow_payload()
@@ -1044,7 +1046,7 @@ class DigiFlowsTests(unittest.TestCase):
                 "step_type": "filter_rate_limit",
                 "title": "Rate Limit Filter",
                 "enabled": 1,
-                "config": {"rate_limit_seconds": 7},
+                "config": {"rate_limit_rules_text": "SQ9MDD* - 7s"},
             },
             {
                 "step_type": "filter_path",
@@ -1060,7 +1062,7 @@ class DigiFlowsTests(unittest.TestCase):
             },
         ]
         with temporary_database():
-            with self.assertRaisesRegex(ValueError, "one of: 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60"):
+            with self.assertRaisesRegex(ValueError, "line #1"):
                 normalize_digi_flow_payload(payload)
 
     def test_rate_limit_filter_rejects_non_rf_targets(self) -> None:
@@ -1073,7 +1075,7 @@ class DigiFlowsTests(unittest.TestCase):
                 "step_type": "filter_rate_limit",
                 "title": "Rate Limit Filter",
                 "enabled": 1,
-                "config": {"rate_limit_seconds": 15},
+                "config": {"rate_limit_rules_text": "* - 15s"},
             },
             {
                 "step_type": "action_log",

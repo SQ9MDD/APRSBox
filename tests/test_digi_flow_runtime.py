@@ -235,7 +235,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "step_type": "filter_rate_limit",
                             "title": "Rate Limit Filter",
                             "enabled": 1,
-                            "config": {"rate_limit_seconds": 5},
+                            "config": {"rate_limit_rules_text": "* - 5s"},
                         },
                         {
                             "step_type": "filter_path",
@@ -256,8 +256,13 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 (flow_id,),
             )
             assert rate_limit_step is not None
-            step = {"id": int(rate_limit_step["id"]), "config": {"rate_limit_seconds": 5}}
-            context = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-frame", "current_line": ""}
+            step = {"id": int(rate_limit_step["id"]), "config": {"rate_limit_rules": [{"source_callsign_pattern": "*", "rate_limit_seconds": 5}]}}
+            context = {
+                "flow": {"id": flow_id, "target_kind": "tx_rf"},
+                "frame_uid": "rate-limit-frame",
+                "current_line": "",
+                "parsed": {"source": "SQ9MDD-7"},
+            }
             runtime = DigiFlowRuntimeService()
             with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0, 105.5]):
                 first = runtime._execute_rate_limit_filter(context, step)
@@ -288,7 +293,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "step_type": "filter_rate_limit",
                             "title": "Rate Limit Filter",
                             "enabled": 1,
-                            "config": {"source_callsign_pattern": "SQ9MDD*", "rate_limit_seconds": 5},
+                            "config": {"rate_limit_rules_text": "SQ9MDD-7 - 10s\nSQ* - 5s"},
                         },
                         {
                             "step_type": "filter_path",
@@ -311,29 +316,34 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert rate_limit_step is not None
             step = {
                 "id": int(rate_limit_step["id"]),
-                "config": {"source_callsign_pattern": "SQ9MDD*", "rate_limit_seconds": 5},
+                "config": {
+                    "rate_limit_rules": [
+                        {"source_callsign_pattern": "SQ9MDD-7", "rate_limit_seconds": 10},
+                        {"source_callsign_pattern": "SQ*", "rate_limit_seconds": 5},
+                    ]
+                },
             }
             runtime = DigiFlowRuntimeService()
             matching_context = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-1", "parsed": {"source": "SQ9MDD-7"}}
-            skipped_context = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-skip", "parsed": {"source": "SQ8XYZ-1"}}
-            matching_context_2 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-2", "parsed": {"source": "SQ9MDD-7"}}
+            matching_context_2 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-2", "parsed": {"source": "SQ8XYZ-1"}}
             matching_context_3 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-3", "parsed": {"source": "SQ9MDD-7"}}
-            with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0, 106.1]):
+            matching_context_4 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-4", "parsed": {"source": "SQ8XYZ-1"}}
+            with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0, 102.0, 106.1]):
                 first = runtime._execute_rate_limit_filter(matching_context, step)
-                skipped = runtime._execute_rate_limit_filter(skipped_context, step)
                 second = runtime._execute_rate_limit_filter(matching_context_2, step)
                 third = runtime._execute_rate_limit_filter(matching_context_3, step)
+                fourth = runtime._execute_rate_limit_filter(matching_context_4, step)
 
             self.assertEqual(first["decision"], "continue")
-            self.assertEqual(skipped["decision"], "continue")
-            self.assertEqual(second["decision"], "drop")
-            self.assertEqual(third["decision"], "continue")
-            skipped_rows = event_rows_for_frame("rate-limit-mask-skip")
-            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "passed" for row in skipped_rows))
-            self.assertTrue(any("did not match pattern SQ9MDD*" in row["message"] for row in skipped_rows if row["event_type"] == "filter_rate_limit"))
-            blocked_rows = event_rows_for_frame("rate-limit-mask-match-2")
+            self.assertEqual(second["decision"], "continue")
+            self.assertEqual(third["decision"], "drop")
+            self.assertEqual(fourth["decision"], "continue")
+            wildcard_rows = event_rows_for_frame("rate-limit-mask-match-2")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "passed" for row in wildcard_rows))
+            self.assertTrue(any("pattern SQ*" in row["message"] for row in wildcard_rows if row["event_type"] == "filter_rate_limit"))
+            blocked_rows = event_rows_for_frame("rate-limit-mask-match-3")
             self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in blocked_rows))
-            self.assertTrue(any("pattern SQ9MDD*" in row["message"] for row in blocked_rows if row["event_type"] == "filter_rate_limit"))
+            self.assertTrue(any("pattern SQ9MDD-7" in row["message"] for row in blocked_rows if row["event_type"] == "filter_rate_limit"))
 
     async def test_rate_limit_filter_shows_as_rejected_in_execution_summary(self) -> None:
         with temporary_database():
@@ -352,7 +362,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "step_type": "filter_rate_limit",
                             "title": "Rate Limit Filter",
                             "enabled": 1,
-                            "config": {"rate_limit_seconds": 5},
+                            "config": {"rate_limit_rules_text": "* - 5s"},
                         },
                         {
                             "step_type": "filter_path",
