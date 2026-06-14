@@ -103,6 +103,19 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
         self.assertIsNotNone(status_field)
         self.assertEqual(status_field["value"], "Station online")
 
+    def test_station_detail_comment_field_linkifies_urls(self) -> None:
+        snapshot = sample_snapshot()
+        snapshot["comment"] = "See https://example.com/docs for details"
+        detail = get_station_detail("SP8ABC-9", snapshots=[snapshot])
+        assert detail is not None
+        comment_field = next((item for item in detail["fields"] if item.get("html")), None)
+        self.assertIsNotNone(comment_field)
+        self.assertEqual(comment_field["value"], "See https://example.com/docs for details")
+        self.assertEqual(
+            comment_field["html"],
+            'See <a href="https://example.com/docs">https://example.com/docs</a> for details',
+        )
+
     def test_visible_station_snapshots_uses_cache_when_source_data_is_unchanged(self) -> None:
         snapshots = [sample_snapshot()]
         with patch("app.services.content.get_heard_station_snapshots", return_value=snapshots) as heard_mock, patch(

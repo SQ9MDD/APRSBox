@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from html import escape
 import ipaddress
 import json
 import math
@@ -78,6 +79,7 @@ MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 DASHBOARD_ACTIVITY_WINDOW_MINUTES = 60
 DASHBOARD_ACTIVITY_BUCKET_MINUTES = 5
 STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
+_STATION_DETAIL_URL_PATTERN = re.compile(r"https?://[^\s<>'\"`]+")
 APRS_SYMBOL_SET_SETTING_KEY = "aprs_symbol_set"
 APRS_SYMBOL_SET_LEGACY = "legacy"
 APRS_SYMBOL_SET_MODERN = "modern"
@@ -2624,8 +2626,37 @@ def _messaging_capable(snapshot: dict[str, Any]) -> bool | None:
     return None
 
 
-def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[dict[str, str]]:
-    fields: list[dict[str, str]] = []
+def _render_station_detail_comment(comment: str) -> str:
+    text = str(comment or "")
+    if not text:
+        return ""
+
+    parts: list[str] = []
+    last_index = 0
+    for match in _STATION_DETAIL_URL_PATTERN.finditer(text):
+        start, end = match.span()
+        if start > last_index:
+            parts.append(escape(text[last_index:start]))
+
+        url = match.group(0)
+        trailing = ""
+        while url and url[-1] in ").,!?;:]":
+            trailing = url[-1] + trailing
+            url = url[:-1]
+
+        if url:
+            parts.append(f'<a href="{escape(url)}">{escape(url)}</a>')
+        parts.append(escape(trailing))
+        last_index = end
+
+    if last_index < len(text):
+        parts.append(escape(text[last_index:]))
+
+    return "".join(parts)
+
+
+def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[dict[str, Any]]:
+    fields: list[dict[str, Any]] = []
     display_callsign = snapshot.get("display_callsign")
     if display_callsign:
         fields.append({"label": _t("Display callsign"), "value": str(display_callsign)})
@@ -2648,7 +2679,8 @@ def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[
     if snapshot.get("symbol_code"):
         fields.append({"label": _t("Symbol code"), "value": str(snapshot["symbol_code"])})
     if snapshot.get("comment"):
-        fields.append({"label": _t("Comment"), "value": str(snapshot["comment"])})
+        comment = str(snapshot["comment"])
+        fields.append({"label": _t("Comment"), "value": comment, "html": _render_station_detail_comment(comment)})
     fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
     if snapshot.get("path"):
         fields.append({"label": _t("Path"), "value": str(snapshot["path"])})

@@ -72,6 +72,8 @@
                 <dd>
                     {% if field.label == t("Latest raw packet") %}
                     <code>{{ field.value }}</code>
+                    {% elif field.html is defined %}
+                    {{ field.html|safe }}
                     {% else %}
                     {{ field.value }}
                     {% endif %}

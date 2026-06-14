@@ -176,6 +176,11 @@ class StationDistanceUiTests(unittest.TestCase):
         template_source = Path("app/templates/station_detail.html").read_text(encoding="utf-8")
         self.assertIn("data-track-points=", template_source)
         self.assertIn("station_map_config.track_points|tojson", template_source)
+        self.assertIn('field.html is defined', template_source)
+
+    def test_station_detail_script_renders_linkified_comment_html(self) -> None:
+        script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")
+        self.assertIn("field.html || escapeHtml(field.value)", script_source)
 
     def test_stations_page_script_skips_table_rerender_when_payload_is_unchanged(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")

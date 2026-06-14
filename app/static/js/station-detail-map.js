@@ -106,7 +106,11 @@
         if (!fields) return;
         fields.innerHTML = (station.fields || []).map((field) => `
             <dt>${escapeHtml(field.label)}</dt>
-            <dd>${field.label === i18n.latestRawPacket ? `<code>${escapeHtml(field.value)}</code>` : escapeHtml(field.value)}</dd>
+            <dd>${
+                field.label === i18n.latestRawPacket
+                    ? `<code>${escapeHtml(field.value)}</code>`
+                    : (field.html || escapeHtml(field.value))
+            }</dd>
         `).join("");
     }
 
