@@ -470,6 +470,7 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_distance"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_rate_limit"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][0]["name"], "rate_limit_seconds")
+            self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][1]["name"], "source_callsign_pattern")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():
@@ -1031,7 +1032,7 @@ class DigiFlowsTests(unittest.TestCase):
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual([step["step_type"] for step in normalized["steps"]], ["receiver_rf", "filter_rate_limit", "filter_path", "tx_rf"])
-            self.assertEqual(normalized["steps"][1]["config"], {"rate_limit_seconds": 15})
+            self.assertEqual(normalized["steps"][1]["config"], {"rate_limit_seconds": 15, "source_callsign_pattern": "*"})
 
     def test_rate_limit_filter_rejects_invalid_seconds(self) -> None:
         payload = sample_flow_payload()

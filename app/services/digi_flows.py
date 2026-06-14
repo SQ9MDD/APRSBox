@@ -301,7 +301,12 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Rate Limit Filter",
         "badge": "Filter",
-        "description": "Blocks frames until the configured number of seconds has elapsed since the last passed frame.",
+        "description": "Blocks matching source callsigns until the configured number of seconds has elapsed since the last passed frame.",
+        "editor_help_lines": (
+            "The mask is matched against the source callsign of the packet.",
+            "Wildcard * is supported; use * to apply the limit to every source callsign.",
+            "The filter keeps one timer per flow step and matched mask.",
+        ),
         "config_fields": (
             {
                 "name": "rate_limit_seconds",
@@ -309,6 +314,14 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "type": "select",
                 "required": True,
                 "options": tuple(str(item) for item in RATE_LIMIT_SECONDS_ALLOWED),
+            },
+            {
+                "name": "source_callsign_pattern",
+                "label": "Source callsign mask",
+                "type": "text",
+                "required": False,
+                "placeholder": "*",
+                "help_text": "Wildcard * is supported.",
             },
         ),
     },
@@ -658,7 +671,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "filter_distance":
         return {"zones": [{"latitude": "", "longitude": "", "radius_km": ""}]}
     if step_type == "filter_rate_limit":
-        return {"rate_limit_seconds": RATE_LIMIT_SECONDS_DEFAULT}
+        return {"source_callsign_pattern": "*", "rate_limit_seconds": RATE_LIMIT_SECONDS_DEFAULT}
     if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": 30}
     if step_type == "tx_rf":
@@ -745,7 +758,11 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         raw_seconds = config.get("rate_limit_seconds")
         if raw_seconds is None or not _normalize_text(raw_seconds):
             raw_seconds = config.get("packets_per_minute")
-        return {"rate_limit_seconds": _normalize_rate_limit_seconds(raw_seconds)}
+        pattern = _normalize_text(config.get("source_callsign_pattern")) or "*"
+        return {
+            "source_callsign_pattern": pattern.upper(),
+            "rate_limit_seconds": _normalize_rate_limit_seconds(raw_seconds),
+        }
     if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": _normalize_number(config.get("packets_per_minute"), label="Packets per minute", minimum=1)}
     if step_type == "tx_rf":
@@ -811,7 +828,8 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         rate_limit_seconds = config.get("rate_limit_seconds")
         if rate_limit_seconds in {None, ""}:
             rate_limit_seconds = config.get("packets_per_minute")
-        return f"Rate: {rate_limit_seconds or '-'} sec"
+        pattern = str(config.get("source_callsign_pattern") or "*").strip() or "*"
+        return f"Source: {pattern}, Rate: {rate_limit_seconds or '-'} sec"
     if step_type == "filter_rate_limit_per_callsign":
         return f"Per callsign: {config.get('packets_per_minute', '-')!s} pkt/min"
     if step_type == "tx_rf":

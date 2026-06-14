@@ -2,6 +2,7 @@
 
 ## 1.8.38.dev - 14.06.2026
 - `DIGI / Rate limit filter`: aktywowano istniejący bloczek `Filtr limitu tempa` dla flowów z `TX = tnc radio`; filtr przechowuje ostatnio przepuszczoną ramkę per instancja, odrzuca kolejne ramki przed upływem ustawionego limitu 5-60 s i loguje blokadę wraz z limitem.
+- `DIGI / Rate limit filter`: dodano maskę znaku źródłowego z wildcardem `*`; limit działa teraz na pasujące znaki wywoławcze, a `*` obejmuje wszystkie źródła.
 - `DIGI / Path rule`: dla flowów RF zachowano wymuszoną kolejność, tak aby `Filtr limitu tempa` był zawsze bezpośrednio przed `Reguła ścieżki i ochrony digi`.
 
 ## 1.8.37.dev - 11.06.2026

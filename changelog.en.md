@@ -2,6 +2,7 @@
 
 ## 1.8.38.dev - 2026-06-14
 - `DIGI / Rate limit filter`: activated the existing `Rate limit filter` block for flows with `TX = tnc radio`; the filter keeps the last passed frame per instance, drops subsequent frames until the configured 5-60 s limit expires, and logs the block together with the active limit.
+- `DIGI / Rate limit filter`: added a source-callsign mask with `*` wildcard support; the limit now applies to matching callsigns, and `*` covers all sources.
 - `DIGI / Path rule`: for RF flows, the forced order remains in place so `Rate limit filter` is always placed directly before `Path rule and DIGI guard`.
 
 ## 1.8.37.dev - 2026-06-11

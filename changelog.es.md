@@ -2,6 +2,7 @@
 
 ## 1.8.38.dev - 2026-06-14
 - `DIGI / Rate limit filter`: se activó el bloque existente `Rate limit filter` para flujos con `TX = tnc radio`; el filtro guarda la última trama permitida por instancia, descarta las siguientes hasta que expire el límite configurado de 5-60 s y registra el bloqueo junto con el límite activo.
+- `DIGI / Rate limit filter`: se añadió una máscara de indicativo de origen con soporte para el comodín `*`; el límite ahora se aplica a los indicativos que coinciden y `*` cubre todas las fuentes.
 - `DIGI / Path rule`: en los flujos RF se mantiene el orden forzado, de modo que `Rate limit filter` siempre queda justo antes de `Path rule and DIGI guard`.
 
 ## 1.8.37.dev - 2026-06-11

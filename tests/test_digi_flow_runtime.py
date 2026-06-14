@@ -271,6 +271,70 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in rows))
             self.assertTrue(any("limit is 5s" in row["message"] for row in rows if row["event_type"] == "filter_rate_limit"))
 
+    async def test_rate_limit_filter_matches_source_mask_and_ignores_non_matching_callsigns(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Masked rate limited RF TX",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_rate_limit",
+                            "title": "Rate Limit Filter",
+                            "enabled": 1,
+                            "config": {"source_callsign_pattern": "SQ9MDD*", "rate_limit_seconds": 5},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            rate_limit_step = fetch_one(
+                """
+                SELECT id
+                FROM digi_flow_steps
+                WHERE flow_id = ? AND step_type = 'filter_rate_limit'
+                """,
+                (flow_id,),
+            )
+            assert rate_limit_step is not None
+            step = {
+                "id": int(rate_limit_step["id"]),
+                "config": {"source_callsign_pattern": "SQ9MDD*", "rate_limit_seconds": 5},
+            }
+            runtime = DigiFlowRuntimeService()
+            matching_context = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-1", "parsed": {"source": "SQ9MDD-7"}}
+            skipped_context = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-skip", "parsed": {"source": "SQ8XYZ-1"}}
+            matching_context_2 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-2", "parsed": {"source": "SQ9MDD-7"}}
+            matching_context_3 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-3", "parsed": {"source": "SQ9MDD-7"}}
+            with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0, 106.1]):
+                first = runtime._execute_rate_limit_filter(matching_context, step)
+                skipped = runtime._execute_rate_limit_filter(skipped_context, step)
+                second = runtime._execute_rate_limit_filter(matching_context_2, step)
+                third = runtime._execute_rate_limit_filter(matching_context_3, step)
+
+            self.assertEqual(first["decision"], "continue")
+            self.assertEqual(skipped["decision"], "continue")
+            self.assertEqual(second["decision"], "drop")
+            self.assertEqual(third["decision"], "continue")
+            skipped_rows = event_rows_for_frame("rate-limit-mask-skip")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "passed" for row in skipped_rows))
+            self.assertTrue(any("did not match pattern SQ9MDD*" in row["message"] for row in skipped_rows if row["event_type"] == "filter_rate_limit"))
+            blocked_rows = event_rows_for_frame("rate-limit-mask-match-2")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in blocked_rows))
+            self.assertTrue(any("pattern SQ9MDD*" in row["message"] for row in blocked_rows if row["event_type"] == "filter_rate_limit"))
+
     async def test_rate_limit_filter_shows_as_rejected_in_execution_summary(self) -> None:
         with temporary_database():
             flow_id = create_flow(

@@ -460,7 +460,7 @@
             if (stepType === "filter_packet_type") return { mode: "allow", packet_types: [] };
             if (stepType === "filter_icon") return { mode: "allow", icons: [] };
             if (stepType === "filter_distance") return { zones: [{ latitude: "", longitude: "", radius_km: "" }] };
-            if (stepType === "filter_rate_limit") return { rate_limit_seconds: 60 };
+            if (stepType === "filter_rate_limit") return { rate_limit_seconds: 60, source_callsign_pattern: "*" };
             if (stepType === "filter_rate_limit_per_callsign") return { packets_per_minute: 30 };
             if (stepType === "tx_rf") return { rf_target: refValue || "" };
             if (stepType === "tx_aprsis") return { aprsis_target: refValue || "" };
@@ -523,7 +523,7 @@
             }
             if (step.step_type === "filter_icon") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.icons}: ${(config.icons || []).join(", ") || i18n.none}`;
             if (step.step_type === "filter_distance") return `${i18n.distanceZones}: ${normalizeDistanceZones(config.zones).length}`;
-            if (step.step_type === "filter_rate_limit") return `${i18n.rate}: ${config.rate_limit_seconds || config.packets_per_minute || "-"} ${i18n.sec}`;
+            if (step.step_type === "filter_rate_limit") return `${i18n.sourceLabel} ${config.source_callsign_pattern || "*"}, ${i18n.rate}: ${config.rate_limit_seconds || config.packets_per_minute || "-"} ${i18n.sec}`;
             if (step.step_type === "filter_rate_limit_per_callsign") return `${i18n.perCallsign}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
             if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
             if (step.step_type === "tx_aprsis") return `${i18n.aprsisTarget}: ${config.aprsis_target || "-"}`;
@@ -1614,6 +1614,9 @@
                 }
                 if (normalized.config.rate_limit_seconds == null || String(normalized.config.rate_limit_seconds).trim() === "") {
                     normalized.config.rate_limit_seconds = String(normalized.config.packets_per_minute ?? 60);
+                }
+                if (normalized.config.source_callsign_pattern == null || String(normalized.config.source_callsign_pattern).trim() === "") {
+                    normalized.config.source_callsign_pattern = "*";
                 }
                 delete normalized.config.packets_per_minute;
             }
