@@ -271,6 +271,58 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in rows))
             self.assertTrue(any("limit is 5s" in row["message"] for row in rows if row["event_type"] == "filter_rate_limit"))
 
+    async def test_rate_limit_filter_shows_as_rejected_in_execution_summary(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Rate limited RF TX",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_rate_limit",
+                            "title": "Rate Limit Filter",
+                            "enabled": 1,
+                            "config": {"rate_limit_seconds": 5},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                first = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-7>URQU02,WIDE1-1,WIDE2-1:'0SWl  [/>144.800MHz op. Rysiek&",
+                )
+                second = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-7>URQU02,WIDE1-1,WIDE2-1:'0SWl  [/>144.800MHz op. Rysiek&",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=10)
+            self.assertGreaterEqual(len(summaries), 2)
+            blocked_summary = next(summary for summary in summaries if summary["frame_uid"] == str(second["frame_uid"]))
+            self.assertEqual(blocked_summary["steps"][1]["status"], "rejected")
+            self.assertIn("Rate limit filter blocked frame", blocked_summary["steps"][1]["description"])
+
     async def test_duplicate_filter_viscous_delay_waits_then_allows_unique_fingerprints(self) -> None:
         with temporary_database():
             create_flow(

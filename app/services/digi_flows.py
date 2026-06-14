@@ -1754,6 +1754,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
                 "filter_callsign",
                 "filter_digi",
                 "filter_dupe",
+                "filter_rate_limit",
                 "direct_only",
                 "path_rule",
                 "strict_filter",
@@ -1874,6 +1875,8 @@ def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -
         return "filter_callsign"
     if event_type == "filter_dupe":
         return "filter_dupe"
+    if event_type == "filter_rate_limit":
+        return "filter_rate_limit"
     if event_type == "path_rule":
         return "filter_path"
     if event_type == "strict_filter":
