@@ -859,9 +859,23 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     frames: list[dict[str, Any]] = []
     for row in frame_rows:
         direction = str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX")
+        line = str(row["line"] or "")
+        parsed = parse_tnc2_frame(line)
+        aprs_data = parsed.get("aprs_data") if parsed else {}
+        packet_group = str((aprs_data or {}).get("packet_group") or "").strip().lower()
+        symbol = str((aprs_data or {}).get("symbol") or "").strip()
+        display_callsign = str((aprs_data or {}).get("entity_name") or "").strip()
+        if packet_group not in {"object", "item"} or not display_callsign:
+            display_callsign = str(
+                (parsed or {}).get("logical_source_key")
+                or (parsed or {}).get("source_key")
+                or row["source"]
+                or ""
+            ).strip()
+        display_icon_path = get_aprs_symbol_icon_path(symbol) if packet_group in {"object", "item"} else ""
         row_class = _traffic_frame_row_class(
             direction=direction,
-            line=str(row["line"] or ""),
+            line=line,
             command=str(row["command"] or ""),
             station_source_key=station_source_key,
             wx_source_key=wx_source_key,
@@ -880,6 +894,9 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "length": str(row["length"]),
                 "hex": row["hex"] or "",
                 "row_class": row_class,
+                "display_callsign": display_callsign,
+                "display_packet_group": packet_group,
+                "display_icon_path": display_icon_path,
             }
         )
     return {

@@ -373,6 +373,18 @@
         return (station && station.iconPath) || fallbackStationIconPath;
     }
 
+    function frameIconPath(frame, fallbackCallsign) {
+        const displayIconPath = String((frame && frame.display_icon_path) || "").trim();
+        if (displayIconPath) {
+            return `${staticRoot}${displayIconPath}`;
+        }
+        const displayPacketGroup = String((frame && frame.display_packet_group) || "").trim().toLowerCase();
+        if (displayPacketGroup === "object" || displayPacketGroup === "item") {
+            return fallbackStationIconPath;
+        }
+        return stationIconPath(fallbackCallsign);
+    }
+
     function buildScrollerEntries(snapshot) {
         const frames = Array.isArray(snapshot && snapshot.frames) ? snapshot.frames : [];
         const entries = [];
@@ -387,14 +399,15 @@
                 continue;
             }
             const marker = resolveMarker(parsed, direction);
-            const stationLabel = `${parsed.station}${marker}`;
+            const displayCallsign = String((frame && frame.display_callsign) || parsed.station || "").trim() || parsed.station;
+            const stationLabel = `${displayCallsign}${marker}`;
             entries.push({
                 timestamp: shortTimestamp(frame && frame.timestamp),
-                station: parsed.station,
+                station: displayCallsign,
                 stationLabel,
                 digipeater: parsed.digipeater,
-                stationIconPath: stationIconPath(parsed.station),
-                stationColor: stationTextColor(parsed.station),
+                stationIconPath: frameIconPath(frame, displayCallsign || parsed.station),
+                stationColor: stationTextColor(displayCallsign || parsed.station),
             });
             if (entries.length >= maxEntries) {
                 break;
