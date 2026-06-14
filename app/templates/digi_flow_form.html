@@ -279,7 +279,7 @@
 
         const typeMeta = {{ type_meta|tojson }};
         const endpointOptions = {{ endpoint_options|tojson }};
-        const filterTypes = {{ filter_step_types|tojson }};
+        const filterTypes = {{ filter_step_types|tojson }}.filter((stepType) => stepType !== "filter_rate_limit_per_callsign");
         const symbolTableOptions = {{ symbol_table_options|tojson }};
         const symbolCodeOptions = {{ symbol_code_options|tojson }};
         const mapPickerConfig = {{ map_picker_config|tojson }};
