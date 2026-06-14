@@ -691,6 +691,8 @@
   "Paths (TRACE)": "Pathmey (TRACE)",
   "Paths (TRACE / traced)": "Pathmey (TRACE / traced)",
   "Paths (NO TRACE / not traced)": "Pathmey (NO TRACE / not traced)",
+  "One path alias or explicit hop per line.": "wa' lineDaq wa' path alias pagh explicit hop yIchel.",
+  "TRACE example:": "TRACE chovnatlh:",
   "messages/queries addressed to My station": "messages/queries addressed to My station",
   "messages/queries addressed to WX station": "messages/queries addressed to WX station",
   "third-party frames": "third-party frames",

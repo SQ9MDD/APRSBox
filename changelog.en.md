@@ -2,6 +2,8 @@
 
 ## 1.8.37.dev - 2026-06-11
 - `Objects / timestamp`: temporary objects now compute the APRS timestamp only at the moment of a real frame transmission (`DDHHMMz`), while permanent objects still use the fixed `111111z`.
+- `DIGI / Path rule`: the `Paths (TRACE / traced)` field description now includes example paths `WIDE1-1`, `WIDE2-1` and `WIDE2-2`, and for flows with `TX = tnc radio` the order is enforced strictly: `Duplicate Filter (viscous-delay)` is always first and `Path rule and DIGI guard` is always last.
+- `Map / scroller / objects`: fixed object rendering in the right map scroller so it uses the correct `display_callsign`.
 
 ## 1.8.36.dev - 2026-06-11
 - `Outbound/TX queue`: fixed local-generated pacing so delayed frames are eventually transmitted instead of being rescheduled indefinitely.

@@ -848,6 +848,8 @@
   "If the first remaining hop matches neither TRACE nor NO TRACE, the packet is rejected.": "Jeśli pierwszy pozostały hop nie pasuje ani do TRACE, ani do NO TRACE, pakiet jest odrzucany.",
   "Paths (TRACE)": "Ścieżki (TRACE)",
   "Paths (NO TRACE)": "Ścieżki (NO TRACE)",
+  "One path alias or explicit hop per line.": "W każdej linii wpisz jeden alias ścieżki lub jawny hop.",
+  "TRACE example:": "Przykład TRACE:",
   "One path alias or explicit hop per line. Example: WIDE1-1 or TRACE2-2.": "Jeden alias ścieżki lub jawny hop w linii. Przykład: WIDE1-1 albo TRACE2-2.",
   "One path alias or explicit hop per line. Matching hops are consumed without inserting the local digi callsign.": "Jeden alias ścieżki lub jawny hop w linii. Dopasowane hop-y są zużywane bez wstawiania lokalnego znaku digi.",
   "Strict Filter": "Filtr ścisły",

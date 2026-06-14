@@ -2,6 +2,8 @@
 
 ## 1.8.37.dev - 2026-06-11
 - `Objects / timestamp`: los objetos temporales ahora calculan el timestamp APRS solo en el momento de la transmisión real de la trama (`DDHHMMz`), mientras que los objetos permanentes siguen usando el fijo `111111z`.
+- `DIGI / Path rule`: la descripción del campo `Paths (TRACE / traced)` ahora incluye las rutas de ejemplo `WIDE1-1`, `WIDE2-1` y `WIDE2-2`, y para los flujos con `TX = tnc radio` se fuerza estrictamente el orden: `Duplicate Filter (viscous-delay)` siempre primero y `Path rule and DIGI guard` siempre último.
+- `Map / scroller / objects`: se corrigió la visualización de objetos en el scroller derecho del mapa para que use el `display_callsign` correcto.
 
 ## 1.8.36.dev - 2026-06-11
 - `Outbound/TX queue`: se corrigió el pacing de tramas locales para que las tramas retrasadas se transmitan finalmente en lugar de volver a reprogramarse indefinidamente.

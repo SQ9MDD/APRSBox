@@ -2,6 +2,8 @@
 
 ## 1.8.37.dev - 11.06.2026
 - `Objects / timestamp`: dla obiektów tymczasowych timestamp APRS jest teraz liczony dopiero przy realnym nadaniu ramki (`DDHHMMz`), a obiekty permanentne nadal używają stałego `111111z`.
+- `DIGI / Path rule`: opis pola `Paths (TRACE / traced)` uzupełniono o przykładowe ścieżki `WIDE1-1`, `WIDE2-1` i `WIDE2-2`, a dla flowów z `TX = tnc radio` wymuszono sztywno kolejność: `Duplicate Filter (viscous-delay)` zawsze pierwszy, `Path rule and DIGI guard` zawsze ostatni.
+- `Map / scroller / objects`: poprawiono wyświetlanie obiektów w prawym scrollerze mapy, żeby korzystały z właściwego `display_callsign`.
 
 ## 1.8.36.dev - 11.06.2026
 - `Outbound/TX queue`: naprawiono pacing lokalnych ramek, tak aby opóźnione pakiety były ostatecznie nadawane zamiast być odkładane w nieskończoność.

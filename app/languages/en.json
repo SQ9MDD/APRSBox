@@ -884,6 +884,8 @@
   "If the first remaining hop matches neither TRACE nor NO TRACE, the packet is rejected.": "If the first remaining hop matches neither TRACE nor NO TRACE, the packet is rejected.",
   "Paths (TRACE)": "Paths (TRACE)",
   "Paths (NO TRACE)": "Paths (NO TRACE)",
+  "One path alias or explicit hop per line.": "One path alias or explicit hop per line.",
+  "TRACE example:": "TRACE example:",
   "One path alias or explicit hop per line. Example: WIDE1-1 or TRACE2-2.": "One path alias or explicit hop per line. Example: WIDE1-1 or TRACE2-2.",
   "One path alias or explicit hop per line. Matching hops are consumed without inserting the local digi callsign.": "One path alias or explicit hop per line. Matching hops are consumed without inserting the local digi callsign.",
   "Strict Filter": "Strict Filter",
