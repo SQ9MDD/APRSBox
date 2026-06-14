@@ -181,6 +181,8 @@ class StationDistanceUiTests(unittest.TestCase):
     def test_station_detail_script_renders_linkified_comment_html(self) -> None:
         script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")
         self.assertIn("field.html || escapeHtml(field.value)", script_source)
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".station-detail-comment-link", stylesheet_source)
 
     def test_stations_page_script_skips_table_rerender_when_payload_is_unchanged(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")

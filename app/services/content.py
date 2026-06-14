@@ -2645,7 +2645,9 @@ def _render_station_detail_comment(comment: str) -> str:
             url = url[:-1]
 
         if url:
-            parts.append(f'<a href="{escape(url)}">{escape(url)}</a>')
+            parts.append(
+                f'<a class="station-detail-comment-link" href="{escape(url)}" target="_blank" rel="noopener noreferrer">{escape(url)}</a>'
+            )
         parts.append(escape(trailing))
         last_index = end
 

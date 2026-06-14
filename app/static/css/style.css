@@ -4198,6 +4198,18 @@ select:focus-visible,
     min-width: 0;
 }
 
+.station-detail-comment-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: currentColor;
+    text-underline-offset: 0.12em;
+}
+
+.station-detail-comment-link:hover,
+.station-detail-comment-link:focus-visible {
+    color: inherit;
+}
+
 .station-detail-decoded {
     margin-top: 0.9rem;
     padding-top: 0.55rem;

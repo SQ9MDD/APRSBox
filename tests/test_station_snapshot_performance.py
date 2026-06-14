@@ -113,7 +113,7 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
         self.assertEqual(comment_field["value"], "See https://example.com/docs for details")
         self.assertEqual(
             comment_field["html"],
-            'See <a href="https://example.com/docs">https://example.com/docs</a> for details',
+            'See <a class="station-detail-comment-link" href="https://example.com/docs" target="_blank" rel="noopener noreferrer">https://example.com/docs</a> for details',
         )
 
     def test_visible_station_snapshots_uses_cache_when_source_data_is_unchanged(self) -> None:
