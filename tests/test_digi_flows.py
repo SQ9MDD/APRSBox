@@ -457,6 +457,7 @@ class DigiFlowsTests(unittest.TestCase):
             type_meta = get_digi_flow_type_meta()
             self.assertEqual(type_meta["filter_path"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
+            self.assertIn("WIDE1-1", type_meta["filter_path"]["config_fields"][1]["help_lines"])
             self.assertEqual(type_meta["filter_direct_only"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_direct_only"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_packet_type"]["runtime_status"], "implemented")
@@ -961,6 +962,44 @@ class DigiFlowsTests(unittest.TestCase):
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["target_kind"], "tx_rf")
+
+    def test_rf_target_normalizes_viscous_delay_first_and_path_rule_last(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "tx_rf"
+        payload["target_ref"] = "RF-OUT"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_callsign",
+                "title": "Callsign Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "callsigns": ["SP8ABC-9"]},
+            },
+            {
+                "step_type": "filter_path",
+                "title": "Path Rule",
+                "enabled": 1,
+                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+            },
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 5},
+            },
+            {
+                "step_type": "tx_rf",
+                "title": "TX RF",
+                "enabled": 1,
+                "config": {"rf_target": "RF-OUT"},
+            },
+        ]
+        with temporary_database():
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual(
+                [step["step_type"] for step in normalized["steps"]],
+                ["receiver_rf", "filter_dupe", "filter_callsign", "filter_path", "tx_rf"],
+            )
 
     def test_local_tx_to_aprsis_and_black_hole_are_valid(self) -> None:
         with temporary_database():

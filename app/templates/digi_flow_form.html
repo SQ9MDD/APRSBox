@@ -560,6 +560,8 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
+        const isTxRfTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_rf";
+        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && (stepType === "filter_dupe" || stepType === "filter_path");
         const isDistanceFilterStepType = (stepType) => stepType === "filter_distance";
         const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
         const hasViscousDelayStep = () => steps.some(
@@ -595,6 +597,22 @@
             strictStep.enabled = 1;
             strictStep.config = {};
             steps = [sourceStep, strictStep, targetStep];
+        };
+
+        const enforceTxRfFlowRestrictions = () => {
+            if (!Array.isArray(steps) || steps.length < 2 || !isTxRfTargetFlow()) {
+                return;
+            }
+            const sourceStep = steps[0];
+            const targetStep = steps[steps.length - 1];
+            const middleSteps = steps.slice(1, -1);
+            const viscousDelaySteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_dupe");
+            const otherSteps = middleSteps.filter((step) => {
+                const stepType = String(step.step_type || "").trim();
+                return stepType !== "filter_dupe" && stepType !== "filter_path";
+            });
+            const pathSteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_path");
+            steps = [sourceStep, ...viscousDelaySteps, ...otherSteps, ...pathSteps, targetStep];
         };
 
         const syncPaletteState = () => {
@@ -1301,6 +1319,7 @@
         const render = () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             syncPaletteState();
             stepsJsonInput.value = JSON.stringify(steps);
@@ -1349,6 +1368,9 @@
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
                 const aprsisLockedFlow = isAprsisTargetFlow();
+                const txRfLockedStep = isFixedTxRfStepType(step.step_type);
+                const previousStepType = String((steps[index - 1] || {}).step_type || "").trim();
+                const nextStepType = String((steps[index + 1] || {}).step_type || "").trim();
                 const aprsisSystemStrictStep = aprsisLockedFlow && step.step_type === "filter_strict" && index === 1;
 
                 const enabledRow = document.createElement("label");
@@ -1398,7 +1420,8 @@
                 moveUpButton.setAttribute("aria-label", i18n.moveStepUp);
                 moveUpButton.disabled = (
                     index <= 1
-                    || isViscousDelayStepType((steps[index - 1] || {}).step_type || "")
+                    || txRfLockedStep
+                    || (isTxRfTargetFlow() && previousStepType === "filter_dupe")
                     || aprsisLockedFlow
                 );
                 const moveUpIcon = document.createElement("img");
@@ -1421,7 +1444,8 @@
                 moveDownButton.setAttribute("aria-label", i18n.moveStepDown);
                 moveDownButton.disabled = (
                     index >= steps.length - 2
-                    || isViscousDelayStepType(step.step_type)
+                    || txRfLockedStep
+                    || (isTxRfTargetFlow() && nextStepType === "filter_path")
                     || aprsisLockedFlow
                 );
                 const moveDownIcon = document.createElement("img");
@@ -1609,6 +1633,7 @@
         form.addEventListener("submit", () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             for (const step of steps) {
                 if (step.step_type === "filter_distance") {

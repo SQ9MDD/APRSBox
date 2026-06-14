@@ -136,7 +136,13 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "label": "Paths (TRACE / traced)",
                 "type": "textarea",
                 "required": False,
-                "help_text": "One path alias or explicit hop per line. Example: WIDE1-1 or TRACE2-2.",
+                "help_lines": (
+                    "One path alias or explicit hop per line.",
+                    "TRACE example:",
+                    "WIDE1-1",
+                    "WIDE2-1",
+                    "WIDE2-2",
+                ),
             },
             {
                 "name": "no_trace_paths",
@@ -566,6 +572,23 @@ def _has_enabled_aprsis_strict_guard(steps: list[dict[str, Any]]) -> bool:
         return False
     strict_step = middle_steps[0]
     return strict_step.get("step_type") == "filter_strict" and int(strict_step.get("enabled") or 0) == 1
+
+
+def _normalize_tx_rf_flow_step_order(steps: list[dict[str, Any]]) -> None:
+    if len(steps) < 2:
+        return
+    source_step = steps[0]
+    target_step = steps[-1]
+    middle_steps = list(steps[1:-1])
+    viscous_delay_steps = [step for step in middle_steps if step["step_type"] == "filter_dupe"]
+    other_steps = [
+        step
+        for step in middle_steps
+        if step["step_type"] not in {"filter_dupe", "filter_path"}
+    ]
+    path_steps = [step for step in middle_steps if step["step_type"] == "filter_path"]
+    steps[:] = [source_step, *viscous_delay_steps, *other_steps, *path_steps, target_step]
+    _reindex_steps(steps)
 
 
 def _reindex_steps(steps: list[dict[str, Any]]) -> None:
@@ -1131,14 +1154,16 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     duplicate_filter_positions = [index for index, step in enumerate(normalized_steps) if step["step_type"] == "filter_dupe"]
     if len(duplicate_filter_positions) > 1:
         raise ValueError(_t("Duplicate filter (viscous-delay) can be used only once in a flow."))
-    if duplicate_filter_positions and duplicate_filter_positions[0] != 1:
-        raise ValueError(_t("Duplicate filter (viscous-delay) must be the first filter step in the flow."))
     distance_filter_count = sum(1 for step in normalized_steps if step["step_type"] == "filter_distance")
     if distance_filter_count > 1:
         raise ValueError(_t("Distance filter can be used only once in a flow."))
     has_strict_filter = any(step["step_type"] == "filter_strict" for step in normalized_steps[1:-1])
     if target_kind != "tx_aprsis" and has_strict_filter:
         raise ValueError(_t("Strict APRS-IS guard can be used only in APRS-IS target flows."))
+    if target_kind == "tx_rf":
+        _normalize_tx_rf_flow_step_order(normalized_steps)
+    elif duplicate_filter_positions and duplicate_filter_positions[0] != 1:
+        raise ValueError(_t("Duplicate filter (viscous-delay) must be the first filter step in the flow."))
     if target_kind == "tx_aprsis":
         if source_kind not in APRSIS_ALLOWED_SOURCE_KINDS:
             raise ValueError(_t("APRS-IS target flow must use Receiver RF or Local TX as source."))
