@@ -13,6 +13,7 @@
     const scrollerVisibleStorageKey = "aprsbox-map-scroller-visible";
     const stationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
+    const trafficSnapshotEventName = "aprsbox:traffic-snapshot";
     const fallbackStationIconPath = `${staticRoot}${aprsSymbolIconFallback}`;
     const maxEntries = 120;
     const stationSourceKey = normalizeCallsignKey(root.dataset.stationSourceKey || "");
@@ -434,6 +435,10 @@
 
     function applySnapshot(snapshot) {
         lastSnapshotPayload = snapshot;
+        window.__APRSBOX_TRAFFIC_SNAPSHOT__ = snapshot;
+        root.dispatchEvent(new window.CustomEvent(trafficSnapshotEventName, {
+            detail: snapshot,
+        }));
         const entries = buildScrollerEntries(snapshot);
         const signature = entries
             .map((entry) => `${entry.timestamp}|${entry.stationLabel}|${entry.digipeater}|${entry.stationIconPath}|${entry.stationColor}`)

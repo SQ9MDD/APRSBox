@@ -875,6 +875,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 or ""
             ).strip()
         display_icon_path = get_aprs_symbol_icon_path(symbol) if packet_group in {"object", "item"} else ""
+        emergency_data = _build_emergency_frame_data(parsed=parsed, row=row, line=line) if parsed else None
         row_class = _traffic_frame_row_class(
             direction=direction,
             line=line,
@@ -899,6 +900,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "display_callsign": display_callsign,
                 "display_packet_group": packet_group,
                 "display_icon_path": display_icon_path,
+                "emergency": bool(emergency_data),
+                "emergency_data": emergency_data,
             }
         )
     return {
@@ -910,6 +913,67 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         "last_error": last_error,
         "updated_at": updated_at,
         "frames": frames,
+    }
+
+
+_EMERGENCY_COMMENT_PREFIX_RE = re.compile(
+    r"^!(?:TESTALARM|EMERGENCY|ALARM|ALERT|WARNING|WXALARM|EM)!",
+    re.IGNORECASE,
+)
+
+
+def _strip_emergency_comment_prefix(text: str) -> str:
+    comment = str(text or "").strip()
+    match = _EMERGENCY_COMMENT_PREFIX_RE.match(comment)
+    if not match:
+        return comment
+    return comment[match.end():].lstrip(" /,;:-")
+
+
+def _extract_emergency_comment_token(text: str) -> str | None:
+    comment = str(text or "").strip()
+    match = _EMERGENCY_COMMENT_PREFIX_RE.match(comment)
+    if not match:
+        return None
+    token = match.group(0).strip("!")
+    return token.upper() if token else None
+
+
+def _build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) -> dict[str, Any] | None:
+    aprs_data = dict(parsed.get("aprs_data") or {})
+    if not bool(aprs_data.get("emergency")):
+        return None
+
+    comment = str(aprs_data.get("comment") or "").strip()
+    summary = _strip_emergency_comment_prefix(comment)
+    if not summary and aprs_data.get("data"):
+        decoded_items = _format_decoded_data_for_display(dict(aprs_data["data"]), "metric")
+        summary = ", ".join(
+            str(item.get("value") or "").strip()
+            for item in decoded_items[:4]
+            if str(item.get("value") or "").strip()
+        )
+
+    callsign = str(
+        (aprs_data.get("entity_name") or "")
+        or (parsed.get("logical_source_key") or "")
+        or (parsed.get("source_key") or "")
+        or (row["source"] or "")
+    ).strip()
+
+    return {
+        "callsign": callsign,
+        "source_interface": str(row["source"] or "").strip(),
+        "source_port": str(row["port"] or "").strip(),
+        "path": str(parsed.get("logical_path") or parsed.get("path") or "").strip(),
+        "timestamp_utc": str(row["created_at"] or "").strip(),
+        "comment": comment,
+        "summary": summary,
+        "latitude": aprs_data.get("latitude"),
+        "longitude": aprs_data.get("longitude"),
+        "raw_frame": line,
+        "emergency_code": str(aprs_data.get("emergency_code") or "").strip(),
+        "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
     }
 
 
@@ -3321,6 +3385,11 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     data: dict[str, Any] = dict(result.get("data", {}) or {})
     preserve_qsy_callsign_in_comment = False
     is_weather_context = bool(result.get("packet_group") == "weather" or result.get("symbol", "").endswith("_"))
+    emergency_token = _extract_emergency_comment_token(comment)
+    if emergency_token is not None or bool(result.get("emergency")):
+        result["emergency"] = True
+    if emergency_token is not None:
+        result["emergency_code"] = emergency_token
     if result.get("symbol", "").endswith("_"):
         weather = _parse_weather_fields(comment)
         if weather:

@@ -155,6 +155,12 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("latitude"), "52.30617")
         self.assertEqual(aprs_data.get("longitude"), "21.08117")
 
+    def test_parse_tnc2_frame_detects_emergency_comment_prefix(self) -> None:
+        parsed = parse_tnc2_frame("SP8ABC-9>APRS:!5218.37N\\02104.87E$!EMERGENCY!Need help")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertTrue(bool(aprs_data.get("emergency")))
+        self.assertEqual(aprs_data.get("emergency_code"), "EMERGENCY")
+
     def test_parse_tnc2_frame_does_not_mark_weather_symbol_position_as_mobile(self) -> None:
         parsed = parse_tnc2_frame("SP8WX-1>APRS:!5218.37N/02104.87E_090/010g015t020r000p000P000h50b10150")
         self.assertIsNotNone(parsed)
