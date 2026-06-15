@@ -3385,6 +3385,9 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     data: dict[str, Any] = dict(result.get("data", {}) or {})
     preserve_qsy_callsign_in_comment = False
     is_weather_context = bool(result.get("packet_group") == "weather" or result.get("symbol", "").endswith("_"))
+    if str(result.get("symbol") or "").strip() == "\\!":
+        result["emergency"] = True
+        result.setdefault("emergency_code", "EMERGENCY")
     emergency_token = _extract_emergency_comment_token(comment)
     if emergency_token is not None or bool(result.get("emergency")):
         result["emergency"] = True
