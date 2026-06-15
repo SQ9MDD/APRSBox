@@ -365,10 +365,18 @@
     height: 32px;
 }
 
+:root[data-aprs-symbol-set="modern"][data-theme="light"] .map-station-aprs-icon {
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+:root[data-aprs-symbol-set="modern"][data-theme="dark"] .map-station-aprs-icon {
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+}
+
 .map-station-aprs-overlay {
     position: absolute;
-    left: 10px;
-    top: 10px;
+    left: 50%;
+    top: 50%;
     transform: translate(-50%, -55%);
     min-width: 0.64rem;
     height: 0.64rem;
@@ -384,8 +392,12 @@
 }
 
 :root[data-aprs-symbol-set="modern"] .map-station-aprs-overlay {
-    left: 16px;
-    top: 16px;
+    transform: translate(-50%, -50%);
+    min-width: 0.78rem;
+    height: 0.78rem;
+    padding: 0 0.05rem;
+    font-size: 0.58rem;
+    line-height: 0.78rem;
 }
 
 .map-station-icon-stale .map-station-aprs-overlay {

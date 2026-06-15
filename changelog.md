@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.39.dev - 15.06.2026
+- `Mapa / ikony modern`: wycentrowano overlay na ikonach oraz dodano lepszy cień dla czytelności.
+
 ## 1.8.38.dev - 14.06.2026
 - `DIGI / Rate limit filter`: aktywowano istniejący bloczek `Filtr limitu tempa` dla flowów z `TX = tnc radio`; filtr przechowuje ostatnio przepuszczoną ramkę per instancja, odrzuca kolejne ramki przed upływem ustawionego limitu 5-60 s i loguje blokadę wraz z limitem.
 - `DIGI / Rate limit filter`: dodano maskę znaku źródłowego z wildcardem `*`; limit działa teraz na pasujące znaki wywoławcze, a `*` obejmuje wszystkie źródła.
