@@ -167,6 +167,14 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertTrue(bool(aprs_data.get("emergency")))
         self.assertEqual(aprs_data.get("symbol"), "\\!")
 
+    def test_parse_tnc2_frame_detects_mic_e_emergency_status(self) -> None:
+        parsed = parse_tnc2_frame("SQ9MDD-7>521U02,RFONLY:'0SWl \x1c[/>144.800MHz op. Rysiek&")
+        aprs_data = (parsed or {}).get("aprs_data") or {}
+        self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
+        self.assertEqual(aprs_data.get("mice_message"), "EMERGENCY")
+        self.assertEqual(aprs_data.get("emergency_source"), "mic-e")
+        self.assertTrue(bool(aprs_data.get("emergency")))
+
     def test_parse_tnc2_frame_does_not_mark_weather_symbol_position_as_mobile(self) -> None:
         parsed = parse_tnc2_frame("SP8WX-1>APRS:!5218.37N/02104.87E_090/010g015t020r000p000P000h50b10150")
         self.assertIsNotNone(parsed)
@@ -192,6 +200,7 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
         self.assertEqual(aprs_data.get("latitude"), "52.78550")
         self.assertEqual(aprs_data.get("longitude"), "21.40817")
+        self.assertFalse(bool(aprs_data.get("emergency")))
 
     def test_parse_tnc2_frame_decodes_mic_e_longitude_hundredths_without_60_wrap(self) -> None:
         parsed = parse_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14d^\\^]D[/"4N}Witam!')

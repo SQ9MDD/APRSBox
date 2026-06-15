@@ -920,6 +920,16 @@ _EMERGENCY_COMMENT_PREFIX_RE = re.compile(
     r"^!?((?:TESTALARM|EMERGENCY|ALARM|ALERT|WARNING|WXALARM|EM))!",
     re.IGNORECASE,
 )
+_MIC_E_MESSAGE_LABELS = {
+    0: "OFF-DUTY",
+    1: "ENROUTE",
+    2: "IN SERVICE",
+    3: "RETURNING",
+    4: "COMMITTED",
+    5: "SPECIAL",
+    6: "PRIORITY",
+    7: "EMERGENCY",
+}
 
 
 def _strip_emergency_comment_prefix(text: str) -> str:
@@ -973,6 +983,8 @@ def _build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) 
         "longitude": aprs_data.get("longitude"),
         "raw_frame": line,
         "emergency_code": str(aprs_data.get("emergency_code") or "").strip(),
+        "emergency_source": str(aprs_data.get("emergency_source") or "").strip(),
+        "mice_message": str(aprs_data.get("mice_message") or "").strip(),
         "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
     }
 
@@ -3021,6 +3033,13 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
         "comment": comment,
     }
+    mice_message_code, mice_message = _decode_mic_e_message(destination)
+    if mice_message is not None:
+        result["mice_message"] = mice_message
+        result["mice_message_code"] = mice_message_code
+        if mice_message == "EMERGENCY":
+            result["emergency"] = True
+            result["emergency_source"] = "mic-e"
     if position_ambiguity_digits > 0:
         result["position_ambiguity_digits"] = position_ambiguity_digits
         result["position_ambiguous"] = True
@@ -3104,6 +3123,18 @@ def _decode_mic_e_speed_course(info: str) -> dict[str, int] | None:
         "course_deg": course,
         "speed_knots": speed,
     }
+
+
+def _decode_mic_e_message(destination: str) -> tuple[int | None, str | None]:
+    if len(destination) != 6:
+        return None, None
+
+    bits = [
+        0 if ("A" <= char <= "J" or "P" <= char <= "Y") else 1
+        for char in destination[:3]
+    ]
+    message_code = 4 * bits[0] + 2 * bits[1] + bits[2]
+    return message_code, _MIC_E_MESSAGE_LABELS.get(message_code)
 
 
 def _decode_mic_e_dest_digit(char: str) -> tuple[int | None, bool]:
