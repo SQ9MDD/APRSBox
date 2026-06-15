@@ -122,6 +122,46 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "traffic-log-row-own-wx-tx",
             )
 
+    async def test_traffic_snapshot_marks_mic_e_emergency_frames_for_modal_trigger(self) -> None:
+        with temporary_database():
+            line = "SQ9MDD-7>521U02,RFONLY:'0SWl \x1c[/>144.800MHz op. Rysiek&"
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, 1, 'rx', '2m', 'TNC2', ?, '', '', ?, '', '2026-01-01T00:00:01+00:00')
+                """,
+                ("TNC-2m", line, len(line)),
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            frame = next(item for item in snapshot["frames"] if item["line"] == line)
+
+            self.assertEqual(frame["display_packet_group"], "position")
+            self.assertTrue(frame["emergency"])
+            self.assertEqual(frame["emergency_data"]["emergency_source"], "mic-e")
+            self.assertEqual(frame["emergency_data"]["mice_message"], "EMERGENCY")
+
+    async def test_traffic_snapshot_does_not_mark_normal_mic_e_frames_as_emergency(self) -> None:
+        with temporary_database():
+            line = 'SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!'
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, 1, 'rx', '2m', 'TNC2', ?, '', '', ?, '', '2026-01-01T00:00:01+00:00')
+                """,
+                ("TNC-2m", line, len(line)),
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            frame = next(item for item in snapshot["frames"] if item["line"] == line)
+
+            self.assertFalse(frame["emergency"])
+            self.assertIsNone(frame["emergency_data"])
+
     async def test_traffic_snapshot_uses_object_name_and_symbol_icon_for_object_frames(self) -> None:
         with temporary_database():
             execute(

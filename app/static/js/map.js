@@ -168,6 +168,12 @@
         zoom: initialView.zoom,
         zoomControl: true,
     });
+    window.aprsboxCenterMapOn = function (latitude, longitude) {
+        if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
+            return;
+        }
+        map.setView([Number(latitude), Number(longitude)], Math.max(map.getZoom(), 15));
+    };
     const mapMaskPaneName = "map-mask-pane";
     let mapMaskPane = null;
     let mapMaskLayer = null;
