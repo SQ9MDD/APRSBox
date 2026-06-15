@@ -551,7 +551,8 @@
 .aprs-emergency-modal {
     position: fixed;
     inset: 0;
-    z-index: 140;
+    z-index: 10000;
+    pointer-events: auto;
 }
 
 .aprs-emergency-backdrop {
