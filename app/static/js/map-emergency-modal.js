@@ -216,14 +216,14 @@
         }
 
         const masterGain = audioContext.createGain();
-        masterGain.gain.value = 0.14;
+        masterGain.gain.value = 0.26;
         masterGain.connect(audioContext.destination);
 
         const startAt = audioContext.currentTime + 0.02;
         const pattern = [
-            { start: startAt, duration: 0.16, frequency: 880 },
-            { start: startAt + 0.24, duration: 0.16, frequency: 880 },
-            { start: startAt + 0.48, duration: 0.22, frequency: 660 },
+            { start: startAt, duration: 0.18, frequency: 988 },
+            { start: startAt + 0.24, duration: 0.18, frequency: 988 },
+            { start: startAt + 0.48, duration: 0.34, frequency: 659 },
         ];
 
         for (const step of pattern) {
@@ -232,7 +232,7 @@
             oscillator.type = "square";
             oscillator.frequency.value = step.frequency;
             gainNode.gain.setValueAtTime(0.0001, step.start);
-            gainNode.gain.exponentialRampToValueAtTime(0.9, step.start + 0.02);
+            gainNode.gain.exponentialRampToValueAtTime(1.0, step.start + 0.02);
             gainNode.gain.exponentialRampToValueAtTime(0.0001, step.start + step.duration);
             oscillator.connect(gainNode);
             gainNode.connect(masterGain);
@@ -241,12 +241,38 @@
         }
     }
 
+    function playEmergencySpeechFallback() {
+        try {
+            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") {
+                return;
+            }
+            window.speechSynthesis.cancel();
+            const utterance = new window.SpeechSynthesisUtterance("Emergency alert");
+            utterance.lang = "en-US";
+            utterance.rate = 1.05;
+            utterance.pitch = 0.15;
+            utterance.volume = 1;
+            window.speechSynthesis.speak(utterance);
+        } catch (_error) {
+        }
+    }
+
     function playOpenBeep() {
         void ensureEmergencyAudioReady()
             .then(() => {
-                playEmergencyToneSequence();
+                if (emergencyAudioContext && emergencyAudioContext.state === "running") {
+                    playEmergencyToneSequence();
+                    return;
+                }
+                playEmergencySpeechFallback();
             })
             .catch(() => {});
+        try {
+            if (navigator.vibrate) {
+                navigator.vibrate([150, 60, 150, 60, 300]);
+            }
+        } catch (_error) {
+        }
     }
 
     function applyCopyFrame() {
