@@ -38,8 +38,13 @@
     let miniMapMarker = null;
     let newEmergencyTimer = null;
     let currentEmergencyFrame = null;
-    let emergencyAudioContext = null;
-    let emergencyAudioUnlockPromise = null;
+    const emergencyAlarmSrc = `${String(root.dataset.staticRoot || "/static/")}audio/aprs-emergency.wav`;
+    const emergencyAlarmAudio = new Audio(emergencyAlarmSrc);
+    emergencyAlarmAudio.preload = "auto";
+    emergencyAlarmAudio.playsInline = true;
+    emergencyAlarmAudio.loop = false;
+    emergencyAlarmAudio.volume = 1;
+    emergencyAlarmAudio.load();
 
     function textOrDash(value) {
         const text = String(value ?? "").trim();
@@ -174,99 +179,35 @@
         miniMap.invalidateSize();
     }
 
-    function getEmergencyAudioContext() {
+    function primeEmergencyAlarmAudio() {
         try {
-            const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-            if (typeof AudioContextCtor !== "function") {
-                return null;
-            }
-            if (!emergencyAudioContext) {
-                emergencyAudioContext = new AudioContextCtor();
-            }
-            return emergencyAudioContext;
-        } catch (_error) {
-            return null;
-        }
-    }
-
-    function ensureEmergencyAudioReady() {
-        const audioContext = getEmergencyAudioContext();
-        if (!audioContext) {
-            return Promise.resolve(null);
-        }
-        if (audioContext.state === "running") {
-            return Promise.resolve(audioContext);
-        }
-        if (emergencyAudioUnlockPromise) {
-            return emergencyAudioUnlockPromise;
-        }
-        emergencyAudioUnlockPromise = audioContext.resume()
-            .catch(() => null)
-            .then(() => audioContext)
-            .finally(() => {
-                emergencyAudioUnlockPromise = null;
-            });
-        return emergencyAudioUnlockPromise;
-    }
-
-    function playEmergencyToneSequence() {
-        const audioContext = getEmergencyAudioContext();
-        if (!audioContext || audioContext.state !== "running") {
-            return;
-        }
-
-        const masterGain = audioContext.createGain();
-        masterGain.gain.value = 0.26;
-        masterGain.connect(audioContext.destination);
-
-        const startAt = audioContext.currentTime + 0.02;
-        const pattern = [
-            { start: startAt, duration: 0.18, frequency: 988 },
-            { start: startAt + 0.24, duration: 0.18, frequency: 988 },
-            { start: startAt + 0.48, duration: 0.34, frequency: 659 },
-        ];
-
-        for (const step of pattern) {
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            oscillator.type = "square";
-            oscillator.frequency.value = step.frequency;
-            gainNode.gain.setValueAtTime(0.0001, step.start);
-            gainNode.gain.exponentialRampToValueAtTime(1.0, step.start + 0.02);
-            gainNode.gain.exponentialRampToValueAtTime(0.0001, step.start + step.duration);
-            oscillator.connect(gainNode);
-            gainNode.connect(masterGain);
-            oscillator.start(step.start);
-            oscillator.stop(step.start + step.duration + 0.02);
-        }
-    }
-
-    function playEmergencySpeechFallback() {
-        try {
-            if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") {
+            emergencyAlarmAudio.muted = true;
+            const primePromise = emergencyAlarmAudio.play();
+            if (primePromise && typeof primePromise.then === "function") {
+                primePromise.then(() => {
+                    emergencyAlarmAudio.pause();
+                    emergencyAlarmAudio.currentTime = 0;
+                    emergencyAlarmAudio.muted = false;
+                }).catch(() => {
+                    emergencyAlarmAudio.muted = false;
+                });
                 return;
             }
-            window.speechSynthesis.cancel();
-            const utterance = new window.SpeechSynthesisUtterance("Emergency alert");
-            utterance.lang = "en-US";
-            utterance.rate = 1.05;
-            utterance.pitch = 0.15;
-            utterance.volume = 1;
-            window.speechSynthesis.speak(utterance);
         } catch (_error) {
         }
+        emergencyAlarmAudio.muted = false;
     }
 
     function playOpenBeep() {
-        void ensureEmergencyAudioReady()
-            .then(() => {
-                if (emergencyAudioContext && emergencyAudioContext.state === "running") {
-                    playEmergencyToneSequence();
-                    return;
-                }
-                playEmergencySpeechFallback();
-            })
-            .catch(() => {});
+        try {
+            emergencyAlarmAudio.pause();
+            emergencyAlarmAudio.currentTime = 0;
+            const playPromise = emergencyAlarmAudio.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+                playPromise.catch(() => {});
+            }
+        } catch (_error) {
+        }
         try {
             if (navigator.vibrate) {
                 navigator.vibrate([150, 60, 150, 60, 300]);
@@ -446,7 +387,7 @@
     const audioUnlockEvents = ["pointerdown", "keydown", "touchstart"];
     for (const eventType of audioUnlockEvents) {
         window.addEventListener(eventType, function () {
-            void ensureEmergencyAudioReady();
+            primeEmergencyAlarmAudio();
         }, { once: true, passive: true });
     }
 
