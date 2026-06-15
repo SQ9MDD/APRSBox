@@ -38,6 +38,8 @@
     let miniMapMarker = null;
     let newEmergencyTimer = null;
     let currentEmergencyFrame = null;
+    let emergencyAudioContext = null;
+    let emergencyAudioUnlockPromise = null;
 
     function textOrDash(value) {
         const text = String(value ?? "").trim();
@@ -172,27 +174,79 @@
         miniMap.invalidateSize();
     }
 
-    function playOpenBeep() {
+    function getEmergencyAudioContext() {
         try {
             const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
             if (typeof AudioContextCtor !== "function") {
-                return;
+                return null;
             }
-            const audioContext = new AudioContextCtor();
+            if (!emergencyAudioContext) {
+                emergencyAudioContext = new AudioContextCtor();
+            }
+            return emergencyAudioContext;
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    function ensureEmergencyAudioReady() {
+        const audioContext = getEmergencyAudioContext();
+        if (!audioContext) {
+            return Promise.resolve(null);
+        }
+        if (audioContext.state === "running") {
+            return Promise.resolve(audioContext);
+        }
+        if (emergencyAudioUnlockPromise) {
+            return emergencyAudioUnlockPromise;
+        }
+        emergencyAudioUnlockPromise = audioContext.resume()
+            .catch(() => null)
+            .then(() => audioContext)
+            .finally(() => {
+                emergencyAudioUnlockPromise = null;
+            });
+        return emergencyAudioUnlockPromise;
+    }
+
+    function playEmergencyToneSequence() {
+        const audioContext = getEmergencyAudioContext();
+        if (!audioContext || audioContext.state !== "running") {
+            return;
+        }
+
+        const masterGain = audioContext.createGain();
+        masterGain.gain.value = 0.14;
+        masterGain.connect(audioContext.destination);
+
+        const startAt = audioContext.currentTime + 0.02;
+        const pattern = [
+            { start: startAt, duration: 0.16, frequency: 880 },
+            { start: startAt + 0.24, duration: 0.16, frequency: 880 },
+            { start: startAt + 0.48, duration: 0.22, frequency: 660 },
+        ];
+
+        for (const step of pattern) {
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
-            oscillator.type = "sine";
-            oscillator.frequency.value = 880;
-            gainNode.gain.value = 0.05;
+            oscillator.type = "square";
+            oscillator.frequency.value = step.frequency;
+            gainNode.gain.setValueAtTime(0.0001, step.start);
+            gainNode.gain.exponentialRampToValueAtTime(0.9, step.start + 0.02);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, step.start + step.duration);
             oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.12);
-            oscillator.onended = function () {
-                audioContext.close().catch(() => {});
-            };
-        } catch (_error) {
+            gainNode.connect(masterGain);
+            oscillator.start(step.start);
+            oscillator.stop(step.start + step.duration + 0.02);
         }
+    }
+
+    function playOpenBeep() {
+        void ensureEmergencyAudioReady()
+            .then(() => {
+                playEmergencyToneSequence();
+            })
+            .catch(() => {});
     }
 
     function applyCopyFrame() {
@@ -361,6 +415,13 @@
                 window.aprsboxCenterMapOn(latitude, longitude);
             }
         });
+    }
+
+    const audioUnlockEvents = ["pointerdown", "keydown", "touchstart"];
+    for (const eventType of audioUnlockEvents) {
+        window.addEventListener(eventType, function () {
+            void ensureEmergencyAudioReady();
+        }, { once: true, passive: true });
     }
 
     root.addEventListener(eventName, function (event) {

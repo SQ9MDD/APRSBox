@@ -701,7 +701,7 @@
 .aprs-emergency-map-wrap {
     position: relative;
     flex: 0 0 auto;
-    height: 11rem;
+    height: clamp(18rem, 30vh, 24rem);
     border: 1px solid rgba(255, 31, 31, 0.45);
     border-radius: 0.75rem;
     overflow: hidden;
