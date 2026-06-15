@@ -6,6 +6,7 @@
     }
 
     const eventName = "aprsbox:traffic-snapshot";
+    const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const dialog = modal.querySelector(".aprs-emergency-dialog");
     const title = document.getElementById("aprs-emergency-title");
     const callsign = document.getElementById("aprs-emergency-callsign");
@@ -346,6 +347,9 @@
 
         const nextSignature = emergencySignature(emergencyFrame);
         if (nextSignature && nextSignature === currentSignature && isVisible) {
+            if (emergencyAlarmAudio.paused) {
+                playOpenBeep();
+            }
             return;
         }
         if (!isVisible && nextSignature && nextSignature === dismissedSignature) {
@@ -387,6 +391,12 @@
 
     root.addEventListener(eventName, function (event) {
         handleSnapshot(event && event.detail ? event.detail : {});
+    });
+
+    root.addEventListener(mapViewRefreshEventName, function () {
+        if (isVisible && currentEmergencyFrame && emergencyAlarmAudio.paused) {
+            playOpenBeep();
+        }
     });
 
     if (window.__APRSBOX_TRAFFIC_SNAPSHOT__) {
