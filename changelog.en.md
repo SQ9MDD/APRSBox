@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.39.dev - 2026-06-15
+- `Map / modern icons`: centered the overlay on the icons and added a stronger shadow for readability.
+
 ## 1.8.38.dev - 2026-06-14
 - `DIGI / Rate limit filter`: activated the existing `Rate limit filter` block for flows with `TX = tnc radio`; the filter keeps the last passed frame per instance, drops subsequent frames until the configured 5-60 s limit expires, and logs the block together with the active limit.
 - `DIGI / Rate limit filter`: added a source-callsign mask with `*` wildcard support; the limit now applies to matching callsigns, and `*` covers all sources.

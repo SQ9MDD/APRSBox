@@ -115,6 +115,7 @@
             const symbolIcon = String((station && station.symbol_icon) || "").trim();
             const stationInfo = {
                 iconPath: symbolIcon ? `${staticRoot}${symbolIcon}` : fallbackStationIconPath,
+                symbolOverlay: resolveSymbolOverlay(station && station.symbol_table),
                 latitude: Number((station && station.latitude)),
                 longitude: Number((station && station.longitude)),
             };
@@ -123,6 +124,14 @@
                 registerStationLookupEntry(station && station.callsign, stationInfo);
             }
         }
+    }
+
+    function resolveSymbolOverlay(symbolTable) {
+        const normalized = String(symbolTable || "").trim();
+        if (!normalized || normalized === "/" || normalized === "\\") {
+            return "";
+        }
+        return normalized.charAt(0);
     }
 
     function updateMapViewState(detail) {
@@ -373,6 +382,11 @@
         return (station && station.iconPath) || fallbackStationIconPath;
     }
 
+    function stationIconOverlay(stationCallsign) {
+        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign));
+        return (station && station.symbolOverlay) || "";
+    }
+
     function frameIconPath(frame, fallbackCallsign) {
         const displayIconPath = String((frame && frame.display_icon_path) || "").trim();
         if (displayIconPath) {
@@ -407,6 +421,7 @@
                 stationLabel,
                 digipeater: parsed.digipeater,
                 stationIconPath: frameIconPath(frame, displayCallsign || parsed.station),
+                stationIconOverlay: stationIconOverlay(displayCallsign || parsed.station),
                 stationColor: stationTextColor(displayCallsign || parsed.station),
             });
             if (entries.length >= maxEntries) {
@@ -425,6 +440,7 @@
             `<div class="map-scroller-row">`
                 + `<span class="map-scroller-icon-wrap" title="${escapeHtml(entry.timestamp)}">`
                     + `<img class="map-scroller-icon" src="${escapeHtml(entry.stationIconPath)}" alt="">`
+                    + `${entry.stationIconOverlay ? `<span class="aprs-symbol-overlay" aria-hidden="true">${escapeHtml(entry.stationIconOverlay)}</span>` : ""}`
                 + `</span>`
                 + `<span class="map-scroller-station" style="color:${escapeHtml(entry.stationColor)}">${escapeHtml(entry.stationLabel)}</span>`
                 + `<span class="map-scroller-digi">${escapeHtml(entry.digipeater)}</span>`
@@ -436,7 +452,7 @@
         lastSnapshotPayload = snapshot;
         const entries = buildScrollerEntries(snapshot);
         const signature = entries
-            .map((entry) => `${entry.timestamp}|${entry.stationLabel}|${entry.digipeater}|${entry.stationIconPath}|${entry.stationColor}`)
+            .map((entry) => `${entry.timestamp}|${entry.stationLabel}|${entry.digipeater}|${entry.stationIconPath}|${entry.stationIconOverlay}|${entry.stationColor}`)
             .join("||");
         if (signature === lastSnapshotSignature) {
             return;
