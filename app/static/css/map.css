@@ -699,7 +699,8 @@
 
 .aprs-emergency-map-wrap {
     position: relative;
-    min-height: 11rem;
+    flex: 0 0 auto;
+    height: 11rem;
     border: 1px solid rgba(255, 31, 31, 0.45);
     border-radius: 0.75rem;
     overflow: hidden;
@@ -727,6 +728,7 @@
 .aprs-emergency-raw-block {
     display: grid;
     gap: 0.45rem;
+    min-height: 0;
 }
 
 .aprs-emergency-raw-label {

@@ -37,6 +37,7 @@
     let miniMap = null;
     let miniMapMarker = null;
     let newEmergencyTimer = null;
+    let currentEmergencyFrame = null;
 
     function textOrDash(value) {
         const text = String(value ?? "").trim();
@@ -67,6 +68,32 @@
             emergencyData.raw_frame || frame.line || "",
             emergencyData.callsign || frame.display_callsign || frame.source || "",
         ].join("|");
+    }
+
+    function emergencyFrameSortValue(frame) {
+        const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
+        const rawTimestamp = String(emergencyData.timestamp_utc || frame.timestamp || "").trim();
+        const parsedTimestamp = Date.parse(rawTimestamp);
+        return Number.isFinite(parsedTimestamp) ? parsedTimestamp : -Infinity;
+    }
+
+    function selectNewestEmergencyFrame(frames) {
+        if (!Array.isArray(frames) || frames.length === 0) {
+            return null;
+        }
+        let newestFrame = null;
+        let newestValue = -Infinity;
+        for (const frame of frames) {
+            if (!frame || !frame.emergency) {
+                continue;
+            }
+            const currentValue = emergencyFrameSortValue(frame);
+            if (newestFrame === null || currentValue >= newestValue) {
+                newestFrame = frame;
+                newestValue = currentValue;
+            }
+        }
+        return newestFrame;
     }
 
     function destroyMiniMap() {
@@ -263,6 +290,7 @@
         const latitude = parseCoordinate(emergencyData.latitude);
         const longitude = parseCoordinate(emergencyData.longitude);
 
+        currentEmergencyFrame = frame;
         currentSignature = emergencySignature(frame);
         if (title) {
             title.textContent = "EMERGENCY FRAME RECEIVED";
@@ -296,7 +324,7 @@
 
     function handleSnapshot(snapshot) {
         const frames = Array.isArray(snapshot && snapshot.frames) ? snapshot.frames : [];
-        const emergencyFrame = frames.find((frame) => Boolean(frame && frame.emergency));
+        const emergencyFrame = selectNewestEmergencyFrame(frames);
         if (!emergencyFrame) {
             return;
         }
@@ -326,9 +354,7 @@
 
     if (openMapButton) {
         openMapButton.addEventListener("click", function () {
-            const emergencyData = window.__APRSBOX_TRAFFIC_SNAPSHOT__ && Array.isArray(window.__APRSBOX_TRAFFIC_SNAPSHOT__.frames)
-                ? (window.__APRSBOX_TRAFFIC_SNAPSHOT__.frames.find((frame) => Boolean(frame && frame.emergency)) || {}).emergency_data || {}
-                : {};
+            const emergencyData = currentEmergencyFrame && currentEmergencyFrame.emergency_data ? currentEmergencyFrame.emergency_data : {};
             const latitude = parseCoordinate(emergencyData.latitude);
             const longitude = parseCoordinate(emergencyData.longitude);
             if (Number.isFinite(latitude) && Number.isFinite(longitude) && typeof window.aprsboxCenterMapOn === "function") {
