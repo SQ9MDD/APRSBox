@@ -38,7 +38,7 @@
     let miniMapMarker = null;
     let newEmergencyTimer = null;
     let currentEmergencyFrame = null;
-    const emergencyAlarmSrc = `${String(root.dataset.staticRoot || "/static/")}audio/aprs-emergency.wav`;
+    const emergencyAlarmSrc = `${String(root.dataset.staticRoot || "/static/")}audio/aprs-audio-alert.mp3`;
     const emergencyAlarmAudio = new Audio(emergencyAlarmSrc);
     emergencyAlarmAudio.preload = "auto";
     emergencyAlarmAudio.playsInline = true;
