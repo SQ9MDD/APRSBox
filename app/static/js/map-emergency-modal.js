@@ -88,17 +88,9 @@
         if (!Array.isArray(frames) || frames.length === 0) {
             return null;
         }
-        let newestFrame = null;
-        let newestValue = -Infinity;
-        for (const frame of frames) {
-            if (!frame || !frame.emergency) {
-                continue;
-            }
-            const currentValue = emergencyFrameSortValue(frame);
-            if (newestFrame === null || currentValue >= newestValue) {
-                newestFrame = frame;
-                newestValue = currentValue;
-            }
+        const newestFrame = frames[0];
+        if (!newestFrame || !newestFrame.emergency) {
+            return null;
         }
         return newestFrame;
     }
