@@ -347,9 +347,7 @@
 
         const nextSignature = emergencySignature(emergencyFrame);
         if (nextSignature && nextSignature === currentSignature && isVisible) {
-            if (emergencyAlarmAudio.paused) {
-                playOpenBeep();
-            }
+            playOpenBeep();
             return;
         }
         if (!isVisible && nextSignature && nextSignature === dismissedSignature) {
@@ -394,7 +392,13 @@
     });
 
     root.addEventListener(mapViewRefreshEventName, function () {
-        if (isVisible && currentEmergencyFrame && emergencyAlarmAudio.paused) {
+        if (isVisible && currentEmergencyFrame) {
+            playOpenBeep();
+        }
+    });
+
+    window.addEventListener("visibilitychange", function () {
+        if (!document.hidden && isVisible && currentEmergencyFrame) {
             playOpenBeep();
         }
     });
