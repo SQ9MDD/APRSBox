@@ -393,6 +393,7 @@
 }
 
 :root[data-aprs-symbol-set="modern"] .map-station-aprs-overlay {
+    transform: translate(-50%, -50%);
     min-width: 0.78rem;
     height: 0.78rem;
     padding: 0 0.05rem;
