@@ -366,6 +366,14 @@
     height: 32px;
 }
 
+:root[data-aprs-symbol-set="modern"][data-theme="light"] .map-station-aprs-icon {
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+:root[data-aprs-symbol-set="modern"][data-theme="dark"] .map-station-aprs-icon {
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+}
+
 .map-station-aprs-overlay {
     position: absolute;
     left: 50%;
