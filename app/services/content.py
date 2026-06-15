@@ -917,7 +917,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
 
 
 _EMERGENCY_COMMENT_PREFIX_RE = re.compile(
-    r"^!(?:TESTALARM|EMERGENCY|ALARM|ALERT|WARNING|WXALARM|EM)!",
+    r"^!?((?:TESTALARM|EMERGENCY|ALARM|ALERT|WARNING|WXALARM|EM))!",
     re.IGNORECASE,
 )
 
@@ -935,7 +935,7 @@ def _extract_emergency_comment_token(text: str) -> str | None:
     match = _EMERGENCY_COMMENT_PREFIX_RE.match(comment)
     if not match:
         return None
-    token = match.group(0).strip("!")
+    token = match.group(1)
     return token.upper() if token else None
 
 
