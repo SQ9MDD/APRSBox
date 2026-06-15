@@ -42,7 +42,7 @@
     const emergencyAlarmAudio = new Audio(emergencyAlarmSrc);
     emergencyAlarmAudio.preload = "auto";
     emergencyAlarmAudio.playsInline = true;
-    emergencyAlarmAudio.loop = false;
+    emergencyAlarmAudio.loop = true;
     emergencyAlarmAudio.volume = 1;
     emergencyAlarmAudio.load();
 
@@ -278,6 +278,8 @@
 
     function hideModal() {
         isVisible = false;
+        emergencyAlarmAudio.pause();
+        emergencyAlarmAudio.currentTime = 0;
         modal.hidden = true;
         document.body.classList.remove("modal-open");
         dismissedSignature = currentSignature;
