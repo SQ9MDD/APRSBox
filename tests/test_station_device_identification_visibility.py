@@ -129,6 +129,7 @@ class StationDeviceIdentificationVisibilityTests(unittest.TestCase):
             fields = detail.get("fields") or []
             self.assertIn({"label": "Packet type", "value": "Mic-E"}, fields)
             self.assertTrue(any(field.get("label") == "Destination" and "Mic-E encoded" in str(field.get("value") or "") for field in fields))
+            self.assertFalse(any(field.get("label") == "Device known" for field in fields))
 
 
 if __name__ == "__main__":

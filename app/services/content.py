@@ -2816,7 +2816,6 @@ def _station_detail_mic_e_fields(mic_e: dict[str, Any] | None) -> list[dict[str,
     fields.append({"label": _t("Status"), "value": unknown_text(mic_e.get("status"))})
     fields.append({"label": _t("Emergency"), "value": bool_text(mic_e.get("emergency"))})
     fields.append({"label": _t("Device"), "value": unknown_text(mic_e.get("device_name"))})
-    fields.append({"label": _t("Device known"), "value": bool_text(mic_e.get("device_known"))})
     fields.append({"label": _t("Device type"), "value": unknown_text(mic_e.get("device_type"))})
     fields.append({"label": _t("Raw type byte"), "value": unknown_text("space" if mic_e.get("raw_type_byte") == " " else mic_e.get("raw_type_byte"))})
     fields.append({"label": _t("Raw identifier"), "value": unknown_text(mic_e.get("raw_identifier"))})
