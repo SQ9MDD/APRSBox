@@ -126,6 +126,9 @@ class StationDeviceIdentificationVisibilityTests(unittest.TestCase):
             self.assertIsNotNone(detail["mic_e"])
             self.assertEqual((detail["mic_e"] or {}).get("destination_raw"), "URTW13")
             self.assertEqual((detail["mic_e"] or {}).get("device_name"), "FT3D")
+            fields = detail.get("fields") or []
+            self.assertIn({"label": "Packet type", "value": "Mic-E"}, fields)
+            self.assertTrue(any(field.get("label") == "Destination" and "Mic-E encoded" in str(field.get("value") or "") for field in fields))
 
 
 if __name__ == "__main__":

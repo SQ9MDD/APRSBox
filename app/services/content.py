@@ -2774,6 +2774,9 @@ def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[
     if snapshot.get("comment"):
         comment = str(snapshot["comment"])
         fields.append({"label": _t("Comment"), "value": comment, "html": _render_station_detail_comment(comment)})
+    mic_e_fields = _station_detail_mic_e_fields(snapshot.get("mic_e"))
+    if mic_e_fields:
+        fields.extend(mic_e_fields)
     fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
     if snapshot.get("path"):
         fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
@@ -2783,6 +2786,60 @@ def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[
         fields.append({"label": _t("Messaging capability"), "value": _t("Yes") if messaging_capable else _t("No")})
     if snapshot.get("raw_text"):
         fields.append({"label": _t("Latest raw packet"), "value": str(snapshot["raw_text"])})
+    return fields
+
+
+def _station_detail_mic_e_fields(mic_e: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not mic_e:
+        return []
+
+    def add_field(fields: list[dict[str, Any]], label: str, value: Any) -> None:
+        if value in {None, ""}:
+            return
+        fields.append({"label": label, "value": str(value)})
+
+    def bool_text(value: bool | None) -> str:
+        if value is True:
+            return _t("Yes")
+        if value is False:
+            return _t("No")
+        return _t("Unknown")
+
+    def unknown_text(value: Any) -> str:
+        text = str(value or "").strip()
+        return text if text else _t("Unknown")
+
+    fields: list[dict[str, Any]] = []
+    add_field(fields, _t("Packet type"), _t("Mic-E"))
+    if mic_e.get("destination_raw"):
+        fields.append({"label": _t("Destination"), "value": f'{mic_e["destination_raw"]} (Mic-E encoded)'})
+    fields.append({"label": _t("Status"), "value": unknown_text(mic_e.get("status"))})
+    fields.append({"label": _t("Emergency"), "value": bool_text(mic_e.get("emergency"))})
+    fields.append({"label": _t("Device"), "value": unknown_text(mic_e.get("device_name"))})
+    fields.append({"label": _t("Device known"), "value": bool_text(mic_e.get("device_known"))})
+    fields.append({"label": _t("Device type"), "value": unknown_text(mic_e.get("device_type"))})
+    fields.append({"label": _t("Raw type byte"), "value": unknown_text("space" if mic_e.get("raw_type_byte") == " " else mic_e.get("raw_type_byte"))})
+    fields.append({"label": _t("Raw identifier"), "value": unknown_text(mic_e.get("raw_identifier"))})
+    fields.append({"label": _t("Message capable"), "value": bool_text(mic_e.get("message_capable"))})
+
+    speed_knots = mic_e.get("speed_knots")
+    speed_kmh = mic_e.get("speed_kmh")
+    if speed_knots is not None and speed_kmh is not None:
+        fields.append({"label": _t("Speed"), "value": f"{speed_knots} kt / {speed_kmh} km/h"})
+    else:
+        fields.append({"label": _t("Speed"), "value": _t("Unknown")})
+
+    course_deg = mic_e.get("course_deg")
+    fields.append({"label": _t("Course"), "value": f"{course_deg}°" if course_deg is not None else _t("Unknown")})
+
+    altitude_m = mic_e.get("altitude_m")
+    altitude_ft = mic_e.get("altitude_ft")
+    if altitude_m is not None and altitude_ft is not None:
+        fields.append({"label": _t("Altitude"), "value": f"{altitude_m} m / {altitude_ft} ft"})
+    else:
+        fields.append({"label": _t("Altitude"), "value": _t("Unknown")})
+
+    fields.append({"label": _t("Position ambiguity"), "value": unknown_text(mic_e.get("position_ambiguity"))})
     return fields
 
 
