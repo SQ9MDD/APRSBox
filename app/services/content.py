@@ -2777,7 +2777,8 @@ def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[
     mic_e_fields = _station_detail_mic_e_fields(snapshot.get("mic_e"))
     if mic_e_fields:
         fields.extend(mic_e_fields)
-    fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
+    if not snapshot.get("mic_e"):
+        fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
     if snapshot.get("path"):
         fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
 
