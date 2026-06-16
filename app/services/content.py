@@ -3073,13 +3073,14 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         result.setdefault("data", {})["altitude_ft"] = mic_e_altitude_ft
     _attach_comment_extensions(result)
     mic_e_status = _MIC_E_STATUS_LABELS.get(mice_message_code) if mice_message_code is not None else None
-    type_label, message_capable = _decode_mic_e_type_byte(raw_type_byte)
+    type_label, type_message_capable = _decode_mic_e_type_byte(raw_type_byte)
+    message_capable = type_message_capable
     known_device_name = None
     raw_identifier = None
     if device_identification is not None:
         known_device_name = str(device_identification.get("short_name") or device_identification.get("identified_as") or "").strip() or None
         raw_identifier = str(device_identification.get("actual_identifier") or "").strip() or None
-        if device_identification.get("message_capable") is not None:
+        if message_capable is None and device_identification.get("message_capable") is not None:
             message_capable = bool(device_identification.get("message_capable"))
     altitude_m = int(round(float(mic_e_altitude_ft) * 0.3048)) if mic_e_altitude_ft is not None else None
     mic_e_details = {

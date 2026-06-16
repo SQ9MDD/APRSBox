@@ -216,6 +216,22 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertIsNone(mic_e.get("altitude_ft"))
         self.assertNotIn("\x1c", str(aprs_data.get("comment") or ""))
 
+    def test_parse_tnc2_frame_prefers_raw_type_byte_for_message_capable_flag(self) -> None:
+        line = 'SP5QWE-7>URQT61,SQ9MDD-4*,WIDE2*:`0Rx\x1c\x1cJ[/"48}op.Marcin'
+        identification = dict(self._sample_mic_e_identification())
+        identification["message_capable"] = False
+        with patch("app.services.content._decode_mic_e_type_byte", return_value=("Other Mic-E (message capable)", True)), patch(
+            "app.services.content.lookup_aprs_device_identification",
+            return_value=identification,
+        ), patch(
+            "app.services.content.get_aprs_device_identification_database",
+            return_value={},
+        ):
+            parsed = parse_tnc2_frame(line)
+
+        mic_e = dict((parsed or {}).get("aprs_data") or {}).get("mic_e") or {}
+        self.assertTrue(bool(mic_e.get("message_capable")))
+
     def test_parse_tnc2_frame_decodes_mic_e_altitude_and_cleans_comment(self) -> None:
         base_line = 'SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!'
         prefix, info = base_line.split(":", 1)
