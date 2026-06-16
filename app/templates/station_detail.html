@@ -15,6 +15,20 @@
     data-refresh-ms="30000"
     data-i18n-tocall="{{ t('TOCALL') }}"
     data-i18n-mic-e="{{ t('Mic-E') }}"
+    data-i18n-mic-e-details="{{ t('Mic-E details') }}"
+    data-i18n-packet-type="{{ t('Packet type') }}"
+    data-i18n-emergency="{{ t('Emergency') }}"
+    data-i18n-device="{{ t('Device') }}"
+    data-i18n-device-known="{{ t('Device known') }}"
+    data-i18n-device-type="{{ t('Device type') }}"
+    data-i18n-raw-type-byte="{{ t('Raw type byte') }}"
+    data-i18n-raw-identifier="{{ t('Raw identifier') }}"
+    data-i18n-message-capable="{{ t('Message capable') }}"
+    data-i18n-position-ambiguity="{{ t('Position ambiguity') }}"
+    data-i18n-status="{{ t('Status') }}"
+    data-i18n-speed="{{ t('Speed') }}"
+    data-i18n-course="{{ t('Course') }}"
+    data-i18n-altitude="{{ t('Altitude') }}"
     data-i18n-identified-software-device="{{ t('Identified software/device') }}"
     data-i18n-vendor="{{ t('Vendor') }}"
     data-i18n-model="{{ t('Model') }}"
@@ -188,6 +202,70 @@
             </div>
         </div>
     </article>
+</section>
+
+<section class="panel" id="station-mic-e-details-panel" {% if not station.mic_e %}hidden{% endif %}>
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Mic-E details") }}</h2>
+            </div>
+        </div>
+        <div id="station-mic-e-details">
+            {% if station.mic_e %}
+            <dl class="details-grid station-device-grid">
+                <dt>{{ t("Packet type") }}</dt>
+                <dd>{{ t("Mic-E") }}</dd>
+                <dt>{{ t("Destination") }}</dt>
+                <dd><code>{{ station.mic_e.destination_raw }}</code> <span class="muted">(Mic-E encoded)</span></dd>
+                <dt>{{ t("Status") }}</dt>
+                <dd>{{ station.mic_e.status or t("Unknown") }}</dd>
+                <dt>{{ t("Emergency") }}</dt>
+                <dd>{% if station.mic_e.emergency %}{{ t("Yes") }}{% else %}{{ t("No") }}{% endif %}</dd>
+                <dt>{{ t("Device") }}</dt>
+                <dd>{{ station.mic_e.device_name or t("Unknown") }}</dd>
+                <dt>{{ t("Device known") }}</dt>
+                <dd>{% if station.mic_e.device_known %}{{ t("Yes") }}{% else %}{{ t("No") }}{% endif %}</dd>
+                <dt>{{ t("Device type") }}</dt>
+                <dd>{{ station.mic_e.device_type or t("Unknown") }}</dd>
+                <dt>{{ t("Raw type byte") }}</dt>
+                <dd><code>{{ 'space' if station.mic_e.raw_type_byte == ' ' else (station.mic_e.raw_type_byte or t("Unknown")) }}</code></dd>
+                <dt>{{ t("Raw identifier") }}</dt>
+                <dd><code>{{ station.mic_e.raw_identifier or t("Unknown") }}</code></dd>
+                <dt>{{ t("Message capable") }}</dt>
+                <dd>
+                    {% if station.mic_e.message_capable is true %}
+                    {{ t("Yes") }}
+                    {% elif station.mic_e.message_capable is false %}
+                    {{ t("No") }}
+                    {% else %}
+                    {{ t("Unknown") }}
+                    {% endif %}
+                </dd>
+                <dt>{{ t("Speed") }}</dt>
+                <dd>
+                    {% if station.mic_e.speed_knots is not none and station.mic_e.speed_kmh is not none %}
+                    {{ station.mic_e.speed_knots }} kt / {{ station.mic_e.speed_kmh }} km/h
+                    {% else %}
+                    {{ t("Unknown") }}
+                    {% endif %}
+                </dd>
+                <dt>{{ t("Course") }}</dt>
+                <dd>{% if station.mic_e.course_deg is not none %}{{ station.mic_e.course_deg }}°{% else %}{{ t("Unknown") }}{% endif %}</dd>
+                <dt>{{ t("Altitude") }}</dt>
+                <dd>
+                    {% if station.mic_e.altitude_m is not none and station.mic_e.altitude_ft is not none %}
+                    {{ station.mic_e.altitude_m }} m / {{ station.mic_e.altitude_ft }} ft
+                    {% else %}
+                    {{ t("Unknown") }}
+                    {% endif %}
+                </dd>
+                <dt>{{ t("Position ambiguity") }}</dt>
+                <dd>{{ station.mic_e.position_ambiguity or t("Unknown") }}</dd>
+            </dl>
+            {% endif %}
+        </div>
+    </div>
 </section>
 
 <section class="panel">

@@ -930,6 +930,16 @@ _MIC_E_MESSAGE_LABELS = {
     6: "PRIORITY",
     7: "EMERGENCY",
 }
+_MIC_E_STATUS_LABELS = {
+    0: "Off Duty",
+    1: "En Route",
+    2: "In Service",
+    3: "Returning",
+    4: "Committed",
+    5: "Special",
+    6: "Priority",
+    7: "Emergency",
+}
 
 
 def _strip_emergency_comment_prefix(text: str) -> str:
@@ -2070,6 +2080,7 @@ def get_station_detail(
         "position_ambiguous": bool(snapshot.get("position_ambiguous")),
         "distance_km": snapshot.get("distance_km"),
         "messaging_capable": _messaging_capable(snapshot),
+        "mic_e": dict(snapshot["mic_e"]) if snapshot.get("mic_e") else None,
         "aprs_device": dict(snapshot["aprs_device"]) if snapshot.get("aprs_device") else None,
         "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
         "fields": _station_detail_fields(snapshot, unit_system),
@@ -2360,6 +2371,8 @@ def _build_station_snapshots_from_rows(
             station["status_text"] = str(aprs_data["comment"])
         if not station["data_raw"] and aprs_data.get("data"):
             station["data_raw"] = dict(aprs_data["data"])
+        if not station.get("mic_e") and aprs_data.get("mic_e"):
+            station["mic_e"] = dict(aprs_data["mic_e"])
         if not station["latitude"] and aprs_data.get("latitude"):
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
@@ -2389,6 +2402,7 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
         "aprs_device",
         "aprs_device_short",
         "status_text",
+        "mic_e",
         "position_ambiguity_digits",
     ):
         if not merged.get(field) and secondary.get(field):
@@ -2458,6 +2472,7 @@ def _new_station_snapshot(
         "comment": "",
         "status_text": "",
         "data_raw": {},
+        "mic_e": None,
         "latitude": "",
         "longitude": "",
         "position_ambiguity_digits": None,
@@ -3013,6 +3028,15 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     if len(destination) != 6 or len(info) < 9:
         return None
 
+    mic_e_payload = info[9:] if len(info) > 9 else ""
+    raw_type_byte = mic_e_payload[:1] if mic_e_payload else ""
+    mic_e_comment, mic_e_altitude_ft = _decode_mic_e_comment(mic_e_payload)
+    device_identification = lookup_aprs_device_identification(
+        destination="",
+        info=info,
+        database=get_aprs_device_identification_database(),
+    )
+
     latitude, position_ambiguity_digits = _decode_mic_e_latitude(destination)
     longitude = _decode_mic_e_longitude(destination, info)
     if latitude is None or longitude is None:
@@ -3020,7 +3044,6 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
 
     symbol_code = info[7] if len(info) > 7 else ""
     symbol_table = info[8] if len(info) > 8 else "/"
-    comment = info[9:].strip() if len(info) > 9 else ""
     result = {
         "entity_class": "mobile",
         "frame_type": "M",
@@ -3031,7 +3054,7 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
-        "comment": comment,
+        "comment": mic_e_comment,
     }
     mice_message_code, mice_message = _decode_mic_e_message(destination)
     if mice_message is not None:
@@ -3046,8 +3069,98 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     mic_e_movement = _decode_mic_e_speed_course(info)
     if mic_e_movement:
         result["data"] = mic_e_movement
+    if mic_e_altitude_ft is not None:
+        result.setdefault("data", {})["altitude_ft"] = mic_e_altitude_ft
     _attach_comment_extensions(result)
+    mic_e_status = _MIC_E_STATUS_LABELS.get(mice_message_code) if mice_message_code is not None else None
+    type_label, message_capable = _decode_mic_e_type_byte(raw_type_byte)
+    known_device_name = None
+    raw_identifier = None
+    if device_identification is not None:
+        known_device_name = str(device_identification.get("short_name") or device_identification.get("identified_as") or "").strip() or None
+        raw_identifier = str(device_identification.get("actual_identifier") or "").strip() or None
+        if device_identification.get("message_capable") is not None:
+            message_capable = bool(device_identification.get("message_capable"))
+    altitude_m = int(round(float(mic_e_altitude_ft) * 0.3048)) if mic_e_altitude_ft is not None else None
+    mic_e_details = {
+        "destination_raw": destination,
+        "destination_is_encoded": True,
+        "destination_is_tocall": False,
+        "status": mic_e_status,
+        "emergency": bool(result.get("emergency")),
+        "device_name": known_device_name,
+        "device_known": device_identification is not None,
+        "device_type": type_label,
+        "type_byte": type_label,
+        "raw_identifier": raw_identifier,
+        "raw_type_byte": raw_type_byte or None,
+        "message_capable": message_capable,
+        "speed_knots": mic_e_movement.get("speed_knots") if mic_e_movement else None,
+        "speed_kmh": int(round(float(mic_e_movement["speed_knots"]) * 1.852)) if mic_e_movement and mic_e_movement.get("speed_knots") is not None else None,
+        "course_deg": mic_e_movement.get("course_deg") if mic_e_movement else None,
+        "altitude_m": altitude_m,
+        "altitude_ft": mic_e_altitude_ft,
+        "position_ambiguity": _format_mic_e_position_ambiguity(position_ambiguity_digits),
+        "raw_mice_payload": mic_e_payload,
+    }
+    result["mic_e"] = mic_e_details
     return result
+
+
+def _decode_mic_e_comment(raw_payload: str) -> tuple[str, int | None]:
+    payload = re.sub(r"[\x00-\x1f\x7f]", " ", str(raw_payload or ""))
+    if not payload:
+        return "", None
+
+    payload = payload.lstrip()
+    if payload[:1] in {" ", ">", "]", "`", "'"}:
+        payload = payload[1:].lstrip()
+
+    altitude_ft = None
+    if len(payload) >= 4 and payload[3] == "}":
+        try:
+            altitude_value = (
+                8192 * _mic_e_base91_value(payload[0])
+                + 91 * _mic_e_base91_value(payload[1])
+                + _mic_e_base91_value(payload[2])
+                - 10000
+            )
+        except ValueError:
+            altitude_value = None
+        else:
+            altitude_ft = max(0, min(32700, altitude_value))
+            payload = payload[4:].lstrip()
+
+    return _clean_decoded_tokens(payload), altitude_ft
+
+
+def _mic_e_base91_value(char: str) -> int:
+    value = ord(char) - 33
+    if value < 0 or value > 90:
+        raise ValueError("Mic-E altitude byte out of range.")
+    return value
+
+
+def _decode_mic_e_type_byte(raw_type_byte: str) -> tuple[str | None, bool | None]:
+    if raw_type_byte == " ":
+        return "Original Mic-E", False
+    if raw_type_byte == ">":
+        return "Kenwood TH-D7A family", True
+    if raw_type_byte == "]":
+        return "Kenwood TM-D700 family", True
+    if raw_type_byte == "`":
+        return "Other Mic-E (message capable)", True
+    if raw_type_byte == "'":
+        return "Other Mic-E (tracker)", False
+    return None, None
+
+
+def _format_mic_e_position_ambiguity(position_ambiguity_digits: int) -> str:
+    if position_ambiguity_digits <= 0:
+        return "none"
+    if position_ambiguity_digits == 1:
+        return "1 digit"
+    return f"{position_ambiguity_digits} digits"
 
 
 def _decode_mic_e_latitude(destination: str) -> tuple[str | None, int]:

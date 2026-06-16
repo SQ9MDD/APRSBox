@@ -6,6 +6,8 @@
     const title = document.getElementById("station-detail-title");
     const meta = document.getElementById("station-detail-meta");
     const fields = document.getElementById("station-detail-fields");
+    const micEDetailsPanel = document.getElementById("station-mic-e-details-panel");
+    const micEDetailsRoot = document.getElementById("station-mic-e-details");
     const decodedData = document.getElementById("station-detail-decoded");
     const devicePanel = document.getElementById("station-device-identification-panel");
     const deviceRoot = document.getElementById("station-device-identification");
@@ -28,6 +30,20 @@
     const i18n = Object.freeze({
         tocall: pageRoot.dataset.i18nTocall || "TOCALL",
         micE: pageRoot.dataset.i18nMicE || "Mic-E",
+        micEDetails: pageRoot.dataset.i18nMicEDetails || "Mic-E details",
+        packetType: pageRoot.dataset.i18nPacketType || "Packet type",
+        emergency: pageRoot.dataset.i18nEmergency || "Emergency",
+        status: pageRoot.dataset.i18nStatus || "Status",
+        device: pageRoot.dataset.i18nDevice || "Device",
+        deviceKnown: pageRoot.dataset.i18nDeviceKnown || "Device known",
+        deviceType: pageRoot.dataset.i18nDeviceType || "Device type",
+        rawTypeByte: pageRoot.dataset.i18nRawTypeByte || "Raw type byte",
+        rawIdentifier: pageRoot.dataset.i18nRawIdentifier || "Raw identifier",
+        messageCapable: pageRoot.dataset.i18nMessageCapable || "Message capable",
+        positionAmbiguity: pageRoot.dataset.i18nPositionAmbiguity || "Position ambiguity",
+        speed: pageRoot.dataset.i18nSpeed || "Speed",
+        course: pageRoot.dataset.i18nCourse || "Course",
+        altitude: pageRoot.dataset.i18nAltitude || "Altitude",
         identifiedSoftwareDevice: pageRoot.dataset.i18nIdentifiedSoftwareDevice || "Identified software/device",
         vendor: pageRoot.dataset.i18nVendor || "Vendor",
         model: pageRoot.dataset.i18nModel || "Model",
@@ -112,6 +128,60 @@
                     : (field.html || escapeHtml(field.value))
             }</dd>
         `).join("");
+    }
+
+    function renderMicEDetails(station) {
+        if (!micEDetailsPanel || !micEDetailsRoot) return;
+        const micE = station.mic_e || null;
+        if (!micE) {
+            micEDetailsPanel.hidden = true;
+            micEDetailsRoot.innerHTML = "";
+            return;
+        }
+
+        const boolText = (value) => (value === true ? "yes" : value === false ? "no" : "unknown");
+        const rawTypeByteText = (value) => (value === " " ? "space" : (value ? String(value) : "unknown"));
+        const speedText = micE.speed_knots != null && micE.speed_kmh != null
+            ? `${escapeHtml(micE.speed_knots)} kt / ${escapeHtml(micE.speed_kmh)} km/h`
+            : "unknown";
+        const courseText = micE.course_deg != null ? `${escapeHtml(micE.course_deg)}°` : "unknown";
+        const altitudeText = micE.altitude_m != null && micE.altitude_ft != null
+            ? `${escapeHtml(micE.altitude_m)} m / ${escapeHtml(micE.altitude_ft)} ft`
+            : "unknown";
+
+        micEDetailsRoot.innerHTML = `
+            <dl class="details-grid station-device-grid">
+                <dt>${escapeHtml(i18n.packetType)}</dt>
+                <dd>${escapeHtml(i18n.micE)}</dd>
+                <dt>${escapeHtml(i18n.destination)}</dt>
+                <dd>${micE.destination_raw ? `<code>${escapeHtml(micE.destination_raw)}</code> <span class="muted">(Mic-E encoded)</span>` : "unknown"}</dd>
+                <dt>${escapeHtml(i18n.status || "Status")}</dt>
+                <dd>${escapeHtml(micE.status || "unknown")}</dd>
+                <dt>${escapeHtml(i18n.emergency)}</dt>
+                <dd>${boolText(micE.emergency)}</dd>
+                <dt>${escapeHtml(i18n.device)}</dt>
+                <dd>${escapeHtml(micE.device_name || "unknown")}</dd>
+                <dt>${escapeHtml(i18n.deviceKnown)}</dt>
+                <dd>${boolText(micE.device_known)}</dd>
+                <dt>${escapeHtml(i18n.deviceType)}</dt>
+                <dd>${escapeHtml(micE.device_type || "unknown")}</dd>
+                <dt>${escapeHtml(i18n.rawTypeByte)}</dt>
+                <dd><code>${escapeHtml(rawTypeByteText(micE.raw_type_byte))}</code></dd>
+                <dt>${escapeHtml(i18n.rawIdentifier)}</dt>
+                <dd>${micE.raw_identifier ? `<code>${escapeHtml(micE.raw_identifier)}</code>` : "unknown"}</dd>
+                <dt>${escapeHtml(i18n.messageCapable)}</dt>
+                <dd>${boolText(micE.message_capable)}</dd>
+                <dt>${escapeHtml(i18n.speed)}</dt>
+                <dd>${speedText}</dd>
+                <dt>${escapeHtml(i18n.course)}</dt>
+                <dd>${courseText}</dd>
+                <dt>${escapeHtml(i18n.altitude)}</dt>
+                <dd>${altitudeText}</dd>
+                <dt>${escapeHtml(i18n.positionAmbiguity)}</dt>
+                <dd>${escapeHtml(micE.position_ambiguity || "unknown")}</dd>
+            </dl>
+        `;
+        micEDetailsPanel.hidden = false;
     }
 
     function renderDecodedData(items) {
@@ -552,6 +622,7 @@
             }
             renderMeta(station);
             renderFields(station);
+            renderMicEDetails(station);
             renderDecodedData(station.data || []);
             renderAprsDevice(station.aprs_device || null);
             renderRecentPackets(payload.recent_packets || []);
