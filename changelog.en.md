@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.40.dev.mice - 2026-06-17
+- `Mic-E / Station Details`: expanded Mic-E diagnostics directly inside station details, without a separate section or empty labels; also fixed `message capable` priority so the raw type byte wins over device metadata.
+
 ## 1.8.39.dev - 2026-06-15
 - `Map / modern icons`: centered the overlay on the icons and added a stronger shadow for readability.
 
