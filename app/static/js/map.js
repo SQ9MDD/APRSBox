@@ -39,6 +39,7 @@
     const coverageFillOpacitySelect = document.getElementById("map-coverage-fill-opacity");
     const coverageOutlineOpacitySelect = document.getElementById("map-coverage-outline-opacity");
     const staticRoot = root.dataset.staticRoot || "/static/";
+    const aprsSymbolIconFallback = window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif";
     const rootPath = root.dataset.rootPath || "";
     const locale = document.documentElement.lang || undefined;
     const relativeTimeFormatter = (typeof Intl !== "undefined" && typeof Intl.RelativeTimeFormat === "function")
@@ -78,8 +79,9 @@
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
-    const aprsIconSize = [20, 20];
-    const aprsIconAnchor = [10, 10];
+    const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
+    const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
+    const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
     let refreshTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
@@ -166,6 +168,12 @@
         zoom: initialView.zoom,
         zoomControl: true,
     });
+    window.aprsboxCenterMapOn = function (latitude, longitude) {
+        if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
+            return;
+        }
+        map.setView([Number(latitude), Number(longitude)], Math.max(map.getZoom(), 15));
+    };
     const mapMaskPaneName = "map-mask-pane";
     let mapMaskPane = null;
     let mapMaskLayer = null;
@@ -1065,7 +1073,7 @@
 
     function buildStationIcon(station) {
         const staleClass = station.stale ? " map-station-icon-stale" : "";
-        const iconPath = station.symbol_icon ? `${staticRoot}${station.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
+        const iconPath = station.symbol_icon ? `${staticRoot}${station.symbol_icon}` : `${staticRoot}${aprsSymbolIconFallback}`;
         const iconAlt = station.symbol_table || station.symbol_code ? `${station.symbol_table || ""}${station.symbol_code || ""}` : "";
         const overlay = resolveSymbolOverlay(station.symbol_table);
         return window.L.divIcon({

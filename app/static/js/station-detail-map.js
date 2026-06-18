@@ -19,10 +19,12 @@
     const stationEndpoint = pageRoot.dataset.stationEndpoint || "";
     const staticRoot = pageRoot.dataset.staticRoot || "/static/";
     const rootPath = pageRoot.dataset.rootPath || "";
+    const aprsSymbolIconFallback = window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif";
     const refreshMs = Number.parseInt(pageRoot.dataset.refreshMs || "30000", 10);
     const legacyMaskOpacityStorageKey = "aprsbox-map-mask-opacity";
-    const aprsIconSize = [20, 20];
-    const aprsIconAnchor = [10, 10];
+    const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
+    const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
+    const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
     const i18n = Object.freeze({
         tocall: pageRoot.dataset.i18nTocall || "TOCALL",
         micE: pageRoot.dataset.i18nMicE || "Mic-E",
@@ -104,7 +106,11 @@
         if (!fields) return;
         fields.innerHTML = (station.fields || []).map((field) => `
             <dt>${escapeHtml(field.label)}</dt>
-            <dd>${field.label === i18n.latestRawPacket ? `<code>${escapeHtml(field.value)}</code>` : escapeHtml(field.value)}</dd>
+            <dd>${
+                field.label === i18n.latestRawPacket
+                    ? `<code>${escapeHtml(field.value)}</code>`
+                    : (field.html || escapeHtml(field.value))
+            }</dd>
         `).join("");
     }
 
@@ -486,7 +492,7 @@
         mapRoot.dataset.tileSubdomains = String(mapConfig.tile_subdomains || "");
 
         const latLng = [Number(station.latitude_float), Number(station.longitude_float)];
-        const symbolIcon = mapConfig.symbol_icon ? `${staticRoot}${mapConfig.symbol_icon}` : `${staticRoot}icons/verG/x.gif`;
+            const symbolIcon = mapConfig.symbol_icon ? `${staticRoot}${mapConfig.symbol_icon}` : `${staticRoot}${aprsSymbolIconFallback}`;
         const symbolTable = mapConfig.symbol_table || station.symbol_table || "";
         const tileConfig = normalizeTileConfig(mapConfig);
         const icon = window.L.divIcon({

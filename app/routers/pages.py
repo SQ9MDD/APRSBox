@@ -45,10 +45,14 @@ from app.services.beacon_pathing import (
     normalize_beacon_interval_mode,
 )
 from app.services.content import (
+    APRS_SYMBOL_SET_LEGACY,
+    APRS_SYMBOL_SET_MODERN,
+    APRS_SYMBOL_SET_SETTING_KEY,
     dashboard_home_data,
     delete_section_row,
     get_active_tnc_interfaces,
     get_aprs_symbol_icon_path,
+    get_aprs_symbol_set,
     get_recent_station_packets,
     heard_stations,
     has_enabled_modem_interface,
@@ -153,7 +157,7 @@ from app.services.map_service import (
     get_station_detail_track_payload,
 )
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
-from app.services.outbound import enqueue_beacon_job, enqueue_status_job
+from app.services.outbound import enqueue_beacon_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
     container_system_actions_disabled_message,
     current_update_channel,
@@ -675,6 +679,7 @@ def _settings_page_context(
     current_language: str | None = None,
     current_default_units: str | None = None,
     current_ui_palette: str | None = None,
+    current_aprs_symbol_set: str | None = None,
     map_source_edit_id: int | None = None,
     map_source_form: dict[str, Any] | None = None,
 ) -> dict:
@@ -715,6 +720,7 @@ def _settings_page_context(
     )
     update_channels = list_update_channels()
     resolved_ui_palette = normalize_ui_palette(current_ui_palette if current_ui_palette is not None else get_app_setting("ui_palette"))
+    resolved_aprs_symbol_set = get_aprs_symbol_set() if current_aprs_symbol_set is None else current_aprs_symbol_set
     event_log_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
     event_log_debug_enabled = get_event_log_debug_enabled()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
@@ -742,7 +748,13 @@ def _settings_page_context(
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
         current_ui_palette=resolved_ui_palette,
+        current_aprs_symbol_set=resolved_aprs_symbol_set,
         current_ui_palette_label=get_ui_palette_label(resolved_ui_palette),
+        current_aprs_symbol_set_label=_translate("Modern icon set") if resolved_aprs_symbol_set == APRS_SYMBOL_SET_MODERN else _translate("Legacy icon set"),
+        aprs_symbol_set_options=[
+            {"value": APRS_SYMBOL_SET_LEGACY, "label": "Legacy icon set"},
+            {"value": APRS_SYMBOL_SET_MODERN, "label": "Modern icon set"},
+        ],
         ui_palette_options=get_ui_palette_options(),
         aprs_device_identification_status=get_aprs_device_identification_status(),
         event_log_keep_rows=DEFAULT_EVENT_LOG_KEEP_ROWS,
@@ -1389,15 +1401,18 @@ def settings_update_global(
     language: str = Form(...),
     default_units: str = Form(...),
     ui_palette: str = Form(""),
+    aprs_symbol_set: str = Form(""),
     event_log_min_level: str = Form(""),
     event_log_debug_enabled: str | None = Form(None),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
     raw_ui_palette = str(ui_palette or "").strip().lower()
+    raw_aprs_symbol_set = str(aprs_symbol_set or "").strip().lower()
     selected_language = normalize_language(language)
     selected_default_units = str(default_units or "").strip().lower()
     selected_ui_palette = normalize_ui_palette(raw_ui_palette)
+    selected_aprs_symbol_set = raw_aprs_symbol_set if raw_aprs_symbol_set in {APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN} else APRS_SYMBOL_SET_LEGACY
     raw_event_log_min_level = str(event_log_min_level or "").strip().upper()
     selected_event_log_min_level = _normalize_event_log_min_level(raw_event_log_min_level)
     selected_event_log_debug_enabled = _map_source_checkbox(event_log_debug_enabled)
@@ -1409,6 +1424,8 @@ def settings_update_global(
         return JSONResponse({"ok": False, "error": _translate("Unsupported unit selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if not is_supported_ui_palette(raw_ui_palette):
         return JSONResponse({"ok": False, "error": _translate("Unsupported color palette selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if raw_aprs_symbol_set and raw_aprs_symbol_set not in {APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN}:
+        return JSONResponse({"ok": False, "error": _translate("Unsupported icon set selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if raw_event_log_min_level not in EVENT_LOG_MIN_LEVEL_OPTIONS:
         return JSONResponse({"ok": False, "error": _translate("Unsupported log level selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
 
@@ -1423,6 +1440,7 @@ def settings_update_global(
 
     set_app_setting("app_language", selected_language)
     set_app_setting("ui_palette", selected_ui_palette)
+    set_app_setting(APRS_SYMBOL_SET_SETTING_KEY, selected_aprs_symbol_set)
     set_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY, selected_event_log_min_level)
     set_app_setting(EVENT_LOG_DEBUG_ENABLED_SETTING_KEY, "1" if selected_event_log_debug_enabled else "0")
     return JSONResponse(
@@ -1432,6 +1450,7 @@ def settings_update_global(
             "current_language": selected_language,
             "current_default_units": selected_default_units,
             "current_ui_palette": selected_ui_palette,
+            "current_aprs_symbol_set": selected_aprs_symbol_set,
             "event_log_min_level": selected_event_log_min_level,
             "event_log_debug_enabled": selected_event_log_debug_enabled,
             "reload": True,
@@ -1934,10 +1953,21 @@ def objects_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
     edit: int | None = None,
+    flash: str | None = None,
+    success: str | None = None,
 ) -> object:
     templates = request.app.state.templates
     edit_row = get_section_row("objects", edit) if edit is not None else None
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "objects", edit_row=edit_row))
+    context = _section_template_context(
+        request,
+        current_user,
+        "objects",
+        flash=flash,
+        edit_row=edit_row,
+    )
+    if success is not None:
+        context["flash_success"] = str(success).strip() not in {"0", "false", "False"}
+    return templates.TemplateResponse("section.html", context)
 
 
 @router.post("/objects")
@@ -1999,6 +2029,27 @@ def objects_create(
         edit_row = get_section_row("objects", record_id) if error else None
     context = _section_template_context(request, current_user, "objects", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/settings/objects/{record_id}/send")
+def objects_send_now(
+    record_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    row = get_section_row("objects", record_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found.")
+
+    station_settings = get_station_settings()
+    success, flash = enqueue_object_job(row, station_settings, trigger="manual", force_send=True)
+    return RedirectResponse(
+        url=_path(
+            request,
+            f"/objects?edit={record_id}&flash={quote(str(flash or '') )}&success={'1' if success else '0'}",
+        ),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/items")

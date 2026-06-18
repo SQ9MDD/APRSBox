@@ -295,6 +295,7 @@
 .map-scroller-icon-wrap {
     width: 1rem;
     height: 1rem;
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -360,10 +361,23 @@
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
+:root[data-aprs-symbol-set="modern"] .map-station-aprs-icon {
+    width: 32px;
+    height: 32px;
+}
+
+:root[data-aprs-symbol-set="modern"][data-theme="light"] .map-station-aprs-icon {
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+:root[data-aprs-symbol-set="modern"][data-theme="dark"] .map-station-aprs-icon {
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+}
+
 .map-station-aprs-overlay {
     position: absolute;
-    left: 10px;
-    top: 10px;
+    left: 50%;
+    top: 50%;
     transform: translate(-50%, -55%);
     min-width: 0.64rem;
     height: 0.64rem;
@@ -376,6 +390,15 @@
     line-height: 0.64rem;
     text-align: center;
     pointer-events: none;
+}
+
+:root[data-aprs-symbol-set="modern"] .map-station-aprs-overlay {
+    transform: translate(-50%, -50%);
+    min-width: 0.78rem;
+    height: 0.78rem;
+    padding: 0 0.05rem;
+    font-size: 0.58rem;
+    line-height: 0.78rem;
 }
 
 .map-station-icon-stale .map-station-aprs-overlay {
@@ -398,6 +421,10 @@
     letter-spacing: 0.01em;
     white-space: nowrap;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+}
+
+:root[data-aprs-symbol-set="modern"] .map-station-label {
+    left: 34px;
 }
 
 :root[data-theme="light"] .map-station-label {
@@ -527,5 +554,262 @@
 @media (max-width: 980px) {
     .page-map .main-area {
         min-height: 0;
+    }
+}
+
+.aprs-emergency-modal[hidden] {
+    display: none;
+}
+
+.aprs-emergency-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    pointer-events: auto;
+}
+
+.aprs-emergency-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.82);
+}
+
+.aprs-emergency-dialog {
+    position: relative;
+    width: 75vw;
+    height: 75vh;
+    max-width: calc(100vw - 1.5rem);
+    max-height: calc(100vh - 1.5rem);
+    margin: 6vh auto 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 2px solid #ff1f1f;
+    border-radius: 0.9rem;
+    background: linear-gradient(180deg, #1a0505 0%, #0d0505 42%, #090202 100%);
+    box-shadow: 0 1.8rem 4rem rgba(0, 0, 0, 0.6);
+    color: #fff;
+}
+
+.aprs-emergency-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.95rem 1rem;
+    background: linear-gradient(180deg, #b40000 0%, #670000 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.aprs-emergency-header-copy {
+    min-width: 0;
+}
+
+.aprs-emergency-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-width: 0;
+}
+
+.aprs-emergency-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+}
+
+.aprs-emergency-icon img {
+    width: 2rem;
+    height: 2rem;
+    animation: aprs-emergency-blink 0.9s steps(2, start) infinite;
+    filter: drop-shadow(0 0 0.6rem rgba(255, 255, 255, 0.65));
+}
+
+.aprs-emergency-title-stack {
+    min-width: 0;
+}
+
+.aprs-emergency-title {
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.aprs-emergency-callsign {
+    margin-top: 0.18rem;
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 800;
+    line-height: 1.05;
+    word-break: break-word;
+}
+
+.aprs-emergency-status-badge {
+    flex: 0 0 auto;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    background: #ff1f1f;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22) inset;
+}
+
+.aprs-emergency-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+    padding: 0.9rem 1rem 1rem;
+    overflow: auto;
+}
+
+.aprs-emergency-newer {
+    padding: 0.45rem 0.7rem;
+    border-radius: 0.45rem;
+    border: 1px solid rgba(255, 31, 31, 0.55);
+    background: rgba(255, 31, 31, 0.14);
+    color: #ffd5d5;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.aprs-emergency-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 1rem;
+    margin: 0;
+}
+
+.aprs-emergency-row {
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+}
+
+.aprs-emergency-row dt {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.aprs-emergency-row dd {
+    margin: 0;
+    min-width: 0;
+    word-break: break-word;
+    color: #fff;
+}
+
+.aprs-emergency-map-wrap {
+    position: relative;
+    flex: 0 0 auto;
+    height: clamp(18rem, 30vh, 24rem);
+    border: 1px solid rgba(255, 31, 31, 0.45);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: #110303;
+}
+
+.aprs-emergency-map {
+    position: absolute;
+    inset: 0;
+}
+
+.aprs-emergency-no-position {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.9);
+    background: radial-gradient(circle at center, rgba(255, 31, 31, 0.14), rgba(8, 2, 2, 0.94));
+    font-weight: 700;
+}
+
+.aprs-emergency-raw-block {
+    display: grid;
+    gap: 0.45rem;
+    min-height: 0;
+}
+
+.aprs-emergency-raw-label {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.aprs-emergency-raw {
+    margin: 0;
+    padding: 0.8rem 0.85rem;
+    border: 1px solid rgba(255, 31, 31, 0.42);
+    border-radius: 0.75rem;
+    background: #0b0b0d;
+    color: #ffb6b6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.aprs-emergency-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    padding: 0 1rem 1rem;
+    flex-wrap: wrap;
+}
+
+.aprs-emergency-actions .button {
+    min-width: 0;
+}
+
+@keyframes aprs-emergency-blink {
+    0%,
+    49% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50%,
+    100% {
+        opacity: 0.18;
+        transform: scale(0.92);
+    }
+}
+
+@media (max-width: 980px) {
+    .aprs-emergency-dialog {
+        width: calc(100vw - 1rem);
+        height: calc(100vh - 1rem);
+        margin-top: 0.5rem;
+    }
+
+    .aprs-emergency-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .aprs-emergency-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .aprs-emergency-status-badge {
+        align-self: flex-start;
     }
 }

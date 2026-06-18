@@ -9,6 +9,7 @@ from app import get_version
 from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
 from app.ui_palette import normalize_ui_palette
+from app.services.content import get_aprs_symbol_icon_fallback_path, get_aprs_symbol_set
 from app.services.messages import get_unread_inbox_count
 
 
@@ -77,6 +78,8 @@ def build_template_context(
     translate_format = get_format_translator(app_language)
     station_identity = _resolve_station_identity()
     current_ui_palette = normalize_ui_palette(get_app_setting("ui_palette"))
+    current_aprs_symbol_set = get_aprs_symbol_set()
+    aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
@@ -107,5 +110,7 @@ def build_template_context(
         "tf": translate_format,
         "format_datetime": format_display_datetime,
         "current_ui_palette": current_ui_palette,
+        "current_aprs_symbol_set": current_aprs_symbol_set,
+        "aprs_symbol_icon_fallback": aprs_symbol_icon_fallback,
         **extra,
     }

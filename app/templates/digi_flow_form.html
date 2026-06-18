@@ -78,6 +78,7 @@
                     </div>
                     <div class="digi-step-palette" id="digi-step-palette">
                         {% for step_type in filter_step_types %}
+                        {% if step_type != "filter_rate_limit_per_callsign" %}
                         <button
                             type="button"
                             class="digi-palette-button"
@@ -104,6 +105,7 @@
                                 <span class="muted small">{{ type_meta[step_type].description }}</span>
                             </span>
                         </button>
+                        {% endif %}
                         {% endfor %}
                     </div>
                 </aside>
@@ -279,7 +281,7 @@
 
         const typeMeta = {{ type_meta|tojson }};
         const endpointOptions = {{ endpoint_options|tojson }};
-        const filterTypes = {{ filter_step_types|tojson }};
+        const filterTypes = {{ filter_step_types|tojson }}.filter((stepType) => stepType !== "filter_rate_limit_per_callsign");
         const symbolTableOptions = {{ symbol_table_options|tojson }};
         const symbolCodeOptions = {{ symbol_code_options|tojson }};
         const mapPickerConfig = {{ map_picker_config|tojson }};
@@ -358,6 +360,7 @@
             symbolCode: {{ t("Symbol Code")|tojson }},
             symbolTable: {{ t("Symbol Table")|tojson }},
             duplicateFilterUsed: {{ t("Duplicate filter (viscous-delay) is already used in this flow.")|tojson }},
+            rateLimitFilterUsed: {{ t("Rate limit filter is already used in this flow.")|tojson }},
             distanceFilterUsed: {{ t("Distance filter is already used in this flow.")|tojson }},
             latitude: {{ t("Latitude")|tojson }},
             longitude: {{ t("Longitude")|tojson }},
@@ -459,7 +462,7 @@
             if (stepType === "filter_packet_type") return { mode: "allow", packet_types: [] };
             if (stepType === "filter_icon") return { mode: "allow", icons: [] };
             if (stepType === "filter_distance") return { zones: [{ latitude: "", longitude: "", radius_km: "" }] };
-            if (stepType === "filter_rate_limit") return { packets_per_minute: 60 };
+            if (stepType === "filter_rate_limit") return { rate_limit_rules_text: "* - 60s" };
             if (stepType === "filter_rate_limit_per_callsign") return { packets_per_minute: 30 };
             if (stepType === "tx_rf") return { rf_target: refValue || "" };
             if (stepType === "tx_aprsis") return { aprsis_target: refValue || "" };
@@ -468,7 +471,12 @@
             return {};
         };
 
-        const configLinesToText = (value) => Array.isArray(value) ? value.join("\n") : "";
+        const configLinesToText = (value) => {
+            if (Array.isArray(value)) {
+                return value.join("\n");
+            }
+            return String(value || "");
+        };
 
         const textToLines = (value) => String(value || "")
             .split(/\r?\n/)
@@ -522,7 +530,11 @@
             }
             if (step.step_type === "filter_icon") return `${i18n.mode}: ${stepModeLabel(config.mode || "allow")}, ${i18n.icons}: ${(config.icons || []).join(", ") || i18n.none}`;
             if (step.step_type === "filter_distance") return `${i18n.distanceZones}: ${normalizeDistanceZones(config.zones).length}`;
-            if (step.step_type === "filter_rate_limit") return `${i18n.rate}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
+            if (step.step_type === "filter_rate_limit") {
+                const rulesText = String(config.rate_limit_rules_text || "");
+                const ruleCount = rulesText ? rulesText.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#")).length : (Array.isArray(config.rate_limit_rules) ? config.rate_limit_rules.length : 0);
+                return `Rules: ${ruleCount || "-"}`;
+            }
             if (step.step_type === "filter_rate_limit_per_callsign") return `${i18n.perCallsign}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
             if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
             if (step.step_type === "tx_aprsis") return `${i18n.aprsisTarget}: ${config.aprsis_target || "-"}`;
@@ -560,10 +572,16 @@
         const stepBadge = (stepType) => (typeMeta[stepType] || {}).badge || "";
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
+        const isRateLimitStepType = (stepType) => stepType === "filter_rate_limit";
+        const isTxRfTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_rf";
+        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
         const isDistanceFilterStepType = (stepType) => stepType === "filter_distance";
         const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
         const hasViscousDelayStep = () => steps.some(
             (step, index) => index > 0 && index < steps.length - 1 && isViscousDelayStepType(step.step_type),
+        );
+        const hasRateLimitStep = () => steps.some(
+            (step, index) => index > 0 && index < steps.length - 1 && isRateLimitStepType(step.step_type),
         );
         const hasDistanceFilterStep = () => steps.some(
             (step, index) => index > 0 && index < steps.length - 1 && isDistanceFilterStepType(step.step_type),
@@ -574,8 +592,8 @@
             if (!Array.isArray(steps) || steps.length < 2) {
                 return;
             }
-            const sourceStep = { ...steps[0] };
-            const targetStep = { ...steps[steps.length - 1] };
+            const sourceStep = steps[0];
+            const targetStep = steps[steps.length - 1];
             if (!isAprsisTargetFlow()) {
                 const middle = steps
                     .slice(1, -1)
@@ -597,8 +615,32 @@
             steps = [sourceStep, strictStep, targetStep];
         };
 
+        const enforceTxRfFlowRestrictions = () => {
+            if (!Array.isArray(steps) || steps.length < 2 || !isTxRfTargetFlow()) {
+                if (Array.isArray(steps) && steps.length >= 2) {
+                    const sourceStep = steps[0];
+                    const targetStep = steps[steps.length - 1];
+                    const middleSteps = steps.slice(1, -1).filter((step) => String(step.step_type || "").trim() !== "filter_rate_limit");
+                    steps = [sourceStep, ...middleSteps, targetStep];
+                }
+                return;
+            }
+            const sourceStep = steps[0];
+            const targetStep = steps[steps.length - 1];
+            const middleSteps = steps.slice(1, -1);
+            const viscousDelaySteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_dupe");
+            const otherSteps = middleSteps.filter((step) => {
+                const stepType = String(step.step_type || "").trim();
+                return stepType !== "filter_dupe" && stepType !== "filter_rate_limit" && stepType !== "filter_path";
+            });
+            const rateLimitSteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_rate_limit");
+            const pathSteps = middleSteps.filter((step) => String(step.step_type || "").trim() === "filter_path");
+            steps = [sourceStep, ...viscousDelaySteps, ...otherSteps, ...rateLimitSteps, ...pathSteps, targetStep];
+        };
+
         const syncPaletteState = () => {
             const hasViscous = hasViscousDelayStep();
+            const hasRateLimit = hasRateLimitStep();
             const hasDistanceFilter = hasDistanceFilterStep();
             const aprsisTarget = isAprsisTargetFlow();
             for (const button of paletteButtons) {
@@ -607,6 +649,12 @@
                     button.disabled = true;
                     button.title = i18n.aprsisSystemFlowLocked;
                     button.setAttribute("aria-label", i18n.aprsisSystemFlowLocked);
+                    continue;
+                }
+                if (isRateLimitStepType(stepType) && !isTxRfTargetFlow()) {
+                    button.disabled = true;
+                    button.removeAttribute("title");
+                    button.removeAttribute("aria-label");
                     continue;
                 }
                 if (stepType === "filter_strict") {
@@ -620,6 +668,17 @@
                     if (hasViscous) {
                         button.title = i18n.duplicateFilterUsed;
                         button.setAttribute("aria-label", i18n.duplicateFilterUsed);
+                    } else {
+                        button.removeAttribute("title");
+                        button.removeAttribute("aria-label");
+                    }
+                    continue;
+                }
+                if (isRateLimitStepType(stepType)) {
+                    button.disabled = hasRateLimit;
+                    if (hasRateLimit) {
+                        button.title = i18n.rateLimitFilterUsed;
+                        button.setAttribute("aria-label", i18n.rateLimitFilterUsed);
                     } else {
                         button.removeAttribute("title");
                         button.removeAttribute("aria-label");
@@ -786,7 +845,7 @@
             const selected = symbolCodeOptions.find((option) => option.value === code) || null;
             const iconPathValue = selected
                 ? `${rootPath}/static/${table === "\\" ? selected.alternate_icon : selected.primary_icon}`
-                : `${rootPath}/static/icons/verG/x.gif`;
+                : `${rootPath}/static/${window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
             return {
                 value: normalized,
                 label: selected ? selected.label : normalized || i18n.none,
@@ -1117,14 +1176,14 @@
                     const selected = symbolCodeOptions.find((option) => option.value === pickerState.symbolCode) || symbolCodeOptions[0];
                     const useAlternate = pickerState.symbolTable === "\\";
                     const icon = useAlternate ? selected.alternate_icon : selected.primary_icon;
-                    triggerImage.src = `${rootPath}/static/${icon || "icons/verG/x.gif"}`;
+                    triggerImage.src = `${rootPath}/static/${icon || window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
                     triggerText.textContent = selected.label || i18n.selectSymbol;
                     for (const optionButton of symbolMenu.querySelectorAll(".station-symbol-option")) {
                         const useAlt = pickerState.symbolTable === "\\";
                         const image = optionButton.querySelector(".station-symbol-option-image");
                         const optionIcon = useAlt ? optionButton.dataset.alternateIcon : optionButton.dataset.primaryIcon;
                         if (image) {
-                            image.src = optionIcon || `${rootPath}/static/icons/verG/x.gif`;
+                            image.src = optionIcon || `${rootPath}/static/${window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
                         }
                         const isActive = optionButton.dataset.value === selected.value;
                         optionButton.classList.toggle("active", isActive);
@@ -1271,12 +1330,12 @@
             if (field.type === "textarea") {
                 const textarea = document.createElement("textarea");
                 const value = step.config[field.name];
-                textarea.value = configLinesToText(value);
+                textarea.value = field.name === "rate_limit_rules_text" ? String(value || "") : configLinesToText(value);
                 if (field.placeholder) {
                     textarea.placeholder = field.placeholder;
                 }
                 textarea.addEventListener("input", () => {
-                    step.config[field.name] = textToLines(textarea.value);
+                    step.config[field.name] = field.name === "rate_limit_rules_text" ? textarea.value : textToLines(textarea.value);
                 });
                 wrapper.appendChild(textarea);
                 appendFieldHelp();
@@ -1301,6 +1360,7 @@
         const render = () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             syncPaletteState();
             stepsJsonInput.value = JSON.stringify(steps);
@@ -1349,6 +1409,9 @@
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
                 const aprsisLockedFlow = isAprsisTargetFlow();
+                const txRfLockedStep = isFixedTxRfStepType(step.step_type);
+                const previousStepType = String((steps[index - 1] || {}).step_type || "").trim();
+                const nextStepType = String((steps[index + 1] || {}).step_type || "").trim();
                 const aprsisSystemStrictStep = aprsisLockedFlow && step.step_type === "filter_strict" && index === 1;
 
                 const enabledRow = document.createElement("label");
@@ -1398,7 +1461,8 @@
                 moveUpButton.setAttribute("aria-label", i18n.moveStepUp);
                 moveUpButton.disabled = (
                     index <= 1
-                    || isViscousDelayStepType((steps[index - 1] || {}).step_type || "")
+                    || txRfLockedStep
+                    || (isTxRfTargetFlow() && previousStepType === "filter_dupe")
                     || aprsisLockedFlow
                 );
                 const moveUpIcon = document.createElement("img");
@@ -1421,7 +1485,8 @@
                 moveDownButton.setAttribute("aria-label", i18n.moveStepDown);
                 moveDownButton.disabled = (
                     index >= steps.length - 2
-                    || isViscousDelayStepType(step.step_type)
+                    || txRfLockedStep
+                    || (isTxRfTargetFlow() && nextStepType === "filter_path")
                     || aprsisLockedFlow
                 );
                 const moveDownIcon = document.createElement("img");
@@ -1554,6 +1619,26 @@
             if (normalized.step_type === "filter_distance") {
                 ensureDistanceFilterConfig(normalized);
             }
+            if (normalized.step_type === "filter_rate_limit") {
+                if (!normalized.config || typeof normalized.config !== "object") {
+                    normalized.config = {};
+                }
+                if (normalized.config.rate_limit_rules_text == null || String(normalized.config.rate_limit_rules_text).trim() === "") {
+                    if (Array.isArray(normalized.config.rate_limit_rules) && normalized.config.rate_limit_rules.length) {
+                        normalized.config.rate_limit_rules_text = normalized.config.rate_limit_rules
+                            .map((rule) => `${String(rule.source_callsign_pattern || rule.pattern || "*").trim() || "*"} - ${String(rule.rate_limit_seconds || rule.seconds || rule.limit || 60).trim()}s`)
+                            .join("\n");
+                    } else if (normalized.config.source_callsign_pattern != null || normalized.config.rate_limit_seconds != null || normalized.config.packets_per_minute != null) {
+                        normalized.config.rate_limit_rules_text = `${String(normalized.config.source_callsign_pattern || "*").trim() || "*"} - ${String(normalized.config.rate_limit_seconds ?? normalized.config.packets_per_minute ?? 60).trim()}s`;
+                    } else {
+                        normalized.config.rate_limit_rules_text = "* - 60s";
+                    }
+                }
+                delete normalized.config.rate_limit_rules;
+                delete normalized.config.source_callsign_pattern;
+                delete normalized.config.rate_limit_seconds;
+                delete normalized.config.packets_per_minute;
+            }
             return normalized;
         });
 
@@ -1566,13 +1651,25 @@
                 if (isAprsisTargetFlow() || stepType === "filter_strict") {
                     return;
                 }
+                if (isRateLimitStepType(stepType) && !isTxRfTargetFlow()) {
+                    return;
+                }
                 if (isViscousDelayStepType(stepType) && hasViscousDelayStep()) {
+                    return;
+                }
+                if (isRateLimitStepType(stepType) && hasRateLimitStep()) {
                     return;
                 }
                 if (isDistanceFilterStepType(stepType) && hasDistanceFilterStep()) {
                     return;
                 }
-                const insertIndex = isViscousDelayStepType(stepType) ? 1 : steps.length - 1;
+                let insertIndex = steps.length - 1;
+                if (isViscousDelayStepType(stepType)) {
+                    insertIndex = 1;
+                } else if (isRateLimitStepType(stepType)) {
+                    const pathStepIndex = steps.findIndex((step, index) => index > 0 && index < steps.length - 1 && String(step.step_type || "").trim() === "filter_path");
+                    insertIndex = pathStepIndex > 0 ? pathStepIndex : steps.length - 1;
+                }
                 steps.splice(insertIndex, 0, {
                     step_type: stepType,
                     title: stepLabel(stepType),
@@ -1609,6 +1706,7 @@
         form.addEventListener("submit", () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             for (const step of steps) {
                 if (step.step_type === "filter_distance") {

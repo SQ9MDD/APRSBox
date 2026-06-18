@@ -30,14 +30,11 @@ STALE_BEACON_PROCESSING_REASON = "Beacon was not transmitted: APRSBox core resta
 STALE_WX_PROCESSING_REASON = "WX frame was not transmitted: APRSBox core restarted while outbound job was processing."
 _AX25_CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}$")
 LOCAL_TX_ORIGIN = "local_generated"
+LOCAL_TX_ORIGIN_ROUTED = "routed"
+LOCAL_TX_ORIGIN_UNKNOWN = "unknown"
+LOCAL_TX_KIND_ROUTED = "routed"
+LOCAL_TX_KIND_OTHER = "other"
 INTERNAL_TX_INTERFACE_NAME = "Internal TX"
-LOCAL_TX_OUTBOUND_PURPOSE_BY_KIND = {
-    OUTBOUND_KIND_BEACON: "beacon",
-    OUTBOUND_KIND_STATUS: "status",
-    OUTBOUND_KIND_OBJECT: "object",
-    OUTBOUND_KIND_MESSAGE: "message",
-    OUTBOUND_KIND_WX: "wx",
-}
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -191,8 +188,8 @@ def _format_queue_result(label: str, job_ids: list[int]) -> str:
 
 
 def _with_local_tx_metadata(*, kind: str, payload: dict[str, Any]) -> dict[str, Any]:
-    purpose = LOCAL_TX_OUTBOUND_PURPOSE_BY_KIND.get(str(kind or "").strip())
-    if not purpose:
+    tx_origin, tx_kind = _resolve_tx_origin_and_kind(kind=kind, payload=payload)
+    if tx_origin != LOCAL_TX_ORIGIN:
         return dict(payload)
 
     stored = dict(payload)
@@ -200,14 +197,45 @@ def _with_local_tx_metadata(*, kind: str, payload: dict[str, Any]) -> dict[str, 
     if not event_id:
         event_id = uuid.uuid4().hex
     stored["local_tx_event_id"] = event_id
+    stored["tx_origin"] = str(stored.get("tx_origin") or tx_origin).strip() or tx_origin
+    stored["tx_kind"] = str(stored.get("tx_kind") or tx_kind).strip() or tx_kind
 
     metadata = dict(stored.get("local_tx_metadata") or {})
     metadata["origin"] = LOCAL_TX_ORIGIN
     metadata["local_generated"] = True
     metadata["own_station"] = True
-    metadata["frame_purpose"] = str(metadata.get("frame_purpose") or purpose).strip() or purpose
+    metadata["tx_origin"] = stored["tx_origin"]
+    metadata["tx_kind"] = stored["tx_kind"]
+    metadata["frame_purpose"] = str(metadata.get("frame_purpose") or stored["tx_kind"]).strip() or stored["tx_kind"]
     stored["local_tx_metadata"] = metadata
     return stored
+
+
+def _resolve_tx_origin_and_kind(*, kind: str, payload: dict[str, Any]) -> tuple[str, str]:
+    normalized_kind = str(kind or "").strip()
+    if normalized_kind == OUTBOUND_KIND_DIGI_TX:
+        return LOCAL_TX_ORIGIN_ROUTED, LOCAL_TX_KIND_ROUTED
+    if normalized_kind == OUTBOUND_KIND_BEACON:
+        return LOCAL_TX_ORIGIN, "beacon"
+    if normalized_kind == OUTBOUND_KIND_STATUS:
+        return LOCAL_TX_ORIGIN, "status"
+    if normalized_kind == OUTBOUND_KIND_OBJECT:
+        return LOCAL_TX_ORIGIN, "object"
+    if normalized_kind == OUTBOUND_KIND_WX:
+        return LOCAL_TX_ORIGIN, "wx"
+    if normalized_kind == OUTBOUND_KIND_MESSAGE:
+        trigger = str(payload.get("trigger") or "").strip().lower()
+        message_kind = str(payload.get("message_kind") or "").strip().lower()
+        if message_kind == "ack":
+            return LOCAL_TX_ORIGIN, "ack"
+        if trigger.startswith("manual"):
+            return LOCAL_TX_ORIGIN, "manual"
+        if message_kind in {"direct_message", "query"}:
+            return LOCAL_TX_ORIGIN, "message"
+        if message_kind in {"announcement", "group_bulletin", "bulletin"}:
+            return LOCAL_TX_ORIGIN, "bulletin"
+        return LOCAL_TX_ORIGIN, "bulletin"
+    return LOCAL_TX_ORIGIN_UNKNOWN, LOCAL_TX_KIND_OTHER
 
 
 def enqueue_beacon_job(
@@ -428,6 +456,7 @@ def enqueue_object_job(
     *,
     trigger: str = "scheduled",
     scheduled_for: datetime | None = None,
+    force_send: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -444,12 +473,13 @@ def enqueue_object_job(
     symbol_table = _normalize_symbol_table(obj.get("symbol_table"))
     symbol_overlay = _normalize_symbol_overlay(obj.get("symbol_overlay"), symbol_table=symbol_table)
 
+    lifetime = str(obj.get("lifetime") or "temporary").strip().lower()
     payload = {
         "object_id": int(obj["id"]),
         "callsign": callsign,
         "ssid": ssid,
         "name": str(obj.get("name") or ""),
-        "lifetime": str(obj.get("lifetime") or "temporary"),
+        "lifetime": lifetime,
         "state": str(obj.get("state") or "live"),
         "latitude": latitude,
         "longitude": longitude,
@@ -458,9 +488,11 @@ def enqueue_object_job(
         "symbol_overlay": symbol_overlay,
         "comment": str(obj.get("comment") or "").strip(),
         "path": str(obj.get("path") or "").strip(),
-        "object_timestamp": _object_timestamp(str(obj.get("lifetime") or "temporary")),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
+        "force_send": bool(force_send),
     }
+    if lifetime == "permanent":
+        payload["object_timestamp"] = _object_timestamp(lifetime)
     scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now())
     job_ids = _enqueue_jobs_for_modems(
         kind=OUTBOUND_KIND_OBJECT,
@@ -610,6 +642,8 @@ def enqueue_digi_tx_job(
         "trigger": str(trigger or "digi_flow").strip() or "digi_flow",
         "flow_id": int(flow_id) if flow_id is not None else None,
         "frame_uid": str(frame_uid).strip() if frame_uid is not None else None,
+        "tx_origin": LOCAL_TX_ORIGIN_ROUTED,
+        "tx_kind": LOCAL_TX_KIND_ROUTED,
     }
     now_text = utc_now()
     with get_connection() as connection:
@@ -1030,7 +1064,14 @@ def _build_beacon_info(payload: dict[str, Any]) -> str:
 def _build_object_info(payload: dict[str, Any]) -> str:
     name = str(payload.get("name") or "")[:9].ljust(9)
     state_marker = "*" if str(payload.get("state") or "live") == "live" else "_"
-    timestamp = str(payload.get("object_timestamp") or _object_timestamp(str(payload.get("lifetime") or "temporary")))
+    lifetime = str(payload.get("lifetime") or "temporary").strip().lower()
+    object_timestamp = payload.get("object_timestamp")
+    if payload.get("object_id") is not None:
+        timestamp = _object_timestamp(lifetime)
+    elif object_timestamp:
+        timestamp = str(object_timestamp)
+    else:
+        timestamp = _object_timestamp(lifetime)
     latitude = _format_aprs_latitude(float(payload["latitude"]))
     longitude = _format_aprs_longitude(float(payload["longitude"]))
     symbol_table = _normalize_symbol_table(payload.get("symbol_table"))

@@ -5,14 +5,21 @@ import os
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import app.services.digi_flows as digi_flows
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
-from app.services.outbound import claim_next_outbound_job, enqueue_digi_tx_job, get_outbound_job
+from app.services.outbound import (
+    claim_next_outbound_job,
+    enqueue_digi_tx_job,
+    enqueue_direct_message_job,
+    enqueue_object_job,
+    get_outbound_job,
+)
 from app.services.outbound_runtime import OutboundService
 from app.services.traffic import TrafficMonitorService
 
@@ -73,6 +80,13 @@ def insert_modem(*, name: str = "RF-OUT", device_path: str = "127.0.0.1:9001") -
     row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
     assert row is not None
     return int(row["id"])
+
+
+def parse_utc_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def event_rows_for_frame(frame_uid: str) -> list[dict]:
@@ -203,6 +217,185 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(any(row["event_type"] == "output_action" for row in first_rows))
             self.assertFalse(any(row["event_type"] == "output_action" for row in second_rows))
             self.assertTrue(any("duplicate seen within 2s" in row["message"] for row in second_rows if row["event_type"] == "filter_dupe"))
+
+    async def test_rate_limit_filter_blocks_until_limit_expires_and_keeps_last_passed_timestamp(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Rate limited RF TX",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_rate_limit",
+                            "title": "Rate Limit Filter",
+                            "enabled": 1,
+                            "config": {"rate_limit_rules_text": "* - 5s"},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            rate_limit_step = fetch_one(
+                """
+                SELECT id
+                FROM digi_flow_steps
+                WHERE flow_id = ? AND step_type = 'filter_rate_limit'
+                """,
+                (flow_id,),
+            )
+            assert rate_limit_step is not None
+            step = {"id": int(rate_limit_step["id"]), "config": {"rate_limit_rules": [{"source_callsign_pattern": "*", "rate_limit_seconds": 5}]}}
+            context = {
+                "flow": {"id": flow_id, "target_kind": "tx_rf"},
+                "frame_uid": "rate-limit-frame",
+                "current_line": "",
+                "parsed": {"source": "SQ9MDD-7"},
+            }
+            runtime = DigiFlowRuntimeService()
+            with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0, 105.5]):
+                first = runtime._execute_rate_limit_filter(context, step)
+                second = runtime._execute_rate_limit_filter(context, step)
+                third = runtime._execute_rate_limit_filter(context, step)
+
+            self.assertEqual(first["decision"], "continue")
+            self.assertEqual(second["decision"], "drop")
+            self.assertEqual(third["decision"], "continue")
+            rows = event_rows_for_frame("rate-limit-frame")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in rows))
+            self.assertTrue(any("limit is 5s" in row["message"] for row in rows if row["event_type"] == "filter_rate_limit"))
+
+    async def test_rate_limit_filter_matches_source_mask_and_ignores_non_matching_callsigns(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Masked rate limited RF TX",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_rate_limit",
+                            "title": "Rate Limit Filter",
+                            "enabled": 1,
+                            "config": {"rate_limit_rules_text": "SQ9MDD-7 - 10s\nSQ* - 5s"},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            rate_limit_step = fetch_one(
+                """
+                SELECT id
+                FROM digi_flow_steps
+                WHERE flow_id = ? AND step_type = 'filter_rate_limit'
+                """,
+                (flow_id,),
+            )
+            assert rate_limit_step is not None
+            step = {
+                "id": int(rate_limit_step["id"]),
+                "config": {
+                    "rate_limit_rules": [
+                        {"source_callsign_pattern": "SQ9MDD-7", "rate_limit_seconds": 10},
+                        {"source_callsign_pattern": "SQ*", "rate_limit_seconds": 5},
+                    ]
+                },
+            }
+            runtime = DigiFlowRuntimeService()
+            matching_context = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-1", "parsed": {"source": "SQ9MDD-7"}}
+            matching_context_2 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-2", "parsed": {"source": "SQ8XYZ-1"}}
+            matching_context_3 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-3", "parsed": {"source": "SQ9MDD-7"}}
+            matching_context_4 = {"flow": {"id": flow_id, "target_kind": "tx_rf"}, "frame_uid": "rate-limit-mask-match-4", "parsed": {"source": "SQ8XYZ-1"}}
+            with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0, 102.0, 106.1]):
+                first = runtime._execute_rate_limit_filter(matching_context, step)
+                second = runtime._execute_rate_limit_filter(matching_context_2, step)
+                third = runtime._execute_rate_limit_filter(matching_context_3, step)
+                fourth = runtime._execute_rate_limit_filter(matching_context_4, step)
+
+            self.assertEqual(first["decision"], "continue")
+            self.assertEqual(second["decision"], "continue")
+            self.assertEqual(third["decision"], "drop")
+            self.assertEqual(fourth["decision"], "continue")
+            wildcard_rows = event_rows_for_frame("rate-limit-mask-match-2")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "passed" for row in wildcard_rows))
+            self.assertTrue(any("pattern SQ*" in row["message"] for row in wildcard_rows if row["event_type"] == "filter_rate_limit"))
+            blocked_rows = event_rows_for_frame("rate-limit-mask-match-3")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in blocked_rows))
+            self.assertTrue(any("pattern SQ9MDD-7" in row["message"] for row in blocked_rows if row["event_type"] == "filter_rate_limit"))
+
+    async def test_rate_limit_filter_shows_as_rejected_in_execution_summary(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Rate limited RF TX",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_rate_limit",
+                            "title": "Rate Limit Filter",
+                            "enabled": 1,
+                            "config": {"rate_limit_rules_text": "* - 5s"},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                first = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-7>URQU02,WIDE1-1,WIDE2-1:'0SWl  [/>144.800MHz op. Rysiek&",
+                )
+                second = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-7>URQU02,WIDE1-1,WIDE2-1:'0SWl  [/>144.800MHz op. Rysiek&",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=10)
+            self.assertGreaterEqual(len(summaries), 2)
+            blocked_summary = next(summary for summary in summaries if summary["frame_uid"] == str(second["frame_uid"]))
+            self.assertEqual(blocked_summary["steps"][1]["status"], "rejected")
+            self.assertIn("Rate limit filter blocked frame", blocked_summary["steps"][1]["description"])
 
     async def test_duplicate_filter_viscous_delay_waits_then_allows_unique_fingerprints(self) -> None:
         with temporary_database():
@@ -1385,6 +1578,284 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(write_timestamps), 2)
             self.assertGreaterEqual(write_timestamps[1] - write_timestamps[0], 0.30)
+
+    async def test_local_generated_object_jobs_are_tagged_and_paced_on_same_interface(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9016")
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": str(interface_id),
+            }
+            for object_id, name in ((101, "OBJ-A"), (102, "OBJ-B")):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    station_settings,
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=5.0,
+                local_tx_jitter_seconds=0.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            first_record = get_outbound_job(int(first_job["id"]))
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert first_record is not None
+            assert second_record is not None
+
+            self.assertEqual(first_record["status"], "sent")
+            self.assertEqual(first_record["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(first_record["payload"]["tx_kind"], "object")
+            self.assertEqual(second_record["status"], "queued")
+            self.assertEqual(second_record["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(second_record["payload"]["tx_kind"], "object")
+            self.assertIn("tx_pacing_next_allowed_at", second_record["payload"])
+
+            spacing_seconds = (parse_utc_timestamp(second_record["scheduled_at"]) - parse_utc_timestamp(first_record["sent_at"])).total_seconds()
+            self.assertGreaterEqual(spacing_seconds, 5.0)
+
+    async def test_delayed_local_generated_object_job_eventually_sends_when_due(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9022")
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": str(interface_id),
+            }
+            for object_id, name in ((501, "OBJ-G"), (502, "OBJ-H")):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    station_settings,
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=0.05,
+                local_tx_jitter_seconds=0.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            await asyncio.sleep(0.08)
+            next_job = claim_next_outbound_job()
+            assert next_job is not None
+            self.assertEqual(int(next_job["id"]), int(second_job["id"]))
+            await outbound_service._process_job(next_job)
+
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert second_record is not None
+            self.assertEqual(second_record["status"], "sent")
+
+    @patch("app.services.outbound_runtime.random.uniform", return_value=3.0)
+    async def test_local_generated_object_jitter_is_bounded(self, _uniform: object) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9017")
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": str(interface_id),
+            }
+            for object_id, name in ((201, "OBJ-C"), (202, "OBJ-D")):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    station_settings,
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=5.0,
+                local_tx_jitter_seconds=3.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            first_record = get_outbound_job(int(first_job["id"]))
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert first_record is not None
+            assert second_record is not None
+
+            spacing_seconds = (parse_utc_timestamp(second_record["scheduled_at"]) - parse_utc_timestamp(first_record["sent_at"])).total_seconds()
+            self.assertGreaterEqual(spacing_seconds, 5.0)
+            self.assertLessEqual(spacing_seconds, 8.0)
+
+    async def test_local_generated_object_jobs_on_different_interfaces_are_paced_independently(self) -> None:
+        with temporary_database():
+            interface_a_id = insert_modem(name="RF-A", device_path="127.0.0.1:9018")
+            interface_b_id = insert_modem(name="RF-B", device_path="127.0.0.1:9019")
+            for interface_id, object_id, name in (
+                (interface_a_id, 301, "OBJ-E"),
+                (interface_b_id, 302, "OBJ-F"),
+            ):
+                success, _ = enqueue_object_job(
+                    {
+                        "id": object_id,
+                        "name": name,
+                        "latitude": 52.2297,
+                        "longitude": 21.0122,
+                        "symbol_table": "/",
+                        "symbol_code": ">",
+                        "comment": name,
+                        "path": "",
+                        "lifetime": "temporary",
+                        "state": "live",
+                    },
+                    {
+                        "callsign": "SQ9MDD",
+                        "ssid": "4",
+                        "beacon_interface_id": str(interface_id),
+                    },
+                    trigger="manual",
+                    force_send=True,
+                )
+                self.assertTrue(success)
+
+            first_job = claim_next_outbound_job()
+            second_job = claim_next_outbound_job()
+            assert first_job is not None
+            assert second_job is not None
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.send_outbound_frame = AsyncMock(return_value=True)
+
+            outbound_service = OutboundService(
+                traffic_monitor=FakeTrafficMonitor(),
+                local_tx_base_spacing_seconds=0.5,
+                local_tx_jitter_seconds=0.0,
+            )
+            await outbound_service._process_job(first_job)
+            await outbound_service._process_job(second_job)
+
+            first_record = get_outbound_job(int(first_job["id"]))
+            second_record = get_outbound_job(int(second_job["id"]))
+            assert first_record is not None
+            assert second_record is not None
+
+            self.assertEqual(first_record["status"], "sent")
+            self.assertEqual(second_record["status"], "sent")
+            self.assertEqual(first_record["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(second_record["payload"]["tx_origin"], "local_generated")
+
+    def test_digi_tx_jobs_are_tagged_as_routed(self) -> None:
+        with temporary_database():
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9020")
+            success, _ = enqueue_digi_tx_job(
+                interface_name="RF-OUT",
+                line="SQ9MDD-4>APRS:>Routed TX",
+                flow_id=99,
+                frame_uid="frame-routed",
+            )
+            self.assertTrue(success)
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            stored_job = get_outbound_job(int(job["id"]))
+            assert stored_job is not None
+
+            self.assertEqual(stored_job["payload"]["tx_origin"], "routed")
+            self.assertEqual(stored_job["payload"]["tx_kind"], "routed")
+            self.assertNotEqual(stored_job["payload"]["tx_origin"], "local_generated")
+
+    def test_manual_message_jobs_are_tagged_as_manual(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="RF-OUT", device_path="127.0.0.1:9021")
+            success, _ = enqueue_direct_message_job(
+                {
+                    "id": 401,
+                    "addressee": "SQ9ABC",
+                    "message_text": "Manual TX",
+                    "path": "",
+                    "message_number": "A1",
+                },
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": str(interface_id),
+                },
+                trigger="manual",
+            )
+            self.assertTrue(success)
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            stored_job = get_outbound_job(int(job["id"]))
+            assert stored_job is not None
+
+            self.assertEqual(stored_job["payload"]["tx_origin"], "local_generated")
+            self.assertEqual(stored_job["payload"]["tx_kind"], "manual")
+            self.assertNotEqual(stored_job["payload"]["tx_origin"], "routed")
 
     def test_claim_next_outbound_job_prioritizes_digi_tx_over_non_digi_jobs(self) -> None:
         with temporary_database():

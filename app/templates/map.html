@@ -141,6 +141,65 @@
                     <aside id="map-scroller-overlay" class="map-scroller-overlay" aria-live="polite"></aside>
                 </div>
             </div>
+            <div id="aprs-emergency-modal" class="aprs-emergency-modal" hidden>
+                <div class="aprs-emergency-backdrop"></div>
+                <div
+                    class="aprs-emergency-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="aprs-emergency-title"
+                    tabindex="-1"
+                >
+                    <header class="aprs-emergency-header">
+                        <div class="aprs-emergency-header-copy">
+                            <div class="aprs-emergency-title-row">
+                                <span class="aprs-emergency-icon" aria-hidden="true">
+                                    <img src="{{ request.scope.root_path }}/static/icons/car-emergency.svg" alt="">
+                                </span>
+                                <div class="aprs-emergency-title-stack">
+                                    <div class="aprs-emergency-title" id="aprs-emergency-title">EMERGENCY FRAME RECEIVED</div>
+                                    <div class="aprs-emergency-callsign" id="aprs-emergency-callsign">-</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="aprs-emergency-status-badge" id="aprs-emergency-status">ACTIVE EMERGENCY</div>
+                    </header>
+                    <div class="aprs-emergency-body">
+                        <div class="aprs-emergency-newer" id="aprs-emergency-newer" hidden>Newer emergency received</div>
+                        <dl class="aprs-emergency-grid">
+                            <div class="aprs-emergency-row">
+                                <dt>UTC timestamp</dt>
+                                <dd id="aprs-emergency-timestamp">-</dd>
+                            </div>
+                            <div class="aprs-emergency-row">
+                                <dt>Source interface</dt>
+                                <dd id="aprs-emergency-source">-</dd>
+                            </div>
+                            <div class="aprs-emergency-row">
+                                <dt>Path</dt>
+                                <dd id="aprs-emergency-path">-</dd>
+                            </div>
+                            <div class="aprs-emergency-row">
+                                <dt>Comment / summary</dt>
+                                <dd id="aprs-emergency-summary">-</dd>
+                            </div>
+                        </dl>
+                        <div class="aprs-emergency-map-wrap">
+                            <div id="aprs-emergency-map" class="aprs-emergency-map"></div>
+                            <div id="aprs-emergency-no-position" class="aprs-emergency-no-position" hidden>No position available in this frame</div>
+                        </div>
+                        <div class="aprs-emergency-raw-block">
+                            <div class="aprs-emergency-raw-label">Raw APRS frame</div>
+                            <pre id="aprs-emergency-raw" class="aprs-emergency-raw"></pre>
+                        </div>
+                    </div>
+                    <footer class="aprs-emergency-actions">
+                        <button type="button" class="button button-secondary" id="aprs-emergency-copy">Copy frame</button>
+                        <button type="button" class="button button-secondary" id="aprs-emergency-open-map" disabled>Open on map</button>
+                        <button type="button" class="button" id="aprs-emergency-close">Acknowledge / Close</button>
+                    </footer>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -151,4 +210,5 @@
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}"></script>
 {% endblock %}

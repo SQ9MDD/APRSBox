@@ -17,6 +17,9 @@
                 return;
             }
         })();
+        window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK = {{ aprs_symbol_icon_fallback|tojson }};
+        window.APRSBOX_APRS_SYMBOL_SET = {{ current_aprs_symbol_set|tojson }};
+        document.documentElement.setAttribute("data-aprs-symbol-set", window.APRSBOX_APRS_SYMBOL_SET || "legacy");
     </script>
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}">
     {% block extra_head %}{% endblock %}

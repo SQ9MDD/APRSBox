@@ -10,7 +10,7 @@ from unittest.mock import patch
 from app.db import execute, fetch_one, init_db
 from app.services.content import update_station_settings
 from app.services.object_scheduler import ObjectSchedulerService
-from app.services.outbound import claim_next_outbound_job, get_outbound_job
+from app.services.outbound import build_object_tnc2, claim_next_outbound_job, enqueue_object_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
 
 
@@ -172,6 +172,271 @@ class ObjectOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             runtime_job = get_outbound_job(int(row["id"]))
             assert runtime_job is not None
             self.assertTrue(written_frames)
+            traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
+            assert traffic_row is not None
+            self.assertIn(";T2WARSPL *111111z", traffic_row["line"])
+
+    async def test_outbound_runtime_renders_temporary_object_timestamp_at_send_time(self) -> None:
+        with temporary_database():
+            insert_modem()
+            object_id = insert_object(lifetime="temporary", interval_minutes=30)
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            row = fetch_one("SELECT * FROM aprs_objects WHERE id = ?", (object_id,))
+            assert row is not None
+            success, message = enqueue_object_job(
+                dict(row),
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                },
+                trigger="manual",
+                force_send=True,
+                scheduled_for=datetime.now(timezone.utc) - timedelta(seconds=1),
+            )
+            self.assertTrue(success)
+            self.assertIn("queued", message.lower())
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertNotIn("object_timestamp", job["payload"])
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    _ = data
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9001)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection), patch(
+                "app.services.outbound.datetime"
+            ) as datetime_mock:
+                datetime_mock.now.return_value = datetime(2026, 6, 11, 20, 47, tzinfo=timezone.utc)
+                await outbound_service._process_job(job)
+
+            traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
+            assert traffic_row is not None
+            self.assertIn(";T2WARSPL *112047z", traffic_row["line"])
+
+    async def test_outbound_runtime_renders_fresh_temporary_object_timestamp_for_consecutive_sends(self) -> None:
+        with temporary_database():
+            insert_modem()
+            object_id = insert_object(lifetime="temporary", interval_minutes=30)
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            row = fetch_one("SELECT * FROM aprs_objects WHERE id = ?", (object_id,))
+            assert row is not None
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": "1",
+                "beacon_comment": "",
+                "beacon_interval_minutes": "30",
+                "beacon_path": "",
+                "latitude": "52.2501",
+                "longitude": "20.9268",
+                "symbol_table": "/",
+                "symbol_code": ">",
+                "default_units": "metric",
+                "tx_enabled": None,
+            }
+            success, message = enqueue_object_job(
+                dict(row),
+                station_settings,
+                trigger="manual",
+                force_send=True,
+                scheduled_for=datetime.now(timezone.utc) - timedelta(seconds=1),
+            )
+            self.assertTrue(success)
+            self.assertIn("queued", message.lower())
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertNotIn("object_timestamp", job["payload"])
+
+            with patch("app.services.outbound.datetime") as datetime_mock:
+                datetime_mock.now.side_effect = [
+                    datetime(2026, 6, 11, 20, 47, tzinfo=timezone.utc),
+                    datetime(2026, 6, 11, 20, 48, tzinfo=timezone.utc),
+                ]
+                first_line = build_object_tnc2(job["payload"])
+                second_line = build_object_tnc2(job["payload"])
+
+            self.assertIn(";T2WARSPL *112047z", first_line)
+            self.assertIn(";T2WARSPL *112048z", second_line)
+
+    async def test_outbound_runtime_sends_killed_object_jobs_with_underscore_state_marker(self) -> None:
+        with temporary_database():
+            insert_modem()
+            object_id = insert_object(lifetime="permanent", interval_minutes=30)
+            execute("UPDATE aprs_objects SET state = 'killed' WHERE id = ?", (object_id,))
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            scheduler = ObjectSchedulerService()
+            scheduler._tick()
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(job["kind"], "object")
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    _ = data
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9001)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await outbound_service._process_job(job)
+
+            traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
+            assert traffic_row is not None
+            self.assertIn(";T2WARSPL _111111z", traffic_row["line"])
+
+    async def test_outbound_runtime_sends_force_send_object_jobs_even_when_expired(self) -> None:
+        with temporary_database():
+            insert_modem()
+            object_id = insert_object(lifetime="permanent", interval_minutes=30, valid_until_utc="2000-01-01 00:00")
+            update_station_settings(
+                {
+                    "callsign": "SQ9MDD",
+                    "ssid": "4",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2501",
+                    "longitude": "20.9268",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": "1",
+                "beacon_comment": "",
+                "beacon_interval_minutes": "30",
+                "beacon_path": "",
+                "latitude": "52.2501",
+                "longitude": "20.9268",
+                "symbol_table": "/",
+                "symbol_code": ">",
+                "default_units": "metric",
+                "tx_enabled": None,
+            }
+            row = fetch_one("SELECT * FROM aprs_objects WHERE id = ?", (object_id,))
+            assert row is not None
+            success, message = enqueue_object_job(dict(row), station_settings, trigger="manual", force_send=True)
+            self.assertTrue(success)
+            self.assertIn("queued", message.lower())
+
+            job = claim_next_outbound_job()
+            assert job is not None
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    _ = data
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9001)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await outbound_service._process_job(job)
+
             traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
             assert traffic_row is not None
             self.assertIn(";T2WARSPL *111111z", traffic_row["line"])

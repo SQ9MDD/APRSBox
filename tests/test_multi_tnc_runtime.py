@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_one, init_db
-from app.services.content import traffic_snapshot as build_traffic_snapshot
+from app.services.content import get_aprs_symbol_icon_path, traffic_snapshot as build_traffic_snapshot
 from app.services.outbound import build_tnc2_kiss_frame, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
 from app.services.traffic import TrafficMonitorService
@@ -121,6 +121,77 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 row_classes["SQ9MDD-3>APBOX0,RFONLY:=5215.03N/02055.60E_.../...t...X121"],
                 "traffic-log-row-own-wx-tx",
             )
+
+    async def test_traffic_snapshot_marks_mic_e_emergency_frames_for_modal_trigger(self) -> None:
+        with temporary_database():
+            line = "SQ9MDD-7>521U02,RFONLY:'0SWl \x1c[/>144.800MHz op. Rysiek&"
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, 1, 'rx', '2m', 'TNC2', ?, '', '', ?, '', '2026-01-01T00:00:01+00:00')
+                """,
+                ("TNC-2m", line, len(line)),
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            frame = next(item for item in snapshot["frames"] if item["line"] == line)
+
+            self.assertEqual(frame["display_packet_group"], "position")
+            self.assertTrue(frame["emergency"])
+            self.assertEqual(frame["emergency_data"]["emergency_source"], "mic-e")
+            self.assertEqual(frame["emergency_data"]["mice_message"], "EMERGENCY")
+
+    async def test_traffic_snapshot_does_not_mark_normal_mic_e_frames_as_emergency(self) -> None:
+        with temporary_database():
+            line = 'SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!'
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES (?, 1, 'rx', '2m', 'TNC2', ?, '', '', ?, '', '2026-01-01T00:00:01+00:00')
+                """,
+                ("TNC-2m", line, len(line)),
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            frame = next(item for item in snapshot["frames"] if item["line"] == line)
+
+            self.assertFalse(frame["emergency"])
+            self.assertIsNone(frame["emergency_data"])
+
+    async def test_traffic_snapshot_uses_object_name_and_symbol_icon_for_object_frames(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                )
+                VALUES
+                    (
+                        'OpenWebRX MQTT',
+                        1,
+                        'rx',
+                        '70cm',
+                        'TNC2',
+                        'SQ5ABC-9>APBOX0:;X2922759 *111207z5228.37N/02104.87EORS41-SGP P=169.90hPa /A=042219 F=4024 RSM424 FW v20506',
+                        '0',
+                        'RX',
+                        114,
+                        '',
+                        '2026-01-01T00:00:02+00:00'
+                    )
+                """
+            )
+
+            snapshot = build_traffic_snapshot(limit=10)
+            frame = next(item for item in snapshot["frames"] if item["line"].startswith("SQ5ABC-9>APBOX0:;X2922759"))
+
+            self.assertEqual(frame["display_callsign"], "X2922759")
+            self.assertEqual(frame["display_packet_group"], "object")
+            self.assertEqual(frame["display_icon_path"], get_aprs_symbol_icon_path("/O"))
 
     async def test_traffic_snapshot_treats_local_ssid_zero_as_base_callsign_for_row_classification(self) -> None:
         with temporary_database():

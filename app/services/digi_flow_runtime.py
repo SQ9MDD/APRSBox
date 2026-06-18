@@ -23,6 +23,7 @@ from app.services.aprsis import (
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import enqueue_digi_tx_job
+from app.services.messages import split_callsign_ssid
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
 _DUPLICATE_FILTER_WINDOW_DEFAULT_SEC = 5
@@ -79,6 +80,7 @@ class DigiFlowRuntimeService:
         self._viscous_delay_lock = asyncio.Lock()
         self._viscous_delay_entries: dict[tuple[int, int, str, str], _ViscousDelayEntry] = {}
         self._pending_viscous_wait_count = 0
+        self._rate_limit_last_passed: dict[tuple[int, int, str], float] = {}
 
     async def start(self) -> None:
         if self._task is not None:
@@ -97,6 +99,7 @@ class DigiFlowRuntimeService:
             ]
             self._viscous_delay_entries.clear()
             self._pending_viscous_wait_count = 0
+            self._rate_limit_last_passed.clear()
         for task in cleanup_tasks:
             task.cancel()
         for task in cleanup_tasks:
@@ -333,6 +336,8 @@ class DigiFlowRuntimeService:
             return self._execute_icon_filter(context, step)
         if step_type == "filter_distance":
             return self._execute_distance_filter(context, step)
+        if step_type == "filter_rate_limit":
+            return self._execute_rate_limit_filter(context, step)
         if step_type == "action_log":
             return self._execute_log_only(context, step)
         if step_type == "action_drop":
@@ -1175,6 +1180,90 @@ class DigiFlowRuntimeService:
         )
         return {"decision": "drop"}
 
+    def _execute_rate_limit_filter(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        config = dict(step.get("config") or {})
+        source_callsign = str((context.get("parsed") or {}).get("source") or "").strip().upper()
+        rules = _rate_limit_rules_from_config(config)
+        matched_rule = _find_rate_limit_rule(source_callsign, rules)
+        if matched_rule is None:
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_rate_limit",
+                decision="passed",
+                message=_tf(
+                    "Rate limit filter skipped frame because source callsign {callsign} did not match any configured rule.",
+                    {"callsign": source_callsign or "-"},
+                ),
+            )
+            return {"decision": "continue"}
+
+        rate_limit_seconds = int(matched_rule["rate_limit_seconds"])
+        matched_pattern = str(matched_rule["source_callsign_pattern"])
+        now = time.monotonic()
+        state_key = (flow_id, step_id, matched_pattern, source_callsign)
+        last_passed = self._rate_limit_last_passed.get(state_key)
+        if last_passed is not None:
+            elapsed_seconds = now - last_passed
+            if elapsed_seconds <= rate_limit_seconds:
+                log_digi_flow_event(
+                    frame_uid=context["frame_uid"],
+                    flow_id=flow_id,
+                    step_id=step_id,
+                    event_type="filter_rate_limit",
+                    decision="rejected",
+                    message=_tf(
+                        "Rate limit filter blocked frame for source callsign {callsign} with pattern {pattern} because only {elapsed_seconds}s elapsed since the last passed frame; limit is {rate_limit_seconds}s.",
+                        {
+                            "callsign": source_callsign or "-",
+                            "pattern": matched_pattern,
+                            "elapsed_seconds": f"{elapsed_seconds:.1f}".rstrip("0").rstrip("."),
+                            "rate_limit_seconds": rate_limit_seconds,
+                        },
+                    ),
+                )
+                return {"decision": "drop"}
+
+            self._rate_limit_last_passed[state_key] = now
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="filter_rate_limit",
+                decision="passed",
+                message=_tf(
+                    "Rate limit filter passed for source callsign {callsign} with pattern {pattern} after {elapsed_seconds}s since the last passed frame; limit is {rate_limit_seconds}s.",
+                    {
+                        "callsign": source_callsign or "-",
+                        "pattern": matched_pattern,
+                        "elapsed_seconds": f"{elapsed_seconds:.1f}".rstrip("0").rstrip("."),
+                        "rate_limit_seconds": rate_limit_seconds,
+                    },
+                ),
+            )
+            return {"decision": "continue"}
+
+        self._rate_limit_last_passed[state_key] = now
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="filter_rate_limit",
+            decision="passed",
+            message=_tf(
+                "Rate limit filter passed for source callsign {callsign} with pattern {pattern} because no previous frame has been allowed yet; limit is {rate_limit_seconds}s.",
+                {
+                    "callsign": source_callsign or "-",
+                    "pattern": matched_pattern,
+                    "rate_limit_seconds": rate_limit_seconds,
+                },
+            ),
+        )
+        return {"decision": "continue"}
+
     def _execute_log_only(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         config = dict(step.get("config") or {})
         tag = str(config.get("log_tag") or "").strip()
@@ -1532,6 +1621,85 @@ def _callsign_matches_pattern(callsign: str, pattern: str) -> bool:
         return callsign == pattern
     regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
     return re.match(regex, callsign) is not None
+
+
+def _parse_rate_limit_seconds_text(value: Any) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.casefold().endswith("s"):
+        text = text[:-1].strip()
+    if not text:
+        return None
+    try:
+        seconds = int(text)
+    except ValueError:
+        return None
+    if seconds < 5 or seconds > 300 or seconds % 5 != 0:
+        return None
+    return seconds
+
+
+def _rate_limit_rules_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
+    rules = config.get("rate_limit_rules")
+    if isinstance(rules, list) and rules:
+        normalized_rules: list[dict[str, Any]] = []
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            pattern = str(rule.get("source_callsign_pattern") or "").strip().upper()
+            seconds = _parse_rate_limit_seconds_text(rule.get("rate_limit_seconds") or rule.get("seconds") or rule.get("limit"))
+            if pattern and seconds:
+                normalized_rules.append(
+                    {
+                        "source_callsign_pattern": pattern,
+                        "rate_limit_seconds": seconds,
+                    }
+                )
+        if normalized_rules:
+            return normalized_rules
+
+    legacy_pattern = str(config.get("source_callsign_pattern") or "").strip().upper()
+    legacy_seconds = _parse_rate_limit_seconds_text(config.get("rate_limit_seconds") or config.get("packets_per_minute"))
+    if legacy_pattern and legacy_seconds:
+        return [{"source_callsign_pattern": legacy_pattern, "rate_limit_seconds": legacy_seconds}]
+    return []
+
+
+def _rate_limit_pattern_matches_source(pattern: str, source_callsign: str) -> bool:
+    normalized_pattern = str(pattern or "").strip().upper()
+    normalized_callsign = str(source_callsign or "").strip().upper()
+    if not normalized_pattern or not normalized_callsign:
+        return False
+    if "*" in normalized_pattern:
+        return _callsign_matches_pattern(normalized_callsign, normalized_pattern)
+    pattern_base, pattern_ssid = split_callsign_ssid(normalized_pattern)
+    source_base, source_ssid = split_callsign_ssid(normalized_callsign)
+    if pattern_ssid:
+        return normalized_callsign == normalized_pattern
+    return source_base == pattern_base
+
+
+def _rate_limit_rule_sort_key(rule: dict[str, Any]) -> tuple[int, int, int, int]:
+    pattern = str(rule.get("source_callsign_pattern") or "").strip().upper()
+    has_wildcard = 1 if "*" in pattern else 0
+    _, ssid = split_callsign_ssid(pattern)
+    specificity = len(pattern.replace("*", ""))
+    return (0 if has_wildcard else 1, 1 if ssid else 0, specificity, 0)
+
+
+def _find_rate_limit_rule(source_callsign: str, rules: list[dict[str, Any]]) -> dict[str, Any] | None:
+    matches: list[tuple[tuple[int, int, int, int], int, dict[str, Any]]] = []
+    for index, rule in enumerate(rules):
+        pattern = str(rule.get("source_callsign_pattern") or "").strip().upper()
+        if not pattern:
+            continue
+        if _rate_limit_pattern_matches_source(pattern, source_callsign):
+            matches.append((_rate_limit_rule_sort_key(rule), -index, rule))
+    if not matches:
+        return None
+    matches.sort(reverse=True)
+    return matches[0][2]
 
 
 def _rewrite_trace_path(path_tokens: list[str], token_index: int, local_identity: str) -> list[str]:

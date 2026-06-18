@@ -37,6 +37,15 @@
                 </select>
             </label>
             <label>
+                <span>{{ t("Icon set") }}</span>
+                <select name="aprs_symbol_set">
+                    {% for option in aprs_symbol_set_options %}
+                    <option value="{{ option.value }}" {% if current_aprs_symbol_set == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
+                    {% endfor %}
+                </select>
+                <span class="muted small">{{ t("Applies globally across the GUI.") }}</span>
+            </label>
+            <label>
                 <span>{{ t("Color palette") }}</span>
                 <select name="ui_palette">
                     {% for option in ui_palette_options %}
@@ -69,6 +78,8 @@
             <dd><code>{{ current_language }}</code></dd>
             <dt>{{ t("Units") }}</dt>
             <dd>{{ t("Imperial") if current_default_units == "imperial" else t("Metric") }}</dd>
+            <dt>{{ t("Icon set") }}</dt>
+            <dd>{{ current_aprs_symbol_set_label }}</dd>
             <dt>{{ t("Color palette") }}</dt>
             <dd>{{ t(current_ui_palette_label) }}</dd>
             <dt>{{ t("Minimum stored log level") }}</dt>

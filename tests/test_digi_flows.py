@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from app.db import connect, fetch_one, init_db
+from app.services.content import get_section_row, safe_update_section_row
 from app.services.digi_flows import (
     create_digi_flow,
     get_digi_flow,
@@ -370,6 +371,47 @@ class DigiFlowsTests(unittest.TestCase):
             }
             self.assertIn("tx_rf::TNC-70cm", preserved_values)
 
+    def test_renaming_tnc_updates_digi_flow_references(self) -> None:
+        with temporary_database():
+            connection = connect()
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO modems (
+                        name, modem_type, band, device_path, baud_rate, enabled,
+                        expose_port_enabled, expose_bind_address, expose_port, expose_whitelist,
+                        notes, created_at, updated_at
+                    )
+                    VALUES (?, 'TCP', '2m', '127.0.0.1:9001', NULL, 1, 0, '127.0.0.1', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    ("TNC-A",),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            flow_id = create_digi_flow(sample_rf_flow_payload(name="2m loop", source_ref="TNC-A", target_ref="TNC-A"))
+            modem_row = get_section_row("modems", 1)
+            assert modem_row is not None
+            modem_payload = dict(modem_row)
+            modem_payload["name"] = "TNC-B"
+            success, error = safe_update_section_row("modems", 1, modem_payload)
+            self.assertTrue(success, msg=error or "")
+
+            flow = get_digi_flow(flow_id)
+            assert flow is not None
+            self.assertEqual(flow["source_ref"], "TNC-B")
+            self.assertEqual(flow["target_ref"], "TNC-B")
+            self.assertEqual(flow["steps"][0]["config"]["rf_port"], "TNC-B")
+            self.assertEqual(flow["steps"][-1]["config"]["rf_target"], "TNC-B")
+
+            source_values = {option["value"] for option in get_digi_flow_endpoint_options()["source"]}
+            target_values = {option["value"] for option in get_digi_flow_endpoint_options()["target"]}
+            self.assertIn("receiver_rf::TNC-B", source_values)
+            self.assertIn("tx_rf::TNC-B", target_values)
+            self.assertNotIn("receiver_rf::TNC-A", source_values)
+            self.assertNotIn("tx_rf::TNC-A", target_values)
+
     def test_openwebrx_mqtt_is_available_as_source_but_not_as_tx_target(self) -> None:
         with temporary_database():
             connection = connect()
@@ -415,6 +457,7 @@ class DigiFlowsTests(unittest.TestCase):
             type_meta = get_digi_flow_type_meta()
             self.assertEqual(type_meta["filter_path"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
+            self.assertIn("WIDE1-1", type_meta["filter_path"]["config_fields"][1]["help_lines"])
             self.assertEqual(type_meta["filter_direct_only"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_direct_only"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_packet_type"]["runtime_status"], "implemented")
@@ -425,6 +468,8 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_dupe"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_distance"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_distance"]["runtime_label"], "Runtime")
+            self.assertEqual(type_meta["filter_rate_limit"]["runtime_status"], "implemented")
+            self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][0]["name"], "rate_limit_rules_text")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():
@@ -919,6 +964,129 @@ class DigiFlowsTests(unittest.TestCase):
         with temporary_database():
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["target_kind"], "tx_rf")
+
+    def test_rf_target_normalizes_viscous_delay_first_and_path_rule_last(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "tx_rf"
+        payload["target_ref"] = "RF-OUT"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_callsign",
+                "title": "Callsign Filter",
+                "enabled": 1,
+                "config": {"mode": "allow", "callsigns": ["SP8ABC-9"]},
+            },
+            {
+                "step_type": "filter_path",
+                "title": "Path Rule",
+                "enabled": 1,
+                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+            },
+            {
+                "step_type": "filter_dupe",
+                "title": "Duplicate Filter",
+                "enabled": 1,
+                "config": {"window_sec": 5},
+            },
+            {
+                "step_type": "tx_rf",
+                "title": "TX RF",
+                "enabled": 1,
+                "config": {"rf_target": "RF-OUT"},
+            },
+        ]
+        with temporary_database():
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual(
+                [step["step_type"] for step in normalized["steps"]],
+                ["receiver_rf", "filter_dupe", "filter_callsign", "filter_path", "tx_rf"],
+            )
+
+    def test_rf_target_normalizes_rate_limit_filter_before_path_rule(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "tx_rf"
+        payload["target_ref"] = "RF-OUT"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_path",
+                "title": "Path Rule",
+                "enabled": 1,
+                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+            },
+            {
+                "step_type": "filter_rate_limit",
+                "title": "Rate Limit Filter",
+                "enabled": 1,
+                "config": {"rate_limit_rules_text": "SQ9MDD* - 15s"},
+            },
+            {
+                "step_type": "tx_rf",
+                "title": "TX RF",
+                "enabled": 1,
+                "config": {"rf_target": "RF-OUT"},
+            },
+        ]
+        with temporary_database():
+            normalized = normalize_digi_flow_payload(payload)
+            self.assertEqual([step["step_type"] for step in normalized["steps"]], ["receiver_rf", "filter_rate_limit", "filter_path", "tx_rf"])
+            self.assertEqual(
+                normalized["steps"][1]["config"],
+                {"rate_limit_rules": [{"source_callsign_pattern": "SQ9MDD*", "rate_limit_seconds": 15}]},
+            )
+
+    def test_rate_limit_filter_rejects_invalid_seconds(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "tx_rf"
+        payload["target_ref"] = "RF-OUT"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_rate_limit",
+                "title": "Rate Limit Filter",
+                "enabled": 1,
+                "config": {"rate_limit_rules_text": "SQ9MDD* - 7s"},
+            },
+            {
+                "step_type": "filter_path",
+                "title": "Path Rule",
+                "enabled": 1,
+                "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+            },
+            {
+                "step_type": "tx_rf",
+                "title": "TX RF",
+                "enabled": 1,
+                "config": {"rf_target": "RF-OUT"},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "line #1"):
+                normalize_digi_flow_payload(payload)
+
+    def test_rate_limit_filter_rejects_non_rf_targets(self) -> None:
+        payload = sample_flow_payload()
+        payload["target_kind"] = "action_log"
+        payload["target_ref"] = "log-only"
+        payload["steps"] = [
+            payload["steps"][0],
+            {
+                "step_type": "filter_rate_limit",
+                "title": "Rate Limit Filter",
+                "enabled": 1,
+                "config": {"rate_limit_rules_text": "* - 15s"},
+            },
+            {
+                "step_type": "action_log",
+                "title": "Black Hole",
+                "enabled": 1,
+                "config": {"log_tag": "log-only", "note": ""},
+            },
+        ]
+        with temporary_database():
+            with self.assertRaisesRegex(ValueError, "RF TX target flows"):
+                normalize_digi_flow_payload(payload)
 
     def test_local_tx_to_aprsis_and_black_hole_are_valid(self) -> None:
         with temporary_database():

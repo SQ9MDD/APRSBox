@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from html import escape
 import ipaddress
 import json
 import math
@@ -78,6 +79,56 @@ MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 DASHBOARD_ACTIVITY_WINDOW_MINUTES = 60
 DASHBOARD_ACTIVITY_BUCKET_MINUTES = 5
 STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
+_STATION_DETAIL_URL_PATTERN = re.compile(r"https?://[^\s<>'\"`]+")
+APRS_SYMBOL_SET_SETTING_KEY = "aprs_symbol_set"
+APRS_SYMBOL_SET_LEGACY = "legacy"
+APRS_SYMBOL_SET_MODERN = "modern"
+
+
+def _normalize_aprs_symbol_set(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized == APRS_SYMBOL_SET_MODERN:
+        return APRS_SYMBOL_SET_MODERN
+    return APRS_SYMBOL_SET_LEGACY
+
+
+def _aprs_symbol_icon_set_parts(symbol_set: str) -> tuple[str, str]:
+    if symbol_set == APRS_SYMBOL_SET_MODERN:
+        return "aprs-symbols", "png"
+    return "verG", "gif"
+
+
+def get_aprs_symbol_set() -> str:
+    return _normalize_aprs_symbol_set(get_app_setting(APRS_SYMBOL_SET_SETTING_KEY))
+
+
+def _aprs_symbol_icon_path_for_set(symbol: str, symbol_set: str) -> str | None:
+    icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
+
+    if len(symbol) != 2:
+        filename = f"x.{extension}"
+    else:
+        table, code = symbol[0], symbol[1]
+        index = ord(code) - 33
+        if index < 0 or index > 93:
+            filename = f"x.{extension}"
+        else:
+            filename = f"{index:02d}.{extension}" if table == "/" else f"a{index:02d}.{extension}"
+
+    candidate = settings.static_dir / "icons" / icon_dir / filename
+    if candidate.exists():
+        return f"icons/{icon_dir}/{filename}"
+    return None
+
+
+def get_aprs_symbol_icon_fallback_path() -> str:
+    current_set = get_aprs_symbol_set()
+    for symbol_set in (current_set, APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN):
+        icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
+        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
+        if candidate.exists():
+            return f"icons/{icon_dir}/x.{extension}"
+    return "icons/verG/x.gif"
 
 
 def _t(message: object) -> str:
@@ -206,6 +257,17 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
 def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
     definition = SECTION_DEFINITIONS[slug]
     normalized_payload = _normalize_section_payload(slug, payload)
+    previous_row: dict[str, Any] | None = None
+    if slug == "modems":
+        row = fetch_one(
+            """
+            SELECT id, name
+            FROM modems
+            WHERE id = ?
+            """,
+            (row_id,),
+        )
+        previous_row = dict(row) if row is not None else None
     values: dict[str, Any] = {}
     for field in definition.fields:
         name = field["name"]
@@ -230,7 +292,72 @@ def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
             """,
             values,
         )
+        if slug == "modems" and previous_row is not None:
+            previous_name = str(previous_row.get("name") or "").strip()
+            current_name = str(values.get("name") or "").strip()
+            if previous_name and current_name and previous_name != current_name:
+                _propagate_modem_rename_to_digi_flows(
+                    connection=connection,
+                    previous_name=previous_name,
+                    current_name=current_name,
+                )
     log_event("INFO", "config", f"Updated record {row_id} in {definition.table_name}")
+
+
+def _propagate_modem_rename_to_digi_flows(
+    *,
+    connection: sqlite3.Connection,
+    previous_name: str,
+    current_name: str,
+) -> None:
+    timestamp = utc_now()
+    connection.execute(
+        """
+        UPDATE digi_flows
+        SET source_ref = ?, updated_at = ?
+        WHERE source_kind = 'receiver_rf'
+          AND source_ref = ?
+        """,
+        (current_name, timestamp, previous_name),
+    )
+    connection.execute(
+        """
+        UPDATE digi_flows
+        SET target_ref = ?, updated_at = ?
+        WHERE target_kind = 'tx_rf'
+          AND target_ref = ?
+        """,
+        (current_name, timestamp, previous_name),
+    )
+    rows = connection.execute(
+        """
+        SELECT id, step_type, config_json
+        FROM digi_flow_steps
+        WHERE step_type IN ('receiver_rf', 'tx_rf')
+        """,
+    ).fetchall()
+    for row in rows:
+        try:
+            config = json.loads(str(row["config_json"] or "{}"))
+        except json.JSONDecodeError:
+            continue
+        step_type = str(row["step_type"] or "")
+        updated = False
+        if step_type == "receiver_rf" and str(config.get("rf_port") or "").strip() == previous_name:
+            config["rf_port"] = current_name
+            updated = True
+        elif step_type == "tx_rf" and str(config.get("rf_target") or "").strip() == previous_name:
+            config["rf_target"] = current_name
+            updated = True
+        if updated:
+            connection.execute(
+                """
+                UPDATE digi_flow_steps
+                SET config_json = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (json.dumps(config, ensure_ascii=True, separators=(",", ":")), timestamp, int(row["id"])),
+            )
 
 
 def delete_section_row(slug: str, row_id: int) -> None:
@@ -734,9 +861,24 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     frames: list[dict[str, Any]] = []
     for row in frame_rows:
         direction = str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX")
+        line = str(row["line"] or "")
+        parsed = parse_tnc2_frame(line)
+        aprs_data = parsed.get("aprs_data") if parsed else {}
+        packet_group = str((aprs_data or {}).get("packet_group") or "").strip().lower()
+        symbol = str((aprs_data or {}).get("symbol") or "").strip()
+        display_callsign = str((aprs_data or {}).get("entity_name") or "").strip()
+        if packet_group not in {"object", "item"} or not display_callsign:
+            display_callsign = str(
+                (parsed or {}).get("logical_source_key")
+                or (parsed or {}).get("source_key")
+                or row["source"]
+                or ""
+            ).strip()
+        display_icon_path = get_aprs_symbol_icon_path(symbol) if packet_group in {"object", "item"} else ""
+        emergency_data = _build_emergency_frame_data(parsed=parsed, row=row, line=line) if parsed else None
         row_class = _traffic_frame_row_class(
             direction=direction,
-            line=str(row["line"] or ""),
+            line=line,
             command=str(row["command"] or ""),
             station_source_key=station_source_key,
             wx_source_key=wx_source_key,
@@ -755,6 +897,11 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "length": str(row["length"]),
                 "hex": row["hex"] or "",
                 "row_class": row_class,
+                "display_callsign": display_callsign,
+                "display_packet_group": packet_group,
+                "display_icon_path": display_icon_path,
+                "emergency": bool(emergency_data),
+                "emergency_data": emergency_data,
             }
         )
     return {
@@ -766,6 +913,89 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         "last_error": last_error,
         "updated_at": updated_at,
         "frames": frames,
+    }
+
+
+_EMERGENCY_COMMENT_PREFIX_RE = re.compile(
+    r"^!?((?:TESTALARM|EMERGENCY|ALARM|ALERT|WARNING|WXALARM|EM))!",
+    re.IGNORECASE,
+)
+_MIC_E_MESSAGE_LABELS = {
+    0: "OFF-DUTY",
+    1: "ENROUTE",
+    2: "IN SERVICE",
+    3: "RETURNING",
+    4: "COMMITTED",
+    5: "SPECIAL",
+    6: "PRIORITY",
+    7: "EMERGENCY",
+}
+_MIC_E_STATUS_LABELS = {
+    0: "Off Duty",
+    1: "En Route",
+    2: "In Service",
+    3: "Returning",
+    4: "Committed",
+    5: "Special",
+    6: "Priority",
+    7: "Emergency",
+}
+
+
+def _strip_emergency_comment_prefix(text: str) -> str:
+    comment = str(text or "").strip()
+    match = _EMERGENCY_COMMENT_PREFIX_RE.match(comment)
+    if not match:
+        return comment
+    return comment[match.end():].lstrip(" /,;:-")
+
+
+def _extract_emergency_comment_token(text: str) -> str | None:
+    comment = str(text or "").strip()
+    match = _EMERGENCY_COMMENT_PREFIX_RE.match(comment)
+    if not match:
+        return None
+    token = match.group(1)
+    return token.upper() if token else None
+
+
+def _build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) -> dict[str, Any] | None:
+    aprs_data = dict(parsed.get("aprs_data") or {})
+    if not bool(aprs_data.get("emergency")):
+        return None
+
+    comment = str(aprs_data.get("comment") or "").strip()
+    summary = _strip_emergency_comment_prefix(comment)
+    if not summary and aprs_data.get("data"):
+        decoded_items = _format_decoded_data_for_display(dict(aprs_data["data"]), "metric")
+        summary = ", ".join(
+            str(item.get("value") or "").strip()
+            for item in decoded_items[:4]
+            if str(item.get("value") or "").strip()
+        )
+
+    callsign = str(
+        (aprs_data.get("entity_name") or "")
+        or (parsed.get("logical_source_key") or "")
+        or (parsed.get("source_key") or "")
+        or (row["source"] or "")
+    ).strip()
+
+    return {
+        "callsign": callsign,
+        "source_interface": str(row["source"] or "").strip(),
+        "source_port": str(row["port"] or "").strip(),
+        "path": str(parsed.get("logical_path") or parsed.get("path") or "").strip(),
+        "timestamp_utc": str(row["created_at"] or "").strip(),
+        "comment": comment,
+        "summary": summary,
+        "latitude": aprs_data.get("latitude"),
+        "longitude": aprs_data.get("longitude"),
+        "raw_frame": line,
+        "emergency_code": str(aprs_data.get("emergency_code") or "").strip(),
+        "emergency_source": str(aprs_data.get("emergency_source") or "").strip(),
+        "mice_message": str(aprs_data.get("mice_message") or "").strip(),
+        "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
     }
 
 
@@ -1850,6 +2080,7 @@ def get_station_detail(
         "position_ambiguous": bool(snapshot.get("position_ambiguous")),
         "distance_km": snapshot.get("distance_km"),
         "messaging_capable": _messaging_capable(snapshot),
+        "mic_e": dict(snapshot["mic_e"]) if snapshot.get("mic_e") else None,
         "aprs_device": dict(snapshot["aprs_device"]) if snapshot.get("aprs_device") else None,
         "data": _format_decoded_data_for_display(snapshot["data_raw"], unit_system),
         "fields": _station_detail_fields(snapshot, unit_system),
@@ -2058,6 +2289,7 @@ def _build_station_snapshots_from_rows(
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
     station_key_index: dict[str, str] = {}
+    killed_station_keys: set[str] = set()
     pending_status_by_station_key: dict[str, str] = {}
     device_database = get_aprs_device_identification_database()
 
@@ -2071,6 +2303,13 @@ def _build_station_snapshots_from_rows(
         station_key = (aprs_data.get("entity_name") or callsign).strip()
         station_key_folded = station_key.casefold()
         packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
+        if packet_group == "object" and str(aprs_data.get("state") or "").strip().lower() == "killed":
+            existing_key = station_key_index.get(station_key_folded)
+            if existing_key is None:
+                killed_station_keys.add(station_key_folded)
+            continue
+        if station_key_folded in killed_station_keys:
+            continue
         status_comment = str(aprs_data.get("comment") or "").strip()
         if packet_group == "status" and station_key and status_comment:
             existing_key = station_key_index.get(station_key_folded)
@@ -2132,6 +2371,8 @@ def _build_station_snapshots_from_rows(
             station["status_text"] = str(aprs_data["comment"])
         if not station["data_raw"] and aprs_data.get("data"):
             station["data_raw"] = dict(aprs_data["data"])
+        if not station.get("mic_e") and aprs_data.get("mic_e"):
+            station["mic_e"] = dict(aprs_data["mic_e"])
         if not station["latitude"] and aprs_data.get("latitude"):
             station["latitude"] = aprs_data["latitude"]
         if not station["longitude"] and aprs_data.get("longitude"):
@@ -2161,6 +2402,7 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
         "aprs_device",
         "aprs_device_short",
         "status_text",
+        "mic_e",
         "position_ambiguity_digits",
     ):
         if not merged.get(field) and secondary.get(field):
@@ -2226,10 +2468,11 @@ def _new_station_snapshot(
         "symbol": "",
         "symbol_table": "",
         "symbol_code": "",
-        "symbol_icon": "icons/verG/x.gif",
+        "symbol_icon": get_aprs_symbol_icon_fallback_path(),
         "comment": "",
         "status_text": "",
         "data_raw": {},
+        "mic_e": None,
         "latitude": "",
         "longitude": "",
         "position_ambiguity_digits": None,
@@ -2474,8 +2717,39 @@ def _messaging_capable(snapshot: dict[str, Any]) -> bool | None:
     return None
 
 
-def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[dict[str, str]]:
-    fields: list[dict[str, str]] = []
+def _render_station_detail_comment(comment: str) -> str:
+    text = str(comment or "")
+    if not text:
+        return ""
+
+    parts: list[str] = []
+    last_index = 0
+    for match in _STATION_DETAIL_URL_PATTERN.finditer(text):
+        start, end = match.span()
+        if start > last_index:
+            parts.append(escape(text[last_index:start]))
+
+        url = match.group(0)
+        trailing = ""
+        while url and url[-1] in ").,!?;:]":
+            trailing = url[-1] + trailing
+            url = url[:-1]
+
+        if url:
+            parts.append(
+                f'<a class="station-detail-comment-link" href="{escape(url)}" target="_blank" rel="noopener noreferrer">{escape(url)}</a>'
+            )
+        parts.append(escape(trailing))
+        last_index = end
+
+    if last_index < len(text):
+        parts.append(escape(text[last_index:]))
+
+    return "".join(parts)
+
+
+def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[dict[str, Any]]:
+    fields: list[dict[str, Any]] = []
     display_callsign = snapshot.get("display_callsign")
     if display_callsign:
         fields.append({"label": _t("Display callsign"), "value": str(display_callsign)})
@@ -2498,8 +2772,13 @@ def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[
     if snapshot.get("symbol_code"):
         fields.append({"label": _t("Symbol code"), "value": str(snapshot["symbol_code"])})
     if snapshot.get("comment"):
-        fields.append({"label": _t("Comment"), "value": str(snapshot["comment"])})
-    fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
+        comment = str(snapshot["comment"])
+        fields.append({"label": _t("Comment"), "value": comment, "html": _render_station_detail_comment(comment)})
+    mic_e_fields = _station_detail_mic_e_fields(snapshot.get("mic_e"))
+    if mic_e_fields:
+        fields.extend(mic_e_fields)
+    if not snapshot.get("mic_e"):
+        fields.append({"label": _t("Status"), "value": str(snapshot.get("status_text") or "")})
     if snapshot.get("path"):
         fields.append({"label": _t("Path"), "value": str(snapshot["path"])})
 
@@ -2508,6 +2787,59 @@ def _station_detail_fields(snapshot: dict[str, Any], _unit_system: str) -> list[
         fields.append({"label": _t("Messaging capability"), "value": _t("Yes") if messaging_capable else _t("No")})
     if snapshot.get("raw_text"):
         fields.append({"label": _t("Latest raw packet"), "value": str(snapshot["raw_text"])})
+    return fields
+
+
+def _station_detail_mic_e_fields(mic_e: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not mic_e:
+        return []
+
+    def add_field(fields: list[dict[str, Any]], label: str, value: Any) -> None:
+        if value in {None, ""}:
+            return
+        fields.append({"label": label, "value": str(value)})
+
+    def bool_text(value: bool | None) -> str:
+        if value is True:
+            return _t("Yes")
+        if value is False:
+            return _t("No")
+        return _t("Unknown")
+
+    def unknown_text(value: Any) -> str:
+        text = str(value or "").strip()
+        return text if text else _t("Unknown")
+
+    fields: list[dict[str, Any]] = []
+    add_field(fields, _t("Packet type"), _t("Mic-E"))
+    if mic_e.get("destination_raw"):
+        fields.append({"label": _t("Destination"), "value": f'{mic_e["destination_raw"]} (Mic-E encoded)'})
+    fields.append({"label": _t("Status"), "value": unknown_text(mic_e.get("status"))})
+    fields.append({"label": _t("Emergency"), "value": bool_text(mic_e.get("emergency"))})
+    fields.append({"label": _t("Device"), "value": unknown_text(mic_e.get("device_name"))})
+    fields.append({"label": _t("Device type"), "value": unknown_text(mic_e.get("device_type"))})
+    fields.append({"label": _t("Raw type byte"), "value": unknown_text("space" if mic_e.get("raw_type_byte") == " " else mic_e.get("raw_type_byte"))})
+    fields.append({"label": _t("Raw identifier"), "value": unknown_text(mic_e.get("raw_identifier"))})
+    fields.append({"label": _t("Message capable"), "value": bool_text(mic_e.get("message_capable"))})
+
+    speed_knots = mic_e.get("speed_knots")
+    speed_kmh = mic_e.get("speed_kmh")
+    if speed_knots is not None and speed_kmh is not None:
+        fields.append({"label": _t("Speed"), "value": f"{speed_knots} kt / {speed_kmh} km/h"})
+    else:
+        fields.append({"label": _t("Speed"), "value": _t("Unknown")})
+
+    course_deg = mic_e.get("course_deg")
+    fields.append({"label": _t("Course"), "value": f"{course_deg}°" if course_deg is not None else _t("Unknown")})
+
+    altitude_m = mic_e.get("altitude_m")
+    altitude_ft = mic_e.get("altitude_ft")
+    if altitude_m is not None and altitude_ft is not None:
+        fields.append({"label": _t("Altitude"), "value": f"{altitude_m} m / {altitude_ft} ft"})
+    else:
+        fields.append({"label": _t("Altitude"), "value": _t("Unknown")})
+
+    fields.append({"label": _t("Position ambiguity"), "value": unknown_text(mic_e.get("position_ambiguity"))})
     return fields
 
 
@@ -2753,6 +3085,15 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
     if len(destination) != 6 or len(info) < 9:
         return None
 
+    mic_e_payload = info[9:] if len(info) > 9 else ""
+    raw_type_byte = mic_e_payload[:1] if mic_e_payload else ""
+    mic_e_comment, mic_e_altitude_ft = _decode_mic_e_comment(mic_e_payload)
+    device_identification = lookup_aprs_device_identification(
+        destination="",
+        info=info,
+        database=get_aprs_device_identification_database(),
+    )
+
     latitude, position_ambiguity_digits = _decode_mic_e_latitude(destination)
     longitude = _decode_mic_e_longitude(destination, info)
     if latitude is None or longitude is None:
@@ -2760,7 +3101,6 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
 
     symbol_code = info[7] if len(info) > 7 else ""
     symbol_table = info[8] if len(info) > 8 else "/"
-    comment = info[9:].strip() if len(info) > 9 else ""
     result = {
         "entity_class": "mobile",
         "frame_type": "M",
@@ -2771,16 +3111,114 @@ def _parse_mic_e_packet(packet: dict[str, str]) -> dict[str, Any] | None:
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}" if symbol_code else "",
-        "comment": comment,
+        "comment": mic_e_comment,
     }
+    mice_message_code, mice_message = _decode_mic_e_message(destination)
+    if mice_message is not None:
+        result["mice_message"] = mice_message
+        result["mice_message_code"] = mice_message_code
+        if mice_message == "EMERGENCY":
+            result["emergency"] = True
+            result["emergency_source"] = "mic-e"
     if position_ambiguity_digits > 0:
         result["position_ambiguity_digits"] = position_ambiguity_digits
         result["position_ambiguous"] = True
     mic_e_movement = _decode_mic_e_speed_course(info)
     if mic_e_movement:
         result["data"] = mic_e_movement
+    if mic_e_altitude_ft is not None:
+        result.setdefault("data", {})["altitude_ft"] = mic_e_altitude_ft
     _attach_comment_extensions(result)
+    mic_e_status = _MIC_E_STATUS_LABELS.get(mice_message_code) if mice_message_code is not None else None
+    type_label, type_message_capable = _decode_mic_e_type_byte(raw_type_byte)
+    message_capable = type_message_capable
+    known_device_name = None
+    raw_identifier = None
+    if device_identification is not None:
+        known_device_name = str(device_identification.get("short_name") or device_identification.get("identified_as") or "").strip() or None
+        raw_identifier = str(device_identification.get("actual_identifier") or "").strip() or None
+        if message_capable is None and device_identification.get("message_capable") is not None:
+            message_capable = bool(device_identification.get("message_capable"))
+    altitude_m = int(round(float(mic_e_altitude_ft) * 0.3048)) if mic_e_altitude_ft is not None else None
+    mic_e_details = {
+        "destination_raw": destination,
+        "destination_is_encoded": True,
+        "destination_is_tocall": False,
+        "status": mic_e_status,
+        "emergency": bool(result.get("emergency")),
+        "device_name": known_device_name,
+        "device_known": device_identification is not None,
+        "device_type": type_label,
+        "type_byte": type_label,
+        "raw_identifier": raw_identifier,
+        "raw_type_byte": raw_type_byte or None,
+        "message_capable": message_capable,
+        "speed_knots": mic_e_movement.get("speed_knots") if mic_e_movement else None,
+        "speed_kmh": int(round(float(mic_e_movement["speed_knots"]) * 1.852)) if mic_e_movement and mic_e_movement.get("speed_knots") is not None else None,
+        "course_deg": mic_e_movement.get("course_deg") if mic_e_movement else None,
+        "altitude_m": altitude_m,
+        "altitude_ft": mic_e_altitude_ft,
+        "position_ambiguity": _format_mic_e_position_ambiguity(position_ambiguity_digits),
+        "raw_mice_payload": mic_e_payload,
+    }
+    result["mic_e"] = mic_e_details
     return result
+
+
+def _decode_mic_e_comment(raw_payload: str) -> tuple[str, int | None]:
+    payload = re.sub(r"[\x00-\x1f\x7f]", " ", str(raw_payload or ""))
+    if not payload:
+        return "", None
+
+    payload = payload.lstrip()
+    if payload[:1] in {" ", ">", "]", "`", "'"}:
+        payload = payload[1:].lstrip()
+
+    altitude_ft = None
+    if len(payload) >= 4 and payload[3] == "}":
+        try:
+            altitude_value = (
+                8192 * _mic_e_base91_value(payload[0])
+                + 91 * _mic_e_base91_value(payload[1])
+                + _mic_e_base91_value(payload[2])
+                - 10000
+            )
+        except ValueError:
+            altitude_value = None
+        else:
+            altitude_ft = max(0, min(32700, altitude_value))
+            payload = payload[4:].lstrip()
+
+    return _clean_decoded_tokens(payload), altitude_ft
+
+
+def _mic_e_base91_value(char: str) -> int:
+    value = ord(char) - 33
+    if value < 0 or value > 90:
+        raise ValueError("Mic-E altitude byte out of range.")
+    return value
+
+
+def _decode_mic_e_type_byte(raw_type_byte: str) -> tuple[str | None, bool | None]:
+    if raw_type_byte == " ":
+        return "Original Mic-E", False
+    if raw_type_byte == ">":
+        return "Kenwood TH-D7A family", True
+    if raw_type_byte == "]":
+        return "Kenwood TM-D700 family", True
+    if raw_type_byte == "`":
+        return "Other Mic-E (message capable)", True
+    if raw_type_byte == "'":
+        return "Other Mic-E (tracker)", False
+    return None, None
+
+
+def _format_mic_e_position_ambiguity(position_ambiguity_digits: int) -> str:
+    if position_ambiguity_digits <= 0:
+        return "none"
+    if position_ambiguity_digits == 1:
+        return "1 digit"
+    return f"{position_ambiguity_digits} digits"
 
 
 def _decode_mic_e_latitude(destination: str) -> tuple[str | None, int]:
@@ -2858,6 +3296,18 @@ def _decode_mic_e_speed_course(info: str) -> dict[str, int] | None:
     }
 
 
+def _decode_mic_e_message(destination: str) -> tuple[int | None, str | None]:
+    if len(destination) != 6:
+        return None, None
+
+    bits = [
+        0 if ("A" <= char <= "J" or "P" <= char <= "Y") else 1
+        for char in destination[:3]
+    ]
+    message_code = 4 * bits[0] + 2 * bits[1] + bits[2]
+    return message_code, _MIC_E_MESSAGE_LABELS.get(message_code)
+
+
 def _decode_mic_e_dest_digit(char: str) -> tuple[int | None, bool]:
     if "0" <= char <= "9":
         return ord(char) - ord("0"), False
@@ -2899,6 +3349,7 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
     if not name:
         return None
 
+    state = "killed" if info[10] == "_" else "live"
     latitude = _parse_latitude(info[18:26])
     symbol_table = info[26]
     longitude = _parse_longitude(info[27:36])
@@ -2914,6 +3365,7 @@ def _parse_object_packet(info: str) -> dict[str, Any] | None:
         "packet_group": "object",
         "packet_group_label": _packet_group_label("object"),
         "packet_type_code": "object",
+        "state": state,
         "latitude": latitude,
         "longitude": longitude,
         "symbol": f"{symbol_table}{symbol_code}",
@@ -3135,6 +3587,14 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
     data: dict[str, Any] = dict(result.get("data", {}) or {})
     preserve_qsy_callsign_in_comment = False
     is_weather_context = bool(result.get("packet_group") == "weather" or result.get("symbol", "").endswith("_"))
+    if str(result.get("symbol") or "").strip() == "\\!":
+        result["emergency"] = True
+        result.setdefault("emergency_code", "EMERGENCY")
+    emergency_token = _extract_emergency_comment_token(comment)
+    if emergency_token is not None or bool(result.get("emergency")):
+        result["emergency"] = True
+    if emergency_token is not None:
+        result["emergency_code"] = emergency_token
     if result.get("symbol", "").endswith("_"):
         weather = _parse_weather_fields(comment)
         if weather:
@@ -3514,19 +3974,13 @@ def _base91_value(value: str) -> int:
 
 
 def _aprs_symbol_icon_path(symbol: str) -> str:
-    if len(symbol) != 2:
-        return "icons/verG/x.gif"
-
-    table, code = symbol[0], symbol[1]
-    index = ord(code) - 33
-    if index < 0 or index > 93:
-        return "icons/verG/x.gif"
-
-    filename = f"{index:02d}.gif" if table == "/" else f"a{index:02d}.gif"
-    candidate = settings.static_dir / "icons" / "verG" / filename
-    if candidate.exists():
-        return f"icons/verG/{filename}"
-    return "icons/verG/x.gif"
+    current_set = get_aprs_symbol_set()
+    alternate_set = APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN
+    for symbol_set in (current_set, alternate_set):
+        candidate = _aprs_symbol_icon_path_for_set(symbol, symbol_set)
+        if candidate is not None:
+            return candidate
+    return get_aprs_symbol_icon_fallback_path()
 
 
 def get_aprs_symbol_icon_path(symbol: str) -> str:

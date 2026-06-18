@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.8.40.dev.mice - 17.06.2026
+- `Mic-E / Station Details`: uzupełniono diagnostykę o dekodowane pola Mic-E w szczegółach stacji, bez osobnej sekcji i bez pustych etykiet; poprawiono też priorytet `message capable` względem surowego bajtu typu.
+
+## 1.8.39.dev - 15.06.2026
+- `Mapa / ikony modern`: wycentrowano overlay na ikonach oraz dodano lepszy cień dla czytelności.
+
+## 1.8.38.dev - 14.06.2026
+- `DIGI / Rate limit filter`: aktywowano istniejący bloczek `Filtr limitu tempa` dla flowów z `TX = tnc radio`; filtr przechowuje ostatnio przepuszczoną ramkę per instancja, odrzuca kolejne ramki przed upływem ustawionego limitu 5-60 s i loguje blokadę wraz z limitem.
+- `DIGI / Rate limit filter`: dodano maskę znaku źródłowego z wildcardem `*`; limit działa teraz na pasujące znaki wywoławcze, a `*` obejmuje wszystkie źródła.
+- `DIGI / Path rule`: dla flowów RF zachowano wymuszoną kolejność, tak aby `Filtr limitu tempa` był zawsze bezpośrednio przed `Reguła ścieżki i ochrony digi`.
+
+## 1.8.37.dev - 11.06.2026
+- `Objects / timestamp`: dla obiektów tymczasowych timestamp APRS jest teraz liczony dopiero przy realnym nadaniu ramki (`DDHHMMz`), a obiekty permanentne nadal używają stałego `111111z`.
+- `DIGI / Path rule`: opis pola `Paths (TRACE / traced)` uzupełniono o przykładowe ścieżki `WIDE1-1`, `WIDE2-1` i `WIDE2-2`, a dla flowów z `TX = tnc radio` wymuszono sztywno kolejność: `Duplicate Filter (viscous-delay)` zawsze pierwszy, `Path rule and DIGI guard` zawsze ostatni.
+- `Map / scroller / objects`: poprawiono wyświetlanie obiektów w prawym scrollerze mapy, żeby korzystały z właściwego `display_callsign`.
+
+## 1.8.36.dev - 11.06.2026
+- `Outbound/TX queue`: naprawiono pacing lokalnych ramek, tak aby opóźnione pakiety były ostatecznie nadawane zamiast być odkładane w nieskończoność.
+- `DIGI / rename TNC`: zmiana nazwy TNC propaguje się teraz do referencji source/target w flowach DIGI oraz do konfiguracji kroków RF, więc routing dalej wskazuje ten sam interfejs.
+
+## 1.8.35.dev - 11.06.2026
+- `Outbound/TX queue`: dodano per-TNC pacing dla lokalnie generowanych ramek APRSBox, aby obiekty, biuletyny, beacon, WX, status i ręczny TX były rozkładane w czasie przed fizycznym nadaniem zamiast nadawania jeden po drugim.
+
+## 1.8.34.dev - 09.06.2026
+- `Objects / inbound-outbound`: obiekty `killed` nie trafiają już do widocznej listy/mapy, a ramki outbound nadal używają znacznika `_` dla killed object.
+- `Objects / manual TX`: w edycji obiektu dodano przycisk `Wyślij`, który wymusza ręczne nadanie obiektu.
+- `GUI / icons`: w ustawieniach globalnych dodano wybór zestawu ikon APRS (`legacy` / `modern`) i podłączono lokalny katalog PNG z nowymi symbolami do renderowania w całym GUI.
+
+## 1.8.33.dev - 05.06.2026
+- `Mapa / lista stacji`: usunięto mieszanie ikonek i kolorów w prawym scrollerze mapy przez lookup po bazowym znaku; wpisy korzystają teraz z dokładnego `display_callsign`.
+
 ## 1.8.32.dev - 03.06.2026
 - `Powiadomienia / Telegram / webhooks`: zaimplementowano powiadomienia Telegram przez webhooki dla wiadomości i radaru stacji.
 

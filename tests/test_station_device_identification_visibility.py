@@ -99,6 +99,39 @@ class StationDeviceIdentificationVisibilityTests(unittest.TestCase):
             assert detail is not None
             self.assertIsNone(detail["aprs_device"])
 
+    def test_station_detail_exposes_mic_e_details_for_mic_e_frame(self) -> None:
+        with temporary_database(), patch(
+            "app.services.content.lookup_aprs_device_identification",
+            return_value={
+                "identifier_kind": "mic-e",
+                "actual_identifier": "_0",
+                "matched_pattern": "_0",
+                "short_name": "FT3D",
+                "identified_as": "FT3D",
+                "vendor": "Yaesu",
+                "model": "FT3D",
+                "class_label": "Handheld APRS client",
+                "class_description": "Handheld APRS client",
+                "message_capable": True,
+                "features": ["messaging"],
+            },
+        ), patch(
+            "app.services.content.get_aprs_device_identification_database",
+            return_value={},
+        ):
+            insert_tnc2_frame('SO5AJM-7 > URTW13 , SR5NWR*,WIDE1*,WIDE2*:`14M^\\^]D[/"4N}Witam!')
+
+            detail = get_station_detail("SO5AJM-7")
+            assert detail is not None
+            self.assertIsNotNone(detail["mic_e"])
+            self.assertEqual((detail["mic_e"] or {}).get("destination_raw"), "URTW13")
+            self.assertEqual((detail["mic_e"] or {}).get("device_name"), "FT3D")
+            fields = detail.get("fields") or []
+            self.assertIn({"label": "Packet type", "value": "Mic-E"}, fields)
+            self.assertTrue(any(field.get("label") == "Destination" and "Mic-E encoded" in str(field.get("value") or "") for field in fields))
+            self.assertFalse(any(field.get("label") == "Device known" for field in fields))
+            self.assertEqual(sum(1 for field in fields if field.get("label") == "Status"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

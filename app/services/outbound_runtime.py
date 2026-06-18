@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from app.db import execute, fetch_one, log_event, utc_now
+from app.db import execute, fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.activation_schedule import compute_activation_state
 from app.services.messages import (
     QUERY_MESSAGE_KIND,
@@ -17,6 +19,7 @@ from app.services.messages import (
 from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, LOCAL_TX_SOURCE_REF
 from app.services.outbound import (
     LOCAL_TX_ORIGIN,
+    LOCAL_TX_ORIGIN_ROUTED,
     OUTBOUND_KIND_DIGI_TX,
     build_beacon_tnc2,
     build_message_tnc2,
@@ -35,6 +38,7 @@ from app.services.outbound import (
 from app.services.traffic import TrafficMonitorService
 
 KISS_FEND = 0xC0
+LOCAL_TX_PACING_KINDS = {"object", "bulletin", "beacon", "wx", "freq_object", "net_sked", "status", "manual"}
 
 
 def _kiss_frame_hex_preview(frame: bytes, *, max_bytes: int = 32) -> str:
@@ -57,12 +61,18 @@ class OutboundService:
         traffic_monitor: TrafficMonitorService | None = None,
         digi_flow_runtime: Any | None = None,
         min_tx_gap_seconds: float = 0.35,
+        local_tx_base_spacing_seconds: float = 5.0,
+        local_tx_jitter_seconds: float = 3.0,
     ) -> None:
         self._poll_interval = poll_interval
         self._traffic_monitor = traffic_monitor
         self._digi_flow_runtime = digi_flow_runtime
         self._min_tx_gap_seconds = max(0.0, float(min_tx_gap_seconds))
+        self._local_tx_base_spacing_seconds = max(0.0, float(local_tx_base_spacing_seconds))
+        self._local_tx_jitter_seconds = max(0.0, float(local_tx_jitter_seconds))
         self._last_tx_monotonic_by_interface: dict[int, float] = {}
+        self._local_tx_last_physical_at_by_interface: dict[int, datetime] = {}
+        self._local_tx_next_allowed_at_by_interface: dict[int, datetime] = {}
         self._local_tx_forwarded_event_ids: set[str] = set()
         self._local_tx_forwarded_event_order: list[str] = []
         self._local_tx_forwarded_event_limit = 512
@@ -150,11 +160,11 @@ class OutboundService:
                     raise ValueError("DIGI TX outbound job is missing packet line.")
             else:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
-            self._forward_local_tx_to_digi_flow(job=job, kind=kind, payload=payload, tnc2_line=tnc2_line)
-            log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
-            if kind == "wx":
-                log_event("INFO", "wx", f"Generating WX frame for outbound job #{job_id}")
             if kind != OUTBOUND_KIND_DIGI_TX and _payload_flag(payload.get("internal_tx_only"), default=False):
+                self._forward_local_tx_to_digi_flow(job=job, kind=kind, payload=payload, tnc2_line=tnc2_line)
+                log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
+                if kind == "wx":
+                    log_event("INFO", "wx", f"Generating WX frame for outbound job #{job_id}")
                 mark_outbound_job_sent(job_id)
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:
@@ -168,6 +178,18 @@ class OutboundService:
                 if kind == "wx":
                     log_event("INFO", "wx", f"Sent WX outbound job #{job_id} via Internal TX routing")
                 return
+            if self._maybe_delay_local_generated_tx(
+                job=job,
+                kind=kind,
+                payload=payload,
+                interface_id=normalized_interface_id,
+                interface_name=interface_name,
+            ):
+                return
+            self._forward_local_tx_to_digi_flow(job=job, kind=kind, payload=payload, tnc2_line=tnc2_line)
+            log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
+            if kind == "wx":
+                log_event("INFO", "wx", f"Generating WX frame for outbound job #{job_id}")
             frame = build_tnc2_kiss_frame(tnc2_line)
             if job.get("interface_enabled") in {0, "0", False}:
                 skip_reason = f"TX skipped: interface {interface_name} is disabled in configuration."
@@ -388,7 +410,9 @@ class OutboundService:
         metadata["origin"] = str(metadata.get("origin") or LOCAL_TX_ORIGIN).strip() or LOCAL_TX_ORIGIN
         metadata["local_generated"] = _payload_flag(metadata.get("local_generated"), default=True)
         metadata["own_station"] = _payload_flag(metadata.get("own_station"), default=True)
-        metadata["frame_purpose"] = str(metadata.get("frame_purpose") or purpose).strip() or purpose
+        metadata["tx_origin"] = str(payload.get("tx_origin") or metadata.get("tx_origin") or metadata["origin"]).strip() or metadata["origin"]
+        metadata["tx_kind"] = str(payload.get("tx_kind") or metadata.get("tx_kind") or metadata.get("frame_purpose") or purpose).strip() or purpose
+        metadata["frame_purpose"] = str(metadata.get("frame_purpose") or metadata["tx_kind"] or purpose).strip() or purpose
 
         event_id = str(payload.get("local_tx_event_id") or "").strip()
         forward_key = event_id or f"legacy:{kind}:{tnc2_line}"
@@ -412,6 +436,196 @@ class OutboundService:
         except Exception as exc:
             error = str(exc).strip() or exc.__class__.__name__
             log_event("WARNING", "outbound", f"Failed to enqueue Local TX frame to routing runtime: {error}")
+
+    def _maybe_delay_local_generated_tx(
+        self,
+        *,
+        job: dict[str, Any],
+        kind: str,
+        payload: dict[str, Any],
+        interface_id: int | None,
+        interface_name: str,
+    ) -> bool:
+        if interface_id is None:
+            return False
+        tx_origin, tx_kind = self._resolve_tx_origin_and_kind(kind=kind, payload=payload)
+        if tx_origin != LOCAL_TX_ORIGIN or tx_kind not in LOCAL_TX_PACING_KINDS:
+            return False
+
+        now = datetime.now(timezone.utc)
+        job_release_at = self._parse_timestamp(str(payload.get("tx_pacing_next_allowed_at") or ""))
+        if job_release_at is None:
+            raw_metadata = payload.get("local_tx_metadata")
+            metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+            job_release_at = self._parse_timestamp(str(metadata.get("tx_pacing_next_allowed_at") or ""))
+        if job_release_at is not None and job_release_at <= now:
+            spacing_seconds = self._compute_local_tx_spacing_seconds()
+            updated_next_allowed_at = now + timedelta(seconds=spacing_seconds)
+            current_next_allowed_at = self._local_tx_next_allowed_at_by_interface.get(interface_id)
+            if current_next_allowed_at is None or updated_next_allowed_at > current_next_allowed_at:
+                self._local_tx_next_allowed_at_by_interface[interface_id] = updated_next_allowed_at
+            self._local_tx_last_physical_at_by_interface[interface_id] = now
+            return False
+
+        next_allowed_at = self._local_tx_next_allowed_at_by_interface.get(interface_id)
+        if next_allowed_at is None:
+            next_allowed_at = self._load_local_tx_next_allowed_at_from_db(interface_id=interface_id)
+            if next_allowed_at is not None:
+                self._local_tx_next_allowed_at_by_interface[interface_id] = next_allowed_at
+        if next_allowed_at is None:
+            last_physical_at = self._local_tx_last_physical_at_by_interface.get(interface_id)
+            if last_physical_at is not None:
+                next_allowed_at = last_physical_at + timedelta(seconds=self._compute_local_tx_spacing_seconds())
+        if next_allowed_at is None and job_release_at is not None:
+            next_allowed_at = job_release_at
+
+        if next_allowed_at is not None and next_allowed_at > now:
+            delay_seconds = (next_allowed_at - now).total_seconds()
+            self._reschedule_outbound_job_for_local_tx(
+                job=job,
+                next_allowed_at=next_allowed_at,
+                payload=payload,
+                interface_id=interface_id,
+            )
+            log_event(
+                "DEBUG",
+                "outbound",
+                f"TX pacing: delayed {tx_origin} {tx_kind} for {interface_name} by {delay_seconds:.1f}s",
+            )
+            return True
+
+        spacing_seconds = self._compute_local_tx_spacing_seconds()
+        updated_next_allowed_at = now + timedelta(seconds=spacing_seconds)
+        self._local_tx_last_physical_at_by_interface[interface_id] = now
+        current_next_allowed_at = self._local_tx_next_allowed_at_by_interface.get(interface_id)
+        if current_next_allowed_at is None or updated_next_allowed_at > current_next_allowed_at:
+            self._local_tx_next_allowed_at_by_interface[interface_id] = updated_next_allowed_at
+        return False
+
+    def _compute_local_tx_spacing_seconds(self) -> float:
+        if self._local_tx_jitter_seconds <= 0:
+            return self._local_tx_base_spacing_seconds
+        return self._local_tx_base_spacing_seconds + random.uniform(0.0, self._local_tx_jitter_seconds)
+
+    def _load_local_tx_next_allowed_at_from_db(self, *, interface_id: int) -> datetime | None:
+        rows = fetch_all(
+            """
+            SELECT kind, payload_json
+            FROM outbound_jobs
+            WHERE interface_id = ?
+              AND status IN (?, ?)
+            ORDER BY id DESC
+            """,
+            (interface_id, "queued", "processing"),
+        )
+        latest: datetime | None = None
+        for row in rows:
+            try:
+                payload = json.loads(str(row["payload_json"] or "{}"))
+            except json.JSONDecodeError:
+                continue
+            tx_origin, tx_kind = self._resolve_tx_origin_and_kind(kind=str(row["kind"] or ""), payload=payload)
+            if tx_origin != LOCAL_TX_ORIGIN or tx_kind not in LOCAL_TX_PACING_KINDS:
+                continue
+            parsed = self._parse_timestamp(str(payload.get("tx_pacing_next_allowed_at") or ""))
+            if parsed is None:
+                raw_metadata = payload.get("local_tx_metadata")
+                metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+                parsed = self._parse_timestamp(str(metadata.get("tx_pacing_next_allowed_at") or ""))
+            if parsed is None:
+                continue
+            if latest is None or parsed > latest:
+                latest = parsed
+        return latest
+
+    def _reschedule_outbound_job_for_local_tx(
+        self,
+        *,
+        job: dict[str, Any],
+        next_allowed_at: datetime,
+        payload: dict[str, Any],
+        interface_id: int,
+    ) -> None:
+        spacing_seconds = self._compute_local_tx_spacing_seconds()
+        updated_next_allowed_at = next_allowed_at + timedelta(seconds=spacing_seconds)
+        updated_payload = dict(payload)
+        updated_payload["tx_pacing_next_allowed_at"] = self._format_timestamp(next_allowed_at)
+        metadata = dict(updated_payload.get("local_tx_metadata") or {})
+        metadata["tx_pacing_next_allowed_at"] = updated_payload["tx_pacing_next_allowed_at"]
+        updated_payload["local_tx_metadata"] = metadata
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE outbound_jobs
+                SET status = ?, scheduled_at = ?, locked_at = NULL, started_at = NULL,
+                    attempt_count = CASE WHEN attempt_count > 0 THEN attempt_count - 1 ELSE 0 END,
+                    last_error = NULL, payload_json = ?, updated_at = ?
+                WHERE id = ? AND status = ?
+                """,
+                (
+                    "queued",
+                    self._format_timestamp(next_allowed_at),
+                    json.dumps(updated_payload, ensure_ascii=True, separators=(",", ":")),
+                    utc_now(),
+                    int(job["id"]),
+                    "processing",
+                ),
+            )
+        self._local_tx_next_allowed_at_by_interface[interface_id] = updated_next_allowed_at
+
+    def _resolve_tx_origin_and_kind(self, *, kind: str, payload: dict[str, Any]) -> tuple[str, str]:
+        stored_origin = str(payload.get("tx_origin") or "").strip().lower()
+        stored_kind = str(payload.get("tx_kind") or "").strip().lower()
+        if stored_origin and stored_kind:
+            return stored_origin, stored_kind
+
+        raw_metadata = payload.get("local_tx_metadata")
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+        metadata_origin = str(metadata.get("origin") or "").strip().lower()
+        metadata_kind = str(metadata.get("tx_kind") or metadata.get("frame_purpose") or "").strip().lower()
+        normalized_kind = str(kind or "").strip().lower()
+        if normalized_kind == OUTBOUND_KIND_DIGI_TX:
+            return LOCAL_TX_ORIGIN_ROUTED, "routed"
+        if normalized_kind == "beacon":
+            return LOCAL_TX_ORIGIN, "beacon"
+        if normalized_kind == "status":
+            return LOCAL_TX_ORIGIN, "status"
+        if normalized_kind == "object":
+            return LOCAL_TX_ORIGIN, "object"
+        if normalized_kind == "wx":
+            return LOCAL_TX_ORIGIN, "wx"
+        if normalized_kind == "message":
+            trigger = str(payload.get("trigger") or "").strip().lower()
+            message_kind = str(payload.get("message_kind") or "").strip().lower()
+            if message_kind == "ack":
+                return LOCAL_TX_ORIGIN, "ack"
+            if trigger.startswith("manual"):
+                return LOCAL_TX_ORIGIN, "manual"
+            if message_kind in {"direct_message", "query"}:
+                return LOCAL_TX_ORIGIN, "message"
+            if message_kind in {"announcement", "group_bulletin", "bulletin"}:
+                return LOCAL_TX_ORIGIN, "bulletin"
+            return LOCAL_TX_ORIGIN, "bulletin"
+        if metadata_origin:
+            return metadata_origin, metadata_kind or "other"
+        if stored_origin:
+            return stored_origin, stored_kind or "other"
+        return "unknown", "other"
+
+    def _format_timestamp(self, value: datetime) -> str:
+        return value.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+
+    def _parse_timestamp(self, value: str) -> datetime | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     def _resolve_tx_gap_seconds(self, job: dict[str, Any]) -> float:
         try:
@@ -512,6 +726,8 @@ def _payload_flag(value: Any, *, default: bool) -> bool:
 
 def _skip_reason_for_inactive_aprs_content(*, kind: str, payload: dict[str, Any], now: datetime) -> str | None:
     if kind == "object":
+        if _payload_flag(payload.get("force_send"), default=False):
+            return None
         object_id = _normalize_payload_id(payload.get("object_id"))
         if object_id is None:
             return None

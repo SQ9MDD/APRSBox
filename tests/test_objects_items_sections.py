@@ -226,6 +226,80 @@ class ObjectAndItemFormTests(unittest.TestCase):
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
 
+    def test_object_manual_send_queues_force_send_job(self) -> None:
+        with temporary_database():
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "9",
+                    "beacon_interface_id": "1",
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": None,
+                }
+            )
+            execute(
+                """
+                INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
+                VALUES ('Test TNC', 'TCP', '2m', '127.0.0.1:9001', 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """
+            )
+            success, error = safe_create_section_row(
+                "objects",
+                {
+                    "name": "VOICE",
+                    "lifetime": "temporary",
+                    "state": "live",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": "r",
+                    "interval_minutes": "30",
+                    "path": "WIDE2-2",
+                    "comment": "Local voice repeater",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("VOICE",))
+            assert row is not None
+
+            try:
+                from fastapi.testclient import TestClient
+            except ModuleNotFoundError:
+                self.skipTest("fastapi is not installed in this environment")
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="tester",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                response = client.post(f"/settings/objects/{int(row['id'])}/send")
+                self.assertEqual(response.status_code, 200)
+                job = fetch_one(
+                    "SELECT payload_json, status FROM outbound_jobs WHERE kind = 'object' ORDER BY id DESC LIMIT 1"
+                )
+                assert job is not None
+                payload = json.loads(job["payload_json"])
+                self.assertTrue(payload["force_send"])
+                self.assertEqual(payload["trigger"], "manual")
+                self.assertEqual(job["status"], "queued")
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
     def test_object_preview_uses_overlay_for_alternate_symbol_table(self) -> None:
         with temporary_database():
             update_station_settings(

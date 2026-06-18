@@ -329,7 +329,7 @@
                         <div class="station-symbol-dropdown" id="{{ section.slug }}-symbol-dropdown">
                             <button type="button" class="station-symbol-trigger" id="{{ section.slug }}-symbol-trigger" aria-haspopup="listbox" aria-expanded="false">
                                 <span class="station-symbol-trigger-copy">
-                                    <img id="{{ section.slug }}-symbol-trigger-image" src="{{ request.scope.root_path }}/static/icons/verG/x.gif" alt="">
+                                    <img id="{{ section.slug }}-symbol-trigger-image" src="{{ request.scope.root_path }}/static/{{ aprs_symbol_icon_fallback }}" alt="">
                                     <span id="{{ section.slug }}-symbol-trigger-text">{{ t("Select symbol") }}</span>
                                 </span>
                                 <span class="station-symbol-trigger-caret">▾</span>
@@ -441,6 +441,9 @@
                 {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
+                    {% if section.slug == 'objects' and edit_row %}
+                    <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/settings/objects/{{ edit_row.id }}/send" formmethod="post">{{ t("Send now") }}</button>
+                    {% endif %}
                     {% if section.supports_editing and edit_row %}
                     <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% if section.supports_delete %}
@@ -779,7 +782,7 @@
                 const icon = symbolTable.value === "\\"
                     ? selected.dataset.alternateIcon
                     : selected.dataset.primaryIcon;
-                symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+                symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/{{ aprs_symbol_icon_fallback }}";
                 symbolTriggerText.textContent = selected.dataset.label || selected.value;
 
                 for (const option of symbolOptions) {
@@ -788,7 +791,7 @@
                         : option.dataset.primaryIcon;
                     const image = option.querySelector(".station-symbol-option-image");
                     if (image) {
-                        image.src = optionIcon || "{{ request.scope.root_path }}/static/icons/verG/x.gif";
+                        image.src = optionIcon || "{{ request.scope.root_path }}/static/{{ aprs_symbol_icon_fallback }}";
                     }
                     const isActive = option.dataset.value === selected.dataset.value;
                     option.classList.toggle("active", isActive);

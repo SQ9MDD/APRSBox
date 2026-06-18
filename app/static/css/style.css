@@ -2088,6 +2088,11 @@ body {
     image-rendering: pixelated;
 }
 
+:root[data-aprs-symbol-set="modern"] .station-symbol-option-image {
+    width: 32px;
+    height: 32px;
+}
+
 .station-symbol-option-label {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3366,11 +3371,21 @@ select:focus-visible,
     flex: 0 0 auto;
 }
 
+:root[data-aprs-symbol-set="modern"] .aprs-symbol-icon-stack {
+    width: 2rem;
+    height: 2rem;
+}
+
 .aprs-symbol-icon {
     width: 1.5rem;
     height: 1.5rem;
     image-rendering: pixelated;
     flex: 0 0 auto;
+}
+
+:root[data-aprs-symbol-set="modern"] .aprs-symbol-icon {
+    width: 2rem;
+    height: 2rem;
 }
 
 .aprs-symbol-overlay {
@@ -4183,6 +4198,18 @@ select:focus-visible,
     min-width: 0;
 }
 
+.station-detail-comment-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: currentColor;
+    text-underline-offset: 0.12em;
+}
+
+.station-detail-comment-link:hover,
+.station-detail-comment-link:focus-visible {
+    color: inherit;
+}
+
 .station-detail-decoded {
     margin-top: 0.9rem;
     padding-top: 0.55rem;
@@ -4703,6 +4730,11 @@ code {
     width: 20px;
     height: 20px;
     image-rendering: pixelated;
+}
+
+:root[data-aprs-symbol-set="modern"] .section-symbol-preview {
+    width: 32px;
+    height: 32px;
 }
 
 .prepared-entity-table {

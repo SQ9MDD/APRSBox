@@ -9,10 +9,12 @@
     const toggleButton = document.getElementById("map-toggle-scroller");
     const toggleIcon = document.getElementById("map-toggle-scroller-icon");
     const staticRoot = root.dataset.staticRoot || "/static/";
+    const aprsSymbolIconFallback = window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif";
     const scrollerVisibleStorageKey = "aprsbox-map-scroller-visible";
     const stationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
-    const fallbackStationIconPath = `${staticRoot}icons/verG/x.gif`;
+    const trafficSnapshotEventName = "aprsbox:traffic-snapshot";
+    const fallbackStationIconPath = `${staticRoot}${aprsSymbolIconFallback}`;
     const maxEntries = 120;
     const stationSourceKey = normalizeCallsignKey(root.dataset.stationSourceKey || "");
     const stationSourceCallsign = baseCallsignKey(stationSourceKey);
@@ -105,10 +107,6 @@
             return;
         }
         stationByCallsignKey.set(normalized, stationInfo);
-        const base = baseCallsignKey(normalized);
-        if (base) {
-            stationByCallsignKey.set(base, stationInfo);
-        }
     }
 
     function updateStationLookup(stations) {
@@ -118,12 +116,23 @@
             const symbolIcon = String((station && station.symbol_icon) || "").trim();
             const stationInfo = {
                 iconPath: symbolIcon ? `${staticRoot}${symbolIcon}` : fallbackStationIconPath,
+                symbolOverlay: resolveSymbolOverlay(station && station.symbol_table),
                 latitude: Number((station && station.latitude)),
                 longitude: Number((station && station.longitude)),
             };
             registerStationLookupEntry(station && station.display_callsign, stationInfo);
-            registerStationLookupEntry(station && station.callsign, stationInfo);
+            if (!String((station && station.display_callsign) || "").trim()) {
+                registerStationLookupEntry(station && station.callsign, stationInfo);
+            }
         }
+    }
+
+    function resolveSymbolOverlay(symbolTable) {
+        const normalized = String(symbolTable || "").trim();
+        if (!normalized || normalized === "/" || normalized === "\\") {
+            return "";
+        }
+        return normalized.charAt(0);
     }
 
     function updateMapViewState(detail) {
@@ -314,8 +323,7 @@
     }
 
     function stationTextColor(stationCallsign) {
-        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign))
-            || stationByCallsignKey.get(baseCallsignKey(stationCallsign));
+        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign));
         if (!station || !Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
             return "#000000";
         }
@@ -371,9 +379,25 @@
     }
 
     function stationIconPath(stationCallsign) {
-        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign))
-            || stationByCallsignKey.get(baseCallsignKey(stationCallsign));
+        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign));
         return (station && station.iconPath) || fallbackStationIconPath;
+    }
+
+    function stationIconOverlay(stationCallsign) {
+        const station = stationByCallsignKey.get(normalizeCallsignKey(stationCallsign));
+        return (station && station.symbolOverlay) || "";
+    }
+
+    function frameIconPath(frame, fallbackCallsign) {
+        const displayIconPath = String((frame && frame.display_icon_path) || "").trim();
+        if (displayIconPath) {
+            return `${staticRoot}${displayIconPath}`;
+        }
+        const displayPacketGroup = String((frame && frame.display_packet_group) || "").trim().toLowerCase();
+        if (displayPacketGroup === "object" || displayPacketGroup === "item") {
+            return fallbackStationIconPath;
+        }
+        return stationIconPath(fallbackCallsign);
     }
 
     function buildScrollerEntries(snapshot) {
@@ -390,14 +414,16 @@
                 continue;
             }
             const marker = resolveMarker(parsed, direction);
-            const stationLabel = `${parsed.station}${marker}`;
+            const displayCallsign = String((frame && frame.display_callsign) || parsed.station || "").trim() || parsed.station;
+            const stationLabel = `${displayCallsign}${marker}`;
             entries.push({
                 timestamp: shortTimestamp(frame && frame.timestamp),
-                station: parsed.station,
+                station: displayCallsign,
                 stationLabel,
                 digipeater: parsed.digipeater,
-                stationIconPath: stationIconPath(parsed.station),
-                stationColor: stationTextColor(parsed.station),
+                stationIconPath: frameIconPath(frame, displayCallsign || parsed.station),
+                stationIconOverlay: stationIconOverlay(displayCallsign || parsed.station),
+                stationColor: stationTextColor(displayCallsign || parsed.station),
             });
             if (entries.length >= maxEntries) {
                 break;
@@ -415,6 +441,7 @@
             `<div class="map-scroller-row">`
                 + `<span class="map-scroller-icon-wrap" title="${escapeHtml(entry.timestamp)}">`
                     + `<img class="map-scroller-icon" src="${escapeHtml(entry.stationIconPath)}" alt="">`
+                    + `${entry.stationIconOverlay ? `<span class="aprs-symbol-overlay" aria-hidden="true">${escapeHtml(entry.stationIconOverlay)}</span>` : ""}`
                 + `</span>`
                 + `<span class="map-scroller-station" style="color:${escapeHtml(entry.stationColor)}">${escapeHtml(entry.stationLabel)}</span>`
                 + `<span class="map-scroller-digi">${escapeHtml(entry.digipeater)}</span>`
@@ -424,9 +451,13 @@
 
     function applySnapshot(snapshot) {
         lastSnapshotPayload = snapshot;
+        window.__APRSBOX_TRAFFIC_SNAPSHOT__ = snapshot;
+        root.dispatchEvent(new window.CustomEvent(trafficSnapshotEventName, {
+            detail: snapshot,
+        }));
         const entries = buildScrollerEntries(snapshot);
         const signature = entries
-            .map((entry) => `${entry.timestamp}|${entry.stationLabel}|${entry.digipeater}|${entry.stationIconPath}|${entry.stationColor}`)
+            .map((entry) => `${entry.timestamp}|${entry.stationLabel}|${entry.digipeater}|${entry.stationIconPath}|${entry.stationIconOverlay}|${entry.stationColor}`)
             .join("||");
         if (signature === lastSnapshotSignature) {
             return;
