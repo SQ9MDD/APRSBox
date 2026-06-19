@@ -2,8 +2,8 @@
 
 ## Application
 
-- [Creating objects](application/objects_en.md)
+- [Creating objects](application/objects.en.md)
 
 ## Protocoll
 
-- [Repeater and QSY objects](protocoll/repeaters_qsy_en.md)
+- [Repeater and QSY objects](protocoll/repeaters_qsy.en.md)
