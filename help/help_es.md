@@ -3,6 +3,7 @@
 ## Application
 
 - [Creacion de objetos](application/objects.es.md)
+- [Boletines y anuncios](application/bulletins.es.md)
 
 ## Protocoll
 
