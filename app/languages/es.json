@@ -1436,6 +1436,11 @@
   "Notification transport test failed.": "La prueba del transporte de notificaciones falló.",
   "Radar rule saved.": "La regla de radar se guardó.",
   "Radar rule deleted.": "La regla de radar se eliminó.",
+  "Help": "Ayuda",
+  "Close help": "Cerrar ayuda",
+  "Loading help...": "Cargando ayuda...",
+  "Help file not found.": "Archivo de ayuda no encontrado.",
+  "Unable to load help.": "No se pudo cargar la ayuda.",
   "Delete this entry?": "¿Eliminar esta entrada?",
   "Your role can view notification configuration but cannot change it.": "Tu rol puede ver la configuración de notificaciones, pero no puede cambiarla."
 }

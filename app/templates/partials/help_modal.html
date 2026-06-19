@@ -1,0 +1,34 @@
+<div
+    class="help-viewer-modal"
+    id="help-viewer-modal"
+    hidden
+    data-root-path="{{ request.scope.root_path }}"
+    data-title-text="{{ t('Help') }}"
+    data-loading-text="{{ t('Loading help...') }}"
+    data-not-found-text="{{ t('Help file not found.') }}"
+    data-error-text="{{ t('Unable to load help.') }}"
+>
+    <div class="help-viewer-backdrop" data-close-help-viewer></div>
+    <div class="help-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="help-viewer-title" tabindex="-1">
+        <div class="help-viewer-header">
+            <h3 id="help-viewer-title">{{ t("Help") }}</h3>
+            <button
+                type="button"
+                class="sidebar-action-button"
+                data-close-help-viewer
+                aria-label="{{ t('Close help') }}"
+                title="{{ t('Close help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+            </button>
+        </div>
+        <div class="help-viewer-body">
+            <article id="help-viewer-content" class="help-viewer-markdown">
+                <p class="muted">{{ t("Loading help...") }}</p>
+            </article>
+        </div>
+        <div class="help-viewer-footer">
+            <button type="button" class="button button-secondary" data-close-help-viewer>{{ t("Close") }}</button>
+        </div>
+    </div>
+</div>

@@ -1481,6 +1481,11 @@
   "Notification transport test failed.": "Notification transport test failed.",
   "Radar rule saved.": "Radar rule saved.",
   "Radar rule deleted.": "Radar rule deleted.",
+  "Help": "Help",
+  "Close help": "Close help",
+  "Loading help...": "Loading help...",
+  "Help file not found.": "Help file not found.",
+  "Unable to load help.": "Unable to load help.",
   "Delete this entry?": "Delete this entry?",
   "Your role can view notification configuration but cannot change it.": "Your role can view notification configuration but cannot change it."
 }

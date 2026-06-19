@@ -1503,6 +1503,11 @@
   "Notification transport test failed.": "Test transportu powiadomień nie powiódł się.",
   "Radar rule saved.": "Reguła radaru została zapisana.",
   "Radar rule deleted.": "Reguła radaru została usunięta.",
+  "Help": "Pomoc",
+  "Close help": "Zamknij pomoc",
+  "Loading help...": "Ładowanie pomocy...",
+  "Help file not found.": "Nie znaleziono pliku pomocy.",
+  "Unable to load help.": "Nie udało się załadować pomocy.",
   "Delete this entry?": "Usunąć ten wpis?",
   "Your role can view notification configuration but cannot change it.": "Twoja rola może przeglądać konfigurację powiadomień, ale nie może jej zmieniać."
 }
