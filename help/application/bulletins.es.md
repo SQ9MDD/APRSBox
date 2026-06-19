@@ -15,12 +15,12 @@ Los boletines y anuncios son utiles para informacion breve, por ejemplo:
 
 ## Campos basicos
 
-- `Type` selecciona el tipo de entrada.
-- `Code` identifica el boletin o anuncio.
-- `Group` asigna la entrada a un nombre corto de grupo.
-- `Message` contiene el texto del comunicado.
-- `Path` define la ruta APRS, si hace falta.
-- `Send interval` y `Activation` controlan con que frecuencia y en que horario puede enviarse la trama.
+- `Type` selecciona el tipo de entrada, por ejemplo boletin general, boletin de grupo o anuncio. Esto influye en como se construye el destinatario APRS y en que campos auxiliares son relevantes.
+- `Code` identifica el boletin o anuncio con un solo caracter. Los boletines suelen usar digitos `0-9`, mientras que los anuncios usan letras `A-Z`, lo que facilita reconocer el tipo de mensaje en el lado receptor.
+- `Group` asigna la entrada a un nombre corto de grupo, sobre todo para boletines de grupo. Este valor debe mantenerse corto, legible y estable porque pasa a formar parte del identificador visible para el receptor.
+- `Message` contiene el texto real del comunicado enviado a la red APRS. Conviene escribir aqui un texto breve y claro para que pueda leerse comodamente en una radio o en un cliente APRS simple sin desplazamiento ni dudas de contexto.
+- `Path` define la ruta APRS si debe usarse en la transmision por RF. Para mensajes locales simples, dejar este campo vacio suele ser la opcion mas segura salvo que la practica local requiera una ruta concreta.
+- `Send interval` define cada cuanto tiempo puede reenviarse la entrada, mientras que `Activation` define cuando puede estar activa. En la practica, estos campos trabajan juntos: uno controla el intervalo entre transmisiones y el otro la ventana de tiempo en la que el envio esta permitido.
 
 ## Reglas practicas breves
 
