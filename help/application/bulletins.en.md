@@ -121,13 +121,7 @@ EVENT
 SP5
 ```
 
-Weaker group names:
-
-```text
-very_long_group_name
-club_meeting_2026
-text with spaces and special characters
-```
+The APRS specification states that a group bulletin address is composed of `BLN`, a single-digit bulletin identifier, and a group name up to 5 characters long, padded with spaces to 5 characters.
 
 ## 4. Form handling
 

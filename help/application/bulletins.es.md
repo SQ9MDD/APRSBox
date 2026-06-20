@@ -121,13 +121,7 @@ EVENT
 SP5
 ```
 
-Nombres de grupo menos adecuados:
-
-```text
-nombre_de_grupo_muy_largo
-reunion_del_club_2026
-texto con espacios y caracteres especiales
-```
+La especificación APRS indica que la dirección de un boletín de grupo se compone de `BLN`, un identificador de boletín de un solo dígito y un nombre de grupo de hasta 5 caracteres, completado con espacios hasta 5 caracteres.
 
 ## 4. Manejo del formulario
 

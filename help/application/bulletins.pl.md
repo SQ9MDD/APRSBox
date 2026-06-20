@@ -121,13 +121,7 @@ EVENT
 SP5
 ```
 
-Słabsze nazwy grup:
-
-```text
-bardzo_dluga_nazwa
-spotkanie_klubowe_2026
-tekst z odstępami i znakami specjalnymi
-```
+Specyfikacja APRS opisuje, że adres biuletynu grupowego składa się z `BLN`, jednocyfrowego identyfikatora biuletynu i nazwy grupy o długości do 5 znaków, uzupełnianej spacjami do 5 znaków.
 
 ## 4. Obsługa formularza
 
