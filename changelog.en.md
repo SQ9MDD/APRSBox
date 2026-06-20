@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.41.dev - 2026-06-20
+- `Help / Objects / Bulletins`: added local Markdown help files for the `Objects` and `Bulletins / Announcements` tabs in `PL/EN/ES`, together with basic document navigation and GUI form integration.
+
 ## 1.8.40.dev.mice - 2026-06-17
 - `Mic-E / Station Details`: expanded Mic-E diagnostics directly inside station details, without a separate section or empty labels; also fixed `message capable` priority so the raw type byte wins over device metadata.
 

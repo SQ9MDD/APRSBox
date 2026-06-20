@@ -1,41 +1,390 @@
-# Biuletyny i ogłoszenia
+# Biuletyny i ogłoszenia APRS
 
-Ekran służy do przygotowania ramek APRS w formacie wiadomości, używanych do publikowania biuletynów i ogłoszeń.
+Ten ekran służy do przygotowania krótkich komunikatów rozgłoszeniowych APRS w formacie wiadomości. Biuletyny i ogłoszenia nie są prywatnymi wiadomościami do jednej stacji. 
+Są przeznaczone dla wielu odbiorców, na przykład dla lokalnych operatorów, uczestników wydarzenia, grupy klubowej albo stacji znajdujących się w zasięgu radiowym.
 
-## Zastosowanie
+## 1. Teoria
 
-Biuletyny i ogłoszenia przydają się do przekazywania krótkich informacji tekstowych, takich jak:
+### Czym jest biuletyn APRS
 
-- informacje klubowe i operatorskie,
-- krótkie komunikaty organizacyjne,
-- zapowiedzi wydarzeń,
-- lokalne komunikaty techniczne lub pogodowe.
+Biuletyn APRS to krótka informacja tekstowa wysyłana do wielu odbiorców. Może zawierać komunikat klubowy, organizacyjny, techniczny, pogodowy albo informację przydatną podczas lokalnej aktywności radiowej.
 
-## Podstawowe pola
+Biuletyn nie jest rozmową tekstową i nie powinien zastępować długiego opisu, strony WWW ani prywatnej wiadomości do konkretnej osoby. Jego zadaniem jest szybkie przekazanie informacji, która ma znaczenie tu i teraz.
 
-- `Typ` wybiera rodzaj wpisu, na przykład `Biuletyn ogólny`, `Biuletyn grupowy` albo `Ogłoszenie`. Od tego pola zależy sposób zbudowania adresata APRS oraz to, które pola pomocnicze mają znaczenie.
-- `Kod` służy do oznaczania biuletynu lub ogłoszenia pojedynczym znakiem. Dla biuletynów zwykle używa się cyfr `0-9`, a dla ogłoszeń liter `A-Z`, dzięki czemu odbiorca łatwiej rozpoznaje typ komunikatu.
-- `Grupa` pozwala przypisać wpis do krótkiej grupy, używanej głównie przy biuletynach grupowych. To pole powinno pozostać krótkie, czytelne i stabilne, bo staje się częścią identyfikatora widocznego po stronie odbiorcy.
-- `Treść wiadomości` zawiera właściwą treść komunikatu wysyłanego do sieci APRS. Najlepiej wpisywać tu krótki, jednoznaczny tekst, który da się wygodnie odczytać na radiu lub prostym kliencie APRS bez przewijania i bez domyślania się kontekstu.
-- `Ścieżka` określa ścieżkę APRS, jeśli ma być użyta przy emisji radiowej. Dla prostych lokalnych komunikatów najbezpieczniej zostawić to pole puste, a jeśli w danym regionie stosowana jest konkretna praktyka, warto trzymać się lokalnych zasad.
-- `Interwał wysyłki` określa co ile minut wpis może być ponownie wysyłany. To ustawienie nie mówi jeszcze kiedy wpis wolno nadawać, tylko jaki ma być odstęp między kolejnymi emisjami, jeśli wpis jest aktualnie aktywny.
-- `Tryb aktywacji` wybiera tryb aktywacji wpisu. `Ręczny` oznacza ręczne włączenie bez harmonogramu, `Zaplanowany` pozwala zdefiniować jedno ciągłe okno czasowe, a `Cykliczny` służy do cyklicznego włączania wpisu według powtarzalnego planu.
-- `Aktywne od` określa moment rozpoczęcia aktywności wpisu w czasie UTC. W trybie `Zaplanowany` jest to początek jednego zadanego okna aktywności, a w trybie `Cykliczny` jest to pierwszy moment startu całego cyklu.
-- `Aktywne do` określa moment zakończenia aktywności wpisu w czasie UTC. W trybie `Zaplanowany` zwykle wyznacza koniec jednego przedziału emisji, a w trybie ręcznym może być użyte jako dodatkowe ograniczenie ważności wpisu.
-- `Aktywne przez (godziny)` określa jak długo pojedynczy cykl ma pozostawać aktywny w trybie `Cykliczny`. Innymi słowy, pole to definiuje długość jednego okna nadawania po każdym uruchomieniu cyklu.
-- `Powtarzaj co` określa co jaki interwał cykl ma się powtarzać w trybie `Cykliczny`. Razem z polem jednostki definiuje odstęp pomiędzy kolejnymi startami aktywnego okna.
-- `Jednostka powtórzenia` określa jednostkę używaną przez `Powtarzaj co`, na przykład dni, tygodnie, miesiące albo lata. To pole decyduje, czy powtarzanie ma być liczone w prostych odstępach dobowych, tygodniowych czy w dłuższych krokach kalendarzowych.
+Dobre zastosowania biuletynów:
 
-## Krótkie zasady praktyczne
+- informacja o lokalnej sieci lub spotkaniu,
+- komunikat dla uczestników wydarzenia,
+- informacja klubowa,
+- krótka zapowiedź pracy przemiennika, digi, iGate albo stacji terenowej,
+- lokalny komunikat techniczny,
+- krótka informacja pogodowa lub organizacyjna.
 
-- Dla biuletynów ogólnych i grupowych używaj kodów `0-9`.
-- Dla ogłoszeń używaj kodów `A-Z`.
-- Pole grupy powinno być krótkie i czytelne.
-- Treść wiadomości powinna być zwięzła i konkretna.
-- Tekst powinien mieścić się w limicie 67 znaków i używać drukowalnego ASCII.
-- Dla prostych, lokalnych emisji najbezpieczniej pozostawić pustą ścieżkę albo użyć tylko tego, co wynika z lokalnej praktyki.
-- Przy harmonogramach warto pamiętać, że `Interwał wysyłki` i `Tryb aktywacji` działają wspólnie: harmonogram określa kiedy wolno nadawać, a interwał określa jak często wpis ma być wysyłany w dozwolonym oknie.
+Przykłady dobrych komunikatów:
 
-## Uwagi
+```text
+NET 19:00 local repeater SR5XXX
+HAMFEST parking on 145.550
+WX alert: strong wind until 18 UTC
+APRS test 12:00-14:00 local area
+```
 
-Biuletyny APRS nie są miejscem na długie opisy. Lepiej wysyłać krótkie, jednoznaczne komunikaty niż rozbudowany tekst trudny do odczytania na radiu lub prostym kliencie APRS.
+### Czym jest ogłoszenie APRS
+
+Ogłoszenie jest podobne do biuletynu, ale zwykle ma charakter bardziej informacyjny lub zapowiadający. W praktyce może służyć do publikowania krótkich zapowiedzi aktywności, wydarzeń lub ważnych lokalnych informacji.
+
+Dla użytkownika najważniejsza różnica jest prosta:
+
+```text
+biuletyn      krótka informacja rozgłoszeniowa, zwykle numerowana cyfrą
+ogłoszenie    krótka informacja oznaczana literą
+```
+
+### Biuletyn a zwykła wiadomość APRS
+
+Zwykła wiadomość APRS jest kierowana do konkretnego znaku stacji. Biuletyn lub ogłoszenie jest kierowane do specjalnego adresata typu `BLN`, dlatego może zostać rozpoznane przez klientów APRS jako komunikat rozgłoszeniowy.
+
+Biuletyn:
+
+- nie jest prywatną wiadomością,
+- nie jest typowym czatem,
+- nie powinien wymagać odpowiedzi od konkretnej stacji,
+- powinien być krótki i zrozumiały bez dodatkowego kontekstu.
+
+## 2. Zgodność z protokołem APRS
+
+Biuletyny i ogłoszenia są wysyłane jako ramki APRS w formacie wiadomości. Różnią się od zwykłej wiadomości tym, że pole adresata zawiera specjalny identyfikator zaczynający się od `BLN`.
+
+Typowe identyfikatory:
+
+```text
+BLN0       biuletyn ogólny numer 0
+BLN1       biuletyn ogólny numer 1
+BLNA       ogłoszenie oznaczone literą A
+BLN0GRP    biuletyn grupowy, przykład z krótką grupą GRP
+```
+
+Pole adresata APRS ma ograniczoną długość, dlatego kod i nazwa grupy muszą być krótkie. Nie warto tworzyć długich ani niestandardowych identyfikatorów, 
+bo starsze radia i proste klienty APRS mogą ich nie pokazać w oczekiwany sposób.
+
+Dla zgodności i czytelności najlepiej stosować:
+
+```text
+0-9    dla biuletynów ogólnych i grupowych
+A-Z    dla ogłoszeń
+```
+
+Treść komunikatu powinna mieścić się w limicie krótkiej wiadomości APRS. Bezpieczną praktyką jest trzymanie się maksymalnie 67 znaków tekstu i używanie drukowalnego ASCII. 
+Warto unikać narodowych znaków, symboli specjalnych i formatowania, ponieważ część radii i starszych klientów APRS może ich nie wyświetlić poprawnie.
+
+## 3. Zasady dobrego użycia
+
+APRS został zaprojektowany jako system bieżącej informacji operatorskiej. Dobry biuletyn powinien odpowiadać na pytanie: czy ta informacja jest przydatna dla stacji, które odbiorą ją teraz i tutaj?
+
+Najlepsze praktyki:
+
+- pisz krótko i konkretnie,
+- przekazuj informacje przydatne lokalnie lub operacyjnie,
+- używaj prostego języka,
+- unikaj długich opisów,
+- unikaj zbyt częstego powtarzania,
+- nie używaj biuletynów jako reklamy bez znaczenia dla lokalnych operatorów,
+- nie wysyłaj treści, które lepiej umieścić na stronie WWW, w mailu albo komunikatorze.
+
+Dobry biuletyn APRS to krótka informacja o bieżącej wartości dla lokalnych operatorów, a nie tekst wysyłany do sieci tylko dlatego, że technicznie da się go nadać.
+
+### Interwał wysyłki
+
+Interwał powinien być dobrany rozsądnie. Biuletyn ma przypominać o ważnej informacji, ale nie powinien stale zajmować kanału radiowego.
+
+Dla lokalnych emisji RF unikaj bardzo krótkich odstępów. Jeżeli komunikat nie jest pilny, lepiej wysyłać go rzadziej. 
+Przy wydarzeniach i aktywnościach terenowych dobrym podejściem jest ustawienie okna aktywności i umiarkowanego interwału powtórzeń.
+
+### Ścieżka APRS
+
+Dla prostych lokalnych emisji najbezpieczniej zostawić ścieżkę pustą albo użyć ustawień zgodnych z lokalną praktyką. 
+Zbyt szeroka ścieżka może niepotrzebnie obciążać kanał radiowy i rozprowadzać lokalny komunikat dalej, niż jest to potrzebne.
+
+Jeżeli komunikat ma trafić tylko do APRS-IS, ścieżka radiowa zwykle nie ma znaczenia.
+
+### Grupy
+
+Grupa ma sens wtedy, gdy komunikat jest przeznaczony dla konkretnego środowiska, wydarzenia, klubu albo lokalnej aktywności. Nazwa grupy powinna być krótka, stabilna i łatwa do rozpoznania.
+
+Dobre nazwy grup:
+
+```text
+CLUB
+FIELD
+ARES
+EVENT
+SP5
+```
+
+Słabsze nazwy grup:
+
+```text
+bardzo_dluga_nazwa
+spotkanie_klubowe_2026
+tekst z odstępami i znakami specjalnymi
+```
+
+## 4. Obsługa formularza
+
+### Typ
+
+Pole `Typ` wybiera rodzaj wpisu.
+
+Typowe możliwości:
+
+```text
+Biuletyn ogólny
+Biuletyn grupowy
+Ogłoszenie
+```
+
+Od wybranego typu zależy sposób zbudowania adresata APRS i znaczenie pól pomocniczych.
+
+### Kod
+
+Pole `Kod` oznacza biuletyn lub ogłoszenie pojedynczym znakiem.
+
+Zalecane użycie:
+
+```text
+0-9    dla biuletynów
+A-Z    dla ogłoszeń
+```
+
+Przykłady:
+
+```text
+0    pierwszy biuletyn
+1    drugi biuletyn
+A    ogłoszenie A
+B    ogłoszenie B
+```
+
+Nie zmieniaj kodu bez potrzeby, jeżeli komunikat jest kontynuacją tej samej informacji. Stabilny kod ułatwia odbiorcom rozpoznanie, że widzą aktualizację tego samego biuletynu lub ogłoszenia.
+
+### Grupa
+
+Pole `Grupa` jest używane głównie przy biuletynach grupowych. Pozwala ograniczyć znaczenie komunikatu do konkretnej grupy odbiorców lub konkretnej aktywności.
+
+Grupa powinna być:
+
+- krótka,
+- czytelna,
+- stabilna,
+- zapisana prostymi znakami ASCII.
+
+Przykład:
+
+```text
+EVENT
+CLUB
+SP5
+```
+
+### Treść wiadomości
+
+Pole `Treść wiadomości` zawiera właściwy komunikat APRS.
+
+Najlepsza treść jest krótka, jednoznaczna i zrozumiała bez dodatkowego kontekstu. Pamiętaj, że komunikat może być czytany na małym ekranie radia, a nie tylko w wygodnej aplikacji na komputerze.
+
+Zalecenia:
+
+- maksymalnie 67 znaków,
+- drukowalne ASCII,
+- bez polskich znaków,
+- bez długich zdań,
+- bez formatowania,
+- bez niepotrzebnych ozdobników.
+
+Dobry przykład:
+
+```text
+NET 19:00 SR5XXX, check-ins welcome
+```
+
+Słabszy przykład:
+
+```text
+Dzisiejsze spotkanie naszej grupy odbedzie sie wieczorem, szczegoly na stronie internetowej, prosimy wszystkich o zapoznanie sie z informacjami.
+```
+
+### Ścieżka
+
+Pole `Ścieżka` określa ścieżkę APRS używaną przy emisji radiowej.
+
+Dla prostych lokalnych komunikatów najlepiej pozostawić je puste albo użyć tylko takiej ścieżki, jaka jest przyjęta lokalnie. 
+Nie ustawiaj szerokiej ścieżki tylko po to, żeby komunikat dotarł jak najdalej. Biuletyn powinien trafiać tam, gdzie ma wartość dla odbiorców.
+
+### Interwał wysyłki
+
+Pole `Interwał wysyłki` określa, co ile minut komunikat może być ponownie wysłany, gdy jest aktywny.
+
+To pole nie decyduje samo o tym, kiedy komunikat wolno nadawać. Interwał działa razem z trybem aktywacji i harmonogramem.
+
+Przykład:
+
+```text
+Interwał wysyłki: 30 minut
+Aktywne od: 10:00 UTC
+Aktywne do: 14:00 UTC
+```
+
+Oznacza to, że komunikat może być wysyłany co 30 minut tylko w oknie od 10:00 do 14:00 UTC.
+
+### Tryb aktywacji
+
+Pole `Tryb aktywacji` określa, kiedy wpis jest aktywny.
+
+Typowe tryby:
+
+```text
+Ręczny       wpis jest włączany i wyłączany ręcznie
+Zaplanowany  wpis ma jedno określone okno aktywności
+Cykliczny    wpis wraca regularnie według powtarzalnego planu
+```
+
+### Aktywne od
+
+Pole `Aktywne od` określa moment rozpoczęcia aktywności wpisu w czasie UTC.
+
+W trybie zaplanowanym jest to początek jednego okna emisji. W trybie cyklicznym jest to pierwszy start całego cyklu.
+
+### Aktywne do
+
+Pole `Aktywne do` określa moment zakończenia aktywności wpisu w czasie UTC.
+
+W trybie zaplanowanym jest to koniec jednego okna emisji. W trybie ręcznym może służyć jako dodatkowe ograniczenie ważności wpisu.
+
+### Aktywne przez
+
+Pole `Aktywne przez` określa, jak długo pojedynczy cykl pozostaje aktywny w trybie cyklicznym.
+
+Przykład:
+
+```text
+Aktywne przez: 3 godziny
+Powtarzaj co: 7 dni
+```
+
+Oznacza to, że po każdym starcie cyklu komunikat będzie aktywny przez 3 godziny.
+
+### Powtarzaj co
+
+Pole `Powtarzaj co` określa odstęp między kolejnymi startami cyklu.
+
+Przykład:
+
+```text
+Powtarzaj co: 1
+Jednostka powtórzenia: tydzień
+```
+
+Oznacza cykl powtarzany raz na tydzień.
+
+### Jednostka powtórzenia
+
+Pole `Jednostka powtórzenia` określa jednostkę używaną przez `Powtarzaj co`.
+
+Typowe jednostki:
+
+```text
+dni
+tygodnie
+miesiące
+lata
+```
+
+W przypadku miesięcy i lat pamiętaj, że są to jednostki kalendarzowe. Nie każdy miesiąc ma tę samą liczbę dni.
+
+## 5. Przykłady użycia
+
+### Biuletyn ogólny
+
+Użycie: krótka informacja dla wszystkich odbiorców.
+
+```text
+Typ: Biuletyn ogólny
+Kod: 0
+Treść wiadomości: NET 19:00 SR5XXX, check-ins welcome
+Interwał wysyłki: 30 minut
+```
+
+Przykładowy sens komunikatu:
+
+```text
+Lokalna sieć rozpoczyna się o 19:00 na przemienniku SR5XXX.
+```
+
+### Biuletyn grupowy
+
+Użycie: komunikat dla konkretnej grupy, wydarzenia albo aktywności.
+
+```text
+Typ: Biuletyn grupowy
+Kod: 1
+Grupa: EVENT
+Treść wiadomości: EVENT parking on 145.550 simplex
+Interwał wysyłki: 20 minut
+```
+
+Przykładowy sens komunikatu:
+
+```text
+Uczestnicy wydarzenia znajdą informację o kanale parkingowym.
+```
+
+### Ogłoszenie
+
+Użycie: krótka zapowiedź lub informacja organizacyjna.
+
+```text
+Typ: Ogłoszenie
+Kod: A
+Treść wiadomości: HAMFEST gates open 08:00 UTC
+Interwał wysyłki: 60 minut
+```
+
+Przykładowy sens komunikatu:
+
+```text
+Ogłoszenie informuje o godzinie otwarcia wydarzenia.
+```
+
+## 6. Na co uważać
+
+Unikaj:
+
+- bardzo długich komunikatów,
+- polskich znaków i znaków specjalnych,
+- zbyt częstego powtarzania,
+- szerokiej ścieżki bez wyraźnej potrzeby,
+- komunikatów niezwiązanych z lokalną sytuacją operatorską,
+- treści, które powinny być zwykłą wiadomością do konkretnej stacji,
+- treści, które powinny trafić na stronę WWW, do maila albo komunikatora.
+
+Pamiętaj, że kanał APRS na radiu ma ograniczoną przepustowość. Każdy nadawany biuletyn powinien mieć sens dla odbiorców.
+
+## 7. Krótka ściąga
+
+```text
+Biuletyn APRS     krótki komunikat rozgłoszeniowy
+Ogłoszenie APRS   krótka zapowiedź lub informacja
+BLN               specjalny adres używany dla biuletynów i ogłoszeń
+0-9               zalecane kody biuletynów
+A-Z               zalecane kody ogłoszeń
+Grupa             krótki identyfikator odbiorców lub aktywności
+67 znaków         bezpieczny limit treści wiadomości
+ASCII             najbezpieczniejszy zestaw znaków
+Interwał          jak często powtarzać aktywny komunikat
+Aktywacja         kiedy komunikat może być nadawany
+```
+
+## 8. Najważniejsza zasada
+
+Biuletyn APRS powinien być krótki, lokalnie użyteczny i łatwy do odczytania na prostym sprzęcie. 
+Jeśli komunikat wymaga długiego wyjaśnienia, wielu zdań albo linkowania do dodatkowych informacji, prawdopodobnie nie nadaje się jako biuletyn APRS.

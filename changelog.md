@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.41.dev - 20.06.2026
+- `Help / Objects / Bulletins`: dodano lokalne pliki pomocy Markdown dla zakładek `Objects` i `Bulletins / Announcements` w wariantach `PL/EN/ES`, wraz z podstawową nawigacją między dokumentami i podpięciem pod formularze GUI.
+
 ## 1.8.40.dev.mice - 17.06.2026
 - `Mic-E / Station Details`: uzupełniono diagnostykę o dekodowane pola Mic-E w szczegółach stacji, bez osobnej sekcji i bez pustych etykiet; poprawiono też priorytet `message capable` względem surowego bajtu typu.
 
