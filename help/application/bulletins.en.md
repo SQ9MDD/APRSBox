@@ -1,7 +1,5 @@
 # Bulletins and announcements
 
-This document describes the basic use of the `Bulletins / Announcements` tab in APRSBox.
-
 This screen is used to prepare APRS message-format frames for bulletins and announcements.
 
 ## Use cases
@@ -20,7 +18,13 @@ Bulletins and announcements are useful for short text information such as:
 - `Group` assigns the entry to a short group name, mainly for group bulletins. This value should stay short, readable, and stable because it becomes part of the identifier visible to the receiver.
 - `Message` contains the actual text sent to the APRS network. It is best to keep it short and unambiguous so it can be read easily on a radio or simple APRS client without scrolling or guessing the context.
 - `Path` defines the APRS path if one should be used for RF transmission. For simple local messages, leaving this field blank is usually safest unless local operating practice requires a specific path.
-- `Send interval` defines how often the entry may be retransmitted, while `Activation` defines when the entry is allowed to be active. In practice, these fields work together: one controls the spacing between transmissions and the other controls the time window in which sending is allowed at all.
+- `Send interval` defines how often the entry may be retransmitted. This setting does not decide when sending is allowed, only the spacing between repeated transmissions while the entry is active.
+- `Activation` selects the activation mode for the entry. `Manual` means manual enablement without a schedule, `Scheduled` defines one continuous time window, and `Recurring` is used for a repeating activity plan.
+- `Active from` defines when the entry becomes active in UTC. In `Scheduled` mode, this is the start of a single activity window, while in `Recurring` mode it is the first start time of the whole cycle.
+- `Active until` defines when the entry stops being active in UTC. In `Scheduled` mode, it usually marks the end of the transmission window, while in manual mode it may still be used as an additional validity limit.
+- `Active for` defines how long a single active cycle lasts in `Recurring` mode. In other words, it sets the length of one transmission window after each cycle start.
+- `Repeat every` defines how often the cycle repeats in `Recurring` mode. Together with the repeat unit, it sets the gap between successive starts of the active window.
+- `Repeat unit` defines the unit used by `Repeat every`, for example days, weeks, months, or years. This decides whether the schedule repeats in simple daily or weekly steps or in longer calendar-based intervals.
 
 ## Short practical rules
 
@@ -30,6 +34,7 @@ Bulletins and announcements are useful for short text information such as:
 - Keep the message text concise and specific.
 - The text should fit within 67 characters and use printable ASCII.
 - For simple local transmissions, leaving the path blank is usually the safest option unless local practice requires something else.
+- With scheduled entries, remember that `Send interval` and `Activation` work together: the schedule defines when sending is allowed, and the interval defines how often the entry is sent within that allowed window.
 
 ## Notes
 
