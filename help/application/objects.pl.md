@@ -12,6 +12,13 @@ Opis dobrych praktyk dla takich obiektów znajduje się w osobnym dokumencie:
 
 [Obiekty przemiennikowe i QSY](../protocoll/repeaters_qsy.pl.md)
 
+Pokrewne typy obiektów częstotliwościowych:
+
+- [Obiekty WiRES / WiRES-X](../protocoll/wires_qsy.pl.md)
+- [Obiekty EchoLink](../protocoll/echolink_qsy.pl.md)
+- [Obiekty Winlink](../protocoll/winlink_qsy.pl.md)
+- [Obiekty IRLP](../protocoll/irlp_qsy.pl.md)
+
 ## Uwagi praktyczne
 
 - Nazwa obiektu powinna być jednoznaczna w skali sieci APRS-IS.

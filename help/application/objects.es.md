@@ -12,6 +12,13 @@ La descripcion de las buenas practicas para estos objetos se encuentra en un doc
 
 [Objetos de repetidor y QSY](../protocoll/repeaters_qsy.es.md)
 
+Tipos relacionados de objetos de frecuencia:
+
+- [Objetos WiRES / WiRES-X](../protocoll/wires_qsy.es.md)
+- [Objetos EchoLink](../protocoll/echolink_qsy.es.md)
+- [Objetos Winlink](../protocoll/winlink_qsy.es.md)
+- [Objetos IRLP](../protocoll/irlp_qsy.es.md)
+
 ## Notas practicas
 
 - El nombre del objeto debe ser inequívoco en toda la red APRS-IS.

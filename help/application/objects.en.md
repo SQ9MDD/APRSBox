@@ -12,6 +12,13 @@ The description of best practices for such objects is available in a separate do
 
 [Repeater and QSY objects](../protocoll/repeaters_qsy.en.md)
 
+Related frequency object types:
+
+- [WiRES / WiRES-X objects](../protocoll/wires_qsy.en.md)
+- [EchoLink objects](../protocoll/echolink_qsy.en.md)
+- [Winlink objects](../protocoll/winlink_qsy.en.md)
+- [IRLP objects](../protocoll/irlp_qsy.en.md)
+
 ## Practical notes
 
 - The object name should be unambiguous across the APRS-IS network.
