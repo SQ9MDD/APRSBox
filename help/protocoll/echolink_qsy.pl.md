@@ -1,7 +1,5 @@
 # Obiekty EchoLink w APRS
 
-Ten dokument jest plikiem pomocy dla użytkownika tworzącego obiekty częstotliwościowe APRS.
-
 Celem takich obiektów jest pokazanie lokalnych zasobów radiowych w sposób czytelny dla operatorów mobilnych oraz możliwie zgodny z praktyką APRS Frequency Objects. Obiekt powinien pomagać odpowiedzieć na proste pytania:
 
 - gdzie znajduje się zasób,

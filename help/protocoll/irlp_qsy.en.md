@@ -1,7 +1,5 @@
 # IRLP objects in APRS
 
-This document is a help file for a user creating APRS frequency objects.
-
 The purpose of such objects is to show local radio resources in a way that is readable to mobile operators and as compatible as possible with APRS Frequency Objects practice. The object should help answer simple questions:
 
 - where the resource is located,

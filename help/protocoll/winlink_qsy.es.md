@@ -1,7 +1,5 @@
 # Objetos Winlink en APRS
 
-Este documento es un archivo de ayuda para un usuario que crea objetos APRS de frecuencia.
-
 El objetivo de estos objetos es mostrar recursos locales de radio de una forma legible para operadores móviles y lo más compatible posible con la práctica de APRS Frequency Objects. El objeto debe ayudar a responder preguntas simples:
 
 - dónde se encuentra el recurso,
