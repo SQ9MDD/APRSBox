@@ -91,6 +91,12 @@ class TrafficKissRxParserTests(unittest.TestCase):
 
         self.assertEqual([entry["line"] for entry in persisted], ["A"])
 
+    def test_empty_data_frame_is_ignored(self) -> None:
+        runtime, persisted = self._runtime_with_capture()
+        runtime._consume_kiss_chunk(bytes([KISS_FEND, 0x00, KISS_FEND]))
+
+        self.assertEqual(persisted, [])
+
     def test_undecodable_ax25_data_frame_is_persisted_with_diagnostic_reason(self) -> None:
         runtime, persisted = self._runtime_with_capture()
         runtime._consume_kiss_chunk(bytes([KISS_FEND, 0x00, 0x01, 0x02, KISS_FEND]))

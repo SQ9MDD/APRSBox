@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.43.dev - 2026-06-21
+- `Traffic Monitor / KISS RX`: las tramas de datos KISS vacías (`0x00` sin payload) procedentes de TNC TCP/IP ahora se ignoran, por lo que Traffic Monitor deja de mostrar el ruido `AX.25 decode failed (payload too short (0B))` entre paquetes válidos.
+- `Changelog / I18N`: se añadió un archivo de changelog en alemán y la selección de contenido `DE` según el idioma actual de la GUI.
+
 ## 1.8.42.dev - 2026-06-21
 - `GUI / sidebar / branding`: se sustituyó el branding anterior del sidebar (icono + `APRSBox` + `Native APRS console`) por el nuevo logo de APRSBox renderizado como inline SVG.
 - `GUI / sidebar / logo`: los colores del logo se conectaron al sistema existente de temas y paletas mediante variables CSS, por lo que el branding cambia automáticamente cuando el usuario cambia el tema de la GUI.
