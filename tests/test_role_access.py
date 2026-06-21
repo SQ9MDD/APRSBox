@@ -50,12 +50,15 @@ class RoleAccessTests(unittest.TestCase):
         current_user = SimpleNamespace(role="viewer", username="viewer")
 
         context = build_template_context(request, page_title="Dashboard", current_user=current_user, active_nav="dashboard")
-        navigation_keys = [item["key"] for item in context["navigation"] if not item.get("separator")]
+        navigation = {item["key"]: item for item in context["navigation"] if not item.get("separator")}
 
-        self.assertEqual(
-            navigation_keys,
-            ["dashboard", "stations", "map", "band-condition", "modems", "traffic", "statistics"],
-        )
+        for key in ("dashboard", "stations", "map", "band-condition", "modems", "traffic", "statistics"):
+            self.assertIn(key, navigation)
+            self.assertFalse(bool(navigation[key].get("disabled")), key)
+
+        for key in ("station", "wx", "messages", "notifications", "objects", "bulletins", "digi-flows", "igate", "logs", "users", "settings", "changelog"):
+            self.assertIn(key, navigation)
+            self.assertTrue(bool(navigation[key].get("disabled")), key)
 
     def test_viewer_can_open_allowed_pages_and_cannot_open_restricted_pages(self) -> None:
         with temporary_database():

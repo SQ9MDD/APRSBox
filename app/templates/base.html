@@ -84,6 +84,15 @@
             {% for item in navigation %}
             {% if item.separator %}
             <div class="nav-separator" aria-hidden="true"></div>
+            {% elif item.disabled %}
+            <span
+                class="nav-link nav-link-disabled"
+                aria-disabled="true"
+                title="{{ t('Access not available for your role') }}"
+            >
+                <img class="nav-icon" src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="">
+                <span>{{ item.label }}</span>
+            </span>
             {% else %}
             <a
                 href="{{ request.scope.root_path }}{{ item.href }}"

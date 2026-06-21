@@ -733,6 +733,21 @@ body {
     transform: translateX(1px);
 }
 
+.nav-link-disabled {
+    opacity: 0.42;
+    cursor: default;
+    pointer-events: none;
+    filter: grayscale(0.35);
+}
+
+.nav-link-disabled:hover,
+.nav-link-disabled.active {
+    background: transparent;
+    color: var(--muted);
+    border-color: transparent;
+    transform: none;
+}
+
 .nav-link-struck span {
     text-decoration: line-through;
     text-decoration-thickness: 1.5px;
