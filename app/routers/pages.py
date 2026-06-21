@@ -195,6 +195,7 @@ _CHANGELOG_FILES_BY_LANGUAGE: dict[str, Path] = {
     "pl": _REPO_ROOT_DIR / "changelog.md",
     "en": _REPO_ROOT_DIR / "changelog.en.md",
     "es": _REPO_ROOT_DIR / "changelog.es.md",
+    "de": _REPO_ROOT_DIR / "changelog.de.md",
 }
 _CHANGELOG_FALLBACK_LANGUAGE_ORDER: tuple[str, ...] = ("pl", "en")
 _HELP_FALLBACK_LANGUAGE_ORDER: tuple[str, ...] = ("en",)
