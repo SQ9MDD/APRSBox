@@ -38,7 +38,7 @@
     --traffic-color-proxy-tx: #a65fc1;
     --logo-bg: transparent;
     --logo-bg-inner: #000e31;
-    --logo-border: #ffffff;
+    --logo-border: #08182e;
     --logo-text: #ffffff;
     --logo-accent: #5990e3;
     --logo-symbol: #ffffff;
@@ -79,7 +79,7 @@
     --map-mask-default-opacity: 0.2;
     --logo-bg: transparent;
     --logo-bg-inner: color-mix(in srgb, var(--panel-emphasis) 76%, #08182e 24%);
-    --logo-border: color-mix(in srgb, #ffffff 86%, var(--text) 14%);
+    --logo-border: var(--logo-gradient-to);
     --logo-text: color-mix(in srgb, #ffffff 80%, var(--text) 20%);
     --logo-accent: color-mix(in srgb, #5990e3 38%, var(--accent) 62%);
     --logo-symbol: color-mix(in srgb, #ffffff 90%, var(--panel) 10%);
@@ -121,7 +121,7 @@
     --map-mask-default-opacity: 0.16;
     --logo-bg: transparent;
     --logo-bg-inner: color-mix(in srgb, var(--panel-emphasis) 68%, #08182e 32%);
-    --logo-border: color-mix(in srgb, #ffffff 72%, var(--border) 28%);
+    --logo-border: var(--logo-gradient-to);
     --logo-text: color-mix(in srgb, #ffffff 88%, var(--text) 12%);
     --logo-accent: color-mix(in srgb, #5990e3 42%, var(--accent) 58%);
     --logo-symbol: color-mix(in srgb, #ffffff 94%, var(--panel) 6%);
