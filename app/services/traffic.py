@@ -1474,6 +1474,8 @@ class _TrafficModemRuntime:
                 raw_frame=raw_frame,
             )
             return
+        if not payload:
+            return
         timestamp = utc_now()
 
         entry: dict[str, Any] = {
