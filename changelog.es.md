@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.42.dev - 2026-06-21
+- `GUI / sidebar / branding`: se sustituyó el branding anterior del sidebar (icono + `APRSBox` + `Native APRS console`) por el nuevo logo de APRSBox renderizado como inline SVG.
+- `GUI / sidebar / logo`: los colores del logo se conectaron al sistema existente de temas y paletas mediante variables CSS, por lo que el branding cambia automáticamente cuando el usuario cambia el tema de la GUI.
+- `GUI / sidebar / layout`: el logo se mantiene responsivo dentro del ancho actual del sidebar, sin ensanchar el sidebar ni desordenar el layout del menú.
+
 ## 1.8.41.dev - 2026-06-20
 - `Help / Objects / Bulletins`: se añadieron archivos locales de ayuda Markdown para las pestañas `Objects` y `Bulletins / Announcements` en variantes `PL/EN/ES`, junto con navegación básica entre documentos e integración con los formularios de la GUI.
 
