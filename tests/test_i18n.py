@@ -54,7 +54,7 @@ class I18nTests(unittest.TestCase):
             get_supported_languages(),
             [
                 {"code": "en", "label": "English"},
-                {"code": "de", "label": "Deutsch / German"},
+                {"code": "de", "label": "Deutsch"},
                 {"code": "pl", "label": "Polski"},
                 {"code": "es", "label": "Español"},
                 {"code": "tlh", "label": "tlhIngan Hol"},

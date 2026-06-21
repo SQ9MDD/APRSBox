@@ -11,7 +11,7 @@ from app.db import get_app_setting
 DEFAULT_LANGUAGE = "en"
 SUPPORTED_LANGUAGES: tuple[dict[str, str], ...] = (
     {"code": "en", "label": "English"},
-    {"code": "de", "label": "Deutsch / German"},
+    {"code": "de", "label": "Deutsch"},
     {"code": "pl", "label": "Polski"},
     {"code": "es", "label": "Español"},
     {"code": "tlh", "label": "tlhIngan Hol"},
