@@ -79,7 +79,7 @@
     --map-mask-default-opacity: 0.2;
     --logo-bg: transparent;
     --logo-bg-inner: color-mix(in srgb, var(--panel-emphasis) 76%, #08182e 24%);
-    --logo-border: var(--logo-gradient-to);
+    --logo-border: var(--logo-symbol);
     --logo-text: color-mix(in srgb, #ffffff 80%, var(--text) 20%);
     --logo-accent: color-mix(in srgb, #5990e3 38%, var(--accent) 62%);
     --logo-symbol: color-mix(in srgb, #ffffff 90%, var(--panel) 10%);
