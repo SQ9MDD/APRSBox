@@ -36,6 +36,15 @@
     --traffic-color-own-message-rx: #f0b36e;
     --traffic-color-repeated-tx: #d24b4b;
     --traffic-color-proxy-tx: #a65fc1;
+    --logo-bg: transparent;
+    --logo-bg-inner: #000e31;
+    --logo-border: #ffffff;
+    --logo-text: #ffffff;
+    --logo-accent: #5990e3;
+    --logo-symbol: #ffffff;
+    --logo-symbol-inner: #ffffff;
+    --logo-gradient-from: #1b4d94;
+    --logo-gradient-to: #08182e;
 }
 
 :root[data-theme="dark"] {
@@ -68,6 +77,15 @@
     --message-bubble-tx-border: color-mix(in srgb, var(--accent) 46%, transparent);
     --map-mask-layer-color: color-mix(in srgb, #000 78%, var(--bg-layer));
     --map-mask-default-opacity: 0.2;
+    --logo-bg: transparent;
+    --logo-bg-inner: color-mix(in srgb, var(--panel-emphasis) 76%, #08182e 24%);
+    --logo-border: color-mix(in srgb, #ffffff 86%, var(--text) 14%);
+    --logo-text: color-mix(in srgb, #ffffff 80%, var(--text) 20%);
+    --logo-accent: color-mix(in srgb, #5990e3 38%, var(--accent) 62%);
+    --logo-symbol: color-mix(in srgb, #ffffff 90%, var(--panel) 10%);
+    --logo-symbol-inner: color-mix(in srgb, #ffffff 94%, var(--panel-soft) 6%);
+    --logo-gradient-from: color-mix(in srgb, #1b4d94 30%, var(--accent) 70%);
+    --logo-gradient-to: color-mix(in srgb, #08182e 70%, var(--bg-layer) 30%);
 }
 
 :root[data-theme="light"] {
@@ -101,6 +119,15 @@
     --message-bubble-tx-border: color-mix(in srgb, var(--accent) 33%, transparent);
     --map-mask-layer-color: color-mix(in srgb, #fff 82%, var(--panel));
     --map-mask-default-opacity: 0.16;
+    --logo-bg: transparent;
+    --logo-bg-inner: color-mix(in srgb, var(--panel-emphasis) 68%, #08182e 32%);
+    --logo-border: color-mix(in srgb, #ffffff 72%, var(--border) 28%);
+    --logo-text: color-mix(in srgb, #ffffff 88%, var(--text) 12%);
+    --logo-accent: color-mix(in srgb, #5990e3 42%, var(--accent) 58%);
+    --logo-symbol: color-mix(in srgb, #ffffff 94%, var(--panel) 6%);
+    --logo-symbol-inner: #ffffff;
+    --logo-gradient-from: color-mix(in srgb, #1b4d94 24%, var(--accent) 76%);
+    --logo-gradient-to: color-mix(in srgb, #08182e 56%, var(--panel-emphasis) 44%);
 }
 
 :root[data-theme="dark"][data-palette="red-tactic"] {
@@ -563,6 +590,12 @@ body {
     padding: 0.1rem 0.1rem var(--space-2);
 }
 
+.brand.sidebar-logo {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+}
+
 .brand strong {
     display: block;
     font-size: 1rem;
@@ -585,6 +618,20 @@ body {
     height: 16px;
     opacity: 0.86;
     filter: var(--icon-filter);
+}
+
+.sidebar-logo {
+    width: 100%;
+    max-width: 100%;
+}
+
+.sidebar-logo svg,
+.aprsbox-logo {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 58px;
 }
 
 .nav-list {

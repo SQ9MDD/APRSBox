@@ -27,14 +27,8 @@
 <body class="app-shell{% if body_class %} {{ body_class }}{% endif %}">
     {% if current_user %}
     <aside class="sidebar">
-        <div class="brand">
-            <div class="brand-mark">
-                <img src="{{ request.scope.root_path }}/static/icons/radio-tower.svg" alt="">
-            </div>
-            <div>
-                <strong>APRSBox</strong>
-                <div class="muted">{{ t("Native APRS console") }}</div>
-            </div>
+        <div class="brand sidebar-logo">
+            {% include "partials/logo.html" %}
         </div>
         <div class="sidebar-user-panel">
             <div class="sidebar-user-meta">
