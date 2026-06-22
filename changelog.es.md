@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.8.44 - 2026-06-22
+
+### Stable release
+- Promocion estable de las funciones de la rama `dev` a `main`.
+
+### Included development snapshots
+- cambios desde `1.8.25.dev` hasta `1.8.43.dev`
+
+### Cambios principales
+- `Map / UX / diagnostics`: se rehizo la vista de mapa y la capa de monitorizacion situacional con mejor layout de viewport, scroller `Latest packet` / ultimo digi, filtros de visibilidad por TNC, limpieza de tooltips y renderizado APRS mas pulido.
+- `Routing / TX / APRS-IS`: se añadieron la fuente logica `Local TX`, el modo neutro `Internal TX`, guards duros para el uplink APRS-IS y las tramas generadas localmente, y pacing por TNC para las colas TX.
+- `DIGI / flow engine`: se amplio `Path rule and DIGI guard`, se activo `Rate limit filter`, se forzo un orden seguro de pasos RF y los cambios de nombre de TNC ahora se propagan a las referencias de los flows.
+- `Objects / Bulletins / content`: se añadieron envios de objetos programados y recurrentes, `Valid until` con precision de minuto, generacion del timestamp del objeto en el TX real, `Send now` manual, ocultacion de objetos `killed` y ayuda local en Markdown para `Objects` y `Bulletins`.
+- `Integrations / RX / parser`: se añadió `OpenWebRX MQTT (RX only)` con soporte `APRS/SONDE/ADSB`, deduplicacion local, diagnostica ampliada y mejoras en la decodificacion y presentacion de Mic-E.
+- `Maintenance / GUI / I18N`: se añadieron espanol y changelogs multilingues (`PL/EN/ES/DE`), guards de Docker mode para acciones del host, diagnostica SQLite runtime con reset seguro, notificaciones Telegram/webhook, el nuevo logo del sidebar y archivos de ayuda locales.
+
 ## 1.8.43.dev - 2026-06-21
 - `Traffic Monitor / KISS RX`: las tramas de datos KISS vacías (`0x00` sin payload) procedentes de TNC TCP/IP ahora se ignoran, por lo que Traffic Monitor deja de mostrar el ruido `AX.25 decode failed (payload too short (0B))` entre paquetes válidos.
 - `Changelog / I18N`: se añadió un archivo de changelog en alemán y la selección de contenido `DE` según el idioma actual de la GUI.

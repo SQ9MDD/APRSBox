@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.8.44 - 2026-06-22
+
+### Stable release
+- Stable promotion from the `dev` branch to `main`.
+
+### Included development snapshots
+- changes from `1.8.25.dev` to `1.8.43.dev`
+
+### Highlights
+- `Map / UX / diagnostics`: reworked the map and situational monitoring stack with a better viewport layout, the `Latest packet` / last digi scroller, per-TNC visibility filters, tooltip cleanup, and refined APRS icon rendering.
+- `Routing / TX / APRS-IS`: added the logical `Local TX` source, the neutral `Internal TX` mode, hard guards for APRS-IS uplink and locally generated frames, and per-TNC pacing for TX queues.
+- `DIGI / flow engine`: expanded `Path rule and DIGI guard`, activated the `Rate limit filter`, enforced a safe RF step order, and propagated TNC rename operations into flow references.
+- `Objects / Bulletins / content`: added scheduled and recurring object transmission, minute-precision `Valid until`, object timestamp generation at real TX time, manual `Send now`, hidden `killed` objects, and local Markdown help for `Objects` and `Bulletins`.
+- `Integrations / RX / parser`: added `OpenWebRX MQTT (RX only)` with `APRS/SONDE/ADSB` support, local deduplication, extended diagnostics, and improved Mic-E decoding and presentation.
+- `Maintenance / GUI / I18N`: added Spanish and multilingual changelogs (`PL/EN/ES/DE`), Docker mode guards for host actions, SQLite runtime diagnostics with safe reset, Telegram/webhook notifications, the new sidebar logo, and local help files.
+
 ## 1.8.43.dev - 2026-06-21
 - `Traffic Monitor / KISS RX`: empty KISS data frames (`0x00` with no payload) from TCP/IP TNCs are now ignored, so Traffic Monitor no longer shows `AX.25 decode failed (payload too short (0B))` noise between valid packets.
 - `Changelog / I18N`: added a German changelog file and `DE` content selection based on the current GUI language.
