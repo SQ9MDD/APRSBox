@@ -193,7 +193,9 @@
                     <div class="panel-header-copy">
                         <h2>{{ t("Recent important events") }}</h2>
                     </div>
+                    {% if current_user.role in ("admin", "operator") %}
                     <a class="dashboard-subtle-link" href="{{ request.scope.root_path }}/logs">{{ t("More") }}</a>
+                    {% endif %}
                 </div>
                 {% if dashboard_home.recent_events %}
                 <ul class="dashboard-v2-event-feed">

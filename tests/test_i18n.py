@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import init_db, set_app_setting
 from app.i18n import LANGUAGES_DIR, get_app_language, get_supported_languages, get_translator, normalize_language
@@ -26,7 +27,7 @@ def temporary_database() -> Path:
 
 class I18nTests(unittest.TestCase):
     def test_normalize_language_uses_default_for_unsupported_values(self) -> None:
-        self.assertEqual(normalize_language("de"), "en")
+        self.assertEqual(normalize_language("de"), "de")
         self.assertEqual(normalize_language(None), "en")
         self.assertEqual(normalize_language("PL"), "pl")
         self.assertEqual(normalize_language("tlh"), "tlh")
@@ -53,16 +54,34 @@ class I18nTests(unittest.TestCase):
             get_supported_languages(),
             [
                 {"code": "en", "label": "English"},
+                {"code": "de", "label": "Deutsch"},
                 {"code": "pl", "label": "Polski"},
                 {"code": "es", "label": "Español"},
                 {"code": "tlh", "label": "tlhIngan Hol"},
             ],
         )
 
+    def test_german_translator_uses_catalog_and_english_fallback(self) -> None:
+        with patch(
+            "app.i18n._load_catalog",
+            side_effect=lambda language: {
+                "en": {"Settings": "Settings", "Fallback only": "Fallback only"},
+                "de": {"Settings": "Einstellungen"},
+            }[language],
+        ):
+            translator = get_translator("de")
+            self.assertEqual(translator("Settings"), "Einstellungen")
+            self.assertEqual(translator("Fallback only"), "Fallback only")
+
     def test_klingon_catalog_matches_english_keys(self) -> None:
         english_catalog = json.loads((LANGUAGES_DIR / "en.json").read_text(encoding="utf-8"))
         klingon_catalog = json.loads((LANGUAGES_DIR / "tlh.json").read_text(encoding="utf-8"))
         self.assertEqual(set(klingon_catalog), set(english_catalog))
+
+    def test_german_catalog_matches_english_keys(self) -> None:
+        english_catalog = json.loads((LANGUAGES_DIR / "en.json").read_text(encoding="utf-8"))
+        german_catalog = json.loads((LANGUAGES_DIR / "de.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(german_catalog), set(english_catalog))
 
     def test_spanish_catalog_matches_english_keys(self) -> None:
         english_catalog = json.loads((LANGUAGES_DIR / "en.json").read_text(encoding="utf-8"))

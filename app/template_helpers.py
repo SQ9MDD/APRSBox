@@ -21,20 +21,20 @@ PRIMARY_NAV = [
     {"key": "modems", "label": "TNC", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
     {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
     {"key": "statistics", "label": "Statistics", "href": "/statistics", "roles": ("admin", "operator", "viewer"), "icon": "chart-bar-stacked.svg"},
-    {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator", "viewer")},
-    {"key": "station", "label": "My Station", "href": "/station", "roles": ("admin", "operator", "viewer"), "icon": "antenna.svg"},
-    {"key": "wx", "label": "WX", "href": "/wx", "roles": ("admin", "operator", "viewer"), "icon": "weather-partly-snowy.svg"},
-    {"key": "messages", "label": "Messages", "href": "/messages", "roles": ("admin", "operator", "viewer"), "icon": "message-reply-text-outline.svg"},
-    {"key": "notifications", "label": "Notifications", "href": "/notifications", "roles": ("admin", "operator", "viewer"), "icon": "bell-outline.svg"},
-    {"key": "objects", "label": "Objects / Items", "href": "/objects", "roles": ("admin", "operator", "viewer"), "icon": "crosshairs.svg"},
-    {"key": "bulletins", "label": "Bulletins", "href": "/bulletins", "roles": ("admin", "operator", "viewer"), "icon": "message-text-outline.svg"},
-    {"key": "digi-flows", "label": "Packet Routing", "href": "/digi-flows", "roles": ("admin", "operator", "viewer"), "icon": "source-branch-check.svg"},
-    {"key": "igate", "label": "iGATE settings", "href": "/igate", "roles": ("admin", "operator", "viewer"), "icon": "lan-connect.svg"},
-    {"key": "nav-separator-secondary", "separator": True, "roles": ("admin", "operator", "viewer")},
-    {"key": "logs", "label": "Logs", "href": "/logs", "roles": ("admin", "operator", "viewer"), "icon": "book-open-variant.svg"},
-    {"key": "users", "label": "Users / Roles", "href": "/admin/users", "roles": ("admin",), "icon": "account-cog.svg"},
-    {"key": "settings", "label": "Settings", "href": "/settings", "roles": ("admin", "operator", "viewer"), "icon": "cog.svg"},
-    {"key": "changelog", "label": "Changelog", "href": "/changelog", "roles": ("admin", "operator", "viewer"), "icon": "language-markdown-outline.svg"},
+    {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator"), "visible_roles": ("viewer",)},
+    {"key": "station", "label": "My Station", "href": "/station", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "antenna.svg"},
+    {"key": "wx", "label": "WX", "href": "/wx", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "weather-partly-snowy.svg"},
+    {"key": "messages", "label": "Messages", "href": "/messages", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "message-reply-text-outline.svg"},
+    {"key": "notifications", "label": "Notifications", "href": "/notifications", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "bell-outline.svg"},
+    {"key": "objects", "label": "Objects / Items", "href": "/objects", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "crosshairs.svg"},
+    {"key": "bulletins", "label": "Bulletins", "href": "/bulletins", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "message-text-outline.svg"},
+    {"key": "digi-flows", "label": "Packet Routing", "href": "/digi-flows", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "source-branch-check.svg"},
+    {"key": "igate", "label": "iGATE settings", "href": "/igate", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "lan-connect.svg"},
+    {"key": "nav-separator-secondary", "separator": True, "roles": ("admin", "operator"), "visible_roles": ("viewer",)},
+    {"key": "logs", "label": "Logs", "href": "/logs", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "book-open-variant.svg"},
+    {"key": "users", "label": "Users / Roles", "href": "/admin/users", "roles": ("admin",), "visible_roles": ("viewer",), "icon": "account-cog.svg"},
+    {"key": "settings", "label": "Settings", "href": "/settings", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "cog.svg"},
+    {"key": "changelog", "label": "Changelog", "href": "/changelog", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "language-markdown-outline.svg"},
 ]
 
 
@@ -83,11 +83,13 @@ def build_template_context(
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
-        if current_user and current_user.role in item["roles"]:
+        visible_roles = tuple(item.get("visible_roles") or ())
+        if current_user and (current_user.role in item["roles"] or current_user.role in visible_roles):
             translated_item = dict(item)
+            translated_item["disabled"] = current_user.role not in item["roles"]
             if not item.get("separator"):
                 translated_item["label"] = translate(item["label"])
-                if item["key"] == "messages":
+                if item["key"] == "messages" and not translated_item["disabled"]:
                     translated_item["has_unread"] = unread_inbox_count > 0
                     translated_item["unread_count"] = unread_inbox_count
                     if unread_inbox_count > 0:

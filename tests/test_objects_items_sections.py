@@ -977,6 +977,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         self.assertIn('id="bulletins-message-count"', template_source)
         self.assertIn('id="bulletins-message-error"', template_source)
+        self.assertIn('data-help-page="{{ \'application/objects\' if section.slug == \'objects\' else \'application/bulletins\' }}"', template_source)
         self.assertIn("datetime-local", template_source)
         self.assertIn("Bulletins TX Log", template_source)
         self.assertIn("No bulletin outbound jobs yet.", template_source)

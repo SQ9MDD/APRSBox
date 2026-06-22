@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.8.44 - 22.06.2026
+
+### Stable release
+- Migracja wydania z gałęzi `dev` do `main`.
+
+### Included development snapshots
+- zmiany od `1.8.25.dev` do `1.8.43.dev`
+
+### Najważniejsze zmiany
+- `Mapa / UX / diagnostyka`: przebudowano widok mapy i monitor sytuacyjny: lepszy layout viewportu, scroller `Latest packet` / ostatni digi, filtry per interfejs TNC, poprawki tooltipów oraz dopracowane renderowanie ikon APRS.
+- `Routing / TX / APRS-IS`: dodano logiczne źródło `Local TX`, neutralny tryb `Internal TX`, twarde guardy dla uplinku APRS-IS i lokalnie generowanych ramek oraz pacing/per-TNC dla kolejek TX.
+- `DIGI / flow engine`: rozszerzono ochronę `Path rule and DIGI guard`, aktywowano `Rate limit filter`, wymuszono bezpieczną kolejność kroków RF i dodano propagację zmiany nazwy TNC do referencji flow.
+- `Objects / Bulletins / content`: dodano planowane i cykliczne nadawanie obiektów, dokładność `Valid until` do minuty, wyliczanie timestampu obiektu przy realnym TX, ręczne `Send now`, ukrycie obiektów `killed` oraz lokalną pomoc Markdown dla `Objects` i `Bulletins`.
+- `Integracje / RX / parser`: dodano `OpenWebRX MQTT (RX only)` z obsługą `APRS/SONDE/ADSB`, lokalną deduplikacją i rozszerzoną diagnostyką oraz poprawiono dekodowanie i prezentację danych Mic-E.
+- `Utrzymanie / GUI / I18N`: dodano hiszpański i wielojęzyczne changelogi (`PL/EN/ES/DE`), guardy Docker mode dla akcji hosta, diagnostykę i bezpieczny reset danych runtime SQLite, powiadomienia Telegram/webhook, nowe logo sidebara oraz lokalne pliki pomocy.
+
+## 1.8.43.dev - 21.06.2026
+- `Traffic Monitor / KISS RX`: puste ramki danych KISS (`0x00` bez payloadu) z TNC TCP/IP są teraz ignorowane, więc monitor ruchu nie pokazuje już szumu `AX.25 decode failed (payload too short (0B))` między prawidłowymi pakietami.
+- `Changelog / I18N`: dodano niemiecki plik changeloga i wybór treści `DE` zgodnie z aktualnym językiem GUI.
+
+## 1.8.42.dev - 21.06.2026
+- `GUI / sidebar / branding`: stary branding sidebara (ikonka + `APRSBox` + `Natywna konsola APRS`) zastąpiono nowym logo APRSBox renderowanym jako inline SVG.
+- `GUI / sidebar / logo`: kolory logo podłączono do istniejącego systemu motywów i palet przez zmienne CSS, więc branding zmienia się automatycznie po przełączeniu motywu użytkownika.
+- `GUI / sidebar / layout`: logo skaluje się responsywnie w obrębie aktualnej szerokości sidebara, bez poszerzania sidebara i bez rozbijania układu menu.
+
+## 1.8.41.dev - 20.06.2026
+- `Help / Objects / Bulletins`: dodano lokalne pliki pomocy Markdown dla zakładek `Objects` i `Bulletins / Announcements` w wariantach `PL/EN/ES`, wraz z podstawową nawigacją między dokumentami i podpięciem pod formularze GUI.
+
 ## 1.8.40.dev.mice - 17.06.2026
 - `Mic-E / Station Details`: uzupełniono diagnostykę o dekodowane pola Mic-E w szczegółach stacji, bez osobnej sekcji i bez pustych etykiet; poprawiono też priorytet `message capable` względem surowego bajtu typu.
 

@@ -46,6 +46,7 @@
                     {% if station.path %}<span class="muted"> • {{ t("Path") }} {{ station.path }}</span>{% endif %}
                 </p>
             </div>
+            {% if current_user.role in ("admin", "operator") %}
             <a
                 href="{{ request.scope.root_path }}/messages?callsign={{ station.display_callsign|urlencode }}"
                 class="table-icon-button station-detail-message-link"
@@ -54,6 +55,7 @@
             >
                 <img src="{{ request.scope.root_path }}/static/icons/forum.svg" alt="">
             </a>
+            {% endif %}
         </div>
     </div>
 </section>

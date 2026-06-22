@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote
 
@@ -190,12 +190,15 @@ from app.services.wx import (
 
 router = APIRouter()
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
+_HELP_ROOT_DIR = _REPO_ROOT_DIR / "help"
 _CHANGELOG_FILES_BY_LANGUAGE: dict[str, Path] = {
     "pl": _REPO_ROOT_DIR / "changelog.md",
     "en": _REPO_ROOT_DIR / "changelog.en.md",
     "es": _REPO_ROOT_DIR / "changelog.es.md",
+    "de": _REPO_ROOT_DIR / "changelog.de.md",
 }
 _CHANGELOG_FALLBACK_LANGUAGE_ORDER: tuple[str, ...] = ("pl", "en")
+_HELP_FALLBACK_LANGUAGE_ORDER: tuple[str, ...] = ("en",)
 _CONFIG_BACKUP_MAX_BYTES = 5 * 1024 * 1024
 EVENT_LOG_MIN_LEVEL_OPTIONS: tuple[str, ...] = ("INFO", "WARNING", "ERROR")
 EVENT_LOG_VIEW_LEVEL_OPTIONS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
@@ -340,6 +343,101 @@ def _read_changelog_markdown(language: str | None = None) -> str:
         except OSError:
             continue
     return "# Changelog\n\nUnable to read changelog file."
+
+
+def _sanitize_help_relative_markdown_path(value: str | None) -> PurePosixPath | None:
+    text = str(value or "").strip().replace("\\", "/")
+    if not text:
+        return None
+    try:
+        path = PurePosixPath(text)
+    except Exception:
+        return None
+    if path.is_absolute() or not path.parts:
+        return None
+    if any(part in {"", ".", ".."} for part in path.parts):
+        return None
+    if path.suffix.lower() != ".md":
+        return None
+    return PurePosixPath(*path.parts)
+
+
+def _sanitize_help_page_identifier(value: str | None) -> PurePosixPath | None:
+    text = str(value or "").strip().replace("\\", "/")
+    if not text:
+        return None
+    try:
+        path = PurePosixPath(text)
+    except Exception:
+        return None
+    if path.is_absolute() or not path.parts:
+        return None
+    if any(part in {"", ".", ".."} for part in path.parts):
+        return None
+    if path.suffix:
+        return None
+    return PurePosixPath(*path.parts)
+
+
+def _resolve_help_file_path(relative_path: PurePosixPath) -> Path | None:
+    candidate = (_HELP_ROOT_DIR / Path(*relative_path.parts)).resolve(strict=False)
+    try:
+        candidate.relative_to(_HELP_ROOT_DIR.resolve(strict=False))
+    except ValueError:
+        return None
+    if candidate.suffix.lower() != ".md":
+        return None
+    return candidate
+
+
+def _read_help_markdown_file(relative_path: PurePosixPath) -> tuple[str, str] | None:
+    file_path = _resolve_help_file_path(relative_path)
+    if file_path is None or not file_path.is_file():
+        return None
+    try:
+        return relative_path.as_posix(), file_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _build_help_markdown_candidates(page: str | None, language: str | None = None) -> list[PurePosixPath]:
+    page_path = _sanitize_help_page_identifier(page)
+    if page_path is None:
+        return []
+    resolved_language = normalize_language(language if language is not None else get_app_language())
+    language_order = (resolved_language, *_HELP_FALLBACK_LANGUAGE_ORDER)
+    relative_candidates: list[PurePosixPath] = []
+    for language_code in language_order:
+        relative_path = page_path.parent / f"{page_path.name}.{language_code}.md"
+        if relative_path not in relative_candidates:
+            relative_candidates.append(relative_path)
+    return relative_candidates
+
+
+def _read_help_markdown(
+    *,
+    page: str | None = None,
+    path: str | None = None,
+    language: str | None = None,
+) -> tuple[str, str] | None:
+    if str(path or "").strip():
+        relative_path = _sanitize_help_relative_markdown_path(path)
+        if relative_path is None:
+            return None
+        return _read_help_markdown_file(relative_path)
+    for relative_path in _build_help_markdown_candidates(page, language=language):
+        resolved = _read_help_markdown_file(relative_path)
+        if resolved is not None:
+            return resolved
+    return None
+
+
+def _help_markdown_title(markdown: str, fallback: str) -> str:
+    for raw_line in str(markdown or "").splitlines():
+        line = raw_line.strip()
+        if line.startswith("# "):
+            return line[2:].strip() or fallback
+    return fallback
 
 
 def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:
@@ -957,7 +1055,7 @@ def station_detail_page(
 def station_detail_message(
     callsign: str,
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     destination_callsign: str = Form(""),
     message_text: str = Form(""),
 ) -> object:
@@ -1108,7 +1206,7 @@ def modems_delete(
 @router.get("/settings/servers")
 def servers_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "servers"))
@@ -1117,7 +1215,7 @@ def servers_page(
 @router.get("/settings")
 def settings_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit_map_source: int | None = None,
 ) -> object:
     templates = request.app.state.templates
@@ -1127,7 +1225,7 @@ def settings_page(
 
 @router.post("/settings/check-gui-version")
 def settings_check_gui_version(
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     result = latest_gui_version()
     if not result.get("ok"):
@@ -1174,14 +1272,14 @@ def settings_update_application(
 
 @router.get("/api/settings/update/channels")
 def settings_update_channels_api(
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     return JSONResponse(list_update_channels())
 
 
 @router.get("/api/settings/update/channel")
 def settings_update_channel_api(
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     channels = list_update_channels()
     return JSONResponse(
@@ -1208,7 +1306,7 @@ async def settings_update_channel_set_api(
 
 @router.get("/api/settings/update/log")
 def settings_update_log_api(
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     return JSONResponse(read_update_log())
 
@@ -1216,7 +1314,7 @@ def settings_update_log_api(
 @router.get("/api/settings/jobs/{job_id}")
 def settings_job_status_api(
     job_id: int,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     job = fetch_system_job(job_id)
     if job is None:
@@ -1625,7 +1723,7 @@ def servers_create(
 @router.get("/igate")
 def igate_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     flash: str | None = None,
     success: int = 0,
 ) -> object:
@@ -1665,7 +1763,7 @@ def igate_settings_update(
 
 @router.get("/api/igate/diagnostics")
 def igate_diagnostics_api(
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     runtime = get_aprsis_runtime_status()
     return JSONResponse(
@@ -1681,7 +1779,7 @@ def igate_diagnostics_api(
 @router.get("/digi")
 def digi_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "digi"))
@@ -1715,7 +1813,7 @@ def digi_create(
 @router.get("/digi-flows")
 def digi_flows_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     flash: str | None = None,
     success: int = 0,
 ) -> object:
@@ -1764,7 +1862,7 @@ def digi_flows_aprsis_config_update(
 @router.get("/digi-flows/new")
 def digi_flow_new_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     duplicate: int | None = None,
 ) -> object:
     templates = request.app.state.templates
@@ -1794,7 +1892,7 @@ def digi_flow_new_page(
 def digi_flow_edit_page(
     flow_id: int,
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     flow = get_digi_flow(flow_id)
@@ -1812,7 +1910,7 @@ def digi_flow_edit_page(
 @router.get("/api/digi-flows/{flow_id}/events")
 def digi_flow_event_log_api(
     flow_id: int,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     flow = get_digi_flow(flow_id)
     if flow is None:
@@ -1823,7 +1921,7 @@ def digi_flow_event_log_api(
 @router.get("/api/digi-flows/{flow_id}/executions")
 def digi_flow_execution_summaries_api(
     flow_id: int,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     flow = get_digi_flow(flow_id)
     if flow is None:
@@ -1951,7 +2049,7 @@ def digi_flow_delete(
 @router.get("/objects")
 def objects_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit: int | None = None,
     flash: str | None = None,
     success: str | None = None,
@@ -2055,7 +2153,7 @@ def objects_send_now(
 @router.get("/items")
 def items_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit: int | None = None,
 ) -> object:
     templates = request.app.state.templates
@@ -2145,7 +2243,7 @@ def items_delete(
 @router.get("/bulletins")
 def bulletins_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit: int | None = None,
 ) -> object:
     templates = request.app.state.templates
@@ -2211,7 +2309,7 @@ def bulletins_delete(
 @router.get("/station")
 def station_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     context = _station_page_context(request, current_user)
@@ -2318,7 +2416,7 @@ async def map_tile_events(
 @router.get("/wx")
 def wx_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit_source: int | None = None,
 ) -> object:
     templates = request.app.state.templates
@@ -2569,7 +2667,7 @@ def wx_source_discover(
 @router.get("/notifications")
 def notifications_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit_transport: int | None = None,
     edit_rule: int | None = None,
 ) -> object:
@@ -2896,7 +2994,7 @@ def station_send_status(
 def logs_page(
     request: Request,
     min_level: str = "",
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     configured_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
@@ -2918,7 +3016,7 @@ def logs_page(
 @router.get("/changelog")
 def changelog_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     context = build_template_context(
@@ -2979,7 +3077,7 @@ def statistics_page(
 @router.get("/messages")
 def messages_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     context = build_template_context(
@@ -2994,17 +3092,38 @@ def messages_page(
 
 @router.get("/api/messages")
 def messages_snapshot(
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     return JSONResponse(get_live_messages_page_data())
 
 
 @router.get("/api/messages/unread-status")
 def messages_unread_status(
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     unread_count = get_unread_inbox_count()
     return JSONResponse({"unread_count": unread_count, "has_unread": unread_count > 0})
+
+
+@router.get("/api/help")
+def help_markdown_api(
+    page: str | None = None,
+    path: str | None = None,
+    language: str | None = None,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    resolved = _read_help_markdown(page=page, path=path, language=language)
+    if resolved is None:
+        return JSONResponse({"ok": False, "error": _translate("Help file not found.")}, status_code=status.HTTP_404_NOT_FOUND)
+    resolved_path, markdown = resolved
+    return JSONResponse(
+        {
+            "ok": True,
+            "path": resolved_path,
+            "title": _help_markdown_title(markdown, fallback=_translate("Help")),
+            "markdown": markdown,
+        }
+    )
 
 
 @router.post("/api/messages/conversations")
@@ -3043,7 +3162,7 @@ async def messages_send(
 @router.post("/api/messages/conversations/{conversation_id}/read")
 def messages_mark_read(
     conversation_id: int,
-    _: UserIdentity = Depends(require_roles("admin", "operator", "viewer")),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     mark_conversation_read(conversation_id)
     return JSONResponse({"ok": True})
