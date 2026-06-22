@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.45.dev - 2026-06-22
+- `My Station / Beacon`: das Stationsrufzeichen im Beacon-Formular wurde auf maximal 6 druckbare ASCII-Zeichen begrenzt; die Validierung erfolgt auch im Backend.
+- `My Station / Location`: die manuelle Bearbeitung von `latitude` und `longitude` wurde gesperrt; Koordinaten werden jetzt nur noch ueber die Schaltflaeche `Get location` gesetzt.
+
 ## 1.8.44 - 2026-06-22
 
 ### Stable release

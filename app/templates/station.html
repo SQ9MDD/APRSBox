@@ -281,7 +281,7 @@
                 <div class="form-grid station-settings-subgrid">
                     <label>
                         <span>{{ t("Callsign") }}</span>
-                        <input type="text" name="callsign" value="{{ station.callsign }}">
+                        <input type="text" name="callsign" value="{{ station.callsign }}" maxlength="6">
                     </label>
                     <label>
                         <span>{{ t("SSID") }}</span>
@@ -385,11 +385,11 @@
                     </label>
                     <label>
                         <span>{{ t("Latitude") }}</span>
-                        <input type="text" name="latitude" value="{{ station.latitude }}">
+                        <input type="text" name="latitude" value="{{ station.latitude }}" readonly>
                     </label>
                     <label>
                         <span>{{ t("Longitude") }}</span>
-                        <input type="text" name="longitude" value="{{ station.longitude }}">
+                        <input type="text" name="longitude" value="{{ station.longitude }}" readonly>
                     </label>
                     <label>
                         <span>{{ t("Symbol Table") }}</span>
