@@ -2,7 +2,9 @@
 
 ## 1.8.45.dev - 2026-06-22
 - `My Station / Beacon`: limited the station callsign in the beacon form to at most 6 printable ASCII characters, with backend validation as well.
+- `My Station / Beacon`: the `callsign` and `Beacon Path` fields are now normalized to uppercase both in the form and on save.
 - `My Station / Location`: blocked manual editing of `latitude` and `longitude`; coordinates are now set only through the `Get location` button.
+- `Settings / Global settings`: moved the `Save Global Settings` button to the bottom of the block, and `Coverage fill opacity` now defaults to `10%` unless the user already saved a custom value.
 
 ## 1.8.44 - 2026-06-22
 

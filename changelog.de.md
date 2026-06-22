@@ -2,7 +2,9 @@
 
 ## 1.8.45.dev - 2026-06-22
 - `My Station / Beacon`: das Stationsrufzeichen im Beacon-Formular wurde auf maximal 6 druckbare ASCII-Zeichen begrenzt; die Validierung erfolgt auch im Backend.
+- `My Station / Beacon`: die Felder `callsign` und `Beacon Path` werden jetzt sowohl im Formular als auch beim Speichern auf Grossbuchstaben normalisiert.
 - `My Station / Location`: die manuelle Bearbeitung von `latitude` und `longitude` wurde gesperrt; Koordinaten werden jetzt nur noch ueber die Schaltflaeche `Get location` gesetzt.
+- `Settings / Global settings`: die Schaltflaeche `Save Global Settings` wurde an das Ende des Blocks verschoben, und `Coverage fill opacity` verwendet jetzt standardmaessig `10%`, sofern der Benutzer keinen eigenen Wert gespeichert hat.
 
 ## 1.8.44 - 2026-06-22
 

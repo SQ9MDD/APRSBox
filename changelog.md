@@ -2,7 +2,9 @@
 
 ## 1.8.45.dev - 22.06.2026
 - `Moja stacja / Beacon`: znak stacji w formularzu beaconu ograniczono do maksymalnie 6 drukowalnych znaków ASCII, z walidacją także po stronie backendu.
+- `Moja stacja / Beacon`: pola `znak stacji` i `Beacon Path` są teraz automatycznie normalizowane do wielkich liter w formularzu i przy zapisie.
 - `Moja stacja / Lokalizacja`: ręczna edycja pól `szerokość` i `długość geograficzna` została zablokowana; współrzędne są teraz ustawiane wyłącznie przez przycisk `Pobierz lokalizację`.
+- `Settings / Global settings`: przycisk `Save Global Settings` przeniesiono na dół bloku, a `Coverage fill opacity` ma domyślnie `10%`, o ile użytkownik nie zapisał własnej wartości.
 
 ## 1.8.44 - 22.06.2026
 

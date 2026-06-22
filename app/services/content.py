@@ -531,7 +531,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         "beacon_comment": beacon_comment,
         "beacon_interval_mode": beacon_interval_mode,
         "beacon_interval_minutes": beacon_interval_minutes,
-        "beacon_path": payload.get("beacon_path", ""),
+        "beacon_path": str(payload.get("beacon_path", "") or "").strip().upper(),
         "status_enabled": status_enabled,
         "status_text": status_text,
         "status_interval_minutes": status_interval_minutes,
@@ -4338,7 +4338,7 @@ def _normalize_station_text_field(value: Any, *, max_length: int, label: str) ->
 
 
 def _normalize_station_callsign(value: Any) -> str:
-    return _normalize_station_text_field(value, max_length=6, label="Callsign")
+    return _normalize_station_text_field(str(value or "").strip().upper(), max_length=6, label="Callsign")
 
 
 def _normalize_aprs_message_text(value: str) -> str:

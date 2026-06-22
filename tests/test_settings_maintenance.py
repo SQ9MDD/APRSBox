@@ -91,6 +91,20 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("data-settings-action-id=\"reset-runtime-data\"", template_source)
         self.assertIn('{{ t("Reset runtime logs/data") }}', template_source)
 
+    def test_settings_template_keeps_global_save_button_below_coverage_controls(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('id="global-settings-form"', template_source)
+        self.assertIn('form="global-settings-form"', template_source)
+        self.assertLess(
+            template_source.index('{{ t("Coverage fill opacity") }}'),
+            template_source.index('{{ t("Save Global Settings") }}'),
+        )
+
+    def test_settings_template_uses_ten_percent_default_for_coverage_fill_opacity(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("const normalizeCoverageOpacityPercent = (value, fallback = 10) => {", template_source)
+        self.assertIn("const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 10);", template_source)
+
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('{{ t("Danger zone") }}', template_source)

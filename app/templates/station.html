@@ -281,7 +281,7 @@
                 <div class="form-grid station-settings-subgrid">
                     <label>
                         <span>{{ t("Callsign") }}</span>
-                        <input type="text" name="callsign" value="{{ station.callsign }}" maxlength="6">
+                        <input type="text" name="callsign" value="{{ station.callsign }}" maxlength="6" autocapitalize="characters" spellcheck="false" data-force-uppercase="true">
                     </label>
                     <label>
                         <span>{{ t("SSID") }}</span>
@@ -346,7 +346,7 @@
                     </label>
                     <label>
                         <span>{{ t("Beacon Path") }}</span>
-                        <input type="text" name="beacon_path" id="station-beacon-path" value="{{ station.beacon_path }}">
+                        <input type="text" name="beacon_path" id="station-beacon-path" value="{{ station.beacon_path }}" autocapitalize="characters" spellcheck="false" data-force-uppercase="true">
                     </label>
                     <input type="hidden" name="beacon_interval_mode" id="station-beacon-interval-mode" value="{{ beacon_interval_mode }}">
                     <input type="hidden" name="beacon_interval_minutes_fixed" id="station-beacon-interval-fixed" value="{{ beacon_interval_fixed_value }}">
@@ -792,6 +792,20 @@
             };
 
             inputs.forEach(bindLengthCounter);
+        };
+
+        const initUppercaseInputs = () => {
+            const inputs = document.querySelectorAll("input[data-force-uppercase]");
+            if (!inputs.length) {
+                return;
+            }
+
+            for (const input of inputs) {
+                input.addEventListener("input", () => {
+                    input.value = input.value.toUpperCase();
+                });
+                input.value = input.value.toUpperCase();
+            }
         };
 
         const initBeaconPathHealth = () => {
@@ -1463,6 +1477,7 @@
 
         initSymbolPicker();
         initLengthCounters();
+        initUppercaseInputs();
         initBeaconPathHealth();
         initLocationPicker();
         initPhgGenerator();
