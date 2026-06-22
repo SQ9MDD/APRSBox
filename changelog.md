@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.45.dev - 22.06.2026
+- `Moja stacja / Beacon`: znak stacji w formularzu beaconu ograniczono do maksymalnie 6 drukowalnych znaków ASCII, z walidacją także po stronie backendu.
+- `Moja stacja / Lokalizacja`: ręczna edycja pól `szerokość` i `długość geograficzna` została zablokowana; współrzędne są teraz ustawiane wyłącznie przez przycisk `Pobierz lokalizację`.
+
 ## 1.8.44 - 22.06.2026
 
 ### Stable release

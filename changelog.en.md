@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.45.dev - 2026-06-22
+- `My Station / Beacon`: limited the station callsign in the beacon form to at most 6 printable ASCII characters, with backend validation as well.
+- `My Station / Location`: blocked manual editing of `latitude` and `longitude`; coordinates are now set only through the `Get location` button.
+
 ## 1.8.44 - 2026-06-22
 
 ### Stable release

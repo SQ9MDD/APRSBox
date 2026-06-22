@@ -523,7 +523,7 @@ def normalize_station_settings_payload(payload: dict[str, Any]) -> dict[str, Any
         symbol_code = ">"
     symbol_overlay = _normalize_station_symbol_overlay_value(payload.get("symbol_overlay"), symbol_table=symbol_table)
     return {
-        "callsign": payload.get("callsign", ""),
+        "callsign": _normalize_station_callsign(payload.get("callsign", "")),
         "ssid": payload.get("ssid", ""),
         "beacon_interface_id": beacon_interface_id,
         "beacon_tx_scope": beacon_tx_scope,
@@ -4335,6 +4335,10 @@ def _normalize_station_text_field(value: Any, *, max_length: int, label: str) ->
     if len(normalized) > max_length:
         raise ValueError(f"{label} must be {max_length} printable ASCII characters or fewer.")
     return normalized
+
+
+def _normalize_station_callsign(value: Any) -> str:
+    return _normalize_station_text_field(value, max_length=6, label="Callsign")
 
 
 def _normalize_aprs_message_text(value: str) -> str:

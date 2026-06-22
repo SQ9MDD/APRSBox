@@ -117,6 +117,9 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             self.assertIn("Status is sent as a separate APRS frame", template_source)
             self.assertIn('/station/send-status', template_source)
             self.assertIn("Send status", template_source)
+            self.assertIn('name="callsign" value="{{ station.callsign }}" maxlength="6"', template_source)
+            self.assertIn('name="latitude" value="{{ station.latitude }}" readonly', template_source)
+            self.assertIn('name="longitude" value="{{ station.longitude }}" readonly', template_source)
             self.assertIn('id="station-phg-gain-input"', template_source)
             self.assertIn('id="station-phg-direction-input"', template_source)
             self.assertIn('name="symbol_overlay"', template_source)
@@ -193,6 +196,24 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             success, error = safe_update_station_settings(payload)
             self.assertFalse(success)
             self.assertEqual(error, "Beacon comment may contain only printable ASCII characters.")
+
+    def test_callsign_length_is_enforced(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["callsign"] = "SQ9XYZ7"
+            success, error = safe_update_station_settings(payload)
+            self.assertFalse(success)
+            self.assertEqual(error, "Callsign must be 6 printable ASCII characters or fewer.")
+
+    def test_callsign_ascii_is_enforced(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            payload = station_payload(interface_id, tx_enabled="1")
+            payload["callsign"] = "SQ9ŁYZ"
+            success, error = safe_update_station_settings(payload)
+            self.assertFalse(success)
+            self.assertEqual(error, "Callsign may contain only printable ASCII characters.")
 
     def test_status_text_length_is_enforced(self) -> None:
         with temporary_database():

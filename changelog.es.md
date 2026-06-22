@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.45.dev - 2026-06-22
+- `My Station / Beacon`: el indicativo de la estacion en el formulario beacon se limito a un maximo de 6 caracteres ASCII imprimibles, tambien con validacion en backend.
+- `My Station / Location`: se bloqueo la edicion manual de `latitude` y `longitude`; las coordenadas ahora se establecen solo mediante el boton `Get location`.
+
 ## 1.8.44 - 2026-06-22
 
 ### Stable release
