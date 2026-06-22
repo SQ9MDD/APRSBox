@@ -5,6 +5,7 @@
 - `My Station / Beacon`: los campos `callsign` y `Beacon Path` ahora se normalizan a mayusculas tanto en el formulario como al guardar.
 - `My Station / Location`: se bloqueo la edicion manual de `latitude` y `longitude`; las coordenadas ahora se establecen solo mediante el boton `Get location`.
 - `Settings / Global settings`: el boton `Save Global Settings` se movio al final del bloque y `Coverage fill opacity` ahora usa `10%` por defecto, salvo que el usuario ya haya guardado un valor propio.
+- `Settings / Global settings / I18N`: se añadieron las traducciones que faltaban para el campo `Icon set`, su lista de opciones y el texto de ayuda bajo el selector.
 
 ## 1.8.44 - 2026-06-22
 

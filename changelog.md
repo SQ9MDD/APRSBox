@@ -5,6 +5,7 @@
 - `Moja stacja / Beacon`: pola `znak stacji` i `Beacon Path` są teraz automatycznie normalizowane do wielkich liter w formularzu i przy zapisie.
 - `Moja stacja / Lokalizacja`: ręczna edycja pól `szerokość` i `długość geograficzna` została zablokowana; współrzędne są teraz ustawiane wyłącznie przez przycisk `Pobierz lokalizację`.
 - `Settings / Global settings`: przycisk `Save Global Settings` przeniesiono na dół bloku, a `Coverage fill opacity` ma domyślnie `10%`, o ile użytkownik nie zapisał własnej wartości.
+- `Settings / Global settings / I18N`: uzupełniono brakujące tłumaczenia pola `Icon set`, listy opcji oraz opisu pod selectem.
 
 ## 1.8.44 - 22.06.2026
 
