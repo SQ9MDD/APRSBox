@@ -427,6 +427,77 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 [(int(row["interface_id"]), str(row["status"])) for row in statuses],
             )
 
+    async def test_all_active_direct_message_success_before_later_tnc_failure_still_queues_retry(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="A Good TNC", device_path="127.0.0.1:9701")
+            second_interface = insert_modem(name="B Bad TNC", device_path="127.0.0.1:9702")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Success then fail", path="WIDE1-1")
+            message_id = int(message["id"])
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                if port == 9702:
+                    raise OSError("late tnc failure")
+                self.assertEqual(port, 9701)
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                first_round_job = claim_next_outbound_job()
+                assert first_round_job is not None
+                await OutboundService()._process_job(first_round_job)
+
+                after_success = fetch_one(
+                    "SELECT status, tx_attempt_count FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert after_success is not None
+                self.assertEqual(after_success["status"], MESSAGE_STATUS_SENT)
+                self.assertEqual(int(after_success["tx_attempt_count"] or 0), 1)
+
+                no_retry_yet = fetch_one(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                    (message_id,),
+                )
+                assert no_retry_yet is not None
+                self.assertEqual(int(no_retry_yet["total"]), 1)
+
+                second_round_job = claim_next_outbound_job()
+                assert second_round_job is not None
+                await OutboundService()._process_job(second_round_job)
+
+            final_row = fetch_one(
+                "SELECT status, tx_attempt_count, failure_reason FROM aprs_messages WHERE id = ?",
+                (message_id,),
+            )
+            assert final_row is not None
+            self.assertEqual(final_row["status"], MESSAGE_STATUS_SENT)
+            self.assertEqual(int(final_row["tx_attempt_count"] or 0), 1)
+            self.assertEqual(str(final_row["failure_reason"] or ""), "")
+
+            retry_jobs = fetch_one(
+                "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                (message_id,),
+            )
+            assert retry_jobs is not None
+            self.assertEqual(int(retry_jobs["total"]), 2)
+
     async def test_all_active_direct_message_fails_only_after_entire_round_fails(self) -> None:
         with temporary_database():
             first_interface = insert_modem(name="Fail TNC A", device_path="127.0.0.1:9601")

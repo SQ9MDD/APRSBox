@@ -539,17 +539,36 @@ def mark_message_failed_if_round_exhausted(message_id: int, scheduled_at: str | 
     if not normalized_scheduled_at:
         mark_message_failed(message_id, reason)
         return True
-    row = fetch_one(
+    pending_row = fetch_one(
         """
-        SELECT COUNT(*) AS pending_or_sent
+        SELECT COUNT(*) AS pending
         FROM outbound_jobs
         WHERE aprs_message_id = ?
           AND scheduled_at = ?
-          AND status IN ('queued', 'processing', 'sent')
+          AND status IN ('queued', 'processing')
         """,
         (message_id, normalized_scheduled_at),
     )
-    if row is not None and int(row["pending_or_sent"] or 0) > 0:
+    if pending_row is not None and int(pending_row["pending"] or 0) > 0:
+        return False
+    sent_row = fetch_one(
+        """
+        SELECT COUNT(*) AS sent
+        FROM outbound_jobs
+        WHERE aprs_message_id = ?
+          AND scheduled_at = ?
+          AND status = 'sent'
+        """,
+        (message_id, normalized_scheduled_at),
+    )
+    sent_count = int(sent_row["sent"] or 0) if sent_row is not None else 0
+    if sent_count > 0:
+        message = get_message(message_id)
+        if message is not None:
+            current_attempt = int(message.get("tx_attempt_count") or 0)
+            delay_index = current_attempt - 1
+            if 0 <= delay_index < len(RETRY_DELAYS_SECONDS) and current_attempt < MAX_TX_ATTEMPTS:
+                schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[delay_index])
         return False
     mark_message_failed(message_id, reason)
     return True
