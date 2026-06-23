@@ -12,7 +12,7 @@ from app.services.activation_schedule import compute_activation_state
 from app.services.messages import (
     QUERY_MESSAGE_KIND,
     expire_direct_message_timeouts,
-    mark_message_failed,
+    mark_message_failed_if_round_exhausted,
     register_direct_message_transmission,
     register_query_message_transmission,
 )
@@ -379,7 +379,11 @@ class OutboundService:
             if kind in {"message", "beacon", "status"} and (
                 kind != "message" or str(payload.get("message_kind") or "").strip() in {"direct_message", QUERY_MESSAGE_KIND}
             ) and payload.get("aprs_message_id") is not None:
-                mark_message_failed(int(payload["aprs_message_id"]), error)
+                mark_message_failed_if_round_exhausted(
+                    int(payload["aprs_message_id"]),
+                    str(job.get("scheduled_at") or ""),
+                    error,
+                )
             log_event("WARNING", "outbound", f"{kind.capitalize()} outbound job #{job_id} failed: {error}")
             if kind == "wx":
                 log_event("WARNING", "wx", f"WX outbound job #{job_id} failed: {error}")

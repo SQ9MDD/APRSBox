@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.46.dev - 23.06.2026
+- `Wiadomości / TX / multi-TNC`: naprawiono obsługę błędów wysyłki przy `Transmit on all active interfaces`; pojedynczy błąd jednego TNC nie oznacza już całej wiadomości jako `failed`, jeśli ta sama runda TX nadal trwa na innych interfejsach albo jeden z nich nadał poprawnie.
+- `Wiadomości / retry`: wiadomość przechodzi teraz na `failed` dopiero wtedy, gdy cała runda wysyłki dla danego `scheduled_at` zakończy się bez żadnego `sent`, co przywraca retry/ACK flow dla przypadków `fail + success` w multi-TNC.
+
 ## 1.8.45.dev - 22.06.2026
 - `Moja stacja / Beacon`: znak stacji w formularzu beaconu ograniczono do maksymalnie 6 drukowalnych znaków ASCII, z walidacją także po stronie backendu.
 - `Moja stacja / Beacon`: pola `znak stacji` i `Beacon Path` są teraz automatycznie normalizowane do wielkich liter w formularzu i przy zapisie.

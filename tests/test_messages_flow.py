@@ -349,6 +349,125 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 assert second_retry_jobs is not None
                 self.assertEqual(int(second_retry_jobs["total"]), 2)
 
+    async def test_all_active_direct_message_single_tnc_failure_does_not_cancel_retry_round(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="Bad TNC", device_path="127.0.0.1:9501")
+            second_interface = insert_modem(name="Good TNC", device_path="127.0.0.1:9502")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Mixed round", path="WIDE1-1")
+            message_id = int(message["id"])
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                if port == 9501:
+                    raise OSError("bad tnc link down")
+                self.assertEqual(port, 9502)
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                first_round_job = claim_next_outbound_job()
+                assert first_round_job is not None
+                await OutboundService()._process_job(first_round_job)
+
+                intermediate = fetch_one(
+                    "SELECT status, tx_attempt_count FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert intermediate is not None
+                self.assertEqual(intermediate["status"], "queued")
+                self.assertEqual(int(intermediate["tx_attempt_count"] or 0), 0)
+
+                second_round_job = claim_next_outbound_job()
+                assert second_round_job is not None
+                await OutboundService()._process_job(second_round_job)
+
+            message_row = fetch_one(
+                "SELECT status, tx_attempt_count, failure_reason FROM aprs_messages WHERE id = ?",
+                (message_id,),
+            )
+            assert message_row is not None
+            self.assertEqual(message_row["status"], MESSAGE_STATUS_SENT)
+            self.assertEqual(int(message_row["tx_attempt_count"] or 0), 1)
+            self.assertEqual(str(message_row["failure_reason"] or ""), "")
+
+            retry_jobs = fetch_one(
+                "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                (message_id,),
+            )
+            assert retry_jobs is not None
+            self.assertEqual(int(retry_jobs["total"]), 2)
+
+            statuses = fetch_all(
+                """
+                SELECT interface_id, status
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                ORDER BY id ASC
+                """,
+                (message_id,),
+            )
+            self.assertEqual(
+                [(first_interface, "failed"), (second_interface, "sent"), (first_interface, "queued"), (second_interface, "queued")],
+                [(int(row["interface_id"]), str(row["status"])) for row in statuses],
+            )
+
+    async def test_all_active_direct_message_fails_only_after_entire_round_fails(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="Fail TNC A", device_path="127.0.0.1:9601")
+            second_interface = insert_modem(name="Fail TNC B", device_path="127.0.0.1:9602")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Fail round", path="WIDE1-1")
+            message_id = int(message["id"])
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertIn(port, {9601, 9602})
+                raise OSError(f"tnc {port} unavailable")
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                first_round_job = claim_next_outbound_job()
+                assert first_round_job is not None
+                await OutboundService()._process_job(first_round_job)
+
+                intermediate = fetch_one(
+                    "SELECT status, failure_reason FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert intermediate is not None
+                self.assertEqual(intermediate["status"], "queued")
+                self.assertEqual(str(intermediate["failure_reason"] or ""), "")
+
+                second_round_job = claim_next_outbound_job()
+                assert second_round_job is not None
+                await OutboundService()._process_job(second_round_job)
+
+            failed_row = fetch_one(
+                "SELECT status, failure_reason FROM aprs_messages WHERE id = ?",
+                (message_id,),
+            )
+            assert failed_row is not None
+            self.assertEqual(failed_row["status"], MESSAGE_STATUS_FAILED)
+            self.assertIn("unavailable", str(failed_row["failure_reason"]))
+
     def test_late_ack_marks_failed_direct_message_as_acked(self) -> None:
         with temporary_database():
             interface_id = insert_modem()

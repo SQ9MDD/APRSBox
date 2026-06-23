@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.46.dev - 2026-06-23
+- `Messages / TX / multi-TNC`: fixed outbound error handling for `Transmit on all active interfaces`; a single TNC failure no longer marks the whole message as `failed` while the same TX round is still running on other interfaces or one of them already transmitted successfully.
+- `Messages / retry`: a message now moves to `failed` only after the whole send round for the same `scheduled_at` finishes without any `sent` job, restoring normal retry/ACK flow for `fail + success` multi-TNC cases.
+
 ## 1.8.45.dev - 2026-06-22
 - `My Station / Beacon`: limited the station callsign in the beacon form to at most 6 printable ASCII characters, with backend validation as well.
 - `My Station / Beacon`: the `callsign` and `Beacon Path` fields are now normalized to uppercase both in the form and on save.

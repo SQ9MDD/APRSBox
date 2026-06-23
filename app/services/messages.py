@@ -534,6 +534,27 @@ def mark_message_failed(message_id: int, reason: str) -> None:
         )
 
 
+def mark_message_failed_if_round_exhausted(message_id: int, scheduled_at: str | None, reason: str) -> bool:
+    normalized_scheduled_at = str(scheduled_at or "").strip()
+    if not normalized_scheduled_at:
+        mark_message_failed(message_id, reason)
+        return True
+    row = fetch_one(
+        """
+        SELECT COUNT(*) AS pending_or_sent
+        FROM outbound_jobs
+        WHERE aprs_message_id = ?
+          AND scheduled_at = ?
+          AND status IN ('queued', 'processing', 'sent')
+        """,
+        (message_id, normalized_scheduled_at),
+    )
+    if row is not None and int(row["pending_or_sent"] or 0) > 0:
+        return False
+    mark_message_failed(message_id, reason)
+    return True
+
+
 def retry_failed_message(message_id: int) -> dict[str, Any]:
     message = get_message(message_id)
     if message is None:
