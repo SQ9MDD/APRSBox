@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.8.46.dev - 2026-06-23
+- `Settings / Global settings / Traffic frames`: added a global traffic history retention setting (`1h` to `6h`, `30 min` step, default `1h`) that controls `traffic_frames` cleanup; map visibility for stations, objects, and tracks now follows this data-retention window directly.
 - `Messages / TX / multi-TNC`: fixed outbound error handling for `Transmit on all active interfaces`; a single TNC failure no longer marks the whole message as `failed` while the same TX round is still running on other interfaces or one of them already transmitted successfully.
 - `Messages / retry`: a message now moves to `failed` only after the whole send round for the same `scheduled_at` finishes without any `sent` job, restoring normal retry/ACK flow for `fail + success` multi-TNC cases.
 

@@ -35,6 +35,7 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "app_language",
     "aprs_symbol_set",
     "ui_palette",
+    "traffic_retention_minutes",
     "event_log_min_level",
     "event_log_debug_enabled",
     "gui_update_branch",

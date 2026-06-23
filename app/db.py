@@ -12,7 +12,10 @@ DEFAULT_EVENT_LOG_KEEP_ROWS = 5000
 EVENT_LOG_LEVELS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
 EVENT_LOG_MIN_LEVEL_SETTING_KEY = "event_log_min_level"
 EVENT_LOG_DEBUG_ENABLED_SETTING_KEY = "event_log_debug_enabled"
+TRAFFIC_RETENTION_MINUTES_SETTING_KEY = "traffic_retention_minutes"
 DEFAULT_EVENT_LOG_MIN_LEVEL = "INFO"
+DEFAULT_TRAFFIC_RETENTION_MINUTES = 60
+TRAFFIC_RETENTION_ALLOWED_MINUTES: tuple[int, ...] = tuple(range(60, 361, 30))
 _EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LEVELS)}
 
 _event_log_min_level_cache: str | None = None
@@ -2150,6 +2153,20 @@ def get_event_log_debug_enabled() -> bool:
     return _event_log_debug_enabled_cache
 
 
+def normalize_traffic_retention_minutes(value: Any) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_TRAFFIC_RETENTION_MINUTES
+    if normalized in TRAFFIC_RETENTION_ALLOWED_MINUTES:
+        return normalized
+    return DEFAULT_TRAFFIC_RETENTION_MINUTES
+
+
+def get_traffic_retention_minutes() -> int:
+    return normalize_traffic_retention_minutes(get_app_setting(TRAFFIC_RETENTION_MINUTES_SETTING_KEY))
+
+
 def _normalize_app_setting_bool(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "on", "yes"}
 
@@ -2279,4 +2296,5 @@ def log_event(level: str, category: str, message: str) -> None:
 
 
 def traffic_retention_cutoff() -> str:
-    return (datetime.now(timezone.utc) - timedelta(hours=1)).replace(microsecond=0).isoformat()
+    retention_minutes = get_traffic_retention_minutes()
+    return (datetime.now(timezone.utc) - timedelta(minutes=retention_minutes)).replace(microsecond=0).isoformat()

@@ -2,14 +2,19 @@ import contextlib
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import (
     database_maintenance_snapshot,
     connect,
+    get_traffic_retention_minutes,
     init_db,
     log_event,
+    set_app_setting,
     reset_runtime_operational_data,
+    traffic_retention_cutoff,
     utc_now,
     prune_event_logs,
     vacuum_database,
@@ -33,6 +38,17 @@ def temporary_database() -> Path:
 
 
 class DatabaseMaintenanceTests(unittest.TestCase):
+    def test_traffic_retention_defaults_to_one_hour(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            self.assertEqual(60, get_traffic_retention_minutes())
+            self.assertEqual("2026-01-01T11:00:00+00:00", traffic_retention_cutoff())
+
+    def test_traffic_retention_uses_configured_minutes(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            set_app_setting("traffic_retention_minutes", "180")
+            self.assertEqual(180, get_traffic_retention_minutes())
+            self.assertEqual("2026-01-01T09:00:00+00:00", traffic_retention_cutoff())
+
     def test_prune_event_logs_keeps_only_newest_rows(self) -> None:
         with temporary_database():
             for index in range(6):
@@ -130,6 +146,11 @@ class DatabaseMaintenanceTests(unittest.TestCase):
             self.assertEqual(0, event_logs_total)
             self.assertEqual(0, traffic_frames_total)
             self.assertEqual(1, modems_total)
+
+class _FixedDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):  # type: ignore[override]
+        return cls(2026, 1, 1, 12, 0, 0, tzinfo=tz or timezone.utc)
 
 
 if __name__ == "__main__":

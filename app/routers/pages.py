@@ -12,9 +12,12 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from app.dependencies import get_current_user, require_roles
 from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
+    DEFAULT_TRAFFIC_RETENTION_MINUTES,
     EVENT_LOG_DEBUG_ENABLED_SETTING_KEY,
     EVENT_LOG_MIN_LEVEL_SETTING_KEY,
     RUNTIME_MAINTENANCE_RESET_TABLES,
+    TRAFFIC_RETENTION_ALLOWED_MINUTES,
+    TRAFFIC_RETENTION_MINUTES_SETTING_KEY,
     VACUUM_RECOMMEND_FREE_BYTES_MIN,
     VACUUM_RECOMMEND_FREE_RATIO_MIN,
     create_system_job,
@@ -25,10 +28,12 @@ from app.db import (
     get_event_log_debug_enabled,
     get_event_log_min_level,
     get_app_setting,
+    get_traffic_retention_minutes,
     log_event,
     mark_system_job_error,
     mark_system_job_running,
     normalize_event_log_level,
+    normalize_traffic_retention_minutes,
     reset_runtime_operational_data,
     set_app_setting,
     vacuum_database,
@@ -722,6 +727,20 @@ def _normalize_event_log_min_level(value: Any) -> str:
     return normalized
 
 
+def _normalize_traffic_retention_minutes_option(value: Any) -> int:
+    normalized = normalize_traffic_retention_minutes(value)
+    if normalized not in TRAFFIC_RETENTION_ALLOWED_MINUTES:
+        return DEFAULT_TRAFFIC_RETENTION_MINUTES
+    return normalized
+
+
+def _format_traffic_retention_minutes_option(value: int) -> str:
+    hours, minutes = divmod(int(value), 60)
+    if minutes == 0:
+        return f"{hours}h"
+    return f"{hours}h {minutes}m"
+
+
 def _empty_map_source_form() -> dict[str, Any]:
     return {
         "record_id": None,
@@ -821,6 +840,7 @@ def _settings_page_context(
     resolved_aprs_symbol_set = get_aprs_symbol_set() if current_aprs_symbol_set is None else current_aprs_symbol_set
     event_log_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
     event_log_debug_enabled = get_event_log_debug_enabled()
+    traffic_retention_minutes = _normalize_traffic_retention_minutes_option(get_traffic_retention_minutes())
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -859,6 +879,12 @@ def _settings_page_context(
         event_log_min_level=event_log_min_level,
         event_log_debug_enabled=event_log_debug_enabled,
         event_log_min_level_options=[{"value": value, "label": value} for value in EVENT_LOG_MIN_LEVEL_OPTIONS],
+        traffic_retention_minutes=traffic_retention_minutes,
+        traffic_retention_minutes_label=_format_traffic_retention_minutes_option(traffic_retention_minutes),
+        traffic_retention_minutes_options=[
+            {"value": value, "label": _format_traffic_retention_minutes_option(value)}
+            for value in TRAFFIC_RETENTION_ALLOWED_MINUTES
+        ],
         database_vacuum_blocked=database_vacuum_blocked,
         database_maintenance_snapshot=db_maintenance_snapshot,
         database_path=str(db_maintenance_snapshot.get("database_path") or ""),
@@ -1498,6 +1524,7 @@ def settings_update_global(
     request: Request,
     language: str = Form(...),
     default_units: str = Form(...),
+    traffic_retention_minutes: str = Form(""),
     ui_palette: str = Form(""),
     aprs_symbol_set: str = Form(""),
     event_log_min_level: str = Form(""),
@@ -1509,6 +1536,8 @@ def settings_update_global(
     raw_aprs_symbol_set = str(aprs_symbol_set or "").strip().lower()
     selected_language = normalize_language(language)
     selected_default_units = str(default_units or "").strip().lower()
+    raw_traffic_retention_minutes = str(traffic_retention_minutes or "").strip()
+    selected_traffic_retention_minutes = _normalize_traffic_retention_minutes_option(raw_traffic_retention_minutes)
     selected_ui_palette = normalize_ui_palette(raw_ui_palette)
     selected_aprs_symbol_set = raw_aprs_symbol_set if raw_aprs_symbol_set in {APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN} else APRS_SYMBOL_SET_LEGACY
     raw_event_log_min_level = str(event_log_min_level or "").strip().upper()
@@ -1520,6 +1549,11 @@ def settings_update_global(
         return JSONResponse({"ok": False, "error": _translate("Unsupported language selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if selected_default_units not in {"metric", "imperial"}:
         return JSONResponse({"ok": False, "error": _translate("Unsupported unit selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if raw_traffic_retention_minutes != str(selected_traffic_retention_minutes):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Unsupported traffic history retention selection.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     if not is_supported_ui_palette(raw_ui_palette):
         return JSONResponse({"ok": False, "error": _translate("Unsupported color palette selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if raw_aprs_symbol_set and raw_aprs_symbol_set not in {APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN}:
@@ -1537,6 +1571,7 @@ def settings_update_global(
         )
 
     set_app_setting("app_language", selected_language)
+    set_app_setting(TRAFFIC_RETENTION_MINUTES_SETTING_KEY, str(selected_traffic_retention_minutes))
     set_app_setting("ui_palette", selected_ui_palette)
     set_app_setting(APRS_SYMBOL_SET_SETTING_KEY, selected_aprs_symbol_set)
     set_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY, selected_event_log_min_level)
@@ -1547,6 +1582,7 @@ def settings_update_global(
             "message": _translate("Global settings updated."),
             "current_language": selected_language,
             "current_default_units": selected_default_units,
+            "traffic_retention_minutes": selected_traffic_retention_minutes,
             "current_ui_palette": selected_ui_palette,
             "current_aprs_symbol_set": selected_aprs_symbol_set,
             "event_log_min_level": selected_event_log_min_level,
