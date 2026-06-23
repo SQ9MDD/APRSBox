@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.8.46.dev - 2026-06-23
-- `Settings / Global settings / Traffic frames`: se añadio una configuracion global de retencion del historial de trafico (`1h` a `6h`, paso de `30 min`, valor por defecto `1h`) que controla la limpieza de `traffic_frames`; la visibilidad en el mapa de estaciones, objetos y tracks ahora sigue directamente esa ventana de retencion de datos.
+- `Settings / Global settings / Traffic frames`: se añadio una configuracion global de retencion del historial de trafico (`1h` a `6h` en pasos de `30 min`, mas `12h` y `24h`, valor por defecto `1h`) que controla la limpieza de `traffic_frames`; la visibilidad en el mapa de estaciones, objetos y tracks ahora sigue directamente esa ventana de retencion de datos.
 - `Messages / TX / multi-TNC`: se corrigio el manejo de errores outbound para `Transmit on all active interfaces`; un fallo de un solo TNC ya no marca todo el mensaje como `failed` mientras la misma ronda TX siga en curso en otras interfaces o una de ellas ya haya transmitido correctamente.
 - `Messages / retry`: un mensaje ahora pasa a `failed` solo cuando toda la ronda de envio para el mismo `scheduled_at` termina sin ningun job `sent`, restaurando el flujo normal de retry/ACK para los casos multi-TNC de `fail + success`.
 

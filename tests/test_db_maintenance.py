@@ -49,6 +49,12 @@ class DatabaseMaintenanceTests(unittest.TestCase):
             self.assertEqual(180, get_traffic_retention_minutes())
             self.assertEqual("2026-01-01T09:00:00+00:00", traffic_retention_cutoff())
 
+    def test_traffic_retention_accepts_twenty_four_hours(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            set_app_setting("traffic_retention_minutes", "1440")
+            self.assertEqual(1440, get_traffic_retention_minutes())
+            self.assertEqual("2025-12-31T12:00:00+00:00", traffic_retention_cutoff())
+
     def test_prune_event_logs_keeps_only_newest_rows(self) -> None:
         with temporary_database():
             for index in range(6):

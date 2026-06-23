@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.8.46.dev - 2026-06-23
-- `Settings / Global settings / Traffic frames`: eine globale Aufbewahrung fuer den Verkehrsverlauf wurde hinzugefuegt (`1h` bis `6h`, Schritt `30 min`, Standard `1h`); sie steuert das Cleanup von `traffic_frames`, und die Sichtbarkeit von Stationen, Objekten und Tracks auf der Karte folgt jetzt direkt diesem Datenfenster.
+- `Settings / Global settings / Traffic frames`: eine globale Aufbewahrung fuer den Verkehrsverlauf wurde hinzugefuegt (`1h` bis `6h` in Schritten von `30 min`, plus `12h` und `24h`, Standard `1h`); sie steuert das Cleanup von `traffic_frames`, und die Sichtbarkeit von Stationen, Objekten und Tracks auf der Karte folgt jetzt direkt diesem Datenfenster.
 - `Messages / TX / multi-TNC`: die Fehlerbehandlung fuer `Transmit on all active interfaces` wurde korrigiert; ein einzelner TNC-Fehler markiert die gesamte Nachricht nicht mehr sofort als `failed`, solange dieselbe TX-Runde noch auf anderen Interfaces laeuft oder eines davon bereits erfolgreich gesendet hat.
 - `Messages / retry`: eine Nachricht wechselt jetzt erst dann nach `failed`, wenn die komplette Senderunde fuer dasselbe `scheduled_at` ohne irgendeinen Job im Zustand `sent` endet; damit funktioniert der normale Retry/ACK-Ablauf in Multi-TNC-Faellen vom Typ `fail + success` wieder korrekt.
 

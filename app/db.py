@@ -15,7 +15,7 @@ EVENT_LOG_DEBUG_ENABLED_SETTING_KEY = "event_log_debug_enabled"
 TRAFFIC_RETENTION_MINUTES_SETTING_KEY = "traffic_retention_minutes"
 DEFAULT_EVENT_LOG_MIN_LEVEL = "INFO"
 DEFAULT_TRAFFIC_RETENTION_MINUTES = 60
-TRAFFIC_RETENTION_ALLOWED_MINUTES: tuple[int, ...] = tuple(range(60, 361, 30))
+TRAFFIC_RETENTION_ALLOWED_MINUTES: tuple[int, ...] = (*range(60, 361, 30), 720, 1440)
 _EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LEVELS)}
 
 _event_log_min_level_cache: str | None = None
