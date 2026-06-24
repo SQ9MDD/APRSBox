@@ -447,7 +447,6 @@ install_sudoers_policy() {
         fail "sudo is required but not available."
     fi
     cat > "$SUDOERS_FILE" <<EOF
-Defaults:$APP_USER !requiretty
 $APP_USER ALL=(root) NOPASSWD: $TARGET_APP_DIR/scripts/update.sh
 $APP_USER ALL=(root) NOPASSWD: $TARGET_APP_DIR/scripts/restart-services.sh
 $APP_USER ALL=(root) NOPASSWD: $TARGET_APP_DIR/scripts/reboot-host.sh
