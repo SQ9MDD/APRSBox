@@ -4525,6 +4525,42 @@ select:focus-visible,
     flex-wrap: wrap;
 }
 
+.traffic-filter-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.traffic-filter-button {
+    display: inline-flex;
+    align-items: center;
+    min-width: 4.2rem;
+    justify-content: center;
+}
+
+.traffic-filter-button.is-active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow-soft);
+    background: linear-gradient(180deg, var(--accent-soft), var(--panel-soft));
+}
+
+.traffic-text-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.traffic-text-filter span {
+    white-space: nowrap;
+}
+
+.traffic-text-filter input {
+    width: 18rem;
+    max-width: 100%;
+}
+
 .inline-form {
     margin: 0;
 }

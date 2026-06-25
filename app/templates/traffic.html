@@ -7,6 +7,15 @@
         <div class="traffic-toolbar">
             <h2>{{ t("Traffic Log") }}</h2>
             <div class="traffic-toolbar-actions">
+                <div class="traffic-filter-group" role="group" aria-label="{{ t('Filter') }}">
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="rx" aria-pressed="false">RX</button>
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="tx" aria-pressed="false">{{ t("TX") }}</button>
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="remote" aria-pressed="false">{{ t("Remote") }}</button>
+                </div>
+                <label class="traffic-text-filter">
+                    <span class="muted small">{{ t("Filter") }}</span>
+                    <input type="text" id="traffic-text-filter" placeholder="{{ t('Filter') }}" autocomplete="off" spellcheck="false">
+                </label>
                 <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
             </div>
         </div>
@@ -37,8 +46,11 @@
         const count = document.getElementById("traffic-frame-count");
         const interfaceSummary = document.getElementById("traffic-interface-summary");
         const initialDataNode = document.getElementById("traffic-initial-data");
+        const quickFilterButtons = Array.from(document.querySelectorAll("[data-traffic-quick-filter]"));
+        const textFilterInput = document.getElementById("traffic-text-filter");
         const staticIconsRoot = {{ (request.scope.root_path ~ '/static/icons')|tojson }};
         const noFramesText = {{ t("No frames received yet.")|tojson }};
+        const noFilteredFramesText = {{ t("No frames match current filters.")|tojson }};
         const entriesText = {{ t("entries")|tojson }};
         const listeningText = {{ t("Listening")|tojson }};
         const clientsText = {{ t("Clients")|tojson }};
@@ -50,7 +62,19 @@
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
         const frameNodeByKey = new Map();
         const interfaceVisibilityByKey = new Map();
+        let activeQuickFilter = "";
+        let textFilterValue = "";
         let latestSnapshot = { interfaces: [], frames: [] };
+
+        const normalizeFilterText = (value) => String(value || "").trim().toLowerCase();
+
+        const updateQuickFilterButtons = () => {
+            quickFilterButtons.forEach((button) => {
+                const isActive = (button.dataset.trafficQuickFilter || "") === activeQuickFilter;
+                button.classList.toggle("is-active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
+        };
 
         const interfaceKey = (item) => {
             if (Number.isInteger(item.modem_id)) {
@@ -86,6 +110,38 @@
             return visibleInterfaceIds.has(interfaceId);
         };
 
+        const matchesQuickFilter = (frame) => {
+            const direction = String(frame.direction || "").trim().toUpperCase();
+            const command = String(frame.command || "").trim().toUpperCase();
+            if (activeQuickFilter === "rx") {
+                return direction === "RX";
+            }
+            if (activeQuickFilter === "tx") {
+                return direction === "TX";
+            }
+            if (activeQuickFilter === "remote") {
+                return command.startsWith("TX-PROXY");
+            }
+            return true;
+        };
+
+        const matchesTextFilter = (frame) => {
+            if (!textFilterValue) {
+                return true;
+            }
+            const searchableText = [
+                frame.source,
+                frame.band,
+                frame.direction,
+                frame.command,
+                frame.line,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+            return searchableText.includes(textFilterValue);
+        };
+
         const filteredFrames = (snapshot) => {
             const interfaces = Array.isArray(snapshot.interfaces) ? snapshot.interfaces : [];
             const frames = Array.isArray(snapshot.frames) ? snapshot.frames : [];
@@ -100,7 +156,12 @@
                     visibleInterfaceIds.add(item.modem_id);
                 }
             });
-            return frames.filter((frame) => isFrameVisible(frame, interfacesById, visibleInterfaceIds));
+            return frames.filter(
+                (frame) =>
+                    isFrameVisible(frame, interfacesById, visibleInterfaceIds)
+                    && matchesQuickFilter(frame)
+                    && matchesTextFilter(frame),
+            );
         };
 
         const renderInterfaces = (interfaces) => {
@@ -228,10 +289,10 @@
             }
         };
 
-        const renderFrames = (frames) => {
+        const renderFrames = (frames, hasSnapshotFrames) => {
             if (!frames.length) {
                 frameNodeByKey.clear();
-                streamContainer.innerHTML = `<div class="empty-state muted" id="traffic-empty-state">${noFramesText}</div>`;
+                streamContainer.innerHTML = `<div class="empty-state muted" id="traffic-empty-state">${hasSnapshotFrames ? noFilteredFramesText : noFramesText}</div>`;
                 return;
             }
 
@@ -285,10 +346,28 @@
             const visibleFrames = filteredFrames(latestSnapshot);
             count.textContent = `${visibleFrames.length} ${entriesText}`;
             renderInterfaces(latestSnapshot.interfaces);
-            renderFrames(visibleFrames);
+            renderFrames(visibleFrames, latestSnapshot.frames.length > 0);
         };
 
+        quickFilterButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const nextFilter = button.dataset.trafficQuickFilter || "";
+                activeQuickFilter = activeQuickFilter === nextFilter ? "" : nextFilter;
+                updateQuickFilterButtons();
+                applySnapshot(latestSnapshot);
+            });
+        });
+
+        if (textFilterInput) {
+            textFilterInput.addEventListener("input", () => {
+                textFilterValue = normalizeFilterText(textFilterInput.value);
+                applySnapshot(latestSnapshot);
+            });
+            textFilterValue = normalizeFilterText(textFilterInput.value);
+        }
+
         streamContainer.textContent = "";
+        updateQuickFilterButtons();
         applySnapshot(initialSnapshot);
 
         const eventSource = new EventSource({{ traffic_stream_url|tojson }});

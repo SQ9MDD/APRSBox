@@ -307,6 +307,8 @@
   "Delete this bulletin?": "Delete this bulletin?",
   "Delete this object?": "Delete this object?",
   "Allow TX from remote clients": "Allow TX from remote clients",
+  "Remote": "Remote",
+  "No frames match current filters.": "No frames match current filters.",
   "Edit flow": "Flow yIchoH",
   "Edit source": "Edit source",
   "Enable WX": "Enable WX",
