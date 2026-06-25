@@ -577,6 +577,14 @@ body {
     box-shadow: var(--shadow-soft);
 }
 
+@media (min-width: 981px) {
+    .sidebar {
+        height: 100vh;
+        height: 100dvh;
+        overflow-y: auto;
+    }
+}
+
 .brand,
 .topbar-user,
 .checkbox-row,
