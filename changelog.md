@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.48.dev - 25.06.2026
+- `Traffic Monitor / filtry`: w odpowiedzi na GitHub `issue #53` (`Traffic monitor - filters`) główny toolbar dostał frontendowe szybkie filtry `RX`, `TX` i zdalnego `TX` od klientów, tekstowy filtr typu grep oraz przycisk `Clear filters`; wszystkie filtry działają na żywo także dla kolejnych odświeżeń SSE, bez zmian w backendzie.
+
 ## 1.8.47.dev - 25.06.2026
 - `GUI / sidebar / scrolling`: w odpowiedzi na GitHub `issue #54` (`Menu panel independent scrolling`) sidebar na desktopie przewija się teraz niezależnie od głównej zawartości, a jego scrollbar pozostaje ukryty.
 

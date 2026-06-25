@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.48.dev - 2026-06-25
+- `Traffic Monitor / filtros`: en respuesta al GitHub `issue #53` (`Traffic monitor - filters`), la barra principal ahora ofrece filtros frontend-only para `RX`, `TX` y tramas `TX` de clientes remotos, un filtro de texto tipo grep y `Clear filters`; todos los filtros se aplican en vivo tambien sobre las siguientes actualizaciones SSE, sin cambios en backend.
+
 ## 1.8.47.dev - 2026-06-25
 - `GUI / sidebar / scrolling`: en respuesta al GitHub `issue #54` (`Menu panel independent scrolling`), el sidebar en desktop ahora se desplaza de forma independiente del contenido principal y mantiene oculto su scrollbar.
 
