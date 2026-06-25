@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.47.dev - 25.06.2026
+- `GUI / sidebar / scrolling`: w odpowiedzi na GitHub `issue #54` (`Menu panel independent scrolling`) sidebar na desktopie przewija się teraz niezależnie od głównej zawartości, a jego scrollbar pozostaje ukryty.
+
 ## 1.8.46.dev - 23.06.2026
 - `Settings / Global settings / Traffic frames`: dodano globalne ustawienie retencji historii ruchu (`1h` do `6h` co `30 min`, plus `12h` i `24h`, domyślnie `1h`), które steruje cleanupem tabeli `traffic_frames`; widoczność stacji, obiektów i śladów na mapie wynika teraz bezpośrednio z tego okna retencji danych.
 - `Wiadomości / TX / multi-TNC`: naprawiono obsługę błędów wysyłki przy `Transmit on all active interfaces`; pojedynczy błąd jednego TNC nie oznacza już całej wiadomości jako `failed`, jeśli ta sama runda TX nadal trwa na innych interfejsach albo jeden z nich nadał poprawnie.

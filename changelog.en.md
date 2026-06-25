@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.47.dev - 2026-06-25
+- `GUI / sidebar / scrolling`: in response to GitHub `issue #54` (`Menu panel independent scrolling`), the desktop sidebar now scrolls independently from the main content while keeping its scrollbar hidden.
+
 ## 1.8.46.dev - 2026-06-23
 - `Settings / Global settings / Traffic frames`: added a global traffic history retention setting (`1h` to `6h` in `30 min` steps, plus `12h` and `24h`, default `1h`) that controls `traffic_frames` cleanup; map visibility for stations, objects, and tracks now follows this data-retention window directly.
 - `Messages / TX / multi-TNC`: fixed outbound error handling for `Transmit on all active interfaces`; a single TNC failure no longer marks the whole message as `failed` while the same TX round is still running on other interfaces or one of them already transmitted successfully.
