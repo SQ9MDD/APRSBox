@@ -8,14 +8,14 @@
             <h2>{{ t("Traffic Log") }}</h2>
             <div class="traffic-toolbar-actions">
                 <div class="traffic-filter-group" role="group" aria-label="{{ t('Filter') }}">
-                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="rx" aria-pressed="false">RX</button>
-                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="tx" aria-pressed="false">{{ t("TX") }}</button>
-                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="remote" aria-pressed="false">{{ t("Remote") }}</button>
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="rx" aria-pressed="false" title="{{ t('Show only RX frames') }}" aria-label="{{ t('Show only RX frames') }}">RX</button>
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="tx" aria-pressed="false" title="{{ t('Show only TX frames') }}" aria-label="{{ t('Show only TX frames') }}">{{ t("TX") }}</button>
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="remote" aria-pressed="false" title="{{ t('Show only remote client TX frames') }}" aria-label="{{ t('Show only remote client TX frames') }}">{{ t("Remote") }}</button>
                 </div>
                 <label class="traffic-text-filter">
-                    <span class="muted small">{{ t("Filter") }}</span>
-                    <input type="text" id="traffic-text-filter" placeholder="{{ t('Filter') }}" autocomplete="off" spellcheck="false">
+                    <input type="text" id="traffic-text-filter" placeholder="{{ t('Filter') }}" aria-label="{{ t('Filter') }}" autocomplete="off" spellcheck="false">
                 </label>
+                <button type="button" class="button-secondary" id="traffic-clear-filters" title="{{ t('Clear filters') }}" aria-label="{{ t('Clear filters') }}" disabled>{{ t("Clear filters") }}</button>
                 <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
             </div>
         </div>
@@ -48,6 +48,7 @@
         const initialDataNode = document.getElementById("traffic-initial-data");
         const quickFilterButtons = Array.from(document.querySelectorAll("[data-traffic-quick-filter]"));
         const textFilterInput = document.getElementById("traffic-text-filter");
+        const clearFiltersButton = document.getElementById("traffic-clear-filters");
         const staticIconsRoot = {{ (request.scope.root_path ~ '/static/icons')|tojson }};
         const noFramesText = {{ t("No frames received yet.")|tojson }};
         const noFilteredFramesText = {{ t("No frames match current filters.")|tojson }};
@@ -74,6 +75,13 @@
                 button.classList.toggle("is-active", isActive);
                 button.setAttribute("aria-pressed", isActive ? "true" : "false");
             });
+        };
+
+        const syncClearFiltersButton = () => {
+            if (!clearFiltersButton) {
+                return;
+            }
+            clearFiltersButton.disabled = !(activeQuickFilter || textFilterValue);
         };
 
         const interfaceKey = (item) => {
@@ -354,6 +362,7 @@
                 const nextFilter = button.dataset.trafficQuickFilter || "";
                 activeQuickFilter = activeQuickFilter === nextFilter ? "" : nextFilter;
                 updateQuickFilterButtons();
+                syncClearFiltersButton();
                 applySnapshot(latestSnapshot);
             });
         });
@@ -361,13 +370,28 @@
         if (textFilterInput) {
             textFilterInput.addEventListener("input", () => {
                 textFilterValue = normalizeFilterText(textFilterInput.value);
+                syncClearFiltersButton();
                 applySnapshot(latestSnapshot);
             });
             textFilterValue = normalizeFilterText(textFilterInput.value);
         }
 
+        if (clearFiltersButton) {
+            clearFiltersButton.addEventListener("click", () => {
+                activeQuickFilter = "";
+                textFilterValue = "";
+                if (textFilterInput) {
+                    textFilterInput.value = "";
+                }
+                updateQuickFilterButtons();
+                syncClearFiltersButton();
+                applySnapshot(latestSnapshot);
+            });
+        }
+
         streamContainer.textContent = "";
         updateQuickFilterButtons();
+        syncClearFiltersButton();
         applySnapshot(initialSnapshot);
 
         const eventSource = new EventSource({{ traffic_stream_url|tojson }});
