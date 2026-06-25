@@ -577,6 +577,21 @@ body {
     box-shadow: var(--shadow-soft);
 }
 
+@media (min-width: 981px) {
+    .sidebar {
+        height: 100vh;
+        height: 100dvh;
+        overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .sidebar::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+    }
+}
+
 .brand,
 .topbar-user,
 .checkbox-row,
