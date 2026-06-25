@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.48.dev - 2026-06-25
+- `Traffic Monitor / Filter`: als Reaktion auf GitHub `issue #53` (`Traffic monitor - filters`) gibt es in der Hauptleiste jetzt frontend-only Schnellfilter fuer `RX`, `TX` und Remote-Client-`TX`-Frames, einen grep-aehnlichen Textfilter sowie `Clear filters`; alle Filter wirken live auch auf nachfolgende SSE-Aktualisierungen, ganz ohne Backend-Aenderungen.
+
 ## 1.8.47.dev - 2026-06-25
 - `GUI / sidebar / scrolling`: als Reaktion auf GitHub `issue #54` (`Menu panel independent scrolling`) scrollt die Sidebar auf dem Desktop jetzt unabhaengig vom Hauptinhalt, waehrend der Scrollbalken ausgeblendet bleibt.
 
