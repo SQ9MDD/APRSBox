@@ -36,10 +36,10 @@ class WxSchedulerService:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            self._tick()
+            await self._tick()
             await self._sleep(self._poll_interval)
 
-    def _tick(self) -> None:
+    async def _tick(self) -> None:
         config = get_wx_config()
         if not bool(config.get("enabled")):
             return
@@ -48,7 +48,7 @@ class WxSchedulerService:
         last_refresh_at = _parse_timestamp(get_app_setting(WX_REFRESH_LAST_AT_KEY))
         if last_refresh_at is None or int((now - last_refresh_at).total_seconds()) >= interval_seconds:
             try:
-                refresh_wx_runtime(trigger="scheduled")
+                await asyncio.to_thread(refresh_wx_runtime, trigger="scheduled")
             except Exception as exc:
                 log_event("WARNING", "wx", f"WX scheduler refresh failed: {exc}")
                 return

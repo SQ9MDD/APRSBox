@@ -748,10 +748,15 @@ CREATE INDEX IF NOT EXISTS idx_map_sources_enabled_sort ON map_sources(enabled D
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
 CREATE INDEX IF NOT EXISTS idx_digi_flows_route_pair ON digi_flows(source_kind, source_ref, target_kind, target_ref);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_status_scheduled_at ON outbound_jobs(kind, status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_status_last_attempt_at
+    ON aprs_messages(direction, status, last_attempt_at, id);
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
+    ON aprs_messages(direction, is_unread, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_wx_sources_type_enabled ON wx_sources(source_type, enabled, name);
 CREATE INDEX IF NOT EXISTS idx_wx_mappings_source_enabled ON wx_mappings(source_id, enabled, parameter_name);
 CREATE INDEX IF NOT EXISTS idx_wx_runtime_cache_status_updated ON wx_runtime_cache(status, updated_at DESC);
@@ -1221,6 +1226,24 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
             """
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
     ON outbound_jobs(aprs_message_id, status, scheduled_at, id)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_status_scheduled_at
+    ON outbound_jobs(kind, status, scheduled_at, id)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_status_last_attempt_at
+    ON aprs_messages(direction, status, last_attempt_at, id)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
+    ON aprs_messages(direction, is_unread, conversation_id)
 """
         )
         connection.execute(
@@ -1708,6 +1731,10 @@ def _migrate_aprs_messages_table(connection: sqlite3.Connection) -> None:
         DROP TABLE aprs_messages_old;
         CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
         CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
+        CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_status_last_attempt_at
+            ON aprs_messages(direction, status, last_attempt_at, id);
+        CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
+            ON aprs_messages(direction, is_unread, conversation_id);
         """
     )
 
@@ -2194,6 +2221,30 @@ def prune_event_logs(*, keep_rows: int) -> int:
         after_row = connection.execute("SELECT COUNT(*) AS total FROM event_logs").fetchone()
         after_total = int(after_row["total"]) if after_row is not None else 0
     return before_total - after_total
+
+
+def prune_traffic_frames_batch(*, limit: int = 1000) -> int:
+    normalized_limit = max(1, int(limit))
+    cutoff = traffic_retention_cutoff()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM traffic_frames
+            WHERE id IN (
+                SELECT id
+                FROM (
+                    SELECT id
+                    FROM traffic_frames
+                    WHERE created_at < ?
+                    ORDER BY created_at ASC, id ASC
+                    LIMIT ?
+                )
+            )
+            """,
+            (cutoff, normalized_limit),
+        )
+        deleted = cursor.rowcount
+    return max(int(deleted or 0), 0)
 
 
 def vacuum_database() -> None:

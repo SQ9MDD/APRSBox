@@ -188,6 +188,10 @@
                 applyUnreadState(Boolean(detail.hasUnread), Number(detail.unreadCount || 0));
             });
 
+            if (document.getElementById("messages-app")) {
+                return;
+            }
+
             refreshTimer = window.setInterval(() => {
                 void refreshUnreadState();
             }, 5000);
