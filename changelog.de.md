@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.49.dev - 2026-06-29
+- `Performance / runtime / SQLite`: Hot Paths fuer schwache Hardware wurden entlastet: Radar prueft `radar_enabled` jetzt vor der teuren Auswertung, das Cleanup von `traffic_frames` wurde aus dem RX-Hot-Path in ein Batch-Maintenance verschoben, kurze Caches fuer Traffic-/Stations-Snapshots und SQLite-Indizes fuer Outbound-/Messages-Hot-Paths wurden hinzugefuegt, der WX-Scheduler lagert blockierendes Refresh in einen Thread aus und die Seite `Messages` pollt `unread-status` nicht mehr doppelt.
+- `Map / erster Ladevorgang / Rendering`: der erste Kartenaufruf verwendet jetzt ein leichtes Marker-Payload (`stations-lite`), waehrend Stationsdetails und `mobile_tracks` erst nach dem ersten Render separat geladen werden; das Frontend aktualisiert Marker, PHG-Abdeckung und Tracks nun inkrementell statt per Full-Redraw, wodurch Punkte schneller sichtbar werden und das Overlay-Flackern verschwindet.
+
 ## 1.8.48.dev - 2026-06-25
 - `Traffic Monitor / Filter`: als Reaktion auf GitHub `issue #53` (`Traffic monitor - filters`) gibt es in der Hauptleiste jetzt frontend-only Schnellfilter fuer `RX`, `TX` und Remote-Client-`TX`-Frames, einen grep-aehnlichen Textfilter sowie `Clear filters`; alle Filter wirken live auch auf nachfolgende SSE-Aktualisierungen, ganz ohne Backend-Aenderungen.
 
