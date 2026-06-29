@@ -28,7 +28,7 @@ async def lifespan(app_instance: FastAPI):
     outbound_service = OutboundService(traffic_monitor=traffic_monitor, digi_flow_runtime=digi_flow_runtime)
     beacon_scheduler = BeaconSchedulerService()
     bulletin_scheduler = BulletinSchedulerService()
-    maintenance_scheduler = MaintenanceSchedulerService()
+    maintenance_scheduler = MaintenanceSchedulerService(poll_interval=30.0)
     object_scheduler = ObjectSchedulerService()
     wx_scheduler = WxSchedulerService()
     radio_activity_aggregator = RadioActivityAggregatorService()

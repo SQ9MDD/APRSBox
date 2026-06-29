@@ -153,6 +153,9 @@ from app.services.map_service import (
     get_map_source,
     list_map_sources,
     get_map_page_config,
+    get_map_mobile_tracks_payload,
+    get_map_station_details_payload,
+    get_map_station_markers_payload,
     get_map_station_payload,
     safe_move_map_source,
     safe_delete_map_source,
@@ -2374,11 +2377,34 @@ def map_page(
         body_class="page-map",
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_station_source_key=map_station_source_key,
-        map_stations_endpoint=_path(request, "/api/map/stations"),
+        map_stations_endpoint=_path(request, "/api/map/stations-lite"),
+        map_station_details_endpoint=_path(request, "/api/map/stations-details"),
+        map_mobile_tracks_endpoint=_path(request, "/api/map/mobile-tracks"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
         map_traffic_stream_endpoint=_path(request, "/api/traffic/stream"),
     )
     return templates.TemplateResponse("map.html", context)
+
+
+@router.get("/api/map/stations-lite")
+def map_stations_lite(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_map_station_markers_payload())
+
+
+@router.get("/api/map/stations-details")
+def map_station_details(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_map_station_details_payload())
+
+
+@router.get("/api/map/mobile-tracks")
+def map_mobile_tracks(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_map_mobile_tracks_payload())
 
 
 @router.get("/api/map/stations")

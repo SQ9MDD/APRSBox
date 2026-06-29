@@ -9,7 +9,7 @@ import time
 from threading import Lock
 from typing import Any, Callable
 
-from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
+from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
 from app.services.band_condition import process_incoming_frame
 from app.services.messages import process_incoming_tnc2_message
@@ -2102,7 +2102,6 @@ class _TrafficModemRuntime:
         return "unknown modem"
 
     def _persist_frame(self, entry: dict[str, Any], timestamp: str) -> None:
-        cutoff = traffic_retention_cutoff()
         active_band = ""
         interface_id: int | None = None
         rx_monotonic = entry.get("_rx_monotonic")
@@ -2147,7 +2146,6 @@ class _TrafficModemRuntime:
                     timestamp,
                 ),
             )
-            connection.execute("DELETE FROM traffic_frames WHERE created_at < ?", (cutoff,))
         rx_to_db_commit_ms = _elapsed_ms_since(rx_monotonic)
         if entry["format"] == "TNC2":
             details = [

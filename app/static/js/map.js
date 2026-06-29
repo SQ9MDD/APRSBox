@@ -10,6 +10,8 @@
         zoom: Number.parseInt(root.dataset.defaultZoom || "", 10),
     };
     const stationsEndpoint = root.dataset.stationsEndpoint || "/api/map/stations";
+    const stationDetailsEndpoint = root.dataset.stationDetailsEndpoint || "";
+    const mobileTracksEndpoint = root.dataset.mobileTracksEndpoint || "";
     const mapTileEventsEndpoint = root.dataset.mapTileEventsEndpoint || "";
     const tileUrl = root.dataset.tileUrl || "";
     const tileAttribution = root.dataset.tileAttribution || "";
@@ -69,7 +71,9 @@
         show: root.dataset.i18nShow || "Show",
         hide: root.dataset.i18nHide || "Hide",
     });
-    const stationLayer = window.L.layerGroup();
+    const coverageLayerGroup = window.L.layerGroup();
+    const trackLayerGroup = window.L.layerGroup();
+    const markerLayerGroup = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
@@ -92,7 +96,15 @@
     let latestStations = [];
     let latestMobileTracks = [];
     let latestInterfaces = [];
+    let latestStationRevision = "";
+    let latestStationDetailsRevision = "";
+    let latestTrackRevision = "";
+    let detailsLoadingRevision = "";
+    let tracksLoadingRevision = "";
     const interfaceVisibilityByKey = new Map();
+    const markerLayersByKey = new Map();
+    const coverageLayersByKey = new Map();
+    const trackLayersByKey = new Map();
     let rulerState = null;
     let tileErrorActive = false;
     let tileErrorCount = 0;
@@ -136,6 +148,13 @@
             return opacityPercent;
         }
         return normalizedFallback;
+    }
+
+    function normalizeRevision(value) {
+        if (value === null || value === undefined) {
+            return "";
+        }
+        return String(value);
     }
 
     function resolveInitialView() {
@@ -230,7 +249,9 @@
     map.on("resize zoom move", syncMapMaskLayerViewport);
     mapMaskLayer = ensureMapMaskLayer(map);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
-    stationLayer.addTo(map);
+    coverageLayerGroup.addTo(map);
+    trackLayerGroup.addTo(map);
+    markerLayerGroup.addTo(map);
     rulerLayer.addTo(map);
 
     if (tileSourceOutput) {
@@ -644,6 +665,127 @@
         };
     }
 
+    function mergeInterfaces(...groups) {
+        const merged = [];
+        const seen = new Set();
+        for (const group of groups) {
+            for (const item of group || []) {
+                const key = interfaceKey(item);
+                if (seen.has(key)) {
+                    continue;
+                }
+                seen.add(key);
+                merged.push(item);
+            }
+        }
+        return merged;
+    }
+
+    function hiddenInterfaceSignature() {
+        return Array.from(interfaceVisibilityByKey.entries())
+            .filter(([, isVisible]) => isVisible === false)
+            .map(([key]) => key)
+            .sort()
+            .join("|");
+    }
+
+    function interfacesSignature(interfaces) {
+        return (interfaces || [])
+            .map((item) => {
+                const interfaceId = normalizeInterfaceId(item && item.modem_id);
+                const name = String((item && item.name) || "").trim();
+                const band = String((item && item.band) || "").trim();
+                return `${interfaceId === null ? "" : interfaceId}:${name}:${band}`;
+            })
+            .join("|");
+    }
+
+    function buildRenderSignature() {
+        return [
+            normalizeRevision(latestStationRevision),
+            normalizeRevision(latestStationDetailsRevision),
+            tracksVisible ? normalizeRevision(latestTrackRevision) : "tracks-off",
+            coverageVisible ? normalizeRevision(latestStationDetailsRevision) : "coverage-off",
+            String(latestStations.length),
+            String(latestMobileTracks.length),
+            interfacesSignature(latestInterfaces),
+            hiddenInterfaceSignature(),
+            tracksVisible ? "tracks-on" : "tracks-hidden",
+            coverageVisible ? "coverage-on" : "coverage-hidden",
+        ].join("||");
+    }
+
+    function stationIdentityKey(station) {
+        return String(
+            (station && station.display_callsign)
+            || (station && station.callsign)
+            || ""
+        ).trim();
+    }
+
+    function mergeStationDetails(stations, details) {
+        const detailsByKey = new Map();
+        for (const detail of details || []) {
+            const key = stationIdentityKey(detail);
+            if (!key) {
+                continue;
+            }
+            detailsByKey.set(key, detail);
+        }
+        return (stations || []).map((station) => {
+            const key = stationIdentityKey(station);
+            const detail = detailsByKey.get(key);
+            return detail ? detail : station;
+        });
+    }
+
+    function mergeStationSupplementalData(stations, previousStations) {
+        const previousByKey = new Map();
+        for (const station of previousStations || []) {
+            const key = stationIdentityKey(station);
+            if (!key) {
+                continue;
+            }
+            previousByKey.set(key, station);
+        }
+        return (stations || []).map((station) => {
+            const key = stationIdentityKey(station);
+            const previous = previousByKey.get(key);
+            if (!previous) {
+                return station;
+            }
+            return {
+                ...station,
+                comment: previous.comment,
+                data: previous.data,
+                path: previous.path,
+                aprs_device_short: previous.aprs_device_short,
+                speed: previous.speed,
+                course: previous.course,
+                altitude: previous.altitude,
+                phg_power_w: previous.phg_power_w,
+                phg_height_ft: previous.phg_height_ft,
+                phg_gain_dbi: previous.phg_gain_dbi,
+                phg_direction: previous.phg_direction,
+                phg_range_km: previous.phg_range_km,
+                qsy_frequency_mhz: previous.qsy_frequency_mhz,
+                qsy_tone: previous.qsy_tone,
+                qsy_offset_khz: previous.qsy_offset_khz,
+                qsy_callsign: previous.qsy_callsign,
+                destination: previous.destination,
+            };
+        });
+    }
+
+    function retainVisibleMobileTracks(mobileTracks, stations) {
+        const visibleKeys = new Set(
+            (stations || [])
+                .map((station) => stationIdentityKey(station))
+                .filter((key) => Boolean(key))
+        );
+        return (mobileTracks || []).filter((track) => visibleKeys.has(String(track.display_callsign || "").trim()));
+    }
+
     function renderInterfaceFilters(interfaces) {
         if (!mapInterfaceFilters) {
             return;
@@ -706,7 +848,7 @@
                 stationLongitude: defaultView.longitude,
             },
         }));
-        const nextSignature = `${stationsSignature(filtered.stations)}|${mobileTracksSignature(filtered.mobileTracks)}`;
+        const nextSignature = buildRenderSignature();
         if (!forceRender && nextSignature === lastStationsSignature) {
             return;
         }
@@ -959,6 +1101,9 @@
     if (toggleTracksButton) {
         toggleTracksButton.addEventListener("click", function () {
             applyTracksToggleState(!tracksVisible);
+            if (tracksVisible && latestTrackRevision !== latestStationRevision) {
+                void loadMobileTracks(latestStationRevision);
+            }
             applyLatestMapData({ forceRender: true });
         });
     }
@@ -966,6 +1111,9 @@
     if (toggleCoverageButton) {
         toggleCoverageButton.addEventListener("click", function () {
             applyCoverageToggleState(!coverageVisible);
+            if (coverageVisible && latestStationDetailsRevision !== latestStationRevision) {
+                void loadStationDetails(latestStationRevision);
+            }
             applyLatestMapData({ forceRender: true });
         });
     }
@@ -1087,35 +1235,6 @@
             iconAnchor: aprsIconAnchor,
             tooltipAnchor: [0, -10],
         });
-    }
-
-    function stationsSignature(stations) {
-        return JSON.stringify((stations || []).map((station) => ([
-            station.display_callsign || station.callsign || "",
-            station.last_heard_at || "",
-            station.interface_id,
-            station.latitude,
-            station.longitude,
-            station.symbol_icon || "",
-            station.symbol_table || "",
-            station.symbol_code || "",
-            station.comment || "",
-            station.distance_km,
-            station.stale,
-            (station.data || []).map((item) => `${item.label}:${item.value}`).join("|"),
-        ])));
-    }
-
-    function mobileTracksSignature(mobileTracks) {
-        return JSON.stringify((mobileTracks || []).map((track) => ([
-            track.display_callsign || "",
-            (track.points || []).map((point) => ([
-                point.interface_id,
-                point.latitude,
-                point.longitude,
-                point.heard_at || "",
-            ])),
-        ])));
     }
 
     function colorForCallsign(callsign) {
@@ -1250,8 +1369,170 @@
         });
     }
 
-    function renderStations(stations, mobileTracks) {
-        stationLayer.clearLayers();
+    function markerSignature(station) {
+        return [
+            Number(station.latitude),
+            Number(station.longitude),
+            String(station.symbol_icon || ""),
+            String(station.symbol_table || ""),
+            String(station.symbol_code || ""),
+            String(station.display_callsign || station.callsign || ""),
+            String(station.detail_href || ""),
+            station.stale ? "1" : "0",
+        ].join("|");
+    }
+
+    function tooltipSignature(station) {
+        return [
+            String(station.display_callsign || station.callsign || ""),
+            String(station.last_heard_at || ""),
+            String(station.activity_label || ""),
+            String(station.activity_age_label || ""),
+            String(station.source || ""),
+            String(station.path || ""),
+            Number.isFinite(station.distance_km) ? String(station.distance_km) : "",
+            String(station.comment || ""),
+            Number.isFinite(station.altitude) ? String(station.altitude) : "",
+            Array.isArray(station.data)
+                ? station.data.map((item) => `${item.label || ""}:${item.value || ""}:${item.icon || ""}`).join(";")
+                : "",
+            String(station.aprs_device_short || ""),
+        ].join("|");
+    }
+
+    function coverageSignature(station) {
+        return [
+            Number(station.latitude),
+            Number(station.longitude),
+            Number(station.phg_range_km),
+            String(station.phg_direction || ""),
+            String(station.display_callsign || station.callsign || ""),
+            String(coverageFillOpacity),
+            String(coverageOutlineOpacity),
+        ].join("|");
+    }
+
+    function trackSignature(track) {
+        return [
+            String(track.display_callsign || ""),
+            (track.points || []).map((point) => (
+                `${point.interface_id || ""}:${point.latitude}:${point.longitude}:${point.heard_at || ""}`
+            )).join(";"),
+        ].join("|");
+    }
+
+    function syncMarkerInteractions(marker, station, tooltipContent) {
+        if (marker.getTooltip()) {
+            marker.setTooltipContent(tooltipContent);
+        } else {
+            marker.bindTooltip(tooltipContent, {
+                direction: "top",
+                className: "aprs-tooltip",
+                opacity: 0.96,
+                sticky: true,
+            });
+        }
+        marker.off("click");
+        if (station.detail_href) {
+            marker.on("click", function () {
+                window.location.href = station.detail_href;
+            });
+        }
+    }
+
+    function removeMissingLayerRecords(recordsByKey, layerGroup, nextKeys) {
+        for (const [key, record] of Array.from(recordsByKey.entries())) {
+            if (nextKeys.has(key)) {
+                continue;
+            }
+            layerGroup.removeLayer(record.layer);
+            recordsByKey.delete(key);
+        }
+    }
+
+    function buildTrackLayer(track) {
+        const group = window.L.layerGroup();
+        const points = (track.points || []).filter((point) => (
+            Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+        ));
+        if (points.length < 2) {
+            return group;
+        }
+        const trackColor = colorForCallsign(track.display_callsign || "");
+        const polyline = window.L.polyline(
+            points.map((point) => ([point.latitude, point.longitude])),
+            {
+                color: trackColor,
+                weight: 3,
+                opacity: 0.85,
+                lineJoin: "round",
+                lineCap: "round",
+                interactive: false,
+            }
+        );
+        group.addLayer(polyline);
+        for (const point of points.slice(0, -1)) {
+            const dot = window.L.circleMarker([point.latitude, point.longitude], {
+                radius: 3,
+                color: trackColor,
+                fillColor: trackColor,
+                fillOpacity: 0.65,
+                opacity: 0.95,
+                weight: 1,
+                interactive: false,
+            });
+            group.addLayer(dot);
+        }
+        return group;
+    }
+
+    function reconcileMarkers(stations) {
+        const nextKeys = new Set();
+        for (const station of stations || []) {
+            if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
+                continue;
+            }
+            const key = stationIdentityKey(station);
+            if (!key) {
+                continue;
+            }
+            nextKeys.add(key);
+            const nextMarkerSignature = markerSignature(station);
+            const nextTooltipSignature = tooltipSignature(station);
+            const nextTooltipContent = tooltipHtml(station);
+            const existing = markerLayersByKey.get(key);
+            if (!existing) {
+                const marker = window.L.marker([station.latitude, station.longitude], {
+                    icon: buildStationIcon(station),
+                    keyboard: false,
+                });
+                syncMarkerInteractions(marker, station, nextTooltipContent);
+                markerLayerGroup.addLayer(marker);
+                markerLayersByKey.set(key, {
+                    layer: marker,
+                    markerSignature: nextMarkerSignature,
+                    tooltipSignature: nextTooltipSignature,
+                });
+                continue;
+            }
+            if (existing.markerSignature !== nextMarkerSignature) {
+                existing.layer.setLatLng([station.latitude, station.longitude]);
+                existing.layer.setIcon(buildStationIcon(station));
+                existing.markerSignature = nextMarkerSignature;
+                syncMarkerInteractions(existing.layer, station, nextTooltipContent);
+                existing.tooltipSignature = nextTooltipSignature;
+                continue;
+            }
+            if (existing.tooltipSignature !== nextTooltipSignature) {
+                syncMarkerInteractions(existing.layer, station, nextTooltipContent);
+                existing.tooltipSignature = nextTooltipSignature;
+            }
+        }
+        removeMissingLayerRecords(markerLayersByKey, markerLayerGroup, nextKeys);
+    }
+
+    function reconcileCoverage(stations) {
+        const nextKeys = new Set();
         if (coverageVisible) {
             for (const station of stations || []) {
                 if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
@@ -1260,14 +1541,37 @@
                 if (!Number.isFinite(station.phg_range_km) || station.phg_range_km <= 0) {
                     continue;
                 }
-                const coverageColor = colorForCallsign(station.display_callsign || station.callsign || "");
-                const coverageLayer = buildPhgCoverageLayer(station, coverageColor);
-                if (!coverageLayer) {
+                const key = stationIdentityKey(station);
+                if (!key) {
                     continue;
                 }
-                stationLayer.addLayer(coverageLayer);
+                nextKeys.add(key);
+                const nextCoverageSignature = coverageSignature(station);
+                const existing = coverageLayersByKey.get(key);
+                if (existing && existing.signature === nextCoverageSignature) {
+                    continue;
+                }
+                if (existing) {
+                    coverageLayerGroup.removeLayer(existing.layer);
+                    coverageLayersByKey.delete(key);
+                }
+                const coverageColor = colorForCallsign(station.display_callsign || station.callsign || "");
+                const layer = buildPhgCoverageLayer(station, coverageColor);
+                if (!layer) {
+                    continue;
+                }
+                coverageLayerGroup.addLayer(layer);
+                coverageLayersByKey.set(key, {
+                    layer,
+                    signature: nextCoverageSignature,
+                });
             }
         }
+        removeMissingLayerRecords(coverageLayersByKey, coverageLayerGroup, nextKeys);
+    }
+
+    function reconcileTracks(mobileTracks) {
+        const nextKeys = new Set();
         if (tracksVisible) {
             for (const track of mobileTracks || []) {
                 const points = (track.points || []).filter((point) => (
@@ -1276,54 +1580,119 @@
                 if (points.length < 2) {
                     continue;
                 }
-                const trackColor = colorForCallsign(track.display_callsign || "");
-                const polyline = window.L.polyline(
-                    points.map((point) => ([point.latitude, point.longitude])),
-                    {
-                        color: trackColor,
-                        weight: 3,
-                        opacity: 0.85,
-                        lineJoin: "round",
-                        lineCap: "round",
-                        interactive: false,
-                    }
-                );
-                stationLayer.addLayer(polyline);
-                for (const point of points.slice(0, -1)) {
-                    const dot = window.L.circleMarker([point.latitude, point.longitude], {
-                        radius: 3,
-                        color: trackColor,
-                        fillColor: trackColor,
-                        fillOpacity: 0.65,
-                        opacity: 0.95,
-                        weight: 1,
-                        interactive: false,
-                    });
-                    stationLayer.addLayer(dot);
+                const key = String(track.display_callsign || "").trim();
+                if (!key) {
+                    continue;
                 }
-            }
-        }
-        for (const station of stations || []) {
-            if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
-                continue;
-            }
-            const marker = window.L.marker([station.latitude, station.longitude], {
-                icon: buildStationIcon(station),
-                keyboard: false,
-            });
-            marker.bindTooltip(tooltipHtml(station), {
-                direction: "top",
-                className: "aprs-tooltip",
-                opacity: 0.96,
-                sticky: true,
-            });
-            if (station.detail_href) {
-                marker.on("click", function () {
-                    window.location.href = station.detail_href;
+                nextKeys.add(key);
+                const nextTrackSignature = trackSignature(track);
+                const existing = trackLayersByKey.get(key);
+                if (existing && existing.signature === nextTrackSignature) {
+                    continue;
+                }
+                if (existing) {
+                    trackLayerGroup.removeLayer(existing.layer);
+                    trackLayersByKey.delete(key);
+                }
+                const layer = buildTrackLayer(track);
+                trackLayerGroup.addLayer(layer);
+                trackLayersByKey.set(key, {
+                    layer,
+                    signature: nextTrackSignature,
                 });
             }
-            stationLayer.addLayer(marker);
         }
+        removeMissingLayerRecords(trackLayersByKey, trackLayerGroup, nextKeys);
+    }
+
+    function renderStations(stations, mobileTracks) {
+        reconcileCoverage(stations);
+        reconcileTracks(mobileTracks);
+        reconcileMarkers(stations);
+    }
+
+    async function loadStationDetails(expectedRevision) {
+        const targetRevision = normalizeRevision(expectedRevision);
+        if (!stationDetailsEndpoint || !targetRevision) {
+            return;
+        }
+        if (latestStationDetailsRevision === targetRevision || detailsLoadingRevision === targetRevision) {
+            return;
+        }
+        detailsLoadingRevision = targetRevision;
+        try {
+            const response = await fetch(stationDetailsEndpoint, {
+                headers: { Accept: "application/json" },
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            const payloadRevision = normalizeRevision(payload.revision);
+            if (!payloadRevision || payloadRevision !== targetRevision || payloadRevision !== latestStationRevision) {
+                return;
+            }
+            latestStations = mergeStationDetails(latestStations, payload.stations || []);
+            latestInterfaces = mergeInterfaces(payload.interfaces || [], latestInterfaces);
+            latestStationDetailsRevision = payloadRevision;
+            applyLatestMapData({ forceRender: true });
+        } catch (_error) {
+        } finally {
+            if (detailsLoadingRevision === targetRevision) {
+                detailsLoadingRevision = "";
+            }
+        }
+    }
+
+    async function loadMobileTracks(expectedRevision) {
+        const targetRevision = normalizeRevision(expectedRevision);
+        if (!mobileTracksEndpoint || !targetRevision) {
+            return;
+        }
+        if (latestTrackRevision === targetRevision || tracksLoadingRevision === targetRevision) {
+            return;
+        }
+        tracksLoadingRevision = targetRevision;
+        try {
+            const response = await fetch(mobileTracksEndpoint, {
+                headers: { Accept: "application/json" },
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            const payloadRevision = normalizeRevision(payload.revision);
+            if (!payloadRevision || payloadRevision !== targetRevision || payloadRevision !== latestStationRevision) {
+                return;
+            }
+            latestMobileTracks = payload.mobile_tracks || [];
+            latestInterfaces = mergeInterfaces(latestInterfaces, payload.interfaces || []);
+            latestTrackRevision = payloadRevision;
+            applyLatestMapData({ forceRender: true });
+        } catch (_error) {
+        } finally {
+            if (tracksLoadingRevision === targetRevision) {
+                tracksLoadingRevision = "";
+            }
+        }
+    }
+
+    function scheduleDeferredMapDataLoad() {
+        const targetRevision = normalizeRevision(latestStationRevision);
+        if (!targetRevision) {
+            return;
+        }
+        window.requestAnimationFrame(function () {
+            if (normalizeRevision(latestStationRevision) !== targetRevision) {
+                return;
+            }
+            if (latestStationDetailsRevision !== targetRevision) {
+                void loadStationDetails(targetRevision);
+            }
+            if (tracksVisible && latestTrackRevision !== targetRevision) {
+                void loadMobileTracks(targetRevision);
+            }
+        });
     }
 
     async function refreshStations() {
@@ -1336,12 +1705,21 @@
             }
             const payload = await response.json();
             const stations = payload.stations || [];
-            const mobileTracks = payload.mobile_tracks || [];
             const interfaces = payload.interfaces || [];
-            latestStations = stations;
-            latestMobileTracks = mobileTracks;
-            latestInterfaces = Array.isArray(interfaces) ? interfaces : [];
-            applyLatestMapData();
+            const payloadRevision = normalizeRevision(payload.revision);
+            const revisionChanged = payloadRevision !== latestStationRevision;
+            latestStations = (latestStationDetailsRevision === payloadRevision)
+                ? mergeStationDetails(stations, latestStations)
+                : mergeStationSupplementalData(stations, latestStations);
+            latestStationRevision = payloadRevision;
+            latestInterfaces = revisionChanged
+                ? (Array.isArray(interfaces) ? interfaces : [])
+                : mergeInterfaces(Array.isArray(interfaces) ? interfaces : [], latestInterfaces);
+            if (revisionChanged) {
+                latestMobileTracks = retainVisibleMobileTracks(latestMobileTracks, latestStations);
+            }
+            applyLatestMapData({ forceRender: revisionChanged });
+            scheduleDeferredMapDataLoad();
         } catch (_error) {
         }
     }

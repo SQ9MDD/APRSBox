@@ -555,12 +555,26 @@
             : i18n.selectConversationToEnableComposer;
     }
 
+    function syncGlobalUnreadState() {
+        const unreadCount = state.conversations.reduce(
+            (total, conversation) => total + Math.max(Number(conversation.unread_count || 0), 0),
+            0
+        );
+        window.dispatchEvent(new CustomEvent("aprsbox:messages-unread-state", {
+            detail: {
+                hasUnread: unreadCount > 0,
+                unreadCount,
+            },
+        }));
+    }
+
     function render(options = {}) {
         renderConversationList();
         const activeConversation = getActiveConversation();
         renderThreadHeader(activeConversation);
         renderThreadHistory(activeConversation, options);
         renderComposer(activeConversation);
+        syncGlobalUnreadState();
     }
 
     async function applyServerState(serverData, preferredConversationId = undefined) {

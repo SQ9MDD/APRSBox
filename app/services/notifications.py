@@ -439,9 +439,9 @@ def queue_aprs_message_notification(
 
 def queue_radar_notifications(*, timestamp: str | None = None) -> None:
     settings = get_notification_settings()
-    events = evaluate_radar_notifications(timestamp=timestamp)
     if not settings["radar_enabled"]:
         return
+    events = evaluate_radar_notifications(timestamp=timestamp)
     for event in events:
         _NOTIFICATION_EXECUTOR.submit(_send_notification_event, event)
 

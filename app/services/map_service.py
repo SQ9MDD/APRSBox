@@ -11,6 +11,7 @@ from app.services.content import (
     get_aprs_symbol_icon_fallback_path,
     get_configured_modem_interfaces,
     get_station_settings,
+    get_visible_station_snapshot_revision,
     get_visible_station_snapshots,
     parse_tnc2_frame,
 )
@@ -669,11 +670,13 @@ def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
     }
 
 
-def get_map_station_payload() -> dict[str, Any]:
-    station_settings = get_station_settings()
-    unit_system = str(station_settings.get("default_units") or "metric")
+def _map_station_revision() -> int | None:
+    return get_visible_station_snapshot_revision()
+
+
+def _build_map_station_marker_rows(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     stations: list[dict[str, Any]] = []
-    for station in get_visible_station_snapshots():
+    for station in snapshots:
         latitude = _parse_coordinate(station.get("latitude"))
         longitude = _parse_coordinate(station.get("longitude"))
         if latitude is None or longitude is None:
@@ -683,6 +686,7 @@ def get_map_station_payload() -> dict[str, Any]:
                 "callsign": station["callsign"],
                 "ssid": station["ssid"],
                 "display_callsign": station["display_callsign"],
+                "detail_href": build_station_detail_href(station["display_callsign"]),
                 "origin": station.get("origin", "heard"),
                 "activity_label": station.get("activity_label", "Last heard"),
                 "activity_age_label": station.get("activity_age_label", "Last heard age"),
@@ -693,36 +697,105 @@ def get_map_station_payload() -> dict[str, Any]:
                 "symbol_icon": station["symbol_icon"],
                 "symbol_table": station["symbol_table"],
                 "symbol_code": station["symbol_code"],
-                "comment": station["comment"],
-                "data": format_decoded_data_for_display(station["data_raw"], unit_system),
-                "path": station["path"],
                 "source": station["source"],
                 "interface_id": _normalize_interface_id(station.get("interface_id")),
                 "last_heard_at": station["last_heard_at"],
                 "last_heard_age_s": station["last_heard_age_s"],
                 "distance_km": station.get("distance_km"),
-                "aprs_device_short": station.get("aprs_device_short", ""),
-                "speed": _speed_kmh(station["data_raw"]),
-                "course": _integer_value(station["data_raw"].get("course_deg")),
-                "altitude": _altitude_meters(station["data_raw"]),
-                "phg_power_w": _float_value(station["data_raw"].get("phg_power_w")),
-                "phg_height_ft": _float_value(station["data_raw"].get("phg_height_ft")),
-                "phg_gain_dbi": _float_value(station["data_raw"].get("phg_gain_dbi")),
-                "phg_direction": station["data_raw"].get("phg_direction"),
-                "phg_range_km": _phg_range_km(station["data_raw"]),
-                "qsy_frequency_mhz": _float_value(station["data_raw"].get("qsy_frequency_mhz")),
-                "qsy_tone": _string_or_none(station["data_raw"].get("qsy_tone")),
-                "qsy_offset_khz": _integer_value(station["data_raw"].get("qsy_offset_khz")),
-                "qsy_callsign": _string_or_none(station["data_raw"].get("qsy_callsign")),
-                "destination": station["destination"],
+                "entity_class": station["entity_class"],
                 "packet_type": station["frame_type"],
                 "stale": bool((station["last_heard_age_s"] or 0) >= STALE_AFTER_SECONDS),
-                "detail_href": build_station_detail_href(station["display_callsign"]),
             }
         )
+    return stations
+
+
+def _build_map_station_detail_rows(
+    snapshots: list[dict[str, Any]],
+    *,
+    unit_system: str,
+) -> list[dict[str, Any]]:
+    stations = _build_map_station_marker_rows(snapshots)
+    details_by_callsign = {
+        str(snapshot["display_callsign"]): snapshot
+        for snapshot in snapshots
+    }
+    for station in stations:
+        snapshot = details_by_callsign.get(str(station["display_callsign"]))
+        if snapshot is None:
+            continue
+        station["comment"] = snapshot["comment"]
+        station["data"] = format_decoded_data_for_display(snapshot["data_raw"], unit_system)
+        station["path"] = snapshot["path"]
+        station["aprs_device_short"] = snapshot.get("aprs_device_short", "")
+        station["speed"] = _speed_kmh(snapshot["data_raw"])
+        station["course"] = _integer_value(snapshot["data_raw"].get("course_deg"))
+        station["altitude"] = _altitude_meters(snapshot["data_raw"])
+        station["phg_power_w"] = _float_value(snapshot["data_raw"].get("phg_power_w"))
+        station["phg_height_ft"] = _float_value(snapshot["data_raw"].get("phg_height_ft"))
+        station["phg_gain_dbi"] = _float_value(snapshot["data_raw"].get("phg_gain_dbi"))
+        station["phg_direction"] = snapshot["data_raw"].get("phg_direction")
+        station["phg_range_km"] = _phg_range_km(snapshot["data_raw"])
+        station["qsy_frequency_mhz"] = _float_value(snapshot["data_raw"].get("qsy_frequency_mhz"))
+        station["qsy_tone"] = _string_or_none(snapshot["data_raw"].get("qsy_tone"))
+        station["qsy_offset_khz"] = _integer_value(snapshot["data_raw"].get("qsy_offset_khz"))
+        station["qsy_callsign"] = _string_or_none(snapshot["data_raw"].get("qsy_callsign"))
+        station["destination"] = snapshot["destination"]
+    return stations
+
+
+def get_map_station_markers_payload() -> dict[str, Any]:
+    snapshots = get_visible_station_snapshots()
+    revision = _map_station_revision()
+    stations = _build_map_station_marker_rows(snapshots)
+    interfaces = _build_map_interfaces(stations, [])
+    return {
+        "revision": revision,
+        "station_count": len(stations),
+        "stations": stations,
+        "interfaces": interfaces,
+    }
+
+
+def get_map_station_details_payload() -> dict[str, Any]:
+    station_settings = get_station_settings()
+    unit_system = str(station_settings.get("default_units") or "metric")
+    snapshots = get_visible_station_snapshots()
+    revision = _map_station_revision()
+    stations = _build_map_station_detail_rows(snapshots, unit_system=unit_system)
+    return {
+        "revision": revision,
+        "station_count": len(stations),
+        "stations": stations,
+        "interfaces": _build_map_interfaces(stations, []),
+    }
+
+
+def get_map_mobile_tracks_payload() -> dict[str, Any]:
+    snapshots = get_visible_station_snapshots()
+    revision = _map_station_revision()
+    stations = _build_map_station_marker_rows(snapshots)
     mobile_tracks = _build_mobile_station_tracks(stations)
     return {
+        "revision": revision,
+        "track_count": len(mobile_tracks),
+        "mobile_tracks": mobile_tracks,
+        "interfaces": _build_map_interfaces(stations, mobile_tracks),
+    }
+
+
+def get_map_station_payload() -> dict[str, Any]:
+    station_settings = get_station_settings()
+    unit_system = str(station_settings.get("default_units") or "metric")
+    snapshots = get_visible_station_snapshots()
+    revision = _map_station_revision()
+    stations = _build_map_station_detail_rows(snapshots, unit_system=unit_system)
+    mobile_tracks = _build_mobile_station_tracks(stations)
+    return {
+        "revision": revision,
+        "station_count": len(stations),
         "stations": stations,
+        "track_count": len(mobile_tracks),
         "mobile_tracks": mobile_tracks,
         "interfaces": _build_map_interfaces(stations, mobile_tracks),
     }

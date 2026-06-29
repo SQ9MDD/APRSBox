@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timedelta, timezone
 from html import escape
 import ipaddress
@@ -9,6 +10,7 @@ import re
 import sqlite3
 import subprocess
 from shutil import which
+import time
 from typing import Any
 from urllib.parse import quote
 
@@ -71,6 +73,10 @@ WORKER_DEFINITIONS = (
 STATION_SNAPSHOT_ROW_LIMIT_FACTOR = 40
 STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
 _STATION_SNAPSHOT_CACHE: dict[tuple[int, int | None, str, str], list[dict[str, Any]]] = {}
+_VISIBLE_STATION_SNAPSHOT_TTL_CACHE: dict[tuple[int, str, str], tuple[float, list[dict[str, Any]]]] = {}
+_VISIBLE_STATION_SNAPSHOT_TTL_SECONDS = 2.0
+_TRAFFIC_SNAPSHOT_CACHE: dict[tuple[int], tuple[float, dict[str, Any]]] = {}
+_TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS = 1.0
 SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS = 150
 SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
 MODEM_TX_MIN_GAP_SECONDS_DEFAULT = 0.35
@@ -714,6 +720,12 @@ def recent_bulletin_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
+    cache_key = (int(limit),)
+    cached_snapshot = _TRAFFIC_SNAPSHOT_CACHE.get(cache_key)
+    current_time = time.monotonic()
+    if cached_snapshot is not None and current_time - cached_snapshot[0] < _TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS:
+        return copy.deepcopy(cached_snapshot[1])
+
     station_settings = get_station_settings()
 
     from app.services.wx import get_wx_config
@@ -904,7 +916,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "emergency_data": emergency_data,
             }
         )
-    return {
+    result = {
         "status": status,
         "status_detail": status_detail,
         "active_modem": active_modem,
@@ -914,6 +926,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         "updated_at": updated_at,
         "frames": frames,
     }
+    _TRAFFIC_SNAPSHOT_CACHE[cache_key] = (time.monotonic(), copy.deepcopy(result))
+    return result
 
 
 _EMERGENCY_COMMENT_PREFIX_RE = re.compile(
@@ -2209,11 +2223,22 @@ def get_local_tx_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
 def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     normalized_limit = max(1, int(limit or 0))
     station_settings = get_station_settings()
+    station_latitude = str(station_settings.get("latitude") or "")
+    station_longitude = str(station_settings.get("longitude") or "")
+    ttl_cache_key = (
+        normalized_limit,
+        station_latitude,
+        station_longitude,
+    )
+    cached_visible = _VISIBLE_STATION_SNAPSHOT_TTL_CACHE.get(ttl_cache_key)
+    current_time = time.monotonic()
+    if cached_visible is not None and current_time - cached_visible[0] < _VISIBLE_STATION_SNAPSHOT_TTL_SECONDS:
+        return [dict(item) for item in cached_visible[1]]
     cache_key = (
         normalized_limit,
         _latest_station_snapshot_frame_id(),
-        str(station_settings.get("latitude") or ""),
-        str(station_settings.get("longitude") or ""),
+        station_latitude,
+        station_longitude,
     )
     cached = _STATION_SNAPSHOT_CACHE.get(cache_key)
     if cached is not None:
@@ -2238,6 +2263,7 @@ def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     result = snapshots[:normalized_limit]
     _STATION_SNAPSHOT_CACHE.clear()
     _STATION_SNAPSHOT_CACHE[cache_key] = [dict(item) for item in result]
+    _VISIBLE_STATION_SNAPSHOT_TTL_CACHE[ttl_cache_key] = (time.monotonic(), [dict(item) for item in result])
     return [dict(item) for item in result]
 
 
@@ -2257,6 +2283,10 @@ def _latest_station_snapshot_frame_id() -> int | None:
     if row is None or row["max_id"] is None:
         return None
     return int(row["max_id"])
+
+
+def get_visible_station_snapshot_revision() -> int | None:
+    return _latest_station_snapshot_frame_id()
 
 
 def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[dict[str, Any]]:
