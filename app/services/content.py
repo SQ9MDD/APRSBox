@@ -2285,6 +2285,10 @@ def _latest_station_snapshot_frame_id() -> int | None:
     return int(row["max_id"])
 
 
+def get_visible_station_snapshot_revision() -> int | None:
+    return _latest_station_snapshot_frame_id()
+
+
 def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[dict[str, Any]]:
     placeholders = ", ".join("?" for _ in formats)
     rows = fetch_all(

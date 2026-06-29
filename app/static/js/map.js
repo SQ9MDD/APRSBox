@@ -10,6 +10,8 @@
         zoom: Number.parseInt(root.dataset.defaultZoom || "", 10),
     };
     const stationsEndpoint = root.dataset.stationsEndpoint || "/api/map/stations";
+    const stationDetailsEndpoint = root.dataset.stationDetailsEndpoint || "";
+    const mobileTracksEndpoint = root.dataset.mobileTracksEndpoint || "";
     const mapTileEventsEndpoint = root.dataset.mapTileEventsEndpoint || "";
     const tileUrl = root.dataset.tileUrl || "";
     const tileAttribution = root.dataset.tileAttribution || "";
@@ -92,6 +94,11 @@
     let latestStations = [];
     let latestMobileTracks = [];
     let latestInterfaces = [];
+    let latestStationRevision = "";
+    let latestStationDetailsRevision = "";
+    let latestTrackRevision = "";
+    let detailsLoadingRevision = "";
+    let tracksLoadingRevision = "";
     const interfaceVisibilityByKey = new Map();
     let rulerState = null;
     let tileErrorActive = false;
@@ -136,6 +143,13 @@
             return opacityPercent;
         }
         return normalizedFallback;
+    }
+
+    function normalizeRevision(value) {
+        if (value === null || value === undefined) {
+            return "";
+        }
+        return String(value);
     }
 
     function resolveInitialView() {
@@ -644,6 +658,80 @@
         };
     }
 
+    function mergeInterfaces(...groups) {
+        const merged = [];
+        const seen = new Set();
+        for (const group of groups) {
+            for (const item of group || []) {
+                const key = interfaceKey(item);
+                if (seen.has(key)) {
+                    continue;
+                }
+                seen.add(key);
+                merged.push(item);
+            }
+        }
+        return merged;
+    }
+
+    function hiddenInterfaceSignature() {
+        return Array.from(interfaceVisibilityByKey.entries())
+            .filter(([, isVisible]) => isVisible === false)
+            .map(([key]) => key)
+            .sort()
+            .join("|");
+    }
+
+    function interfacesSignature(interfaces) {
+        return (interfaces || [])
+            .map((item) => {
+                const interfaceId = normalizeInterfaceId(item && item.modem_id);
+                const name = String((item && item.name) || "").trim();
+                const band = String((item && item.band) || "").trim();
+                return `${interfaceId === null ? "" : interfaceId}:${name}:${band}`;
+            })
+            .join("|");
+    }
+
+    function buildRenderSignature() {
+        return [
+            normalizeRevision(latestStationRevision),
+            normalizeRevision(latestStationDetailsRevision),
+            tracksVisible ? normalizeRevision(latestTrackRevision) : "tracks-off",
+            coverageVisible ? normalizeRevision(latestStationDetailsRevision) : "coverage-off",
+            String(latestStations.length),
+            String(latestMobileTracks.length),
+            interfacesSignature(latestInterfaces),
+            hiddenInterfaceSignature(),
+            tracksVisible ? "tracks-on" : "tracks-hidden",
+            coverageVisible ? "coverage-on" : "coverage-hidden",
+        ].join("||");
+    }
+
+    function stationIdentityKey(station) {
+        return String(
+            (station && station.display_callsign)
+            || (station && station.callsign)
+            || ""
+        ).trim();
+    }
+
+    function mergeStationDetails(stations, details) {
+        const detailsByKey = new Map();
+        for (const detail of details || []) {
+            const key = stationIdentityKey(detail);
+            if (!key) {
+                continue;
+            }
+            detailsByKey.set(key, detail);
+        }
+        return (stations || []).map((station) => {
+            const key = stationIdentityKey(station);
+            const detail = detailsByKey.get(key);
+            return detail ? detail : station;
+        });
+    }
+
     function renderInterfaceFilters(interfaces) {
         if (!mapInterfaceFilters) {
             return;
@@ -706,7 +794,7 @@
                 stationLongitude: defaultView.longitude,
             },
         }));
-        const nextSignature = `${stationsSignature(filtered.stations)}|${mobileTracksSignature(filtered.mobileTracks)}`;
+        const nextSignature = buildRenderSignature();
         if (!forceRender && nextSignature === lastStationsSignature) {
             return;
         }
@@ -959,6 +1047,9 @@
     if (toggleTracksButton) {
         toggleTracksButton.addEventListener("click", function () {
             applyTracksToggleState(!tracksVisible);
+            if (tracksVisible && latestTrackRevision !== latestStationRevision) {
+                void loadMobileTracks(latestStationRevision);
+            }
             applyLatestMapData({ forceRender: true });
         });
     }
@@ -966,6 +1057,9 @@
     if (toggleCoverageButton) {
         toggleCoverageButton.addEventListener("click", function () {
             applyCoverageToggleState(!coverageVisible);
+            if (coverageVisible && latestStationDetailsRevision !== latestStationRevision) {
+                void loadStationDetails(latestStationRevision);
+            }
             applyLatestMapData({ forceRender: true });
         });
     }
@@ -1087,35 +1181,6 @@
             iconAnchor: aprsIconAnchor,
             tooltipAnchor: [0, -10],
         });
-    }
-
-    function stationsSignature(stations) {
-        return JSON.stringify((stations || []).map((station) => ([
-            station.display_callsign || station.callsign || "",
-            station.last_heard_at || "",
-            station.interface_id,
-            station.latitude,
-            station.longitude,
-            station.symbol_icon || "",
-            station.symbol_table || "",
-            station.symbol_code || "",
-            station.comment || "",
-            station.distance_km,
-            station.stale,
-            (station.data || []).map((item) => `${item.label}:${item.value}`).join("|"),
-        ])));
-    }
-
-    function mobileTracksSignature(mobileTracks) {
-        return JSON.stringify((mobileTracks || []).map((track) => ([
-            track.display_callsign || "",
-            (track.points || []).map((point) => ([
-                point.interface_id,
-                point.latitude,
-                point.longitude,
-                point.heard_at || "",
-            ])),
-        ])));
     }
 
     function colorForCallsign(callsign) {
@@ -1326,6 +1391,90 @@
         }
     }
 
+    async function loadStationDetails(expectedRevision) {
+        const targetRevision = normalizeRevision(expectedRevision);
+        if (!stationDetailsEndpoint || !targetRevision) {
+            return;
+        }
+        if (latestStationDetailsRevision === targetRevision || detailsLoadingRevision === targetRevision) {
+            return;
+        }
+        detailsLoadingRevision = targetRevision;
+        try {
+            const response = await fetch(stationDetailsEndpoint, {
+                headers: { Accept: "application/json" },
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            const payloadRevision = normalizeRevision(payload.revision);
+            if (!payloadRevision || payloadRevision !== targetRevision || payloadRevision !== latestStationRevision) {
+                return;
+            }
+            latestStations = mergeStationDetails(latestStations, payload.stations || []);
+            latestInterfaces = mergeInterfaces(payload.interfaces || [], latestInterfaces);
+            latestStationDetailsRevision = payloadRevision;
+            applyLatestMapData({ forceRender: true });
+        } catch (_error) {
+        } finally {
+            if (detailsLoadingRevision === targetRevision) {
+                detailsLoadingRevision = "";
+            }
+        }
+    }
+
+    async function loadMobileTracks(expectedRevision) {
+        const targetRevision = normalizeRevision(expectedRevision);
+        if (!mobileTracksEndpoint || !targetRevision) {
+            return;
+        }
+        if (latestTrackRevision === targetRevision || tracksLoadingRevision === targetRevision) {
+            return;
+        }
+        tracksLoadingRevision = targetRevision;
+        try {
+            const response = await fetch(mobileTracksEndpoint, {
+                headers: { Accept: "application/json" },
+            });
+            if (!response.ok) {
+                return;
+            }
+            const payload = await response.json();
+            const payloadRevision = normalizeRevision(payload.revision);
+            if (!payloadRevision || payloadRevision !== targetRevision || payloadRevision !== latestStationRevision) {
+                return;
+            }
+            latestMobileTracks = payload.mobile_tracks || [];
+            latestInterfaces = mergeInterfaces(latestInterfaces, payload.interfaces || []);
+            latestTrackRevision = payloadRevision;
+            applyLatestMapData({ forceRender: true });
+        } catch (_error) {
+        } finally {
+            if (tracksLoadingRevision === targetRevision) {
+                tracksLoadingRevision = "";
+            }
+        }
+    }
+
+    function scheduleDeferredMapDataLoad() {
+        const targetRevision = normalizeRevision(latestStationRevision);
+        if (!targetRevision) {
+            return;
+        }
+        window.requestAnimationFrame(function () {
+            if (normalizeRevision(latestStationRevision) !== targetRevision) {
+                return;
+            }
+            if (latestStationDetailsRevision !== targetRevision) {
+                void loadStationDetails(targetRevision);
+            }
+            if (tracksVisible && latestTrackRevision !== targetRevision) {
+                void loadMobileTracks(targetRevision);
+            }
+        });
+    }
+
     async function refreshStations() {
         try {
             const response = await fetch(stationsEndpoint, {
@@ -1336,12 +1485,25 @@
             }
             const payload = await response.json();
             const stations = payload.stations || [];
-            const mobileTracks = payload.mobile_tracks || [];
             const interfaces = payload.interfaces || [];
-            latestStations = stations;
-            latestMobileTracks = mobileTracks;
-            latestInterfaces = Array.isArray(interfaces) ? interfaces : [];
-            applyLatestMapData();
+            const payloadRevision = normalizeRevision(payload.revision);
+            const revisionChanged = payloadRevision !== latestStationRevision;
+            latestStations = (!revisionChanged && latestStationDetailsRevision === payloadRevision)
+                ? mergeStationDetails(stations, latestStations)
+                : stations;
+            latestStationRevision = payloadRevision;
+            latestInterfaces = revisionChanged
+                ? (Array.isArray(interfaces) ? interfaces : [])
+                : mergeInterfaces(Array.isArray(interfaces) ? interfaces : [], latestInterfaces);
+            if (revisionChanged) {
+                latestStationDetailsRevision = "";
+                latestTrackRevision = "";
+                latestMobileTracks = [];
+                detailsLoadingRevision = "";
+                tracksLoadingRevision = "";
+            }
+            applyLatestMapData({ forceRender: revisionChanged });
+            scheduleDeferredMapDataLoad();
         } catch (_error) {
         }
     }
