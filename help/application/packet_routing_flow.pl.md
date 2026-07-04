@@ -218,15 +218,6 @@ Użycie:
 - testy,
 - obserwacja działania filtrów.
 
-### `Action Drop`
-
-Cel kończący regułę odrzuceniem pakietu.
-
-Użycie:
-
-- świadome blokowanie ruchu,
-- czytelne rozdzielenie scenariuszy akceptacji i odrzucenia.
-
 ## Ograniczenia edytora
 
 - Reguła ma zawsze jedno źródło i jeden cel.

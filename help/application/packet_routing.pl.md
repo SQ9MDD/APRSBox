@@ -60,16 +60,6 @@ Tego wariantu używa się, gdy:
 - chcesz przeanalizować przebieg pakietu bez emisji,
 - chcesz tymczasowo obserwować ruch na danym wejściu.
 
-### `RF -> Action Drop`
-
-To wariant blokujący. Reguła kończy się świadomym odrzuceniem pakietu.
-
-Tego wariantu używa się, gdy:
-
-- chcesz odciąć niepożądany ruch już w konkretnej gałęzi,
-- chcesz rozdzielić ruch akceptowany i odrzucany na osobne scenariusze,
-- chcesz mieć czytelną dokumentację polityki filtrowania.
-
 ## Źródła i cele
 
 Źródło określa, skąd pakiet wchodzi do reguły.
@@ -82,7 +72,6 @@ Cel określa, gdzie pakiet ma trafić na końcu reguły.
 - `TX RF` nadaje pakiet przez wybrany modem radiowy.
 - `TX APRS-IS` wysyła pakiet do APRS-IS.
 - `Black Hole` zapisuje przebieg bez nadawania pakietu dalej.
-- `Action Drop` kończy regułę odrzuceniem pakietu.
 
 `Local TX` może być kierowany tylko do APRS-IS albo do logu. Nie służy do ponownego wpuszczania lokalnych ramek na RF przez routing.
 

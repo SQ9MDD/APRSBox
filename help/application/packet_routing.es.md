@@ -58,23 +58,13 @@ Se usa cuando:
 - quieres observar como pasan los paquetes por los filtros,
 - quieres registrar trafico sin transmitirlo.
 
-### `RF -> Action Drop`
-
-Es un camino de bloqueo. La regla termina con un descarte intencional.
-
-Se usa cuando:
-
-- quieres cortar trafico no deseado en una regla explicita,
-- quieres una ruta de rechazo separada en lugar de mezclar toda la logica en una sola regla,
-- quieres que la politica de filtrado sea facil de leer.
-
 ## Fuentes y destinos
 
 `Receiver RF` significa paquetes recibidos por un modem de radio configurado.
 
 `Local TX` significa tramas generadas por APRSBox, como beacon, estado, meteorologia, objetos, items, boletines y mensajes.
 
-Los destinos disponibles incluyen `TX RF`, `TX APRS-IS`, `Black Hole` para solo registrar, y `Action Drop` para terminar la regla descartando el paquete.
+Los destinos disponibles incluyen `TX RF`, `TX APRS-IS` y `Black Hole` para solo registrar.
 
 `Local TX` solo puede dirigirse a APRS-IS o al registro.
 

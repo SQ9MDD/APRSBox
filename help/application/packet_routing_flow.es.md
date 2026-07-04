@@ -216,15 +216,6 @@ Usalo para:
 - pruebas,
 - observacion del comportamiento de filtros.
 
-### `Action Drop`
-
-Termina la regla descartando intencionadamente el paquete.
-
-Usalo para:
-
-- reglas de bloqueo explicitas,
-- separacion limpia entre rutas aceptadas y rechazadas.
-
 ## Restricciones del editor
 
 - Una regla siempre tiene una fuente y un destino.

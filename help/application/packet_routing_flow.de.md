@@ -216,15 +216,6 @@ Verwende ihn fur:
 - Tests,
 - Beobachtung des Filterverhaltens.
 
-### `Action Drop`
-
-Beendet die Regel durch absichtliches Verwerfen des Pakets.
-
-Verwende ihn fur:
-
-- explizite Sperrregeln,
-- saubere Trennung zwischen akzeptierten und abgelehnten Pfaden.
-
 ## Einschränkungen des Editors
 
 - Eine Regel hat immer genau eine Quelle und ein Ziel.

@@ -58,23 +58,13 @@ Verwendung:
 - wenn du sehen willst, wie Pakete durch Filter laufen,
 - wenn du Verkehr protokollieren, aber nicht senden willst.
 
-### `RF -> Action Drop`
-
-Das ist ein Sperrpfad. Die Regel endet mit einem absichtlichen Verwerfen.
-
-Verwendung:
-
-- wenn unerwunschter Verkehr in einer klar sichtbaren Regel gestoppt werden soll,
-- wenn du einen eigenen Ablehnungspfad statt einer grossen Mischregel willst,
-- wenn die Filterpolitik explizit und lesbar bleiben soll.
-
 ## Quellen und Ziele
 
 `Receiver RF` bedeutet Pakete, die von einem konfigurierten Funkmodem empfangen wurden.
 
 `Local TX` bedeutet Frames, die APRSBox selbst erzeugt, zum Beispiel Beacon, Status, Wetter, Objekte, Items, Bulletins und Nachrichten.
 
-Ziele sind `TX RF`, `TX APRS-IS`, `Black Hole` fur reine Protokollierung und `Action Drop` zum Verwerfen am Ende der Regel.
+Ziele sind `TX RF`, `TX APRS-IS` und `Black Hole` fur reine Protokollierung.
 
 `Local TX` kann nur zu APRS-IS oder zur reinen Protokollierung geroutet werden.
 

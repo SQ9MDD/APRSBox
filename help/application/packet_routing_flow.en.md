@@ -216,15 +216,6 @@ Use it for:
 - testing,
 - observing filter behavior.
 
-### `Action Drop`
-
-Ends the rule by intentionally dropping the packet.
-
-Use it for:
-
-- explicit blocking rules,
-- clean separation between accepted and rejected paths.
-
 ## Editor constraints
 
 - A rule always has one source and one target.
