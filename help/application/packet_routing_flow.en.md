@@ -183,18 +183,25 @@ In practice:
 
 This is the system safety block for rules ending in `TX APRS-IS`.
 
-It:
+For frames coming from `Receiver RF` it:
 
-- rejects packets with `TCPIP` or `TCPXX`,
-- rejects packets marked `NOGATE` or `RFONLY`,
-- validates third-party frames,
-- validates the outer and inner paths of third-party traffic,
-- keeps unsuitable traffic away from APRS-IS.
+- checks the full outer path,
+- rejects the frame if the path contains `TCPIP`, `TCPXX`, `NOGATE`, or `RFONLY`,
+- validates third-party encapsulation,
+- for valid third-party frames, checks the inner path for the same blocked tokens.
 
-Use it:
+For `Local TX` it is even stricter:
 
-- always with `TX APRS-IS`,
-- never as a replacement for RF digi path control.
+- the frame must be marked in metadata as locally generated APRSBox traffic,
+- third-party encapsulation is rejected,
+- any `q..` construct in path is rejected,
+- `TCPIP`, `TCPXX`, `NOGATE`, and `RFONLY` are still blocked.
+
+Important notes:
+
+- with `TX APRS-IS` this filter is mandatory,
+- it is not a replacement for RF digi path logic,
+- if TNC2 parsing fails, the frame is rejected.
 
 Typical use cases:
 
@@ -203,33 +210,59 @@ Typical use cases:
 
 ### `Path rule and DIGI guard`
 
-This is the most important block for flows ending in `TX RF`.
+This is the key block for flows ending in `TX RF`. It performs DIGI protection first and path rewriting second.
 
-It:
+The guard part rejects:
 
-- analyzes the digi path,
-- decides whether the local station should still repeat the packet,
-- blocks locally addressed APRS messages and queries,
-- blocks third-party traffic that should not be repeated,
-- blocks frames already repeated by the same local station.
+- third-party frames,
+- APRS messages addressed to local `My station`,
+- APRS queries addressed to local `My station`,
+- APRS messages addressed to local `WX station`,
+- APRS queries addressed to local `WX station`,
+- frames where the local station already appears as a consumed path hop such as `MYCALL-SSID*`.
 
-Why it is required:
+Only after that does it inspect path routing:
 
-- without it, an RF retransmit rule has no basic digi protection,
-- this block provides the core path logic for safe on-air repeating.
+- if the path is empty, the frame is rejected,
+- if all hops are already consumed, the frame is rejected,
+- only the first unconsumed hop is checked,
+- later hops are ignored until that first hop is handled.
 
 Configuration fields:
 
 - `Paths (TRACE / traced)`:
-  Aliases or explicit hops that should be consumed while inserting the local digi callsign into the path.
+  If the first unconsumed hop matches this list, APRSBox consumes it and inserts the local digi callsign from `My settings`.
 - `Paths (NO TRACE / not traced)`:
-  Aliases or explicit hops that should be consumed without inserting the local digi callsign.
+  If the first unconsumed hop matches this list, the hop is only marked as consumed, without inserting the local digi callsign.
 
-In practice:
+What you can enter:
 
-- `WIDE1-1` is often configured as traced,
-- the no-trace list depends on local network policy,
-- this block usually sits near the end of the filter chain, right before `TX RF`.
+- a full hop such as `WIDE1-1`, `WIDE2-1`, `WIDE2-2`, or `SP2-2`,
+- a family alias such as `WIDE`; then family members like `WIDE1-1` and `WIDE2-2` match.
+
+Typical rewrites:
+
+- TRACE `WIDE1-1` -> `MYCALL-SSID*`,
+- TRACE `WIDE2-1` -> `MYCALL-SSID*`,
+- TRACE `WIDE2-2` -> `MYCALL-SSID*,WIDE2-1`,
+- NO TRACE `WIDE2-2` -> `WIDE2-2*,WIDE2-1`,
+- NO TRACE `SP2-2` -> `SP2-2*,SP2-1`,
+- if the hop is not in `N-N` form, NO TRACE simply adds `*`.
+
+Typical starter entries:
+
+- `TRACE`: `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: your own `CALLSIGN-SSID` from `My settings` plus local exceptions allowed by network policy.
+
+Why your own callsign is often added to `NO TRACE`:
+
+- to consume packets addressed directly to your callsign without inserting it into path again,
+- to handle explicit local hops that should be non-traced.
+
+Important notes:
+
+- if TRACE matches but the local callsign is not configured, the frame is rejected,
+- if the first unconsumed hop matches neither TRACE nor NO TRACE, the frame is rejected.
 
 Typical layout:
 
@@ -239,34 +272,37 @@ Receiver RF -> Duplicate Filter (viscous-delay) -> Path rule and DIGI guard -> T
 
 ### `Duplicate Filter (viscous-delay)`
 
-This block opens a short listening window after a frame enters the flow.
+This block does not pass the frame immediately. The first frame with a given fingerprint is held until the listening window expires.
 
-It:
+Actual behavior:
 
-- waits for the configured window,
-- checks whether another digi has already repeated the same frame,
-- drops the frame if a duplicate repeat is heard,
-- passes the frame onward if no duplicate repeat is heard.
+- the fingerprint is built from `source callsign + info field`,
+- path is ignored for duplicate comparison,
+- the first frame waits until the window ends,
+- if another frame with the same fingerprint appears during the window, both frames are dropped,
+- if no duplicate appears, the first frame continues only after the timer expires.
 
-Important behavior:
+Practical consequences:
 
-- it can appear only once,
-- it should be the first filter in an RF retransmit flow,
-- it is most useful in classic digi rules.
+- two frames from the same source with the same payload but different path still count as duplicates,
+- this is a true viscous-delay stage: it waits first and decides later,
+- it can appear only once and should be the first filter in an RF retransmit flow.
 
 Use it when:
 
-- duplicate repeats should be reduced,
-- several digis may hear the same source station.
+- several digis may hear the same source station,
+- you want to reduce unnecessary repeats without immediate TX.
 
 ### `Direct Only`
 
-This filter passes only packets heard directly.
+This filter passes only directly heard packets.
 
-That means:
+Actual behavior:
 
-- the path must not contain any already consumed digi hop,
-- if the path contains consumed elements marked with `*`, the frame is rejected.
+- it checks only whether path already contains any consumed hop marked with `*`,
+- it does not care about still unconsumed hops such as `WIDE1-1`,
+- `...,WIDE1-1:` passes,
+- `...,SR5ABC*,WIDE1-1:` is rejected.
 
 Use it when:
 
@@ -276,36 +312,50 @@ Use it when:
 
 ### `DIGI Filter`
 
-This filter examines consumed digi hops in the path.
+This filter does not look at the whole path and does not inspect still unconsumed hops. It checks only hops already marked with `*`, after removing that star.
 
-How it works:
+Actual behavior:
 
-- it matches only already consumed hops,
-- patterns support `*`,
-- `allow` passes only matching packets,
-- `deny` rejects matching packets.
+- from `SR5BCD-2*,WIDE1-1` it sees only `SR5BCD-2`,
+- from `WIDE1-1` it sees nothing, because no hop has been consumed yet,
+- patterns are matched against consumed hops; `*` wildcard may be used anywhere,
+- `allow` passes only when at least one consumed hop matches,
+- `deny` rejects only when at least one consumed hop matches.
+
+Practical consequences:
+
+- an empty `allow` list rejects everything,
+- an empty `deny` list passes everything,
+- `*` in `deny` blocks every already-digipeated frame,
+- `*` in `deny` does not block truly direct frames, because there is no consumed hop to match.
 
 Examples:
 
-- `SR5ABC`,
-- `SR5*`,
-- `*`.
+- path `SR5BCD-2*,WIDE1-1` plus pattern `SR5BCD*` -> match,
+- path `SR5ABC*,WIDE1-1` plus `deny: *` -> drop,
+- path `WIDE1-1` plus `deny: *` -> pass.
 
 Use it when:
 
-- only traffic from selected digi chains should pass,
-- traffic arriving through specific digis should be excluded.
+- only traffic coming through selected digis should pass,
+- traffic already repeated by specific intermediate stations should be excluded.
 
 ### `Callsign Filter`
 
-This filter matches the source callsign.
+This filter checks only the packet source callsign. It does not inspect path, digi hops, or destination.
 
 How it works:
 
-- it operates on the packet source callsign,
-- it supports wildcard `*`,
-- `allow` behaves like an allowlist,
-- `deny` behaves like a blocklist.
+- without `*`, the match is exact,
+- `SQ9MDD` does not match `SQ9MDD-4`,
+- `*` wildcard may be used anywhere,
+- `allow` behaves like a whitelist,
+- `deny` behaves like a blacklist.
+
+Practical consequences:
+
+- an empty `allow` list rejects everything,
+- an empty `deny` list passes everything.
 
 Examples:
 
@@ -320,9 +370,9 @@ Use it when:
 
 ### `Packet Type Filter`
 
-This filter works on APRS packet groups.
+This filter works on whatever APRSBox decoder recognized as APRS packet group or packet type.
 
-Accepted values are:
+Most common selectors:
 
 - `position`,
 - `object`,
@@ -337,7 +387,14 @@ Practical meaning:
 
 - `message` also covers ACK/REJ, bulletin, and announcement,
 - `weather` means weather-only frames,
-- a position with weather data still counts as `position`.
+- a position with weather data still counts as `position`,
+- for backward compatibility, legacy selectors such as `M`, `S`, `O`, and `W` still work, as do raw type codes returned by parser.
+
+How it works:
+
+- in `allow` mode the frame passes only when decoded group or type matches the list,
+- in `deny` mode the frame is dropped only when decoded group or type matches the list,
+- if decoder cannot determine group/type, `allow` rejects and `deny` passes.
 
 Use it when:
 
@@ -346,7 +403,15 @@ Use it when:
 
 ### `Icon Filter`
 
-This filter matches the APRS symbol in `table+code` form.
+This filter compares the APRS symbol exactly in `table+code` form.
+
+How it works:
+
+- matching is exact and does not use wildcard,
+- it compares the exact symbol value returned by APRSBox parser,
+- in `allow` mode, no match means reject,
+- in `deny` mode, no match means pass,
+- if symbol cannot be decoded, `allow` rejects and `deny` passes.
 
 Examples:
 
@@ -360,14 +425,16 @@ Use it when:
 
 ### `Distance Filter`
 
-This filter passes a packet only when its decoded position falls inside at least one configured zone.
+This filter passes a frame only when decoded position falls inside at least one configured zone.
 
 How it works:
 
 - 1 to 3 zones may be configured,
 - each zone has a center and a radius,
-- the zones are evaluated with OR logic,
-- packets without a decodable position are not automatically rejected by this filter.
+- zones are evaluated with OR logic,
+- if no valid zone is configured, the filter is skipped,
+- if the frame has no decodable position, the filter is skipped,
+- only a frame with position outside all zones is rejected.
 
 Use it when:
 
@@ -376,7 +443,7 @@ Use it when:
 
 ### `Rate Limit Filter`
 
-This filter limits how often packets from a callsign or callsign pattern may continue.
+This filter is not a packets-per-minute counter. It is a simple time gate based on the source callsign.
 
 Rule format:
 
@@ -389,13 +456,30 @@ Examples:
 ```text
 SQ9MDD-7 - 30s
 SQ2IDB* - 10s
+SQ9MDD - 20s
 * - 20s
 ```
 
 How it works:
 
-- it tracks the time since the last passed frame for each matching pattern,
-- the next frame is blocked if it arrives before the limit expires.
+- it operates only on the source callsign,
+- the first matching frame always passes,
+- the next frame from the same source under the same matched rule is blocked until the limit expires,
+- timer state is updated only by frames that actually passed,
+- if no rule matches the source, the filter does nothing and the frame passes.
+
+How patterns are matched:
+
+- `SQ9MDD-7` without wildcard matches only that exact SSID,
+- `SQ9MDD` without wildcard and without SSID matches that callsign with any SSID,
+- `SQ*` works as wildcard,
+- if several rules match, runtime picks the most specific one; on tie, the earlier line wins.
+
+Format limits:
+
+- `LIMIT` may be written as `30`, `30s`, or `30S`,
+- allowed range is 5 to 300 seconds,
+- step is 5 seconds.
 
 Use it when:
 

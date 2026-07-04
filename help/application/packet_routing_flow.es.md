@@ -183,18 +183,25 @@ En la practica:
 
 Es el bloque de seguridad del sistema para reglas que terminan en `TX APRS-IS`.
 
-Hace lo siguiente:
+Para tramas que llegan desde `Receptor RF`:
 
-- rechaza paquetes con `TCPIP` o `TCPXX`,
-- rechaza paquetes marcados `NOGATE` o `RFONLY`,
-- valida tramas third-party,
-- valida la ruta externa e interna del trafico third-party,
-- evita que trafico inadecuado llegue a APRS-IS.
+- revisa toda la ruta externa,
+- rechaza la trama si la ruta contiene `TCPIP`, `TCPXX`, `NOGATE` o `RFONLY`,
+- valida la encapsulacion third-party,
+- si la third-party es valida, revisa tambien la ruta interna para los mismos tokens bloqueados.
 
-Usalo:
+Para `TX local` es mas estricto:
 
-- siempre con `TX APRS-IS`,
-- nunca como sustituto del control de trayectoria de un digi RF.
+- la trama debe estar marcada en metadatos como trafico APRSBox generado localmente,
+- la encapsulacion third-party se rechaza,
+- cualquier construccion `q..` en la ruta se rechaza,
+- `TCPIP`, `TCPXX`, `NOGATE` y `RFONLY` siguen bloqueados.
+
+Notas importantes:
+
+- con `TX APRS-IS` este filtro es obligatorio,
+- no sustituye la logica digi RF,
+- si falla el parseo TNC2, la trama se rechaza.
 
 Casos tipicos:
 
@@ -203,33 +210,59 @@ Casos tipicos:
 
 ### `Regla de trayectoria y protección DIGI`
 
-Es el bloque mas importante para flujos que terminan en `TX RF`.
+Es el bloque clave para flujos que terminan en `TX RF`. Primero hace la proteccion DIGI y despues reescribe la ruta.
 
-Hace lo siguiente:
+La parte de proteccion rechaza:
 
-- analiza la ruta digi,
-- decide si la estacion local todavia debe repetir el paquete,
-- bloquea mensajes y consultas APRS dirigidos localmente,
-- bloquea trafico third-party que no debe repetirse,
-- bloquea tramas ya repetidas por la misma estacion local.
+- tramas third-party,
+- mensajes APRS dirigidos a la `My station` local,
+- queries APRS dirigidas a la `My station` local,
+- mensajes APRS dirigidos a la estacion `WX` local,
+- queries APRS dirigidas a la estacion `WX` local,
+- tramas donde la estacion local ya aparece como hop consumido, por ejemplo `MYCALL-SSID*`.
 
-Por que es obligatorio:
+Solo despues analiza la ruta:
 
-- sin este bloque, una regla RF no tiene proteccion digi basica,
-- este bloque aporta la logica principal de trayectoria para repetir con seguridad en el aire.
+- si la ruta esta vacia, la trama se rechaza,
+- si todos los hops ya estan consumidos, la trama se rechaza,
+- solo se revisa el primer hop aun no consumido,
+- los hops siguientes no se miran hasta resolver ese primero.
 
 Campos de configuracion:
 
 - `Paths (TRACE / traced)`:
-  Alias o saltos explicitos que deben consumirse insertando el indicativo del digi local en la ruta.
+  Si el primer hop no consumido coincide con esta lista, APRSBox lo consume e inserta el indicativo local desde `My settings`.
 - `Paths (NO TRACE / not traced)`:
-  Alias o saltos explicitos que deben consumirse sin insertar el indicativo del digi local.
+  Si el primer hop no consumido coincide con esta lista, el hop solo se marca como consumido, sin insertar el indicativo local.
 
-En la practica:
+Que puedes escribir:
 
-- `WIDE1-1` suele configurarse como traced,
-- la lista no-trace depende de la politica local de red,
-- este bloque suele estar cerca del final de la cadena, justo antes de `TX RF`.
+- un hop completo como `WIDE1-1`, `WIDE2-1`, `WIDE2-2` o `SP2-2`,
+- un alias de familia como `WIDE`; entonces coinciden miembros como `WIDE1-1` y `WIDE2-2`.
+
+Reescrituras tipicas:
+
+- TRACE `WIDE1-1` -> `MYCALL-SSID*`,
+- TRACE `WIDE2-1` -> `MYCALL-SSID*`,
+- TRACE `WIDE2-2` -> `MYCALL-SSID*,WIDE2-1`,
+- NO TRACE `WIDE2-2` -> `WIDE2-2*,WIDE2-1`,
+- NO TRACE `SP2-2` -> `SP2-2*,SP2-1`,
+- si el hop no tiene forma `N-N`, NO TRACE solo anade `*`.
+
+Entradas tipicas de arranque:
+
+- `TRACE`: `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: tu propio `CALLSIGN-SSID` de `My settings` y excepciones locales permitidas por la politica de red.
+
+Por que suele anadirse el propio indicativo a `NO TRACE`:
+
+- para consumir paquetes dirigidos expresamente a tu indicativo sin insertarlo otra vez en la ruta,
+- para manejar hops locales explicitos que no deben dejar traza.
+
+Notas importantes:
+
+- si TRACE coincide pero no esta configurado el indicativo local, la trama se rechaza,
+- si el primer hop no consumido no coincide ni con TRACE ni con NO TRACE, la trama se rechaza.
 
 Esquema tipico:
 
@@ -239,73 +272,90 @@ Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y prot
 
 ### `Filtro duplicado (retraso viscoso)`
 
-Este bloque abre una ventana corta de escucha cuando la trama entra en el flujo.
+Este bloque no deja pasar la trama inmediatamente. La primera trama con una huella dada queda retenida hasta que termine la ventana de escucha.
 
-Hace lo siguiente:
+Comportamiento real:
 
-- espera durante la ventana configurada,
-- comprueba si otro digi ya repitio la misma trama,
-- descarta la trama si detecta una repeticion duplicada,
-- la deja seguir si no escucha esa repeticion.
+- la huella se construye con `source callsign + info field`,
+- la ruta no participa en la comparacion de duplicados,
+- la primera trama espera hasta el final de la ventana,
+- si durante esa ventana aparece otra trama con la misma huella, ambas se descartan,
+- si no aparece duplicado, la primera trama continua solo al expirar el temporizador.
 
-Comportamiento importante:
+Consecuencias practicas:
 
-- solo puede aparecer una vez,
-- debe ser el primer filtro en un flujo de retransmision RF,
-- es especialmente util en reglas digi clasicas.
+- dos tramas de la misma estacion con el mismo payload pero distinta ruta siguen contando como duplicado,
+- es un verdadero viscous-delay: primero espera y despues decide,
+- solo puede aparecer una vez y debe ser el primer filtro de un flujo RF.
 
 Usalo cuando:
 
-- quieres reducir duplicados,
-- varios digis pueden escuchar la misma estacion origen.
+- varios digis pueden escuchar la misma estacion origen,
+- quieres reducir repeticiones innecesarias sin transmitir de inmediato.
 
 ### `Solo directo`
 
 Este filtro deja pasar solo paquetes escuchados directamente.
 
-Eso significa:
+Comportamiento real:
 
-- la ruta no puede contener ningun hop digi ya consumido,
-- si la ruta contiene elementos consumidos marcados con `*`, la trama se rechaza.
+- solo comprueba si la ruta ya contiene algun hop consumido marcado con `*`,
+- no le importan los hops aun no consumidos como `WIDE1-1`,
+- `...,WIDE1-1:` pasa,
+- `...,SR5ABC*,WIDE1-1:` se rechaza.
 
 Usalo cuando:
 
-- la regla debe reaccionar solo a estaciones escuchadas localmente,
+- la regla debe reaccionar solo a estaciones oidas en directo,
 - el trafico ya repetido debe ignorarse,
-- quieres inspeccionar por separado la cobertura directa.
+- quieres revisar por separado la cobertura directa.
 
 ### `Filtro DIGI`
 
-Este filtro examina los hops digi ya consumidos en la ruta.
+Este filtro no mira toda la ruta ni revisa hops aun no consumidos. Solo analiza los hops ya marcados con `*`, quitando antes esa estrella.
 
-Como funciona:
+Comportamiento real:
 
-- solo compara hops ya consumidos,
-- los patrones admiten `*`,
-- `allow` deja pasar solo paquetes coincidentes,
-- `deny` rechaza paquetes coincidentes.
+- de `SR5BCD-2*,WIDE1-1` solo ve `SR5BCD-2`,
+- de `WIDE1-1` no ve nada, porque todavia no hay hops consumidos,
+- los patrones se comparan con los hops consumidos; el wildcard `*` puede usarse en cualquier posicion,
+- `allow` deja pasar solo si al menos un hop consumido coincide,
+- `deny` rechaza solo si al menos un hop consumido coincide.
+
+Consecuencias practicas:
+
+- una lista `allow` vacia rechaza todo,
+- una lista `deny` vacia deja pasar todo,
+- `*` en `deny` bloquea toda trama ya digipeateada,
+- `*` en `deny` no bloquea tramas realmente directas, porque no hay hop consumido que comparar.
 
 Ejemplos:
 
-- `SR5ABC`,
-- `SR5*`,
-- `*`.
+- ruta `SR5BCD-2*,WIDE1-1` con patron `SR5BCD*` -> match,
+- ruta `SR5ABC*,WIDE1-1` con `deny: *` -> drop,
+- ruta `WIDE1-1` con `deny: *` -> pass.
 
 Usalo cuando:
 
-- solo debe pasar trafico procedente de ciertas cadenas digi,
-- quieres excluir trafico que ya paso por digis concretos.
+- solo debe pasar trafico que vino por digis concretos,
+- quieres excluir trafico ya repetido por estaciones intermedias determinadas.
 
 ### `Filtro de indicativo`
 
-Este filtro compara el indicativo de origen.
+Este filtro comprueba solo el indicativo de origen. No analiza la ruta, los hops digi ni el destino.
 
 Como funciona:
 
-- opera sobre el indicativo fuente del paquete,
-- admite wildcard `*`,
+- sin `*`, la coincidencia es exacta,
+- `SQ9MDD` no coincide con `SQ9MDD-4`,
+- `*` puede usarse en cualquier posicion,
 - `allow` funciona como lista blanca,
 - `deny` funciona como lista negra.
+
+Consecuencias practicas:
+
+- una lista `allow` vacia rechaza todo,
+- una lista `deny` vacia deja pasar todo.
 
 Ejemplos:
 
@@ -320,9 +370,9 @@ Usalo cuando:
 
 ### `Filtro de tipo de paquete`
 
-Este filtro trabaja sobre los grupos de paquetes APRS.
+Este filtro trabaja sobre lo que el decodificador APRSBox reconoce como grupo o tipo de paquete APRS.
 
-Valores aceptados:
+Selectores mas comunes:
 
 - `position`,
 - `object`,
@@ -336,8 +386,15 @@ Valores aceptados:
 Significado practico:
 
 - `message` tambien cubre ACK/REJ, bulletin y announcement,
-- `weather` significa tramas weather-only,
-- una posicion con datos meteorologicos sigue contando como `position`.
+- `weather` significa solo tramas weather-only,
+- una posicion con datos meteorologicos sigue contando como `position`,
+- por compatibilidad, tambien funcionan selectores antiguos como `M`, `S`, `O` y `W`, ademas de otros codigos crudos devueltos por el parser.
+
+Como funciona:
+
+- en modo `allow`, la trama pasa solo si el grupo o tipo decodificado coincide con la lista,
+- en modo `deny`, la trama cae solo si el grupo o tipo decodificado coincide con la lista,
+- si el parser no puede determinar grupo/tipo, `allow` rechaza y `deny` deja pasar.
 
 Usalo cuando:
 
@@ -346,7 +403,15 @@ Usalo cuando:
 
 ### `Filtro de icono`
 
-Este filtro compara el simbolo APRS en formato `table+code`.
+Este filtro compara exactamente el simbolo APRS en formato `table+code`.
+
+Como funciona:
+
+- la coincidencia es exacta y no usa wildcard,
+- compara exactamente el valor de simbolo devuelto por el parser de APRSBox,
+- en modo `allow`, si no coincide se rechaza,
+- en modo `deny`, si no coincide se deja pasar,
+- si el simbolo no puede decodificarse, `allow` rechaza y `deny` deja pasar.
 
 Ejemplos:
 
@@ -360,14 +425,16 @@ Usalo cuando:
 
 ### `Filtro de distancia`
 
-Este filtro deja pasar un paquete solo cuando su posicion decodificada cae dentro de al menos una zona configurada.
+Este filtro deja pasar una trama solo cuando la posicion decodificada cae dentro de al menos una zona configurada.
 
 Como funciona:
 
 - se pueden definir de 1 a 3 zonas,
 - cada zona tiene centro y radio,
 - las zonas se evalúan con logica OR,
-- los paquetes sin posicion decodificable no se rechazan automaticamente.
+- si no hay ninguna zona valida, el filtro se omite,
+- si la trama no tiene posicion decodificable, el filtro se omite,
+- solo una trama con posicion fuera de todas las zonas se rechaza.
 
 Usalo cuando:
 
@@ -376,7 +443,7 @@ Usalo cuando:
 
 ### `Filtro de limite de ritmo`
 
-Este filtro limita con que frecuencia pueden continuar paquetes de un indicativo o patron de indicativo.
+Este filtro no cuenta paquetes por minuto. Es una compuerta temporal simple basada en el indicativo de origen.
 
 Formato de regla:
 
@@ -389,13 +456,30 @@ Ejemplos:
 ```text
 SQ9MDD-7 - 30s
 SQ2IDB* - 10s
+SQ9MDD - 20s
 * - 20s
 ```
 
 Como funciona:
 
-- mide el tiempo desde la ultima trama aceptada para cada patron coincidente,
-- bloquea la siguiente trama si llega antes de que expire el limite.
+- actua solo sobre el indicativo de origen,
+- la primera trama que coincide siempre pasa,
+- la siguiente trama de la misma fuente bajo la misma regla coincidente se bloquea hasta que expire el limite,
+- el temporizador solo se actualiza con tramas que realmente pasaron,
+- si ninguna regla coincide con la fuente, el filtro no bloquea nada y la trama sigue.
+
+Como se comparan los patrones:
+
+- `SQ9MDD-7` sin wildcard coincide solo con ese SSID exacto,
+- `SQ9MDD` sin wildcard y sin SSID coincide con ese indicativo con cualquier SSID,
+- `SQ*` funciona como wildcard,
+- si coinciden varias reglas, runtime elige la mas especifica; en empate gana la linea anterior.
+
+Limites del formato:
+
+- `LIMIT` puede escribirse como `30`, `30s` o `30S`,
+- el rango permitido es de 5 a 300 segundos,
+- el paso es de 5 segundos.
 
 Usalo cuando:
 
