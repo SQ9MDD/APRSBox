@@ -1,6 +1,8 @@
-# Packet routing rules
+# Packet Flow rule reference
 
-This is the full help file for both `Packet Routing` and `Packet Flow`. It covers the screen purpose, common use cases, rule order, filter blocks, target blocks, and ready-made rule layouts.
+This help file is for the `Packet Flow` editor that opens after you enter a specific rule from the `Packet Routing` list.
+
+It covers the detailed rule structure, common use cases, step order, filter blocks, target blocks, and ready-made rule layouts.
 
 ## What this screen does
 

@@ -1,6 +1,8 @@
-# Reglas de enrutamiento de paquetes
+# Packet Flow - referencia detallada
 
-Este es el archivo completo de ayuda para `Packet Routing` y `Packet Flow`. Reune el objetivo de la pantalla, los casos de uso mas comunes, el orden de la regla, los bloques de filtro y destino, y varios esquemas listos para usar.
+Este archivo de ayuda corresponde al editor `Packet Flow`, que se abre al entrar en una regla concreta desde la lista `Packet Routing`.
+
+Reune la estructura detallada de la regla, los casos de uso mas comunes, el orden de pasos, los bloques de filtro, los bloques de destino y varios esquemas listos para usar.
 
 ## Que hace esta pantalla
 
@@ -60,13 +62,13 @@ Es la ruta clasica de digipeater.
 Esquema minimo:
 
 ```text
-Receptor RF -> Regla de trayectoria y guardia DIGI -> TX RF
+Receptor RF -> Regla de trayectoria y protección DIGI -> TX RF
 ```
 
 Esquema mas habitual:
 
 ```text
-Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y guardia DIGI -> TX RF
+Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
 ```
 
 Usalo cuando:
@@ -78,7 +80,7 @@ Usalo cuando:
 
 Notas importantes:
 
-- `Regla de trayectoria y guardia DIGI` es obligatoria,
+- `Regla de trayectoria y protección DIGI` es obligatoria,
 - `Filtro duplicado (retraso viscoso)` suele ser un buen primer paso,
 - esta es la ruta donde mas importa proteger el canal RF.
 
@@ -199,7 +201,7 @@ Casos tipicos:
 - `Receptor RF -> Filtro estricto -> TX APRS-IS`,
 - `TX local -> Filtro estricto -> TX APRS-IS`.
 
-### `Regla de trayectoria y guardia DIGI`
+### `Regla de trayectoria y protección DIGI`
 
 Es el bloque mas importante para flujos que terminan en `TX RF`.
 
@@ -232,7 +234,7 @@ En la practica:
 Esquema tipico:
 
 ```text
-Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y guardia DIGI -> TX RF
+Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
 ```
 
 ### `Filtro duplicado (retraso viscoso)`
@@ -415,7 +417,7 @@ Usalo para:
 Esquema tipico:
 
 ```text
-Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y guardia DIGI -> TX RF
+Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
 ```
 
 ### `TX APRS-IS`
@@ -446,7 +448,7 @@ Usalo para:
 - Una regla siempre tiene una fuente y un destino.
 - `TX local` solo puede llevar a `TX APRS-IS` o `Agujero negro`.
 - `TX APRS-IS` siempre mantiene el `Filtro estricto` obligatorio.
-- `TX RF` requiere una `Regla de trayectoria y guardia DIGI` activa.
+- `TX RF` requiere una `Regla de trayectoria y protección DIGI` activa.
 - `Filtro duplicado (retraso viscoso)` solo puede aparecer una vez.
 - `Filtro de distancia` solo puede aparecer una vez.
 - `Filtro de limite de ritmo` esta pensado para flujos que terminan en `TX RF`.
@@ -462,13 +464,13 @@ Receptor RF -> Filtro estricto -> TX APRS-IS
 ### Digi RF clasico
 
 ```text
-Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y guardia DIGI -> TX RF
+Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
 ```
 
 ### Digi solo para estaciones directas
 
 ```text
-Receptor RF -> Solo directo -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y guardia DIGI -> TX RF
+Receptor RF -> Solo directo -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
 ```
 
 ### Trafico generado localmente hacia APRS-IS

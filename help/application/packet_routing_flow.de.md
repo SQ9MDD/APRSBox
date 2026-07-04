@@ -1,6 +1,8 @@
-# Packet-Routing-Regeln
+# Packet Flow - Detailreferenz
 
-Dies ist die vollstandige Hilfedatei fur `Packet Routing` und `Packet Flow`. Sie beschreibt den Zweck des Bildschirms, typische Anwendungsfalle, die Reihenfolge der Regel, die Filter- und Zielblocke sowie fertige Regelskizzen.
+Diese Hilfedatei gehort zum Editor `Packet Flow`, der geoffnet wird, wenn du aus der Liste `Packet Routing` eine konkrete Regel auswahlst.
+
+Sie beschreibt den detaillierten Aufbau der Regel, typische Anwendungsfalle, die Reihenfolge der Schritte, die Filterblocke, die Zielblocke und fertige Regelschemata.
 
 ## Was dieser Bildschirm macht
 

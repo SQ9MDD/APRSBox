@@ -1,6 +1,8 @@
-# Reguły routingu pakietów
+# Packet Flow - szczegółowy opis reguły
 
-To jest pełny plik pomocy dla zakładek `Packet Routing` oraz `Packet Flow`. Zawiera opis całego ekranu, najczęstszych zastosowań, kolejności kroków, bloków filtrujących i docelowych oraz praktycznych schematów reguł.
+Ten plik pomocy dotyczy edytora `Packet Flow`, otwieranego po wejściu w konkretną regułę z listy `Packet Routing`.
+
+Zawiera dokładny opis budowy reguły, najczęstszych zastosowań, kolejności kroków, bloków filtrów, bloków docelowych oraz gotowych schematów do użycia.
 
 ## Co robi ten ekran
 

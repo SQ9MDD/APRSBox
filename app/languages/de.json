@@ -849,7 +849,7 @@
   "Listening window": "Hörfenster",
   "Window (sec)": "Fenster (Sek.)",
   "Path Rule": "Pfadregel",
-  "Path rule and DIGI guard": "Wegregel und DIGI-Wächter",
+  "Path rule and DIGI guard": "Pfadregel und DIGI-Schutz",
   "Rule": "Regel",
   "Checks only the first remaining path hop. TRACE (traced) repeats the hop with the local digi callsign and keeps N-N continuation when needed. NO TRACE (not traced) consumes the hop without adding the local digi callsign. If the first remaining hop matches neither TRACE nor NO TRACE, the packet is dropped.": "Überprüft nur den ersten verbleibenden Pfad-Hop. TRACE (verfolgt) wiederholt den Hop mit dem lokalen Digi-Rufzeichen und behält bei Bedarf die N-N-Fortsetzung bei. NO TRACE (nicht verfolgt) verbraucht den Hop, ohne das lokale Digi-Rufzeichen hinzuzufügen. Wenn der erste verbleibende Hop weder mit TRACE noch mit NO TRACE übereinstimmt, wird das Paket verworfen.",
   "This mandatory block handles the DIGI path and blocks frames that should not be repeated: messages and queries addressed to local stations, third-party frames, and frames already repeated by this station.": "Dieser obligatorische Block verwaltet den DIGI-Pfad und blockiert Frames, die nicht wiederholt werden sollten: Nachrichten und Abfragen, die an lokale Stationen gerichtet sind, Frames von Drittanbietern und Frames, die bereits von dieser Station wiederholt wurden.",
