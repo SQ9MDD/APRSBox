@@ -3392,18 +3392,3 @@ async def traffic_stream(
         "X-Accel-Buffering": "no",
     }
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
-
-
-@router.get("/map")
-def map_page(
-    request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
-) -> object:
-    templates = request.app.state.templates
-    context = build_template_context(
-        request,
-        page_title="Map",
-        current_user=current_user,
-        active_nav="map",
-    )
-    return templates.TemplateResponse("placeholder.html", context)
