@@ -4,13 +4,69 @@ This screen lists the rules that APRSBox uses to move APRS packets between input
 
 Rules are evaluated from top to bottom. The order on the list matters, especially when several rules describe similar traffic.
 
-## Common uses
+## What packet routing is used for
+
+Packet routing defines what APRSBox should do with a packet after it is received from RF or generated locally by the application.
+
+Common uses:
 
 - forward RF-received frames to APRS-IS,
 - digipeat RF traffic to an RF output,
 - forward locally generated APRSBox frames to APRS-IS,
 - log selected traffic without transmitting it,
 - drop traffic that should not continue.
+
+## Common routing scenarios
+
+### `RF -> APRS-IS`
+
+This is the typical iGate path. APRSBox receives a frame from radio and forwards it to APRS-IS after the required system guard.
+
+Use this when:
+
+- you want locally heard RF traffic to appear on APRS-IS,
+- you want different RF ports to feed APRS-IS under controlled rules,
+- you want a clear separation between RF ingest and Internet uplink behavior.
+
+### `RF -> RF`
+
+This is the classic digipeater case. A frame enters from RF and is retransmitted on RF after passing the configured filters.
+
+Use this when:
+
+- you are building a local digi,
+- you want cross-band or port-to-port RF forwarding,
+- you want to repeat only selected traffic classes, areas, paths or callsigns.
+
+### `Local TX -> APRS-IS`
+
+This path is for frames created by APRSBox itself, such as beacons, status, weather, objects, items, bulletins and messages.
+
+Use this when:
+
+- you want local application-generated traffic to be uploaded to APRS-IS,
+- you want objects, bulletins or messages to leave APRSBox without an RF path,
+- you want local transmit logic separated from incoming RF traffic logic.
+
+### `RF -> Black Hole` or `Local TX -> Black Hole`
+
+This is a diagnostic path. The packet goes through the rule, but it is not transmitted further.
+
+Use this when:
+
+- you want to test a rule safely,
+- you want to observe how packets move through filters,
+- you want packet logging without transmission.
+
+### `RF -> Action Drop`
+
+This is a blocking path. The rule ends with an intentional drop.
+
+Use this when:
+
+- you want to stop unwanted traffic in a clearly documented rule,
+- you want a separate reject path instead of mixing the logic into one large rule,
+- you want filtering policy to remain explicit and readable.
 
 ## Sources and targets
 
@@ -33,6 +89,10 @@ Useful filters include:
 - `Duplicate Filter` provides a short viscous-delay window.
 - `Direct Only` accepts only directly heard packets.
 - callsign, digi, packet type, icon, distance and rate-limit filters narrow the traffic before transmission.
+
+For a detailed block-by-block reference, see:
+
+[Detailed routing block reference](packet_routing_flow.en.md)
 
 ## System guards
 

@@ -163,6 +163,17 @@ class DigiFlowsTests(unittest.TestCase):
         create_action_index = template_source.index('{{ t("New routing flow") }}')
         self.assertGreater(create_action_index, table_index)
 
+    def test_digi_flow_form_template_includes_detailed_help(self) -> None:
+        template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/packet_routing_flow"', template_source)
+        self.assertIn('data-help-autoload="1"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+
+        script_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
+        self.assertIn('data-help-autoload="1"', script_source)
+
     def test_init_db_creates_digi_flow_tables_and_allows_duplicate_route_pairs(self) -> None:
         with temporary_database():
             connection = connect()

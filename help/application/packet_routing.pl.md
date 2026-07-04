@@ -4,7 +4,7 @@ Ten ekran pokazuje reguły, przez które APRSBox kieruje pakiety pomiędzy wejś
 
 Reguły są wykonywane od góry do dołu. Kolejność na liście ma znaczenie, dlatego aktywne reguły dla tego samego kierunku warto trzymać świadomie uporządkowane.
 
-## Kiedy używać reguł routingu
+## Po co używa się reguł routingu
 
 Reguły routingu służą do opisania, co ma się stać z pakietem APRS po odebraniu albo wygenerowaniu lokalnie przez APRSBox.
 
@@ -15,6 +15,60 @@ Typowe zastosowania:
 - przekazanie lokalnie wygenerowanych ramek do APRS-IS,
 - zapis wybranych ramek do logu bez dalszego nadawania,
 - odrzucenie ramek, które nie powinny przejść dalej.
+
+## Najczęstsze przypadki użycia
+
+### `RF -> APRS-IS`
+
+To najczęstszy wariant dla iGate. APRSBox odbiera pakiet z radia i po przejściu przez wymagany filtr systemowy przekazuje go do APRS-IS.
+
+Tego wariantu używa się, gdy:
+
+- chcesz publikować do APRS-IS lokalnie odebrane pakiety,
+- chcesz odseparować różne porty RF i decydować, które z nich mają iść do Internetu,
+- chcesz dodać własne warunki przyjęcia ramek już na wejściu RF przez odpowiedni dobór źródła.
+
+### `RF -> RF`
+
+To klasyczny przypadek digipeatera. Pakiet przychodzi z jednego portu RF i po przejściu przez zestaw filtrów jest nadawany ponownie przez RF.
+
+Tego wariantu używa się, gdy:
+
+- budujesz lokalny digi,
+- chcesz robić cross-band albo port-to-port RF,
+- chcesz powtarzać tylko wybrane typy ramek, znaki, obszary albo ścieżki.
+
+W tym trybie kluczowy jest blok `Path rule and DIGI guard`, bo to on pilnuje ścieżki digi i podstawowych zasad powtarzania.
+
+### `Local TX -> APRS-IS`
+
+To wariant dla ramek generowanych przez sam APRSBox: beaconów, statusów, obiektów, itemów, biuletynów, wiadomości i pogody.
+
+Tego wariantu używa się, gdy:
+
+- chcesz, żeby lokalne emisje aplikacji trafiały do APRS-IS,
+- chcesz uruchomić obiekty, biuletyny albo wiadomości bez bezpośredniego toru RF,
+- chcesz rozdzielić logikę lokalnego nadawania od logiki ruchu przychodzącego z radia.
+
+### `RF -> Black Hole` albo `Local TX -> Black Hole`
+
+To wariant diagnostyczny i testowy. Pakiet przechodzi przez regułę, ale na końcu nie jest nadawany dalej.
+
+Tego wariantu używa się, gdy:
+
+- chcesz sprawdzić, czy filtr działa zgodnie z oczekiwaniem,
+- chcesz przeanalizować przebieg pakietu bez emisji,
+- chcesz tymczasowo obserwować ruch na danym wejściu.
+
+### `RF -> Action Drop`
+
+To wariant blokujący. Reguła kończy się świadomym odrzuceniem pakietu.
+
+Tego wariantu używa się, gdy:
+
+- chcesz odciąć niepożądany ruch już w konkretnej gałęzi,
+- chcesz rozdzielić ruch akceptowany i odrzucany na osobne scenariusze,
+- chcesz mieć czytelną dokumentację polityki filtrowania.
 
 ## Źródła i cele
 
@@ -44,6 +98,10 @@ Najważniejsze typy:
 - `Direct Only` przepuszcza tylko pakiety usłyszane bezpośrednio.
 - `Callsign Filter`, `DIGI Filter`, `Packet Type Filter`, `Icon Filter` i `Distance Filter` zawężają ruch według źródła, użytego digi, typu pakietu, symbolu albo położenia.
 - `Rate Limit Filter` ogranicza częstotliwość przepuszczania ramek dla znaków lub wzorców znaków.
+
+Szczegółowy opis każdego bloku znajduje się w osobnym dokumencie:
+
+[Szczegółowy opis bloków routingu](packet_routing_flow.pl.md)
 
 ## Ograniczenia systemowe
 

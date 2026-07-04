@@ -4,13 +4,69 @@ Diese Seite zeigt die Regeln, mit denen APRSBox APRS-Pakete zwischen Eingangen u
 
 Die Regeln werden von oben nach unten ausgewertet. Die Reihenfolge in der Liste ist wichtig, besonders wenn mehrere Regeln ahnlichen Verkehr beschreiben.
 
-## Typische Verwendung
+## Wofur Packet Routing verwendet wird
+
+Packet Routing definiert, was APRSBox mit einem Paket tun soll, nachdem es per RF empfangen oder lokal von der Anwendung erzeugt wurde.
+
+Typische Verwendung:
 
 - per RF empfangene Frames zu APRS-IS weiterleiten,
 - RF-Verkehr zu einem RF-Ausgang digipeaten,
 - lokal von APRSBox erzeugte Frames zu APRS-IS senden,
 - ausgewahlten Verkehr nur protokollieren,
 - Verkehr verwerfen, der nicht weiterlaufen soll.
+
+## Haufige Szenarien
+
+### `RF -> APRS-IS`
+
+Das ist der typische iGate-Fall. APRSBox empfängt einen Frame vom Funk und leitet ihn nach dem erforderlichen Systemfilter zu APRS-IS weiter.
+
+Verwendung:
+
+- wenn lokal gehorter RF-Verkehr auf APRS-IS erscheinen soll,
+- wenn verschiedene RF-Ports APRS-IS mit getrennten Regeln versorgen sollen,
+- wenn du RF-Empfang und Internet-Uplink klar trennen willst.
+
+### `RF -> RF`
+
+Das ist der klassische Digipeater-Fall. Ein Frame kommt per RF herein und wird nach den konfigurierten Filtern wieder per RF gesendet.
+
+Verwendung:
+
+- wenn du ein lokales Digi aufbaust,
+- wenn du Cross-Band oder Port-zu-Port-RF umsetzen willst,
+- wenn nur ausgewahlte Verkehrsarten, Gebiete, Pfade oder Rufzeichen wiederholt werden sollen.
+
+### `Local TX -> APRS-IS`
+
+Dieser Pfad ist fur Frames gedacht, die APRSBox selbst erzeugt, zum Beispiel Beacon, Status, Wetter, Objekte, Items, Bulletins und Nachrichten.
+
+Verwendung:
+
+- wenn lokal erzeugter Anwendungsverkehr zu APRS-IS hochgeladen werden soll,
+- wenn Objekte, Bulletins oder Nachrichten APRSBox ohne RF-Pfad verlassen sollen,
+- wenn lokale Sendelogik von eingehender RF-Logik getrennt bleiben soll.
+
+### `RF -> Black Hole` oder `Local TX -> Black Hole`
+
+Das ist ein Diagnosepfad. Das Paket lauft durch die Regel, wird aber nicht weiter ausgesendet.
+
+Verwendung:
+
+- wenn du eine Regel sicher testen willst,
+- wenn du sehen willst, wie Pakete durch Filter laufen,
+- wenn du Verkehr protokollieren, aber nicht senden willst.
+
+### `RF -> Action Drop`
+
+Das ist ein Sperrpfad. Die Regel endet mit einem absichtlichen Verwerfen.
+
+Verwendung:
+
+- wenn unerwunschter Verkehr in einer klar sichtbaren Regel gestoppt werden soll,
+- wenn du einen eigenen Ablehnungspfad statt einer grossen Mischregel willst,
+- wenn die Filterpolitik explizit und lesbar bleiben soll.
 
 ## Quellen und Ziele
 
@@ -33,6 +89,10 @@ Wichtige Filter:
 - `Duplicate Filter` stellt ein kurzes Viscous-Delay-Fenster bereit.
 - `Direct Only` lasst nur direkt gehorte Pakete durch.
 - Callsign-, Digi-, Pakettyp-, Icon-, Distanz- und Rate-Limit-Filter begrenzen den Verkehr vor der Aussendung.
+
+Eine ausfuhrliche Block-fur-Block-Beschreibung steht hier:
+
+[Detaillierte Beschreibung der Routing-Blocke](packet_routing_flow.de.md)
 
 ## Systemschutz
 

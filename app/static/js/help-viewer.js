@@ -269,4 +269,12 @@
             closeModal();
         }
     });
+
+    const autoLoadButton = document.querySelector('[data-help-page][data-help-autoload="1"]');
+    if (autoLoadButton instanceof HTMLElement) {
+        const page = String(autoLoadButton.getAttribute("data-help-page") || "").trim();
+        if (page) {
+            void loadHelp({ page, language: currentLanguage() }, autoLoadButton);
+        }
+    }
 })();

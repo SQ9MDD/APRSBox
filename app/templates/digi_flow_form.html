@@ -3,6 +3,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 {% endblock %}
 
 {% block content %}
@@ -13,6 +14,16 @@
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
                 <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRSIS target uses a mandatory system strict guard step.") }}</p>
             </div>
+            <button
+                class="help-icon-button"
+                type="button"
+                data-help-page="application/packet_routing_flow"
+                data-help-autoload="1"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF TX flows require an enabled Path Rule step. APRSIS flows are system-restricted.") }}</div>
         {% if flash %}
@@ -1926,4 +1937,6 @@
         });
     })();
 </script>
+{% include "partials/help_modal.html" %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endblock %}
