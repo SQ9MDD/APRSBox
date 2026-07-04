@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import json
 import os
@@ -718,7 +719,7 @@ class WxServiceTests(unittest.TestCase):
 
             scheduler = WxSchedulerService()
             with patch("app.services.wx_sources.urlopen", side_effect=scheduler_response):
-                scheduler._tick()
+                asyncio.run(scheduler._tick())
 
             row = fetch_one(
                 "SELECT status, normalized_value, value_origin FROM wx_runtime_cache WHERE parameter_name = ?",
@@ -788,7 +789,7 @@ class WxServiceTests(unittest.TestCase):
             )
 
             scheduler = WxSchedulerService()
-            scheduler._tick()
+            asyncio.run(scheduler._tick())
 
             log_row = fetch_one(
                 """
@@ -880,7 +881,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             scheduler = WxSchedulerService()
             with patch("app.services.wx_sources.urlopen", side_effect=temperature_only_response):
-                scheduler._tick()
+                await scheduler._tick()
 
             job = claim_next_outbound_job()
             assert job is not None
@@ -1018,7 +1019,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             scheduler = WxSchedulerService()
             with patch("app.services.wx_sources.urlopen", side_effect=scheduler_response):
-                scheduler._tick()
+                await scheduler._tick()
 
             job = claim_next_outbound_job()
             assert job is not None

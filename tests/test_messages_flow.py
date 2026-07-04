@@ -99,7 +99,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(normalize_aprs_destination_callsign(alias.lower()), alias)
 
     def test_destination_callsign_rejects_unknown_non_callsign_alias(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Destination callsign"):
+        with self.assertRaisesRegex(ValueError, "AX.25/APRS"):
             normalize_aprs_destination_callsign("FOO-BAR")
 
     def test_split_callsign_ssid_keeps_non_ssid_alias_intact(self) -> None:
