@@ -996,8 +996,13 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertIn("api/igate/diagnostics", template_source)
         self.assertNotIn('id="igate-diag-last-sent-line"', template_source)
         self.assertNotIn('id="igate-diag-last-strict-line"', template_source)
+        self.assertNotIn('id="igate-diag-strict-tcp"', template_source)
+        self.assertNotIn('id="igate-diag-strict-rfonly"', template_source)
+        self.assertNotIn('id="igate-diag-session-uptime"', template_source)
+        self.assertNotIn('id="igate-diag-reconnects"', template_source)
         self.assertIn('id="igate-diag-tx-sent"', template_source)
         self.assertIn('id="igate-runtime-label"', template_source)
+        self.assertLess(template_source.index('name="server"'), template_source.index("iGATE diagnostics"))
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('@router.get("/api/igate/diagnostics")', router_source)
 
