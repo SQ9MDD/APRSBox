@@ -68,19 +68,9 @@ Targets include `TX RF`, `TX APRS-IS`, and `Black Hole` for log-only handling.
 
 `Local TX` can be routed only to APRS-IS or to log-only handling.
 
-## Filters
+## Detailed block reference
 
-Filters run in order. If a packet is rejected by a filter, later steps are not executed.
-
-Useful filters include:
-
-- `Strict Filter` rejects `TCPIP`, `TCPXX`, `NOGATE`, `RFONLY` and invalid third-party packets.
-- `Path rule and DIGI guard` handles the digi path and blocks frames this station should not repeat.
-- `Duplicate Filter` provides a short viscous-delay window.
-- `Direct Only` accepts only directly heard packets.
-- callsign, digi, packet type, icon, distance and rate-limit filters narrow the traffic before transmission.
-
-For a detailed block-by-block reference, see:
+For a detailed block-by-block reference covering filters, rules and targets, see:
 
 [Detailed routing block reference](packet_routing_flow.en.md)
 

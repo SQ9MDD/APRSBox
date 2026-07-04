@@ -68,19 +68,9 @@ Ziele sind `TX RF`, `TX APRS-IS` und `Black Hole` fur reine Protokollierung.
 
 `Local TX` kann nur zu APRS-IS oder zur reinen Protokollierung geroutet werden.
 
-## Filter
+## Detaillierte Blockbeschreibung
 
-Filter laufen der Reihe nach. Wenn ein Paket durch einen Filter abgelehnt wird, werden die weiteren Schritte nicht ausgefuhrt.
-
-Wichtige Filter:
-
-- `Strict Filter` lehnt `TCPIP`, `TCPXX`, `NOGATE`, `RFONLY` und ungultige Third-Party-Pakete ab.
-- `Path rule and DIGI guard` verarbeitet den Digi-Pfad und blockiert Frames, die diese Station nicht wiederholen soll.
-- `Duplicate Filter` stellt ein kurzes Viscous-Delay-Fenster bereit.
-- `Direct Only` lasst nur direkt gehorte Pakete durch.
-- Callsign-, Digi-, Pakettyp-, Icon-, Distanz- und Rate-Limit-Filter begrenzen den Verkehr vor der Aussendung.
-
-Eine ausfuhrliche Block-fur-Block-Beschreibung steht hier:
+Eine ausfuhrliche Beschreibung von Filtern, Regeln und Zielen steht hier:
 
 [Detaillierte Beschreibung der Routing-Blocke](packet_routing_flow.de.md)
 

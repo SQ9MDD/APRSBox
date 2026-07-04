@@ -68,19 +68,9 @@ Los destinos disponibles incluyen `TX RF`, `TX APRS-IS` y `Black Hole` para solo
 
 `Local TX` solo puede dirigirse a APRS-IS o al registro.
 
-## Filtros
+## Referencia detallada de bloques
 
-Los filtros se ejecutan en orden. Si un filtro rechaza un paquete, los pasos siguientes no se ejecutan.
-
-Filtros utiles:
-
-- `Strict Filter` rechaza `TCPIP`, `TCPXX`, `NOGATE`, `RFONLY` y tramas third-party invalidas.
-- `Path rule and DIGI guard` maneja la ruta digi y bloquea tramas que esta estacion no debe repetir.
-- `Duplicate Filter` aplica una ventana corta de viscous-delay.
-- `Direct Only` acepta solo paquetes escuchados directamente.
-- Los filtros de indicativo, digi, tipo de paquete, icono, distancia y limite de tasa reducen el trafico antes de transmitir.
-
-Para una referencia detallada bloque por bloque, consulta:
+Para una referencia detallada de filtros, reglas y destinos, consulta:
 
 [Referencia detallada de bloques de routing](packet_routing_flow.es.md)
 

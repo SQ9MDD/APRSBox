@@ -75,20 +75,9 @@ Cel określa, gdzie pakiet ma trafić na końcu reguły.
 
 `Local TX` może być kierowany tylko do APRS-IS albo do logu. Nie służy do ponownego wpuszczania lokalnych ramek na RF przez routing.
 
-## Filtry i reguły pośrodku
+## Szczegółowy opis bloków
 
-Filtry działają kolejno. Jeżeli pakiet zostanie odrzucony przez filtr, dalsze kroki nie są wykonywane.
-
-Najważniejsze typy:
-
-- `Strict Filter` blokuje ramki z tokenami `TCPIP`, `TCPXX`, `NOGATE`, `RFONLY` oraz niepoprawne ramki third-party.
-- `Path rule and DIGI guard` obsługuje ścieżkę digi i chroni przed powtarzaniem ramek, których ta stacja nie powinna powtarzać.
-- `Duplicate Filter` działa jak viscous-delay: czeka krótko i odrzuca ramkę, jeżeli w tym czasie usłyszy jej powtórzenie.
-- `Direct Only` przepuszcza tylko pakiety usłyszane bezpośrednio.
-- `Callsign Filter`, `DIGI Filter`, `Packet Type Filter`, `Icon Filter` i `Distance Filter` zawężają ruch według źródła, użytego digi, typu pakietu, symbolu albo położenia.
-- `Rate Limit Filter` ogranicza częstotliwość przepuszczania ramek dla znaków lub wzorców znaków.
-
-Szczegółowy opis każdego bloku znajduje się w osobnym dokumencie:
+Dokładny opis filtrów, reguł i bloków docelowych znajduje się w osobnym dokumencie:
 
 [Szczegółowy opis bloków routingu](packet_routing_flow.pl.md)
 
