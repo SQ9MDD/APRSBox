@@ -155,7 +155,7 @@ class DigiFlowsTests(unittest.TestCase):
     def test_digi_flows_template_includes_help_and_footer_create_action(self) -> None:
         template_source = Path("app/templates/digi_flows.html").read_text(encoding="utf-8")
         self.assertIn("static/css/help-viewer.css", template_source)
-        self.assertIn('data-help-page="application/packet_routing"', template_source)
+        self.assertIn('data-help-page="application/packet_routing_flow"', template_source)
         self.assertIn('include "partials/help_modal.html"', template_source)
         self.assertIn("static/js/help-viewer.js", template_source)
 

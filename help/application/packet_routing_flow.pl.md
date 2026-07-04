@@ -1,27 +1,158 @@
-# Szczegółowy opis bloków routingu
+# Reguły routingu pakietów
 
-Ten dokument opisuje bloki dostępne w edytorze pojedynczej reguły routingu. Każda reguła składa się z jednego źródła, zero lub więcej filtrów pośrodku oraz jednego celu.
+To jest pełny plik pomocy dla zakładek `Packet Routing` oraz `Packet Flow`. Zawiera opis całego ekranu, najczęstszych zastosowań, kolejności kroków, bloków filtrujących i docelowych oraz praktycznych schematów reguł.
 
-## Jak czytać regułę
+## Co robi ten ekran
 
-Pakiet przechodzi przez regułę od góry do dołu.
+Reguła routingu opisuje, co APRSBox ma zrobić z pakietem po jego odebraniu albo wygenerowaniu lokalnie.
 
-1. Wchodzi ze źródła.
-2. Przechodzi przez każdy kolejny blok filtra albo reguły.
-3. Jeżeli którykolwiek blok odrzuci pakiet, dalsze kroki nie są wykonywane.
-4. Jeżeli pakiet przejdzie całą ścieżkę, trafia do celu.
+Każda reguła ma:
+
+- jedno źródło,
+- zero lub więcej bloków filtrów i reguł pośrodku,
+- jeden cel końcowy.
+
+Pakiet zawsze idzie od góry do dołu. Jeżeli którykolwiek blok go odrzuci, kolejne kroki nie są już wykonywane.
+
+## Jak czytać i budować regułę
+
+Najprostszy sposób myślenia o regule jest taki:
+
+1. Skąd pakiet wchodzi.
+2. Jakie warunki ma spełnić.
+3. Dokąd ma trafić na końcu.
+
+Typowa kolejność budowy:
+
+1. Wybierz źródło.
+2. Wybierz cel.
+3. Dodaj tylko te filtry, które naprawdę są potrzebne.
+4. Zapisz i sprawdź log wykonania reguły.
+
+## Najczęstsze use case'y
+
+### `Odbiornik RF -> TX APRS-IS`
+
+To klasyczny wariant iGate.
+
+Schemat minimalny:
+
+```text
+Odbiornik RF -> Filtr ścisły -> TX APRS-IS
+```
+
+Używaj tego, gdy:
+
+- lokalnie odebrane pakiety mają trafić do APRS-IS,
+- różne porty RF mają mieć różne zasady wejścia do Internetu APRS,
+- chcesz oddzielić ruch radiowy od ruchu lokalnie generowanego.
+
+Najważniejsze uwagi:
+
+- `Filtr ścisły` jest obowiązkowy,
+- nie każda ramka odebrana z RF powinna wejść do APRS-IS,
+- to jest ścieżka bardziej "iGate" niż "digi".
+
+### `Odbiornik RF -> TX RF`
+
+To klasyczny wariant digipeatera.
+
+Schemat minimalny:
+
+```text
+Odbiornik RF -> Reguła ścieżki i ochrona DIGI -> TX RF
+```
+
+Schemat częstszy w praktyce:
+
+```text
+Odbiornik RF -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
+```
+
+Używaj tego, gdy:
+
+- chcesz powtarzać ruch APRS w eterze,
+- budujesz lokalny digi,
+- robisz cross-band albo port-to-port RF,
+- chcesz powtarzać tylko określony typ ruchu po dodatkowych filtrach.
+
+Najważniejsze uwagi:
+
+- `Reguła ścieżki i ochrona DIGI` jest wymagana,
+- `Filtr duplikatów` zwykle warto dodać na początku,
+- to tutaj najłatwiej niechcący przeciążyć kanał RF, więc ostrożność ma znaczenie.
+
+### `Local TX -> TX APRS-IS`
+
+To ścieżka dla ramek generowanych przez sam APRSBox.
+
+Schemat:
+
+```text
+Local TX -> Filtr ścisły -> TX APRS-IS
+```
+
+Używaj tego, gdy:
+
+- beacony, statusy, pogoda, obiekty, biuletyny albo wiadomości mają trafiać do APRS-IS,
+- chcesz wypchnąć lokalnie generowany ruch bez osobnej reguły RF.
+
+Najważniejsze uwagi:
+
+- `Local TX` nie oznacza ramek odebranych z eteru,
+- to osobny strumień, tworzony wewnątrz APRSBox,
+- `Filtr ścisły` także tutaj pozostaje obowiązkowy.
+
+### `Odbiornik RF -> Black Hole`
+
+To ścieżka testowa i diagnostyczna.
+
+Schemat:
+
+```text
+Odbiornik RF -> Black Hole
+```
+
+albo bardziej użytecznie:
+
+```text
+Odbiornik RF -> Tylko direct -> Black Hole
+```
+
+Używaj tego, gdy:
+
+- chcesz sprawdzić działanie filtrów bez nadawania dalej,
+- chcesz obserwować ruch z konkretnego portu,
+- chcesz przygotować regułę "na sucho" przed włączeniem TX RF albo TX APRS-IS.
+
+### `Local TX -> Black Hole`
+
+To wariant pomocniczy do testów lokalnego nadawania aplikacji.
+
+Używaj tego, gdy:
+
+- chcesz zobaczyć, co generuje APRSBox,
+- chcesz sprawdzić obiekty, statusy albo biuletyny bez emisji dalej.
 
 ## Bloki źródłowe
 
-### `Receiver RF`
+### `Odbiornik RF`
 
-To wejście dla pakietów odebranych z konkretnego modemu radiowego.
+To źródło dla pakietów odebranych przez konkretny modem radiowy.
 
-Używaj tego bloku, gdy reguła ma obsługiwać ruch przychodzący z eteru.
+Kiedy używać:
+
+- gdy reguła ma reagować na ruch przychodzący z eteru,
+- gdy chcesz rozdzielić kilka odbiorników RF na osobne reguły.
+
+W praktyce:
+
+- każda reguła `Odbiornik RF -> ...` zaczyna się właśnie tym blokiem,
+- wybór modemu w źródle decyduje, z którego wejścia w ogóle pakiet trafi do tej reguły.
 
 ### `Local TX`
 
-To wejście dla ramek tworzonych lokalnie przez APRSBox.
+To źródło dla ramek wygenerowanych lokalnie przez APRSBox.
 
 Obejmuje między innymi:
 
@@ -33,104 +164,163 @@ Obejmuje między innymi:
 - biuletyny,
 - wiadomości.
 
-Ten blok nie obejmuje ramek odebranych z RF ani już digipeatowanych.
+Nie obejmuje:
+
+- ramek odebranych z RF,
+- ramek już digipeatowanych,
+- zwykłego ruchu wejściowego z TNC.
+
+W praktyce:
+
+- to osobna ścieżka dla ruchu "wewnętrznego",
+- `Local TX` może prowadzić tylko do `TX APRS-IS` albo `Black Hole`.
 
 ## Bloki filtrów i reguł
 
-### `Strict Filter`
+### `Filtr ścisły`
 
-To systemowy filtr bezpieczeństwa dla ścieżki do APRS-IS.
+To systemowy filtr bezpieczeństwa dla ścieżek kończących się na `TX APRS-IS`.
 
-Zadania tego bloku:
+Co robi:
 
-- odrzuca ramki zawierające `TCPIP` albo `TCPXX`,
-- odrzuca ramki oznaczone `NOGATE` albo `RFONLY`,
+- odrzuca pakiety z `TCPIP` albo `TCPXX`,
+- odrzuca pakiety z `NOGATE` albo `RFONLY`,
 - sprawdza poprawność ramek third-party,
-- blokuje niepoprawne ścieżki wewnętrzne i zewnętrzne.
+- sprawdza ścieżkę zewnętrzną i wewnętrzną w third-party,
+- pilnuje, żeby do APRS-IS nie trafił ruch, który nie powinien tam wejść.
 
-Użycie:
+Kiedy używać:
 
-- obowiązkowy przy `TX APRS-IS`,
-- nie jest przeznaczony do zwykłych reguł `RF -> RF`,
-- ma chronić zgodność z zasadami ruchu do APRS-IS.
+- zawsze przy `TX APRS-IS`,
+- nigdy jako zamiennik dla reguł digipeatera RF.
 
-### `Path rule and DIGI guard`
+Typowe use case'y:
 
-To podstawowy blok dla reguł `RF -> RF`.
+- `Odbiornik RF -> Filtr ścisły -> TX APRS-IS`,
+- `Local TX -> Filtr ścisły -> TX APRS-IS`.
 
-Zadania tego bloku:
+### `Reguła ścieżki i ochrona DIGI`
 
-- analizuje ścieżkę digi w pakiecie,
-- decyduje, czy lokalna stacja powinna jeszcze powtórzyć pakiet,
+To najważniejszy blok dla ścieżek `... -> TX RF`.
+
+Co robi:
+
+- analizuje digi path,
+- sprawdza, czy lokalna stacja powinna jeszcze powtórzyć pakiet,
 - blokuje wiadomości i zapytania adresowane lokalnie,
-- blokuje third-party tam, gdzie nie powinny być powtarzane,
-- blokuje pakiety już powtórzone przez tę samą stację.
+- blokuje third-party, które nie powinno być powtarzane,
+- blokuje pakiet już wcześniej powtórzony przez tę samą stację.
 
-Użycie:
+Dlaczego ten blok jest obowiązkowy:
 
-- wymagany przy `TX RF`,
-- powinien znajdować się blisko końca części filtrującej,
-- jest kluczowy dla bezpiecznego zachowania digi w eterze.
+- bez niego reguła RF nie ma podstawowej ochrony logicznej digi,
+- to właśnie ten blok pilnuje sensownego użycia ścieżki w eterze.
 
-### `Duplicate Filter (viscous-delay)`
+Pola konfiguracyjne:
 
-Ten blok otwiera krótkie okno nasłuchu. W tym czasie APRSBox sprawdza, czy identyczna ramka została już powtórzona przez inny digi.
+- `Paths (TRACE / traced)`:
+  To aliasy albo konkretne hop-y, które mają zostać zużyte z dodaniem lokalnego znaku digi do ścieżki.
+- `Paths (NO TRACE / not traced)`:
+  To aliasy albo hop-y, które mają zostać zużyte bez dopisywania lokalnego znaku do ścieżki.
 
-Jeżeli tak:
+Praktyka:
 
-- pakiet zostaje odrzucony.
+- `WIDE1-1` bywa używany jako traced,
+- lista NO TRACE zależy od lokalnej polityki sieci i konkretnej instalacji,
+- ten blok zwykle jest jednym z ostatnich przed `TX RF`.
 
-Jeżeli nie:
+Typowy schemat:
 
-- pakiet idzie dalej po upływie okna.
+```text
+Odbiornik RF -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
+```
 
-Użycie:
+### `Filtr duplikatów (viscous-delay)`
 
-- przy digipeaterze RF, gdy chcesz zmniejszyć liczbę zbędnych powtórzeń,
-- jako pierwszy blok filtra w regule RF.
+Ten blok otwiera krótkie okno nasłuchu po wejściu pakietu.
 
-### `Direct Only`
+Co robi:
 
-Ten filtr przepuszcza tylko pakiety odebrane bezpośrednio, bez żadnego już zużytego hopu digi.
+- czeka przez ustalone okno czasu,
+- sprawdza, czy w tym czasie ten sam pakiet został już powtórzony przez inne digi,
+- jeśli tak, odrzuca pakiet,
+- jeśli nie, przepuszcza go dalej po końcu okna.
 
-Użycie:
+Najważniejsze cechy:
 
-- gdy chcesz reagować wyłącznie na stacje słyszane lokalnie,
-- gdy reguła ma ignorować ramki już powtarzane przez inne digi.
+- może wystąpić tylko raz,
+- powinien być pierwszym filtrem w ścieżce RF,
+- najczęściej używa się go właśnie w klasycznych regułach digi.
 
-### `DIGI Filter`
+Kiedy używać:
 
-Ten filtr sprawdza, jakie digi już pojawiły się w zużytej ścieżce pakietu.
+- gdy chcesz ograniczyć zbędne powtórzenia,
+- gdy kilka digi może słyszeć tę samą stację.
 
-Tryby:
+### `Tylko direct`
 
-- `allow` przepuszcza tylko pakiety pasujące do listy,
-- `deny` odrzuca pakiety pasujące do listy.
+Ten filtr przepuszcza tylko pakiety usłyszane bezpośrednio.
 
-Użycie:
+Co to znaczy:
 
-- do akceptowania tylko ruchu po wybranych digi,
-- do wycinania ramek pochodzących z konkretnych ścieżek powtórzeń.
+- ścieżka nie może zawierać żadnego już zużytego hopu digi,
+- jeśli w path są zużyte elementy oznaczone `*`, pakiet zostanie odrzucony.
 
-### `Callsign Filter`
+Kiedy używać:
+
+- gdy chcesz reagować tylko na stacje słyszane lokalnie,
+- gdy nie chcesz dalej obrabiać ramek już powtórzonych przez inne digi,
+- gdy budujesz testy typu "co słyszę bezpośrednio".
+
+### `Filtr DIGI`
+
+Ten filtr analizuje zużyte hop-y digi w ścieżce.
+
+Jak działa:
+
+- sprawdza tylko hop-y już oznaczone jako zużyte,
+- wzorce mogą używać `*`,
+- tryb `allow` przepuszcza tylko pasujące pakiety,
+- tryb `deny` odrzuca pasujące pakiety.
+
+Przykłady wzorców:
+
+- `SR5ABC`,
+- `SR5*`,
+- `*`.
+
+Kiedy używać:
+
+- gdy chcesz przepuszczać ruch po wybranych digi,
+- gdy chcesz wyciąć ruch przychodzący z określonej części sieci.
+
+### `Filtr znaków`
 
 Ten filtr sprawdza znak źródłowy nadawcy pakietu.
 
-Tryby:
+Jak działa:
 
-- `allow` przepuszcza tylko dopasowane znaki,
-- `deny` odrzuca dopasowane znaki.
+- działa na callsignie źródłowym,
+- wspiera wildcard `*`,
+- tryb `allow` działa jak whitelist,
+- tryb `deny` działa jak blacklist.
 
-Użycie:
+Przykłady:
 
-- do tworzenia whitelisty albo blacklisty nadawców,
-- do rozdzielenia ruchu klubowego, testowego albo serwisowego.
+- `SQ9MDD`,
+- `SQ9MDD*`,
+- `SP*`.
 
-### `Packet Type Filter`
+Kiedy używać:
 
-Ten filtr działa na głównych grupach pakietów APRS.
+- do rozdzielenia ruchu klubowego, testowego albo technicznego,
+- do blokowania znanych źródeł zakłócających ruch.
 
-Obsługiwane grupy:
+### `Filtr typu pakietu`
+
+Ten filtr działa na grupie pakietu APRS.
+
+Do wpisania używa się dokładnie takich wartości:
 
 - `position`,
 - `object`,
@@ -141,97 +331,162 @@ Obsługiwane grupy:
 - `telemetry`,
 - `query`.
 
-Użycie:
+Znaczenie praktyczne:
 
-- gdy chcesz osobno traktować pozycje, wiadomości, pogodę albo obiekty,
-- gdy jedna reguła ma obsługiwać tylko wybraną klasę ruchu.
+- `message` obejmuje także ACK/REJ, bulletin i announcement,
+- `weather` dotyczy ramek weather-only,
+- pozycja z danymi pogody nadal liczy się jako `position`.
 
-### `Icon Filter`
+Kiedy używać:
 
-Ten filtr działa na symbolu APRS.
+- gdy chcesz osobno traktować wiadomości, obiekty, pozycje albo pogodę,
+- gdy jedna ścieżka ma dotyczyć tylko jednego rodzaju ruchu.
 
-Użycie:
+### `Filtr ikon`
 
-- do przepuszczania albo blokowania konkretnych ikon,
-- do tworzenia osobnych tras na przykład dla stacji mobilnych, pogodowych albo obiektów specjalnych.
+Ten filtr działa na symbolu APRS zapisanym w postaci `table+code`.
 
-### `Distance Filter`
+Przykłady wpisów:
+
+- `/>`,
+- `\\l`.
+
+Kiedy używać:
+
+- gdy chcesz osobno obsłużyć określone klasy obiektów albo stacji,
+- gdy symbol ma być ważniejszy niż sam typ pakietu.
+
+### `Filtr odległości`
 
 Ten filtr przepuszcza pakiet tylko wtedy, gdy jego pozycja mieści się w jednej z zadanych stref.
 
-Właściwości:
+Jak działa:
 
-- można zdefiniować od 1 do 3 stref,
+- można ustawić od 1 do 3 stref,
 - każda strefa ma środek i promień,
-- pakiet bez dekodowalnej pozycji nie jest przez ten filtr odrzucany automatycznie.
+- strefy działają w logice OR,
+- pakiety bez dekodowalnej pozycji nie są przez ten filtr automatycznie odrzucane.
 
-Użycie:
+Kiedy używać:
 
-- do ograniczania ruchu do wybranego obszaru,
-- do tworzenia lokalnych stref digi albo bramkowania.
+- gdy chcesz ograniczyć ruch do wybranego obszaru,
+- gdy chcesz zrobić lokalne reguły tylko dla określonej okolicy.
 
-### `Rate Limit Filter`
+### `Filtr limitu tempa`
 
-Ten filtr ogranicza, jak często pakiety od danego znaku albo wzorca znaku mogą przejść dalej.
+Ten filtr ogranicza częstotliwość przepuszczania ramek od konkretnego znaku albo wzorca.
 
-Zasada działania:
+Format reguły:
 
-- dla każdej reguły zliczany jest czas od ostatnio przepuszczonego pakietu,
-- kolejny pakiet z tego samego dopasowania przed upływem limitu zostaje zablokowany.
+```text
+CALL_OR_PATTERN - LIMIT
+```
 
-Użycie:
+Przykłady:
 
-- do uspokajania bardzo aktywnych stacji,
-- do ochrony kanału RF przed nadmiarem powtarzanych ramek,
-- do łagodnego ograniczania ruchu bez całkowitego odcinania źródła.
+```text
+SQ9MDD-7 - 30s
+SQ2IDB* - 10s
+* - 20s
+```
+
+Jak działa:
+
+- dla każdego dopasowania liczony jest czas od ostatnio przepuszczonej ramki,
+- kolejna ramka przed upływem limitu zostanie zablokowana.
+
+Kiedy używać:
+
+- gdy bardzo aktywne stacje generują zbyt dużo ruchu,
+- gdy chcesz ochronić ścieżkę RF bez całkowitego blokowania źródła.
 
 ## Bloki docelowe
 
 ### `TX RF`
 
-Cel nadający pakiet przez wskazany modem radiowy.
+To cel nadający pakiet przez wskazany modem radiowy.
 
-Użycie:
+Używaj go:
 
-- lokalny digi,
-- cross-band,
-- przekazywanie między portami RF.
+- dla digi,
+- dla cross-band,
+- dla przekazywania między portami RF.
+
+Typowy schemat:
+
+```text
+Odbiornik RF -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
+```
 
 ### `TX APRS-IS`
 
-Cel wysyłający pakiet do APRS-IS.
+To cel wysyłający pakiet do APRS-IS.
 
-Użycie:
+Używaj go:
 
-- iGate,
-- przekazanie lokalnych ramek aplikacji do Internetu APRS.
+- dla iGate,
+- dla lokalnie generowanych ramek APRSBox kierowanych do Internetu APRS.
 
-Ten cel jest ograniczony systemowo do obowiązkowego `Strict Filter`.
+Najważniejsze ograniczenie:
+
+- ten cel zawsze utrzymuje obowiązkowy `Filtr ścisły`.
 
 ### `Black Hole`
 
-Cel zapisujący przebieg bez nadawania pakietu dalej.
+To cel diagnostyczny. Pakiet kończy na nim przebieg, ale nie jest nadawany dalej.
 
-Użycie:
+Używaj go:
 
-- diagnostyka,
-- testy,
-- obserwacja działania filtrów.
+- do testów,
+- do obserwacji ruchu,
+- do sprawdzania działania filtrów przed uruchomieniem emisji.
 
 ## Ograniczenia edytora
 
 - Reguła ma zawsze jedno źródło i jeden cel.
 - `Local TX` może prowadzić tylko do `TX APRS-IS` albo `Black Hole`.
-- `TX APRS-IS` utrzymuje obowiązkowy `Strict Filter`.
-- `TX RF` wymaga aktywnego `Path rule and DIGI guard`.
-- `Duplicate Filter` może wystąpić tylko raz.
-- `Distance Filter` może wystąpić tylko raz.
-- `Rate Limit Filter` jest przeznaczony dla ścieżek kończących się na `TX RF`.
+- `TX APRS-IS` utrzymuje obowiązkowy `Filtr ścisły`.
+- `TX RF` wymaga aktywnej `Reguły ścieżki i ochrony DIGI`.
+- `Filtr duplikatów` może wystąpić tylko raz.
+- `Filtr odległości` może wystąpić tylko raz.
+- `Filtr limitu tempa` jest przeznaczony dla ścieżek kończących się na `TX RF`.
 
-## Dobre praktyki budowy reguł
+## Gotowe szkice reguł
 
-- Najpierw ustal źródło i cel, dopiero potem dodawaj filtry.
-- Dla `RF -> RF` myśl najpierw o ochronie kanału, a dopiero potem o zasięgu.
-- Dla `RF -> APRS-IS` pilnuj, żeby do Internetu trafiał tylko ruch, który rzeczywiście powinien tam wejść.
-- Przy testach zaczynaj od `Black Hole`, aby zobaczyć przebieg bez emisji.
-- Po zapisaniu sprawdzaj log wykonania reguły, bo pokazuje dokładnie, na którym kroku pakiet został przepuszczony albo odrzucony.
+### Prosty iGate RF
+
+```text
+Odbiornik RF -> Filtr ścisły -> TX APRS-IS
+```
+
+### Klasyczny digi RF
+
+```text
+Odbiornik RF -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
+```
+
+### Digi tylko dla stacji direct
+
+```text
+Odbiornik RF -> Tylko direct -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
+```
+
+### Ruch lokalnie generowany do APRS-IS
+
+```text
+Local TX -> Filtr ścisły -> TX APRS-IS
+```
+
+### Diagnostyka bez nadawania
+
+```text
+Odbiornik RF -> Black Hole
+```
+
+## Dobre praktyki
+
+- Najpierw wybierz źródło i cel, dopiero potem buduj warunki.
+- Przy `TX RF` myśl najpierw o ochronie kanału, dopiero potem o zasięgu.
+- Przy `TX APRS-IS` pilnuj, żeby do Internetu wchodził tylko sensowny ruch.
+- Na etapie testów zaczynaj od `Black Hole`.
+- Po zapisaniu patrz w log wykonania reguły, bo pokazuje dokładnie, który krok przepuścił albo odrzucił pakiet.

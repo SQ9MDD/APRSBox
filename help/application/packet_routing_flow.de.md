@@ -1,134 +1,326 @@
-# Detaillierte Beschreibung der Routing-Blocke
+# Packet-Routing-Regeln
 
-Dieses Dokument beschreibt die Blocke im Editor fur eine einzelne Routing-Regel. Jede Regel hat eine Quelle, null oder mehr Filter in der Mitte und ein Ziel.
+Dies ist die vollstandige Hilfedatei fur `Packet Routing` und `Packet Flow`. Sie beschreibt den Zweck des Bildschirms, typische Anwendungsfalle, die Reihenfolge der Regel, die Filter- und Zielblocke sowie fertige Regelskizzen.
 
-## Wie eine Regel ausgewertet wird
+## Was dieser Bildschirm macht
 
-Pakete laufen von oben nach unten durch die Regel.
+Eine Routing-Regel legt fest, was APRSBox mit einem Paket tun soll, nachdem es empfangen oder lokal erzeugt wurde.
 
-1. Das Paket kommt aus der Quelle.
-2. Es durchlauft jeden Filter- oder Regelblock der Reihe nach.
-3. Wenn ein Block das Paket ablehnt, werden die folgenden Schritte nicht mehr ausgefuhrt.
-4. Wenn das Paket alle Schritte passiert, erreicht es das Ziel.
+Jede Regel hat:
+
+- eine Quelle,
+- null oder mehr Filter- oder Regelblocke in der Mitte,
+- ein finales Ziel.
+
+Pakete laufen immer von oben nach unten. Wenn ein Block das Paket ablehnt, werden die folgenden Schritte nicht mehr ausgefuhrt.
+
+## Wie man eine Regel liest und aufbaut
+
+Die einfachste Denkweise fur eine Regel ist:
+
+1. Wo das Paket eintritt.
+2. Welche Bedingungen es erfullen muss.
+3. Wo es enden soll.
+
+Empfohlene Reihenfolge:
+
+1. Quelle auswahlen.
+2. Ziel auswahlen.
+3. Nur die wirklich benotigten Filter hinzufugen.
+4. Regel speichern und das Ausfuhrungsprotokoll ansehen.
+
+## Haufige Anwendungsfalle
+
+### `Empfänger RF -> TX APRS-IS`
+
+Das ist der klassische iGate-Pfad.
+
+Minimale Form:
+
+```text
+Empfänger RF -> Strenger Filter -> TX APRS-IS
+```
+
+Verwende ihn, wenn:
+
+- lokal gehorter RF-Verkehr an APRS-IS weitergeleitet werden soll,
+- verschiedene RF-Ports unterschiedliche Uplink-Regeln haben sollen,
+- RF-Eingang und lokal erzeugter Verkehr getrennt bleiben sollen.
+
+Wichtige Hinweise:
+
+- `Strenger Filter` ist verpflichtend,
+- nicht jedes per RF empfangene Paket soll zu APRS-IS gehen,
+- das ist ein Uplink-Pfad, kein Digi-Pfad.
+
+### `Empfänger RF -> TX RF`
+
+Das ist der klassische Digipeater-Pfad.
+
+Minimale Form:
+
+```text
+Empfänger RF -> Pfadregel und DIGI-Schutz -> TX RF
+```
+
+Haufigere Form:
+
+```text
+Empfänger RF -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> TX RF
+```
+
+Verwende ihn, wenn:
+
+- APRS-Verkehr per RF wiederholt werden soll,
+- du ein lokales Digi aufbaust,
+- du Cross-Band oder RF-Port-zu-Port-Weiterleitung willst,
+- nur ausgewahlte Verkehrsarten nach zusatzlichen Filtern weiterlaufen sollen.
+
+Wichtige Hinweise:
+
+- `Pfadregel und DIGI-Schutz` ist verpflichtend,
+- `Duplikatfilter (viscous-delay)` ist oft ein sinnvoller erster Schritt,
+- auf diesem Pfad ist Kanalschutz besonders wichtig.
+
+### `Local TX -> TX APRS-IS`
+
+Dieser Pfad ist fur Frames gedacht, die APRSBox selbst erzeugt.
+
+Form:
+
+```text
+Local TX -> Strenger Filter -> TX APRS-IS
+```
+
+Verwende ihn, wenn:
+
+- Beacons, Status, Wetter, Objekte, Bulletins oder Nachrichten zu APRS-IS gehen sollen,
+- lokal erzeugter Anwendungsverkehr einen Internet-Uplink braucht.
+
+Wichtige Hinweise:
+
+- `Local TX` ist kein per RF empfangener Verkehr,
+- es ist ein eigener interner Strom,
+- `Strenger Filter` bleibt verpflichtend.
+
+### `Empfänger RF -> Black Hole`
+
+Das ist ein Test- und Diagnosepfad.
+
+Formen:
+
+```text
+Empfänger RF -> Black Hole
+```
+
+oder:
+
+```text
+Empfänger RF -> Nur direkt -> Black Hole
+```
+
+Verwende ihn, wenn:
+
+- du Filter ohne Weiterleitung testen willst,
+- du einen bestimmten RF-Port beobachten willst,
+- du eine Regel vor dem Aktivieren von TX RF oder TX APRS-IS pruefen willst.
+
+### `Local TX -> Black Hole`
+
+Das ist ein Diagnosepfad fur intern erzeugten Verkehr.
+
+Verwende ihn, wenn:
+
+- du sehen willst, was APRSBox selbst erzeugt,
+- du Objekte, Status, Wetter oder Bulletins ohne Weiterleitung testen willst.
 
 ## Quellblocke
 
-### `Receiver RF`
+### `Empfänger RF`
 
-Eingang fur Pakete, die von einem bestimmten Funkmodem empfangen wurden.
+Dies ist die Quelle fur Pakete, die vom gewahlten Funkmodem empfangen wurden.
 
-Verwende ihn, wenn die Regel eingehenden RF-Verkehr behandeln soll.
+Verwende sie, wenn:
+
+- die Regel auf Verkehr aus der Luft reagieren soll,
+- mehrere RF-Empfanger getrennte Routing-Logik brauchen.
+
+In der Praxis:
+
+- jede Regel `Empfänger RF -> ...` beginnt hier,
+- das gewahlte Modem bestimmt, welcher Eingang uberhaupt in die Regel gelangen kann.
 
 ### `Local TX`
 
-Eingang fur Frames, die APRSBox lokal selbst erzeugt.
+Dies ist die Quelle fur Frames, die APRSBox lokal selbst erzeugt.
 
 Dazu gehoren:
 
 - Beacons,
-- Status,
+- Statuspakete,
 - Wetter,
 - Objekte,
 - Items,
 - Bulletins,
 - Nachrichten.
 
-Nicht dazu gehoren per RF empfangene oder bereits digipeatete Frames.
+Nicht dazu gehoren:
+
+- per RF empfangener Verkehr,
+- bereits digipeateter Verkehr,
+- normaler Eingangsverkehr vom TNC.
+
+In der Praxis:
+
+- das ist der interne Sendestrom der Anwendung,
+- `Local TX` darf nur zu `TX APRS-IS` oder `Black Hole` fuhren.
 
 ## Filter- und Regelblocke
 
-### `Strict Filter`
+### `Strenger Filter`
 
-Das ist der Systemsicherheitsfilter fur Regeln mit APRS-IS als Ziel.
+Dies ist der Systemsicherheitsblock fur Regeln, die in `TX APRS-IS` enden.
 
 Er:
 
 - lehnt Pakete mit `TCPIP` oder `TCPXX` ab,
 - lehnt Pakete mit `NOGATE` oder `RFONLY` ab,
 - validiert Third-Party-Frames,
-- blockiert fehlerhafte aussere oder innere Pfade.
+- validiert den ausseren und inneren Pfad von Third-Party-Verkehr,
+- halt unpassenden Verkehr von APRS-IS fern.
 
 Verwende ihn:
 
-- als verpflichtenden Schutz fur `TX APRS-IS`,
-- um APRS-IS-Weiterleitung sicher und regelkonform zu halten.
+- immer mit `TX APRS-IS`,
+- niemals als Ersatz fur die Pfadlogik eines RF-Digis.
 
-### `Path rule and DIGI guard`
+Typische Anwendungsfalle:
 
-Das ist der zentrale Block fur `RF -> RF`-Regeln.
+- `Empfänger RF -> Strenger Filter -> TX APRS-IS`,
+- `Local TX -> Strenger Filter -> TX APRS-IS`.
+
+### `Pfadregel und DIGI-Schutz`
+
+Dies ist der wichtigste Block fur Flows, die in `TX RF` enden.
 
 Er:
 
 - analysiert den Digi-Pfad,
 - entscheidet, ob die lokale Station das Paket noch wiederholen soll,
-- blockiert lokal adressierte Nachrichten und Anfragen,
+- blockiert lokal adressierte APRS-Nachrichten und Anfragen,
 - blockiert Third-Party-Verkehr, der nicht wiederholt werden soll,
-- blockiert Frames, die von dieser Station bereits wiederholt wurden.
+- blockiert Frames, die von derselben lokalen Station bereits wiederholt wurden.
 
-Verwende ihn:
+Warum er verpflichtend ist:
 
-- in jeder RF-Wiederholregel,
-- als Kernblock fur Digi-Verhalten und Pfadsteuerung.
+- ohne diesen Block hat eine RF-Regel keinen grundlegenden Digi-Schutz,
+- dieser Block stellt die zentrale Pfadlogik fur sicheres Wiederholen im Funk bereit.
 
-### `Duplicate Filter (viscous-delay)`
+Konfigurationsfelder:
 
-Dieser Block offnet ein kurzes Horfenster und pruft, ob ein anderes Digi denselben Frame bereits wiederholt hat.
+- `Paths (TRACE / traced)`:
+  Aliase oder explizite Hops, die verbraucht werden sollen und dabei das lokale Digi-Rufzeichen in den Pfad eintragen.
+- `Paths (NO TRACE / not traced)`:
+  Aliase oder explizite Hops, die verbraucht werden sollen, ohne das lokale Digi-Rufzeichen einzutragen.
 
-Wenn ja:
+In der Praxis:
 
-- wird das Paket verworfen.
+- `WIDE1-1` wird oft als traced konfiguriert,
+- die no-trace-Liste hangt von der lokalen Netzpolitik ab,
+- dieser Block sitzt meist nahe am Ende der Kette, direkt vor `TX RF`.
 
-Wenn nein:
+Typische Form:
 
-- lauft das Paket nach Ablauf des Fensters weiter.
+```text
+Empfänger RF -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> TX RF
+```
 
-Verwende ihn:
+### `Duplikatfilter (viscous-delay)`
 
-- in RF-Digi-Pfaden, wenn Doppelungen reduziert werden sollen,
-- als ersten Filter in einer typischen RF-Regel.
+Dieser Block offnet ein kurzes Horfenster, sobald der Frame in den Flow eintritt.
 
-### `Direct Only`
+Er:
 
-Lasst nur direkt gehorte Pakete ohne bereits verbrauchten Digi-Hop durch.
+- wartet wahrend des konfigurierten Fensters,
+- pruft, ob ein anderes Digi denselben Frame bereits wiederholt hat,
+- verwirft den Frame bei erkannter Doppelwiederholung,
+- lasst den Frame weiterlaufen, wenn keine Doppelwiederholung gehort wurde.
 
-Verwende ihn:
+Wichtiges Verhalten:
 
-- wenn die Regel nur auf lokal gehorte Stationen reagieren soll,
-- wenn bereits wiederholter Verkehr ignoriert werden soll.
+- er darf nur einmal vorkommen,
+- er sollte der erste Filter in einem RF-Wiederholpfad sein,
+- er ist besonders nutzlich in klassischen Digi-Regeln.
 
-### `DIGI Filter`
+Verwende ihn, wenn:
 
-Prugt, welche Digipeater bereits im verbrauchten Pfad auftauchen.
+- doppelte Wiederholungen reduziert werden sollen,
+- mehrere Digis dieselbe Quellstation horen konnen.
 
-Modi:
+### `Nur direkt`
 
+Dieser Filter lasst nur direkt gehorte Pakete durch.
+
+Das bedeutet:
+
+- der Pfad darf keinen bereits verbrauchten Digi-Hop enthalten,
+- wenn der Pfad verbrauchte Elemente mit `*` enthalt, wird der Frame abgelehnt.
+
+Verwende ihn, wenn:
+
+- die Regel nur auf lokal direkt gehorte Stationen reagieren soll,
+- bereits wiederholter Verkehr ignoriert werden soll,
+- du die Direktabdeckung getrennt untersuchen willst.
+
+### `DIGI-Filter`
+
+Dieser Filter untersucht verbrauchte Digi-Hops im Pfad.
+
+So arbeitet er:
+
+- er vergleicht nur bereits verbrauchte Hops,
+- Muster unterstutzen `*`,
 - `allow` lasst nur passende Pakete durch,
 - `deny` lehnt passende Pakete ab.
 
-Verwende ihn:
+Beispiele:
 
-- um nur Verkehr aus bestimmten Digi-Ketten zu akzeptieren,
-- um Pakete zu blockieren, die bereits uber bestimmte Digis gelaufen sind.
+- `SR5ABC`,
+- `SR5*`,
+- `*`.
 
-### `Callsign Filter`
+Verwende ihn, wenn:
 
-Vergleicht das Quellrufzeichen des Pakets.
+- nur Verkehr aus bestimmten Digi-Ketten passieren soll,
+- Verkehr uber bestimmte Digis ausgeschlossen werden soll.
 
-Modi:
+### `Rufzeichenfilter`
 
-- `allow` lasst nur passende Rufzeichen durch,
-- `deny` lehnt passende Rufzeichen ab.
+Dieser Filter vergleicht das Quellrufzeichen.
 
-Verwende ihn:
+So arbeitet er:
 
-- fur Allowlists und Blocklists,
-- um Club-, Service- oder Testverkehr zu trennen.
+- er arbeitet auf dem Quellrufzeichen des Pakets,
+- er unterstutzt Wildcard `*`,
+- `allow` funktioniert wie eine Allowlist,
+- `deny` funktioniert wie eine Blocklist.
 
-### `Packet Type Filter`
+Beispiele:
 
-Arbeitet mit den wichtigsten APRS-Paketgruppen.
+- `SQ9MDD`,
+- `SQ9MDD*`,
+- `SP*`.
 
-Unterstutzte Gruppen:
+Verwende ihn, wenn:
+
+- Club-, Test-, Service- oder Operatorverkehr getrennt werden soll,
+- eine bekannte Quelle blockiert oder isoliert werden soll.
+
+### `Pakettypfilter`
+
+Dieser Filter arbeitet auf APRS-Paketgruppen.
+
+Erwartete Werte:
 
 - `position`,
 - `object`,
@@ -139,97 +331,162 @@ Unterstutzte Gruppen:
 - `telemetry`,
 - `query`.
 
-Verwende ihn:
+Praktische Bedeutung:
 
-- um Positionen, Nachrichten, Wetter oder Objekte unterschiedlich zu behandeln,
-- um eine Regel auf eine Verkehrsklasse zu beschranken.
+- `message` umfasst auch ACK/REJ, bulletin und announcement,
+- `weather` bedeutet weather-only-Frames,
+- eine Position mit Wetterdaten zahlt weiterhin als `position`.
 
-### `Icon Filter`
+Verwende ihn, wenn:
 
-Vergleicht das APRS-Symbol.
+- Positionen, Objekte, Nachrichten oder Wetter getrennt geroutet werden sollen,
+- eine Regel auf eine Verkehrsklasse begrenzt bleiben soll.
 
-Verwende ihn:
+### `Symbolfilter`
 
-- um bestimmte Symboltypen zuzulassen oder zu blockieren,
-- um getrennte Wege fur mobilen, Wetter- oder Spezialobjekt-Verkehr zu bauen.
+Dieser Filter vergleicht das APRS-Symbol im Format `table+code`.
 
-### `Distance Filter`
+Beispiele:
 
-Lasst ein Paket nur dann durch, wenn seine decodierte Position in mindestens einer konfigurierten Zone liegt.
+- `/>`,
+- `\\l`.
 
-Eigenschaften:
+Verwende ihn, wenn:
+
+- bestimmte Symbolklassen einen eigenen Pfad bekommen sollen,
+- die Symbolbedeutung wichtiger ist als der Pakettyp.
+
+### `Distanzfilter`
+
+Dieser Filter lasst ein Paket nur durch, wenn seine decodierte Position in mindestens einer konfigurierten Zone liegt.
+
+So arbeitet er:
 
 - es konnen 1 bis 3 Zonen definiert werden,
 - jede Zone hat Mittelpunkt und Radius,
-- Pakete ohne decodierbare Position werden von diesem Filter nicht automatisch abgelehnt.
+- die Zonen arbeiten mit OR-Logik,
+- Pakete ohne decodierbare Position werden nicht automatisch abgelehnt.
 
-Verwende ihn:
+Verwende ihn, wenn:
 
-- um Verkehr auf einen geografischen Bereich zu begrenzen,
-- um lokale Digi- oder Gate-Zonen aufzubauen.
+- Verkehr auf ein geografisches Gebiet begrenzt werden soll,
+- lokales Routing von Abdeckung oder Veranstaltungsgebiet abhangen soll.
 
-### `Rate Limit Filter`
+### `Ratenbegrenzungsfilter`
 
-Begrenzt, wie oft Pakete eines Rufzeichens oder Rufzeichenmusters weiterlaufen durfen.
+Dieser Filter begrenzt, wie oft Pakete eines Rufzeichens oder Rufzeichenmusters weiterlaufen durfen.
 
-Er:
+Regelformat:
 
-- misst die Zeit seit dem zuletzt durchgelassenen Paket fur jede passende Regel,
-- blockiert das nachste Paket, wenn es vor Ablauf des Limits eintrifft.
+```text
+CALL_OR_PATTERN - LIMIT
+```
 
-Verwende ihn:
+Beispiele:
 
-- um sehr aktive Stationen zu beruhigen,
-- um RF vor wiederholten Bursts zu schutzen,
-- um Verkehr zu reduzieren, ohne eine Quelle komplett zu sperren.
+```text
+SQ9MDD-7 - 30s
+SQ2IDB* - 10s
+* - 20s
+```
+
+So arbeitet er:
+
+- er misst die Zeit seit dem zuletzt durchgelassenen Frame pro passendem Muster,
+- er blockiert den nachsten Frame, wenn er vor Ablauf des Limits ankommt.
+
+Verwende ihn, wenn:
+
+- sehr aktive Stationen zu viel Verkehr erzeugen,
+- ein RF-Pfad sanfte Verkehrsbegrenzung ohne Komplettsperre braucht.
 
 ## Zielblocke
 
 ### `TX RF`
 
-Sendet das Paket uber das gewahlte Funkmodem.
+Dieses Ziel sendet das Paket uber das gewahlte Funkmodem.
 
-Verwende ihn fur:
+Verwende es fur:
 
 - lokale Digi-Pfade,
 - Cross-Band,
 - RF-Port-zu-Port-Weiterleitung.
 
+Typische Form:
+
+```text
+Empfänger RF -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> TX RF
+```
+
 ### `TX APRS-IS`
 
-Sendet das Paket zu APRS-IS.
+Dieses Ziel sendet das Paket zu APRS-IS.
 
-Verwende ihn fur:
+Verwende es fur:
 
 - iGate-Uplink,
-- Weiterleitung lokal erzeugten Anwendungsverkehrs zu APRS-IS.
+- lokal von APRSBox erzeugten Verkehr, der APRS-IS erreichen soll.
 
-Dieses Ziel ist systemseitig auf den verpflichtenden `Strict Filter` beschrankt.
+Wichtige Einschränkung:
+
+- dieses Ziel behalt immer den verpflichtenden `Strengen Filter`.
 
 ### `Black Hole`
 
-Protokolliert die Ausfuhrung, ohne das Paket weiterzuleiten.
+Dies ist ein Diagnoseziel. Das Paket endet dort und wird nicht weitergeleitet.
 
-Verwende ihn fur:
+Verwende es fur:
 
-- Diagnose,
 - Tests,
-- Beobachtung des Filterverhaltens.
+- Verkehrsbeobachtung,
+- Validierung von Filtern vor dem Aktivieren der Aussendung.
 
 ## Einschränkungen des Editors
 
 - Eine Regel hat immer genau eine Quelle und ein Ziel.
 - `Local TX` darf nur zu `TX APRS-IS` oder `Black Hole` fuhren.
-- `TX APRS-IS` behalt immer den verpflichtenden `Strict Filter`.
-- `TX RF` erfordert einen aktiven `Path rule and DIGI guard`.
-- `Duplicate Filter` darf nur einmal vorkommen.
-- `Distance Filter` darf nur einmal vorkommen.
-- `Rate Limit Filter` ist fur Flows gedacht, die mit `TX RF` enden.
+- `TX APRS-IS` behalt immer den verpflichtenden `Strengen Filter`.
+- `TX RF` erfordert eine aktive `Pfadregel und DIGI-Schutz`.
+- `Duplikatfilter (viscous-delay)` darf nur einmal vorkommen.
+- `Distanzfilter` darf nur einmal vorkommen.
+- `Ratenbegrenzungsfilter` ist fur Flows gedacht, die mit `TX RF` enden.
+
+## Fertige Regelskizzen
+
+### Einfaches RF-iGate
+
+```text
+Empfänger RF -> Strenger Filter -> TX APRS-IS
+```
+
+### Klassisches RF-Digi
+
+```text
+Empfänger RF -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> TX RF
+```
+
+### Digi nur fur direkt gehorte Stationen
+
+```text
+Empfänger RF -> Nur direkt -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> TX RF
+```
+
+### Lokal erzeugter Verkehr zu APRS-IS
+
+```text
+Local TX -> Strenger Filter -> TX APRS-IS
+```
+
+### Diagnose ohne Weiterleitung
+
+```text
+Empfänger RF -> Black Hole
+```
 
 ## Gute Praxis
 
-- Wähle zuerst Quelle und Ziel, danach die Filter.
-- Bei `RF -> RF` sollte Kanalschutz vor Reichweite kommen.
-- Bei `RF -> APRS-IS` sollte nur passender Verkehr auf die Internet-Seite gelangen.
-- Starte Tests mit `Black Hole`, wenn du die Logik ohne Aussendung prufen willst.
-- Nach dem Speichern hilft das Ausfuhrungsprotokoll dabei, genau zu sehen, an welchem Schritt ein Paket passiert oder abgelehnt wurde.
+- Wähle zuerst Quelle und Ziel, danach die Bedingungen.
+- Bei `TX RF` sollte Kanalschutz vor Reichweite kommen.
+- Bei `TX APRS-IS` sollte nur passender Verkehr auf die Internet-Seite gelangen.
+- Fur Tests beginne mit `Black Hole`.
+- Nach dem Speichern zeigt das Ausfuhrungsprotokoll genau, welcher Schritt ein Paket durchgelassen oder abgelehnt hat.
