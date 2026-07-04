@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 <section class="panel">
     <div class="panel-body">
@@ -7,11 +11,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("Configured Packet Routing Flows") }}</h2>
             </div>
-            <div class="form-actions">
-                {% if can_edit %}
-                <a href="{{ request.scope.root_path }}/digi-flows/new" class="button">{{ t("New routing flow") }}</a>
-                {% endif %}
-            </div>
+            <button
+                class="help-icon-button"
+                type="button"
+                data-help-page="application/packet_routing"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
@@ -141,6 +149,13 @@
                 </tbody>
             </table>
         </div>
+        {% if can_edit %}
+        <div class="form-actions">
+            <a href="{{ request.scope.root_path }}/digi-flows/new" class="button">{{ t("New routing flow") }}</a>
+        </div>
+        {% endif %}
     </div>
 </section>
+{% include "partials/help_modal.html" %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endblock %}
