@@ -8,8 +8,6 @@ import json
 import math
 import re
 import sqlite3
-import subprocess
-from shutil import which
 import time
 from typing import Any
 from urllib.parse import quote
@@ -56,19 +54,6 @@ from app.services.tx_scope import (
 )
 from app.sections import SECTION_DEFINITIONS
 
-
-WORKER_DEFINITIONS = (
-    {
-        "label": "aprs-core",
-        "service_names": ("aprsbox-core", "aprs-core"),
-        "process_patterns": ("aprsbox-core", "aprs-core", "aprsbox-core-placeholder.sh"),
-    },
-    {
-        "label": "aprs-web",
-        "service_names": ("aprsbox-web", "aprs-web"),
-        "process_patterns": ("aprsbox-web", "aprs-web", "app.main:app"),
-    },
-)
 
 STATION_SNAPSHOT_ROW_LIMIT_FACTOR = 40
 STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
@@ -625,10 +610,6 @@ def recent_station_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
         item["display_time"] = item.get("sent_at") or item.get("started_at") or item.get("scheduled_at") or ""
         jobs.append(item)
     return jobs
-
-
-def recent_beacon_jobs(limit: int = 20) -> list[dict[str, Any]]:
-    return recent_station_outbound_jobs(limit=limit)
 
 
 def recent_object_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
@@ -1308,16 +1289,6 @@ def _format_monitor_timestamp(timestamp: str | None) -> str:
         return "-"
     formatted = format_display_datetime(timestamp)
     return formatted or "-"
-
-
-def dashboard_summary() -> dict[str, Any]:
-    metrics: dict[str, Any] = {}
-    for slug, definition in SECTION_DEFINITIONS.items():
-        row = fetch_one(f"SELECT COUNT(*) AS total FROM {definition.table_name}")
-        metrics[slug] = row["total"] if row else 0
-    metrics["users"] = fetch_one("SELECT COUNT(*) AS total FROM users")["total"]
-    metrics["logs"] = fetch_one("SELECT COUNT(*) AS total FROM event_logs")["total"]
-    return metrics
 
 
 def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -4015,97 +3986,6 @@ def _aprs_symbol_icon_path(symbol: str) -> str:
 
 def get_aprs_symbol_icon_path(symbol: str) -> str:
     return _aprs_symbol_icon_path(symbol)
-
-
-def _status_from_openrc(service_name: str) -> dict[str, str] | None:
-    if which("rc-service") is None:
-        return None
-    try:
-        result = subprocess.run(
-            ["rc-service", service_name, "status"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=2,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-    output = " ".join(part.strip() for part in (result.stdout, result.stderr) if part.strip()).lower()
-    if "does not exist" in output or "not found" in output:
-        return None
-    if result.returncode == 0 or "started" in output:
-        return {"state": "running", "detail": "OpenRC service is running", "source": f"OpenRC ({service_name})"}
-    if "stopped" in output or "inactive" in output:
-        return {"state": "stopped", "detail": "OpenRC service is stopped", "source": f"OpenRC ({service_name})"}
-    if "crashed" in output or "failed" in output:
-        return {"state": "stopped", "detail": "OpenRC service reported a failure", "source": f"OpenRC ({service_name})"}
-    return None
-
-
-def _status_from_process_scan(worker_label: str, process_patterns: tuple[str, ...]) -> dict[str, str]:
-    if which("ps") is None:
-        return {
-            "state": "unknown",
-            "detail": "Neither OpenRC nor process listing is available",
-            "source": worker_label,
-        }
-
-    try:
-        result = subprocess.run(
-            ["ps", "-eo", "pid=,args="],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=2,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return {
-            "state": "unknown",
-            "detail": "Process listing failed",
-            "source": worker_label,
-        }
-
-    matches: list[str] = []
-    patterns = tuple(pattern.lower() for pattern in process_patterns)
-    for line in result.stdout.splitlines():
-        normalized = line.lower()
-        if any(pattern in normalized for pattern in patterns):
-            matches.append(line.strip())
-
-    if matches:
-        return {
-            "state": "running",
-            "detail": f"Matched {len(matches)} process{'es' if len(matches) != 1 else ''}",
-            "source": "Process scan",
-        }
-
-    return {
-        "state": "stopped",
-        "detail": "No matching process found",
-        "source": "Process scan",
-    }
-
-
-def worker_statuses() -> list[dict[str, str]]:
-    statuses: list[dict[str, str]] = []
-    for worker in WORKER_DEFINITIONS:
-        status: dict[str, str] | None = None
-        for service_name in worker["service_names"]:
-            status = _status_from_openrc(service_name)
-            if status is not None:
-                break
-        if status is None:
-            status = _status_from_process_scan(worker["label"], worker["process_patterns"])
-        statuses.append(
-            {
-                "label": worker["label"],
-                "state": status["state"],
-                "detail": status["detail"],
-                "source": status["source"],
-            }
-        )
-    return statuses
 
 
 def safe_create_section_row(slug: str, payload: dict[str, Any]) -> tuple[bool, str | None]:
