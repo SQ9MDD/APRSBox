@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <style>
     .field-counter-inline {
@@ -277,6 +278,15 @@
                 <div class="station-settings-group-header">
                     <h2>{{ t("Position Beacon") }}</h2>
                     <p class="section-lead">{{ t("Configure the APRS position beacon. Beacon comment stays part of the position frame.") }}</p>
+                    <button
+                        class="help-icon-button page-help-button"
+                        type="button"
+                        data-help-page="application/station"
+                        title="{{ t('Help') }}"
+                        aria-label="{{ t('Help') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+                    </button>
                 </div>
                 <div class="form-grid station-settings-subgrid">
                     <label>
@@ -662,9 +672,11 @@
         </div>
     </div>
 </section>
+{% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
