@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.50.dev - 2026-07-05
+- `Help / GUI / I18N`: vollstaendige lokale Markdown-Hilfedateien in `PL/EN/ES/DE` fuer `iGate settings`, `Notifications`, `Messages`, `WX`, `My Station` und `TNC` wurden hinzugefuegt, an das kontextuelle Hilfe-Icon angebunden und die Icon-Position in Seitenkoepfen vereinheitlicht.
+
 ## 1.8.49.dev - 2026-06-29
 - `Performance / runtime / SQLite`: Hot Paths fuer schwache Hardware wurden entlastet: Radar prueft `radar_enabled` jetzt vor der teuren Auswertung, das Cleanup von `traffic_frames` wurde aus dem RX-Hot-Path in ein Batch-Maintenance verschoben, kurze Caches fuer Traffic-/Stations-Snapshots und SQLite-Indizes fuer Outbound-/Messages-Hot-Paths wurden hinzugefuegt, der WX-Scheduler lagert blockierendes Refresh in einen Thread aus und die Seite `Messages` pollt `unread-status` nicht mehr doppelt.
 - `Map / erster Ladevorgang / Rendering`: der erste Kartenaufruf verwendet jetzt ein leichtes Marker-Payload (`stations-lite`), waehrend Stationsdetails und `mobile_tracks` erst nach dem ersten Render separat geladen werden; das Frontend aktualisiert Marker, PHG-Abdeckung und Tracks nun inkrementell statt per Full-Redraw, wodurch Punkte schneller sichtbar werden und das Overlay-Flackern verschwindet.

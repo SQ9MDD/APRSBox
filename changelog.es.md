@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.50.dev - 2026-07-05
+- `Ayuda / GUI / I18N`: se añadieron archivos locales completos de ayuda Markdown en `PL/EN/ES/DE` para `iGate settings`, `Notifications`, `Messages`, `WX`, `My Station` y `TNC`, se conectaron con el icono contextual de ayuda y se unifico su posicion en los encabezados de pagina.
+
 ## 1.8.49.dev - 2026-06-29
 - `Rendimiento / runtime / SQLite`: se aligeraron las rutas calientes para hardware modesto: radar ahora comprueba `radar_enabled` antes del calculo costoso, la limpieza de `traffic_frames` salio del hot path RX y paso al mantenimiento por lotes, se añadieron caches cortos para snapshots de traffic/stations, indices SQLite para consultas hot-path de outbound/messages, el scheduler WX mueve el refresh bloqueante a un hilo y la pagina `Messages` ya no consulta `unread-status` por duplicado.
 - `Map / primera carga / render`: la primera entrada al mapa usa ahora un payload ligero de marcadores (`stations-lite`), mientras que los detalles de estacion y `mobile_tracks` se cargan aparte despues del primer render; el frontend actualiza marcadores, cobertura PHG y tracks de forma incremental en lugar de un redraw completo, acortando la espera por los puntos visibles y eliminando el parpadeo de overlays.
