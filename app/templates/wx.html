@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 {% endblock %}
 
@@ -20,6 +21,15 @@
                 <h2>{{ t("Global WX configuration") }}</h2>
                 <p class="section-lead">{{ t("Prepare one WX identity for this APRSBox instance. Callsign is read from My Settings and only the WX SSID is selected here.") }}</p>
             </div>
+            <button
+                class="help-icon-button page-help-button"
+                type="button"
+                data-help-page="application/wx"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% set selected_wx_interface_id = '__ALL_ACTIVE__' if wx_config.beacon_tx_scope == 'all_active' else (wx_config.beacon_interface_id|string if wx_config.beacon_interface_id is not none else '') %}
         {% if can_edit %}
@@ -564,9 +574,11 @@
     </div>
 </section>
 {% endif %}
+{% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
