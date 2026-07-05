@@ -1613,6 +1613,15 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(conversation["messages"][0]["text"], "QSL")
             self.assertEqual(conversation["messages"][0]["delivery_state"], "queued")
 
+    def test_messages_template_includes_help_viewer(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/messages"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+        for language in ("pl", "en", "es", "de"):
+            self.assertTrue(Path(f"help/application/messages.{language}.md").exists())
+
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is required for template helper rendering tests")
     def test_sidebar_messages_icon_switches_when_inbox_has_unread_messages(self) -> None:
         with temporary_database():
