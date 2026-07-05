@@ -8,7 +8,6 @@
 
     const dialog = modal.querySelector(".help-viewer-dialog");
     const closeButtons = modal.querySelectorAll("[data-close-help-viewer]");
-    const helpButtons = document.querySelectorAll("[data-help-page]");
     const rootPath = String(modal.dataset.rootPath || "");
     const apiUrl = `${rootPath}/api/help`;
     const titleText = String(modal.dataset.titleText || "Help");
@@ -229,21 +228,24 @@
         }
     };
 
-    for (const button of helpButtons) {
-        button.addEventListener("click", () => {
-            const page = String(button.getAttribute("data-help-page") || "").trim();
-            if (!page) {
-                return;
-            }
-            void loadHelp({ page, language: currentLanguage() }, button);
-        });
-    }
-
     for (const button of closeButtons) {
         button.addEventListener("click", () => {
             closeModal();
         });
     }
+
+    document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target.closest("[data-help-page]") : null;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        const page = String(target.getAttribute("data-help-page") || "").trim();
+        if (!page) {
+            return;
+        }
+        event.preventDefault();
+        void loadHelp({ page, language: currentLanguage() }, target);
+    });
 
     modal.addEventListener("click", (event) => {
         if (event.target instanceof HTMLElement && event.target.hasAttribute("data-close-help-viewer")) {

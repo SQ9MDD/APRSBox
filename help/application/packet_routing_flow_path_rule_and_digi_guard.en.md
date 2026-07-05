@@ -1,0 +1,65 @@
+# Path rule and DIGI guard
+
+This is the key block for flows ending in `TX RF`. It performs DIGI protection first and path rewriting second.
+
+The guard part rejects:
+
+- third-party frames,
+- APRS messages addressed to local `My station`,
+- APRS queries addressed to local `My station`,
+- APRS messages addressed to local `WX station`,
+- APRS queries addressed to local `WX station`,
+- frames where the local station already appears as a consumed path hop such as `MYCALL-SSID*`.
+
+Only after that does it inspect path routing:
+
+- if the path is empty, the frame is rejected,
+- if all hops are already consumed, the frame is rejected,
+- only the first unconsumed hop is checked,
+- later hops are ignored until that first hop is handled.
+
+Configuration fields:
+
+- `Paths (TRACE / traced)`:
+  If the first unconsumed hop matches this list, APRSBox consumes it and inserts the local digi callsign from `My settings`.
+- `Paths (NO TRACE / not traced)`:
+  If the first unconsumed hop matches this list, the hop is only marked as consumed, without inserting the local digi callsign.
+
+What you can enter:
+
+- a full hop such as `WIDE1-1`, `WIDE2-1`, `WIDE2-2`, or `SP2-2`,
+- a family alias such as `WIDE`; then family members like `WIDE1-1` and `WIDE2-2` match.
+
+Typical rewrites:
+
+- TRACE `WIDE1-1` -> `MYCALL-SSID*`,
+- TRACE `WIDE2-1` -> `MYCALL-SSID*`,
+- TRACE `WIDE2-2` -> `MYCALL-SSID*,WIDE2-1`,
+- NO TRACE `WIDE2-2` -> `WIDE2-2*,WIDE2-1`,
+- NO TRACE `SP2-2` -> `SP2-2*,SP2-1`,
+- if the hop is not in `N-N` form, NO TRACE simply adds `*`.
+
+Typical starter entries:
+
+- `TRACE`: `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: your own `CALLSIGN-SSID` from `My settings` plus local exceptions allowed by network policy.
+
+Why your own callsign is often added to `NO TRACE`:
+
+- to consume packets addressed directly to your callsign without inserting it into path again,
+- to handle explicit local hops that should be non-traced.
+
+Important notes:
+
+- if TRACE matches but the local callsign is not configured, the frame is rejected,
+- if the first unconsumed hop matches neither TRACE nor NO TRACE, the frame is rejected.
+
+Typical layout:
+
+```text
+Receiver RF -> Duplicate Filter (viscous-delay) -> Path rule and DIGI guard -> TX RF
+```
+
+## Navigation
+
+[Back to Packet Flow rule reference](packet_routing_flow.en.md)

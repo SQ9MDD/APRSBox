@@ -479,6 +479,7 @@ class DigiFlowsTests(unittest.TestCase):
             type_meta = get_digi_flow_type_meta()
             self.assertEqual(type_meta["filter_path"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
+            self.assertEqual(type_meta["filter_path"]["help_page"], "application/packet_routing_flow_path_rule_and_digi_guard")
             self.assertIn("WIDE1-1", type_meta["filter_path"]["config_fields"][1]["help_lines"])
             self.assertEqual(type_meta["filter_direct_only"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_direct_only"]["runtime_label"], "Runtime")
@@ -492,6 +493,7 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_distance"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_rate_limit"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][0]["name"], "rate_limit_rules_text")
+            self.assertEqual(type_meta["action_log"]["help_page"], "application/packet_routing_flow_black_hole")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():

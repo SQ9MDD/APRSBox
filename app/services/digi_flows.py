@@ -74,6 +74,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Receiver RF",
         "badge": "Source",
         "description": "Receives packets from an RF input identifier.",
+        "help_page": "application/packet_routing_flow_receiver_rf",
         "config_fields": (
             {"name": "rf_port", "label": "RF Port / Radio", "type": "text", "required": True},
         ),
@@ -91,10 +92,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "source",
         "label": "Local TX",
         "badge": "Source",
-        "description": (
-            "Local TX includes only frames generated locally by APRSBox, such as beacons, status packets, weather, "
-            "objects, items, bulletins and messages. It does not include RF-received or digipeated frames."
-        ),
+        "description": "Carries only frames generated locally by APRSBox.",
+        "help_page": "application/packet_routing_flow_local_tx",
         "config_fields": (
             {"name": "local_tx_source", "label": "Local TX Source", "type": "text", "required": True},
         ),
@@ -103,12 +102,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Duplicate Filter (viscous-delay)",
         "badge": "Filter",
-        "description": (
-            "Opens a short listening window after receiving a frame. During this time it checks whether "
-            "the same frame was already repeated by another digipeater. If yes, the frame is dropped. "
-            "If not, it moves to the next step after the window expires. This filter can be used only once "
-            "and must be the first step in the flow."
-        ),
+        "description": "Waits a short viscous-delay window and drops the frame if another digi repeats it first.",
+        "help_page": "application/packet_routing_flow_duplicate_filter",
         "config_fields": (
             {
                 "name": "window_sec",
@@ -123,10 +118,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Path rule and DIGI guard",
         "badge": "Rule",
-        "description": (
-            "This mandatory block handles the DIGI path and blocks frames that should not be repeated: messages and "
-            "queries addressed to local stations, third-party frames, and frames already repeated by this station."
-        ),
+        "description": "Protects the digi path and handles the first unconsumed hop for RF repeating.",
+        "help_page": "application/packet_routing_flow_path_rule_and_digi_guard",
         "editor_help_lines": (
             "messages/queries addressed to My station",
             "messages/queries addressed to WX station",
@@ -164,7 +157,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Strict Filter",
         "badge": "Rule",
-        "description": "Rejects TCPIP/TCPXX, NOGATE/RFONLY and invalid third-party packets",
+        "description": "Mandatory APRS-IS safety guard for RF and Local TX uplink flows.",
+        "help_page": "application/packet_routing_flow_strict_filter",
         "editor_help_lines": (
             "This system guard rejects packets containing TCPIP, TCPXX, NOGATE or RFONLY in the outer path.",
             "For third-party packets, the inner header/path is validated and rejected when malformed.",
@@ -177,6 +171,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Direct Only",
         "badge": "Filter",
         "description": "Passes only packets heard direct, without any consumed digipeater hop in the path.",
+        "help_page": "application/packet_routing_flow_direct_only",
         "editor_help_lines": (
             "This filter passes only packets heard direct from RF.",
             "If the path already contains any consumed hop marked with *, the packet is rejected.",
@@ -188,7 +183,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "DIGI Filter",
         "badge": "Filter",
-        "description": "Allows or denies packets repeated by specific digi callsigns.",
+        "description": "Matches already consumed path hops against allow or deny patterns.",
+        "help_page": "application/packet_routing_flow_digi_filter",
         "editor_help_lines": (
             "Only already consumed hops are inspected, which means only path elements marked with * are checked.",
             "Patterns support * wildcard, for example SR5ABC, SR5BCD*, SR5* or *.",
@@ -211,7 +207,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Callsign Filter",
         "badge": "Filter",
-        "description": "Stores callsign allow or deny rules.",
+        "description": "Matches the source callsign against allow or deny patterns.",
+        "help_page": "application/packet_routing_flow_callsign_filter",
         "editor_help_lines": (
             "This filter matches the source callsign of the packet.",
             "Patterns support * wildcard, for example SQ9MDD, SQ9MDD* or SQ*.",
@@ -234,7 +231,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Packet Type Filter",
         "badge": "Filter",
-        "description": "Allows or denies the 8 main APRS packet groups used in DIGI flows.",
+        "description": "Matches decoded APRS packet groups against allow or deny lists.",
+        "help_page": "application/packet_routing_flow_packet_type_filter",
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
             {
@@ -263,7 +261,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Icon Filter",
         "badge": "Filter",
-        "description": "Allows or denies selected APRS symbols such as /> or \\l.",
+        "description": "Matches decoded APRS symbols against allow or deny lists.",
+        "help_page": "application/packet_routing_flow_icon_filter",
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
             {
@@ -281,6 +280,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Distance Filter",
         "badge": "Filter",
         "description": "Allows packets only when decoded position is inside at least one configured zone.",
+        "help_page": "application/packet_routing_flow_distance_filter",
         "editor_help_lines": (
             "This filter checks only packets where APRS position can be decoded from the current frame.",
             "The packet passes when it falls inside at least one configured zone.",
@@ -302,7 +302,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Rate Limit Filter",
         "badge": "Filter",
-        "description": "Blocks matching source callsigns until their configured per-line limits have elapsed since the last passed frame.",
+        "description": "Applies per-source holdoff timers based on configured callsign patterns.",
+        "help_page": "application/packet_routing_flow_rate_limit_filter",
         "editor_help_lines": (
             "Enter one rule per line in the format CALL_OR_PATTERN - LIMIT.",
             "LIMIT accepts 30, 30s or 30S and must be between 5 and 300 seconds in 5-second steps.",
@@ -333,6 +334,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "TX RF",
         "badge": "Target",
         "description": "Sends packets to an RF output identifier.",
+        "help_page": "application/packet_routing_flow_tx_rf",
         "config_fields": (
             {"name": "rf_target", "label": "RF Target", "type": "text", "required": True},
         ),
@@ -342,6 +344,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "TX APRS-IS",
         "badge": "Target",
         "description": "Sends packets to an APRS-IS output identifier.",
+        "help_page": "application/packet_routing_flow_tx_aprsis",
         "config_fields": (
             {"name": "aprsis_target", "label": "APRS-IS Target", "type": "text", "required": True},
         ),
@@ -359,7 +362,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "target",
         "label": "Black Hole",
         "badge": "Target",
-        "description": "Logs the packet at the end of the flow.",
+        "description": "Ends the flow without forwarding and records the packet in logs.",
+        "help_page": "application/packet_routing_flow_black_hole",
         "config_fields": (
             {"name": "log_tag", "label": "Log Tag", "type": "text", "required": False},
             {"name": "note", "label": "Note", "type": "text", "required": False},
@@ -924,7 +928,7 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
             "label": _t(meta["label"]),
             "badge": _t(meta["badge"]),
             "description": _t(meta["description"]),
-            **({"editor_help_lines": [_t(line) for line in meta["editor_help_lines"]]} if meta.get("editor_help_lines") else {}),
+            **({"help_page": meta["help_page"]} if meta.get("help_page") else {}),
             "runtime_status": _runtime_status(step_type),
             "runtime_label": _runtime_status_label(step_type),
             "config_fields": [
