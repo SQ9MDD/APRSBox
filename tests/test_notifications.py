@@ -378,6 +378,15 @@ class NotificationTests(unittest.TestCase):
                 queue_radar_notifications()
             submit_mock.assert_not_called()
 
+    def test_notifications_template_includes_help_viewer(self) -> None:
+        template_source = Path("app/templates/notifications.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/notifications"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+        for language in ("pl", "en", "es", "de"):
+            self.assertTrue(Path(f"help/application/notifications.{language}.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
