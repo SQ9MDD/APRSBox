@@ -382,6 +382,7 @@ class NotificationTests(unittest.TestCase):
         template_source = Path("app/templates/notifications.html").read_text(encoding="utf-8")
         self.assertIn("static/css/help-viewer.css", template_source)
         self.assertIn('data-help-page="application/notifications"', template_source)
+        self.assertIn('class="help-icon-button page-help-button"', template_source)
         self.assertIn('include "partials/help_modal.html"', template_source)
         self.assertIn("static/js/help-viewer.js", template_source)
         for language in ("pl", "en", "es", "de"):

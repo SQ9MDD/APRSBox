@@ -34,6 +34,13 @@
     filter: var(--icon-filter);
 }
 
+.page-help-button {
+    position: fixed;
+    top: var(--space-4);
+    right: var(--space-4);
+    z-index: 74;
+}
+
 .help-viewer-modal[hidden] {
     display: none;
 }
