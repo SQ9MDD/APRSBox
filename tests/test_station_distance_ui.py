@@ -34,6 +34,9 @@ class StationDistanceUiTests(unittest.TestCase):
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("window.L.circleMarker", script_source)
         self.assertIn("points.slice(0, -1)", script_source)
+        self.assertIn("const callsignColorPalette = Object.freeze([", script_source)
+        self.assertIn("function overlayContrastColor()", script_source)
+        self.assertIn("const haloPolyline = window.L.polyline(", script_source)
 
     def test_map_template_renders_track_toggle_button(self) -> None:
         template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
@@ -104,6 +107,8 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("window.L.polyline(", script_source)
         self.assertIn("window.L.circleMarker(", script_source)
         self.assertIn("ensureMap(station, mapConfig, stationTrack)", script_source)
+        self.assertIn("const callsignColorPalette = Object.freeze([", script_source)
+        self.assertIn("function overlayContrastColor()", script_source)
 
     def test_map_script_initializes_ruler_with_draggable_markers(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")

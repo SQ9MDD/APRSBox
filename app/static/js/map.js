@@ -1128,6 +1128,7 @@
         for (const mutation of mutations) {
             if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
                 applyMaskOpacity(resolveDefaultMaskOpacity());
+                applyLatestMapData({ forceRender: true });
                 break;
             }
         }
@@ -1237,14 +1238,59 @@
         });
     }
 
-    function colorForCallsign(callsign) {
-        const value = String(callsign || "");
-        let hash = 0;
+    const callsignColorPalette = Object.freeze([
+        { hue: 302, saturation: 100, lightness: 56 },
+        { hue: 188, saturation: 100, lightness: 51 },
+        { hue: 272, saturation: 94, lightness: 63 },
+        { hue: 334, saturation: 100, lightness: 60 },
+        { hue: 203, saturation: 100, lightness: 55 },
+        { hue: 287, saturation: 90, lightness: 68 },
+        { hue: 352, saturation: 100, lightness: 63 },
+        { hue: 170, saturation: 100, lightness: 46 },
+        { hue: 248, saturation: 100, lightness: 67 },
+        { hue: 318, saturation: 100, lightness: 54 },
+        { hue: 194, saturation: 100, lightness: 47 },
+        { hue: 283, saturation: 100, lightness: 50 },
+    ]);
+    const callsignColorVariants = Object.freeze([
+        { hueShift: 0, saturationShift: 0, lightnessShift: 0 },
+        { hueShift: 6, saturationShift: -5, lightnessShift: 7 },
+        { hueShift: -7, saturationShift: 5, lightnessShift: -6 },
+    ]);
+
+    function clampNumber(value, minValue, maxValue) {
+        return Math.max(minValue, Math.min(maxValue, value));
+    }
+
+    function hashCallsign(callsign) {
+        const value = String(callsign || "").trim().toUpperCase();
+        let hash = 2166136261;
         for (let index = 0; index < value.length; index += 1) {
-            hash = ((hash * 31) + value.charCodeAt(index)) >>> 0;
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 16777619) >>> 0;
         }
-        const hue = hash % 360;
-        return `hsl(${hue} 80% 52%)`;
+        return hash >>> 0;
+    }
+
+    // Bias the palette toward neon magenta/cyan/violet tones that rarely occur on default OSM tiles.
+    function colorForCallsign(callsign) {
+        const hash = hashCallsign(callsign);
+        const base = callsignColorPalette[hash % callsignColorPalette.length];
+        const variant = callsignColorVariants[(hash >>> 8) % callsignColorVariants.length];
+        const hue = (base.hue + variant.hueShift + (((hash >>> 16) % 5) - 2) + 360) % 360;
+        const saturation = clampNumber(base.saturation + variant.saturationShift, 86, 100);
+        const lightness = clampNumber(base.lightness + variant.lightnessShift, 44, 72);
+        return `hsl(${hue} ${saturation}% ${lightness}%)`;
+    }
+
+    function overlayContrastColor() {
+        return currentThemeName() === "light"
+            ? "rgba(16, 24, 40, 0.82)"
+            : "rgba(255, 255, 255, 0.92)";
+    }
+
+    function overlayContrastOpacity() {
+        return currentThemeName() === "light" ? 0.72 : 0.82;
     }
 
     function phgDirectionAzimuth(directionValue) {
@@ -1339,17 +1385,34 @@
 
     function buildPhgCoverageLayer(station, coverageColor) {
         const radiusMeters = Number(station.phg_range_km) * 1000;
-        const circleOptions = {
+        const haloOpacity = coverageOutlineOpacity > 0
+            ? clampNumber((coverageOutlineOpacity * 0.6) + 0.12, 0, 0.85)
+            : 0;
+        const boundaryHaloOptions = {
+            radius: radiusMeters,
+            color: overlayContrastColor(),
+            opacity: haloOpacity,
+            stroke: true,
+            fill: false,
+            weight: 5,
+            dashArray: "14 10",
+            interactive: false,
+        };
+        const boundaryCoreOptions = {
             radius: radiusMeters,
             color: coverageColor,
             fillColor: coverageColor,
             opacity: coverageOutlineOpacity,
             fillOpacity: coverageFillOpacity,
             stroke: true,
-            weight: 1.25,
+            weight: 2.25,
+            dashArray: "12 8",
             interactive: false,
         };
-        const fallbackCircle = window.L.circle([station.latitude, station.longitude], circleOptions);
+        const fallbackCircle = window.L.layerGroup([
+            window.L.circle([station.latitude, station.longitude], boundaryHaloOptions),
+            window.L.circle([station.latitude, station.longitude], boundaryCoreOptions),
+        ]);
         const azimuth = phgDirectionAzimuth(station.phg_direction);
         if (azimuth === null || !Number.isFinite(azimuth)) {
             return fallbackCircle;
@@ -1358,15 +1421,27 @@
         if (cardioidPoints.length < 4) {
             return fallbackCircle;
         }
-        return window.L.polygon(cardioidPoints, {
-            color: coverageColor,
-            fillColor: coverageColor,
-            opacity: coverageOutlineOpacity,
-            fillOpacity: coverageFillOpacity,
-            stroke: true,
-            weight: 1.25,
-            interactive: false,
-        });
+        return window.L.layerGroup([
+            window.L.polygon(cardioidPoints, {
+                color: overlayContrastColor(),
+                opacity: haloOpacity,
+                stroke: true,
+                fill: false,
+                weight: 5,
+                dashArray: "14 10",
+                interactive: false,
+            }),
+            window.L.polygon(cardioidPoints, {
+                color: coverageColor,
+                fillColor: coverageColor,
+                opacity: coverageOutlineOpacity,
+                fillOpacity: coverageFillOpacity,
+                stroke: true,
+                weight: 2.25,
+                dashArray: "12 8",
+                interactive: false,
+            }),
+        ]);
     }
 
     function markerSignature(station) {
@@ -1409,12 +1484,14 @@
             String(station.display_callsign || station.callsign || ""),
             String(coverageFillOpacity),
             String(coverageOutlineOpacity),
+            String(currentThemeName()),
         ].join("|");
     }
 
     function trackSignature(track) {
         return [
             String(track.display_callsign || ""),
+            String(currentThemeName()),
             (track.points || []).map((point) => (
                 `${point.interface_id || ""}:${point.latitude}:${point.longitude}:${point.heard_at || ""}`
             )).join(";"),
@@ -1459,26 +1536,38 @@
             return group;
         }
         const trackColor = colorForCallsign(track.display_callsign || "");
-        const polyline = window.L.polyline(
+        const haloPolyline = window.L.polyline(
             points.map((point) => ([point.latitude, point.longitude])),
             {
-                color: trackColor,
-                weight: 3,
-                opacity: 0.85,
+                color: overlayContrastColor(),
+                weight: 6,
+                opacity: overlayContrastOpacity(),
                 lineJoin: "round",
                 lineCap: "round",
                 interactive: false,
             }
         );
+        const polyline = window.L.polyline(
+            points.map((point) => ([point.latitude, point.longitude])),
+            {
+                color: trackColor,
+                weight: 3.5,
+                opacity: 0.96,
+                lineJoin: "round",
+                lineCap: "round",
+                interactive: false,
+            }
+        );
+        group.addLayer(haloPolyline);
         group.addLayer(polyline);
         for (const point of points.slice(0, -1)) {
             const dot = window.L.circleMarker([point.latitude, point.longitude], {
-                radius: 3,
-                color: trackColor,
+                radius: 4,
+                color: overlayContrastColor(),
                 fillColor: trackColor,
-                fillOpacity: 0.65,
-                opacity: 0.95,
-                weight: 1,
+                fillOpacity: 0.94,
+                opacity: 0.96,
+                weight: 2,
                 interactive: false,
             });
             group.addLayer(dot);
