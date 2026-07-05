@@ -78,4 +78,6 @@ Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y prot
 
 ## Navegación
 
+[Rutas APRS en la practica](../protocoll/aprs_paths.es.md)
+
 [Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)

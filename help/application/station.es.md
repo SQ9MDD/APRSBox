@@ -27,6 +27,10 @@ APRSBox muestra una advertencia cuando la ruta y el intervalo seleccionados pued
 - Una ruta de dos saltos, como `WIDE2-2`, requiere más cuidado.
 - `Proportional Path` envía tramas locales frecuentes y tramas con ruta completa menos frecuentes para reducir el tráfico del canal.
 
+Si quieres entender como funcionan las rutas APRS en si, consulta:
+
+[Rutas APRS en la practica](../protocoll/aprs_paths.es.md)
+
 Si la aplicación pide confirmación al guardar, ese ajuste puede aumentar significativamente el tráfico RF.
 
 ## PHG Generator

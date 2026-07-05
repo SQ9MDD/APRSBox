@@ -27,6 +27,10 @@ APRSBox shows a warning when the selected path and interval may create too much 
 - A two-hop path, such as `WIDE2-2`, needs extra care.
 - `Proportional Path` sends frequent local frames and less frequent full-path frames to reduce channel traffic.
 
+If you want to understand how APRS paths themselves work, see:
+
+[APRS paths in practice](../protocoll/aprs_paths.en.md)
+
 If the application asks for save confirmation, the setting may significantly increase RF traffic.
 
 ## PHG Generator

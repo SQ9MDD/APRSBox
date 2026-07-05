@@ -27,6 +27,10 @@ APRSBox pokazuje ostrzeżenie, gdy wybrana ścieżka i interwał mogą nadmierni
 - Ścieżka z dwoma hopami, na przykład `WIDE2-2`, wymaga szczególnej ostrożności.
 - `Proportional Path` wysyła częstsze ramki lokalne i rzadsze ramki z pełną ścieżką, żeby zmniejszyć ruch na kanale.
 
+Jeżeli chcesz zrozumieć sam mechanizm działania ścieżek APRS, zobacz:
+
+[Ścieżki APRS w praktyce](../protocoll/aprs_paths.pl.md)
+
 Jeżeli aplikacja prosi o potwierdzenie zapisu, oznacza to, że ustawienie może znacząco zwiększyć ruch RF.
 
 ## PHG Generator

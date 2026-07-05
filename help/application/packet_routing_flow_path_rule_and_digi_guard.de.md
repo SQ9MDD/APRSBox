@@ -78,4 +78,6 @@ Empfänger RF -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> 
 
 ## Navigation
 
+[APRS-Pfade in der Praxis](../protocoll/aprs_paths.de.md)
+
 [Zurück zur Packet-Flow-Regelreferenz](packet_routing_flow.de.md)

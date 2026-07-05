@@ -27,6 +27,10 @@ APRSBox zeigt eine Warnung, wenn der gewählte Pfad und das Intervall zu viel RF
 - Ein Zwei-Hop-Pfad wie `WIDE2-2` braucht besondere Vorsicht.
 - `Proportional Path` sendet häufige lokale Frames und seltenere Full-Path-Frames, um die Kanallast zu reduzieren.
 
+Wenn Sie verstehen moechten, wie APRS-Pfade selbst funktionieren, siehe:
+
+[APRS-Pfade in der Praxis](../protocoll/aprs_paths.de.md)
+
 Wenn die Anwendung beim Speichern eine Bestätigung verlangt, kann diese Einstellung den RF-Verkehr deutlich erhöhen.
 
 ## PHG Generator

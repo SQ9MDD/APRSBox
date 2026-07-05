@@ -78,4 +78,6 @@ Receiver RF -> Duplicate Filter (viscous-delay) -> Path rule and DIGI guard -> T
 
 ## Navigation
 
+[APRS paths in practice](../protocoll/aprs_paths.en.md)
+
 [Back to Packet Flow rule reference](packet_routing_flow.en.md)

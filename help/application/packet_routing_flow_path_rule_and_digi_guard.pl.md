@@ -79,4 +79,6 @@ Odbiornik RF -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
 
 ## Nawigacja
 
+[Ścieżki APRS w praktyce](../protocoll/aprs_paths.pl.md)
+
 [Wróć do opisu Packet Flow](packet_routing_flow.pl.md)
