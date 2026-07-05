@@ -179,6 +179,10 @@ WIDE1-1,WIDE2-1
 -> DIGI1*,DIGI2*
 ```
 
+Warto tu dopowiedzieć ważną rzecz praktyczną: pierwszy człon taki jak `WIDE1-1` albo `SP1-1` ma zwykle rolę specjalnego odcinka dla digi pomocniczych, czyli `fill-in digi`.
+
+Taki digi co do zasady powinien obsłużyć tylko ten pierwszy człon i nie powinien rozwijać dalszej części ścieżki. W przypadku stacji ręcznej albo mobilnej `WIDE1-1` jest właśnie po to, żeby pobliskie stacje domowe lub inne lokalne digi pomocnicze mogły pomóc wyjść z lokalnej dziury zasięgowej, ale bez dalszego powielania całej ścieżki.
+
 Drugi przykład:
 
 ```text
@@ -199,6 +203,7 @@ Najważniejsze wnioski:
 - `WIDE1-1,WIDE2-1` to dwa człony i dwa powtórzenia łącznie,
 - `WIDE1-1,WIDE2-2` to dwa człony, ale już trzy powtórzenia łącznie,
 - `SP1-1,SP2-2` to także dwa człony i trzy powtórzenia łącznie.
+- pierwszy człon `WIDE1-1` albo `SP1-1` ma zwykle sens jako odcinek dla digi pomocniczego, które kończy pracę po obsłużeniu tylko tego jednego hopu.
 
 Ścieżka dwuczłonowa trasowana rośnie szybciej niż nietrasowana, bo każdy kolejny hop może dopisywać znak następnego digi.
 

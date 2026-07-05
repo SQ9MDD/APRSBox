@@ -179,6 +179,10 @@ WIDE1-1,WIDE2-1
 -> DIGI1*,DIGI2*
 ```
 
+Hier lohnt sich ein wichtiger praktischer Hinweis: ein erstes Element wie `WIDE1-1` oder `SP1-1` hat meist die besondere Rolle eines Abschnitts fuer Hilfs-Digis, also fuer `fill-in digi`.
+
+Ein solches Digi sollte grundsaetzlich nur dieses erste Element verbrauchen und den restlichen Pfad nicht weiter wiederholen. Bei einer Handfunk- oder Mobilstation ist `WIDE1-1` im Wesentlichen genau dafuer da, dass nahe Heimstationen oder andere lokale Hilfs-Digis aus einem lokalen Funkloch heraushelfen koennen, aber nach der Bearbeitung von `WIDE1-1` aufhoeren.
+
 Weiteres Beispiel:
 
 ```text
@@ -199,6 +203,7 @@ Wichtige Schlussfolgerungen:
 - `WIDE1-1,WIDE2-1` sind zwei Pfadelemente und insgesamt zwei Wiederholungen,
 - `WIDE1-1,WIDE2-2` sind zwei Pfadelemente, aber insgesamt drei Wiederholungen,
 - `SP1-1,SP2-2` sind ebenfalls zwei Pfadelemente und insgesamt drei Wiederholungen.
+- ein erstes Element wie `WIDE1-1` oder `SP1-1` ist meist als Hilfsabschnitt fuer ein Digi sinnvoll, das nach genau diesem einen Hop aufhoert.
 
 Ein verfolgter zweiteiliger Pfad waechst schneller als ein nicht verfolgter Pfad, weil jeder Hop ein weiteres Digi-Rufzeichen hinzufuegen kann.
 

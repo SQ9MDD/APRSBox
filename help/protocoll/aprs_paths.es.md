@@ -179,6 +179,10 @@ WIDE1-1,WIDE2-1
 -> DIGI1*,DIGI2*
 ```
 
+Aqui conviene anadir un detalle practico importante: un primer componente como `WIDE1-1` o `SP1-1` suele tener el papel especial de tramo para digis auxiliares, es decir, `fill-in digi`.
+
+Como regla general, ese digi deberia consumir solo ese primer componente y no deberia seguir repitiendo el resto de la ruta. En una estacion portatil o movil, `WIDE1-1` esta basicamente para que estaciones domesticas cercanas u otros digis auxiliares locales puedan sacar la trama de una sombra local de cobertura, pero deteniendose despues de atender solo `WIDE1-1`.
+
 Otro ejemplo:
 
 ```text
@@ -199,6 +203,7 @@ Conclusiones importantes:
 - `WIDE1-1,WIDE2-1` son dos elementos de ruta y dos repeticiones en total,
 - `WIDE1-1,WIDE2-2` son dos elementos de ruta, pero tres repeticiones en total,
 - `SP1-1,SP2-2` tambien son dos elementos de ruta y tres repeticiones en total.
+- un primer componente como `WIDE1-1` o `SP1-1` suele tener sentido como tramo auxiliar para un digi que termina su trabajo despues de consumir solo ese salto.
 
 Una ruta trazada de dos componentes crece mas rapido que una no trazada, porque cada salto puede agregar otro indicativo digi.
 

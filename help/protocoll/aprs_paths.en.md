@@ -179,6 +179,10 @@ WIDE1-1,WIDE2-1
 -> DIGI1*,DIGI2*
 ```
 
+There is one important practical detail here: a first element such as `WIDE1-1` or `SP1-1` usually has the special role of a helper segment for `fill-in digi` stations.
+
+As a rule, such a digi should consume only that first element and should not continue repeating the rest of the path. For a handheld or mobile station, `WIDE1-1` is mainly there so that nearby home stations or other local helper digis can bridge the local coverage hole, but stop after handling only `WIDE1-1`.
+
 Another example:
 
 ```text
@@ -199,6 +203,7 @@ Important conclusions:
 - `WIDE1-1,WIDE2-1` is two path elements and two repeats in total,
 - `WIDE1-1,WIDE2-2` is two path elements, but three repeats in total,
 - `SP1-1,SP2-2` is also two path elements and three repeats in total.
+- a first element such as `WIDE1-1` or `SP1-1` usually makes sense as the helper segment for a digi that stops after consuming only that single hop.
 
 A traced two-part path grows faster than a non-traced path because each hop may add another digi callsign.
 
