@@ -1722,15 +1722,17 @@ def _rewrite_no_trace_path(path_tokens: list[str], token_index: int) -> list[str
     updated_tokens = list(path_tokens)
     token = updated_tokens[token_index].rstrip("*")
     match = _N_N_PATH_RE.fullmatch(token)
-    updated_tokens[token_index] = f"{token}*"
     if match is None:
+        updated_tokens[token_index] = f"{token}*"
         return updated_tokens
 
     alias = str(match.group("alias"))
     width = int(match.group("width"))
     remaining = int(match.group("remaining"))
     if remaining > 1:
-        updated_tokens.insert(token_index + 1, f"{alias}{width}-{remaining - 1}")
+        updated_tokens[token_index] = f"{alias}{width}-{remaining - 1}"
+        return updated_tokens
+    updated_tokens[token_index] = f"{alias}{width}*"
     return updated_tokens
 
 

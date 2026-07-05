@@ -23,31 +23,33 @@ Configuration fields:
 - `Paths (TRACE / traced)`:
   If the first unconsumed hop matches this list, APRSBox consumes it and inserts the local digi callsign from `My settings`.
 - `Paths (NO TRACE / not traced)`:
-  If the first unconsumed hop matches this list, the hop is only marked as consumed, without inserting the local digi callsign.
+  If the first unconsumed hop matches this list, APRSBox reduces that hop in place without inserting the local digi callsign.
 
 What you can enter:
 
-- a full hop such as `WIDE1-1`, `WIDE2-1`, `WIDE2-2`, or `SP2-2`,
-- a family alias such as `WIDE`; then family members like `WIDE1-1` and `WIDE2-2` match.
+- `TRACE`: a full hop such as `WIDE1-1`, `WIDE2-1`, `WIDE2-2`, or a family alias such as `WIDE`,
+- `NO TRACE`: a full hop such as `SP1-1`, `SP2-1`, `SP2-2`, a family alias such as `SP`, or your own `CALLSIGN-SSID`.
 
 Typical rewrites:
 
 - TRACE `WIDE1-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-2` -> `MYCALL-SSID*,WIDE2-1`,
-- NO TRACE `WIDE2-2` -> `WIDE2-2*,WIDE2-1`,
-- NO TRACE `SP2-2` -> `SP2-2*,SP2-1`,
+- NO TRACE `SP1-1` -> `SP1*`,
+- NO TRACE `SP2-1` -> `SP2*`,
+- NO TRACE `SP2-2` -> `SP2-1`,
 - if the hop is not in `N-N` form, NO TRACE simply adds `*`.
 
 Typical starter entries:
 
-- `TRACE`: `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
-- `NO TRACE`: your own `CALLSIGN-SSID` from `My settings` plus local exceptions allowed by network policy.
+- `TRACE`: `WIDE`, `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: `SP`, `SP1-1`, `SP2-1`, `SP2-2`, your own `CALLSIGN-SSID` from `My settings`.
 
 Why your own callsign is often added to `NO TRACE`:
 
 - to consume packets addressed directly to your callsign without inserting it into path again,
-- to handle explicit local hops that should be non-traced.
+- to handle explicit local hops that should be non-traced,
+- to reduce local `SP` family hops without inserting your own callsign into path.
 
 Important notes:
 

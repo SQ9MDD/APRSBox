@@ -23,31 +23,33 @@ Konfigurationsfelder:
 - `Paths (TRACE / traced)`:
   Wenn der erste unverbrauchte Hop zu dieser Liste passt, verbraucht APRSBox ihn und fuegt das lokale Digi-Rufzeichen aus `My settings` ein.
 - `Paths (NO TRACE / not traced)`:
-  Wenn der erste unverbrauchte Hop zu dieser Liste passt, wird der Hop nur als verbraucht markiert, ohne das lokale Digi-Rufzeichen einzutragen.
+  Wenn der erste unverbrauchte Hop zu dieser Liste passt, reduziert APRSBox diesen Hop an Ort und Stelle, ohne das lokale Digi-Rufzeichen einzutragen.
 
 Was eingetragen werden kann:
 
-- ein voller Hop wie `WIDE1-1`, `WIDE2-1`, `WIDE2-2` oder `SP2-2`,
-- ein Familienalias wie `WIDE`; dann passen Mitglieder wie `WIDE1-1` und `WIDE2-2`.
+- `TRACE`: ein voller Hop wie `WIDE1-1`, `WIDE2-1`, `WIDE2-2` oder ein Familienalias wie `WIDE`,
+- `NO TRACE`: ein voller Hop wie `SP1-1`, `SP2-1`, `SP2-2`, ein Familienalias wie `SP` oder das eigene `CALLSIGN-SSID`.
 
 Typische Umschreibungen:
 
 - TRACE `WIDE1-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-2` -> `MYCALL-SSID*,WIDE2-1`,
-- NO TRACE `WIDE2-2` -> `WIDE2-2*,WIDE2-1`,
-- NO TRACE `SP2-2` -> `SP2-2*,SP2-1`,
+- NO TRACE `SP1-1` -> `SP1*`,
+- NO TRACE `SP2-1` -> `SP2*`,
+- NO TRACE `SP2-2` -> `SP2-1`,
 - wenn der Hop nicht im Format `N-N` ist, fuegt NO TRACE nur `*` hinzu.
 
 Typische Starteintraege:
 
-- `TRACE`: `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
-- `NO TRACE`: das eigene `CALLSIGN-SSID` aus `My settings` plus lokale Ausnahmen gemaess Netzpolitik.
+- `TRACE`: `WIDE`, `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: `SP`, `SP1-1`, `SP2-1`, `SP2-2`, das eigene `CALLSIGN-SSID` aus `My settings`.
 
 Warum das eigene Rufzeichen oft in `NO TRACE` steht:
 
 - um Pakete zu verbrauchen, die direkt an das eigene Rufzeichen adressiert sind, ohne es erneut in den Pfad einzutragen,
-- um explizite lokale Hops ohne TRACE-Spur zu behandeln.
+- um explizite lokale Hops ohne TRACE-Spur zu behandeln,
+- um lokale Hops der Familie `SP` zu reduzieren, ohne das eigene Rufzeichen in den Pfad einzutragen.
 
 Wichtige Hinweise:
 

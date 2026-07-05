@@ -23,31 +23,33 @@ Pola konfiguracyjne:
 - `Paths (TRACE / traced)`:
   Jeśli pierwszy niezużyty hop pasuje do tej listy, APRSBox zużywa go i wstawia własny znak z `My settings` jako hop powtórzony przez lokalne digi.
 - `Paths (NO TRACE / not traced)`:
-  Jeśli pierwszy niezużyty hop pasuje do tej listy, hop zostaje tylko oznaczony jako zużyty, bez dopisywania lokalnego znaku do ścieżki.
+  Jeśli pierwszy niezużyty hop pasuje do tej listy, APRSBox redukuje ten hop w miejscu bez dopisywania lokalnego znaku digi.
 
 Co dokładnie można wpisać:
 
-- pełny hop, na przykład `WIDE1-1`, `WIDE2-1`, `WIDE2-2`, `SP2-2`,
-- sam alias rodziny, na przykład `WIDE`; wtedy pasują ścieżki z tej rodziny typu `WIDE1-1` albo `WIDE2-2`.
+- `TRACE`: pełny hop `WIDE1-1`, `WIDE2-1`, `WIDE2-2` albo alias rodziny `WIDE`,
+- `NO TRACE`: pełny hop `SP1-1`, `SP2-1`, `SP2-2`, alias rodziny `SP` albo własny `CALLSIGN-SSID`.
 
 Przekształcenie ścieżki w praktyce:
 
 - TRACE `WIDE1-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-2` -> `MYCALL-SSID*,WIDE2-1`,
-- NO TRACE `WIDE2-2` -> `WIDE2-2*,WIDE2-1`,
-- NO TRACE `SP2-2` -> `SP2-2*,SP2-1`,
+- NO TRACE `SP1-1` -> `SP1*`,
+- NO TRACE `SP2-1` -> `SP2*`,
+- NO TRACE `SP2-2` -> `SP2-1`,
 - jeśli hop nie ma postaci `N-N`, NO TRACE po prostu dopisuje `*`.
 
 Typowe wpisy startowe:
 
-- `TRACE`: `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
-- `NO TRACE`: własny `CALLSIGN-SSID` z `My settings` oraz lokalne wyjątki zgodne z polityką sieci.
+- `TRACE`: `WIDE`, `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: `SP`, `SP1-1`, `SP2-1`, `SP2-2`, własny `CALLSIGN-SSID` z `My settings`.
 
 Dlaczego własny znak warto dodać do `NO TRACE`:
 
 - jeżeli chcesz zużywać pakiety kierowane bezpośrednio do Twojego znaku bez ponownego dopisywania go do ścieżki,
-- jeżeli w lokalnej sieci używasz własnego znaku jako jawnego hopu bez śladu TRACE.
+- jeżeli w lokalnej sieci używasz własnego znaku jako jawnego hopu bez śladu TRACE,
+- jeżeli chcesz lokalnie redukować rodzinę typu `SP` bez wstawiania swojego znaku do path.
 
 Najważniejsze uwagi:
 

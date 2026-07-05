@@ -23,31 +23,33 @@ Campos de configuracion:
 - `Paths (TRACE / traced)`:
   Si el primer hop no consumido coincide con esta lista, APRSBox lo consume e inserta el indicativo local desde `My settings`.
 - `Paths (NO TRACE / not traced)`:
-  Si el primer hop no consumido coincide con esta lista, el hop solo se marca como consumido, sin insertar el indicativo local.
+  Si el primer hop no consumido coincide con esta lista, APRSBox reduce ese hop en su lugar sin insertar el indicativo digi local.
 
 Que puedes escribir:
 
-- un hop completo como `WIDE1-1`, `WIDE2-1`, `WIDE2-2` o `SP2-2`,
-- un alias de familia como `WIDE`; entonces coinciden miembros como `WIDE1-1` y `WIDE2-2`.
+- `TRACE`: un hop completo como `WIDE1-1`, `WIDE2-1`, `WIDE2-2` o un alias de familia como `WIDE`,
+- `NO TRACE`: un hop completo como `SP1-1`, `SP2-1`, `SP2-2`, un alias de familia como `SP` o tu propio `CALLSIGN-SSID`.
 
 Reescrituras tipicas:
 
 - TRACE `WIDE1-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-1` -> `MYCALL-SSID*`,
 - TRACE `WIDE2-2` -> `MYCALL-SSID*,WIDE2-1`,
-- NO TRACE `WIDE2-2` -> `WIDE2-2*,WIDE2-1`,
-- NO TRACE `SP2-2` -> `SP2-2*,SP2-1`,
+- NO TRACE `SP1-1` -> `SP1*`,
+- NO TRACE `SP2-1` -> `SP2*`,
+- NO TRACE `SP2-2` -> `SP2-1`,
 - si el hop no tiene forma `N-N`, NO TRACE solo anade `*`.
 
 Entradas tipicas de arranque:
 
-- `TRACE`: `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
-- `NO TRACE`: tu propio `CALLSIGN-SSID` de `My settings` y excepciones locales permitidas por la politica de red.
+- `TRACE`: `WIDE`, `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: `SP`, `SP1-1`, `SP2-1`, `SP2-2`, tu propio `CALLSIGN-SSID` de `My settings`.
 
 Por que suele anadirse el propio indicativo a `NO TRACE`:
 
 - para consumir paquetes dirigidos expresamente a tu indicativo sin insertarlo otra vez en la ruta,
-- para manejar hops locales explicitos que no deben dejar traza.
+- para manejar hops locales explicitos que no deben dejar traza,
+- para reducir hops locales de la familia `SP` sin insertar tu propio indicativo en la ruta.
 
 Notas importantes:
 
@@ -59,10 +61,6 @@ Esquema tipico:
 ```text
 Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
 ```
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

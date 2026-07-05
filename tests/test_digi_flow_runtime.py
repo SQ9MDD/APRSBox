@@ -851,7 +851,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "step_type": "filter_path",
                             "title": "Path Rule",
                             "enabled": 1,
-                            "config": {"mode": "allow", "trace_paths": ["WIDE2-2"], "no_trace_paths": ["SP2-2"]},
+                            "config": {"mode": "allow", "trace_paths": ["WIDE2-2"], "no_trace_paths": ["SP"]},
                         },
                         {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
                     ],
@@ -870,6 +870,16 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     source_ref="TNC-1",
                     raw_payload="SP8ABC-9>APRS,SP2-2:>No trace",
                 )
+                no_trace_one = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,SP2-1:>No trace one",
+                )
+                no_trace_local = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,SP1-1:>No trace local",
+                )
                 rejected = runtime.enqueue_tnc2_frame(
                     source_kind="receiver_rf",
                     source_ref="TNC-1",
@@ -881,9 +891,13 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             trace_rows = event_rows_for_frame(str(trace["frame_uid"]))
             no_trace_rows = event_rows_for_frame(str(no_trace["frame_uid"]))
+            no_trace_one_rows = event_rows_for_frame(str(no_trace_one["frame_uid"]))
+            no_trace_local_rows = event_rows_for_frame(str(no_trace_local["frame_uid"]))
             rejected_rows = event_rows_for_frame(str(rejected["frame_uid"]))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" and "SQ9MDD-4*" in row["message"] for row in trace_rows))
-            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "no_trace" and "SP2-2*,SP2-1" in row["message"] for row in no_trace_rows))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "no_trace" and "SP2-2 -> SP2-1" in row["message"] for row in no_trace_rows))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "no_trace" and "SP2-1 -> SP2*" in row["message"] for row in no_trace_one_rows))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "no_trace" and "SP1-1 -> SP1*" in row["message"] for row in no_trace_local_rows))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "rejected" for row in rejected_rows))
 
     async def test_strict_filter_rejects_tcp_nogate_and_rfonly_paths(self) -> None:
