@@ -27,8 +27,12 @@ Pola konfiguracyjne:
 
 Co dokładnie można wpisać:
 
+- każdy wpis podajesz w osobnej linii,
 - `TRACE`: pełny hop `WIDE1-1`, `WIDE2-1`, `WIDE2-2` albo alias rodziny `WIDE`,
 - `NO TRACE`: pełny hop `SP1-1`, `SP2-1`, `SP2-2`, alias rodziny `SP` albo własny `CALLSIGN-SSID`.
+- wpis `WIDE2-2` pasuje tylko do `WIDE2-2`; nie obsługuje `WIDE2-1` ani `WIDE1-1`,
+- wpis `SP2-2` pasuje tylko do `SP2-2`; nie obsługuje `SP2-1` ani `SP1-1`,
+- jeżeli nie używasz aliasu rodziny `WIDE` albo `SP`, każdą obsługiwaną ścieżkę wpisz osobno.
 
 Przekształcenie ścieżki w praktyce:
 
@@ -42,8 +46,20 @@ Przekształcenie ścieżki w praktyce:
 
 Typowe wpisy startowe:
 
-- `TRACE`: `WIDE`, `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
-- `NO TRACE`: `SP`, `SP1-1`, `SP2-1`, `SP2-2`, własny `CALLSIGN-SSID` z `My settings`.
+`TRACE`:
+
+- `WIDE` - jedna linia obsługująca rodzinę `WIDE`,
+- `WIDE1-1` - tylko ścieżka `WIDE1-1`,
+- `WIDE2-1` - tylko ścieżka `WIDE2-1`,
+- `WIDE2-2` - tylko ścieżka `WIDE2-2`.
+
+`NO TRACE`:
+
+- `SP` - jedna linia obsługująca rodzinę `SP`,
+- `SP1-1` - tylko ścieżka `SP1-1`,
+- `SP2-1` - tylko ścieżka `SP2-1`,
+- `SP2-2` - tylko ścieżka `SP2-2`,
+- `CALLSIGN-SSID` - własny jawny hop, który ma być redukowany bez TRACE.
 
 Dlaczego własny znak warto dodać do `NO TRACE`:
 

@@ -135,6 +135,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "required": False,
                 "help_lines": (
                     "One path alias or explicit hop per line.",
+                    "If you enter WIDE2-2, it matches only WIDE2-2, not WIDE2-1 or WIDE1-1.",
+                    "Add every supported path on its own line unless you use a family alias such as WIDE.",
                     "TRACE example:",
                     "WIDE",
                     "WIDE1-1",
@@ -149,6 +151,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "required": False,
                 "help_lines": (
                     "One path alias or explicit hop per line.",
+                    "If you enter SP2-2, it matches only SP2-2, not SP2-1 or SP1-1.",
+                    "Add every supported path on its own line unless you use a family alias such as SP.",
                     "NO TRACE example:",
                     "SP",
                     "SP1-1",

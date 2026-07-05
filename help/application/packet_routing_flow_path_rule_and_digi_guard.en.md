@@ -27,8 +27,12 @@ Configuration fields:
 
 What you can enter:
 
+- put each entry on its own line,
 - `TRACE`: a full hop such as `WIDE1-1`, `WIDE2-1`, `WIDE2-2`, or a family alias such as `WIDE`,
 - `NO TRACE`: a full hop such as `SP1-1`, `SP2-1`, `SP2-2`, a family alias such as `SP`, or your own `CALLSIGN-SSID`.
+- `WIDE2-2` matches only `WIDE2-2`; it does not handle `WIDE2-1` or `WIDE1-1`,
+- `SP2-2` matches only `SP2-2`; it does not handle `SP2-1` or `SP1-1`,
+- if you do not use a family alias such as `WIDE` or `SP`, add every supported path on a separate line.
 
 Typical rewrites:
 
@@ -42,8 +46,20 @@ Typical rewrites:
 
 Typical starter entries:
 
-- `TRACE`: `WIDE`, `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
-- `NO TRACE`: `SP`, `SP1-1`, `SP2-1`, `SP2-2`, your own `CALLSIGN-SSID` from `My settings`.
+`TRACE`:
+
+- `WIDE` - one line covering the `WIDE` family,
+- `WIDE1-1` - only path `WIDE1-1`,
+- `WIDE2-1` - only path `WIDE2-1`,
+- `WIDE2-2` - only path `WIDE2-2`.
+
+`NO TRACE`:
+
+- `SP` - one line covering the `SP` family,
+- `SP1-1` - only path `SP1-1`,
+- `SP2-1` - only path `SP2-1`,
+- `SP2-2` - only path `SP2-2`,
+- `CALLSIGN-SSID` - your own explicit hop that should be reduced without TRACE.
 
 Why your own callsign is often added to `NO TRACE`:
 
