@@ -1,6 +1,6 @@
 # Reguła ścieżki i ochrona DIGI
 
-To najważniejszy blok dla ścieżek `... -> TX RF`. Ten krok robi dwie rzeczy naraz: najpierw wykonuje ochronę DIGI, a dopiero potem obsługuje pierwszy jeszcze niezużyty element ścieżki.
+To najważniejszy blok dla ścieżek `... -> TX RF`. Ten krok robi dwie rzeczy naraz: najpierw wykonuje ochronę DIGI, a dopiero potem obsługuje pierwszy jeszcze niezużyty element ścieżki. Ten blok powinien być zawsze ostatnim blokiem we flow, bo modyfikuje ścieżkę i może zakłócić działanie innych filtrów.
 
 Najpierw część ochronna odrzuca:
 
@@ -28,11 +28,11 @@ Pola konfiguracyjne:
 Co dokładnie można wpisać:
 
 - każdy wpis podajesz w osobnej linii,
-- `TRACE`: pełny hop `WIDE1-1`, `WIDE2-1`, `WIDE2-2` albo alias rodziny `WIDE`,
-- `NO TRACE`: pełny hop `SP1-1`, `SP2-1`, `SP2-2`, alias rodziny `SP` albo własny `CALLSIGN-SSID`.
+- `TRACE`: pełny hop `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: pełny hop `SP1-1`, `SP2-1`, `SP2-2` albo własny `CALLSIGN-SSID`.
 - wpis `WIDE2-2` pasuje tylko do `WIDE2-2`; nie obsługuje `WIDE2-1` ani `WIDE1-1`,
 - wpis `SP2-2` pasuje tylko do `SP2-2`; nie obsługuje `SP2-1` ani `SP1-1`,
-- jeżeli nie używasz aliasu rodziny `WIDE` albo `SP`, każdą obsługiwaną ścieżkę wpisz osobno.
+- każdą obsługiwaną ścieżkę wpisz osobno.
 
 Przekształcenie ścieżki w praktyce:
 
@@ -48,14 +48,12 @@ Typowe wpisy startowe:
 
 `TRACE`:
 
-- `WIDE` - jedna linia obsługująca rodzinę `WIDE`,
 - `WIDE1-1` - tylko ścieżka `WIDE1-1`,
 - `WIDE2-1` - tylko ścieżka `WIDE2-1`,
 - `WIDE2-2` - tylko ścieżka `WIDE2-2`.
 
 `NO TRACE`:
 
-- `SP` - jedna linia obsługująca rodzinę `SP`,
 - `SP1-1` - tylko ścieżka `SP1-1`,
 - `SP2-1` - tylko ścieżka `SP2-1`,
 - `SP2-2` - tylko ścieżka `SP2-2`,

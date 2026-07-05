@@ -1497,9 +1497,6 @@ def _find_matching_path_spec(token: str, specs: list[str]) -> str | None:
         normalized_spec = spec.strip().upper().rstrip("*")
         if normalized_token == normalized_spec:
             return normalized_spec
-        family_match = _N_N_PATH_RE.fullmatch(normalized_token)
-        if "-" not in normalized_spec and family_match and str(family_match.group("alias")) == normalized_spec:
-            return normalized_spec
     return None
 
 

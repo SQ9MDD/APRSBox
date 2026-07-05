@@ -134,11 +134,10 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "type": "textarea",
                 "required": False,
                 "help_lines": (
-                    "One path alias or explicit hop per line.",
+                    "One explicit path hop per line.",
+                    "Each supported path must be entered on its own line.",
                     "If you enter WIDE2-2, it matches only WIDE2-2, not WIDE2-1 or WIDE1-1.",
-                    "Add every supported path on its own line unless you use a family alias such as WIDE.",
                     "TRACE example:",
-                    "WIDE",
                     "WIDE1-1",
                     "WIDE2-1",
                     "WIDE2-2",
@@ -150,18 +149,17 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "type": "textarea",
                 "required": False,
                 "help_lines": (
-                    "One path alias or explicit hop per line.",
+                    "One explicit path hop per line.",
+                    "Each supported path must be entered on its own line.",
                     "If you enter SP2-2, it matches only SP2-2, not SP2-1 or SP1-1.",
-                    "Add every supported path on its own line unless you use a family alias such as SP.",
                     "NO TRACE example:",
-                    "SP",
                     "SP1-1",
                     "SP2-1",
                     "SP2-2",
                     "MYCALL-SSID",
                 ),
                 "help_text": (
-                    "One path alias or explicit hop per line. Matching paths are reduced in place without inserting "
+                    "One explicit path hop per line. Matching paths are reduced in place without inserting "
                     "the local digi callsign. Good practice: include your own callsign-SSID from My settings."
                 ),
             },

@@ -851,7 +851,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                             "step_type": "filter_path",
                             "title": "Path Rule",
                             "enabled": 1,
-                            "config": {"mode": "allow", "trace_paths": ["WIDE2-2"], "no_trace_paths": ["SP"]},
+                            "config": {"mode": "allow", "trace_paths": ["WIDE2-2"], "no_trace_paths": ["SP1-1", "SP2-1", "SP2-2"]},
                         },
                         {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
                     ],
@@ -899,6 +899,45 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "no_trace" and "SP2-1 -> SP2*" in row["message"] for row in no_trace_one_rows))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "no_trace" and "SP1-1 -> SP1*" in row["message"] for row in no_trace_local_rows))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "rejected" for row in rejected_rows))
+
+    async def test_path_rule_does_not_expand_family_aliases(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            create_flow(
+                {
+                    "name": "Path explicit only",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE"], "no_trace_paths": ["SP"]},
+                        },
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only", "note": ""}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                frame = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE2-2:>Alias reject",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = event_rows_for_frame(str(frame["frame_uid"]))
+            self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "rejected" for row in rows))
 
     async def test_strict_filter_rejects_tcp_nogate_and_rfonly_paths(self) -> None:
         with temporary_database():

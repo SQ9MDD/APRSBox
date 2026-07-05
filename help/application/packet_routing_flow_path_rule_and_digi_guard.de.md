@@ -1,6 +1,6 @@
 # Pfadregel und DIGI-Schutz
 
-Dies ist der zentrale Block fur Flows, die in `TX RF` enden. Er fuehrt zuerst den DIGI-Schutz aus und danach die Pfad-Umschreibung.
+Dies ist der zentrale Block fur Flows, die in `TX RF` enden. Er fuehrt zuerst den DIGI-Schutz aus und danach die Pfad-Umschreibung. Dieser Block sollte immer der letzte Block im Flow sein, weil er den Pfad veraendert und andere Filter stoeren kann.
 
 Der Schutzteil lehnt ab:
 
@@ -28,11 +28,11 @@ Konfigurationsfelder:
 Was eingetragen werden kann:
 
 - jeder Eintrag steht in einer eigenen Zeile,
-- `TRACE`: ein voller Hop wie `WIDE1-1`, `WIDE2-1`, `WIDE2-2` oder ein Familienalias wie `WIDE`,
-- `NO TRACE`: ein voller Hop wie `SP1-1`, `SP2-1`, `SP2-2`, ein Familienalias wie `SP` oder das eigene `CALLSIGN-SSID`.
+- `TRACE`: ein voller Hop wie `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: ein voller Hop wie `SP1-1`, `SP2-1`, `SP2-2` oder das eigene `CALLSIGN-SSID`.
 - `WIDE2-2` passt nur zu `WIDE2-2`; es behandelt nicht `WIDE2-1` oder `WIDE1-1`,
 - `SP2-2` passt nur zu `SP2-2`; es behandelt nicht `SP2-1` oder `SP1-1`,
-- wenn kein Familienalias wie `WIDE` oder `SP` verwendet wird, muss jeder unterstuetzte Pfad in einer eigenen Zeile stehen.
+- jeder unterstuetzte Pfad muss in einer eigenen Zeile stehen.
 
 Typische Umschreibungen:
 
@@ -48,14 +48,12 @@ Typische Starteintraege:
 
 `TRACE`:
 
-- `WIDE` - eine Zeile fuer die Familie `WIDE`,
 - `WIDE1-1` - nur Pfad `WIDE1-1`,
 - `WIDE2-1` - nur Pfad `WIDE2-1`,
 - `WIDE2-2` - nur Pfad `WIDE2-2`.
 
 `NO TRACE`:
 
-- `SP` - eine Zeile fuer die Familie `SP`,
 - `SP1-1` - nur Pfad `SP1-1`,
 - `SP2-1` - nur Pfad `SP2-1`,
 - `SP2-2` - nur Pfad `SP2-2`,

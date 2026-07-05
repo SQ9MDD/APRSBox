@@ -1,6 +1,6 @@
 # Regla de trayectoria y protección DIGI
 
-Es el bloque clave para flujos que terminan en `TX RF`. Primero hace la proteccion DIGI y despues reescribe la ruta.
+Es el bloque clave para flujos que terminan en `TX RF`. Primero hace la proteccion DIGI y despues reescribe la ruta. Este bloque debe ser siempre el ultimo bloque del flow porque modifica la ruta y puede alterar el funcionamiento de otros filtros.
 
 La parte de proteccion rechaza:
 
@@ -28,11 +28,11 @@ Campos de configuracion:
 Que puedes escribir:
 
 - cada entrada va en su propia linea,
-- `TRACE`: un hop completo como `WIDE1-1`, `WIDE2-1`, `WIDE2-2` o un alias de familia como `WIDE`,
-- `NO TRACE`: un hop completo como `SP1-1`, `SP2-1`, `SP2-2`, un alias de familia como `SP` o tu propio `CALLSIGN-SSID`.
+- `TRACE`: un hop completo como `WIDE1-1`, `WIDE2-1`, `WIDE2-2`,
+- `NO TRACE`: un hop completo como `SP1-1`, `SP2-1`, `SP2-2` o tu propio `CALLSIGN-SSID`.
 - `WIDE2-2` coincide solo con `WIDE2-2`; no maneja `WIDE2-1` ni `WIDE1-1`,
 - `SP2-2` coincide solo con `SP2-2`; no maneja `SP2-1` ni `SP1-1`,
-- si no usas un alias de familia como `WIDE` o `SP`, debes anadir cada ruta admitida en una linea separada.
+- debes anadir cada ruta admitida en una linea separada.
 
 Reescrituras tipicas:
 
@@ -48,14 +48,12 @@ Entradas tipicas de arranque:
 
 `TRACE`:
 
-- `WIDE` - una linea que cubre la familia `WIDE`,
 - `WIDE1-1` - solo la ruta `WIDE1-1`,
 - `WIDE2-1` - solo la ruta `WIDE2-1`,
 - `WIDE2-2` - solo la ruta `WIDE2-2`.
 
 `NO TRACE`:
 
-- `SP` - una linea que cubre la familia `SP`,
 - `SP1-1` - solo la ruta `SP1-1`,
 - `SP2-1` - solo la ruta `SP2-1`,
 - `SP2-2` - solo la ruta `SP2-2`,
