@@ -1385,34 +1385,17 @@
 
     function buildPhgCoverageLayer(station, coverageColor) {
         const radiusMeters = Number(station.phg_range_km) * 1000;
-        const haloOpacity = coverageOutlineOpacity > 0
-            ? clampNumber((coverageOutlineOpacity * 0.6) + 0.12, 0, 0.85)
-            : 0;
-        const boundaryHaloOptions = {
-            radius: radiusMeters,
-            color: overlayContrastColor(),
-            opacity: haloOpacity,
-            stroke: true,
-            fill: false,
-            weight: 5,
-            dashArray: "14 10",
-            interactive: false,
-        };
-        const boundaryCoreOptions = {
+        const coverageShapeOptions = {
             radius: radiusMeters,
             color: coverageColor,
             fillColor: coverageColor,
             opacity: coverageOutlineOpacity,
             fillOpacity: coverageFillOpacity,
             stroke: true,
-            weight: 2.25,
-            dashArray: "12 8",
+            weight: 1.5,
             interactive: false,
         };
-        const fallbackCircle = window.L.layerGroup([
-            window.L.circle([station.latitude, station.longitude], boundaryHaloOptions),
-            window.L.circle([station.latitude, station.longitude], boundaryCoreOptions),
-        ]);
+        const fallbackCircle = window.L.circle([station.latitude, station.longitude], coverageShapeOptions);
         const azimuth = phgDirectionAzimuth(station.phg_direction);
         if (azimuth === null || !Number.isFinite(azimuth)) {
             return fallbackCircle;
@@ -1421,27 +1404,15 @@
         if (cardioidPoints.length < 4) {
             return fallbackCircle;
         }
-        return window.L.layerGroup([
-            window.L.polygon(cardioidPoints, {
-                color: overlayContrastColor(),
-                opacity: haloOpacity,
-                stroke: true,
-                fill: false,
-                weight: 5,
-                dashArray: "14 10",
-                interactive: false,
-            }),
-            window.L.polygon(cardioidPoints, {
-                color: coverageColor,
-                fillColor: coverageColor,
-                opacity: coverageOutlineOpacity,
-                fillOpacity: coverageFillOpacity,
-                stroke: true,
-                weight: 2.25,
-                dashArray: "12 8",
-                interactive: false,
-            }),
-        ]);
+        return window.L.polygon(cardioidPoints, {
+            color: coverageColor,
+            fillColor: coverageColor,
+            opacity: coverageOutlineOpacity,
+            fillOpacity: coverageFillOpacity,
+            stroke: true,
+            weight: 1.5,
+            interactive: false,
+        });
     }
 
     function markerSignature(station) {
@@ -1484,7 +1455,6 @@
             String(station.display_callsign || station.callsign || ""),
             String(coverageFillOpacity),
             String(coverageOutlineOpacity),
-            String(currentThemeName()),
         ].join("|");
     }
 
