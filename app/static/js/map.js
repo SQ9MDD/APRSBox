@@ -1510,7 +1510,7 @@
             points.map((point) => ([point.latitude, point.longitude])),
             {
                 color: overlayContrastColor(),
-                weight: 6,
+                weight: 3,
                 opacity: overlayContrastOpacity(),
                 lineJoin: "round",
                 lineCap: "round",
@@ -1521,7 +1521,7 @@
             points.map((point) => ([point.latitude, point.longitude])),
             {
                 color: trackColor,
-                weight: 3.5,
+                weight: 1.75,
                 opacity: 0.96,
                 lineJoin: "round",
                 lineCap: "round",
