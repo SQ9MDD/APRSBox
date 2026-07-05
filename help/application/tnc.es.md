@@ -1,0 +1,49 @@
+# TNC
+
+La pestaña TNC configura las interfaces de radio usadas por APRSBox para recibir KISS/TNC2, transmitir tramas outbound y, opcionalmente, compartir un puerto KISS en la LAN.
+
+## Lista TNC
+
+La tabla muestra las interfaces configuradas. Haz clic en una fila para editarla.
+
+- `Status` muestra el estado de configuración y runtime, por ejemplo conectado, error o desactivado.
+- `TX Block` muestra si la transmisión por esa interfaz está bloqueada.
+- `LAN` muestra si APRSBox expone un proxy KISS/TNC para clientes LAN.
+
+Desactivar un TNC impide que el monitor de tráfico y el servicio outbound lo usen. Beacon, WX, objetos, boletines y mensajes todavía pueden apuntar a esa interfaz, pero la transmisión se omitirá o fallará según el contexto.
+
+## Tipos de interfaz
+
+- `TCP` conecta con un TNC o software que expone KISS por TCP. `Path / Adress` normalmente tiene formato `host:port`, por ejemplo `127.0.0.1:8001`.
+- `SERIALL` usa un puerto serie local, por ejemplo `/dev/ttyUSB0` o `/dev/ttyACM0`, y requiere un `Baud Rate` válido.
+- `OpenWebRX MQTT (RX only)` recibe paquetes desde OpenWebRX MQTT. Este tipo es solo RX: TX queda bloqueado y el proxy LAN se desactiva.
+
+Para OpenWebRX MQTT, el campo de dirección debe ser una URL `mqtt://` o `mqtts://` con el topic en la ruta, por ejemplo `mqtt://user:pass@127.0.0.1:1883/openwebrx/aprs`.
+
+## Campos de configuración
+
+- `Name` aparece en logs, listas de interfaces y selectores TX.
+- `Band` describe la banda de la interfaz.
+- `Enabled` activa la interfaz en el runtime de APRSBox.
+- `Block TX on this interface` permite recibir tráfico, pero bloquea la transmisión outbound.
+- `TX Min Gap (s)` define la pausa mínima entre transmisiones en este TNC. El rango permitido es de `0.2` a `1.2` segundos.
+- `RX Silence Reconnect Timeout (s)` se aplica a interfaces serie. Tras una ausencia de RX más larga que este valor, el broker serie puede forzar una reconexión. `0` desactiva este watchdog.
+
+`Baud Rate` se usa solo para `SERIALL`. Se ignora para `TCP` y `OpenWebRX MQTT`.
+
+## Expose Port
+
+`Expose Port` expone la conexión TNC a través de APRSBox como puerto TCP para clientes LAN. APRSBox reenvía tramas entre el TNC físico y los clientes.
+
+- `Allow TX from remote clients` permite que los clientes LAN envíen tramas al TNC. Si está desactivado, los clientes solo reciben.
+- `Bind Address` define la dirección de escucha. `0.0.0.0` significa todas las interfaces de red.
+- `Port` es el puerto TCP expuesto por APRSBox. Se admiten hasta 3 clientes simultáneos.
+- `Whitelist` limita el acceso a direcciones IPv4 o redes CIDR. Escribe un elemento por línea; también se aceptan comas.
+
+No actives TX remoto en una red no confiable. Si expones el puerto fuera de la máquina local, configura una whitelist.
+
+## Cuándo usar varios TNC
+
+Varios TNC activos pueden funcionar en paralelo. El tráfico recibido se maneja por interfaz, mientras que la transmisión depende del selector usado en cada pestaña, como `My Station`, `WX`, objetos, boletines, mensajes o reglas de `Packet Routing`.
+
+Si solo necesitas entrada desde OpenWebRX, usa `OpenWebRX MQTT (RX only)`. Si necesitas RX/TX completo por radio, usa `TCP` o `SERIALL`.
