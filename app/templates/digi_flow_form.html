@@ -3,6 +3,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 {% endblock %}
 
 {% block content %}
@@ -13,6 +14,15 @@
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
                 <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRSIS target uses a mandatory system strict guard step.") }}</p>
             </div>
+            <button
+                class="help-icon-button page-help-button"
+                type="button"
+                data-help-page="application/packet_routing_flow"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF TX flows require an enabled Path Rule step. APRSIS flows are system-restricted.") }}</div>
         {% if flash %}
@@ -346,6 +356,7 @@
             localTxFrames: {{ t("Locally generated APRSBox TX frames")|tojson }},
             localTxSourceHelp: {{ t("Local TX includes only frames generated locally by APRSBox, such as beacons, status packets, weather, objects, items, bulletins and messages. It does not include RF-received or digipeated frames.")|tojson }},
             directPacketsOnly: {{ t("Passes only direct packets")|tojson }},
+            help: {{ t("Help")|tojson }},
             LOGGED: {{ t("LOGGED")|tojson }},
             DROPPED: {{ t("DROPPED")|tojson }},
             REJECTED: {{ t("REJECTED")|tojson }},
@@ -1528,7 +1539,7 @@
                     editor.className = "form-grid digi-step-editor-grid";
 
                     const stepMeta = typeMeta[step.step_type] || {};
-                    if (stepMeta.description || (Array.isArray(stepMeta.editor_help_lines) && stepMeta.editor_help_lines.length)) {
+                    if (stepMeta.description || stepMeta.help_page) {
                         const helpBlock = document.createElement("div");
                         helpBlock.className = "full";
                         if (stepMeta.description) {
@@ -1537,13 +1548,19 @@
                             lead.textContent = stepMeta.description;
                             helpBlock.appendChild(lead);
                         }
-                        if (Array.isArray(stepMeta.editor_help_lines) && stepMeta.editor_help_lines.length) {
-                            const lines = document.createElement("div");
-                            lines.className = "muted small";
-                            for (const line of stepMeta.editor_help_lines) {
-                                appendHelpLine(lines, line);
-                            }
-                            helpBlock.appendChild(lines);
+                        if (stepMeta.help_page) {
+                            const helpButton = document.createElement("button");
+                            helpButton.type = "button";
+                            helpButton.className = "help-icon-button";
+                            helpButton.setAttribute("data-help-page", stepMeta.help_page);
+                            const helpLabel = stepMeta.label ? `${i18n.help}: ${stepMeta.label}` : i18n.help;
+                            helpButton.title = helpLabel;
+                            helpButton.setAttribute("aria-label", helpLabel);
+                            const helpIcon = document.createElement("img");
+                            helpIcon.src = iconPath("help-circle-outline.svg");
+                            helpIcon.alt = "";
+                            helpButton.appendChild(helpIcon);
+                            helpBlock.appendChild(helpButton);
                         }
                         editor.appendChild(helpBlock);
                     }
@@ -1926,4 +1943,6 @@
         });
     })();
 </script>
+{% include "partials/help_modal.html" %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endblock %}

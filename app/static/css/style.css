@@ -3942,6 +3942,98 @@ select:focus-visible,
     margin-bottom: var(--space-4);
 }
 
+.igate-settings-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
+    gap: var(--space-4);
+    align-items: start;
+}
+
+.igate-config-form {
+    min-width: 0;
+}
+
+.igate-status-summary {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-3);
+    padding-left: var(--space-4);
+    border-left: 1px solid var(--border);
+}
+
+.igate-status-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.igate-status-summary .tnc-badge {
+    min-height: 2rem;
+}
+
+.igate-compact-list,
+.igate-diagnostics-list {
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0;
+}
+
+.igate-compact-list > div,
+.igate-diagnostics-list > div {
+    display: grid;
+    grid-template-columns: minmax(9rem, 0.72fr) minmax(0, 1fr);
+    gap: 0.65rem;
+    padding: 0.42rem 0;
+    border-top: 1px dashed color-mix(in srgb, var(--border) 82%, transparent);
+    align-items: baseline;
+    min-width: 0;
+}
+
+.igate-compact-list dt,
+.igate-diagnostics-list dt {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.igate-compact-list dd,
+.igate-diagnostics-list dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: 0.82rem;
+}
+
+.igate-compact-list code,
+.igate-diagnostics-list code {
+    white-space: normal;
+}
+
+.igate-diagnostics-details {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-3);
+}
+
+.igate-diagnostics-details summary {
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 600;
+}
+
+.igate-diagnostics-details[open] {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.igate-diagnostics-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 var(--space-4);
+}
+
 .danger-zone-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5742,6 +5834,18 @@ button.message-delivery-badge {
         grid-template-columns: 1fr;
     }
 
+    .igate-settings-layout,
+    .igate-diagnostics-list {
+        grid-template-columns: 1fr;
+    }
+
+    .igate-status-summary {
+        padding-left: 0;
+        padding-top: var(--space-4);
+        border-left: 0;
+        border-top: 1px solid var(--border);
+    }
+
     .settings-map-sources-grid {
         grid-template-columns: 1fr;
     }
@@ -5772,6 +5876,8 @@ button.message-delivery-badge {
     .dashboard-detail-grid,
     .band-condition-layout,
     .danger-zone-actions,
+    .igate-compact-list > div,
+    .igate-diagnostics-list > div,
     .form-grid,
     .station-detail-hero,
     .digi-flow-endpoints,

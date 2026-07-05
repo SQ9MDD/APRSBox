@@ -27,8 +27,8 @@ class StationDistanceUiTests(unittest.TestCase):
     def test_map_script_skips_marker_rerender_when_station_payload_is_unchanged(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("let lastStationsSignature = \"\";", script_source)
-        self.assertIn("function stationsSignature(stations)", script_source)
-        self.assertIn("if (nextSignature === lastStationsSignature)", script_source)
+        self.assertIn("function buildRenderSignature()", script_source)
+        self.assertIn("if (!forceRender && nextSignature === lastStationsSignature)", script_source)
 
     def test_map_script_renders_track_dots_for_older_positions(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -133,7 +133,7 @@ class StationDistanceUiTests(unittest.TestCase):
 
         self.assertIn("--map-mask-layer-opacity", map_script_source)
         self.assertIn("--map-mask-layer-opacity", detail_script_source)
-        self.assertIn("function maskLayerOpacityForMaskOpacity(opacityPercent)", map_script_source)
+        self.assertIn("function opacityFractionFromPercent(opacityPercent)", map_script_source)
         self.assertIn("function maskLayerOpacityForMaskOpacity(opacityPercent)", detail_script_source)
         self.assertIn("return Math.max(0, Math.min(100, opacityPercent)) / 100;", map_script_source)
         self.assertIn("return Math.max(0, Math.min(100, opacityPercent)) / 100;", detail_script_source)

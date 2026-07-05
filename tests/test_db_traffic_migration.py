@@ -338,6 +338,18 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                     """
                 ).fetchone()
                 self.assertIsNotNone(index_row)
+                aprs_message_index_rows = connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index'
+                      AND name IN (
+                          'idx_aprs_messages_direction_status_last_attempt_at',
+                          'idx_aprs_messages_direction_unread_conversation'
+                      )
+                    """
+                ).fetchall()
+                self.assertEqual(2, len(aprs_message_index_rows))
             finally:
                 connection.close()
 

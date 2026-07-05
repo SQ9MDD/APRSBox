@@ -34,6 +34,16 @@
     filter: var(--icon-filter);
 }
 
+.page-help-button {
+    position: fixed;
+    top: calc(var(--space-4) + var(--space-5));
+    right: calc(var(--space-4) + var(--space-5));
+    z-index: 74;
+    box-shadow:
+        0 0 0 var(--space-2) var(--bg),
+        var(--shadow-soft);
+}
+
 .help-viewer-modal[hidden] {
     display: none;
 }

@@ -1,13 +1,28 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 <section class="panel messages-page-panel">
     <div class="messages-shell" id="messages-app" data-static-root="{{ request.scope.root_path }}/static/">
         <aside class="messages-sidebar">
             <div class="messages-sidebar-top">
-                <div class="panel-header-copy">
-                    <h2>{{ t("Conversations") }}</h2>
-                    <p class="section-lead">{{ t("Stored APRS message conversations from the local SQLite database.") }}</p>
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>{{ t("Conversations") }}</h2>
+                        <p class="section-lead">{{ t("Stored APRS message conversations from the local SQLite database.") }}</p>
+                    </div>
+                    <button
+                        class="help-icon-button page-help-button"
+                        type="button"
+                        data-help-page="application/messages"
+                        title="{{ t('Help') }}"
+                        aria-label="{{ t('Help') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+                    </button>
                 </div>
                 <form class="messages-new-conversation" id="messages-new-conversation-form">
                     <label class="messages-new-conversation-field">
@@ -79,6 +94,7 @@
         </section>
     </div>
 </section>
+{% include "partials/help_modal.html" %}
 
 <script type="application/json" id="messages-initial-data">{{ messages_view|tojson }}</script>
 <script>
@@ -781,4 +797,8 @@
     });
 })();
 </script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endblock %}

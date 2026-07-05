@@ -449,6 +449,16 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
             self.assertEqual(station_settings["beacon_interval_mode"], "fixed")
             self.assertEqual(int(station_settings["beacon_interval_minutes"]), 60)
 
+    def test_station_template_includes_help_viewer(self) -> None:
+        template_source = Path("app/templates/station.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/station"', template_source)
+        self.assertIn('class="help-icon-button page-help-button"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+        for language in ("pl", "en", "es", "de"):
+            self.assertTrue(Path(f"help/application/station.{language}.md").exists())
+
 
 class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_internal_tx_job_is_marked_sent_without_rf_transport(self) -> None:

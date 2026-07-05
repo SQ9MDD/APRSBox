@@ -16,6 +16,14 @@ TRAFFIC_RETENTION_MINUTES_SETTING_KEY = "traffic_retention_minutes"
 DEFAULT_EVENT_LOG_MIN_LEVEL = "INFO"
 DEFAULT_TRAFFIC_RETENTION_MINUTES = 60
 TRAFFIC_RETENTION_ALLOWED_MINUTES: tuple[int, ...] = (*range(60, 361, 30), 720, 1440)
+DATABASE_INDEX_REPAIR_SETTING_KEY = "database.index_repair.version"
+DATABASE_INDEX_REPAIR_VERSION = "2026-07-index-repair-v1"
+DEFAULT_OUTBOUND_JOB_PRUNE_BATCH_SIZE = 500
+DEFAULT_OUTBOUND_SENT_RETENTION_DAYS = 7
+DEFAULT_OUTBOUND_FAILURE_RETENTION_DAYS = 30
+DEFAULT_OUTBOUND_RETENTION_MIN_ROWS_PER_GROUP = 200
+OUTBOUND_RETENTION_KINDS: tuple[str, ...] = ("beacon", "status", "object", "wx", "digi_tx")
+OUTBOUND_RETENTION_FAILURE_STATUSES: tuple[str, ...] = ("failed", "cancelled")
 _EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LEVELS)}
 
 _event_log_min_level_cache: str | None = None
@@ -753,10 +761,6 @@ CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at 
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
-CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_status_last_attempt_at
-    ON aprs_messages(direction, status, last_attempt_at, id);
-CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
-    ON aprs_messages(direction, is_unread, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_wx_sources_type_enabled ON wx_sources(source_type, enabled, name);
 CREATE INDEX IF NOT EXISTS idx_wx_mappings_source_enabled ON wx_mappings(source_id, enabled, parameter_name);
 CREATE INDEX IF NOT EXISTS idx_wx_runtime_cache_status_updated ON wx_runtime_cache(status, updated_at DESC);
@@ -1424,6 +1428,8 @@ CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
             ),
         )
         _normalize_map_sources_table(connection)
+        connection.commit()
+        _run_database_index_repair_for_update(connection)
 
 
 def _normalize_map_sources_table(connection: sqlite3.Connection) -> None:
@@ -1490,6 +1496,130 @@ def _normalize_map_sources_table(connection: sqlite3.Connection) -> None:
             ON map_sources(is_default)
             WHERE is_default = 1
         """
+    )
+
+
+def _run_database_index_repair_for_update(connection: sqlite3.Connection) -> None:
+    try:
+        marker = _get_app_setting_on_connection(connection, DATABASE_INDEX_REPAIR_SETTING_KEY)
+        if marker == DATABASE_INDEX_REPAIR_VERSION:
+            return
+
+        check_messages = _database_check_messages(connection, "quick_check")
+        if _database_check_ok(check_messages):
+            _set_app_setting_on_connection(
+                connection,
+                DATABASE_INDEX_REPAIR_SETTING_KEY,
+                DATABASE_INDEX_REPAIR_VERSION,
+            )
+            return
+
+        if not _is_reindex_repairable_check_messages(check_messages):
+            _insert_event_log_on_connection(
+                connection,
+                "WARNING",
+                "database",
+                "Skipped automatic database index repair; quick_check reported non-index issues: "
+                f"{_format_database_check_messages(check_messages)}",
+            )
+            return
+
+        connection.execute("REINDEX")
+        integrity_messages = _database_check_messages(connection, "integrity_check")
+        if _database_check_ok(integrity_messages):
+            _set_app_setting_on_connection(
+                connection,
+                DATABASE_INDEX_REPAIR_SETTING_KEY,
+                DATABASE_INDEX_REPAIR_VERSION,
+            )
+            _insert_event_log_on_connection(
+                connection,
+                "INFO",
+                "database",
+                "Automatic database index repair completed after quick_check reported index inconsistencies.",
+            )
+            return
+
+        _insert_event_log_on_connection(
+            connection,
+            "WARNING",
+            "database",
+            "Automatic database index repair ran, but integrity_check still reports issues: "
+            f"{_format_database_check_messages(integrity_messages)}",
+        )
+    except sqlite3.DatabaseError as exc:
+        message = str(exc).strip() or exc.__class__.__name__
+        try:
+            connection.rollback()
+        except sqlite3.DatabaseError:
+            pass
+        try:
+            _insert_event_log_on_connection(
+                connection,
+                "WARNING",
+                "database",
+                f"Automatic database index repair failed: {message}",
+            )
+        except sqlite3.DatabaseError:
+            pass
+
+
+def _database_check_messages(connection: sqlite3.Connection, pragma_name: str) -> list[str]:
+    if pragma_name not in {"quick_check", "integrity_check"}:
+        raise ValueError(f"Unsupported database check pragma: {pragma_name}")
+    rows = connection.execute(f"PRAGMA {pragma_name}").fetchall()
+    return [str(row[0]) for row in rows]
+
+
+def _database_check_ok(messages: list[str]) -> bool:
+    return len(messages) == 1 and messages[0].strip().lower() == "ok"
+
+
+def _is_reindex_repairable_check_messages(messages: list[str]) -> bool:
+    if not messages or _database_check_ok(messages):
+        return False
+    for message in messages:
+        normalized = str(message or "").strip()
+        if normalized.startswith("wrong # of entries in index "):
+            continue
+        if normalized.startswith("row ") and " missing from index " in normalized:
+            continue
+        return False
+    return True
+
+
+def _format_database_check_messages(messages: list[str], *, max_messages: int = 3) -> str:
+    visible_messages = [str(message or "").strip() for message in messages[:max(1, max_messages)]]
+    suffix = ""
+    if len(messages) > len(visible_messages):
+        suffix = f" and {len(messages) - len(visible_messages)} more"
+    return "; ".join(visible_messages) + suffix
+
+
+def _get_app_setting_on_connection(connection: sqlite3.Connection, key: str) -> str | None:
+    row = connection.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    if row is None:
+        return None
+    return str(row["value"])
+
+
+def _set_app_setting_on_connection(connection: sqlite3.Connection, key: str, value: str) -> None:
+    connection.execute(
+        """
+        INSERT INTO app_settings(key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, value, utc_now()),
+    )
+
+
+def _insert_event_log_on_connection(connection: sqlite3.Connection, level: str, category: str, message: str) -> None:
+    connection.execute(
+        "INSERT INTO event_logs(level, category, message, created_at) VALUES (?, ?, ?, ?)",
+        (normalize_event_log_level(level), str(category or "").strip(), str(message or ""), utc_now()),
     )
 
 
@@ -2245,6 +2375,97 @@ def prune_traffic_frames_batch(*, limit: int = 1000) -> int:
         )
         deleted = cursor.rowcount
     return max(int(deleted or 0), 0)
+
+
+def prune_outbound_jobs_batch(
+    *,
+    limit: int = DEFAULT_OUTBOUND_JOB_PRUNE_BATCH_SIZE,
+    sent_retention_days: int = DEFAULT_OUTBOUND_SENT_RETENTION_DAYS,
+    failure_retention_days: int = DEFAULT_OUTBOUND_FAILURE_RETENTION_DAYS,
+    min_rows_per_group: int = DEFAULT_OUTBOUND_RETENTION_MIN_ROWS_PER_GROUP,
+) -> int:
+    normalized_limit = max(1, int(limit))
+    normalized_min_rows = max(0, int(min_rows_per_group))
+    sent_cutoff = _retention_cutoff_days(sent_retention_days)
+    failure_cutoff = _retention_cutoff_days(failure_retention_days)
+    deleted_total = 0
+
+    with get_connection() as connection:
+        for kind in OUTBOUND_RETENTION_KINDS:
+            remaining_limit = normalized_limit - deleted_total
+            if remaining_limit <= 0:
+                break
+            deleted_total += _delete_outbound_jobs_for_policy(
+                connection,
+                kind=kind,
+                status="sent",
+                cutoff=sent_cutoff,
+                keep_rows=normalized_min_rows,
+                limit=remaining_limit,
+            )
+
+        for status in OUTBOUND_RETENTION_FAILURE_STATUSES:
+            for kind in OUTBOUND_RETENTION_KINDS:
+                remaining_limit = normalized_limit - deleted_total
+                if remaining_limit <= 0:
+                    break
+                deleted_total += _delete_outbound_jobs_for_policy(
+                    connection,
+                    kind=kind,
+                    status=status,
+                    cutoff=failure_cutoff,
+                    keep_rows=normalized_min_rows,
+                    limit=remaining_limit,
+                )
+            if deleted_total >= normalized_limit:
+                break
+
+    return deleted_total
+
+
+def _delete_outbound_jobs_for_policy(
+    connection: sqlite3.Connection,
+    *,
+    kind: str,
+    status: str,
+    cutoff: str,
+    keep_rows: int,
+    limit: int,
+) -> int:
+    cursor = connection.execute(
+        """
+        DELETE FROM outbound_jobs
+        WHERE id IN (
+            SELECT id
+            FROM (
+                SELECT id
+                FROM outbound_jobs
+                WHERE kind = ?
+                  AND status = ?
+                  AND aprs_message_id IS NULL
+                  AND COALESCE(sent_at, updated_at, started_at, scheduled_at, created_at) < ?
+                  AND id NOT IN (
+                      SELECT id
+                      FROM outbound_jobs
+                      WHERE kind = ?
+                        AND status = ?
+                        AND aprs_message_id IS NULL
+                      ORDER BY COALESCE(sent_at, updated_at, started_at, scheduled_at, created_at) DESC, id DESC
+                      LIMIT ?
+                  )
+                ORDER BY COALESCE(sent_at, updated_at, started_at, scheduled_at, created_at) ASC, id ASC
+                LIMIT ?
+            )
+        )
+        """,
+        (kind, status, cutoff, kind, status, keep_rows, limit),
+    )
+    return max(int(cursor.rowcount or 0), 0)
+
+
+def _retention_cutoff_days(days: int) -> str:
+    normalized_days = max(1, int(days))
+    return (datetime.now(timezone.utc) - timedelta(days=normalized_days)).replace(microsecond=0).isoformat()
 
 
 def vacuum_database() -> None:

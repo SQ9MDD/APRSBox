@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
 {% endif %}
-{% if section.slug in ['objects', 'bulletins'] %}
+{% if section.slug in ['objects', 'modems', 'bulletins'] %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 {% endif %}
 {% endblock %}
@@ -234,11 +234,11 @@
                 <div class="panel-header-copy">
                     <h2>{{ t(section.edit_title if section.supports_editing and edit_row else section.create_title) }}</h2>
                 </div>
-                {% if section.slug in ['objects', 'bulletins'] %}
+                {% if section.slug in ['objects', 'modems', 'bulletins'] %}
                 <button
-                    class="help-icon-button"
+                    class="help-icon-button page-help-button"
                     type="button"
-                    data-help-page="{{ 'application/objects' if section.slug == 'objects' else 'application/bulletins' }}"
+                    data-help-page="{{ 'application/objects' if section.slug == 'objects' else ('application/tnc' if section.slug == 'modems' else 'application/bulletins') }}"
                     title="{{ t('Help') }}"
                     aria-label="{{ t('Help') }}"
                 >
@@ -506,7 +506,7 @@
             {% else %}
             <p class="muted">{{ t("Your role is read-only for this section.") }}</p>
             {% endif %}
-            {% if section.slug in ['objects', 'bulletins'] %}
+            {% if section.slug in ['objects', 'modems', 'bulletins'] %}
             {% include "partials/help_modal.html" %}
             {% endif %}
         </div>
@@ -563,7 +563,7 @@
 {% if section.slug in ['objects', 'items'] %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 {% endif %}
-{% if section.slug in ['objects', 'bulletins'] %}
+{% if section.slug in ['objects', 'modems', 'bulletins'] %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endif %}
 <script>
