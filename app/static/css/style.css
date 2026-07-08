@@ -1201,6 +1201,27 @@ body {
     margin-top: 0.1rem;
 }
 
+.panel-subsection {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.panel-subsection + .panel-subsection {
+    margin-top: var(--space-4);
+}
+
+.panel-subsection-header {
+    display: grid;
+    gap: var(--space-1);
+}
+
+.panel-subsection-header h3 {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
 .panel-body,
 .stack-md {
     display: grid;
@@ -3719,11 +3740,6 @@ select:focus-visible,
     gap: var(--space-3);
     min-width: 0;
     flex-wrap: nowrap;
-}
-
-.stations-summary-header h2 {
-    margin: 0;
-    font-size: 1.05rem;
 }
 
 .stations-refresh-control {
