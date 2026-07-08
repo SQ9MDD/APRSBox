@@ -78,6 +78,10 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("border: 0;", stylesheet_source)
         self.assertIn("gap: var(--space-4);", stylesheet_source)
         self.assertIn("box-shadow: none;", stylesheet_source)
+        self.assertIn("border: 1px solid var(--border);", stylesheet_source)
+        self.assertIn("border-radius: var(--radius-sm);", stylesheet_source)
+        self.assertIn("border-radius: var(--radius);", stylesheet_source)
+        self.assertIn("box-shadow: var(--shadow-soft);", stylesheet_source)
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")

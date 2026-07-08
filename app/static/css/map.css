@@ -18,15 +18,15 @@
 }
 
 .page-map .map-toolbar {
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-soft);
 }
 
 .page-map .map-stage {
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft);
 }
 
 @media (min-width: 981px) {
