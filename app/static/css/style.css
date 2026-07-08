@@ -4744,6 +4744,13 @@ select:focus-visible,
     gap: 0.8rem;
 }
 
+.traffic-page-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
 .traffic-toolbar,
 .toolbar-inline {
     padding: 0.78rem 0.9rem;
