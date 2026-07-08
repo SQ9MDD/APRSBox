@@ -686,7 +686,16 @@ body {
 }
 
 .sidebar-collapse-slot::before {
-    content: none;
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 0.5rem;
+    height: 2.4rem;
+    background: linear-gradient(90deg, var(--sidebar) 0 50%, var(--bg-layer) 50% 100%);
+    pointer-events: none;
+    z-index: 0;
 }
 
 .sidebar-action-button.sidebar-collapse-button {
