@@ -68,6 +68,17 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('id="map-interface-filters"', template_source)
         self.assertLess(template_source.find('id="map-interface-filters"'), template_source.find('class="map-info-strip"'))
 
+    def test_map_stylesheet_removes_extra_chrome_from_full_map_layout(self) -> None:
+        stylesheet_source = Path("app/static/css/map.css").read_text(encoding="utf-8")
+        self.assertIn(".page-map .content {", stylesheet_source)
+        self.assertIn(".page-map .map-panel {", stylesheet_source)
+        self.assertIn(".page-map .map-toolbar {", stylesheet_source)
+        self.assertIn(".page-map .map-stage {", stylesheet_source)
+        self.assertIn("padding: 0;", stylesheet_source)
+        self.assertIn("border: 0;", stylesheet_source)
+        self.assertIn("border-radius: 0;", stylesheet_source)
+        self.assertIn("box-shadow: none;", stylesheet_source)
+
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("mapTileEventsEndpoint", script_source)

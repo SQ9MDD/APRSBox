@@ -6,6 +6,33 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    padding: 0;
+    gap: 0;
+}
+
+.page-map .map-panel {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.page-map .map-panel .panel-body,
+.page-map .map-page {
+    gap: 0;
+}
+
+.page-map .map-toolbar {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.page-map .map-stage {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 @media (min-width: 981px) {
