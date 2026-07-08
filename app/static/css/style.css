@@ -675,9 +675,9 @@ body {
     position: fixed;
     left: var(--sidebar-current-width);
     top: 50vh;
-    transform: translate(-50%, -50%);
-    width: 1.9rem;
-    height: 4.2rem;
+    transform: translate(-28%, -50%);
+    width: 2.55rem;
+    height: 4.9rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -691,16 +691,20 @@ body {
     inset: 0;
     border-radius: 999px;
     background:
-        radial-gradient(circle at center, color-mix(in srgb, var(--bg-layer) 94%, transparent) 0%, color-mix(in srgb, var(--bg-layer) 94%, transparent) 52%, transparent 72%),
-        linear-gradient(180deg, var(--bg) 0%, var(--bg-layer) 100%);
-    opacity: 0.98;
+        radial-gradient(circle at center, color-mix(in srgb, var(--panel) 96%, transparent) 0%, color-mix(in srgb, var(--panel) 96%, transparent) 54%, transparent 76%),
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, var(--bg-layer) 8%) 0%, color-mix(in srgb, var(--panel-soft) 88%, var(--bg-layer) 12%) 100%);
+    box-shadow:
+        0 10px 24px rgba(0, 0, 0, 0.18),
+        0 0 18px color-mix(in srgb, var(--accent) 18%, transparent);
+    opacity: 1;
+    backdrop-filter: blur(10px);
 }
 
 .sidebar-action-button.sidebar-collapse-button {
-    width: 1.35rem;
-    min-width: 1.35rem;
-    height: 1.35rem;
-    min-height: 1.35rem;
+    width: 1.7rem;
+    min-width: 1.7rem;
+    height: 1.7rem;
+    min-height: 1.7rem;
     padding: 0;
     border: 0;
     border-radius: 999px;
@@ -712,14 +716,20 @@ body {
 }
 
 .sidebar-action-button.sidebar-collapse-button img {
-    width: 1rem;
-    height: 1rem;
+    width: 1.3rem;
+    height: 1.3rem;
+    opacity: 1;
+    filter: var(--icon-filter);
+    filter:
+        var(--icon-filter)
+        drop-shadow(0 1px 0 rgba(255, 255, 255, 0.08))
+        drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 24%, transparent));
 }
 
 .sidebar-action-button.sidebar-collapse-button:hover {
     background: transparent;
     border-color: transparent;
-    transform: scale(1.08);
+    transform: scale(1.12);
 }
 
 .sidebar-action-button.sidebar-collapse-button:focus-visible {
@@ -1006,7 +1016,7 @@ body {
     }
 
     :root[data-sidebar-state="collapsed"] .sidebar-collapse-slot {
-        width: 1.7rem;
+        width: 2.2rem;
     }
 
     :root[data-sidebar-state="collapsed"] .sidebar-user-panel {
