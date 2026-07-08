@@ -541,6 +541,10 @@ body {
     min-height: 100%;
 }
 
+html {
+    scrollbar-gutter: stable;
+}
+
 body {
     margin: 0;
     font-family: var(--font-ui);
@@ -3805,7 +3809,6 @@ select:focus-visible,
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
-    margin-bottom: var(--space-4);
 }
 
 .band-condition-layout-full {
@@ -4126,7 +4129,6 @@ select:focus-visible,
 
 .settings-primary-grid {
     align-items: start;
-    margin-bottom: var(--space-4);
 }
 
 .igate-settings-layout {

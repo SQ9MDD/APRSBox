@@ -26,6 +26,20 @@ class UiConsistencyTemplateTests(unittest.TestCase):
         self.assertNotIn(".stations-summary-header h2 {", stylesheet_source)
         self.assertNotIn("font-size: 1.05rem;", stylesheet_source)
 
+    def test_global_layout_keeps_stable_scrollbar_gutter(self) -> None:
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn("html {\n    scrollbar-gutter: stable;\n}", stylesheet_source)
+
+    def test_top_level_layout_wrappers_do_not_duplicate_content_gap_with_extra_margin(self) -> None:
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        band_condition_block = stylesheet_source.partition(".band-condition-layout {")[2].split("}", 1)[0]
+        settings_block = stylesheet_source.partition(".settings-primary-grid {")[2].split("}", 1)[0]
+
+        self.assertIn("gap: var(--space-4);", band_condition_block)
+        self.assertNotIn("margin-bottom", band_condition_block)
+        self.assertIn("align-items: start;", settings_block)
+        self.assertNotIn("margin-bottom", settings_block)
+
 
 if __name__ == "__main__":
     unittest.main()
