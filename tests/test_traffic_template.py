@@ -14,7 +14,7 @@ class TrafficTemplateTests(unittest.TestCase):
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
         self.assertIn('class="panel traffic-page-panel"', template_source)
         self.assertIn(".traffic-page-panel {", stylesheet_source)
-        self.assertIn("padding: var(--space-4);", stylesheet_source)
+        self.assertIn(".traffic-page-panel {\n    padding: 0;", stylesheet_source)
         self.assertIn("border: 0;", stylesheet_source)
         self.assertIn("background: transparent;", stylesheet_source)
         self.assertIn("box-shadow: none;", stylesheet_source)
