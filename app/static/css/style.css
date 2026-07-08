@@ -2354,6 +2354,13 @@ body {
     box-shadow: var(--shadow-soft);
 }
 
+.station-page-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
 .station-settings-group-header {
     display: grid;
     gap: 0.2rem;
