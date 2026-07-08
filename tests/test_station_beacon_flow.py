@@ -468,6 +468,8 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
         self.assertIn("border: 0;", stylesheet_source)
         self.assertIn("background: transparent;", stylesheet_source)
         self.assertIn("box-shadow: none;", stylesheet_source)
+        self.assertIn(".station-settings-group {", stylesheet_source)
+        self.assertIn(".station-settings-group {\n    padding: var(--space-3);\n    border: 1px solid var(--border);\n    border-radius: var(--radius-md);\n    background: var(--panel);", stylesheet_source)
         self.assertIn('<section class="panel">\n    <div class="panel-body">\n        <div class="panel-header">\n            <div class="panel-header-copy">\n                <h2>{{ t("Station TX Log") }}</h2>', template_source)
 
 

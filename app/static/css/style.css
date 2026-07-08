@@ -2366,7 +2366,7 @@ body {
     padding: var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
+    background: var(--panel);
     box-shadow: var(--shadow-soft);
 }
 
