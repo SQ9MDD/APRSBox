@@ -52,6 +52,8 @@
     let tileLayer = null;
     let trackPolyline = null;
     let trackDots = [];
+    let lastRenderedTrackStation = null;
+    let lastRenderedTrack = null;
     const mapMaskPaneName = "map-mask-pane";
     let mapMaskPane = null;
     let mapMaskLayer = null;
@@ -259,14 +261,59 @@
         `;
     }
 
-    function colorForCallsign(callsign) {
-        const value = String(callsign || "");
-        let hash = 0;
+    const callsignColorPalette = Object.freeze([
+        { hue: 302, saturation: 100, lightness: 56 },
+        { hue: 188, saturation: 100, lightness: 51 },
+        { hue: 272, saturation: 94, lightness: 63 },
+        { hue: 334, saturation: 100, lightness: 60 },
+        { hue: 203, saturation: 100, lightness: 55 },
+        { hue: 287, saturation: 90, lightness: 68 },
+        { hue: 352, saturation: 100, lightness: 63 },
+        { hue: 170, saturation: 100, lightness: 46 },
+        { hue: 248, saturation: 100, lightness: 67 },
+        { hue: 318, saturation: 100, lightness: 54 },
+        { hue: 194, saturation: 100, lightness: 47 },
+        { hue: 283, saturation: 100, lightness: 50 },
+    ]);
+    const callsignColorVariants = Object.freeze([
+        { hueShift: 0, saturationShift: 0, lightnessShift: 0 },
+        { hueShift: 6, saturationShift: -5, lightnessShift: 7 },
+        { hueShift: -7, saturationShift: 5, lightnessShift: -6 },
+    ]);
+
+    function clampNumber(value, minValue, maxValue) {
+        return Math.max(minValue, Math.min(maxValue, value));
+    }
+
+    function hashCallsign(callsign) {
+        const value = String(callsign || "").trim().toUpperCase();
+        let hash = 2166136261;
         for (let index = 0; index < value.length; index += 1) {
-            hash = ((hash * 31) + value.charCodeAt(index)) >>> 0;
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 16777619) >>> 0;
         }
-        const hue = hash % 360;
-        return `hsl(${hue} 80% 52%)`;
+        return hash >>> 0;
+    }
+
+    // Bias the palette toward neon magenta/cyan/violet tones that rarely occur on default OSM tiles.
+    function colorForCallsign(callsign) {
+        const hash = hashCallsign(callsign);
+        const base = callsignColorPalette[hash % callsignColorPalette.length];
+        const variant = callsignColorVariants[(hash >>> 8) % callsignColorVariants.length];
+        const hue = (base.hue + variant.hueShift + (((hash >>> 16) % 5) - 2) + 360) % 360;
+        const saturation = clampNumber(base.saturation + variant.saturationShift, 86, 100);
+        const lightness = clampNumber(base.lightness + variant.lightnessShift, 44, 72);
+        return `hsl(${hue} ${saturation}% ${lightness}%)`;
+    }
+
+    function overlayContrastColor() {
+        return currentThemeName() === "light"
+            ? "rgba(16, 24, 40, 0.82)"
+            : "rgba(255, 255, 255, 0.92)";
+    }
+
+    function overlayContrastOpacity() {
+        return currentThemeName() === "light" ? 0.72 : 0.82;
     }
 
     function parseTrackPoints(value) {
@@ -329,6 +376,9 @@
             return;
         }
 
+        lastRenderedTrackStation = station || null;
+        lastRenderedTrack = stationTrack || null;
+
         if (trackPolyline) {
             map.removeLayer(trackPolyline);
             trackPolyline = null;
@@ -344,26 +394,38 @@
         }
 
         const trackColor = colorForCallsign(station.display_callsign || "");
-        trackPolyline = window.L.polyline(
+        const haloPolyline = window.L.polyline(
             points.map((point) => ([Number(point.latitude), Number(point.longitude)])),
             {
-                color: trackColor,
+                color: overlayContrastColor(),
                 weight: 3,
-                opacity: 0.85,
+                opacity: overlayContrastOpacity(),
                 lineJoin: "round",
                 lineCap: "round",
                 interactive: false,
             }
         ).addTo(map);
+        trackPolyline = window.L.polyline(
+            points.map((point) => ([Number(point.latitude), Number(point.longitude)])),
+            {
+                color: trackColor,
+                weight: 1.75,
+                opacity: 0.96,
+                lineJoin: "round",
+                lineCap: "round",
+                interactive: false,
+            }
+        ).addTo(map);
+        trackDots.push(haloPolyline);
 
         for (const point of points.slice(0, -1)) {
             const dot = window.L.circleMarker([Number(point.latitude), Number(point.longitude)], {
-                radius: 3,
-                color: trackColor,
+                radius: 4,
+                color: overlayContrastColor(),
                 fillColor: trackColor,
-                fillOpacity: 0.65,
-                opacity: 0.95,
-                weight: 1,
+                fillOpacity: 0.94,
+                opacity: 0.96,
+                weight: 2,
                 interactive: false,
             }).addTo(map);
             trackDots.push(dot);
@@ -586,6 +648,9 @@
         for (const mutation of mutations) {
             if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
                 applyMaskOpacity();
+                if (lastRenderedTrackStation && lastRenderedTrack) {
+                    renderTrack(lastRenderedTrackStation, lastRenderedTrack);
+                }
                 break;
             }
         }
