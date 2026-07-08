@@ -18,7 +18,7 @@ class StatisticsTemplateTests(unittest.TestCase):
         self.assertIn(".statistics-priority-grid {", stylesheet_source)
         self.assertIn(".statistics-secondary-grid {", stylesheet_source)
         self.assertIn(".statistics-devices-card {", stylesheet_source)
-        self.assertIn("grid-column: 1 / -1;", stylesheet_source)
+        self.assertIn(".statistics-priority-grid {\n    display: grid;\n    grid-template-columns: repeat(3, minmax(0, 1fr));", stylesheet_source)
 
         direct_heard_pos = template_source.find('{{ t("HEARD DIRECT") }}')
         top_users_pos = template_source.find('{{ t("TOP20 users") }}')
