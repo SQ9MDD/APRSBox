@@ -19,6 +19,11 @@ class TrafficTemplateTests(unittest.TestCase):
         self.assertIn("background: transparent;", stylesheet_source)
         self.assertIn("box-shadow: none;", stylesheet_source)
 
+    def test_traffic_interface_summary_does_not_add_extra_spacing_before_log(self) -> None:
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".traffic-summary-stream {", stylesheet_source)
+        self.assertIn(".traffic-summary-stream {\n    max-height: none;\n    margin-bottom: 0;", stylesheet_source)
+
 
 if __name__ == "__main__":
     unittest.main()

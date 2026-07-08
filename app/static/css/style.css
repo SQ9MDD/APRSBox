@@ -4851,7 +4851,7 @@ select:focus-visible,
 
 .traffic-summary-stream {
     max-height: none;
-    margin-bottom: var(--space-4);
+    margin-bottom: 0;
 }
 
 .traffic-summary-stream .traffic-log-row {
