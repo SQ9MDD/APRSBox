@@ -36,10 +36,10 @@
 
     <div class="statistics-priority-grid">
         <section class="dashboard-activity-card statistics-users-card">
-            <div class="dashboard-activity-card-header">
+            <div class="dashboard-activity-card-header statistics-direct-heard-header">
                 <h3>{{ t("HEARD DIRECT") }}</h3>
+                <span class="statistics-card-note muted small">({{ t("Max 20 direct-heard stations in selected range.") }})</span>
             </div>
-            <p class="statistics-card-note muted small">{{ t("Max 20 direct-heard stations in selected range.") }}</p>
             <div class="empty-state muted" id="statistics-direct-heard-empty" hidden>{{ t("No data for selected range.") }}</div>
             <ul class="statistics-users-list" id="statistics-direct-heard-list"></ul>
         </section>

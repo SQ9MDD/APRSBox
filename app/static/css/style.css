@@ -1635,8 +1635,14 @@ body {
     align-content: start;
 }
 
+.statistics-direct-heard-header {
+    flex-wrap: nowrap;
+    align-items: baseline;
+}
+
 .statistics-card-note {
     margin: 0;
+    white-space: nowrap;
 }
 
 .statistics-devices-list {
