@@ -534,6 +534,8 @@
 
 * {
     box-sizing: border-box;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 html,
@@ -541,8 +543,9 @@ body {
     min-height: 100%;
 }
 
-html {
-    scrollbar-gutter: stable;
+*::-webkit-scrollbar {
+    width: 0;
+    height: 0;
 }
 
 body {
@@ -5122,7 +5125,6 @@ code {
     overflow-x: auto;
     overflow-y: hidden;
     width: 100%;
-    scrollbar-gutter: stable both-edges;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
     border-radius: var(--radius-sm);

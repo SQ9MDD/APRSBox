@@ -26,9 +26,13 @@ class UiConsistencyTemplateTests(unittest.TestCase):
         self.assertNotIn(".stations-summary-header h2 {", stylesheet_source)
         self.assertNotIn("font-size: 1.05rem;", stylesheet_source)
 
-    def test_global_layout_keeps_stable_scrollbar_gutter(self) -> None:
+    def test_global_layout_hides_scrollbars_without_disabling_scroll(self) -> None:
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
-        self.assertIn("html {\n    scrollbar-gutter: stable;\n}", stylesheet_source)
+        self.assertIn("scrollbar-width: none;", stylesheet_source)
+        self.assertIn("-ms-overflow-style: none;", stylesheet_source)
+        self.assertIn("*::-webkit-scrollbar {", stylesheet_source)
+        self.assertNotIn("scrollbar-gutter: stable;", stylesheet_source)
+        self.assertNotIn("scrollbar-gutter: stable both-edges;", stylesheet_source)
 
     def test_top_level_layout_wrappers_do_not_duplicate_content_gap_with_extra_margin(self) -> None:
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
