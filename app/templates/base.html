@@ -49,6 +49,25 @@
                 alt="APRSBox"
             >
         </div>
+        <div class="sidebar-collapse-slot">
+            <button
+                type="button"
+                class="sidebar-action-button sidebar-collapse-button"
+                id="sidebar-collapse-toggle"
+                aria-controls="app-sidebar"
+                aria-expanded="true"
+                aria-label="{{ t('Collapse sidebar') }}"
+                title="{{ t('Collapse sidebar') }}"
+            >
+                <img
+                    id="sidebar-collapse-toggle-icon"
+                    src="{{ request.scope.root_path }}/static/icons/chevron-double-left.svg"
+                    data-expanded-icon="{{ request.scope.root_path }}/static/icons/chevron-double-left.svg"
+                    data-collapsed-icon="{{ request.scope.root_path }}/static/icons/chevron-double-right.svg"
+                    alt=""
+                >
+            </button>
+        </div>
         <div class="sidebar-user-panel">
             <div class="sidebar-user-meta">
                 <span class="role-badge">{{ current_user.username }}</span>
@@ -63,23 +82,6 @@
                 </span>
             </div>
             <div class="sidebar-user-actions">
-                <button
-                    type="button"
-                    class="sidebar-action-button sidebar-collapse-button"
-                    id="sidebar-collapse-toggle"
-                    aria-controls="app-sidebar"
-                    aria-expanded="true"
-                    aria-label="{{ t('Collapse sidebar') }}"
-                    title="{{ t('Collapse sidebar') }}"
-                >
-                    <img
-                        id="sidebar-collapse-toggle-icon"
-                        src="{{ request.scope.root_path }}/static/icons/chevron-double-left.svg"
-                        data-expanded-icon="{{ request.scope.root_path }}/static/icons/chevron-double-left.svg"
-                        data-collapsed-icon="{{ request.scope.root_path }}/static/icons/chevron-double-right.svg"
-                        alt=""
-                    >
-                </button>
                 <button
                     type="button"
                     class="sidebar-action-button"

@@ -15,7 +15,7 @@
     --radius-xs: 6px;
     --radius-lg: 8px;
     --sidebar-width: 248px;
-    --sidebar-collapsed-width: 7rem;
+    --sidebar-collapsed-width: 4rem;
     --shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
     --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
     --shadow-lg: 0 16px 34px rgba(0, 0, 0, 0.24);
@@ -666,6 +666,13 @@ body {
     max-height: 58px;
 }
 
+.sidebar-collapse-slot {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: calc(var(--space-2) * -1);
+}
+
 .nav-list {
     display: flex;
     flex-direction: column;
@@ -921,7 +928,8 @@ body {
 @media (min-width: 981px) {
     :root[data-sidebar-state="collapsed"] .sidebar {
         width: var(--sidebar-collapsed-width);
-        padding: var(--space-4) var(--space-3);
+        padding: var(--space-2);
+        gap: var(--space-2);
     }
 
     :root[data-sidebar-state="collapsed"] .brand.sidebar-logo {
@@ -935,51 +943,27 @@ body {
     :root[data-sidebar-state="collapsed"] .sidebar-logo-icon {
         display: block;
         margin-inline: auto;
+        width: 2.2rem;
+        height: 2.2rem;
+    }
+
+    :root[data-sidebar-state="collapsed"] .sidebar-collapse-slot {
+        justify-content: center;
+        margin-top: 0;
     }
 
     :root[data-sidebar-state="collapsed"] .sidebar-user-panel {
-        align-items: center;
-        justify-content: flex-start;
-        padding: var(--space-2);
-    }
-
-    :root[data-sidebar-state="collapsed"] .sidebar-user-meta {
-        justify-content: center;
-    }
-
-    :root[data-sidebar-state="collapsed"] .role-badge {
         display: none;
-    }
-
-    :root[data-sidebar-state="collapsed"] .sidebar-user-actions {
-        flex-direction: column;
     }
 
     :root[data-sidebar-state="collapsed"] .sidebar-utc-clock {
-        padding-inline: 0.22rem;
-    }
-
-    :root[data-sidebar-state="collapsed"] .sidebar-utc-clock-time {
-        font-size: 0.88rem;
-    }
-
-    :root[data-sidebar-state="collapsed"] .sidebar-utc-clock-date {
         display: none;
-    }
-
-    :root[data-sidebar-state="collapsed"] .sidebar-utc-clock-date-row {
-        justify-content: center;
-    }
-
-    :root[data-sidebar-state="collapsed"] .sidebar-utc-clock-label-inline {
-        font-size: 0.62rem;
-        letter-spacing: 0.08em;
     }
 
     :root[data-sidebar-state="collapsed"] .nav-link {
         justify-content: center;
         gap: 0;
-        padding-inline: 0.35rem;
+        padding: 0.42rem;
     }
 
     :root[data-sidebar-state="collapsed"] .nav-link:hover {
@@ -991,7 +975,7 @@ body {
     }
 
     :root[data-sidebar-state="collapsed"] .nav-separator {
-        width: 1.9rem;
+        width: 1.45rem;
         margin-inline: auto;
     }
 
@@ -5973,6 +5957,10 @@ button.message-delivery-badge {
     }
 
     .sidebar-collapse-button {
+        display: none;
+    }
+
+    .sidebar-collapse-slot {
         display: none;
     }
 }
