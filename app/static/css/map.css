@@ -6,6 +6,27 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    padding: var(--space-4);
+    gap: var(--space-4);
+}
+
+.page-map .map-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.page-map .map-toolbar {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-soft);
+}
+
+.page-map .map-stage {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft);
 }
 
 @media (min-width: 981px) {

@@ -1,107 +1,101 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="panel dashboard-activity-panel" id="statistics-root"
+<div class="statistics-page" id="statistics-root"
     data-api-url="{{ request.scope.root_path }}/api/statistics/traffic"
     data-devices-api-url="{{ request.scope.root_path }}/api/statistics/devices"
     data-users-api-url="{{ request.scope.root_path }}/api/statistics/users"
     data-direct-heard-api-url="{{ request.scope.root_path }}/api/statistics/direct-heard"
     data-no-data-text="{{ t('No data for selected range.') }}"
     data-aggregation-label="{{ t('aggregation') }}"
-    data-devices-count-stations-label="{{ t('Unique CALLSIGN-SSID stations') }}"
-    data-devices-tocall-label="{{ t('TOCALL') }}"
     data-devices-pairs-tooltip-label="{{ t('Counted unique CALLSIGN-SSID stations in this model') }}"
     data-devices-label-other="{{ t('Other') }}"
     data-devices-label-unknown="{{ t('Unknown') }}"
     data-devices-label-mixed-unknown="{{ t('Mixed / Unknown') }}">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Statistics") }}</h2>
-                <p class="section-lead">{{ t("Statistics show APRS traffic structure observed by APRSBox. They are not a measure of audio quality or TNC decoding.") }}</p>
-            </div>
-            <div class="dashboard-activity-controls">
-                <label class="dashboard-activity-range-label" for="statistics-range">{{ t("Range") }}</label>
-                <select id="statistics-range" name="statistics_range">
-                    <option value="1h">{{ t("1 hour") }}</option>
-                    <option value="24h" selected>{{ t("1 day") }}</option>
-                    <option value="7d">{{ t("7 days") }}</option>
-                    <option value="30d">{{ t("30 days") }}</option>
-                </select>
-                <button type="button" class="button button-secondary" id="statistics-back">{{ t("Back") }}</button>
-                <button type="button" class="button button-secondary" id="statistics-forward">{{ t("Forward") }}</button>
-            </div>
-        </div>
-
-        <div class="statistics-layout">
-            <div class="statistics-main-column">
-                <div class="dashboard-activity-grid">
-                    <section class="dashboard-activity-card">
-                        <div class="dashboard-activity-card-header">
-                            <h3>{{ t("APRS Frame Types") }}</h3>
-                            <span class="muted small" id="statistics-frame-types-step"></span>
-                        </div>
-                        <div class="empty-state muted" id="statistics-frame-types-empty" hidden>{{ t("No data for selected range.") }}</div>
-                        <div class="dashboard-activity-canvas">
-                            <canvas id="statistics-frame-types-chart"></canvas>
-                        </div>
-                    </section>
-
-                    <section class="dashboard-activity-card">
-                        <div class="dashboard-activity-card-header">
-                            <h3>{{ t("Direct heard vs all heard") }}</h3>
-                            <span class="muted small" id="statistics-heard-step"></span>
-                        </div>
-                        <div class="empty-state muted" id="statistics-heard-empty" hidden>{{ t("No data for selected range.") }}</div>
-                        <div class="dashboard-activity-canvas">
-                            <canvas id="statistics-heard-chart"></canvas>
-                        </div>
-                    </section>
-
-                    <section class="dashboard-activity-card">
-                        <div class="dashboard-activity-card-header">
-                            <h3>{{ t("APRSBox Actions") }}</h3>
-                            <span class="muted small" id="statistics-actions-step"></span>
-                        </div>
-                        <div class="empty-state muted" id="statistics-actions-empty" hidden>{{ t("No data for selected range.") }}</div>
-                        <div class="dashboard-activity-canvas">
-                            <canvas id="statistics-actions-chart"></canvas>
-                        </div>
-                    </section>
+    <section class="panel statistics-toolbar-panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>{{ t("Statistics") }}</h2>
+                    <p class="section-lead">{{ t("Statistics show APRS traffic structure observed by APRSBox. They are not a measure of audio quality or TNC decoding.") }}</p>
+                </div>
+                <div class="dashboard-activity-controls">
+                    <label class="dashboard-activity-range-label" for="statistics-range">{{ t("Range") }}</label>
+                    <select id="statistics-range" name="statistics_range">
+                        <option value="1h">{{ t("1 hour") }}</option>
+                        <option value="24h" selected>{{ t("1 day") }}</option>
+                        <option value="7d">{{ t("7 days") }}</option>
+                        <option value="30d">{{ t("30 days") }}</option>
+                    </select>
+                    <button type="button" class="button button-secondary" id="statistics-back">{{ t("Back") }}</button>
+                    <button type="button" class="button button-secondary" id="statistics-forward">{{ t("Forward") }}</button>
                 </div>
             </div>
-
-            <aside class="statistics-side-column">
-                <section class="dashboard-activity-card statistics-devices-card">
-                    <div class="dashboard-activity-card-header">
-                        <h3>{{ t("TOP20 devices") }}</h3>
-                    </div>
-                    <div class="empty-state muted" id="statistics-devices-empty" hidden>{{ t("No data for selected range.") }}</div>
-                    <div class="dashboard-activity-canvas statistics-devices-canvas">
-                        <canvas id="statistics-devices-chart"></canvas>
-                    </div>
-                    <ul class="statistics-devices-list" id="statistics-devices-list"></ul>
-                </section>
-
-                <section class="dashboard-activity-card statistics-users-card">
-                    <div class="dashboard-activity-card-header">
-                        <h3>{{ t("TOP20 users") }}</h3>
-                    </div>
-                    <div class="empty-state muted" id="statistics-users-empty" hidden>{{ t("No data for selected range.") }}</div>
-                    <ul class="statistics-users-list" id="statistics-users-list"></ul>
-                </section>
-
-                <section class="dashboard-activity-card statistics-users-card">
-                    <div class="dashboard-activity-card-header">
-                        <h3>{{ t("HEARD DIRECT") }}</h3>
-                    </div>
-                    <div class="empty-state muted" id="statistics-direct-heard-empty" hidden>{{ t("No data for selected range.") }}</div>
-                    <ul class="statistics-users-list" id="statistics-direct-heard-list"></ul>
-                </section>
-            </aside>
         </div>
+    </section>
+
+    <div class="statistics-priority-grid">
+        <section class="dashboard-activity-card statistics-users-card">
+            <div class="dashboard-activity-card-header statistics-direct-heard-header">
+                <h3>{{ t("HEARD DIRECT") }}</h3>
+                <span class="statistics-card-note muted small">({{ t("Max 20 direct-heard stations in selected range.") }})</span>
+            </div>
+            <div class="empty-state muted" id="statistics-direct-heard-empty" hidden>{{ t("No data for selected range.") }}</div>
+            <ul class="statistics-users-list" id="statistics-direct-heard-list"></ul>
+        </section>
+
+        <section class="dashboard-activity-card statistics-users-card">
+            <div class="dashboard-activity-card-header">
+                <h3>{{ t("TOP20 users") }}</h3>
+            </div>
+            <div class="empty-state muted" id="statistics-users-empty" hidden>{{ t("No data for selected range.") }}</div>
+            <ul class="statistics-users-list" id="statistics-users-list"></ul>
+        </section>
+
+        <section class="dashboard-activity-card statistics-devices-card">
+            <div class="dashboard-activity-card-header">
+                <h3>{{ t("TOP20 devices") }}</h3>
+            </div>
+            <div class="empty-state muted" id="statistics-devices-empty" hidden>{{ t("No data for selected range.") }}</div>
+            <ul class="statistics-devices-list" id="statistics-devices-list"></ul>
+        </section>
     </div>
-</section>
+
+    <div class="dashboard-activity-grid statistics-secondary-grid">
+        <section class="dashboard-activity-card">
+            <div class="dashboard-activity-card-header">
+                <h3>{{ t("APRS Frame Types") }}</h3>
+                <span class="muted small" id="statistics-frame-types-step"></span>
+            </div>
+            <div class="empty-state muted" id="statistics-frame-types-empty" hidden>{{ t("No data for selected range.") }}</div>
+            <div class="dashboard-activity-canvas">
+                <canvas id="statistics-frame-types-chart"></canvas>
+            </div>
+        </section>
+
+        <section class="dashboard-activity-card">
+            <div class="dashboard-activity-card-header">
+                <h3>{{ t("Direct heard vs all heard") }}</h3>
+                <span class="muted small" id="statistics-heard-step"></span>
+            </div>
+            <div class="empty-state muted" id="statistics-heard-empty" hidden>{{ t("No data for selected range.") }}</div>
+            <div class="dashboard-activity-canvas">
+                <canvas id="statistics-heard-chart"></canvas>
+            </div>
+        </section>
+
+        <section class="dashboard-activity-card">
+            <div class="dashboard-activity-card-header">
+                <h3>{{ t("APRSBox Actions") }}</h3>
+                <span class="muted small" id="statistics-actions-step"></span>
+            </div>
+            <div class="empty-state muted" id="statistics-actions-empty" hidden>{{ t("No data for selected range.") }}</div>
+            <div class="dashboard-activity-canvas">
+                <canvas id="statistics-actions-chart"></canvas>
+            </div>
+        </section>
+    </div>
+</div>
 
 <script type="application/json" id="statistics-data">{{ statistics_payload|tojson }}</script>
 <script type="application/json" id="statistics-devices-data">{{ statistics_devices_payload|tojson }}</script>

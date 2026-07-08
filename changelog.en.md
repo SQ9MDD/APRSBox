@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.52.dev - 2026-07-08
+- `GUI / layout / consistency`: normalized margins, spacing, and panel borders across screens; aligned `Map`, `Traffic Monitor`, `Statistics`, `My Station`, and settings forms with the shared style, and refined the collapsible sidebar.
+
 ## 1.8.50.dev - 2026-07-05
 - `Help / GUI / I18N`: added complete local Markdown help files in `PL/EN/ES/DE` for `iGate settings`, `Notifications`, `Messages`, `WX`, `My Station`, and `TNC`, wired them to the contextual help icon, and normalized the icon placement across page headers.
 

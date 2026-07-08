@@ -459,6 +459,20 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
         for language in ("pl", "en", "es", "de"):
             self.assertTrue(Path(f"help/application/station.{language}.md").exists())
 
+    def test_station_template_uses_chromeless_outer_panel_without_touching_tx_log(self) -> None:
+        template_source = Path("app/templates/station.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn('class="panel{% if can_edit %} station-page-panel{% endif %}"', template_source)
+        self.assertIn(".station-page-panel {", stylesheet_source)
+        self.assertIn(".station-page-panel {\n    padding: 0;", stylesheet_source)
+        self.assertIn("border: 0;", stylesheet_source)
+        self.assertIn("background: transparent;", stylesheet_source)
+        self.assertIn("box-shadow: none;", stylesheet_source)
+        self.assertIn(".station-settings-group {", stylesheet_source)
+        self.assertIn(".station-settings-group {\n    padding: var(--space-4);\n    border: 1px solid var(--border);\n    border-radius: var(--radius-md);\n    background: var(--panel);", stylesheet_source)
+        self.assertIn("gap: var(--space-4);", stylesheet_source)
+        self.assertIn('<section class="panel">\n    <div class="panel-body">\n        <div class="panel-header">\n            <div class="panel-header-copy">\n                <h2>{{ t("Station TX Log") }}</h2>', template_source)
+
 
 class StationBeaconRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_internal_tx_job_is_marked_sent_without_rf_transport(self) -> None:

@@ -6,11 +6,23 @@
     <title>{{ browser_title }}</title>
     <script>
         (() => {
-            const storedTheme = localStorage.getItem("aprsbox-theme");
-            const serverPalette = {{ current_ui_palette|tojson }};
             const root = document.documentElement;
-            root.setAttribute("data-theme", storedTheme || "dark");
+            const serverPalette = {{ current_ui_palette|tojson }};
+            const normalizeSidebarState = (value) => (value === "collapsed" ? "collapsed" : "expanded");
+            let storedTheme = "dark";
+            let storedSidebarState = "expanded";
+
+            try {
+                storedTheme = localStorage.getItem("aprsbox-theme") || "dark";
+                storedSidebarState = normalizeSidebarState(localStorage.getItem("aprsbox-sidebar-state"));
+            } catch (_) {
+                storedTheme = "dark";
+                storedSidebarState = "expanded";
+            }
+
+            root.setAttribute("data-theme", storedTheme);
             root.setAttribute("data-palette", serverPalette || "green-core");
+            root.setAttribute("data-sidebar-state", storedSidebarState);
             try {
                 localStorage.setItem("aprsbox-palette", serverPalette || "green-core");
             } catch (_) {
@@ -26,9 +38,16 @@
 </head>
 <body class="app-shell{% if body_class %} {{ body_class }}{% endif %}">
     {% if current_user %}
-    <aside class="sidebar">
+    <aside class="sidebar" id="app-sidebar">
         <div class="brand sidebar-logo">
-            {% include "partials/logo.html" %}
+            <span class="sidebar-logo-full">
+                {% include "partials/logo.html" %}
+            </span>
+            <img
+                class="sidebar-logo-icon"
+                src="{{ request.scope.root_path }}/static/media/aprs-box-icon.png"
+                alt="APRSBox"
+            >
         </div>
         <div class="sidebar-user-panel">
             <div class="sidebar-user-meta">
@@ -88,16 +107,19 @@
             <span
                 class="nav-link nav-link-disabled"
                 aria-disabled="true"
-                title="{{ t('Access not available for your role') }}"
+                aria-label="{{ item.label }}"
+                title="{{ item.label }} - {{ t('Access not available for your role') }}"
             >
                 <img class="nav-icon" src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="">
-                <span>{{ item.label }}</span>
+                <span class="nav-label">{{ item.label }}</span>
             </span>
             {% else %}
             <a
                 href="{{ request.scope.root_path }}{{ item.href }}"
                 class="nav-link {% if active_nav == item.key %}active{% endif %}{% if item.key == 'messages' and item.has_unread %} nav-link-unread{% endif %}"
                 data-nav-key="{{ item.key }}"
+                aria-label="{{ item.label }}"
+                title="{{ item.label }}"
                 {% if item.key == 'messages' %}
                 data-icon-normal="message-reply-text-outline.svg"
                 data-icon-alert="message-alert-outline.svg"
@@ -105,7 +127,7 @@
                 {% endif %}
             >
                 <img class="nav-icon" src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="">
-                <span>{{ item.label }}</span>
+                <span class="nav-label">{{ item.label }}</span>
             </a>
             {% endif %}
             {% endfor %}
@@ -115,6 +137,25 @@
             <div class="muted">{{ t("Copyright SQ9MDD") }}</div>
         </div>
     </aside>
+    <div class="sidebar-collapse-slot">
+        <button
+            type="button"
+            class="sidebar-action-button sidebar-collapse-button"
+            id="sidebar-collapse-toggle"
+            aria-controls="app-sidebar"
+            aria-expanded="true"
+            aria-label="{{ t('Collapse sidebar') }}"
+            title="{{ t('Collapse sidebar') }}"
+        >
+            <img
+                id="sidebar-collapse-toggle-icon"
+                src="{{ request.scope.root_path }}/static/icons/chevron-double-left.svg"
+                data-expanded-icon="{{ request.scope.root_path }}/static/icons/chevron-double-left.svg"
+                data-collapsed-icon="{{ request.scope.root_path }}/static/icons/chevron-double-right.svg"
+                alt=""
+            >
+        </button>
+    </div>
     {% endif %}
 
     <div class="main-area">
@@ -281,6 +322,57 @@
                     window.clearTimeout(timerId);
                 }
             });
+        })();
+        (() => {
+            const root = document.documentElement;
+            const sidebar = document.getElementById("app-sidebar");
+            const button = document.getElementById("sidebar-collapse-toggle");
+            const icon = document.getElementById("sidebar-collapse-toggle-icon");
+            if (!(sidebar instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) return;
+
+            const labels = {
+                collapse: {{ t("Collapse sidebar")|tojson }},
+                expand: {{ t("Expand sidebar")|tojson }},
+            };
+            const sidebarStateStorageKey = "aprsbox-sidebar-state";
+            const normalizeSidebarState = (value) => (value === "collapsed" ? "collapsed" : "expanded");
+            const readSidebarState = () => {
+                try {
+                    return normalizeSidebarState(window.localStorage.getItem(sidebarStateStorageKey));
+                } catch (_) {
+                    return normalizeSidebarState(root.getAttribute("data-sidebar-state"));
+                }
+            };
+            const saveSidebarState = (state) => {
+                try {
+                    window.localStorage.setItem(sidebarStateStorageKey, state);
+                } catch (_) {
+                    return;
+                }
+            };
+
+            let sidebarState = readSidebarState();
+
+            const syncSidebarState = () => {
+                const isCollapsed = sidebarState === "collapsed";
+                const label = isCollapsed ? labels.expand : labels.collapse;
+                root.setAttribute("data-sidebar-state", sidebarState);
+                sidebar.dataset.state = sidebarState;
+                button.setAttribute("aria-expanded", String(!isCollapsed));
+                button.setAttribute("aria-label", label);
+                button.setAttribute("title", label);
+                if (icon instanceof HTMLImageElement) {
+                    icon.src = isCollapsed ? icon.dataset.collapsedIcon : icon.dataset.expandedIcon;
+                }
+            };
+
+            button.addEventListener("click", () => {
+                sidebarState = sidebarState === "collapsed" ? "expanded" : "collapsed";
+                saveSidebarState(sidebarState);
+                syncSidebarState();
+            });
+
+            syncSidebarState();
         })();
     </script>
     {% block extra_scripts %}{% endblock %}

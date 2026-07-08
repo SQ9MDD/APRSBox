@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.52.dev - 2026-07-08
+- `GUI / Layout / Konsistenz`: Margins, Abstaende und Panel-Rahmen zwischen den Ansichten wurden vereinheitlicht; `Map`, `Traffic Monitor`, `Statistics`, `My Station` und die Settings-Formulare folgen jetzt demselben Stil, und die einklappbare Sidebar wurde weiter verfeinert.
+
 ## 1.8.50.dev - 2026-07-05
 - `Help / GUI / I18N`: vollstaendige lokale Markdown-Hilfedateien in `PL/EN/ES/DE` fuer `iGate settings`, `Notifications`, `Messages`, `WX`, `My Station` und `TNC` wurden hinzugefuegt, an das kontextuelle Hilfe-Icon angebunden und die Icon-Position in Seitenkoepfen vereinheitlicht.
 

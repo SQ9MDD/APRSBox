@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.52.dev - 2026-07-08
+- `GUI / layout / consistencia`: se normalizaron margenes, espaciados y bordes de panel entre pantallas; `Map`, `Traffic Monitor`, `Statistics`, `My Station` y los formularios de settings siguen ahora un estilo comun, y el sidebar plegable quedo mas pulido.
+
 ## 1.8.50.dev - 2026-07-05
 - `Ayuda / GUI / I18N`: se añadieron archivos locales completos de ayuda Markdown en `PL/EN/ES/DE` para `iGate settings`, `Notifications`, `Messages`, `WX`, `My Station` y `TNC`, se conectaron con el icono contextual de ayuda y se unifico su posicion en los encabezados de pagina.
 
