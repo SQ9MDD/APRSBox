@@ -14,6 +14,7 @@ class StatisticsTemplateTests(unittest.TestCase):
         self.assertIn('class="statistics-priority-grid"', template_source)
         self.assertIn('class="dashboard-activity-grid statistics-secondary-grid"', template_source)
         self.assertNotIn('id="statistics-devices-chart"', template_source)
+        self.assertIn("Max 20 direct-heard stations in selected range.", template_source)
 
         self.assertIn(".statistics-page {", stylesheet_source)
         self.assertIn(".statistics-toolbar-panel .panel-body {", stylesheet_source)
@@ -22,8 +23,13 @@ class StatisticsTemplateTests(unittest.TestCase):
         self.assertIn(".statistics-devices-card {", stylesheet_source)
         self.assertIn(".statistics-priority-grid {\n    display: grid;\n    grid-template-columns: repeat(3, minmax(0, 1fr));", stylesheet_source)
         self.assertNotIn(".statistics-devices-canvas {", stylesheet_source)
+        self.assertIn(".statistics-card-note {", stylesheet_source)
+        self.assertIn(".statistics-users-list-item-placeholder {", stylesheet_source)
         self.assertNotIn('const devicesCanvas = document.getElementById("statistics-devices-chart");', script_source)
         self.assertNotIn('type: "doughnut"', script_source)
+        self.assertIn("const directHeardVisibleLimit = 20;", script_source)
+        self.assertIn("items.slice(0, directHeardVisibleLimit)", script_source)
+        self.assertIn("statistics-users-list-item statistics-users-list-item-placeholder", script_source)
 
         direct_heard_pos = template_source.find('{{ t("HEARD DIRECT") }}')
         top_users_pos = template_source.find('{{ t("TOP20 users") }}')

@@ -1635,6 +1635,10 @@ body {
     align-content: start;
 }
 
+.statistics-card-note {
+    margin: 0;
+}
+
 .statistics-devices-list {
     margin: 0;
     padding: 0;
@@ -1720,6 +1724,14 @@ body {
 .statistics-users-list-value {
     white-space: nowrap;
     color: var(--muted);
+}
+
+.statistics-users-list-item-placeholder {
+    opacity: 0.34;
+}
+
+.statistics-users-list-item-placeholder .statistics-devices-color-marker {
+    opacity: 0;
 }
 
 .dashboard-activity-card {

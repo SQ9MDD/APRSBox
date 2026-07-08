@@ -51,6 +51,7 @@
     const supportedRanges = new Set(["1h", "24h", "7d", "30d"]);
     const defaultRange = "24h";
     const storageKey = "aprsbox-statistics-range";
+    const directHeardVisibleLimit = 20;
 
     let frameChart = null;
     let heardChart = null;
@@ -590,8 +591,9 @@
             return;
         }
         directHeardListNode.textContent = "";
-        for (let index = 0; index < items.length; index += 1) {
-            const item = items[index];
+        const visibleItems = Array.isArray(items) ? items.slice(0, directHeardVisibleLimit) : [];
+        for (let index = 0; index < visibleItems.length; index += 1) {
+            const item = visibleItems[index];
             const row = document.createElement("li");
             row.className = "statistics-users-list-item";
 
@@ -612,6 +614,36 @@
             const valueNode = document.createElement("span");
             valueNode.className = "statistics-users-list-value";
             valueNode.textContent = `${Math.round(Number(item.count) || 0)} (${(Number(item.percent) || 0).toFixed(1)}%)`;
+
+            row.appendChild(indexNode);
+            row.appendChild(labelNode);
+            row.appendChild(valueNode);
+            directHeardListNode.appendChild(row);
+        }
+        if (visibleItems.length <= 0) {
+            return;
+        }
+        for (let index = visibleItems.length; index < directHeardVisibleLimit; index += 1) {
+            const row = document.createElement("li");
+            row.className = "statistics-users-list-item statistics-users-list-item-placeholder";
+            row.setAttribute("aria-hidden", "true");
+
+            const indexNode = document.createElement("span");
+            indexNode.className = "statistics-list-index";
+            indexNode.textContent = String(index + 1);
+
+            const labelNode = document.createElement("span");
+            labelNode.className = "statistics-users-list-label";
+            const markerNode = document.createElement("span");
+            markerNode.className = "statistics-devices-color-marker";
+            const labelTextNode = document.createElement("span");
+            labelTextNode.textContent = "\u00A0";
+            labelNode.appendChild(markerNode);
+            labelNode.appendChild(labelTextNode);
+
+            const valueNode = document.createElement("span");
+            valueNode.className = "statistics-users-list-value";
+            valueNode.textContent = "\u00A0";
 
             row.appendChild(indexNode);
             row.appendChild(labelNode);
