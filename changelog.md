@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.52.dev - 08.07.2026
+- `GUI / layout / spójność`: uporządkowano marginesy, odstępy i ramki między ekranami; ujednolicono widoki `Mapa`, `Monitor ruchu`, `Statystyki`, `Moja stacja` i formularze ustawień oraz dopracowano zwijany sidebar.
+
 ## 1.8.50.dev - 05.07.2026
 - `Pomoc / GUI / I18N`: dodano komplet lokalnych plików pomocy Markdown w `PL/EN/ES/DE` dla zakładek `Ustawienia iGate`, `Powiadomienia`, `Wiadomości`, `WX`, `Moja stacja` i `TNC`, podpięto je pod kontekstową ikonę pomocy oraz ujednolicono jej pozycję w nagłówkach ekranów.
 
