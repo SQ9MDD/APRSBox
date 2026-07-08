@@ -40,6 +40,17 @@ class UiConsistencyTemplateTests(unittest.TestCase):
         self.assertIn("align-items: start;", settings_block)
         self.assertNotIn("margin-bottom", settings_block)
 
+    def test_station_page_uses_roomier_spacing_than_dashboard_density(self) -> None:
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        station_group_block = stylesheet_source.partition(".station-settings-group {")[2].split("}", 1)[0]
+        station_page_form_block = stylesheet_source.partition(".station-page-panel .form-grid {")[2].split("}", 1)[0]
+        station_subgrid_block = stylesheet_source.partition(".station-settings-subgrid {")[2].split("}", 1)[0]
+
+        self.assertIn("padding: var(--space-4);", station_group_block)
+        self.assertIn("gap: var(--space-4);", station_group_block)
+        self.assertIn("gap: var(--space-4);", station_page_form_block)
+        self.assertIn("gap: var(--space-4);", station_subgrid_block)
+
 
 if __name__ == "__main__":
     unittest.main()

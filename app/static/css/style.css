@@ -2388,11 +2388,12 @@ body {
 }
 
 .station-settings-group {
-    padding: var(--space-3);
+    padding: var(--space-4);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background: var(--panel);
     box-shadow: var(--shadow-soft);
+    gap: var(--space-4);
 }
 
 .station-page-panel {
@@ -2404,15 +2405,19 @@ body {
 
 .station-settings-group-header {
     display: grid;
-    gap: 0.2rem;
+    gap: var(--space-1);
 }
 
 .station-settings-group-header h2 {
     margin: 0;
 }
 
+.station-page-panel .form-grid {
+    gap: var(--space-4);
+}
+
 .station-settings-subgrid {
-    gap: var(--space-3);
+    gap: var(--space-4);
 }
 
 label {
