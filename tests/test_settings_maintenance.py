@@ -229,6 +229,20 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("localStorage.setItem(clockModeStorageKey", base_source)
         self.assertIn('utcClockRoot.addEventListener("click"', base_source)
 
+    def test_base_template_supports_sidebar_collapse_persistence(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn('id="app-sidebar"', base_source)
+        self.assertIn('id="sidebar-collapse-toggle"', base_source)
+        self.assertIn('id="sidebar-collapse-toggle-icon"', base_source)
+        self.assertIn('class="sidebar-logo-icon"', base_source)
+        self.assertIn('sidebarStateStorageKey = "aprsbox-sidebar-state"', base_source)
+        self.assertIn('root.setAttribute("data-sidebar-state"', base_source)
+        self.assertIn("--sidebar-collapsed-width", stylesheet_source)
+        self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar', stylesheet_source)
+        self.assertIn(".sidebar-logo-icon", stylesheet_source)
+        self.assertIn(".nav-label", stylesheet_source)
+
 
 if __name__ == "__main__":
     unittest.main()
