@@ -4745,7 +4745,7 @@ select:focus-visible,
 }
 
 .traffic-page-panel {
-    padding: 0;
+    padding: var(--space-4);
     border: 0;
     background: transparent;
     box-shadow: none;
