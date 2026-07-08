@@ -74,9 +74,9 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn(".page-map .map-panel {", stylesheet_source)
         self.assertIn(".page-map .map-toolbar {", stylesheet_source)
         self.assertIn(".page-map .map-stage {", stylesheet_source)
-        self.assertIn("padding: 0;", stylesheet_source)
+        self.assertIn("padding: var(--space-4);", stylesheet_source)
         self.assertIn("border: 0;", stylesheet_source)
-        self.assertIn("border-radius: 0;", stylesheet_source)
+        self.assertIn("gap: var(--space-4);", stylesheet_source)
         self.assertIn("box-shadow: none;", stylesheet_source)
 
     def test_map_script_supports_track_toggle_state(self) -> None:
