@@ -1578,7 +1578,7 @@ body {
     text-decoration: underline;
 }
 
-.dashboard-activity-panel .panel-body {
+.statistics-toolbar-panel .panel-body {
     gap: var(--space-2);
 }
 
@@ -1610,22 +1610,26 @@ body {
     gap: 0.5rem;
 }
 
-.statistics-layout {
+.statistics-page {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+    gap: var(--space-3);
+}
+
+.statistics-priority-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
     align-items: start;
 }
 
-.statistics-main-column,
-.statistics-side-column {
-    min-width: 0;
-    display: grid;
+.statistics-secondary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: var(--space-3);
 }
 
 .statistics-devices-card {
     align-content: start;
+    grid-column: 1 / -1;
 }
 
 .statistics-users-card {
@@ -1826,7 +1830,7 @@ body {
 @media (max-width: 1180px) {
     .dashboard-overview-grid,
     .dashboard-detail-grid,
-    .statistics-layout {
+    .statistics-priority-grid {
         grid-template-columns: 1fr;
     }
 
