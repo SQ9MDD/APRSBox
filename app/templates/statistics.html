@@ -8,8 +8,6 @@
     data-direct-heard-api-url="{{ request.scope.root_path }}/api/statistics/direct-heard"
     data-no-data-text="{{ t('No data for selected range.') }}"
     data-aggregation-label="{{ t('aggregation') }}"
-    data-devices-count-stations-label="{{ t('Unique CALLSIGN-SSID stations') }}"
-    data-devices-tocall-label="{{ t('TOCALL') }}"
     data-devices-pairs-tooltip-label="{{ t('Counted unique CALLSIGN-SSID stations in this model') }}"
     data-devices-label-other="{{ t('Other') }}"
     data-devices-label-unknown="{{ t('Unknown') }}"
@@ -58,9 +56,6 @@
                 <h3>{{ t("TOP20 devices") }}</h3>
             </div>
             <div class="empty-state muted" id="statistics-devices-empty" hidden>{{ t("No data for selected range.") }}</div>
-            <div class="dashboard-activity-canvas statistics-devices-canvas">
-                <canvas id="statistics-devices-chart"></canvas>
-            </div>
             <ul class="statistics-devices-list" id="statistics-devices-list"></ul>
         </section>
     </div>

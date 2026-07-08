@@ -10,7 +10,6 @@
     const frameCanvas = document.getElementById("statistics-frame-types-chart");
     const heardCanvas = document.getElementById("statistics-heard-chart");
     const actionsCanvas = document.getElementById("statistics-actions-chart");
-    const devicesCanvas = document.getElementById("statistics-devices-chart");
     const usersListNode = document.getElementById("statistics-users-list");
     const directHeardListNode = document.getElementById("statistics-direct-heard-list");
     const frameEmptyNode = document.getElementById("statistics-frame-types-empty");
@@ -43,8 +42,6 @@
     const directHeardApiUrl = String(root.dataset.directHeardApiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
-    const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
-    const devicesTocallLabel = String(root.dataset.devicesTocallLabel || "TOCALL");
     const devicesPairsTooltipLabel = String(
         root.dataset.devicesPairsTooltipLabel || "Counted unique CALLSIGN-SSID stations in this model"
     );
@@ -58,8 +55,6 @@
     let frameChart = null;
     let heardChart = null;
     let actionsChart = null;
-    let devicesChart = null;
-
     const readChartPalette = () => {
         const isLightTheme = document.documentElement.getAttribute("data-theme") === "light";
         const rootStyle = window.getComputedStyle(document.documentElement);
@@ -537,9 +532,6 @@
     };
 
     const renderDevices = (payloadValue) => {
-        if (!(devicesCanvas instanceof HTMLCanvasElement)) {
-            return;
-        }
         const total = Math.max(0, Number(payloadValue && payloadValue.total) || 0);
         const items = normalizeDeviceItems(payloadValue && payloadValue.items, total);
         const hasData = total > 0 && items.length > 0;
@@ -547,63 +539,6 @@
 
         toggleEmptyState(devicesEmptyNode, !hasData);
         renderDeviceList(hasData ? items : [], colors);
-
-        if (devicesChart) {
-            devicesChart.destroy();
-            devicesChart = null;
-        }
-
-        if (!hasData) {
-            return;
-        }
-
-        const labels = items.map((item) => resolveDeviceLabel(item));
-        const counts = items.map((item) => Number(item.count) || 0);
-        const palette = readChartPalette();
-        const countBasisLabel = devicesCountStationsLabel;
-
-        const context = devicesCanvas.getContext("2d");
-        if (!context) {
-            return;
-        }
-
-        devicesChart = new ChartConstructor(context, {
-            type: "doughnut",
-            data: {
-                labels,
-                datasets: [
-                    {
-                        data: counts,
-                        backgroundColor: colors,
-                        borderColor: withAlpha(palette.colorBorder, 0.7),
-                        borderWidth: 1,
-                        hoverOffset: 4,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: "62%",
-                plugins: {
-                    legend: {
-                        display: false,
-                    },
-                    tooltip: {
-                        displayColors: true,
-                        callbacks: {
-                            label: (contextValue) => {
-                                const item = items[contextValue.dataIndex] || { count: 0, percent: 0, label: "" };
-                                const label = resolveDeviceLabel(item);
-                                const count = Math.max(0, Number(item.count) || 0);
-                                const percent = Number(item.percent) || 0;
-                                return `${label}: ${count} (${percent.toFixed(1)}%) • ${countBasisLabel}`;
-                            },
-                        },
-                    },
-                },
-            },
-        });
     };
 
     const renderUsersList = (items, colors) => {
@@ -720,7 +655,7 @@
     };
 
     const loadDevicesPayload = async (rangeValue, shiftValue) => {
-        if (!(devicesCanvas instanceof HTMLCanvasElement) || !devicesApiUrl) {
+        if (!devicesApiUrl) {
             return;
         }
         const normalizedRange = normalizeRange(rangeValue);

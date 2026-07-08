@@ -1635,11 +1635,6 @@ body {
     align-content: start;
 }
 
-.statistics-devices-canvas {
-    min-height: 220px;
-    max-height: 280px;
-}
-
 .statistics-devices-list {
     margin: 0;
     padding: 0;
