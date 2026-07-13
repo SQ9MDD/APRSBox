@@ -46,6 +46,34 @@
             <div class="messages-conversation-list" id="messages-conversation-list">
                 <div class="empty-state muted">{{ t("No conversations loaded.") }}</div>
             </div>
+            <form class="messages-settings" id="messages-settings-form">
+                <div class="messages-settings-header">
+                    <h3>{{ t("Message settings") }}</h3>
+                    <p class="section-lead">{{ t("Defaults for new conversations and automatic APRS responses.") }}</p>
+                </div>
+                <label>
+                    <span>{{ t("Default path") }}</span>
+                    <select id="messages-default-path" name="default_path">
+                        {% for option in messages_view.message_settings.path_options %}
+                        <option value="{{ option.value }}"{% if option.value == messages_view.message_settings.default_path %} selected{% endif %}>{{ t(option.label) }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="checkbox-label messages-settings-checkbox">
+                    <input type="checkbox" id="messages-receive-any-ssid" name="receive_any_ssid"{% if messages_view.message_settings.receive_any_ssid %} checked{% endif %}>
+                    <span>{{ t("Receive messages for any SSID of my callsign") }}</span>
+                </label>
+                <small class="muted">{{ t("Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.") }}</small>
+                <label>
+                    <span>{{ t("Target groups") }}</span>
+                    <input type="text" id="messages-target-groups" name="target_groups" value="{{ messages_view.message_settings.target_groups|join(', ') }}" placeholder="YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
+                </label>
+                <small class="muted">{{ t("Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.") }}</small>
+                <div class="messages-settings-actions">
+                    <button class="button-secondary" type="submit">{{ t("Save settings") }}</button>
+                    <small class="field-validation-error" id="messages-settings-error" hidden></small>
+                </div>
+            </form>
         </aside>
 
         <section class="messages-thread">
@@ -117,7 +145,12 @@
     const sendButton = document.getElementById("messages-send-button");
     const newConversationForm = document.getElementById("messages-new-conversation-form");
     const newConversationInput = document.getElementById("messages-new-callsign");
-    const defaultPath = String(initialData.default_path || "");
+    const settingsForm = document.getElementById("messages-settings-form");
+    const defaultPathSelect = document.getElementById("messages-default-path");
+    const receiveAnySsidInput = document.getElementById("messages-receive-any-ssid");
+    const targetGroupsInput = document.getElementById("messages-target-groups");
+    const settingsError = document.getElementById("messages-settings-error");
+    let defaultPath = String(initialData.default_path || "");
     const serviceDestinations = new Set(
         (Array.isArray(initialData.service_destinations) ? initialData.service_destinations : [])
             .map((value) => normalizeCallsign(value))
@@ -693,6 +726,29 @@
         }).catch((error) => {
             composerError.hidden = false;
             composerError.textContent = error.message;
+        });
+    });
+
+    settingsForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        settingsError.hidden = true;
+        void apiRequest(`${messagesApi}/settings`, {
+            method: "PUT",
+            body: JSON.stringify({
+                default_path: normalizeFuturePath(defaultPathSelect.value),
+                receive_any_ssid: receiveAnySsidInput.checked,
+                target_groups: String(targetGroupsInput.value || "").split(","),
+            }),
+        }).then(async (payload) => {
+            const savedSettings = payload && payload.settings ? payload.settings : {};
+            defaultPath = String(savedSettings.default_path || "");
+            defaultPathSelect.value = defaultPath;
+            receiveAnySsidInput.checked = Boolean(savedSettings.receive_any_ssid);
+            targetGroupsInput.value = Array.isArray(savedSettings.target_groups) ? savedSettings.target_groups.join(", ") : "";
+            await applyServerState(payload.messages_view);
+        }).catch((error) => {
+            settingsError.hidden = false;
+            settingsError.textContent = error instanceof Error ? error.message : i18n.requestFailed;
         });
     });
 

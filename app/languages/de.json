@@ -1477,5 +1477,17 @@
   "Help file not found.": "Hilfedatei nicht gefunden.",
   "Unable to load help.": "Die Hilfe konnte nicht geladen werden.",
   "Delete this entry?": "Diesen Eintrag löschen?",
-  "Your role can view notification configuration but cannot change it.": "Ihre Rolle kann die Benachrichtigungskonfiguration anzeigen, sie jedoch nicht ändern."
+  "Your role can view notification configuration but cannot change it.": "Ihre Rolle kann die Benachrichtigungskonfiguration anzeigen, sie jedoch nicht ändern.",
+  "Message settings": "Nachrichteneinstellungen",
+  "Defaults for new conversations and automatic APRS responses.": "Vorgaben für neue Gespräche und automatische APRS-Antworten.",
+  "Default path": "Standardpfad",
+  "Direct (no path)": "Direkt (ohne Pfad)",
+  "Receive messages for any SSID of my callsign": "Nachrichten für jede SSID meines Rufzeichens empfangen",
+  "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Nur Nachrichten an das konfigurierte Rufzeichen mit SSID werden bestätigt oder automatisch beantwortet.",
+  "Target groups": "Zielgruppen",
+  "Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.": "Nach APRS-Konvention immer empfangen: ALL, QST, CQ. Aliasse durch Kommas trennen, 1–9 Buchstaben oder Ziffern; Gruppennachrichten werden nie bestätigt.",
+  "Save settings": "Einstellungen speichern",
+  "Target groups must contain 1-9 letters or digits, separated by commas.": "Zielgruppen müssen 1–9 Buchstaben oder Ziffern enthalten und durch Kommas getrennt sein.",
+  "Bulletin addresses are configured separately from message target groups.": "Bulletin-Adressen werden getrennt von Nachrichtenzielgruppen konfiguriert.",
+  "Choose a default path from the list.": "Wählen Sie einen Standardpfad aus der Liste."
 }

@@ -1533,5 +1533,17 @@
   "Help file not found.": "Nie znaleziono pliku pomocy.",
   "Unable to load help.": "Nie udało się załadować pomocy.",
   "Delete this entry?": "Usunąć ten wpis?",
-  "Your role can view notification configuration but cannot change it.": "Twoja rola może przeglądać konfigurację powiadomień, ale nie może jej zmieniać."
+  "Your role can view notification configuration but cannot change it.": "Twoja rola może przeglądać konfigurację powiadomień, ale nie może jej zmieniać.",
+  "Message settings": "Ustawienia wiadomości",
+  "Defaults for new conversations and automatic APRS responses.": "Ustawienia domyślne dla nowych konwersacji i automatycznych odpowiedzi APRS.",
+  "Default path": "Domyślna ścieżka",
+  "Direct (no path)": "Direct (bez ścieżki)",
+  "Receive messages for any SSID of my callsign": "Odbieraj wiadomości dla każdego SSID mojego znaku",
+  "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Tylko wiadomości zaadresowane dokładnie do skonfigurowanego znaku-SSID są potwierdzane lub otrzymują automatyczną odpowiedź.",
+  "Target groups": "Grupy docelowe",
+  "Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.": "Zawsze odbierane zgodnie z APRS: ALL, QST, CQ. Aliasów używaj po przecinku; 1–9 liter lub cyfr. Wiadomości grupowe nigdy nie są potwierdzane.",
+  "Save settings": "Zapisz ustawienia",
+  "Target groups must contain 1-9 letters or digits, separated by commas.": "Grupy docelowe muszą zawierać od 1 do 9 liter lub cyfr i być rozdzielone przecinkami.",
+  "Bulletin addresses are configured separately from message target groups.": "Adresy biuletynów konfiguruje się oddzielnie od grup docelowych wiadomości.",
+  "Choose a default path from the list.": "Wybierz domyślną ścieżkę z listy."
 }

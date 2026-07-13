@@ -5679,7 +5679,7 @@ body.modal-open {
 
 .messages-sidebar {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(8rem, 1fr) auto;
     border-right: 1px solid var(--border);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
 }
@@ -5721,6 +5721,50 @@ body.modal-open {
     min-height: 0;
     overflow: auto;
     padding: var(--space-4);
+}
+
+.messages-settings {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5) var(--space-5);
+    border-top: 1px solid var(--border);
+    background: var(--panel-soft);
+}
+
+.messages-settings-header {
+    display: grid;
+    gap: var(--space-1);
+}
+
+.messages-settings h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.messages-settings label:not(.messages-settings-checkbox) {
+    display: grid;
+    gap: var(--space-1);
+}
+
+.messages-settings-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+
+.messages-settings-checkbox input {
+    margin-top: 0.2rem;
+}
+
+.messages-settings small {
+    line-height: 1.35;
+}
+
+.messages-settings-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
 }
 
 .messages-conversation-row {

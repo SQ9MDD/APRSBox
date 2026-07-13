@@ -106,6 +106,7 @@ from app.services.messages import (
     mark_conversation_read,
     queue_outgoing_message,
     retry_failed_message,
+    save_message_settings,
     update_conversation_path,
 )
 from app.services.notifications import (
@@ -3199,6 +3200,19 @@ async def messages_create_conversation(
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse({"conversation_id": str(conversation.get("id") or ""), "messages_view": get_live_messages_page_data()})
+
+
+@router.put("/api/messages/settings")
+async def messages_save_settings(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    try:
+        settings = save_message_settings(payload if isinstance(payload, dict) else {})
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse({"ok": True, "settings": settings, "messages_view": get_live_messages_page_data()})
 
 
 @router.post("/api/messages/send")

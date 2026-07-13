@@ -23,6 +23,7 @@ from app.services.messages import (
     QUERY_MESSAGE_KIND,
     _format_heard_parts,
     _heard_recently_state,
+    get_message_settings,
     get_unread_inbox_count,
     get_messages_page_data,
     mark_conversation_read,
@@ -32,6 +33,7 @@ from app.services.messages import (
     queue_outgoing_message,
     register_direct_message_transmission,
     retry_failed_message,
+    save_message_settings,
     split_callsign_ssid,
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job, get_outbound_job
@@ -90,6 +92,47 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_message_settings_save_default_path_and_target_groups(self) -> None:
+        with temporary_database():
+            saved = save_message_settings(
+                {"default_path": "WIDE2-1", "receive_any_ssid": True, "target_groups": ["yaesu", "LOCAL", "YAESU"]}
+            )
+            self.assertEqual(saved["default_path"], "WIDE2-1")
+            self.assertTrue(saved["receive_any_ssid"])
+            self.assertEqual(saved["target_groups"], ["YAESU", "LOCAL"])
+            self.assertEqual(get_message_settings()["always_received_groups"], ["ALL", "QST", "CQ"])
+
+    def test_group_messages_are_stored_without_acknowledgement(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "WIDE1-1", "receive_any_ssid": False, "target_groups": ["YAESU"]})
+
+            process_incoming_tnc2_message("SP8ABC>APRS::YAESU    :Group message{01", timestamp="2026-01-01T00:01:00+00:00")
+
+            stored = fetch_one("SELECT addressee, message_text FROM aprs_messages WHERE direction = 'rx'")
+            assert stored is not None
+            self.assertEqual((stored["addressee"], stored["message_text"]), ("YAESU", "Group message"))
+            queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
+            assert queued_acks is not None
+            self.assertEqual(int(queued_acks["total"]), 0)
+
+    def test_other_ssid_is_stored_without_ack_only_when_enabled(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            inbound = "SP8ABC>APRS::SQ9MDD-7 :Other SSID{01"
+
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:00+00:00")
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+
+            save_message_settings({"default_path": "", "receive_any_ssid": True, "target_groups": []})
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:01+00:00")
+            self.assertIsNotNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+            queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
+            assert queued_acks is not None
+            self.assertEqual(int(queued_acks["total"]), 0)
+
     def test_message_text_allows_extended_printable_ascii_punctuation(self) -> None:
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
         self.assertEqual(normalize_aprs_message_text(allowed), allowed)
@@ -1465,7 +1508,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             job = claim_next_outbound_job()
             assert job is not None
             self.assertEqual(job["kind"], "status")
-            self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APBOX0:>Station online")
+            self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APBOX0,WIDE2-1:>Station online")
             rows = fetch_all("SELECT direction, message_text, status FROM aprs_messages ORDER BY id ASC")
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["message_text"], "?APRSS")

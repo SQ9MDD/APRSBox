@@ -1507,5 +1507,17 @@
   "Help file not found.": "Help file not found.",
   "Unable to load help.": "Unable to load help.",
   "Delete this entry?": "Delete this entry?",
-  "Your role can view notification configuration but cannot change it.": "Your role can view notification configuration but cannot change it."
+  "Your role can view notification configuration but cannot change it.": "Your role can view notification configuration but cannot change it.",
+  "Message settings": "Message settings",
+  "Defaults for new conversations and automatic APRS responses.": "Defaults for new conversations and automatic APRS responses.",
+  "Default path": "Default path",
+  "Direct (no path)": "Direct (no path)",
+  "Receive messages for any SSID of my callsign": "Receive messages for any SSID of my callsign",
+  "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.",
+  "Target groups": "Target groups",
+  "Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.": "Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.",
+  "Save settings": "Save settings",
+  "Target groups must contain 1-9 letters or digits, separated by commas.": "Target groups must contain 1-9 letters or digits, separated by commas.",
+  "Bulletin addresses are configured separately from message target groups.": "Bulletin addresses are configured separately from message target groups.",
+  "Choose a default path from the list.": "Choose a default path from the list."
 }

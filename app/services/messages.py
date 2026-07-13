@@ -35,6 +35,9 @@ DIRECT_MESSAGE_KIND = "direct_message"
 QUERY_MESSAGE_KIND = "query"
 ACK_MESSAGE_KIND = "ack"
 MESSAGE_NUMBER_KEY = "messages.next_message_number"
+MESSAGE_DEFAULT_PATH_SETTING_KEY = "messages.default_path"
+MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY = "messages.receive_any_ssid"
+MESSAGE_TARGET_GROUPS_SETTING_KEY = "messages.target_groups"
 MESSAGE_NUMBER_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 MESSAGE_MAX_LENGTH = 67
 RETRY_DELAYS_SECONDS = (8, 16, 32)
@@ -69,6 +72,15 @@ APRS_SERVICE_DESTINATIONS = (
     "WXBOT",
 )
 _APRS_SERVICE_DESTINATION_SET = frozenset(APRS_SERVICE_DESTINATIONS)
+DEFAULT_MESSAGE_TARGET_GROUPS = ("ALL", "QST", "CQ")
+MESSAGE_PATH_OPTIONS = (
+    ("", "Direct (no path)"),
+    ("WIDE1-1", "WIDE1-1"),
+    ("WIDE2-1", "WIDE2-1"),
+    ("WIDE2-2", "WIDE2-2"),
+    ("RFONLY", "RFONLY"),
+    ("NOGATE", "NOGATE"),
+)
 
 
 def _t(message: str) -> str:
@@ -106,6 +118,65 @@ def normalize_aprs_path(value: str) -> str:
         if codepoint < 32 or codepoint > 126:
             raise ValueError(_t("Future RF path must use printable ASCII only."))
     return path
+
+
+def normalize_message_target_groups(value: Any) -> list[str]:
+    """Normalize user-defined APRS message group addressees.
+
+    APRS addressees are exactly nine characters on air.  Group names are local
+    receive filters, so accept ordinary callsign-like aliases but never a
+    station SSID or a bulletin address here.
+    """
+    raw_values = value if isinstance(value, list) else str(value or "").replace("\n", ",").split(",")
+    groups: list[str] = []
+    for raw_value in raw_values:
+        group = str(raw_value or "").strip().upper()
+        if not group or group in DEFAULT_MESSAGE_TARGET_GROUPS:
+            continue
+        if not re.fullmatch(r"[A-Z0-9]{1,9}", group):
+            raise ValueError(_t("Target groups must contain 1-9 letters or digits, separated by commas."))
+        if group.startswith("BLN"):
+            raise ValueError(_t("Bulletin addresses are configured separately from message target groups."))
+        if group not in groups:
+            groups.append(group)
+    return groups
+
+
+def get_message_settings() -> dict[str, Any]:
+    raw_saved_path = get_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY)
+    saved_path = str(raw_saved_path or "").strip().upper()
+    allowed_paths = {value for value, _label in MESSAGE_PATH_OPTIONS}
+    if raw_saved_path is None:
+        try:
+            saved_path = str(_get_station_settings().get("beacon_path") or "").strip().upper()
+        except Exception:
+            saved_path = ""
+    default_path = saved_path if saved_path in allowed_paths else ""
+    saved_groups = str(get_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY) or "")
+    try:
+        target_groups = normalize_message_target_groups(saved_groups)
+    except ValueError:
+        target_groups = []
+    receive_any_ssid = str(get_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY) or "").strip().lower() in {"1", "true", "yes", "on"}
+    return {
+        "default_path": default_path,
+        "path_options": [{"value": value, "label": label} for value, label in MESSAGE_PATH_OPTIONS],
+        "receive_any_ssid": receive_any_ssid,
+        "target_groups": target_groups,
+        "always_received_groups": list(DEFAULT_MESSAGE_TARGET_GROUPS),
+    }
+
+
+def save_message_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    path = normalize_aprs_path(str(payload.get("default_path") or ""))
+    if path not in {value for value, _label in MESSAGE_PATH_OPTIONS}:
+        raise ValueError(_t("Choose a default path from the list."))
+    groups = normalize_message_target_groups(payload.get("target_groups") or [])
+    receive_any_ssid = bool(payload.get("receive_any_ssid"))
+    set_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY, path)
+    set_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY, "1" if receive_any_ssid else "0")
+    set_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY, ",".join(groups))
+    return get_message_settings()
 
 
 def create_or_update_conversation(callsign: str, *, path: str | None = None) -> dict[str, Any]:
@@ -179,11 +250,9 @@ def _get_conversation(callsign: str) -> dict[str, Any] | None:
 
 
 def _resolve_auto_ack_path(*, sender: str, station_settings: dict[str, Any]) -> str:
-    default_path = ""
-    try:
-        default_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
-    except ValueError:
-        default_path = ""
+    # The message setting is the default for automatic responses. A saved
+    # conversation path remains an explicit peer-specific override.
+    default_path = str(get_message_settings()["default_path"])
     try:
         existing_conversation = _get_conversation(sender)
     except ValueError:
@@ -364,13 +433,14 @@ def get_messages_page_data() -> dict[str, Any]:
         )
     if active_conversation_id is None and conversations:
         active_conversation_id = conversations[0]["id"]
-    station_settings = _get_station_settings()
+    message_settings = get_message_settings()
     return {
         "conversations": conversations,
         "active_conversation_id": active_conversation_id,
         "composer_limit": MESSAGE_MAX_LENGTH,
         "recently_heard_window_minutes": HEARD_WARN_SECONDS // 60,
-        "default_path": str(station_settings.get("beacon_path") or "").strip(),
+        "default_path": message_settings["default_path"],
+        "message_settings": message_settings,
         "service_destinations": list(APRS_SERVICE_DESTINATIONS),
     }
 
@@ -747,12 +817,30 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
 
     local_sender = _local_station_identity()
-    if not local_sender or not _callsign_identity_matches(addressee.upper(), local_sender):
+    recipient_kind = _incoming_message_recipient_kind(addressee, local_sender)
+    if recipient_kind is None:
         return
 
     if local_sender and _callsign_identity_matches(sender, local_sender):
         return
     received_at = _normalize_timestamp(timestamp)
+    # Only the configured callsign-SSID is a true local addressee.  APRS
+    # message groups and the optional same-callsign/other-SSID receive mode
+    # are display filters; they must never ACK or trigger a query response.
+    if recipient_kind != "local":
+        suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
+        if suffix_match is None:
+            return
+        store_incoming_message(
+            sender=sender,
+            addressee=addressee.upper(),
+            message_text=suffix_match.group("text") or "",
+            message_number=_normalize_message_number(suffix_match.group("number")),
+            path=parsed["path"],
+            timestamp=received_at,
+            acknowledge=False,
+        )
+        return
     if text_field.startswith("?"):
         query_text, query_number, query_ack_number = _parse_query_text(text_field)
         if not query_text:
@@ -881,7 +969,7 @@ def enqueue_automatic_query_text_response(
     timestamp: str,
 ) -> None:
     response_text = normalize_aprs_message_text(message_text)
-    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    response_path = str(get_message_settings()["default_path"])
     message_id = create_automatic_query_response(
         sender=sender,
         message_text=response_text,
@@ -913,7 +1001,7 @@ def enqueue_automatic_query_position_response(
     timestamp: str,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_position_text(station_settings)
-    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    response_path = str(get_message_settings()["default_path"])
     message_id = create_automatic_query_response(
         sender=sender,
         message_text=response_text,
@@ -924,6 +1012,7 @@ def enqueue_automatic_query_position_response(
         station_settings,
         trigger=trigger,
         aprs_message_id=message_id,
+        beacon_path_override=response_path,
         scheduled_for=scheduled_for,
     )
     if not success:
@@ -942,7 +1031,7 @@ def enqueue_automatic_query_status_response(
     timestamp: str,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_status_text(station_settings)
-    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    response_path = str(get_message_settings()["default_path"])
     message_id = create_automatic_query_response(
         sender=sender,
         message_text=response_text,
@@ -953,6 +1042,7 @@ def enqueue_automatic_query_status_response(
         station_settings,
         trigger=trigger,
         aprs_message_id=message_id,
+        path=response_path,
         scheduled_for=scheduled_for,
     )
     if not success:
@@ -1045,6 +1135,7 @@ def store_incoming_message(
     ack_number: str | None = None,
     path: str,
     timestamp: str,
+    acknowledge: bool = True,
 ) -> None:
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
@@ -1108,7 +1199,7 @@ def store_incoming_message(
             timestamp=timestamp,
         )
     ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else message_number)
-    if not ack_number_for_tx:
+    if not acknowledge or not ack_number_for_tx:
         return
     enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(
@@ -1814,6 +1905,26 @@ def _callsign_identity_matches(left: str, right: str) -> bool:
     if not left_canonical or not right_canonical:
         return False
     return left_canonical == right_canonical
+
+
+def _incoming_message_recipient_kind(addressee: str, local_sender: str) -> str | None:
+    normalized_addressee = _canonical_callsign_identity(addressee)
+    normalized_local = _canonical_callsign_identity(local_sender)
+    if not normalized_addressee or not normalized_local:
+        return None
+    if normalized_addressee == normalized_local:
+        return "local"
+
+    local_callsign, _local_ssid = split_callsign_ssid(normalized_local)
+    addressee_callsign, _addressee_ssid = split_callsign_ssid(normalized_addressee)
+    if get_message_settings()["receive_any_ssid"] and local_callsign == addressee_callsign:
+        return "other_ssid"
+
+    if normalized_addressee in set(DEFAULT_MESSAGE_TARGET_GROUPS):
+        return "group"
+    if normalized_addressee in set(get_message_settings()["target_groups"]):
+        return "group"
+    return None
 
 
 def _safe_messages_warning(message: str) -> None:

@@ -298,6 +298,7 @@ def enqueue_status_job(
     *,
     trigger: str = "manual",
     aprs_message_id: int | None = None,
+    path: str = "",
     scheduled_for: datetime | None = None,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
@@ -316,6 +317,7 @@ def enqueue_status_job(
         "callsign": callsign,
         "ssid": ssid,
         "status_text": status_text,
+        "path": str(path or "").strip(),
         "trigger": str(trigger or "manual").strip() or "manual",
     }
     scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()
@@ -926,8 +928,12 @@ def build_object_tnc2(payload: dict[str, Any]) -> str:
 
 def build_status_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
+    path = str(payload.get("path") or "").strip()
     info = _build_status_info(payload)
-    return f"{source}>{APRSBOX_DESTINATION}:{info}"
+    header = f"{source}>{APRSBOX_DESTINATION}"
+    if path:
+        header = f"{header},{path}"
+    return f"{header}:{info}"
 
 
 def build_message_tnc2(payload: dict[str, Any]) -> str:
