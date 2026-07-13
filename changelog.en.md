@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.53.dev - 2026-07-14
+- `Messages / group conversations`: added threads for explicitly configured target groups with sender labels; other groups are ignored, while group messages are transmitted once without a message number, ACK, or retry.
+- `Messages / settings / GUI`: added a default path, reception for any SSID of the local callsign, and a validated group list (`ALL`, `QST`, `CQ` on first use); the panel was simplified and multilingual help was expanded.
+
 ## 1.8.52.dev - 2026-07-08
 - `GUI / layout / consistency`: normalized margins, spacing, and panel borders across screens; aligned `Map`, `Traffic Monitor`, `Statistics`, `My Station`, and settings forms with the shared style, and refined the collapsible sidebar.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.53.dev - 2026-07-14
+- `Mensajes / conversaciones de grupo`: se añadieron hilos para los grupos de destino configurados explícitamente, con identificación del remitente; los demás grupos se ignoran y los mensajes de grupo se transmiten una sola vez, sin número, ACK ni reintentos.
+- `Mensajes / configuración / GUI`: se añadieron la ruta predeterminada, la recepción para cualquier SSID del indicativo local y una lista de grupos validada (`ALL`, `QST`, `CQ` en el primer uso); el panel se simplificó y se amplió la ayuda multilingüe.
+
 ## 1.8.52.dev - 2026-07-08
 - `GUI / layout / consistencia`: se normalizaron margenes, espaciados y bordes de panel entre pantallas; `Map`, `Traffic Monitor`, `Statistics`, `My Station` y los formularios de settings siguen ahora un estilo comun, y el sidebar plegable quedo mas pulido.
 

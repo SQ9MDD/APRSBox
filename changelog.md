@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.53.dev - 14.07.2026
+- `Wiadomości / rozmowy grupowe`: dodano wątki dla jawnie skonfigurowanych grup docelowych z oznaczeniem nadawcy; pozostałe grupy są ignorowane, a wysyłka grupowa odbywa się jednokrotnie, bez numeru wiadomości, ACK i retry.
+- `Wiadomości / ustawienia / GUI`: dodano domyślną ścieżkę, odbiór dla dowolnego SSID własnego znaku oraz walidowaną listę grup (`ALL`, `QST`, `CQ` przy pierwszym użyciu); panel uproszczono i uzupełniono wielojęzyczną pomoc.
+
 ## 1.8.52.dev - 08.07.2026
 - `GUI / layout / spójność`: uporządkowano marginesy, odstępy i ramki między ekranami; ujednolicono widoki `Mapa`, `Monitor ruchu`, `Statystyki`, `Moja stacja` i formularze ustawień oraz dopracowano zwijany sidebar.
 

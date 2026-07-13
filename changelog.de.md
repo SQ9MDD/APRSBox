@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.53.dev - 2026-07-14
+- `Nachrichten / Gruppenunterhaltungen`: Threads fuer explizit konfigurierte Zielgruppen mit Absenderkennzeichnung wurden hinzugefuegt; andere Gruppen werden ignoriert, Gruppennachrichten werden einmalig ohne Nachrichtennummer, ACK oder Wiederholung gesendet.
+- `Nachrichten / Einstellungen / GUI`: Standardpfad, Empfang fuer jede SSID des eigenen Rufzeichens und eine validierte Gruppenliste (`ALL`, `QST`, `CQ` bei der ersten Verwendung) wurden ergaenzt; der Bereich wurde vereinfacht und die mehrsprachige Hilfe erweitert.
+
 ## 1.8.52.dev - 2026-07-08
 - `GUI / Layout / Konsistenz`: Margins, Abstaende und Panel-Rahmen zwischen den Ansichten wurden vereinheitlicht; `Map`, `Traffic Monitor`, `Statistics`, `My Station` und die Settings-Formulare folgen jetzt demselben Stil, und die einklappbare Sidebar wurde weiter verfeinert.
 
