@@ -1386,7 +1386,7 @@
   "Receive messages for any SSID of my callsign": "Receive messages for any SSID of my callsign",
   "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.",
   "Target groups": "Target groups",
-  "Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.": "Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.",
+  "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.": "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.",
   "Save settings": "Save settings",
   "Target groups must contain 1-9 letters or digits, separated by commas.": "Target groups must contain 1-9 letters or digits, separated by commas.",
   "Bulletin addresses are configured separately from message target groups.": "Bulletin addresses are configured separately from message target groups.",

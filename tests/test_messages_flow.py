@@ -100,7 +100,24 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved["default_path"], "WIDE2-1")
             self.assertTrue(saved["receive_any_ssid"])
             self.assertEqual(saved["target_groups"], ["YAESU", "LOCAL"])
-            self.assertEqual(get_message_settings()["always_received_groups"], ["ALL", "QST", "CQ"])
+
+    def test_conventional_group_is_received_only_when_explicitly_configured(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            inbound = "SP8ABC>APRS::CQ       :Calling group{01"
+
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:00+00:00")
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+
+            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": ["CQ"]})
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:01+00:00")
+            stored = fetch_one("SELECT addressee, message_text FROM aprs_messages WHERE direction = 'rx'")
+            assert stored is not None
+            self.assertEqual((stored["addressee"], stored["message_text"]), ("CQ", "Calling group"))
+            queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
+            assert queued_acks is not None
+            self.assertEqual(int(queued_acks["total"]), 0)
 
     def test_group_messages_are_stored_without_acknowledgement(self) -> None:
         with temporary_database():

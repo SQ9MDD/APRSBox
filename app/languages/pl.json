@@ -1541,7 +1541,7 @@
   "Receive messages for any SSID of my callsign": "Odbieraj wiadomości dla każdego SSID mojego znaku",
   "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Tylko wiadomości zaadresowane dokładnie do skonfigurowanego znaku-SSID są potwierdzane lub otrzymują automatyczną odpowiedź.",
   "Target groups": "Grupy docelowe",
-  "Always received by APRS convention: ALL, QST, CQ. Comma-separated aliases, 1-9 letters or digits; group messages are never acknowledged.": "Zawsze odbierane zgodnie z APRS: ALL, QST, CQ. Aliasów używaj po przecinku; 1–9 liter lub cyfr. Wiadomości grupowe nigdy nie są potwierdzane.",
+  "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.": "Odbierane są wyłącznie jawnie zdefiniowane grupy. Aliasów używaj po przecinku; 1–9 liter lub cyfr. Wiadomości grupowe nigdy nie są potwierdzane.",
   "Save settings": "Zapisz ustawienia",
   "Target groups must contain 1-9 letters or digits, separated by commas.": "Grupy docelowe muszą zawierać od 1 do 9 liter lub cyfr i być rozdzielone przecinkami.",
   "Bulletin addresses are configured separately from message target groups.": "Adresy biuletynów konfiguruje się oddzielnie od grup docelowych wiadomości.",

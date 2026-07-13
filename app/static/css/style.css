@@ -5666,9 +5666,9 @@ body.modal-open {
 .messages-shell {
     display: grid;
     grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
-    height: calc(100vh - 2 * var(--space-5));
-    min-height: calc(100vh - 2 * var(--space-5));
-    max-height: calc(100vh - 2 * var(--space-5));
+    height: clamp(34rem, 68vh, 52rem);
+    min-height: 34rem;
+    max-height: 52rem;
 }
 
 .messages-sidebar,
@@ -5679,7 +5679,7 @@ body.modal-open {
 
 .messages-sidebar {
     display: grid;
-    grid-template-rows: auto minmax(8rem, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
     border-right: 1px solid var(--border);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
 }
@@ -5725,10 +5725,7 @@ body.modal-open {
 
 .messages-settings {
     display: grid;
-    gap: var(--space-3);
-    padding: var(--space-4) var(--space-5) var(--space-5);
-    border-top: 1px solid var(--border);
-    background: var(--panel-soft);
+    gap: var(--space-4);
 }
 
 .messages-settings-header {
@@ -5736,12 +5733,19 @@ body.modal-open {
     gap: var(--space-1);
 }
 
-.messages-settings h3 {
+.messages-settings h2 {
     margin: 0;
-    font-size: 0.95rem;
 }
 
-.messages-settings label:not(.messages-settings-checkbox) {
+.messages-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(11rem, 0.7fr) minmax(16rem, 1fr) minmax(18rem, 1.35fr);
+    align-items: start;
+    gap: var(--space-5);
+}
+
+.messages-settings-field,
+.messages-settings-field label:not(.messages-settings-checkbox) {
     display: grid;
     gap: var(--space-1);
 }
@@ -5765,6 +5769,13 @@ body.modal-open {
     align-items: center;
     flex-wrap: wrap;
     gap: var(--space-2);
+}
+
+@media (max-width: 1100px) {
+    .messages-settings-grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+    }
 }
 
 .messages-conversation-row {

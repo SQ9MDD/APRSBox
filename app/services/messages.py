@@ -72,7 +72,6 @@ APRS_SERVICE_DESTINATIONS = (
     "WXBOT",
 )
 _APRS_SERVICE_DESTINATION_SET = frozenset(APRS_SERVICE_DESTINATIONS)
-DEFAULT_MESSAGE_TARGET_GROUPS = ("ALL", "QST", "CQ")
 MESSAGE_PATH_OPTIONS = (
     ("", "Direct (no path)"),
     ("WIDE1-1", "WIDE1-1"),
@@ -131,7 +130,7 @@ def normalize_message_target_groups(value: Any) -> list[str]:
     groups: list[str] = []
     for raw_value in raw_values:
         group = str(raw_value or "").strip().upper()
-        if not group or group in DEFAULT_MESSAGE_TARGET_GROUPS:
+        if not group:
             continue
         if not re.fullmatch(r"[A-Z0-9]{1,9}", group):
             raise ValueError(_t("Target groups must contain 1-9 letters or digits, separated by commas."))
@@ -163,7 +162,6 @@ def get_message_settings() -> dict[str, Any]:
         "path_options": [{"value": value, "label": label} for value, label in MESSAGE_PATH_OPTIONS],
         "receive_any_ssid": receive_any_ssid,
         "target_groups": target_groups,
-        "always_received_groups": list(DEFAULT_MESSAGE_TARGET_GROUPS),
     }
 
 
@@ -1920,8 +1918,6 @@ def _incoming_message_recipient_kind(addressee: str, local_sender: str) -> str |
     if get_message_settings()["receive_any_ssid"] and local_callsign == addressee_callsign:
         return "other_ssid"
 
-    if normalized_addressee in set(DEFAULT_MESSAGE_TARGET_GROUPS):
-        return "group"
     if normalized_addressee in set(get_message_settings()["target_groups"]):
         return "group"
     return None
