@@ -323,6 +323,7 @@ CREATE TABLE IF NOT EXISTS aprs_message_conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     remote_callsign TEXT NOT NULL,
     remote_ssid TEXT NOT NULL DEFAULT '',
+    conversation_kind TEXT NOT NULL DEFAULT 'direct' CHECK (conversation_kind IN ('direct', 'group')),
     path TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -804,6 +805,9 @@ def init_db() -> None:
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
+        message_conversation_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(aprs_message_conversations)").fetchall()
+        }
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         traffic_runtime_interface_columns = {
@@ -811,6 +815,14 @@ def init_db() -> None:
         }
         digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
         radio_activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_5m)").fetchall()}
+        if "conversation_kind" not in message_conversation_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_message_conversations
+                ADD COLUMN conversation_kind TEXT NOT NULL DEFAULT 'direct'
+                CHECK (conversation_kind IN ('direct', 'group'))
+                """
+            )
         if "last_login_at" not in user_columns:
             connection.execute(
                 """

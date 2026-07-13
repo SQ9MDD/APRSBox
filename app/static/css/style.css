@@ -5858,6 +5858,13 @@ body.modal-open {
     border-bottom: 1px solid var(--border);
 }
 
+.messages-thread-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
 .messages-thread-history {
     min-height: 0;
     overflow: auto;
@@ -5934,6 +5941,14 @@ body.modal-open {
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.message-bubble-sender {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 700;
 }
 
 .message-bubble-meta {

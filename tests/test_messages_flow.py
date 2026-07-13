@@ -35,6 +35,7 @@ from app.services.messages import (
     retry_failed_message,
     save_message_settings,
     split_callsign_ssid,
+    store_incoming_message,
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
@@ -92,6 +93,27 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_default_message_groups_apply_only_until_user_saves_a_value(self) -> None:
+        with temporary_database():
+            self.assertEqual(get_message_settings()["target_groups"], ["ALL", "QST", "CQ"])
+
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            process_incoming_tnc2_message(
+                "SP8ABC>APRS::CQ       :Default group{01",
+                timestamp="2026-01-01T00:01:00+00:00",
+            )
+            self.assertIsNotNone(fetch_one("SELECT id FROM aprs_messages WHERE addressee = 'CQ'"))
+
+            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": []})
+
+            self.assertEqual(get_message_settings()["target_groups"], [])
+            process_incoming_tnc2_message(
+                "SP9XYZ>APRS::QST      :Must be ignored{02",
+                timestamp="2026-01-01T00:02:00+00:00",
+            )
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE addressee = 'QST'"))
+
     def test_message_settings_save_default_path_and_target_groups(self) -> None:
         with temporary_database():
             saved = save_message_settings(
@@ -105,16 +127,16 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
         with temporary_database():
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id))
-            inbound = "SP8ABC>APRS::CQ       :Calling group{01"
+            inbound = "SP8ABC>APRS::BEM      :Calling group{01"
 
             process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:00+00:00")
             self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
 
-            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": ["CQ"]})
+            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": ["BEM"]})
             process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:01+00:00")
             stored = fetch_one("SELECT addressee, message_text FROM aprs_messages WHERE direction = 'rx'")
             assert stored is not None
-            self.assertEqual((stored["addressee"], stored["message_text"]), ("CQ", "Calling group"))
+            self.assertEqual((stored["addressee"], stored["message_text"]), ("BEM", "Calling group"))
             queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
             assert queued_acks is not None
             self.assertEqual(int(queued_acks["total"]), 0)
@@ -126,13 +148,86 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             save_message_settings({"default_path": "WIDE1-1", "receive_any_ssid": False, "target_groups": ["YAESU"]})
 
             process_incoming_tnc2_message("SP8ABC>APRS::YAESU    :Group message{01", timestamp="2026-01-01T00:01:00+00:00")
+            process_incoming_tnc2_message("SP5XYZ-9>APRS::YAESU    :Second sender{02", timestamp="2026-01-01T00:02:00+00:00")
 
-            stored = fetch_one("SELECT addressee, message_text FROM aprs_messages WHERE direction = 'rx'")
+            stored = fetch_one(
+                """
+                SELECT m.sender, m.addressee, m.message_text, c.remote_callsign, c.conversation_kind
+                FROM aprs_messages m
+                JOIN aprs_message_conversations c ON c.id = m.conversation_id
+                WHERE m.direction = 'rx'
+                """
+            )
             assert stored is not None
             self.assertEqual((stored["addressee"], stored["message_text"]), ("YAESU", "Group message"))
+            self.assertEqual(stored["sender"], "SP8ABC")
+            self.assertEqual(stored["remote_callsign"], "YAESU")
+            self.assertEqual(stored["conversation_kind"], "group")
             queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
             assert queued_acks is not None
             self.assertEqual(int(queued_acks["total"]), 0)
+
+            page_data = get_messages_page_data()
+            self.assertEqual(len(page_data["conversations"]), 1)
+            self.assertEqual(page_data["conversations"][0]["kind"], "group")
+            self.assertEqual(
+                [message["sender"] for message in page_data["conversations"][0]["messages"]],
+                ["SP8ABC", "SP5XYZ-9"],
+            )
+
+    def test_outgoing_group_message_is_sent_once_without_message_number_or_retry(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "WIDE1-1", "receive_any_ssid": False, "target_groups": ["WAW"]})
+
+            message = queue_outgoing_message(callsign="WAW", message_text="Hello group", path="WIDE1-1")
+
+            self.assertIsNone(message["message_number"])
+            conversation = fetch_one("SELECT remote_callsign, conversation_kind FROM aprs_message_conversations")
+            assert conversation is not None
+            self.assertEqual((conversation["remote_callsign"], conversation["conversation_kind"]), ("WAW", "group"))
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(
+                build_message_tnc2(job["payload"]),
+                "SQ9MDD-4>APBOX0,WIDE1-1::WAW      :Hello group",
+            )
+            register_direct_message_transmission(int(message["id"]), int(job["id"]))
+
+            retries = fetch_one(
+                "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                (int(message["id"]),),
+            )
+            assert retries is not None
+            self.assertEqual(int(retries["total"]), 0)
+
+    def test_existing_group_traffic_is_moved_from_sender_thread_to_group_thread(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": ["WAW"]})
+            store_incoming_message(
+                sender="SP8ABC",
+                addressee="WAW",
+                message_text="Legacy placement",
+                message_number="01",
+                path="",
+                timestamp="2026-01-01T00:01:00+00:00",
+                acknowledge=False,
+            )
+
+            legacy = fetch_one("SELECT remote_callsign FROM aprs_message_conversations")
+            assert legacy is not None
+            self.assertEqual(legacy["remote_callsign"], "SP8ABC")
+
+            page_data = get_messages_page_data()
+
+            self.assertEqual(len(page_data["conversations"]), 1)
+            self.assertEqual(page_data["conversations"][0]["callsign"], "WAW")
+            self.assertEqual(page_data["conversations"][0]["kind"], "group")
+            self.assertEqual(page_data["conversations"][0]["messages"][0]["sender"], "SP8ABC")
 
     def test_other_ssid_is_stored_without_ack_only_when_enabled(self) -> None:
         with temporary_database():

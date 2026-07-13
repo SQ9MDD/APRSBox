@@ -187,6 +187,9 @@
         rejectedRej: {{ t("Rejected (REJ)")|tojson }},
         received: {{ t("Received")|tojson }},
         noAckRetryHint: {{ t("No ACK received. Click to retry.")|tojson }},
+        group: {{ t("Group")|tojson }},
+        groupConversationNoAck: {{ t("Group conversation · messages are sent once without ACK.")|tojson }},
+        youWithCallsign: {{ t("You · {callsign}")|tojson }},
         typeAprsMessageText: {{ t("Type APRS message text")|tojson }},
         selectConversationToEnableComposer: {{ t("Select a conversation to enable the composer")|tojson }},
         repeatSendingMessage: {{ t("Repeat sending this APRS message?")|tojson }},
@@ -343,6 +346,7 @@
         return {
             id: String(conversation.id || ""),
             callsign: normalizeCallsign(conversation.callsign),
+            kind: conversation.kind === "group" ? "group" : "direct",
             created_at: String(conversation.created_at || new Date().toISOString()),
             last_activity_at: String(conversation.last_activity_at || conversation.created_at || new Date().toISOString()),
             unread_count: Number(conversation.unread_count || 0),
@@ -354,6 +358,8 @@
             messages: Array.isArray(conversation.messages) ? conversation.messages.map((message) => ({
                 id: String(message.id || ""),
                 direction: message.direction === "rx" ? "rx" : "tx",
+                sender: normalizeCallsign(message.sender),
+                addressee: normalizeCallsign(message.addressee),
                 text: String(message.text || ""),
                 timestamp: String(message.timestamp || new Date().toISOString()),
                 unread: Boolean(message.unread),
@@ -499,7 +505,9 @@
                                 </span>
                             </span>
                             <span class="messages-conversation-meta-row">
-                                ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || i18n.heardRecently)}</span></span>` : `<span class="muted">${escapeHtml(i18n.noRecentHeardStationEntry)}</span>`}
+                                ${conversation.kind === "group"
+                                    ? `<span class="muted">${escapeHtml(i18n.groupConversationNoAck)}</span>`
+                                    : (conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || i18n.heardRecently)}</span></span>` : `<span class="muted">${escapeHtml(i18n.noRecentHeardStationEntry)}</span>`)}
                             </span>
                         </span>
                     </button>
@@ -521,11 +529,17 @@
             `;
             return;
         }
+        const isGroup = conversation.kind === "group";
         threadHeader.innerHTML = `
             <div class="panel-header-copy">
-                <h2>${escapeHtml(conversation.callsign)}</h2>
+                <div class="messages-thread-title-row">
+                    <h2>${escapeHtml(conversation.callsign)}</h2>
+                    ${isGroup ? `<span class="message-state-badge message-state-badge-read">${escapeHtml(i18n.group)}</span>` : ""}
+                </div>
                 <p class="section-lead">
-                    ${conversation.recently_heard ? escapeHtml(conversation.heard_recently_label || i18n.heardRecently) : escapeHtml(i18n.noRecentHeardStationEntry)}
+                    ${isGroup
+                        ? escapeHtml(i18n.groupConversationNoAck)
+                        : (conversation.recently_heard ? escapeHtml(conversation.heard_recently_label || i18n.heardRecently) : escapeHtml(i18n.noRecentHeardStationEntry))}
                 </p>
             </div>
         `;
@@ -572,10 +586,16 @@
                     : (message.delivery_state === "rejected" ? "message-delivery-badge-rejected" : "message-delivery-badge-pending");
                 deliveryBadge = `<span class="message-delivery-badge ${txBadgeClass}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || i18n.sent)}</span>`;
             }
+            const senderLabel = conversation.kind === "group"
+                ? (message.direction === "tx"
+                    ? formatText(i18n.youWithCallsign, { callsign: message.sender })
+                    : message.sender)
+                : "";
             return `
                 ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}
                 <div class="message-bubble-row ${message.direction === "rx" ? "message-bubble-row-rx" : "message-bubble-row-tx"}">
                     <div class="message-bubble ${message.direction === "rx" ? "message-bubble-rx" : "message-bubble-tx"}">
+                        ${senderLabel ? `<strong class="message-bubble-sender">${escapeHtml(senderLabel)}</strong>` : ""}
                         <p>${escapeHtml(message.text)}</p>
                         <span class="message-bubble-meta">${escapeHtml(formatDateTime(message.timestamp))}${deliveryBadge}</span>
                     </div>

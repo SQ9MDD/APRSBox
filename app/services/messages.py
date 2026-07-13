@@ -38,6 +38,9 @@ MESSAGE_NUMBER_KEY = "messages.next_message_number"
 MESSAGE_DEFAULT_PATH_SETTING_KEY = "messages.default_path"
 MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY = "messages.receive_any_ssid"
 MESSAGE_TARGET_GROUPS_SETTING_KEY = "messages.target_groups"
+CONVERSATION_KIND_DIRECT = "direct"
+CONVERSATION_KIND_GROUP = "group"
+DEFAULT_MESSAGE_TARGET_GROUPS = ("ALL", "QST", "CQ")
 MESSAGE_NUMBER_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 MESSAGE_MAX_LENGTH = 67
 RETRY_DELAYS_SECONDS = (8, 16, 32)
@@ -151,11 +154,14 @@ def get_message_settings() -> dict[str, Any]:
         except Exception:
             saved_path = ""
     default_path = saved_path if saved_path in allowed_paths else ""
-    saved_groups = str(get_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY) or "")
-    try:
-        target_groups = normalize_message_target_groups(saved_groups)
-    except ValueError:
-        target_groups = []
+    saved_groups = get_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY)
+    if saved_groups is None:
+        target_groups = list(DEFAULT_MESSAGE_TARGET_GROUPS)
+    else:
+        try:
+            target_groups = normalize_message_target_groups(saved_groups)
+        except ValueError:
+            target_groups = []
     receive_any_ssid = str(get_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY) or "").strip().lower() in {"1", "true", "yes", "on"}
     return {
         "default_path": default_path,
@@ -174,44 +180,121 @@ def save_message_settings(payload: dict[str, Any]) -> dict[str, Any]:
     set_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY, path)
     set_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY, "1" if receive_any_ssid else "0")
     set_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY, ",".join(groups))
+    _reconcile_message_group_conversations(groups)
     return get_message_settings()
 
 
-def create_or_update_conversation(callsign: str, *, path: str | None = None) -> dict[str, Any]:
-    remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
+def _reconcile_message_group_conversations(target_groups: list[str]) -> None:
+    """Move previously stored group traffic into its destination-group thread."""
+    for group in normalize_message_target_groups(target_groups):
+        message_rows = fetch_all(
+            """
+            SELECT id, conversation_id
+            FROM aprs_messages
+            WHERE direction = ? AND UPPER(TRIM(addressee)) = ?
+            """,
+            (MESSAGE_DIRECTION_RX, group),
+        )
+        existing_group_conversation = _get_conversation(group)
+        if not message_rows and existing_group_conversation is None:
+            continue
+        group_conversation = create_or_update_conversation(
+            group,
+            conversation_kind=CONVERSATION_KIND_GROUP,
+        )
+        group_conversation_id = int(group_conversation["id"])
+        source_conversation_ids = {
+            int(row["conversation_id"])
+            for row in message_rows
+            if int(row["conversation_id"]) != group_conversation_id
+        }
+        if not source_conversation_ids:
+            continue
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE aprs_messages
+                SET conversation_id = ?
+                WHERE direction = ? AND UPPER(TRIM(addressee)) = ? AND conversation_id <> ?
+                """,
+                (group_conversation_id, MESSAGE_DIRECTION_RX, group, group_conversation_id),
+            )
+            connection.execute(
+                """
+                UPDATE aprs_message_conversations
+                SET updated_at = COALESCE(
+                    (SELECT MAX(created_at) FROM aprs_messages WHERE conversation_id = ?),
+                    updated_at
+                )
+                WHERE id = ?
+                """,
+                (group_conversation_id, group_conversation_id),
+            )
+            for source_conversation_id in source_conversation_ids:
+                connection.execute(
+                    """
+                    DELETE FROM aprs_message_conversations
+                    WHERE id = ?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM aprs_messages WHERE conversation_id = aprs_message_conversations.id
+                      )
+                    """,
+                    (source_conversation_id,),
+                )
+
+
+def create_or_update_conversation(
+    callsign: str,
+    *,
+    path: str | None = None,
+    conversation_kind: str | None = None,
+) -> dict[str, Any]:
+    normalized_callsign = normalize_aprs_destination_callsign(callsign)
+    remote_callsign, remote_ssid = split_callsign_ssid(normalized_callsign)
+    requested_kind = str(conversation_kind or "").strip().lower()
+    if requested_kind and requested_kind not in {CONVERSATION_KIND_DIRECT, CONVERSATION_KIND_GROUP}:
+        raise ValueError(_t("Unsupported message conversation type."))
     timestamp = utc_now()
     with get_connection() as connection:
         row = connection.execute(
             """
-            SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+            SELECT id, remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
             FROM aprs_message_conversations
             WHERE remote_callsign = ? AND remote_ssid = ?
             """,
             (remote_callsign, remote_ssid),
         ).fetchone()
         if row is None:
+            normalized_kind = requested_kind or (
+                CONVERSATION_KIND_GROUP
+                if normalized_callsign in set(get_message_settings()["target_groups"])
+                else CONVERSATION_KIND_DIRECT
+            )
             cursor = connection.execute(
                 """
-                INSERT INTO aprs_message_conversations(remote_callsign, remote_ssid, path, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO aprs_message_conversations(
+                    remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (remote_callsign, remote_ssid, path or "", timestamp, timestamp),
+                (remote_callsign, remote_ssid, normalized_kind, path or "", timestamp, timestamp),
             )
             conversation_id = int(cursor.lastrowid)
         else:
             conversation_id = int(row["id"])
-            if path is not None:
+            normalized_kind = requested_kind or str(row["conversation_kind"] or CONVERSATION_KIND_DIRECT)
+            if path is not None or str(row["conversation_kind"] or "") != normalized_kind:
                 connection.execute(
                     """
                     UPDATE aprs_message_conversations
-                    SET path = ?, updated_at = ?
+                    SET path = ?, conversation_kind = ?, updated_at = ?
                     WHERE id = ?
                     """,
-                    (path, timestamp, conversation_id),
+                    (str(row["path"] or "") if path is None else path, normalized_kind, timestamp, conversation_id),
                 )
     conversation = fetch_one(
         """
-        SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+        SELECT id, remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
         FROM aprs_message_conversations
         WHERE id = ?
         """,
@@ -237,7 +320,7 @@ def _get_conversation(callsign: str) -> dict[str, Any] | None:
     remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
     row = fetch_one(
         """
-        SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+        SELECT id, remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
         FROM aprs_message_conversations
         WHERE remote_callsign = ? AND remote_ssid = ?
         LIMIT 1
@@ -282,9 +365,18 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     if duplicate is not None:
         log_event("INFO", "messages", f"Ignored duplicate outbound APRS send burst to {normalized_callsign}")
         return duplicate
+    existing_conversation = _get_conversation(normalized_callsign)
+    is_group = (
+        normalized_callsign in set(get_message_settings()["target_groups"])
+        or str((existing_conversation or {}).get("conversation_kind") or "") == CONVERSATION_KIND_GROUP
+    )
     message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
-    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND else None
-    conversation = create_or_update_conversation(normalized_callsign, path=normalized_path)
+    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND and not is_group else None
+    conversation = create_or_update_conversation(
+        normalized_callsign,
+        path=normalized_path,
+        conversation_kind=CONVERSATION_KIND_GROUP if is_group else CONVERSATION_KIND_DIRECT,
+    )
     update_conversation_path(int(conversation["id"]), normalized_path)
 
     with get_connection() as connection:
@@ -360,6 +452,11 @@ def get_messages_page_data() -> dict[str, Any]:
         expire_direct_message_timeouts()
     except sqlite3.Error as exc:
         _safe_messages_warning(f"Failed to expire direct message timeouts: {exc}")
+    message_settings = get_message_settings()
+    try:
+        _reconcile_message_group_conversations(message_settings["target_groups"])
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to reconcile APRS message group conversations: {exc}")
     try:
         heard_by_key = _heard_station_lookup()
     except sqlite3.Error as exc:
@@ -368,7 +465,7 @@ def get_messages_page_data() -> dict[str, Any]:
     try:
         conversation_rows = fetch_all(
             """
-            SELECT c.id, c.remote_callsign, c.remote_ssid, c.path, c.created_at, c.updated_at
+            SELECT c.id, c.remote_callsign, c.remote_ssid, c.conversation_kind, c.path, c.created_at, c.updated_at
             FROM aprs_message_conversations c
             ORDER BY c.updated_at DESC, c.id DESC
             """
@@ -381,6 +478,7 @@ def get_messages_page_data() -> dict[str, Any]:
     local_sender = _local_station_identity()
     for row in conversation_rows:
         display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
+        conversation_kind = str(row["conversation_kind"] or CONVERSATION_KIND_DIRECT)
         if local_sender and _callsign_identity_matches(display_callsign, local_sender):
             continue
         conversation_id = int(row["id"])
@@ -395,7 +493,9 @@ def get_messages_page_data() -> dict[str, Any]:
             """,
             (conversation_id,),
         )]
-        heard_snapshot = heard_by_key.get(display_callsign.casefold()) or heard_by_key.get(str(row["remote_callsign"]).casefold())
+        heard_snapshot = None
+        if conversation_kind != CONVERSATION_KIND_GROUP:
+            heard_snapshot = heard_by_key.get(display_callsign.casefold()) or heard_by_key.get(str(row["remote_callsign"]).casefold())
         unread_count = sum(1 for item in messages if item["direction"] == MESSAGE_DIRECTION_RX and int(item["is_unread"] or 0))
         if active_conversation_id is None and unread_count > 0:
             active_conversation_id = str(conversation_id)
@@ -418,6 +518,7 @@ def get_messages_page_data() -> dict[str, Any]:
             {
                 "id": str(conversation_id),
                 "callsign": display_callsign,
+                "kind": conversation_kind,
                 "messages": prepared_messages,
                 "created_at": str(row["created_at"]),
                 "last_activity_at": last_activity_at,
@@ -431,7 +532,6 @@ def get_messages_page_data() -> dict[str, Any]:
         )
     if active_conversation_id is None and conversations:
         active_conversation_id = conversations[0]["id"]
-    message_settings = get_message_settings()
     return {
         "conversations": conversations,
         "active_conversation_id": active_conversation_id,
@@ -569,7 +669,8 @@ def _register_outbound_message_transmission(message_id: int, job_id: int, *, all
             (now, int(message["conversation_id"])),
         )
     delay_index = next_attempt - 1
-    if allow_retry and next_attempt < MAX_TX_ATTEMPTS and 0 <= delay_index < len(RETRY_DELAYS_SECONDS):
+    expects_ack = bool(str(message.get("message_number") or "").strip())
+    if allow_retry and expects_ack and next_attempt < MAX_TX_ATTEMPTS and 0 <= delay_index < len(RETRY_DELAYS_SECONDS):
         schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[delay_index])
 
 
@@ -720,6 +821,8 @@ def schedule_message_retry(message_id: int, delay_seconds: int) -> None:
     message = get_message(message_id)
     if message is None or str(message.get("status")) in {MESSAGE_STATUS_ACKED, MESSAGE_STATUS_REJECTED, MESSAGE_STATUS_FAILED}:
         return
+    if not str(message.get("message_number") or "").strip():
+        return
     existing = fetch_one(
         """
         SELECT id
@@ -761,6 +864,8 @@ def expire_direct_message_timeouts() -> None:
         FROM aprs_messages
         WHERE direction = ?
           AND status = ?
+          AND message_number IS NOT NULL
+          AND TRIM(message_number) <> ''
           AND tx_attempt_count >= ?
           AND last_attempt_at IS NOT NULL
           AND last_attempt_at <= ?
@@ -837,6 +942,8 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
             path=parsed["path"],
             timestamp=received_at,
             acknowledge=False,
+            conversation_callsign=addressee.upper() if recipient_kind == "group" else sender,
+            conversation_kind=CONVERSATION_KIND_GROUP if recipient_kind == "group" else CONVERSATION_KIND_DIRECT,
         )
         return
     if text_field.startswith("?"):
@@ -1134,10 +1241,15 @@ def store_incoming_message(
     path: str,
     timestamp: str,
     acknowledge: bool = True,
+    conversation_callsign: str | None = None,
+    conversation_kind: str = CONVERSATION_KIND_DIRECT,
 ) -> None:
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(
+        conversation_callsign or sender,
+        conversation_kind=conversation_kind,
+    )
     duplicate_unnumbered = (
         not message_number
         and _has_recent_unnumbered_incoming_message_duplicate(
@@ -1223,7 +1335,7 @@ def store_incoming_query(
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
     ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else query_number)
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     existing = None
     if query_number:
         existing = fetch_one(
@@ -1292,7 +1404,7 @@ def store_incoming_bulletin(
     path: str,
     timestamp: str,
 ) -> None:
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     display_text = _format_bulletin_display_text(addressee, message_text)
     existing = fetch_one(
         """
@@ -1339,7 +1451,7 @@ def create_automatic_query_response(*, sender: str, message_text: str, path: str
     local_sender = _local_station_identity()
     if not local_sender:
         raise ValueError(_t("Local station callsign is required."))
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -1736,6 +1848,8 @@ def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
         "direction": str(row["direction"]),
+        "sender": str(row.get("sender") or ""),
+        "addressee": str(row.get("addressee") or ""),
         "text": str(row["message_text"] or ""),
         "timestamp": timestamp,
         "unread": bool(int(row.get("is_unread") or 0)),

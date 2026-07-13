@@ -13,6 +13,12 @@ class MessagesTemplateTests(unittest.TestCase):
         self.assertIn('class="full checkbox-row"', template_source[settings_panel:])
         self.assertNotIn("messages-settings-checkbox", template_source)
 
+    def test_group_threads_render_the_sender_above_each_message(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        self.assertIn('conversation.kind === "group"', template_source)
+        self.assertIn('class="message-bubble-sender"', template_source)
+        self.assertIn('message.sender', template_source)
+
     def test_messages_path_prefers_local_storage_and_not_server_conversation_path(self) -> None:
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
         self.assertIn("window.localStorage.getItem", template_source)
