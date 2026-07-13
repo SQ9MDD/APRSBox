@@ -100,7 +100,6 @@
         <div class="panel-header messages-settings-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Message settings") }}</h2>
-                <p class="section-lead">{{ t("Defaults for new conversations and automatic APRS responses.") }}</p>
             </div>
         </div>
         <form class="form-grid messages-settings" id="messages-settings-form">
@@ -111,22 +110,19 @@
                     <option value="{{ option.value }}"{% if option.value == messages_view.message_settings.default_path %} selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Used for new conversations and automatic APRS responses.") }}</span>
             </label>
             <label>
                 <span>{{ t("Target groups") }}</span>
                 <input type="text" id="messages-target-groups" name="target_groups" value="{{ messages_view.message_settings.target_groups|join(', ') }}" placeholder="CQ, YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
-                <span class="muted small">{{ t("Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.") }}</span>
             </label>
             <label class="full checkbox-row">
                 <input type="checkbox" id="messages-receive-any-ssid" name="receive_any_ssid"{% if messages_view.message_settings.receive_any_ssid %} checked{% endif %}>
                 <span>{{ t("Receive messages for any SSID of my callsign") }}</span>
-                <span class="muted small">{{ t("Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.") }}</span>
             </label>
-            <div class="form-actions">
+            <div class="form-actions messages-settings-actions">
                 <button class="button" type="submit">{{ t("Save settings") }}</button>
-                <small class="field-validation-error" id="messages-settings-error" hidden></small>
             </div>
+            <small class="field-validation-error messages-settings-error" id="messages-settings-error" hidden></small>
         </form>
     </div>
 </section>
@@ -190,6 +186,9 @@
         group: {{ t("Group")|tojson }},
         groupConversationNoAck: {{ t("Group conversation · messages are sent once without ACK.")|tojson }},
         youWithCallsign: {{ t("You · {callsign}")|tojson }},
+        invalidTargetGroups: {{ t("Target groups must contain 1-9 letters or digits, separated by commas.")|tojson }},
+        emptyTargetGroup: {{ t("Target groups cannot contain empty entries between commas.")|tojson }},
+        bulletinTargetGroup: {{ t("Bulletin addresses are configured separately from message target groups.")|tojson }},
         typeAprsMessageText: {{ t("Type APRS message text")|tojson }},
         selectConversationToEnableComposer: {{ t("Select a conversation to enable the composer")|tojson }},
         repeatSendingMessage: {{ t("Repeat sending this APRS message?")|tojson }},
@@ -307,6 +306,30 @@
             .replace(/[\x00-\x1F\x7F]/g, "")
             .replace(/[^\x20-\x7E]/g, "")
             .slice(0, 64);
+    }
+
+    function validateTargetGroups(value) {
+        const raw = String(value || "");
+        if (!raw.trim()) {
+            return { valid: true, groups: [], canonical: "", error: "" };
+        }
+        const groups = [];
+        for (const rawGroup of raw.split(",")) {
+            const group = rawGroup.trim().toUpperCase();
+            if (!group) {
+                return { valid: false, groups: [], canonical: raw, error: i18n.emptyTargetGroup };
+            }
+            if (!/^[A-Z0-9]{1,9}$/.test(group)) {
+                return { valid: false, groups: [], canonical: raw, error: i18n.invalidTargetGroups };
+            }
+            if (group.startsWith("BLN")) {
+                return { valid: false, groups: [], canonical: raw, error: i18n.bulletinTargetGroup };
+            }
+            if (!groups.includes(group)) {
+                groups.push(group);
+            }
+        }
+        return { valid: true, groups, canonical: groups.join(", "), error: "" };
     }
 
     function conversationPathStorageKey(callsign) {
@@ -760,12 +783,22 @@
     settingsForm.addEventListener("submit", (event) => {
         event.preventDefault();
         settingsError.hidden = true;
+        const groupValidation = validateTargetGroups(targetGroupsInput.value);
+        if (!groupValidation.valid) {
+            targetGroupsInput.setAttribute("aria-invalid", "true");
+            settingsError.hidden = false;
+            settingsError.textContent = groupValidation.error;
+            targetGroupsInput.focus();
+            return;
+        }
+        targetGroupsInput.removeAttribute("aria-invalid");
+        targetGroupsInput.value = groupValidation.canonical;
         void apiRequest(`${messagesApi}/settings`, {
             method: "PUT",
             body: JSON.stringify({
                 default_path: normalizeFuturePath(defaultPathSelect.value),
                 receive_any_ssid: receiveAnySsidInput.checked,
-                target_groups: String(targetGroupsInput.value || "").split(","),
+                target_groups: groupValidation.groups,
             }),
         }).then(async (payload) => {
             const savedSettings = payload && payload.settings ? payload.settings : {};
@@ -778,6 +811,23 @@
             settingsError.hidden = false;
             settingsError.textContent = error instanceof Error ? error.message : i18n.requestFailed;
         });
+    });
+
+    targetGroupsInput.addEventListener("input", () => {
+        targetGroupsInput.removeAttribute("aria-invalid");
+        settingsError.hidden = true;
+    });
+
+    targetGroupsInput.addEventListener("blur", () => {
+        const validation = validateTargetGroups(targetGroupsInput.value);
+        if (validation.valid) {
+            targetGroupsInput.removeAttribute("aria-invalid");
+            targetGroupsInput.value = validation.canonical;
+            return;
+        }
+        targetGroupsInput.setAttribute("aria-invalid", "true");
+        settingsError.hidden = false;
+        settingsError.textContent = validation.error;
     });
 
     composerForm.addEventListener("submit", (event) => {

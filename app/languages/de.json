@@ -1490,8 +1490,10 @@
   "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Nur Nachrichten an das konfigurierte Rufzeichen mit SSID werden bestätigt oder automatisch beantwortet.",
   "Target groups": "Zielgruppen",
   "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.": "Nur ausdrücklich definierte Gruppen werden empfangen. Aliasse durch Kommas trennen, 1–9 Buchstaben oder Ziffern; Gruppennachrichten werden nie bestätigt.",
+  "Only explicitly defined groups are received. Spaces around aliases are removed; each group must contain 1-9 letters or digits. Group messages are never acknowledged.": "Nur ausdrücklich definierte Gruppen werden empfangen. Leerzeichen um Aliasse werden entfernt; jede Gruppe muss 1–9 Buchstaben oder Ziffern enthalten. Gruppennachrichten werden nie bestätigt.",
   "Save settings": "Einstellungen speichern",
   "Target groups must contain 1-9 letters or digits, separated by commas.": "Zielgruppen müssen 1–9 Buchstaben oder Ziffern enthalten und durch Kommas getrennt sein.",
+  "Target groups cannot contain empty entries between commas.": "Die Gruppenliste darf keine leeren Einträge zwischen Kommas enthalten.",
   "Bulletin addresses are configured separately from message target groups.": "Bulletin-Adressen werden getrennt von Nachrichtenzielgruppen konfiguriert.",
   "Choose a default path from the list.": "Wählen Sie einen Standardpfad aus der Liste."
 }

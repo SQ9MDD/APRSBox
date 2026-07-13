@@ -13,11 +13,28 @@ class MessagesTemplateTests(unittest.TestCase):
         self.assertIn('class="full checkbox-row"', template_source[settings_panel:])
         self.assertNotIn("messages-settings-checkbox", template_source)
 
+    def test_message_settings_panel_keeps_explanations_in_help(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        settings_panel = template_source[template_source.index('<section class="panel messages-settings-panel">'):]
+        self.assertNotIn("Defaults for new conversations and automatic APRS responses.", settings_panel)
+        self.assertNotIn("Used for new conversations and automatic APRS responses.", settings_panel)
+        self.assertNotIn("Only explicitly defined groups are received.", settings_panel)
+        self.assertNotIn("Only messages addressed to the configured callsign-SSID", settings_panel)
+        self.assertIn('class="form-actions messages-settings-actions"', settings_panel)
+        self.assertIn('class="field-validation-error messages-settings-error"', settings_panel)
+
     def test_group_threads_render_the_sender_above_each_message(self) -> None:
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
         self.assertIn('conversation.kind === "group"', template_source)
         self.assertIn('class="message-bubble-sender"', template_source)
         self.assertIn('message.sender', template_source)
+
+    def test_target_groups_are_validated_and_canonicalized_before_save(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        self.assertIn("function validateTargetGroups(value)", template_source)
+        self.assertIn('/^[A-Z0-9]{1,9}$/', template_source)
+        self.assertIn('groups.join(", ")', template_source)
+        self.assertIn('target_groups: groupValidation.groups', template_source)
 
     def test_messages_path_prefers_local_storage_and_not_server_conversation_path(self) -> None:
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")

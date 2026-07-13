@@ -5723,8 +5723,68 @@ body.modal-open {
     padding: var(--space-4);
 }
 
+.messages-settings-panel {
+    padding: var(--space-3) var(--space-4);
+}
+
+.messages-settings-panel .panel-body {
+    gap: var(--space-3);
+}
+
 .messages-settings-header {
-    margin-bottom: var(--space-4);
+    margin: 0;
+}
+
+.messages-settings {
+    grid-template-columns: minmax(10rem, 0.65fr) minmax(18rem, 1.35fr) minmax(19rem, auto) auto;
+    align-items: end;
+    gap: var(--space-3);
+}
+
+.messages-settings > label {
+    min-width: 0;
+}
+
+.messages-settings .checkbox-row {
+    grid-column: auto;
+    min-height: var(--control-height);
+    padding: 0 0.15rem;
+    white-space: nowrap;
+}
+
+.messages-settings .form-actions {
+    grid-column: auto;
+    align-self: end;
+    padding: 0;
+    flex-wrap: nowrap;
+}
+
+.messages-settings-actions .button {
+    white-space: nowrap;
+}
+
+.messages-settings-error {
+    grid-column: 1 / -1;
+    margin-top: calc(-1 * var(--space-1));
+}
+
+.messages-settings input[aria-invalid="true"] {
+    border-color: var(--danger);
+}
+
+@media (max-width: 1200px) {
+    .messages-settings {
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    }
+
+    .messages-settings .checkbox-row,
+    .messages-settings .form-actions {
+        grid-column: auto;
+    }
+
+    .messages-settings .form-actions {
+        justify-content: flex-end;
+    }
 }
 
 .messages-conversation-row {

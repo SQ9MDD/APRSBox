@@ -1546,8 +1546,10 @@
   "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Tylko wiadomości zaadresowane dokładnie do skonfigurowanego znaku-SSID są potwierdzane lub otrzymują automatyczną odpowiedź.",
   "Target groups": "Grupy docelowe",
   "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.": "Odbierane są wyłącznie jawnie zdefiniowane grupy. Aliasów używaj po przecinku; 1–9 liter lub cyfr. Wiadomości grupowe nigdy nie są potwierdzane.",
+  "Only explicitly defined groups are received. Spaces around aliases are removed; each group must contain 1-9 letters or digits. Group messages are never acknowledged.": "Odbierane są wyłącznie jawnie zdefiniowane grupy. Spacje wokół aliasów są usuwane; każda grupa musi zawierać 1–9 liter lub cyfr. Wiadomości grupowe nigdy nie są potwierdzane.",
   "Save settings": "Zapisz ustawienia",
   "Target groups must contain 1-9 letters or digits, separated by commas.": "Grupy docelowe muszą zawierać od 1 do 9 liter lub cyfr i być rozdzielone przecinkami.",
+  "Target groups cannot contain empty entries between commas.": "Lista grup nie może zawierać pustych pozycji między przecinkami.",
   "Bulletin addresses are configured separately from message target groups.": "Adresy biuletynów konfiguruje się oddzielnie od grup docelowych wiadomości.",
   "Choose a default path from the list.": "Wybierz domyślną ścieżkę z listy."
 }

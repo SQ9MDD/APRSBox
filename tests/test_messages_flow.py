@@ -29,6 +29,7 @@ from app.services.messages import (
     mark_conversation_read,
     normalize_aprs_destination_callsign,
     normalize_aprs_message_text,
+    normalize_message_target_groups,
     process_incoming_tnc2_message,
     queue_outgoing_message,
     register_direct_message_transmission,
@@ -93,6 +94,19 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_target_group_list_is_trimmed_uppercased_and_deduplicated(self) -> None:
+        self.assertEqual(
+            normalize_message_target_groups(" cq, QST , all, WAW, bem, CQ "),
+            ["CQ", "QST", "ALL", "WAW", "BEM"],
+        )
+        self.assertEqual(normalize_message_target_groups(""), [])
+
+    def test_target_group_list_rejects_invalid_segments(self) -> None:
+        for value in ("CQ,,WAW", "CQ, ,WAW", "ABCDEFGHIJ", "WAW-1", "BLN1"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    normalize_message_target_groups(value)
+
     def test_default_message_groups_apply_only_until_user_saves_a_value(self) -> None:
         with temporary_database():
             self.assertEqual(get_message_settings()["target_groups"], ["ALL", "QST", "CQ"])

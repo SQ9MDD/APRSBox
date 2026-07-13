@@ -129,12 +129,18 @@ def normalize_message_target_groups(value: Any) -> list[str]:
     receive filters, so accept ordinary callsign-like aliases but never a
     station SSID or a bulletin address here.
     """
-    raw_values = value if isinstance(value, list) else str(value or "").replace("\n", ",").split(",")
+    if isinstance(value, list):
+        raw_values = value
+    else:
+        raw_text = str(value or "").replace("\n", ",")
+        if not raw_text.strip():
+            return []
+        raw_values = raw_text.split(",")
     groups: list[str] = []
     for raw_value in raw_values:
         group = str(raw_value or "").strip().upper()
         if not group:
-            continue
+            raise ValueError(_t("Target groups cannot contain empty entries between commas."))
         if not re.fullmatch(r"[A-Z0-9]{1,9}", group):
             raise ValueError(_t("Target groups must contain 1-9 letters or digits, separated by commas."))
         if group.startswith("BLN"):
