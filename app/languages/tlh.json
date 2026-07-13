@@ -1381,6 +1381,7 @@
   "state": "state",
   "Message settings": "Message settings",
   "Defaults for new conversations and automatic APRS responses.": "Defaults for new conversations and automatic APRS responses.",
+  "Used for new conversations and automatic APRS responses.": "Used for new conversations and automatic APRS responses.",
   "Default path": "Default path",
   "Direct (no path)": "Direct (no path)",
   "Receive messages for any SSID of my callsign": "Receive messages for any SSID of my callsign",

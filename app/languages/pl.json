@@ -1536,6 +1536,7 @@
   "Your role can view notification configuration but cannot change it.": "Twoja rola może przeglądać konfigurację powiadomień, ale nie może jej zmieniać.",
   "Message settings": "Ustawienia wiadomości",
   "Defaults for new conversations and automatic APRS responses.": "Ustawienia domyślne dla nowych konwersacji i automatycznych odpowiedzi APRS.",
+  "Used for new conversations and automatic APRS responses.": "Używana dla nowych konwersacji i automatycznych odpowiedzi APRS.",
   "Default path": "Domyślna ścieżka",
   "Direct (no path)": "Direct (bez ścieżki)",
   "Receive messages for any SSID of my callsign": "Odbieraj wiadomości dla każdego SSID mojego znaku",

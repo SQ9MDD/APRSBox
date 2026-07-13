@@ -9,6 +9,9 @@ class MessagesTemplateTests(unittest.TestCase):
         settings_panel = template_source.index('<section class="panel messages-settings-panel">')
         self.assertGreater(settings_panel, conversations_panel)
         self.assertNotIn('id="messages-settings-form"', template_source[conversations_panel:settings_panel])
+        self.assertIn('class="form-grid messages-settings"', template_source[settings_panel:])
+        self.assertIn('class="full checkbox-row"', template_source[settings_panel:])
+        self.assertNotIn("messages-settings-checkbox", template_source)
 
     def test_messages_path_prefers_local_storage_and_not_server_conversation_path(self) -> None:
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")

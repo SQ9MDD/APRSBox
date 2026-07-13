@@ -5723,59 +5723,8 @@ body.modal-open {
     padding: var(--space-4);
 }
 
-.messages-settings {
-    display: grid;
-    gap: var(--space-4);
-}
-
 .messages-settings-header {
-    display: grid;
-    gap: var(--space-1);
-}
-
-.messages-settings h2 {
-    margin: 0;
-}
-
-.messages-settings-grid {
-    display: grid;
-    grid-template-columns: minmax(11rem, 0.7fr) minmax(16rem, 1fr) minmax(18rem, 1.35fr);
-    align-items: start;
-    gap: var(--space-5);
-}
-
-.messages-settings-field,
-.messages-settings-field label:not(.messages-settings-checkbox) {
-    display: grid;
-    gap: var(--space-1);
-}
-
-.messages-settings-checkbox {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-}
-
-.messages-settings-checkbox input {
-    margin-top: 0.2rem;
-}
-
-.messages-settings small {
-    line-height: 1.35;
-}
-
-.messages-settings-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-}
-
-@media (max-width: 1100px) {
-    .messages-settings-grid {
-        grid-template-columns: 1fr;
-        gap: var(--space-4);
-    }
+    margin-bottom: var(--space-4);
 }
 
 .messages-conversation-row {

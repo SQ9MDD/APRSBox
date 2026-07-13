@@ -96,42 +96,39 @@
 </section>
 
 <section class="panel messages-settings-panel">
-    <form class="messages-settings" id="messages-settings-form">
-        <div class="messages-settings-header">
-            <h2>{{ t("Message settings") }}</h2>
-            <p class="section-lead">{{ t("Defaults for new conversations and automatic APRS responses.") }}</p>
-        </div>
-        <div class="messages-settings-grid">
-            <div class="messages-settings-field">
-                <label>
-                    <span>{{ t("Default path") }}</span>
-                    <select id="messages-default-path" name="default_path">
-                        {% for option in messages_view.message_settings.path_options %}
-                        <option value="{{ option.value }}"{% if option.value == messages_view.message_settings.default_path %} selected{% endif %}>{{ t(option.label) }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-            </div>
-            <div class="messages-settings-field">
-                <label class="checkbox-label messages-settings-checkbox">
-                    <input type="checkbox" id="messages-receive-any-ssid" name="receive_any_ssid"{% if messages_view.message_settings.receive_any_ssid %} checked{% endif %}>
-                    <span>{{ t("Receive messages for any SSID of my callsign") }}</span>
-                </label>
-                <small class="muted">{{ t("Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.") }}</small>
-            </div>
-            <div class="messages-settings-field">
-                <label>
-                    <span>{{ t("Target groups") }}</span>
-                    <input type="text" id="messages-target-groups" name="target_groups" value="{{ messages_view.message_settings.target_groups|join(', ') }}" placeholder="CQ, YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
-                </label>
-                <small class="muted">{{ t("Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.") }}</small>
+    <div class="panel-body">
+        <div class="panel-header messages-settings-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Message settings") }}</h2>
+                <p class="section-lead">{{ t("Defaults for new conversations and automatic APRS responses.") }}</p>
             </div>
         </div>
-        <div class="messages-settings-actions">
-            <button class="button-secondary" type="submit">{{ t("Save settings") }}</button>
-            <small class="field-validation-error" id="messages-settings-error" hidden></small>
-        </div>
-    </form>
+        <form class="form-grid messages-settings" id="messages-settings-form">
+            <label>
+                <span>{{ t("Default path") }}</span>
+                <select id="messages-default-path" name="default_path">
+                    {% for option in messages_view.message_settings.path_options %}
+                    <option value="{{ option.value }}"{% if option.value == messages_view.message_settings.default_path %} selected{% endif %}>{{ t(option.label) }}</option>
+                    {% endfor %}
+                </select>
+                <span class="muted small">{{ t("Used for new conversations and automatic APRS responses.") }}</span>
+            </label>
+            <label>
+                <span>{{ t("Target groups") }}</span>
+                <input type="text" id="messages-target-groups" name="target_groups" value="{{ messages_view.message_settings.target_groups|join(', ') }}" placeholder="CQ, YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
+                <span class="muted small">{{ t("Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.") }}</span>
+            </label>
+            <label class="full checkbox-row">
+                <input type="checkbox" id="messages-receive-any-ssid" name="receive_any_ssid"{% if messages_view.message_settings.receive_any_ssid %} checked{% endif %}>
+                <span>{{ t("Receive messages for any SSID of my callsign") }}</span>
+                <span class="muted small">{{ t("Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.") }}</span>
+            </label>
+            <div class="form-actions">
+                <button class="button" type="submit">{{ t("Save settings") }}</button>
+                <small class="field-validation-error" id="messages-settings-error" hidden></small>
+            </div>
+        </form>
+    </div>
 </section>
 {% include "partials/help_modal.html" %}
 

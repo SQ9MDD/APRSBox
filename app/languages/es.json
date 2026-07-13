@@ -1469,6 +1469,7 @@
   "Your role can view notification configuration but cannot change it.": "Tu rol puede ver la configuración de notificaciones, pero no puede cambiarla.",
   "Message settings": "Configuración de mensajes",
   "Defaults for new conversations and automatic APRS responses.": "Valores predeterminados para conversaciones nuevas y respuestas APRS automáticas.",
+  "Used for new conversations and automatic APRS responses.": "Se usa para conversaciones nuevas y respuestas APRS automáticas.",
   "Default path": "Ruta predeterminada",
   "Direct (no path)": "Directo (sin ruta)",
   "Receive messages for any SSID of my callsign": "Recibir mensajes para cualquier SSID de mi indicativo",
