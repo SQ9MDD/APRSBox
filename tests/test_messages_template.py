@@ -27,9 +27,13 @@ class MessagesTemplateTests(unittest.TestCase):
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
         self.assertIn('<div class="messages-page-layout">', template_source)
-        self.assertIn("min-height: calc(100dvh - var(--space-4) - var(--space-4));", stylesheet_source)
+        self.assertIn("height: calc(100dvh - var(--space-4) - var(--space-4));", stylesheet_source)
+        self.assertIn("min-height: 46rem;", stylesheet_source)
         self.assertIn(".messages-page-layout .messages-shell {", stylesheet_source)
+        self.assertIn("display: flex;\n        flex: 1 1 auto;", stylesheet_source)
+        self.assertIn("height: auto;", stylesheet_source)
         self.assertIn("max-height: none;", stylesheet_source)
+        self.assertIn("align-content: safe end;", stylesheet_source)
 
     def test_group_threads_render_the_sender_above_each_message(self) -> None:
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")

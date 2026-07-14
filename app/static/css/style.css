@@ -5780,16 +5780,20 @@ body.modal-open {
 
 @media (min-width: 981px) {
     .messages-page-layout {
-        min-height: calc(100vh - var(--space-4) - var(--space-4));
-        min-height: calc(100dvh - var(--space-4) - var(--space-4));
+        height: calc(100vh - var(--space-4) - var(--space-4));
+        height: calc(100dvh - var(--space-4) - var(--space-4));
+        min-height: 46rem;
     }
 
     .messages-page-panel {
+        display: flex;
         flex: 1 1 auto;
+        min-height: 34rem;
     }
 
     .messages-page-layout .messages-shell {
-        height: 100%;
+        flex: 1 1 auto;
+        height: auto;
         max-height: none;
     }
 
@@ -5955,7 +5959,7 @@ body.modal-open {
     min-height: 0;
     overflow: auto;
     display: grid;
-    align-content: start;
+    align-content: safe end;
     gap: 0.55rem;
     padding: var(--space-5);
     background:
