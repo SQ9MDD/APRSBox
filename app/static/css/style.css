@@ -5657,6 +5657,12 @@ body.modal-open {
     font-size: 0.84rem;
 }
 
+.messages-page-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
 .messages-page-panel {
     padding: 0;
     overflow: hidden;
@@ -5770,6 +5776,26 @@ body.modal-open {
 
 .messages-settings input[aria-invalid="true"] {
     border-color: var(--danger);
+}
+
+@media (min-width: 981px) {
+    .messages-page-layout {
+        min-height: calc(100vh - var(--space-4) - var(--space-4));
+        min-height: calc(100dvh - var(--space-4) - var(--space-4));
+    }
+
+    .messages-page-panel {
+        flex: 1 1 auto;
+    }
+
+    .messages-page-layout .messages-shell {
+        height: 100%;
+        max-height: none;
+    }
+
+    .messages-settings-panel {
+        flex: 0 0 auto;
+    }
 }
 
 @media (max-width: 1200px) {

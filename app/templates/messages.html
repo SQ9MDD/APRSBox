@@ -5,6 +5,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="messages-page-layout">
 <section class="panel messages-page-panel">
     <div class="messages-shell" id="messages-app" data-static-root="{{ request.scope.root_path }}/static/">
         <aside class="messages-sidebar">
@@ -126,6 +127,7 @@
         </form>
     </div>
 </section>
+</div>
 {% include "partials/help_modal.html" %}
 
 <script type="application/json" id="messages-initial-data">{{ messages_view|tojson }}</script>
