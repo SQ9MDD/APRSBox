@@ -490,13 +490,21 @@
             return;
         }
         const size = map.getSize();
-        const bleedX = size.x;
-        const bleedY = size.y;
+        const mapPaneElement = map.getPane("mapPane");
+        const mapPanePosition = mapPaneElement
+            ? window.L.DomUtil.getPosition(mapPaneElement)
+            : null;
+        const offsetX = Number.isFinite(mapPanePosition && mapPanePosition.x)
+            ? mapPanePosition.x
+            : 0;
+        const offsetY = Number.isFinite(mapPanePosition && mapPanePosition.y)
+            ? mapPanePosition.y
+            : 0;
         mapMaskPane.style.transform = "";
-        mapMaskPane.style.left = `${-bleedX}px`;
-        mapMaskPane.style.top = `${-bleedY}px`;
-        mapMaskPane.style.width = `${size.x + (bleedX * 2)}px`;
-        mapMaskPane.style.height = `${size.y + (bleedY * 2)}px`;
+        mapMaskPane.style.left = `${-offsetX}px`;
+        mapMaskPane.style.top = `${-offsetY}px`;
+        mapMaskPane.style.width = `${size.x}px`;
+        mapMaskPane.style.height = `${size.y}px`;
     }
 
     function ensureMapMaskLayer(mapInstance) {
