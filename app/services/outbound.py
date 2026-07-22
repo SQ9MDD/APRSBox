@@ -80,7 +80,7 @@ def _resolve_station_target_modems(station_settings: dict[str, Any]) -> tuple[li
     if scope == TX_SCOPE_ALL_ACTIVE:
         modems = _list_active_tnc_modems()
         if not modems:
-            return None, "No active TNC interfaces are available."
+            return None, "No active RF interfaces are available."
         return modems, None
 
     beacon_interface_id = station_settings.get("beacon_interface_id")
@@ -106,7 +106,7 @@ def _resolve_wx_target_modems(payload: dict[str, Any]) -> tuple[list[dict[str, A
             except (TypeError, ValueError):
                 continue
         if not interface_ids:
-            return None, "No active TNC interfaces are available."
+            return None, "No active RF interfaces are available."
         modems: list[dict[str, Any]] = []
         missing = False
         for interface_id in interface_ids:
@@ -116,7 +116,7 @@ def _resolve_wx_target_modems(payload: dict[str, Any]) -> tuple[list[dict[str, A
                 continue
             modems.append(modem)
         if not modems:
-            return None, "No active TNC interfaces are available."
+            return None, "No active RF interfaces are available."
         if missing:
             log_event("WARNING", "outbound", "WX all-active target list contained unavailable interfaces.")
         return modems, None

@@ -315,6 +315,7 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 self.assertIn("interface_id", columns)
                 self.assertIn("direction", columns)
                 self.assertIn("band", columns)
+                self.assertIn("source_kind", columns)
                 modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
                 self.assertIn("tx_blocked", modem_columns)
                 self.assertIn("tx_min_gap_seconds", modem_columns)
@@ -338,6 +339,22 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                     """
                 ).fetchone()
                 self.assertIsNotNone(index_row)
+                source_kind_index_row = connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index' AND name = 'idx_traffic_frames_source_kind_created_at'
+                    """
+                ).fetchone()
+                self.assertIsNotNone(source_kind_index_row)
+                aprsis_unique_index_row = connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index' AND name = 'idx_modems_single_aprsis'
+                    """
+                ).fetchone()
+                self.assertIsNotNone(aprsis_unique_index_row)
                 aprs_message_index_rows = connection.execute(
                     """
                     SELECT name

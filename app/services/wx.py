@@ -521,7 +521,7 @@ def build_wx_outbound_payload(*, mapping_rows: list[dict[str, Any]] | None = Non
             except (TypeError, ValueError):
                 continue
         if not interface_ids:
-            raise WxValidationError("At least one active TNC interface is required before sending WX.")
+            raise WxValidationError("At least one active RF interface is required before sending WX.")
     elif beacon_interface_id in {None, ""}:
         raise WxValidationError("WX interface is required before sending WX.")
     latitude = str(resolved_config.get("latitude") or "").strip()
@@ -701,7 +701,7 @@ def _normalize_wx_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if enabled and beacon_tx_scope == TX_SCOPE_SINGLE and beacon_interface_id is None:
         raise WxValidationError("WX interface is required when WX is enabled.")
     if enabled and beacon_tx_scope == TX_SCOPE_ALL_ACTIVE and not get_active_tnc_interfaces():
-        raise WxValidationError("At least one active TNC interface is required when WX is enabled.")
+        raise WxValidationError("At least one active RF interface is required when WX is enabled.")
     if enabled and (not latitude or not longitude):
         raise WxValidationError("WX latitude and longitude are required when WX is enabled.")
     if ssid and (not ssid.isdigit() or int(ssid) < 0 or int(ssid) > 15):

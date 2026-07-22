@@ -893,7 +893,12 @@ def expire_direct_message_timeouts() -> None:
             mark_message_failed(int(row["id"]), "No ACK received after APRS retry window.")
 
 
-def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) -> None:
+def process_incoming_tnc2_message(
+    line: str,
+    *,
+    timestamp: str | None = None,
+    allow_automatic_responses: bool = True,
+) -> None:
     parsed = _parse_effective_incoming_tnc2_line(line, log_invalid_third_party=True)
     if parsed is None:
         return
@@ -964,8 +969,9 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
             ack_number=query_ack_number,
             path=parsed["path"],
             timestamp=received_at,
+            acknowledge=allow_automatic_responses,
         )
-        if is_new_query:
+        if is_new_query and allow_automatic_responses:
             _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
         return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
@@ -998,6 +1004,7 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         ack_number=ack_number,
         path=parsed["path"],
         timestamp=received_at,
+        acknowledge=allow_automatic_responses,
     )
 
 
@@ -1337,6 +1344,7 @@ def store_incoming_query(
     ack_number: str | None = None,
     path: str,
     timestamp: str,
+    acknowledge: bool = True,
 ) -> bool:
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
@@ -1361,7 +1369,7 @@ def store_incoming_query(
         # Duplicate bursts for the same query number can appear when a frame is heard
         # multiple times through nearby digipeaters. Limit duplicate ACKs to one short-window
         # transmission per sender/query-number pair to keep TX serialization predictable.
-        if ack_number_for_tx and not _has_recent_duplicate_ack(sender=sender, query_number=ack_number_for_tx):
+        if acknowledge and ack_number_for_tx and not _has_recent_duplicate_ack(sender=sender, query_number=ack_number_for_tx):
             enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-duplicate")
         return False
     with get_connection() as connection:
@@ -1388,7 +1396,7 @@ def store_incoming_query(
             ),
         )
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
-    if not ack_number_for_tx:
+    if not acknowledge or not ack_number_for_tx:
         return True
     enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
     enqueue_ack_job(

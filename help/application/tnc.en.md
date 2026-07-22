@@ -1,8 +1,8 @@
-# TNC
+# Interfaces
 
-The TNC tab configures radio interfaces used by APRSBox for KISS/TNC2 receive, outbound frame transmission, and optional LAN KISS port sharing.
+The Interfaces tab configures APRSBox input interfaces. Radio interfaces can receive KISS/TNC2, transmit outbound frames, and optionally share a LAN KISS port. APRS-IS can be enabled as a receive-only input.
 
-## TNC list
+## Interface list
 
 The table shows configured interfaces. Click a row to edit it.
 
@@ -10,15 +10,18 @@ The table shows configured interfaces. Click a row to edit it.
 - `TX Block` shows whether transmission through the interface is blocked.
 - `LAN` shows whether APRSBox exposes a KISS/TNC proxy for LAN clients.
 
-Disabling a TNC stops the traffic monitor and outbound service from using it. Beacon, WX, object, bulletin, and message settings can still reference that interface, but transmission will be skipped or fail depending on context.
+Disabling an interface stops its receive processing. Disabling a radio interface also stops the outbound service from using it. Beacon, WX, object, bulletin, and message settings can still reference that radio interface, but transmission will be skipped or fail depending on context.
 
 ## Interface types
 
-- `TCP` connects to a TNC or software that exposes KISS over TCP. `Path / Adress` usually has the `host:port` format, for example `127.0.0.1:8001`.
+- `TCP` connects to a TNC or software that exposes KISS over TCP. `Path / Address / Filter` usually has the `host:port` format, for example `127.0.0.1:8001`.
 - `SERIALL` uses a local serial port, for example `/dev/ttyUSB0` or `/dev/ttyACM0`, and requires a valid `Baud Rate`.
 - `OpenWebRX MQTT (RX only)` receives packets from OpenWebRX MQTT. This type is receive-only: TX is blocked and LAN proxy is disabled.
+- `APRSIS` receives TNC2 lines over the existing APRS-IS connection configured in iGate settings. It does not use KISS and is receive-only in this interface. Only one APRSIS interface may exist.
 
 For OpenWebRX MQTT, the address field should be an `mqtt://` or `mqtts://` URL with the topic in the path, for example `mqtt://user:pass@127.0.0.1:1883/openwebrx/aprs`.
+
+For APRSIS, `Path / Address / Filter` is the APRS-IS server filter. New interfaces default to `m/20`; another valid filter such as `r/52.23/21.01/50` can be entered. Server, port, callsign, and passcode continue to come from iGate settings.
 
 ## Configuration fields
 
@@ -29,7 +32,7 @@ For OpenWebRX MQTT, the address field should be an `mqtt://` or `mqtts://` URL w
 - `TX Min Gap (s)` sets the minimum pause between transmissions on this TNC. The allowed range is `0.2` to `1.2` seconds.
 - `RX Silence Reconnect Timeout (s)` applies to serial interfaces. After RX silence longer than this value, the serial broker can force a reconnect. `0` disables this watchdog.
 
-`Baud Rate` is used only for `SERIALL`. It is ignored for `TCP` and `OpenWebRX MQTT`.
+`Baud Rate` is used only for `SERIALL`. Serial, TX, and LAN proxy fields are hidden for APRSIS.
 
 ## Expose Port
 
@@ -42,8 +45,8 @@ For OpenWebRX MQTT, the address field should be an `mqtt://` or `mqtts://` URL w
 
 Do not enable remote TX on an untrusted network. If you expose the port beyond the local machine, configure a whitelist.
 
-## When to use multiple TNCs
+## When to use multiple interfaces
 
-Multiple active TNCs can run in parallel. Received traffic is handled per interface, while transmission depends on the selector used in each tab, such as `My Station`, `WX`, objects, bulletins, messages, or `Packet Routing` rules.
+Multiple active interfaces can run in parallel. Received traffic is handled per interface, while radio transmission depends on the selector used in each tab, such as `My Station`, `WX`, objects, bulletins, messages, or `Packet Routing` rules. APRS-IS receive traffic is visible in traffic history, station details, and the map, but is excluded from all APRSBox statistics.
 
 If you only need input from OpenWebRX, use `OpenWebRX MQTT (RX only)`. If you need full radio RX/TX, use `TCP` or `SERIALL`.

@@ -517,6 +517,7 @@ CREATE TABLE IF NOT EXISTS event_logs (
 CREATE TABLE IF NOT EXISTS traffic_frames (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,
+    source_kind TEXT NOT NULL DEFAULT 'rf',
     interface_id INTEGER,
     direction TEXT,
     band TEXT,
@@ -749,6 +750,9 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_modems_single_aprsis
+    ON modems(UPPER(modem_type))
+    WHERE UPPER(modem_type) = 'APRSIS';
 CREATE INDEX IF NOT EXISTS idx_traffic_device_station_device_hourly_bucket
     ON traffic_device_station_device_hourly(bucket_start_utc, station_key);
 CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
@@ -1056,6 +1060,13 @@ def init_db() -> None:
                 ADD COLUMN interface_id INTEGER
                 """
             )
+        if "source_kind" not in traffic_frame_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_frames
+                ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'rf'
+                """
+            )
         if "direction" not in traffic_frame_columns:
             connection.execute(
                 """
@@ -1150,6 +1161,12 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_interface_created_at
             """
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
     ON traffic_frames(format, created_at DESC, id DESC)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_source_kind_created_at
+    ON traffic_frames(source_kind, created_at DESC, id DESC)
 """
         )
         if "expose_port_enabled" not in traffic_runtime_columns:

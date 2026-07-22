@@ -1484,5 +1484,18 @@
   "Target groups must contain 1-9 letters or digits, separated by commas.": "Los grupos de destino deben contener de 1 a 9 letras o dígitos, separados por comas.",
   "Target groups cannot contain empty entries between commas.": "La lista de grupos no puede contener entradas vacías entre comas.",
   "Bulletin addresses are configured separately from message target groups.": "Las direcciones de boletines se configuran por separado de los grupos de destino de mensajes.",
-  "Choose a default path from the list.": "Elija una ruta predeterminada de la lista."
+  "Choose a default path from the list.": "Elija una ruta predeterminada de la lista.",
+  "Add Interface": "Añadir interfaz",
+  "Edit Interface": "Editar interfaz",
+  "Interface List": "Lista de interfaces",
+  "Manage APRSBox interfaces used for RF monitoring, APRS-IS reception, outbound traffic and optional LAN port sharing.": "Administre las interfaces APRSBox utilizadas para monitorización RF, recepción APRS-IS, tráfico saliente y uso compartido opcional de puertos LAN.",
+  "Interface settings are stored in SQLite and applied by APRSBox core.": "La configuración de las interfaces se almacena en SQLite y la aplica APRSBox core.",
+  "Path / Address / Filter": "Ruta / Dirección / Filtro",
+  "APRS-IS server filter, e.g. m/20 or r/52.23/21.01/50.": "Filtro del servidor APRS-IS, p. ej. m/20 o r/52.23/21.01/50.",
+  "An APRSIS interface already exists. Edit the existing interface instead.": "Ya existe una interfaz APRSIS. Edite la interfaz existente en su lugar.",
+  "Unsupported interface type.": "Tipo de interfaz no compatible.",
+  "No enabled interface is configured.": "No hay ninguna interfaz habilitada configurada.",
+  "Last seen via APRS-IS": "Visto por última vez vía APRS-IS",
+  "Last APRS-IS activity age": "Antigüedad de la última actividad APRS-IS",
+  "Last heard via RF": "Escuchado por última vez vía RF"
 }

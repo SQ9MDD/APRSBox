@@ -1396,5 +1396,18 @@
   "Target groups must contain 1-9 letters or digits, separated by commas.": "Target groups must contain 1-9 letters or digits, separated by commas.",
   "Target groups cannot contain empty entries between commas.": "Target groups cannot contain empty entries between commas.",
   "Bulletin addresses are configured separately from message target groups.": "Bulletin addresses are configured separately from message target groups.",
-  "Choose a default path from the list.": "Choose a default path from the list."
+  "Choose a default path from the list.": "Choose a default path from the list.",
+  "Add Interface": "Add Interface",
+  "Edit Interface": "Edit Interface",
+  "Interface List": "Interface List",
+  "Manage APRSBox interfaces used for RF monitoring, APRS-IS reception, outbound traffic and optional LAN port sharing.": "Manage APRSBox interfaces used for RF monitoring, APRS-IS reception, outbound traffic and optional LAN port sharing.",
+  "Interface settings are stored in SQLite and applied by APRSBox core.": "Interface settings are stored in SQLite and applied by APRSBox core.",
+  "Path / Address / Filter": "Path / Address / Filter",
+  "APRS-IS server filter, e.g. m/20 or r/52.23/21.01/50.": "APRS-IS server filter, e.g. m/20 or r/52.23/21.01/50.",
+  "An APRSIS interface already exists. Edit the existing interface instead.": "An APRSIS interface already exists. Edit the existing interface instead.",
+  "Unsupported interface type.": "Unsupported interface type.",
+  "No enabled interface is configured.": "No enabled interface is configured.",
+  "Last seen via APRS-IS": "Last seen via APRS-IS",
+  "Last APRS-IS activity age": "Last APRS-IS activity age",
+  "Last heard via RF": "Last heard via RF"
 }

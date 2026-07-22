@@ -267,6 +267,7 @@
                 {% endif %}
                 <label
                     class="{% if field.type == 'textarea' %}full{% elif field.type == 'checkbox' %}full checkbox-row{% endif %}"
+                    {% if section.slug == 'modems' %}data-modem-field-row="{{ field.name }}"{% endif %}
                     {% if section.slug == 'bulletins' and field.name == 'bulletin_code' %}id="bulletins-code-row"{% endif %}
                     {% if section.slug == 'bulletins' and field.name == 'group_name' %}id="bulletins-group-row"{% endif %}
                     {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-toggle-row"{% endif %}
@@ -288,6 +289,7 @@
                     <span>{{ t(field.label) }}</span>
                     <select
                         name="{{ field.name }}"
+                        {% if section.slug == 'modems' and field.name == 'modem_type' %}id="modems-type"{% endif %}
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_overlay' %}id="{{ section.slug }}-symbol-overlay"{% endif %}
                         {% if section.slug == 'bulletins' and field.name == 'message_kind' %}id="bulletins-message-kind"{% endif %}
@@ -381,6 +383,7 @@
                     <input
                         type="{{ field.type }}"
                         name="{{ field.name }}"
+                        {% if section.slug == 'modems' and field.name == 'device_path' %}id="modems-device-path"{% endif %}
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-address"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'expose_port' %}id="modems-expose-port"{% endif %}
@@ -396,6 +399,9 @@
                         <span>{{ t("Get location") }}</span>
                     </button>
                     {% endif %}
+                    {% endif %}
+                    {% if section.slug == 'modems' and field.name == 'device_path' %}
+                    <small class="muted" id="modems-aprsis-filter-help" hidden>{{ t("APRS-IS server filter, e.g. m/20 or r/52.23/21.01/50.") }}</small>
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
                     <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
@@ -736,6 +742,8 @@
         if (modemForm) {
             const typeSelect = modemForm.querySelector('select[name="modem_type"]');
             const baudInput = modemForm.querySelector('input[name="baud_rate"]');
+            const devicePathInput = document.getElementById("modems-device-path");
+            const aprsisFilterHelp = document.getElementById("modems-aprsis-filter-help");
             const exposeToggle = document.getElementById("modems-expose-port-enabled");
             const exposeRows = [
                 document.getElementById("modems-expose-allow-tx-row"),
@@ -747,18 +755,45 @@
                 const syncModemFields = () => {
                     const isTcp = typeSelect.value === "TCP";
                     const isOpenWebRxMqtt = typeSelect.value === "OPENWEBRX_MQTT";
-                    const disableBaud = isTcp || isOpenWebRxMqtt;
+                    const isAprsis = typeSelect.value === "APRSIS";
+                    const aprsisHiddenFieldNames = [
+                        "band",
+                        "baud_rate",
+                        "serial_rx_silence_reconnect_seconds",
+                        "tx_blocked",
+                        "tx_min_gap_seconds",
+                        "expose_port_enabled",
+                        "expose_allow_tx",
+                        "expose_bind_address",
+                        "expose_port",
+                        "expose_whitelist",
+                    ];
+                    for (const fieldName of aprsisHiddenFieldNames) {
+                        const row = modemForm.querySelector(`[data-modem-field-row="${fieldName}"]`);
+                        if (!row) continue;
+                        row.hidden = isAprsis;
+                        for (const input of row.querySelectorAll("input, textarea, select")) {
+                            input.disabled = isAprsis;
+                        }
+                    }
+                    const disableBaud = isTcp || isOpenWebRxMqtt || isAprsis;
                     baudInput.disabled = disableBaud;
                     if (disableBaud) {
                         baudInput.value = "";
                     }
+                    if (aprsisFilterHelp) {
+                        aprsisFilterHelp.hidden = !isAprsis;
+                    }
+                    if (isAprsis && devicePathInput && !devicePathInput.value.trim()) {
+                        devicePathInput.value = "m/20";
+                    }
                     if (exposeToggle) {
-                        exposeToggle.disabled = isOpenWebRxMqtt;
-                        if (isOpenWebRxMqtt) {
+                        exposeToggle.disabled = isOpenWebRxMqtt || isAprsis;
+                        if (isOpenWebRxMqtt || isAprsis) {
                             exposeToggle.checked = false;
                         }
                     }
-                    const showExposeFields = Boolean(!isOpenWebRxMqtt && exposeToggle && exposeToggle.checked);
+                    const showExposeFields = Boolean(!isOpenWebRxMqtt && !isAprsis && exposeToggle && exposeToggle.checked);
                     for (const row of exposeRows) {
                         row.hidden = !showExposeFields;
                         const rowInputs = row.querySelectorAll("input, textarea, select");
