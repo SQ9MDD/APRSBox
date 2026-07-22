@@ -15,6 +15,7 @@ from app.services.content import (
     get_visible_station_snapshots,
     parse_tnc2_frame,
 )
+from app.services.traffic_source import RF_SOURCE_KIND
 
 DEFAULT_STATION_ZOOM = 10
 DETAIL_STATION_ZOOM = 14
@@ -681,6 +682,19 @@ def _build_map_station_marker_rows(snapshots: list[dict[str, Any]]) -> list[dict
         longitude = _parse_coordinate(station.get("longitude"))
         if latitude is None or longitude is None:
             continue
+        last_heard_rf_at = station.get("last_heard_rf_at")
+        has_rf_source = bool(last_heard_rf_at)
+        marker_source_kind = RF_SOURCE_KIND if has_rf_source else station.get("source_kind", RF_SOURCE_KIND)
+        marker_source = (
+            station.get("last_heard_rf_source")
+            if has_rf_source
+            else station.get("source")
+        )
+        marker_interface_id = (
+            station.get("last_heard_rf_interface_id")
+            if has_rf_source
+            else station.get("interface_id")
+        )
         stations.append(
             {
                 "callsign": station["callsign"],
@@ -688,11 +702,17 @@ def _build_map_station_marker_rows(snapshots: list[dict[str, Any]]) -> list[dict
                 "display_callsign": station["display_callsign"],
                 "detail_href": build_station_detail_href(station["display_callsign"]),
                 "origin": station.get("origin", "heard"),
-                "source_kind": station.get("source_kind", "rf"),
-                "is_rf": bool(station.get("is_rf")),
+                "source_kind": marker_source_kind,
+                "is_rf": has_rf_source or bool(station.get("is_rf")),
                 "last_seen_any_at": station.get("last_seen_any_at"),
-                "last_heard_rf_at": station.get("last_heard_rf_at"),
+                "last_heard_rf_at": last_heard_rf_at,
+                "last_heard_rf_interface_id": _normalize_interface_id(
+                    station.get("last_heard_rf_interface_id")
+                ),
                 "last_seen_aprsis_at": station.get("last_seen_aprsis_at"),
+                "last_seen_aprsis_interface_id": _normalize_interface_id(
+                    station.get("last_seen_aprsis_interface_id")
+                ),
                 "activity_label": station.get("activity_label", "Last heard"),
                 "activity_age_label": station.get("activity_age_label", "Last heard age"),
                 "latitude": latitude,
@@ -702,8 +722,8 @@ def _build_map_station_marker_rows(snapshots: list[dict[str, Any]]) -> list[dict
                 "symbol_icon": station["symbol_icon"],
                 "symbol_table": station["symbol_table"],
                 "symbol_code": station["symbol_code"],
-                "source": station["source"],
-                "interface_id": _normalize_interface_id(station.get("interface_id")),
+                "source": marker_source,
+                "interface_id": _normalize_interface_id(marker_interface_id),
                 "last_heard_at": station["last_heard_at"],
                 "last_heard_age_s": station["last_heard_age_s"],
                 "distance_km": station.get("distance_km"),

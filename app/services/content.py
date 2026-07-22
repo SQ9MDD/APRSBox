@@ -2290,8 +2290,28 @@ def _find_station_snapshot(
 
 
 def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
-    rows = _station_snapshot_rows(("TNC2",), row_limit=_station_snapshot_row_limit(limit))
-    return _build_station_snapshots_from_rows(rows, origin="heard", limit=limit)
+    row_limit = _station_snapshot_row_limit(limit)
+    # APRS-IS can be much busier than the local RF channel. Query both source
+    # groups independently so an APRS-IS burst cannot push locally heard RF
+    # frames outside the scan window, then use RF as the primary snapshot and
+    # APRS-IS only to fill fields that RF did not provide.
+    rf_rows = _station_snapshot_rows(
+        ("TNC2",),
+        row_limit=row_limit,
+        statistics_only=True,
+    )
+    aprsis_rows = _station_snapshot_rows(
+        ("TNC2",),
+        row_limit=row_limit,
+        source_kind=APRSIS_SOURCE_KIND,
+    )
+    rf_snapshots = _build_station_snapshots_from_rows(rf_rows, origin="heard", limit=limit)
+    aprsis_snapshots = _build_station_snapshots_from_rows(aprsis_rows, origin="heard", limit=limit)
+    return _merge_rf_primary_station_snapshots(
+        rf_snapshots,
+        aprsis_snapshots,
+        limit=limit,
+    )
 
 
 def get_rf_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
@@ -2384,9 +2404,17 @@ def _station_snapshot_rows(
     *,
     row_limit: int,
     statistics_only: bool = False,
+    source_kind: str | None = None,
 ) -> list[dict[str, Any]]:
     placeholders = ", ".join("?" for _ in formats)
-    source_clause = f" AND {STATISTICS_TRAFFIC_SQL_PREDICATE}" if statistics_only else ""
+    params: tuple[Any, ...] = formats
+    if source_kind is not None:
+        source_clause = " AND LOWER(COALESCE(source_kind, 'rf')) = ?"
+        params += (normalize_source_kind(source_kind),)
+    elif statistics_only:
+        source_clause = f" AND {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+    else:
+        source_clause = ""
     rows = fetch_all(
         f"""
         SELECT source, source_kind, interface_id, line, created_at
@@ -2396,9 +2424,61 @@ def _station_snapshot_rows(
         ORDER BY created_at DESC, id DESC
         LIMIT ?
         """,
-        formats + (row_limit,),
+        params + (row_limit,),
     )
     return [dict(row) for row in rows]
+
+
+def _merge_rf_primary_station_snapshots(
+    rf_snapshots: list[dict[str, Any]],
+    aprsis_snapshots: list[dict[str, Any]],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    aprsis_by_key = {
+        str(snapshot.get("display_callsign") or "").casefold(): snapshot
+        for snapshot in aprsis_snapshots
+        if str(snapshot.get("display_callsign") or "").strip()
+    }
+    merged: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    for rf_snapshot in rf_snapshots:
+        key = str(rf_snapshot.get("display_callsign") or "").casefold()
+        supplemental = aprsis_by_key.get(key)
+        if supplemental is None:
+            combined = dict(rf_snapshot)
+        else:
+            combined = _merge_station_snapshots(
+                rf_snapshot,
+                supplemental,
+                prefer_primary_activity=True,
+            )
+        merged.append(combined)
+        seen_keys.add(key)
+
+    merged.sort(
+        key=lambda item: (
+            str(item.get("last_heard_rf_at") or item.get("last_heard_at") or ""),
+            str(item.get("display_callsign") or ""),
+        ),
+        reverse=True,
+    )
+    aprsis_only = [
+        snapshot
+        for key, snapshot in aprsis_by_key.items()
+        if key not in seen_keys
+    ]
+    aprsis_only.sort(
+        key=lambda item: (
+            str(item.get("last_seen_aprsis_at") or item.get("last_heard_at") or ""),
+            str(item.get("display_callsign") or ""),
+        ),
+        reverse=True,
+    )
+    # The map has a finite station limit. Keep locally heard stations first and
+    # use APRS-IS-only stations to fill the remaining capacity.
+    return (merged + aprsis_only)[: max(1, int(limit or 0))]
 
 
 def _normalize_interface_id(value: Any) -> int | None:
@@ -2523,7 +2603,12 @@ def _build_station_snapshots_from_rows(
     return list(stations.values())[:limit]
 
 
-def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any]) -> dict[str, Any]:
+def _merge_station_snapshots(
+    primary: dict[str, Any],
+    secondary: dict[str, Any],
+    *,
+    prefer_primary_activity: bool = False,
+) -> dict[str, Any]:
     merged = dict(primary)
     latest = secondary if str(secondary.get("last_heard_at") or "") > str(primary.get("last_heard_at") or "") else primary
     for field in (
@@ -2559,7 +2644,7 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
     ):
         if not merged.get(field) and secondary.get(field):
             merged[field] = secondary[field]
-    if latest is secondary:
+    if latest is secondary and not prefer_primary_activity:
         for field in (
             "origin",
             "activity_label",
@@ -2579,6 +2664,11 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
             "last_seen_any_at",
         ):
             merged[field] = secondary.get(field)
+    if prefer_primary_activity:
+        merged["last_seen_any_at"] = max(
+            str(primary.get("last_seen_any_at") or primary.get("last_heard_at") or ""),
+            str(secondary.get("last_seen_any_at") or secondary.get("last_heard_at") or ""),
+        )
     merged["statistics_eligible"] = bool(merged.get("last_heard_rf_at"))
     return merged
 

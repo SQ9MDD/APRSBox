@@ -19,6 +19,7 @@ from app.services.aprsis import (
 from app.services.content import (
     dashboard_activity_series,
     dashboard_traffic_summary,
+    get_heard_station_snapshots,
     get_visible_station_snapshots,
     monitoring_public_snapshot,
     safe_create_section_row,
@@ -59,6 +60,24 @@ def create_aprsis_interface(*, name: str = "Internet RX", server_filter: str = "
             "modem_type": "APRSIS",
             "device_path": server_filter,
             "enabled": "1" if enabled else None,
+        },
+    )
+    if not success:
+        raise AssertionError(error)
+    row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
+    assert row is not None
+    return int(row["id"])
+
+
+def create_rf_interface(*, name: str = "Main RF") -> int:
+    success, error = safe_create_section_row(
+        "modems",
+        {
+            "name": name,
+            "band": "2m",
+            "modem_type": "TCP",
+            "device_path": "127.0.0.1:8001",
+            "enabled": "1",
         },
     )
     if not success:
@@ -220,13 +239,14 @@ class AprsisReceivePipelineTests(unittest.TestCase):
 
     def test_rf_frame_still_updates_statistics_and_preserves_rf_heard_when_aprsis_is_newer(self) -> None:
         with temporary_database():
+            rf_interface_id = create_rf_interface()
             rf_time = (datetime.now(timezone.utc) - timedelta(seconds=10)).replace(microsecond=0).isoformat()
             self.assertTrue(
                 process_normalized_tnc2_rx(
                     POSITION_LINE.replace("APRS-IS test", "RF test"),
                     source="Main RF",
                     source_kind="rf",
-                    source_interface_id=7,
+                    source_interface_id=rf_interface_id,
                     band="2m",
                     timestamp=rf_time,
                 )
@@ -248,10 +268,85 @@ class AprsisReceivePipelineTests(unittest.TestCase):
             self.assertEqual(int((radio_rx or {"total": 0})["total"]), 1)
 
             station = next(item for item in get_visible_station_snapshots() if item["display_callsign"] == "SP5ABC-9")
-            self.assertEqual(station["source_kind"], "aprsis")
+            self.assertEqual(station["source_kind"], "rf")
+            self.assertTrue(station["is_rf"])
+            self.assertEqual(station["interface_id"], rf_interface_id)
+            self.assertEqual(station["source"], "Main RF")
             self.assertIsNotNone(station["last_heard_rf_at"])
             self.assertIsNotNone(station["last_seen_aprsis_at"])
             self.assertTrue(station["statistics_eligible"])
+
+            marker = next(
+                item
+                for item in get_map_station_markers_payload()["stations"]
+                if item["display_callsign"] == "SP5ABC-9"
+            )
+            self.assertEqual(marker["source_kind"], "rf")
+            self.assertTrue(marker["is_rf"])
+            self.assertEqual(marker["interface_id"], rf_interface_id)
+            self.assertEqual(marker["last_seen_aprsis_interface_id"], interface_id)
+
+    def test_rf_primary_station_can_fill_missing_position_from_aprsis(self) -> None:
+        with temporary_database():
+            rf_interface_id = create_rf_interface()
+            rf_time = (datetime.now(timezone.utc) - timedelta(seconds=10)).replace(microsecond=0).isoformat()
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    "SP5MIX>APRS:_07221234c000s000g000t020r000p000P000h50b10130",
+                    source="Main RF",
+                    source_kind="rf",
+                    source_interface_id=rf_interface_id,
+                    band="2m",
+                    timestamp=rf_time,
+                )
+            )
+            aprsis_interface_id = create_aprsis_interface()
+            service = self._service(aprsis_interface_id)
+            self.assertTrue(
+                service._process_server_line(
+                    "SP5MIX>APRS,TCPIP*:!5223.45N/02101.23E>Position supplied by APRS-IS"
+                )
+            )
+
+            station = next(item for item in get_visible_station_snapshots() if item["display_callsign"] == "SP5MIX")
+            self.assertEqual(station["source_kind"], "rf")
+            self.assertEqual(station["interface_id"], rf_interface_id)
+            self.assertTrue(station["latitude"])
+            self.assertTrue(station["longitude"])
+            self.assertIsNotNone(station["last_seen_aprsis_at"])
+
+            marker = next(
+                item
+                for item in get_map_station_markers_payload()["stations"]
+                if item["display_callsign"] == "SP5MIX"
+            )
+            self.assertEqual(marker["interface_id"], rf_interface_id)
+            self.assertEqual(marker["source_kind"], "rf")
+
+    def test_aprsis_only_stations_do_not_evict_rf_station_at_snapshot_limit(self) -> None:
+        with temporary_database():
+            rf_interface_id = create_rf_interface()
+            rf_time = (datetime.now(timezone.utc) - timedelta(minutes=5)).replace(microsecond=0).isoformat()
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    "SP5RF>APRS:!5223.00N/02101.00E>Local RF",
+                    source="Main RF",
+                    source_kind="rf",
+                    source_interface_id=rf_interface_id,
+                    band="2m",
+                    timestamp=rf_time,
+                )
+            )
+            aprsis_interface_id = create_aprsis_interface()
+            service = self._service(aprsis_interface_id)
+            self.assertTrue(service._process_server_line("SP5IS1>APRS,TCPIP*:!5224.00N/02102.00E>Internet one"))
+            self.assertTrue(service._process_server_line("SP5IS2>APRS,TCPIP*:!5225.00N/02103.00E>Internet two"))
+
+            snapshots = get_heard_station_snapshots(limit=2)
+            callsigns = {item["display_callsign"] for item in snapshots}
+            self.assertEqual(len(snapshots), 2)
+            self.assertIn("SP5RF", callsigns)
+            self.assertEqual(len(callsigns & {"SP5IS1", "SP5IS2"}), 1)
 
 
 class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
