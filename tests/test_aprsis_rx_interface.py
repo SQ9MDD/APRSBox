@@ -24,7 +24,10 @@ from app.services.content import (
     monitoring_public_snapshot,
     safe_create_section_row,
 )
-from app.services.map_service import get_map_station_markers_payload
+from app.services.map_service import (
+    _build_mobile_track_points_by_station_keys,
+    get_map_station_markers_payload,
+)
 from app.services.radio_activity import run_radio_activity_aggregation
 from app.services.traffic import process_normalized_tnc2_rx
 
@@ -347,6 +350,39 @@ class AprsisReceivePipelineTests(unittest.TestCase):
             self.assertEqual(len(snapshots), 2)
             self.assertIn("SP5RF", callsigns)
             self.assertEqual(len(callsigns & {"SP5IS1", "SP5IS2"}), 1)
+
+    def test_track_keeps_same_position_copy_for_each_interface(self) -> None:
+        with temporary_database():
+            rf_interface_id = create_rf_interface()
+            aprsis_interface_id = create_aprsis_interface()
+            start = datetime.now(timezone.utc) - timedelta(minutes=1)
+            frames = (
+                (aprsis_interface_id, "aprsis", "APRS-IS", "SP5TRK>APRS:!5223.00N/02101.00E>Point A"),
+                (rf_interface_id, "rf", "Main RF", "SP5TRK>APRS:!5223.00N/02101.00E>Point A"),
+                (aprsis_interface_id, "aprsis", "APRS-IS", "SP5TRK>APRS:!5223.00N/02101.00E>Point A repeat"),
+                (aprsis_interface_id, "aprsis", "APRS-IS", "SP5TRK>APRS:!5224.00N/02102.00E>Point B"),
+                (rf_interface_id, "rf", "Main RF", "SP5TRK>APRS:!5224.00N/02102.00E>Point B"),
+            )
+            for offset, (interface_id, source_kind, source, line) in enumerate(frames):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        line,
+                        source=source,
+                        source_kind=source_kind,
+                        source_interface_id=interface_id,
+                        band="" if source_kind == "aprsis" else "2m",
+                        timestamp=(start + timedelta(seconds=offset)).isoformat(),
+                    )
+                )
+
+            points = _build_mobile_track_points_by_station_keys({"sp5trk": "SP5TRK"})["SP5TRK"]
+            self.assertEqual(
+                [point["interface_id"] for point in points],
+                [aprsis_interface_id, rf_interface_id, aprsis_interface_id, rf_interface_id],
+            )
+            rf_points = [point for point in points if point["interface_id"] == rf_interface_id]
+            self.assertEqual(len(rf_points), 2)
+            self.assertNotEqual(rf_points[0]["latitude"], rf_points[1]["latitude"])
 
 
 class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):

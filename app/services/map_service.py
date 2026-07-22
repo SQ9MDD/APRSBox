@@ -1018,6 +1018,22 @@ def _is_same_track_position(point: dict[str, Any], latitude: float, longitude: f
     return abs(point_latitude - latitude) < 1e-6 and abs(point_longitude - longitude) < 1e-6
 
 
+def _limit_mobile_track_points_by_interface(
+    points: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    kept_reversed: list[dict[str, Any]] = []
+    counts_by_interface: dict[int | None, int] = {}
+    for point in reversed(points):
+        interface_id = _normalize_interface_id(point.get("interface_id"))
+        interface_count = counts_by_interface.get(interface_id, 0)
+        if interface_count >= MOBILE_TRACK_MAX_POINTS_PER_STATION:
+            continue
+        counts_by_interface[interface_id] = interface_count + 1
+        kept_reversed.append(point)
+    kept_reversed.reverse()
+    return kept_reversed
+
+
 def _build_mobile_track_points_by_station_keys(
     station_keys: dict[str, str],
 ) -> dict[str, list[dict[str, Any]]]:
@@ -1040,6 +1056,7 @@ def _build_mobile_track_points_by_station_keys(
     )
 
     points_by_station: dict[str, list[dict[str, Any]]] = {}
+    last_point_by_station_interface: dict[tuple[str, int | None], dict[str, Any]] = {}
     for row in rows:
         parsed = parse_tnc2_frame(str(row["line"] or ""))
         if parsed is None:
@@ -1059,17 +1076,21 @@ def _build_mobile_track_points_by_station_keys(
         if _is_null_island_point(latitude, longitude):
             continue
 
+        interface_id = _normalize_interface_id(row["interface_id"])
         points = points_by_station.setdefault(resolved_key, [])
-        if points and _is_same_track_position(points[-1], latitude, longitude):
+        interface_point_key = (resolved_key.casefold(), interface_id)
+        previous_interface_point = last_point_by_station_interface.get(interface_point_key)
+        if previous_interface_point and _is_same_track_position(previous_interface_point, latitude, longitude):
             continue
-        points.append(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "interface_id": _normalize_interface_id(row["interface_id"]),
-                "heard_at": str(row["created_at"] or ""),
-            }
-        )
-        if len(points) > MOBILE_TRACK_MAX_POINTS_PER_STATION:
-            points.pop(0)
-    return points_by_station
+        point = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "interface_id": interface_id,
+            "heard_at": str(row["created_at"] or ""),
+        }
+        points.append(point)
+        last_point_by_station_interface[interface_point_key] = point
+    return {
+        station_key: _limit_mobile_track_points_by_interface(points)
+        for station_key, points in points_by_station.items()
+    }

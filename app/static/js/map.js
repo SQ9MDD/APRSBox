@@ -83,6 +83,7 @@
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
+    const mobileTrackMaxRenderedPoints = 60;
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
@@ -639,19 +640,49 @@
         });
     }
 
+    function isSameTrackPointPosition(previous, current) {
+        const previousLatitude = Number(previous && previous.latitude);
+        const previousLongitude = Number(previous && previous.longitude);
+        const currentLatitude = Number(current && current.latitude);
+        const currentLongitude = Number(current && current.longitude);
+        return Number.isFinite(previousLatitude)
+            && Number.isFinite(previousLongitude)
+            && Number.isFinite(currentLatitude)
+            && Number.isFinite(currentLongitude)
+            && Math.abs(previousLatitude - currentLatitude) < 1e-6
+            && Math.abs(previousLongitude - currentLongitude) < 1e-6;
+    }
+
+    function rebuildVisibleTrackPoints(points, interfacesById, visibleInterfaceIds) {
+        const rebuilt = [];
+        for (const point of points || []) {
+            const interfaceId = normalizeInterfaceId(point && point.interface_id);
+            if (!isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds)) {
+                continue;
+            }
+            const previous = rebuilt[rebuilt.length - 1];
+            if (previous && isSameTrackPointPosition(previous, point)) {
+                continue;
+            }
+            rebuilt.push(point);
+        }
+        return rebuilt.slice(-mobileTrackMaxRenderedPoints);
+    }
+
     function filteredMobileTracks(mobileTracks, interfacesById, visibleInterfaceIds) {
         const filteredTracks = [];
         for (const track of mobileTracks || []) {
-            const filteredPoints = (track.points || []).filter((point) => {
-                const interfaceId = normalizeInterfaceId(point && point.interface_id);
-                return isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds);
-            });
-            if (filteredPoints.length < 2) {
+            const rebuiltPoints = rebuildVisibleTrackPoints(
+                track.points,
+                interfacesById,
+                visibleInterfaceIds
+            );
+            if (rebuiltPoints.length < 2) {
                 continue;
             }
             filteredTracks.push({
                 ...track,
-                points: filteredPoints,
+                points: rebuiltPoints,
             });
         }
         return filteredTracks;
