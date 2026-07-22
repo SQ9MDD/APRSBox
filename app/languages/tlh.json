@@ -1409,5 +1409,6 @@
   "No enabled interface is configured.": "No enabled interface is configured.",
   "Last seen via APRS-IS": "Last seen via APRS-IS",
   "Last APRS-IS activity age": "Last APRS-IS activity age",
-  "Last heard via RF": "Last heard via RF"
+  "Last heard via RF": "Last heard via RF",
+  "No allow rules. This flow will not forward any frames.": "No allow rules. This flow will not forward any frames."
 }

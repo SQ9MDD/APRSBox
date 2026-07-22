@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.54.dev - 2026-07-22
+- `Packet Routing / APRS-IS -> RF`: se añadió APRS-IS como origen de flow, `RF Guard` obligatorio, reglas allow inclusivas con política default-deny, viscous delay, supresión de duplicados RF/IS, rate limiting y encapsulación third-party; las transmisiones usan la cola RF/KISS existente y contadores separados sin afectar las estadísticas DIGI ni RX físico.
+
 ## 1.8.53.dev - 2026-07-14
 - `Mensajes / conversaciones de grupo`: se añadieron hilos para los grupos de destino configurados explícitamente, con identificación del remitente; los demás grupos se ignoran y los mensajes de grupo se transmiten una sola vez, sin número, ACK ni reintentos.
 - `Mensajes / configuración / GUI`: se añadieron la ruta predeterminada, la recepción para cualquier SSID del indicativo local y una lista de grupos validada (`ALL`, `QST`, `CQ` en el primer uso); el panel se simplificó y se amplió la ayuda multilingüe.

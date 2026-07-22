@@ -326,7 +326,7 @@ def _propagate_modem_rename_to_digi_flows(
         """
         UPDATE digi_flows
         SET source_ref = ?, updated_at = ?
-        WHERE source_kind = 'receiver_rf'
+        WHERE source_kind IN ('receiver_rf', 'receiver_aprsis')
           AND source_ref = ?
         """,
         (current_name, timestamp, previous_name),
@@ -344,7 +344,7 @@ def _propagate_modem_rename_to_digi_flows(
         """
         SELECT id, step_type, config_json
         FROM digi_flow_steps
-        WHERE step_type IN ('receiver_rf', 'tx_rf')
+        WHERE step_type IN ('receiver_rf', 'receiver_aprsis', 'tx_rf')
         """,
     ).fetchall()
     for row in rows:
@@ -356,6 +356,9 @@ def _propagate_modem_rename_to_digi_flows(
         updated = False
         if step_type == "receiver_rf" and str(config.get("rf_port") or "").strip() == previous_name:
             config["rf_port"] = current_name
+            updated = True
+        elif step_type == "receiver_aprsis" and str(config.get("aprsis_source") or "").strip() == previous_name:
+            config["aprsis_source"] = current_name
             updated = True
         elif step_type == "tx_rf" and str(config.get("rf_target") or "").strip() == previous_name:
             config["rf_target"] = current_name

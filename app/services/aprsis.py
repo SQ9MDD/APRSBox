@@ -1087,6 +1087,7 @@ class AprsisClientService:
         poll_interval: float = 1.0,
         reconnect_delay: float = 5.0,
         rx_processor: Callable[..., bool] | None = None,
+        frame_consumer: Callable[..., None] | None = None,
     ) -> None:
         self._poll_interval = poll_interval
         self._reconnect_delay = reconnect_delay
@@ -1101,6 +1102,10 @@ class AprsisClientService:
         self._connected_since: str | None = None
         self._retry_not_before = 0.0
         self._rx_processor = rx_processor
+        self._frame_consumer = frame_consumer
+
+    def set_frame_consumer(self, frame_consumer: Callable[..., None] | None) -> None:
+        self._frame_consumer = frame_consumer
 
     async def start(self) -> None:
         if self._task is not None:
@@ -1414,18 +1419,55 @@ class AprsisClientService:
             from app.services.traffic import process_normalized_tnc2_rx
 
             processor = process_normalized_tnc2_rx
+        occurred_at = utc_now()
+        received_monotonic = time.monotonic()
         try:
-            return bool(
+            processed = bool(
                 processor(
                     line,
                     source=f"APRS-IS · {interface_name}",
                     source_kind="aprsis",
                     source_interface_id=interface_id,
                     band="",
-                    timestamp=utc_now(),
-                    rx_received_monotonic=time.monotonic(),
+                    timestamp=occurred_at,
+                    rx_received_monotonic=received_monotonic,
                 )
             )
         except Exception as exc:
             log_event("WARNING", "aprsis", f"APRS-IS RX line processing failed: {exc}")
             return False
+        if not processed or self._frame_consumer is None:
+            return processed
+
+        try:
+            from app.services.aprsis_rf import extract_q_construct
+            from app.services.content import parse_tnc2_frame
+
+            parsed = parse_tnc2_frame(line)
+            if parsed is None:
+                return False
+            aprs_data = dict(parsed.get("aprs_data") or {})
+            self._frame_consumer(
+                line,
+                source_ref=interface_name,
+                source_interface_id=interface_id,
+                rx_received_at=occurred_at,
+                rx_received_monotonic=received_monotonic,
+                metadata={
+                    "source_type": "APRSIS",
+                    "aprsis_interface_id": interface_id,
+                    "original_tnc2_line": line,
+                    "received_at": occurred_at,
+                    "source_callsign": str(parsed.get("source") or ""),
+                    "destination": str(parsed.get("destination") or ""),
+                    "path": str(parsed.get("path") or ""),
+                    "payload": str(parsed.get("info") or ""),
+                    "packet_type": str(aprs_data.get("packet_group") or aprs_data.get("packet_type_code") or ""),
+                    "q_construct": extract_q_construct(parsed),
+                    "is_third_party": bool(parsed.get("is_third_party")),
+                },
+            )
+        except Exception as exc:
+            log_event("WARNING", "aprsis", f"APRS-IS Packet Routing dispatch failed: {exc}")
+            return False
+        return True

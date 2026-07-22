@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.54.dev - 2026-07-22
+- `Packet Routing / APRS-IS -> RF`: APRS-IS wurde als Flow-Quelle ergänzt, zusammen mit obligatorischem `RF Guard`, inklusiven Allow-Regeln mit Default-Deny, viscous delay, RF/IS-Duplikatunterdrückung, Rate Limiting und Third-Party-Kapselung; TX verwendet die bestehende RF/KISS-Queue und getrennte Zähler, ohne DIGI- oder physische RX-Statistiken zu verändern.
+
 ## 1.8.53.dev - 2026-07-14
 - `Nachrichten / Gruppenunterhaltungen`: Threads fuer explizit konfigurierte Zielgruppen mit Absenderkennzeichnung wurden hinzugefuegt; andere Gruppen werden ignoriert, Gruppennachrichten werden einmalig ohne Nachrichtennummer, ACK oder Wiederholung gesendet.
 - `Nachrichten / Einstellungen / GUI`: Standardpfad, Empfang fuer jede SSID des eigenen Rufzeichens und eine validierte Gruppenliste (`ALL`, `QST`, `CQ` bei der ersten Verwendung) wurden ergaenzt; der Bereich wurde vereinfacht und die mehrsprachige Hilfe erweitert.

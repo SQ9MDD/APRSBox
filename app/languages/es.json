@@ -1497,5 +1497,6 @@
   "No enabled interface is configured.": "No hay ninguna interfaz habilitada configurada.",
   "Last seen via APRS-IS": "Visto por última vez vía APRS-IS",
   "Last APRS-IS activity age": "Antigüedad de la última actividad APRS-IS",
-  "Last heard via RF": "Escuchado por última vez vía RF"
+  "Last heard via RF": "Escuchado por última vez vía RF",
+  "No allow rules. This flow will not forward any frames.": "No hay reglas allow. Este flow no reenviará ninguna trama."
 }

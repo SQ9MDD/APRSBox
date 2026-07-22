@@ -5,6 +5,7 @@ from typing import Any
 
 RF_SOURCE_KIND = "rf"
 APRSIS_SOURCE_KIND = "aprsis"
+APRSIS_TO_RF_SOURCE_KIND = "aprsis_to_rf"
 APRSIS_MODEM_TYPE = "APRSIS"
 DEFAULT_APRSIS_FILTER = "m/20"
 
@@ -12,7 +13,7 @@ DEFAULT_APRSIS_FILTER = "m/20"
 # this predicate as well as the live RX pipeline so APRS-IS history remains
 # visible without ever becoming statistical input.
 STATISTICS_TRAFFIC_SQL_PREDICATE = (
-    "LOWER(COALESCE(source_kind, 'rf')) <> 'aprsis'"
+    "LOWER(COALESCE(source_kind, 'rf')) NOT IN ('aprsis', 'aprsis_to_rf')"
 )
 
 
@@ -22,7 +23,7 @@ def normalize_source_kind(value: Any) -> str:
 
 
 def should_collect_statistics(source_kind: Any) -> bool:
-    return normalize_source_kind(source_kind) != APRSIS_SOURCE_KIND
+    return normalize_source_kind(source_kind) not in {APRSIS_SOURCE_KIND, APRSIS_TO_RF_SOURCE_KIND}
 
 
 def is_rf_source(source_kind: Any) -> bool:

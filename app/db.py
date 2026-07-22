@@ -406,6 +406,8 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
         'filter_distance',
         'filter_rate_limit',
         'filter_rate_limit_per_callsign',
+        'filter_rf_guard',
+        'filter_allow_rules',
         'tx_rf',
         'tx_aprsis',
         'action_drop',
@@ -431,6 +433,23 @@ CREATE TABLE IF NOT EXISTS digi_flow_event_log (
     created_at TEXT NOT NULL,
     FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE,
     FOREIGN KEY (step_id) REFERENCES digi_flow_steps(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_rf_stats (
+    flow_id INTEGER PRIMARY KEY,
+    received_from_aprsis INTEGER NOT NULL DEFAULT 0,
+    matched_allow_rule INTEGER NOT NULL DEFAULT 0,
+    dropped_no_allow_rule INTEGER NOT NULL DEFAULT 0,
+    dropped_safety_guard INTEGER NOT NULL DEFAULT 0,
+    dropped_duplicate INTEGER NOT NULL DEFAULT 0,
+    cancelled_during_viscous_delay INTEGER NOT NULL DEFAULT 0,
+    dropped_rate_limit INTEGER NOT NULL DEFAULT 0,
+    dropped_oversize INTEGER NOT NULL DEFAULT 0,
+    queued_to_rf INTEGER NOT NULL DEFAULT 0,
+    transmitted_to_rf INTEGER NOT NULL DEFAULT 0,
+    tx_failed INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS aprs_objects (
@@ -799,6 +818,7 @@ def init_db() -> None:
         _migrate_digi_flows_table(connection)
         _migrate_digi_flow_steps_table(connection)
         _migrate_digi_flow_event_log_table(connection)
+        _migrate_aprsis_rf_stats_table(connection)
         _cleanup_legacy_digi_flow_tables(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
@@ -2092,6 +2112,8 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         "filter_icon",
         "filter_rate_limit_per_callsign",
         "filter_strict",
+        "filter_rf_guard",
+        "filter_allow_rules",
     )
     foreign_keys = list(connection.execute("PRAGMA foreign_key_list(digi_flow_steps)").fetchall())
     references_legacy_flows = any(str(row["table"] or "") == "digi_flows_old" for row in foreign_keys)
@@ -2119,6 +2141,8 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
                 'filter_distance',
                 'filter_rate_limit',
                 'filter_rate_limit_per_callsign',
+                'filter_rf_guard',
+                'filter_allow_rules',
                 'tx_rf',
                 'tx_aprsis',
                 'action_drop',
@@ -2176,6 +2200,49 @@ def _migrate_digi_flow_event_log_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_aprsis_rf_stats_table(connection: sqlite3.Connection) -> None:
+    stats_sql = _table_sql(connection, "aprsis_rf_stats")
+    if not stats_sql:
+        return
+    foreign_keys = list(connection.execute("PRAGMA foreign_key_list(aprsis_rf_stats)").fetchall())
+    if not any(str(row["table"] or "") == "digi_flows_old" for row in foreign_keys):
+        return
+    connection.executescript(
+        """
+        ALTER TABLE aprsis_rf_stats RENAME TO aprsis_rf_stats_old;
+        CREATE TABLE aprsis_rf_stats (
+            flow_id INTEGER PRIMARY KEY,
+            received_from_aprsis INTEGER NOT NULL DEFAULT 0,
+            matched_allow_rule INTEGER NOT NULL DEFAULT 0,
+            dropped_no_allow_rule INTEGER NOT NULL DEFAULT 0,
+            dropped_safety_guard INTEGER NOT NULL DEFAULT 0,
+            dropped_duplicate INTEGER NOT NULL DEFAULT 0,
+            cancelled_during_viscous_delay INTEGER NOT NULL DEFAULT 0,
+            dropped_rate_limit INTEGER NOT NULL DEFAULT 0,
+            dropped_oversize INTEGER NOT NULL DEFAULT 0,
+            queued_to_rf INTEGER NOT NULL DEFAULT 0,
+            transmitted_to_rf INTEGER NOT NULL DEFAULT 0,
+            tx_failed INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
+        );
+        INSERT INTO aprsis_rf_stats (
+            flow_id, received_from_aprsis, matched_allow_rule, dropped_no_allow_rule,
+            dropped_safety_guard, dropped_duplicate, cancelled_during_viscous_delay,
+            dropped_rate_limit, dropped_oversize, queued_to_rf, transmitted_to_rf,
+            tx_failed, updated_at
+        )
+        SELECT
+            flow_id, received_from_aprsis, matched_allow_rule, dropped_no_allow_rule,
+            dropped_safety_guard, dropped_duplicate, cancelled_during_viscous_delay,
+            dropped_rate_limit, dropped_oversize, queued_to_rf, transmitted_to_rf,
+            tx_failed, updated_at
+        FROM aprsis_rf_stats_old;
+        DROP TABLE aprsis_rf_stats_old;
+        """
+    )
+
+
 def _cleanup_legacy_digi_flow_tables(connection: sqlite3.Connection) -> None:
     legacy_flows_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'digi_flows_old' LIMIT 1"
@@ -2184,7 +2251,8 @@ def _cleanup_legacy_digi_flow_tables(connection: sqlite3.Connection) -> None:
         return
     step_fk = list(connection.execute("PRAGMA foreign_key_list(digi_flow_steps)").fetchall())
     event_log_fk = list(connection.execute("PRAGMA foreign_key_list(digi_flow_event_log)").fetchall())
-    if any(str(row["table"] or "") == "digi_flows_old" for row in step_fk + event_log_fk):
+    stats_fk = list(connection.execute("PRAGMA foreign_key_list(aprsis_rf_stats)").fetchall())
+    if any(str(row["table"] or "") == "digi_flows_old" for row in step_fk + event_log_fk + stats_fk):
         return
     connection.execute("DROP TABLE digi_flows_old")
 

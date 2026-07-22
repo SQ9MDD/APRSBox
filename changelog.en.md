@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.54.dev - 2026-07-22
+- `Packet Routing / APRS-IS -> RF`: added APRS-IS as a flow source, mandatory `RF Guard`, inclusive allow rules with default-deny policy, viscous delay, cross-RF/IS duplicate suppression, rate limiting, and third-party encapsulation; transmissions use the existing RF/KISS queue and separate counters without affecting DIGI or physical RX statistics.
+
 ## 1.8.53.dev - 2026-07-14
 - `Messages / group conversations`: added threads for explicitly configured target groups with sender labels; other groups are ignored, while group messages are transmitted once without a message number, ACK, or retry.
 - `Messages / settings / GUI`: added a default path, reception for any SSID of the local callsign, and a validated group list (`ALL`, `QST`, `CQ` on first use); the panel was simplified and multilingual help was expanded.

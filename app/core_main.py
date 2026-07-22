@@ -24,6 +24,7 @@ async def lifespan(app_instance: FastAPI):
     init_db()
     aprsis_uplink = AprsisClientService()
     digi_flow_runtime = DigiFlowRuntimeService(aprsis_client=aprsis_uplink)
+    aprsis_uplink.set_frame_consumer(digi_flow_runtime.enqueue_aprsis_tnc2_frame)
     traffic_monitor = TrafficMonitorService(frame_consumer=digi_flow_runtime.enqueue_rx_tnc2_frame)
     outbound_service = OutboundService(traffic_monitor=traffic_monitor, digi_flow_runtime=digi_flow_runtime)
     beacon_scheduler = BeaconSchedulerService()

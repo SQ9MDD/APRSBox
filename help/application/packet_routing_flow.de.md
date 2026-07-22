@@ -15,6 +15,7 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 - `Empfänger RF -> TX APRS-IS` - klassischer iGate-Uplink von RF nach APRS-IS.
 - `Empfänger RF -> TX RF` - klassischer Digipeater-Pfad auf Funk.
 - `Local TX -> TX APRS-IS` - lokal erzeugte Frames wie Beacons, Wetter, Objekte, Items, Bulletins und Nachrichten.
+- `APRS-IS -> RF Guard -> TX RF` - leitet explizit erlaubte Netzwerkpakete mit Default-Deny sicher an ein physisches TNC weiter.
 - `... -> Black Hole` - Diagnose, Trockenlauf und Regeltests ohne Weiterleitung.
 
 ## Wie man eine Regel aufbaut
@@ -28,6 +29,7 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 
 - [Empfänger RF](packet_routing_flow_receiver_rf.de.md)
 - [Local TX](packet_routing_flow_local_tx.de.md)
+- [APRS-IS als Quelle und RF Guard](packet_routing_flow_rf_guard.de.md)
 
 ## Filter- und Regelblöcke
 
@@ -53,3 +55,4 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 - `TX APRS-IS` erfordert den Block `Strenger Filter`.
 - `TX RF` erfordert den Block `Pfadregel und DIGI-Schutz`.
 - `Local TX` kann nur in `TX APRS-IS` oder `Black Hole` enden.
+- Eine `APRS-IS`-Quelle erhält automatisch den obligatorischen `RF Guard`; ohne Allow-Regeln wird kein Paket weitergeleitet.

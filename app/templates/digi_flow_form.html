@@ -12,7 +12,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRSIS target uses a mandatory system strict guard step.") }}</p>
+                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and explicit inclusive allow rules.") }}</p>
             </div>
             <button
                 class="help-icon-button page-help-button"
@@ -24,7 +24,7 @@
                 <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
             </button>
         </div>
-        <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF TX flows require an enabled Path Rule step. APRSIS flows are system-restricted.") }}</div>
+        <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF receiver to RF target flows require an enabled Path Rule step. APRS-IS source flows use the mandatory RF Guard.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -375,6 +375,19 @@
             distanceFilterUsed: {{ t("Distance filter is already used in this flow.")|tojson }},
             latitude: {{ t("Latitude")|tojson }},
             longitude: {{ t("Longitude")|tojson }},
+            rfGuardSystemManaged: {{ t("RF Guard is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
+            allowRulesSystemManaged: {{ t("Inclusive allow rules are mandatory for an APRS-IS source; an empty list is valid and denies every packet.")|tojson }},
+            noAllowRules: {{ t("No allow rules. This flow will not forward any frames.")|tojson }},
+            allowRule: {{ t("Allow rule")|tojson }},
+            addAllowRule: {{ t("Add allow rule")|tojson }},
+            packetType: {{ t("Packet type")|tojson }},
+            sourceCallsign: {{ t("Source callsign")|tojson }},
+            destination: {{ t("Destination")|tojson }},
+            addressee: {{ t("Addressee")|tojson }},
+            objectName: {{ t("Object name")|tojson }},
+            icon: {{ t("Icon")|tojson }},
+            centerLatitude: {{ t("Center latitude")|tojson }},
+            centerLongitude: {{ t("Center longitude")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
@@ -392,6 +405,8 @@
             filter_distance: ["Distance Filter"],
             filter_rate_limit: ["Rate Limit Filter"],
             filter_rate_limit_per_callsign: ["Rate Limit Per Callsign"],
+            filter_rf_guard: ["RF Guard"],
+            filter_allow_rules: ["Inclusive Allow Rules"],
             tx_rf: ["TX RF"],
             tx_aprsis: ["TX APRS-IS"],
             action_drop: ["Action Drop"],
@@ -465,6 +480,15 @@
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
             if (stepType === "receiver_local_tx") return { local_tx_source: refValue || "local_tx" };
+            if (stepType === "filter_rf_guard") return {
+                viscous_delay_sec: 5,
+                flow_rate_per_minute: 6,
+                flow_burst: 3,
+                source_rate_per_minute: 2,
+                source_burst: 2,
+                duplicate_window_sec: 30,
+            };
+            if (stepType === "filter_allow_rules") return { rules: [] };
             if (stepType === "filter_dupe") return { window_sec: 5 };
             if (stepType === "filter_direct_only") return {};
             if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
@@ -475,7 +499,7 @@
             if (stepType === "filter_distance") return { zones: [{ latitude: "", longitude: "", radius_km: "" }] };
             if (stepType === "filter_rate_limit") return { rate_limit_rules_text: "* - 60s" };
             if (stepType === "filter_rate_limit_per_callsign") return { packets_per_minute: 30 };
-            if (stepType === "tx_rf") return { rf_target: refValue || "" };
+            if (stepType === "tx_rf") return { rf_target: refValue || "", rf_path: "" };
             if (stepType === "tx_aprsis") return { aprsis_target: refValue || "" };
             if (stepType === "action_drop") return { note: "" };
             if (stepType === "action_log") return { log_tag: "", note: "" };
@@ -526,6 +550,10 @@
             if (step.step_type === "receiver_rf") return `${i18n.rfPort}: ${config.rf_port || "-"}`;
             if (step.step_type === "receiver_aprsis") return `${i18n.aprsisSource}: ${config.aprsis_source || "-"}`;
             if (step.step_type === "receiver_local_tx") return i18n.localTxFrames;
+            if (step.step_type === "filter_rf_guard") {
+                return `loop prevention · duplicate suppression · delay ${config.viscous_delay_sec || 5}s · rate limits · third-party`;
+            }
+            if (step.step_type === "filter_allow_rules") return `Rules: ${Array.isArray(config.rules) ? config.rules.length : 0} · default deny`;
             if (step.step_type === "filter_dupe") return `${i18n.window}: ${config.window_sec || "-"} ${i18n.sec}`;
             if (step.step_type === "filter_path") {
                 const tracePaths = config.trace_paths || config.paths || [];
@@ -547,7 +575,7 @@
                 return `Rules: ${ruleCount || "-"}`;
             }
             if (step.step_type === "filter_rate_limit_per_callsign") return `${i18n.perCallsign}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
-            if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
+            if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"} · path: ${config.rf_path || "direct"}`;
             if (step.step_type === "tx_aprsis") return `${i18n.aprsisTarget}: ${config.aprsis_target || "-"}`;
             if (step.step_type === "action_drop") return config.note || i18n.dropPacket;
             if (step.step_type === "action_log") {
@@ -584,8 +612,11 @@
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
         const isRateLimitStepType = (stepType) => stepType === "filter_rate_limit";
+        const isRfGuardStepType = (stepType) => stepType === "filter_rf_guard";
+        const isAllowRulesStepType = (stepType) => stepType === "filter_allow_rules";
         const isTxRfTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_rf";
-        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
+        const isAprsisSourceFlow = () => String(sourceKindInput.value || "").trim() === "receiver_aprsis";
+        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && !isAprsisSourceFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
         const isDistanceFilterStepType = (stepType) => stepType === "filter_distance";
         const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
         const hasViscousDelayStep = () => steps.some(
@@ -626,8 +657,43 @@
             steps = [sourceStep, strictStep, targetStep];
         };
 
+        const enforceAprsisSourceRestrictions = () => {
+            if (!Array.isArray(steps) || steps.length < 2) return;
+            const sourceStep = steps[0];
+            const targetStep = steps[steps.length - 1];
+            const middle = steps.slice(1, -1);
+            if (!isAprsisSourceFlow()) {
+                steps = [
+                    sourceStep,
+                    ...middle.filter((step) => !isRfGuardStepType(step.step_type) && !isAllowRulesStepType(step.step_type)),
+                    targetStep,
+                ];
+                return;
+            }
+            const existingGuard = middle.find((step) => isRfGuardStepType(step.step_type));
+            const existingAllowRules = middle.find((step) => isAllowRulesStepType(step.step_type));
+            const guard = existingGuard ? { ...existingGuard, config: { ...defaultConfig("filter_rf_guard"), ...(existingGuard.config || {}) } } : {
+                step_type: "filter_rf_guard",
+                title: stepLabel("filter_rf_guard"),
+                enabled: 1,
+                config: defaultConfig("filter_rf_guard"),
+            };
+            const allowRules = existingAllowRules ? { ...existingAllowRules, config: { rules: Array.isArray((existingAllowRules.config || {}).rules) ? existingAllowRules.config.rules : [] } } : {
+                step_type: "filter_allow_rules",
+                title: stepLabel("filter_allow_rules"),
+                enabled: 1,
+                config: defaultConfig("filter_allow_rules"),
+            };
+            guard.title = stepLabel("filter_rf_guard");
+            guard.enabled = 1;
+            allowRules.title = stepLabel("filter_allow_rules");
+            allowRules.enabled = 1;
+            const ordinary = middle.filter((step) => !isRfGuardStepType(step.step_type) && !isAllowRulesStepType(step.step_type));
+            steps = [sourceStep, guard, allowRules, ...ordinary, targetStep];
+        };
+
         const enforceTxRfFlowRestrictions = () => {
-            if (!Array.isArray(steps) || steps.length < 2 || !isTxRfTargetFlow()) {
+            if (!Array.isArray(steps) || steps.length < 2 || !isTxRfTargetFlow() || isAprsisSourceFlow()) {
                 if (Array.isArray(steps) && steps.length >= 2) {
                     const sourceStep = steps[0];
                     const targetStep = steps[steps.length - 1];
@@ -654,8 +720,17 @@
             const hasRateLimit = hasRateLimitStep();
             const hasDistanceFilter = hasDistanceFilterStep();
             const aprsisTarget = isAprsisTargetFlow();
+            const aprsisSource = isAprsisSourceFlow();
             for (const button of paletteButtons) {
                 const stepType = button.dataset.stepType || "";
+                if (isRfGuardStepType(stepType) || isAllowRulesStepType(stepType)) {
+                    button.disabled = true;
+                    const message = isRfGuardStepType(stepType) ? i18n.rfGuardSystemManaged : i18n.allowRulesSystemManaged;
+                    button.title = message;
+                    button.setAttribute("aria-label", message);
+                    button.classList.toggle("is-required", aprsisSource);
+                    continue;
+                }
                 if (aprsisTarget) {
                     button.disabled = true;
                     button.title = i18n.aprsisSystemFlowLocked;
@@ -955,6 +1030,7 @@
             }
             if (targetStep.step_type === "tx_rf") {
                 targetStep.config.rf_target = targetRefInput.value;
+                if (targetStep.config.rf_path == null) targetStep.config.rf_path = "";
             } else if (targetStep.step_type === "tx_aprsis") {
                 targetStep.config.aprsis_target = targetRefInput.value;
             } else if (targetStep.step_type === "action_log") {
@@ -982,8 +1058,8 @@
         };
 
         const renderConfigField = (step, field) => {
-            const wrapper = document.createElement("label");
-            wrapper.className = field.type === "textarea" ? "full" : "";
+            const wrapper = document.createElement(field.type === "allow_rules" ? "div" : "label");
+            wrapper.className = ["textarea", "allow_rules"].includes(field.type) ? "full" : "";
             const title = document.createElement("span");
                 title.textContent = field.label;
             wrapper.appendChild(title);
@@ -1004,6 +1080,101 @@
                     wrapper.appendChild(hint);
                 }
             };
+
+            if (step.step_type === "filter_allow_rules" && field.name === "rules" && field.type === "allow_rules") {
+                const rules = Array.isArray(step.config.rules)
+                    ? step.config.rules.filter((rule) => rule && typeof rule === "object" && !Array.isArray(rule))
+                    : [];
+                step.config.rules = rules;
+                const rulesContainer = document.createElement("div");
+                rulesContainer.className = "digi-distance-zones";
+                rulesContainer.dataset.allowRulesEditor = "1";
+
+                if (!rules.length) {
+                    const emptyNotice = document.createElement("div");
+                    emptyNotice.className = "alert alert-info";
+                    emptyNotice.dataset.allowRulesEmpty = "1";
+                    emptyNotice.textContent = i18n.noAllowRules;
+                    rulesContainer.appendChild(emptyNotice);
+                }
+
+                const conditionFields = [
+                    ["packet_type", i18n.packetType, "message, object, position…"],
+                    ["source_callsign", i18n.sourceCallsign, "SP5ABC or SP5*"],
+                    ["destination", i18n.destination, "APRS"],
+                    ["addressee", i18n.addressee, "SQ9MDD-7"],
+                    ["object_name", i18n.objectName, "TESTWX"],
+                    ["icon", i18n.icon, "/>"],
+                    ["center_latitude", i18n.centerLatitude, "52.2297"],
+                    ["center_longitude", i18n.centerLongitude, "21.0122"],
+                    ["radius_km", i18n.radiusKm, "25"],
+                ];
+                rules.forEach((rule, ruleIndex) => {
+                    const ruleCard = document.createElement("div");
+                    ruleCard.className = "digi-distance-zone-card";
+                    ruleCard.dataset.allowRule = String(ruleIndex + 1);
+
+                    const ruleHeader = document.createElement("div");
+                    ruleHeader.className = "digi-distance-zone-header";
+                    const ruleTitle = document.createElement("strong");
+                    ruleTitle.textContent = `${i18n.allowRule} #${ruleIndex + 1}`;
+                    ruleHeader.appendChild(ruleTitle);
+                    const removeButton = document.createElement("button");
+                    removeButton.type = "button";
+                    removeButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
+                    removeButton.title = i18n.delete;
+                    removeButton.setAttribute("aria-label", `${i18n.delete}: ${i18n.allowRule} #${ruleIndex + 1}`);
+                    const removeIcon = document.createElement("img");
+                    removeIcon.src = iconPath("delete-outline.svg");
+                    removeIcon.alt = "";
+                    removeButton.appendChild(removeIcon);
+                    removeButton.addEventListener("click", () => {
+                        step.config.rules = rules.filter((_, index) => index !== ruleIndex);
+                        render();
+                    });
+                    ruleHeader.appendChild(removeButton);
+                    ruleCard.appendChild(ruleHeader);
+
+                    const fieldsGrid = document.createElement("div");
+                    fieldsGrid.className = "digi-distance-zone-grid";
+                    for (const [conditionName, conditionLabel, placeholder] of conditionFields) {
+                        const conditionField = document.createElement("label");
+                        const caption = document.createElement("span");
+                        caption.textContent = conditionLabel;
+                        const input = document.createElement("input");
+                        input.type = ["center_latitude", "center_longitude", "radius_km"].includes(conditionName)
+                            ? "number"
+                            : "text";
+                        input.step = conditionName === "radius_km" ? "0.1" : "any";
+                        input.placeholder = placeholder;
+                        input.value = rule[conditionName] ?? "";
+                        input.dataset.allowCondition = conditionName;
+                        input.addEventListener("input", () => {
+                            rule[conditionName] = input.value;
+                        });
+                        conditionField.appendChild(caption);
+                        conditionField.appendChild(input);
+                        fieldsGrid.appendChild(conditionField);
+                    }
+                    ruleCard.appendChild(fieldsGrid);
+                    rulesContainer.appendChild(ruleCard);
+                });
+
+                const addButton = document.createElement("button");
+                addButton.type = "button";
+                addButton.className = "button button-secondary digi-distance-add-zone";
+                addButton.dataset.addAllowRule = "1";
+                addButton.textContent = i18n.addAllowRule;
+                addButton.disabled = rules.length >= 50;
+                addButton.addEventListener("click", () => {
+                    step.config.rules = [...rules, {}];
+                    render();
+                });
+                rulesContainer.appendChild(addButton);
+                wrapper.appendChild(rulesContainer);
+                appendFieldHelp();
+                return wrapper;
+            }
 
             if (step.step_type === "filter_distance" && field.name === "zones" && field.type === "distance_zones") {
                 wrapper.className = "full";
@@ -1371,6 +1542,7 @@
         const render = () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceAprsisSourceRestrictions();
             enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             syncPaletteState();
@@ -1420,6 +1592,7 @@
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
                 const aprsisLockedFlow = isAprsisTargetFlow();
+                const aprsisSourceSystemStep = isAprsisSourceFlow() && (isRfGuardStepType(step.step_type) || isAllowRulesStepType(step.step_type));
                 const txRfLockedStep = isFixedTxRfStepType(step.step_type);
                 const previousStepType = String((steps[index - 1] || {}).step_type || "").trim();
                 const nextStepType = String((steps[index + 1] || {}).step_type || "").trim();
@@ -1430,10 +1603,10 @@
                 const enabledInput = document.createElement("input");
                 enabledInput.type = "checkbox";
                 enabledInput.value = "1";
-                enabledInput.checked = aprsisSystemStrictStep ? true : !!step.enabled;
-                enabledInput.disabled = aprsisSystemStrictStep;
+                enabledInput.checked = (aprsisSystemStrictStep || aprsisSourceSystemStep) ? true : !!step.enabled;
+                enabledInput.disabled = aprsisSystemStrictStep || aprsisSourceSystemStep;
                 enabledInput.addEventListener("change", () => {
-                    if (aprsisSystemStrictStep) {
+                    if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
                         step.enabled = 1;
                         return;
                     }
@@ -1472,9 +1645,11 @@
                 moveUpButton.setAttribute("aria-label", i18n.moveStepUp);
                 moveUpButton.disabled = (
                     index <= 1
+                    || stepCategory(step.step_type) !== "filter"
                     || txRfLockedStep
                     || (isTxRfTargetFlow() && previousStepType === "filter_dupe")
                     || aprsisLockedFlow
+                    || aprsisSourceSystemStep
                 );
                 const moveUpIcon = document.createElement("img");
                 moveUpIcon.src = iconPath("arrow-up.svg");
@@ -1496,9 +1671,11 @@
                 moveDownButton.setAttribute("aria-label", i18n.moveStepDown);
                 moveDownButton.disabled = (
                     index >= steps.length - 2
+                    || stepCategory(step.step_type) !== "filter"
                     || txRfLockedStep
                     || (isTxRfTargetFlow() && nextStepType === "filter_path")
                     || aprsisLockedFlow
+                    || aprsisSourceSystemStep
                 );
                 const moveDownIcon = document.createElement("img");
                 moveDownIcon.src = iconPath("arrow-down.svg");
@@ -1518,7 +1695,7 @@
                 deleteButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
                 deleteButton.title = i18n.deleteStep;
                 deleteButton.setAttribute("aria-label", i18n.deleteStep);
-                deleteButton.disabled = stepCategory(step.step_type) !== "filter" || aprsisLockedFlow;
+                deleteButton.disabled = stepCategory(step.step_type) !== "filter" || aprsisLockedFlow || aprsisSourceSystemStep;
                 const deleteIcon = document.createElement("img");
                 deleteIcon.src = iconPath("delete-outline.svg");
                 deleteIcon.alt = "";
@@ -1564,10 +1741,12 @@
                         }
                         editor.appendChild(helpBlock);
                     }
-                    if (aprsisSystemStrictStep) {
+                    if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
                         const lockedNote = document.createElement("div");
                         lockedNote.className = "full muted small";
-                        lockedNote.textContent = i18n.aprsisSystemFlowLocked;
+                        lockedNote.textContent = isRfGuardStepType(step.step_type)
+                            ? i18n.rfGuardSystemManaged
+                            : (isAllowRulesStepType(step.step_type) ? i18n.allowRulesSystemManaged : i18n.aprsisSystemFlowLocked);
                         editor.appendChild(lockedNote);
                     }
 
@@ -1577,7 +1756,7 @@
                     const titleInput = document.createElement("input");
                     titleInput.type = "text";
                     titleInput.value = normalizedStepTitle(step);
-                    if (aprsisSystemStrictStep) {
+                    if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
                         titleInput.disabled = true;
                     }
                     titleInput.addEventListener("input", () => {
@@ -1605,7 +1784,8 @@
                     const showMinimumPathFilterWarning =
                         steps.length === 2 &&
                         index === 0 &&
-                        steps[steps.length - 1]?.step_type === "tx_rf";
+                        steps[steps.length - 1]?.step_type === "tx_rf" &&
+                        !isAprsisSourceFlow();
                     if (showMinimumPathFilterWarning) {
                         connector.className = "digi-step-connector digi-step-connector-warning";
 
@@ -1668,6 +1848,9 @@
                 if (isAprsisTargetFlow() || stepType === "filter_strict") {
                     return;
                 }
+                if (isRfGuardStepType(stepType) || isAllowRulesStepType(stepType)) {
+                    return;
+                }
                 if (isRateLimitStepType(stepType) && !isTxRfTargetFlow()) {
                     return;
                 }
@@ -1723,6 +1906,7 @@
         form.addEventListener("submit", () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceAprsisSourceRestrictions();
             enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             for (const step of steps) {

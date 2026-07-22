@@ -16,6 +16,8 @@ KISS_TFESC = 0xDD
 AX25_CONTROL_UI = 0x03
 AX25_PID_NO_LAYER3 = 0xF0
 APRSBOX_DESTINATION = "APBOX0"
+APRSIS_TO_RF_ORIGIN = "aprsis_to_rf"
+AX25_MAX_INFORMATION_BYTES = 256
 OUTBOUND_KIND_BEACON = "beacon"
 OUTBOUND_KIND_STATUS = "status"
 OUTBOUND_KIND_OBJECT = "object"
@@ -618,6 +620,7 @@ def enqueue_digi_tx_job(
     trigger: str = "digi_flow",
     flow_id: int | None = None,
     frame_uid: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     target_name = str(interface_name or "").strip()
     tnc2_line = str(line or "").strip()
@@ -628,7 +631,7 @@ def enqueue_digi_tx_job(
 
     modem = fetch_one(
         """
-        SELECT id, name, modem_type, band, device_path, enabled
+        SELECT id, name, modem_type, band, device_path, enabled, tx_blocked
         FROM modems
         WHERE name = ?
         ORDER BY id ASC
@@ -639,6 +642,16 @@ def enqueue_digi_tx_job(
     if modem is None:
         return False, "Selected interface does not exist."
 
+    normalized_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    if str(normalized_metadata.get("origin") or "").strip() == APRSIS_TO_RF_ORIGIN:
+        modem_type = str(modem["modem_type"] or "").strip().upper()
+        if modem_type not in {"TCP", "SERIALL", "SERIAL"}:
+            return False, "invalid_target_type"
+        if int(modem["enabled"] or 0) != 1:
+            return False, "target_unavailable"
+        if int(modem["tx_blocked"] or 0) == 1:
+            return False, "target_rx_only"
+
     payload = {
         "line": tnc2_line,
         "trigger": str(trigger or "digi_flow").strip() or "digi_flow",
@@ -647,6 +660,11 @@ def enqueue_digi_tx_job(
         "tx_origin": LOCAL_TX_ORIGIN_ROUTED,
         "tx_kind": LOCAL_TX_KIND_ROUTED,
     }
+    for key in ("origin", "aprsis_interface_id", "target_interface_id", "normalized_packet_hash", "rf_guard_reason"):
+        if key in normalized_metadata and normalized_metadata[key] is not None:
+            payload[key] = normalized_metadata[key]
+    if str(payload.get("origin") or "").strip() == APRSIS_TO_RF_ORIGIN:
+        payload["tx_origin"] = APRSIS_TO_RF_ORIGIN
     now_text = utc_now()
     with get_connection() as connection:
         cursor = connection.execute(
@@ -670,6 +688,56 @@ def enqueue_digi_tx_job(
         job_id = int(cursor.lastrowid)
     log_event("INFO", "outbound", f"Queued {payload['trigger']} DIGI TX job #{job_id} for interface {modem['name']}")
     return True, f"DIGI TX queued as job #{job_id}."
+
+
+def build_aprsis_third_party_tnc2(
+    parsed: dict[str, Any],
+    *,
+    igate_callsign: str,
+    rf_path: str = "",
+    destination: str = APRSBOX_DESTINATION,
+) -> str:
+    """Build the mandatory APRS third-party RF representation.
+
+    The APRS-IS/q path is intentionally ignored.  Only the original source,
+    destination and information field are copied into the inner header.
+    """
+
+    if not isinstance(parsed, dict) or bool(parsed.get("is_third_party")):
+        raise ValueError("invalid_third_party")
+    original_source = str(parsed.get("source") or "").strip().upper()
+    original_destination = str(parsed.get("destination") or "").strip().upper()
+    original_payload = str(parsed.get("info") if parsed.get("info") is not None else "")
+    normalized_igate = str(igate_callsign or "").strip().upper()
+    normalized_destination = str(destination or "").strip().upper()
+    normalized_path = str(rf_path or "").strip().upper()
+
+    for address in (original_source, original_destination, normalized_igate, normalized_destination):
+        _split_callsign_ssid(address)
+    path_tokens = [token.strip() for token in normalized_path.split(",") if token.strip()]
+    if len(path_tokens) > 8:
+        raise ValueError("RF path cannot contain more than eight digipeater addresses.")
+    for token in path_tokens:
+        if token.endswith("*"):
+            raise ValueError("Outbound RF path cannot contain consumed path markers.")
+        _split_callsign_ssid(token)
+
+    inner_line = f"{original_source}>{original_destination},TCPIP,{normalized_igate}*:{original_payload}"
+    outer_info = f"}}{inner_line}"
+    try:
+        info_length = len(outer_info.encode("latin-1"))
+    except UnicodeEncodeError as exc:
+        raise ValueError("Final APRS packet contains characters outside the AX.25 information encoding.") from exc
+    if info_length > AX25_MAX_INFORMATION_BYTES:
+        raise ValueError("packet_too_long")
+
+    header = f"{normalized_igate}>{normalized_destination}"
+    if path_tokens:
+        header = f"{header},{','.join(path_tokens)}"
+    line = f"{header}:{outer_info}"
+    # Reuse the existing AX.25/KISS builder as the final structural check.
+    build_tnc2_kiss_frame(line)
+    return line
 
 
 def enqueue_direct_message_job(
@@ -882,17 +950,19 @@ def persist_outbound_frame(
     port: str = "0",
     command: str = "TX",
     payload_hex: str = "",
+    source_kind: str = "rf",
 ) -> None:
     with get_connection() as connection:
         connection.execute(
             """
             INSERT INTO traffic_frames(
-                source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
             )
-            VALUES (?, ?, 'tx', ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, 'tx', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 source,
+                str(source_kind or "rf").strip().lower() or "rf",
                 interface_id,
                 str(band or "").strip(),
                 "TNC2-TX",
