@@ -1,4 +1,4 @@
-# Pfadregel und DIGI-Schutz
+# RF-Digipeating-Pfadregel
 
 Dies ist der zentrale Block fur Flows, die in `TX RF` enden. Er fuehrt zuerst den DIGI-Schutz aus und danach die Pfad-Umschreibung. Dieser Block sollte immer der letzte Block im Flow sein, weil er den Pfad veraendert und andere Filter stoeren kann.
 
@@ -73,7 +73,7 @@ Wichtige Hinweise:
 Typische Form:
 
 ```text
-Empfänger RF -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> TX RF
+Empfänger RF -> RF-Duplikatverzögerungsfilter -> RF-Digipeating-Pfadregel -> TX RF
 ```
 
 ## Navigation

@@ -1,4 +1,4 @@
-# Solo directo
+# Filtro de recepción RF directa
 
 Este filtro deja pasar solo paquetes escuchados directamente.
 
@@ -14,10 +14,6 @@ Usalo cuando:
 - la regla debe reaccionar solo a estaciones oidas en directo,
 - el trafico ya repetido debe ignorarse,
 - quieres revisar por separado la cobertura directa.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

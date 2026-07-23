@@ -9,7 +9,7 @@ Używaj go:
 
 Najważniejsze ograniczenie:
 
-- ten cel zawsze utrzymuje obowiązkowy `Filtr ścisły`.
+- ten cel zawsze utrzymuje obowiązkową `Regułę bezpieczeństwa uplinku APRS-IS`.
 
 ## Nawigacja
 

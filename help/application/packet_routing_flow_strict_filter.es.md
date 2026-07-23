@@ -1,4 +1,4 @@
-# Filtro estricto
+# Regla de seguridad de enlace APRS-IS
 
 Es el bloque de seguridad del sistema para reglas que terminan en `TX APRS-IS`.
 
@@ -18,18 +18,14 @@ Para `TX local` es mas estricto:
 
 Notas importantes:
 
-- con `TX APRS-IS` este filtro es obligatorio,
+- con `TX APRS-IS` esta regla es obligatoria,
 - no sustituye la logica digi RF,
 - si falla el parseo TNC2, la trama se rechaza.
 
 Casos tipicos:
 
-- `Receptor RF -> Filtro estricto -> TX APRS-IS`,
-- `TX local -> Filtro estricto -> TX APRS-IS`.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
+- `Receptor RF -> Regla de seguridad de enlace APRS-IS -> TX APRS-IS`,
+- `TX local -> Regla de seguridad de enlace APRS-IS -> TX APRS-IS`.
 
 ## Navegación
 

@@ -15,7 +15,7 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 - `Receiver RF -> TX APRS-IS` - classic iGate uplink from RF to APRS-IS.
 - `Receiver RF -> TX RF` - classic digipeater path on radio.
 - `Local TX -> TX APRS-IS` - locally generated frames such as beacons, weather, objects, items, bulletins, and messages.
-- `APRS-IS -> Input Guard -> default deny -> RF TX Guard -> TX RF` - safely forwards explicitly allowed network packets to a physical TNC.
+- `APRS-IS source -> APRS-IS Input Safety Rule -> APRS-IS Callsign and Radius Rule -> APRS-IS to RF TX Safety Rule -> TX RF` - safely forwards explicitly allowed network packets to a physical TNC.
 - `... -> Black Hole` - diagnostics, dry runs, and rule testing without forwarding.
 
 ## How to build a rule
@@ -29,20 +29,20 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 
 - [Receiver RF](packet_routing_flow_receiver_rf.en.md)
 - [Local TX](packet_routing_flow_local_tx.en.md)
-- [APRS-IS source and RF Guard](packet_routing_flow_rf_guard.en.md)
+- [APRS-IS → RF mandatory safety rules](packet_routing_flow_rf_guard.en.md)
 
 ## Filter and rule blocks
 
-- [Strict Filter](packet_routing_flow_strict_filter.en.md)
-- [Path rule and DIGI guard](packet_routing_flow_path_rule_and_digi_guard.en.md)
-- [Duplicate Filter (viscous-delay)](packet_routing_flow_duplicate_filter.en.md)
-- [Direct Only](packet_routing_flow_direct_only.en.md)
+- [APRS-IS Uplink Safety Rule](packet_routing_flow_strict_filter.en.md)
+- [RF Digipeating Path Rule](packet_routing_flow_path_rule_and_digi_guard.en.md)
+- [RF Duplicate Delay Filter](packet_routing_flow_duplicate_filter.en.md)
+- [Direct RF Reception Filter](packet_routing_flow_direct_only.en.md)
 - [DIGI Filter](packet_routing_flow_digi_filter.en.md)
-- [Callsign Filter](packet_routing_flow_callsign_filter.en.md)
-- [Packet Type Filter](packet_routing_flow_packet_type_filter.en.md)
-- [Icon Filter](packet_routing_flow_icon_filter.en.md)
-- [Distance Filter](packet_routing_flow_distance_filter.en.md)
-- [Rate Limit Filter](packet_routing_flow_rate_limit_filter.en.md)
+- [Source Callsign Filter](packet_routing_flow_callsign_filter.en.md)
+- [APRS Packet Type Filter](packet_routing_flow_packet_type_filter.en.md)
+- [APRS Symbol Filter](packet_routing_flow_icon_filter.en.md)
+- [Position Zone Filter](packet_routing_flow_distance_filter.en.md)
+- [Transmission Rate Filter](packet_routing_flow_rate_limit_filter.en.md)
 
 ## Target blocks
 
@@ -52,7 +52,7 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 
 ## Quick notes
 
-- `TX APRS-IS` requires the `Strict Filter` block.
-- `TX RF` requires the `Path rule and DIGI guard` block.
+- `TX APRS-IS` requires the `APRS-IS Uplink Safety Rule`.
+- RF-to-RF transmission requires the `RF Digipeating Path Rule`.
 - `Local TX` can end only in `TX APRS-IS` or `Black Hole`.
-- An `APRS-IS -> RF` flow automatically receives mandatory input and RF TX guards around the strict callsign-and-radius default-deny filter. Callsign and radius use `AND`; an empty configuration forwards no packets.
+- An `APRS-IS → RF` flow contains exactly three mandatory system rules. Optional filters cannot be added. Callsign and radius use `AND`; an empty configuration forwards no packets.

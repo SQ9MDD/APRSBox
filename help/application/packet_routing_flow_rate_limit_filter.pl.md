@@ -1,6 +1,6 @@
-# Filtr limitu tempa
+# Filtr tempa transmisji
 
-Ten filtr nie liczy "pakietów na minutę". To prosty limiter czasu od ostatnio przepuszczonej ramki dla znaku źródłowego.
+Ten filtr nie liczy „pakietów na minutę”. To bramka czasowa, która może ograniczać każdy pasujący znak źródłowy osobno albo wszystkie źródła globalnie.
 
 Format reguły:
 
@@ -21,7 +21,9 @@ Jak działa:
 
 - filtr działa wyłącznie na źródłowym callsignie pakietu,
 - pierwsza pasująca ramka zawsze przechodzi,
-- kolejna ramka od tego samego źródła i dla tego samego dopasowanego wzorca zostanie zablokowana, jeśli przyjdzie przed upływem limitu,
+- zwykłe wzorce znaków prowadzą osobny licznik dla każdego źródła,
+- samo `*` jest wyjątkiem: używa jednego globalnego licznika wspólnego dla wszystkich źródeł w tym filtrze,
+- kolejna ramka objęta tym samym licznikiem zostanie zablokowana, jeśli przyjdzie przed upływem limitu,
 - licznik aktualizuje się tylko po ramce przepuszczonej,
 - jeśli żadna reguła nie pasuje do źródła, filtr nic nie blokuje i przepuszcza pakiet dalej.
 

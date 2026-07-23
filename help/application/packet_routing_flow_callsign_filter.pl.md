@@ -1,4 +1,4 @@
-# Filtr znaków
+# Filtr źródłowego znaku
 
 Ten filtr sprawdza wyłącznie znak źródłowy nadawcy pakietu. Nie analizuje ścieżki, hop-ów digi ani celu pakietu.
 

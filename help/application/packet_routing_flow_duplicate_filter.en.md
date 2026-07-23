@@ -1,9 +1,10 @@
-# Duplicate Filter (viscous-delay)
+# RF Duplicate Delay Filter
 
 This block does not pass the frame immediately. The first frame with a given fingerprint is held until the listening window expires.
 
 Actual behavior:
 
+- the listening window can be set from `2` to `7` seconds,
 - the fingerprint is built from `source callsign + info field`,
 - path is ignored for duplicate comparison,
 - the first frame waits until the window ends,

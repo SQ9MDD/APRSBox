@@ -15,7 +15,7 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 - `Receptor RF -> TX APRS-IS` - subida clásica de iGate desde RF hacia APRS-IS.
 - `Receptor RF -> TX RF` - camino clásico de digipeater en radio.
 - `TX local -> TX APRS-IS` - tramas generadas localmente como balizas, meteo, objetos, items, boletines y mensajes.
-- `APRS-IS -> Input Guard -> default deny -> RF TX Guard -> TX RF` - reenvía de forma segura paquetes de red permitidos explícitamente a un TNC físico.
+- `Origen APRS-IS -> Regla de seguridad de entrada APRS-IS -> Regla APRS-IS de indicativo y radio -> Regla de seguridad TX APRS-IS → RF -> TX RF` - reenvía de forma segura paquetes de red permitidos explícitamente a un TNC físico.
 - `... -> Agujero negro` - diagnóstico, pruebas y validación de reglas sin reenvío.
 
 ## Cómo construir una regla
@@ -29,20 +29,20 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 
 - [Receptor RF](packet_routing_flow_receiver_rf.es.md)
 - [TX local](packet_routing_flow_local_tx.es.md)
-- [APRS-IS como origen y RF Guard](packet_routing_flow_rf_guard.es.md)
+- [Reglas de seguridad obligatorias APRS-IS → RF](packet_routing_flow_rf_guard.es.md)
 
 ## Bloques de filtros y reglas
 
-- [Filtro estricto](packet_routing_flow_strict_filter.es.md)
-- [Regla de trayectoria y protección DIGI](packet_routing_flow_path_rule_and_digi_guard.es.md)
-- [Filtro duplicado (retraso viscoso)](packet_routing_flow_duplicate_filter.es.md)
-- [Solo directo](packet_routing_flow_direct_only.es.md)
+- [Regla de seguridad de enlace APRS-IS](packet_routing_flow_strict_filter.es.md)
+- [Regla de ruta de repetición RF](packet_routing_flow_path_rule_and_digi_guard.es.md)
+- [Filtro RF de retardo de duplicados](packet_routing_flow_duplicate_filter.es.md)
+- [Filtro de recepción RF directa](packet_routing_flow_direct_only.es.md)
 - [Filtro DIGI](packet_routing_flow_digi_filter.es.md)
-- [Filtro de indicativo](packet_routing_flow_callsign_filter.es.md)
-- [Filtro de tipo de paquete](packet_routing_flow_packet_type_filter.es.md)
-- [Filtro de icono](packet_routing_flow_icon_filter.es.md)
-- [Filtro de distancia](packet_routing_flow_distance_filter.es.md)
-- [Filtro de limite de ritmo](packet_routing_flow_rate_limit_filter.es.md)
+- [Filtro de indicativo de origen](packet_routing_flow_callsign_filter.es.md)
+- [Filtro de tipo de paquete APRS](packet_routing_flow_packet_type_filter.es.md)
+- [Filtro de símbolos APRS](packet_routing_flow_icon_filter.es.md)
+- [Filtro de zonas de posición](packet_routing_flow_distance_filter.es.md)
+- [Filtro de tasa de transmisión](packet_routing_flow_rate_limit_filter.es.md)
 
 ## Bloques de destino
 
@@ -52,7 +52,7 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 
 ## Notas rápidas
 
-- `TX APRS-IS` requiere el bloque `Filtro estricto`.
-- `TX RF` requiere el bloque `Regla de trayectoria y protección DIGI`.
+- `TX APRS-IS` requiere la `Regla de seguridad de enlace APRS-IS`.
+- La transmisión RF → RF requiere la `Regla de ruta de repetición RF`.
 - `TX local` solo puede terminar en `TX APRS-IS` o `Agujero negro`.
-- Un flujo `APRS-IS -> RF` recibe automáticamente guards obligatorios de entrada y RF TX alrededor del filtro estricto default-deny de indicativo y radio. El indicativo y el radio usan `AND`; una configuración vacía no reenvía paquetes.
+- Un flujo `APRS-IS → RF` contiene exactamente tres reglas obligatorias del sistema. No se pueden añadir filtros opcionales. El indicativo y el radio usan `AND`; una configuración vacía no reenvía paquetes.

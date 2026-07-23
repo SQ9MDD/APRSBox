@@ -309,12 +309,12 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_digi": {
         "category": "filter",
-        "label": "Consumed DIGI Hop Filter",
+        "label": "DIGI Filter",
         "badge": "Filter",
         "palette_kind": "filter",
         "scope_label": "RF → RF",
         "scope_tone": "rf-to-rf",
-        "description": "Matches already consumed path hops against allow or deny patterns.",
+        "description": "Passes or blocks frames already repeated by matching DIGI stations.",
         "help_page": "application/packet_routing_flow_digi_filter",
         "editor_help_lines": (
             "Only already consumed hops are inspected, which means only path elements marked with * are checked.",
@@ -379,18 +379,18 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "required": False,
                 "placeholder": "position\nobject\nitem\nmessage\nstatus\nweather\ntelemetry\nquery",
                 "help_lines": (
-                    "Wpisuj jedna wartosc na linie:",
-                    "**Przyklad**: position - wszystkie ramki z pozycja (takze timestamped, compressed i Mic-E).",
-                    "object - obiekty APRS (;).",
-                    "item - itemy APRS (zaczynajace sie od ')').",
-                    "message - wiadomosci APRS, ACK/REJ, bulletin i announcement.",
-                    "status - ramki status (>...).",
-                    "weather - tylko ramki weather-only (_...).",
-                    "Uwaga: pozycja z danymi pogody nadal liczy sie jako position, nie weather.",
-                    "telemetry - T# oraz definicje PARM/UNIT/EQNS/BITS.",
-                    "query - zapytania APRS zaczynajace sie od ?.",
+                    "Enter one value per line:",
+                    "**Example**: position - all frames with a position (including timestamped, compressed and Mic-E).",
+                    "object - APRS objects (;).",
+                    "item - APRS items (starting with ')').",
+                    "message - APRS messages, ACK/REJ, bulletins and announcements.",
+                    "status - status frames (>...).",
+                    "weather - weather-only frames (_...).",
+                    "Note: a position with weather data still counts as position, not weather.",
+                    "telemetry - T# plus PARM/UNIT/EQNS/BITS definitions.",
+                    "query - APRS queries starting with ?.",
                 ),
-                "help_text": "Zgodnosc wsteczna: nadal dzialaja kody M, S, O, W.",
+                "help_text": "Backward compatibility: M, S, O and W codes are still supported.",
             },
         ),
     },
@@ -407,11 +407,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
             {
                 "name": "icons",
-                "label": "Icons (one per line)",
+                "label": "APRS symbols (one per line)",
                 "type": "textarea",
                 "required": False,
                 "placeholder": "/>\n\\l",
-                "help_text": "Use APRS symbol values in table+code form, exactly as decoded by APRSBox, for example /> or \\l.",
+                "help_text": "Use APRS symbols in table+code form exactly as decoded by APRSBox, for example /> or \\l.",
             },
         ),
     },
@@ -443,26 +443,26 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_rate_limit": {
         "category": "filter",
-        "label": "RF Callsign Holdoff Filter",
+        "label": "Transmission Rate Filter",
         "badge": "Filter",
         "palette_kind": "filter",
         "scope_label": "RF → RF",
         "scope_tone": "rf-to-rf",
-        "description": "Applies per-source holdoff timers based on configured callsign patterns.",
+        "description": "Limits transmission frequency per matching source callsign or globally with *.",
         "help_page": "application/packet_routing_flow_rate_limit_filter",
         "editor_help_lines": (
             "Enter one rule per line in the format CALL_OR_PATTERN - LIMIT.",
             "LIMIT accepts 30, 30s or 30S and must be between 5 and 300 seconds in 5-second steps.",
-            "Wildcard * is supported; use it anywhere in the pattern, for example SQ* - 30s.",
+            "Patterns such as SQ* use a separate timer per source callsign; * alone uses one global timer.",
         ),
         "config_fields": (
             {
                 "name": "rate_limit_rules_text",
-                "label": "Source callsign limits (one per line)",
+                "label": "Transmission limits (one per line)",
                 "type": "textarea",
                 "required": True,
                 "placeholder": "SQ9MDD-7 - 30s\nSQ2IDB* - 10s\nSP5XYZ - 60s\n* - 20s",
-                "help_text": "Format: CALL_OR_PATTERN - LIMIT. LIMIT can be written as 30, 30s or 30S.",
+                "help_text": "Format: CALL_OR_PATTERN - LIMIT. Use * alone for one global limit.",
             },
         ),
     },
@@ -536,12 +536,19 @@ LEGACY_DEFAULT_STEP_TITLES = {
     "filter_strict": {"Strict Filter", "Filtr ścisły"},
     "filter_dupe": {"Duplicate Filter", "Duplicate Filter (viscous-delay)", "Filtr duplikatów (viscous-delay)"},
     "filter_direct_only": {"Direct Only", "Tylko direct"},
-    "filter_digi": {"DIGI Filter", "Filtr DIGI"},
+    "filter_digi": {"Consumed DIGI Hop Filter", "DIGI Filter", "Filtr DIGI"},
     "filter_callsign": {"Callsign Filter", "Filtr znaków"},
     "filter_packet_type": {"Packet Type Filter", "Filtr typu pakietu"},
     "filter_icon": {"Icon Filter", "Filtr ikon"},
     "filter_distance": {"Distance Filter", "Filtr odległości"},
-    "filter_rate_limit": {"Rate Limit Filter", "Filtr limitu tempa"},
+    "filter_rate_limit": {
+        "RF Callsign Holdoff Filter",
+        "Rate Limit Filter",
+        "Transmission Rate Filter",
+        "Filtr limitu tempa",
+        "Filtr odstępów czasowych znaków RF",
+        "Filtr tempa transmisji",
+    },
 }
 
 STEP_TYPE_TO_REF_FIELD = {
@@ -766,7 +773,7 @@ def _normalize_rate_limit_rules(value: Any) -> list[dict[str, Any]]:
                 continue
             raise ValueError(_tf("Rate limit line #{line_number} is invalid.", {"line_number": index}))
         if not normalized_rules:
-            raise ValueError(_t("Rate limit filter requires at least one rule."))
+            raise ValueError(_t("Transmission Rate Filter requires at least one rule."))
         return normalized_rules
 
     normalized_rules = []
@@ -775,7 +782,7 @@ def _normalize_rate_limit_rules(value: Any) -> list[dict[str, Any]]:
         if parsed:
             normalized_rules.append(parsed)
     if not normalized_rules:
-        raise ValueError(_t("Rate limit filter requires at least one rule."))
+        raise ValueError(_t("Transmission Rate Filter requires at least one rule."))
     return normalized_rules
 
 
@@ -1612,7 +1619,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Duplicate filter (viscous-delay) can be used only once in a flow."))
     rate_limit_positions = [index for index, step in enumerate(normalized_steps) if step["step_type"] == "filter_rate_limit"]
     if len(rate_limit_positions) > 1:
-        raise ValueError(_t("Rate limit filter can be used only once in a flow."))
+        raise ValueError(_t("Transmission Rate Filter can be used only once in a flow."))
     distance_filter_count = sum(1 for step in normalized_steps if step["step_type"] == "filter_distance")
     if distance_filter_count > 1:
         raise ValueError(_t("Distance filter can be used only once in a flow."))
@@ -1621,7 +1628,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Strict APRS-IS guard can be used only in APRS-IS target flows."))
     has_rate_limit = any(step["step_type"] == "filter_rate_limit" for step in normalized_steps[1:-1])
     if target_kind != "tx_rf" and has_rate_limit:
-        raise ValueError(_t("Rate limit filter can be used only in RF TX target flows."))
+        raise ValueError(_t("Transmission Rate Filter can be used only in RF TX target flows."))
     guard_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == RF_GUARD_STEP_TYPE]
     tx_guard_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == RF_TX_GUARD_STEP_TYPE]
     allow_rule_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == ALLOW_RULES_STEP_TYPE]

@@ -1,4 +1,4 @@
-# Callsign Filter
+# Source Callsign Filter
 
 This filter checks only the packet source callsign. It does not inspect path, digi hops, or destination.
 

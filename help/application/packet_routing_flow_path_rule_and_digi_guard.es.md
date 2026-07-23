@@ -1,4 +1,4 @@
-# Regla de trayectoria y protección DIGI
+# Regla de ruta de repetición RF
 
 Es el bloque clave para flujos que terminan en `TX RF`. Primero hace la proteccion DIGI y despues reescribe la ruta. Este bloque debe ser siempre el ultimo bloque del flow porque modifica la ruta y puede alterar el funcionamiento de otros filtros.
 
@@ -73,7 +73,7 @@ Notas importantes:
 Esquema tipico:
 
 ```text
-Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
+Receptor RF -> Filtro RF de retardo de duplicados -> Regla de ruta de repetición RF -> TX RF
 ```
 
 ## Navegación

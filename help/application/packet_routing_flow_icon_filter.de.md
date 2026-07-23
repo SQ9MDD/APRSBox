@@ -1,4 +1,4 @@
-# Symbolfilter
+# APRS-Symbolfilter
 
 Dieser Filter vergleicht das APRS-Symbol exakt im Format `table+code`.
 

@@ -11,7 +11,7 @@ Verwende es fur:
 Typische Form:
 
 ```text
-Empfänger RF -> Duplikatfilter (viscous-delay) -> Pfadregel und DIGI-Schutz -> TX RF
+Empfänger RF -> RF-Duplikatverzögerungsfilter -> RF-Digipeating-Pfadregel -> TX RF
 ```
 
 ## Navigation

@@ -1,4 +1,4 @@
-# Nur direkt
+# Filter für direkten RF-Empfang
 
 Dieser Filter laesst nur direkt gehoerte Pakete durch.
 

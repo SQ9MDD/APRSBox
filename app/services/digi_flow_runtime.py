@@ -133,7 +133,7 @@ class DigiFlowRuntimeService:
         self._viscous_delay_lock = asyncio.Lock()
         self._viscous_delay_entries: dict[tuple[int, int, str, str], _ViscousDelayEntry] = {}
         self._pending_viscous_wait_count = 0
-        self._rate_limit_last_passed: dict[tuple[int, int, str], float] = {}
+        self._rate_limit_last_passed: dict[tuple[int, int, str, str], float] = {}
         self._aprsis_rf_delay_override = aprsis_rf_delay_override
         self._aprsis_rf_seen: OrderedDict[str, _AprsisRfSeenEntry] = OrderedDict()
         self._aprsis_rf_pending: dict[tuple[int, str], _AprsisRfPendingEntry] = {}
@@ -1572,7 +1572,7 @@ class DigiFlowRuntimeService:
                 event_type="filter_rate_limit",
                 decision="passed",
                 message=_tf(
-                    "Rate limit filter skipped frame because source callsign {callsign} did not match any configured rule.",
+                    "Transmission Rate Filter skipped frame because source callsign {callsign} did not match any configured rule.",
                     {"callsign": source_callsign or "-"},
                 ),
             )
@@ -1581,7 +1581,8 @@ class DigiFlowRuntimeService:
         rate_limit_seconds = int(matched_rule["rate_limit_seconds"])
         matched_pattern = str(matched_rule["source_callsign_pattern"])
         now = time.monotonic()
-        state_key = (flow_id, step_id, matched_pattern, source_callsign)
+        timer_scope = "*" if matched_pattern == "*" else source_callsign
+        state_key = (flow_id, step_id, matched_pattern, timer_scope)
         last_passed = self._rate_limit_last_passed.get(state_key)
         if last_passed is not None:
             elapsed_seconds = now - last_passed
@@ -1593,7 +1594,7 @@ class DigiFlowRuntimeService:
                     event_type="filter_rate_limit",
                     decision="rejected",
                     message=_tf(
-                        "Rate limit filter blocked frame for source callsign {callsign} with pattern {pattern} because only {elapsed_seconds}s elapsed since the last passed frame; limit is {rate_limit_seconds}s.",
+                        "Transmission Rate Filter blocked frame for source callsign {callsign} with pattern {pattern} because only {elapsed_seconds}s elapsed since the last passed frame; limit is {rate_limit_seconds}s.",
                         {
                             "callsign": source_callsign or "-",
                             "pattern": matched_pattern,
@@ -1612,7 +1613,7 @@ class DigiFlowRuntimeService:
                 event_type="filter_rate_limit",
                 decision="passed",
                 message=_tf(
-                    "Rate limit filter passed for source callsign {callsign} with pattern {pattern} after {elapsed_seconds}s since the last passed frame; limit is {rate_limit_seconds}s.",
+                    "Transmission Rate Filter passed for source callsign {callsign} with pattern {pattern} after {elapsed_seconds}s since the last passed frame; limit is {rate_limit_seconds}s.",
                     {
                         "callsign": source_callsign or "-",
                         "pattern": matched_pattern,
@@ -1631,7 +1632,7 @@ class DigiFlowRuntimeService:
             event_type="filter_rate_limit",
             decision="passed",
             message=_tf(
-                "Rate limit filter passed for source callsign {callsign} with pattern {pattern} because no previous frame has been allowed yet; limit is {rate_limit_seconds}s.",
+                "Transmission Rate Filter passed for source callsign {callsign} with pattern {pattern} because no previous frame has been allowed yet; limit is {rate_limit_seconds}s.",
                 {
                     "callsign": source_callsign or "-",
                     "pattern": matched_pattern,

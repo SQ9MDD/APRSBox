@@ -1,14 +1,14 @@
-# APRS-IS jako źródło — dwa Guardy
+# Obowiązkowe reguły bezpieczeństwa APRS-IS → RF
 
 Flow `APRS-IS -> RF` służy do kontrolowanego przekazania wybranych ramek z APRS-IS na fizyczny interfejs radiowy. Celem może być wyłącznie aktywny interfejs TNC z obsługą TX. Interfejs APRS-IS ani odbiornik RX-only nie mogą być celem.
 
 ## Wymagana kolejność
 
-`APRS-IS source -> APRS-IS Input Guard -> filtr default deny: znak + promień -> RF TX Guard -> TX RF`
+`Źródło APRS-IS -> Reguła bezpieczeństwa wejścia APRS-IS -> Reguła znaku i promienia APRS-IS -> Reguła bezpieczeństwa TX APRS-IS → RF -> TX RF`
 
-Oba Guardy są automatycznie dodawane dla `APRS-IS -> RF`. Nie można ich usunąć, wyłączyć, ominąć, przestawić ani dodać drugi raz. Backend i runtime wymuszają tę samą ochronę również dla ręcznie zmienionych danych.
+Wszystkie trzy reguły są automatycznie dodawane dla `APRS-IS → RF`. Nie można ich usunąć, wyłączyć, ominąć, przestawić ani dodać drugi raz. Do tego restrykcyjnego flow nie można dodać żadnego opcjonalnego filtra. Backend i runtime wymuszają tę samą ochronę również dla ręcznie zmienionych danych.
 
-## Filtr znaku i promienia z domyślnym odrzucaniem
+## Reguła znaku i promienia APRS-IS
 
 Filtr zawiera wyłącznie listę źródłowych znaków i promień. Oba warunki łączą się jako `AND`: źródło pakietu musi dokładnie odpowiadać jednemu z wpisanych znaków, a zdekodowana pozycja pakietu musi znajdować się w promieniu liczonym od współrzędnych skonfigurowanych w `My Station`.
 
@@ -16,11 +16,11 @@ Dopasowanie znaku jest ścisłe i obejmuje SSID. `SQ9MDD` pasuje wyłącznie do 
 
 Pusta konfiguracja jest poprawnym `default deny`. Odrzucane są również pakiety bez zdekodowanej pozycji oraz wszystkie pakiety, gdy `My Station` nie ma prawidłowych współrzędnych.
 
-## APRS-IS Input Guard
+## Reguła bezpieczeństwa wejścia APRS-IS
 
 Pierwszy Guard wykonuje walidację APRS i q-construct, ochronę pętli, blokady `NOGATE`, `RFONLY` i `TCPXX` oraz wstępną, znormalizowaną kontrolę duplikatów między RF i APRS-IS. Sam `TCPIP` nie jest automatycznie blokowany.
 
-## RF TX Guard
+## Reguła bezpieczeństwa TX APRS-IS → RF
 
 Końcowy Guard jest umieszczony bezpośrednio przed `TX RF`. Odpowiada za viscous delay, ponowną kontrolę duplikatów po opóźnieniu, limity token bucket per-flow i per-source, gotowość celu, third-party encapsulation oraz kontrolę długości AX.25. Internetowa ścieżka wejściowa jest usuwana przed TX.
 
@@ -35,7 +35,9 @@ Podczas viscous delay ramka pozostaje wyłącznie w pamięci. Kopia odebrana lok
 
 ## Transmisja i statystyki
 
-Po przejściu kontroli oryginalny payload zostaje zachowany, internetowa ścieżka usunięta, a ramka otrzymuje poprawne APRS third-party encapsulation. Używana jest ścieżka RF skonfigurowana w celu; pusta ścieżka oznacza transmisję direct. Zadanie trafia do istniejącej kolejki RF/KISS.
+Tekst z APRS-IS jest dekodowany jako Unicode, ale AX.25 APRS w RF używa 7-bitowego ASCII. Przed enkapsulacją typowe znaki są transliterowane (`°` na `deg`, `µ`/`μ` na `u`, typograficzne myślniki i cudzysłowy na ASCII), a nieobsługiwane znaki są zastępowane przez `?`. Kontrola rozmiaru i kodowanie KISS pracują dokładnie na tym samym, oczyszczonym payloadzie.
+
+Internetowa ścieżka jest usuwana, a ramka otrzymuje poprawną enkapsulację APRS third-party. Używana jest ścieżka RF skonfigurowana w celu; pusta ścieżka oznacza transmisję direct. Zadanie trafia do istniejącej kolejki RF/KISS.
 
 Ruch ma osobne liczniki `APRS-IS -> RF` i nie zwiększa statystyk DIGI ani fizycznego RX TNC.
 

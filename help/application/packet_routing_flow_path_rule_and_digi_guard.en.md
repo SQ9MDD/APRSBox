@@ -1,4 +1,4 @@
-# Path rule and DIGI guard
+# RF Digipeating Path Rule
 
 This is the key block for flows ending in `TX RF`. It performs DIGI protection first and path rewriting second. This block should always be the last block in the flow because it modifies path values and can disturb other filters.
 
@@ -73,7 +73,7 @@ Important notes:
 Typical layout:
 
 ```text
-Receiver RF -> Duplicate Filter (viscous-delay) -> Path rule and DIGI guard -> TX RF
+Receiver RF -> RF Duplicate Delay Filter -> RF Digipeating Path Rule -> TX RF
 ```
 
 ## Navigation

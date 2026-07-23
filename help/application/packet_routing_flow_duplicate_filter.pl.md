@@ -1,9 +1,10 @@
-# Filtr duplikatów (viscous-delay)
+# Filtr opóźnienia duplikatów RF
 
 Ten blok nie przepuszcza pakietu od razu. Pierwsza ramka z danym fingerprintem zostaje najpierw wstrzymana na czas okna nasłuchu.
 
 Jak działa naprawdę:
 
+- okno nasłuchu można ustawić od `2` do `7` sekund,
 - fingerprint budowany jest z `source callsign + info field`,
 - ścieżka nie bierze udziału w porównaniu duplikatów,
 - pierwsza ramka z danym fingerprintem czeka do końca okna,

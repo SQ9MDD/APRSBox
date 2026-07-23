@@ -28,10 +28,6 @@ Usalo cuando:
 - solo debe pasar trafico que vino por digis concretos,
 - quieres excluir trafico ya repetido por estaciones intermedias determinadas.
 
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
-
 ## Navegación
 
 [Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)

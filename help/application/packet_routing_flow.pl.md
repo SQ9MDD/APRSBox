@@ -15,7 +15,7 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 - `Odbiornik RF -> TX APRS-IS` - klasyczny uplink iGate z eteru do APRS-IS.
 - `Odbiornik RF -> TX RF` - klasyczna ścieżka digipeatera pracującego w radiu.
 - `Local TX -> TX APRS-IS` - wysyłka ramek generowanych lokalnie przez APRSBox, takich jak beacon, pogoda, obiekty, itemy, biuletyny i wiadomości.
-- `APRS-IS -> Input Guard -> default deny -> RF TX Guard -> TX RF` - bezpieczne przekazanie jawnie dopuszczonych ramek z sieci na fizyczny TNC.
+- `Źródło APRS-IS -> Reguła bezpieczeństwa wejścia APRS-IS -> Reguła znaku i promienia APRS-IS -> Reguła bezpieczeństwa TX APRS-IS → RF -> TX RF` - bezpieczne przekazanie jawnie dopuszczonych ramek z sieci na fizyczny TNC.
 - `... -> Black Hole` - diagnostyka, testy i budowa reguły bez dalszego nadawania.
 
 ## Jak budować regułę
@@ -29,20 +29,20 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 
 - [Odbiornik RF](packet_routing_flow_receiver_rf.pl.md)
 - [Local TX](packet_routing_flow_local_tx.pl.md)
-- [APRS-IS jako źródło i RF Guard](packet_routing_flow_rf_guard.pl.md)
+- [Obowiązkowe reguły bezpieczeństwa APRS-IS → RF](packet_routing_flow_rf_guard.pl.md)
 
 ## Bloki filtrów i reguł
 
-- [Filtr ścisły](packet_routing_flow_strict_filter.pl.md)
-- [Reguła ścieżki i ochrona DIGI](packet_routing_flow_path_rule_and_digi_guard.pl.md)
-- [Filtr duplikatów (viscous-delay)](packet_routing_flow_duplicate_filter.pl.md)
-- [Tylko direct](packet_routing_flow_direct_only.pl.md)
+- [Reguła bezpieczeństwa uplinku APRS-IS](packet_routing_flow_strict_filter.pl.md)
+- [Reguła ścieżki DIGI RF](packet_routing_flow_path_rule_and_digi_guard.pl.md)
+- [Filtr opóźnienia duplikatów RF](packet_routing_flow_duplicate_filter.pl.md)
+- [Filtr bezpośredniego odbioru RF](packet_routing_flow_direct_only.pl.md)
 - [Filtr DIGI](packet_routing_flow_digi_filter.pl.md)
-- [Filtr znaków](packet_routing_flow_callsign_filter.pl.md)
-- [Filtr typu pakietu](packet_routing_flow_packet_type_filter.pl.md)
-- [Filtr ikon](packet_routing_flow_icon_filter.pl.md)
-- [Filtr odległości](packet_routing_flow_distance_filter.pl.md)
-- [Filtr limitu tempa](packet_routing_flow_rate_limit_filter.pl.md)
+- [Filtr źródłowego znaku](packet_routing_flow_callsign_filter.pl.md)
+- [Filtr typu pakietu APRS](packet_routing_flow_packet_type_filter.pl.md)
+- [Filtr symbolu APRS](packet_routing_flow_icon_filter.pl.md)
+- [Filtr stref pozycji](packet_routing_flow_distance_filter.pl.md)
+- [Filtr tempa transmisji](packet_routing_flow_rate_limit_filter.pl.md)
 
 ## Bloki docelowe
 
@@ -52,7 +52,7 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 
 ## Krótkie uwagi
 
-- `TX APRS-IS` wymaga bloku `Filtr ścisły`.
-- `TX RF` wymaga bloku `Reguła ścieżki i ochrona DIGI`.
+- `TX APRS-IS` wymaga `Reguły bezpieczeństwa uplinku APRS-IS`.
+- Transmisja RF → RF wymaga `Reguły ścieżki DIGI RF`.
 - `Local TX` może kończyć się tylko na `TX APRS-IS` albo `Black Hole`.
-- Flow `APRS-IS -> RF` automatycznie otrzymuje obowiązkowe Guardy wejścia i TX RF po obu stronach ścisłego filtra znaku oraz promienia z domyślnym odrzucaniem. Znak i promień łączą się jako `AND`; pusta konfiguracja nie przepuszcza żadnych ramek.
+- Flow `APRS-IS → RF` zawiera dokładnie trzy obowiązkowe reguły systemowe. Nie można dodać do niego opcjonalnych filtrów. Znak i promień łączą się jako `AND`; pusta konfiguracja nie przepuszcza żadnych ramek.

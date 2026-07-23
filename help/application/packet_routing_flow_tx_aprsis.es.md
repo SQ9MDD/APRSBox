@@ -9,11 +9,7 @@ Usalo para:
 
 Limitacion importante:
 
-- este destino siempre mantiene el `Filtro estricto` obligatorio.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
+- este destino siempre mantiene la `Regla de seguridad de enlace APRS-IS` obligatoria.
 
 ## Navegación
 

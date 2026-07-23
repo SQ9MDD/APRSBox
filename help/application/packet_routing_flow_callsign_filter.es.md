@@ -1,4 +1,4 @@
-# Filtro de indicativo
+# Filtro de indicativo de origen
 
 Este filtro comprueba solo el indicativo de origen. No analiza la ruta, los hops digi ni el destino.
 
@@ -25,10 +25,6 @@ Usalo cuando:
 
 - quieres separar trafico de club, pruebas, servicio u operador,
 - quieres bloquear o aislar una fuente conocida.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

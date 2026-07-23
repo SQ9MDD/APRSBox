@@ -276,6 +276,68 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in rows))
             self.assertTrue(any("limit is 5s" in row["message"] for row in rows if row["event_type"] == "filter_rate_limit"))
 
+    async def test_rate_limit_filter_uses_one_global_timer_for_bare_wildcard(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Global transmission limit",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {
+                            "step_type": "filter_rate_limit",
+                            "title": "Transmission Rate Filter",
+                            "enabled": 1,
+                            "config": {"rate_limit_rules_text": "* - 5s"},
+                        },
+                        {
+                            "step_type": "filter_path",
+                            "title": "Path Rule",
+                            "enabled": 1,
+                            "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []},
+                        },
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            rate_limit_step = fetch_one(
+                """
+                SELECT id
+                FROM digi_flow_steps
+                WHERE flow_id = ? AND step_type = 'filter_rate_limit'
+                """,
+                (flow_id,),
+            )
+            assert rate_limit_step is not None
+            step = {
+                "id": int(rate_limit_step["id"]),
+                "config": {"rate_limit_rules": [{"source_callsign_pattern": "*", "rate_limit_seconds": 5}]},
+            }
+            first_context = {
+                "flow": {"id": flow_id, "target_kind": "tx_rf"},
+                "frame_uid": "global-rate-limit-first",
+                "parsed": {"source": "SQ9MDD-7"},
+            }
+            other_source_context = {
+                "flow": {"id": flow_id, "target_kind": "tx_rf"},
+                "frame_uid": "global-rate-limit-other-source",
+                "parsed": {"source": "SP5ABC-1"},
+            }
+            runtime = DigiFlowRuntimeService()
+            with patch("app.services.digi_flow_runtime.time.monotonic", side_effect=[100.0, 101.0]):
+                first = runtime._execute_rate_limit_filter(first_context, step)
+                second = runtime._execute_rate_limit_filter(other_source_context, step)
+
+            self.assertEqual(first["decision"], "continue")
+            self.assertEqual(second["decision"], "drop")
+            rows = event_rows_for_frame("global-rate-limit-other-source")
+            self.assertTrue(any(row["event_type"] == "filter_rate_limit" and row["decision"] == "rejected" for row in rows))
+
     async def test_rate_limit_filter_matches_source_mask_and_ignores_non_matching_callsigns(self) -> None:
         with temporary_database():
             flow_id = create_flow(
@@ -395,7 +457,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(len(summaries), 2)
             blocked_summary = next(summary for summary in summaries if summary["frame_uid"] == str(second["frame_uid"]))
             self.assertEqual(blocked_summary["steps"][1]["status"], "rejected")
-            self.assertIn("Rate limit filter blocked frame", blocked_summary["steps"][1]["description"])
+            self.assertIn("Transmission Rate Filter blocked frame", blocked_summary["steps"][1]["description"])
 
     async def test_duplicate_filter_viscous_delay_waits_then_allows_unique_fingerprints(self) -> None:
         with temporary_database():

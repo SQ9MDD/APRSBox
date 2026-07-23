@@ -1,6 +1,6 @@
-# Ratenbegrenzungsfilter
+# Übertragungsratenfilter
 
-Dieser Filter zaehlt nicht Pakete pro Minute. Er ist eine einfache Zeitbremse auf Basis des Quellrufzeichens.
+Dieser Filter zählt keine Pakete pro Minute. Er ist eine Zeitsperre, die jedes passende Quellrufzeichen getrennt oder alle Quellen global begrenzen kann.
 
 Regelformat:
 
@@ -21,7 +21,9 @@ So arbeitet er:
 
 - er arbeitet nur auf dem Quellrufzeichen,
 - der erste passende Frame geht immer durch,
-- der naechste Frame derselben Quelle unter derselben passenden Regel wird bis zum Ablauf des Limits blockiert,
+- normale Rufzeichenmuster führen einen eigenen Timer pro Quelle,
+- `*` allein ist eine Ausnahme: Es verwendet einen globalen Timer für alle Quellen in diesem Filter,
+- der nächste Frame, für den derselbe Timer gilt, wird bis zum Ablauf des Limits blockiert,
 - der Zeitstempel wird nur bei Frames aktualisiert, die wirklich durchgelassen wurden,
 - passt keine Regel zur Quelle, blockiert der Filter nichts.
 

@@ -1,4 +1,4 @@
-# Filtro de icono
+# Filtro de símbolos APRS
 
 Este filtro compara exactamente el simbolo APRS en formato `table+code`.
 
@@ -19,10 +19,6 @@ Usalo cuando:
 
 - ciertas clases de simbolo deben tener su propia ruta,
 - el significado del simbolo importa mas que el tipo de paquete.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

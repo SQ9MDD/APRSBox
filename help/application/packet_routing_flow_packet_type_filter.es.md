@@ -1,4 +1,4 @@
-# Filtro de tipo de paquete
+# Filtro de tipo de paquete APRS
 
 Este filtro trabaja sobre lo que el decodificador APRSBox reconoce como grupo o tipo de paquete APRS.
 
@@ -30,10 +30,6 @@ Usalo cuando:
 
 - posiciones, objetos, mensajes o meteorologia deben ir por rutas distintas,
 - una regla debe limitarse a una sola clase de trafico.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

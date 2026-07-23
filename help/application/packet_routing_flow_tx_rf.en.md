@@ -11,7 +11,7 @@ Use it for:
 Typical layout:
 
 ```text
-Receiver RF -> Duplicate Filter (viscous-delay) -> Path rule and DIGI guard -> TX RF
+Receiver RF -> RF Duplicate Delay Filter -> RF Digipeating Path Rule -> TX RF
 ```
 
 ## Navigation

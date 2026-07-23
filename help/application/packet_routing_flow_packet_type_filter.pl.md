@@ -1,4 +1,4 @@
-# Filtr typu pakietu
+# Filtr typu pakietu APRS
 
 Ten filtr działa na tym, co parser APRSBox zdekoduje jako typ lub grupę pakietu APRS.
 

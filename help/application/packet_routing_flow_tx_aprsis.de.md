@@ -9,7 +9,7 @@ Verwende es fur:
 
 Wichtige Einschränkung:
 
-- dieses Ziel behalt immer den verpflichtenden `Strengen Filter`.
+- dieses Ziel behält immer die verpflichtende `APRS-IS-Uplink-Sicherheitsregel`.
 
 ## Navigation
 
