@@ -1137,25 +1137,40 @@
 
                     const fieldsGrid = document.createElement("div");
                     fieldsGrid.className = "digi-distance-zone-grid";
+                    const distanceConditionNames = new Set(["center_latitude", "center_longitude", "radius_km"]);
+                    const distanceInputs = [];
+                    const syncDistanceRequirements = () => {
+                        const hasDistanceCondition = distanceInputs.some((candidate) => candidate.value.trim() !== "");
+                        for (const candidate of distanceInputs) {
+                            candidate.required = hasDistanceCondition;
+                        }
+                    };
                     for (const [conditionName, conditionLabel, placeholder] of conditionFields) {
                         const conditionField = document.createElement("label");
                         const caption = document.createElement("span");
                         caption.textContent = conditionLabel;
                         const input = document.createElement("input");
-                        input.type = ["center_latitude", "center_longitude", "radius_km"].includes(conditionName)
+                        input.type = distanceConditionNames.has(conditionName)
                             ? "number"
                             : "text";
                         input.step = conditionName === "radius_km" ? "0.1" : "any";
                         input.placeholder = placeholder;
                         input.value = rule[conditionName] ?? "";
                         input.dataset.allowCondition = conditionName;
+                        if (distanceConditionNames.has(conditionName)) {
+                            distanceInputs.push(input);
+                        }
                         input.addEventListener("input", () => {
                             rule[conditionName] = input.value;
+                            if (distanceConditionNames.has(conditionName)) {
+                                syncDistanceRequirements();
+                            }
                         });
                         conditionField.appendChild(caption);
                         conditionField.appendChild(input);
                         fieldsGrid.appendChild(conditionField);
                     }
+                    syncDistanceRequirements();
                     ruleCard.appendChild(fieldsGrid);
                     rulesContainer.appendChild(ruleCard);
                 });

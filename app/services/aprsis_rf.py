@@ -143,8 +143,19 @@ def match_allow_rules(parsed: dict[str, Any] | None, rules: list[dict[str, str]]
         "icon": str(aprs_data.get("symbol") or "").strip().upper(),
     }
     for index, rule in enumerate(rules, start=1):
+        configured_rule = {
+            str(field): str(expected).strip()
+            for field, expected in rule.items()
+            if str(expected).strip()
+        }
+        if not configured_rule:
+            continue
+        distance_fields = {"center_latitude", "center_longitude", "radius_km"}
+        configured_distance_fields = distance_fields.intersection(configured_rule)
+        if configured_distance_fields and configured_distance_fields != distance_fields:
+            continue
         matches = True
-        for field, expected in rule.items():
+        for field, expected in configured_rule.items():
             if field == "packet_type":
                 if str(expected).strip().casefold() not in packet_values:
                     matches = False

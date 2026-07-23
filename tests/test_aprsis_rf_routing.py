@@ -312,6 +312,21 @@ class AprsisRfRuleAndProtocolTests(unittest.TestCase):
         rules[0]["radius_km"] = "0.01"
         self.assertIsNone(match_allow_rules(parsed, rules))
 
+    def test_partial_or_empty_distance_allow_rule_never_matches(self) -> None:
+        parsed = parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAR,IGATE:!5213.78N/02100.72E>Test")
+
+        for rule in (
+            {},
+            {"radius_km": "1"},
+            {"center_latitude": "52.2297"},
+            {"center_latitude": "52.2297", "radius_km": "1"},
+        ):
+            with self.subTest(rule=rule):
+                self.assertIsNone(match_allow_rules(parsed, [rule]))
+
+        with self.assertRaisesRegex(ValueError, "requires center_latitude, center_longitude and radius_km"):
+            normalize_allow_rules([{"radius_km": "1"}])
+
     def test_guard_blocks_markers_bad_q_and_third_party_but_not_tcpip(self) -> None:
         expected = {
             "NOGATE": "blocked_nogate",
