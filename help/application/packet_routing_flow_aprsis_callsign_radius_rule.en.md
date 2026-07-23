@@ -35,7 +35,7 @@ The packet is rejected when:
 
 Both the callsign list and radius must be filled, or both must be empty. A partially filled configuration cannot be saved.
 
-Leaving both fields empty is valid and intentionally denies every packet. This makes an unconfigured rule safe by default.
+Leaving both fields empty is valid. It creates a message-only flow: the rule denies all ordinary traffic while messages and the associated sender position authorized by the Message Delivery Rule still bypass it.
 
 ## Placement
 

@@ -35,7 +35,7 @@ El paquete se rechaza cuando:
 
 La lista de indicativos y el radio deben rellenarse juntos o dejarse ambos vacíos. No se puede guardar una configuración con solo uno de estos campos.
 
-Dejar ambos campos vacíos es válido y deniega intencionadamente todos los paquetes. Así, una regla sin configurar permanece segura de forma predeterminada.
+Dejar ambos campos vacíos es válido y crea un flujo solo para mensajes: la regla deniega todo el tráfico ordinario, mientras que los mensajes y la posición asociada del remitente autorizados por la regla de entrega de mensajes siguen omitiéndola.
 
 ## Ubicación
 

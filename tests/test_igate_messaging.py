@@ -9,7 +9,11 @@ from app.db import execute, fetch_one, init_db, utc_now
 from app.services.aprsis_rf import APRSIS_FLOW_SOURCE_KIND, get_aprsis_rf_stats
 from app.services.content import parse_tnc2_frame
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
-from app.services.digi_flows import create_digi_flow, set_digi_flow_enabled
+from app.services.digi_flows import (
+    create_digi_flow,
+    get_digi_flow_execution_summaries,
+    set_digi_flow_enabled,
+)
 from app.services.igate_messaging import (
     evaluate_message_delivery,
     message_return_capable_for_rf_source,
@@ -401,6 +405,15 @@ class IgateMessagingRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(stats["matched_message_rule"], 1)
             self.assertEqual(stats["matched_associated_position"], 1)
             self.assertEqual(stats["dropped_no_allow_rule"], 1)
+            message_summary = next(
+                summary
+                for summary in get_digi_flow_execution_summaries(flow_id)
+                if "hello{42" in str(summary["raw_packet"])
+            )
+            self.assertEqual(
+                [step["status"] for step in message_summary["steps"]],
+                ["passed", "passed", "passed", "skipped", "passed", "executed"],
+            )
 
     async def test_optional_allow_traffic_cannot_exhaust_message_rate_bucket(self) -> None:
         with temporary_database():

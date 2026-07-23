@@ -1,7 +1,8 @@
 # Changelog
 
 ## 1.8.55.dev - 2026-07-23
-- `iGate / mensajes`: la regla obligatoria de entrega usa automáticamente todos los TNC activos con TX permitido; los mensajes aptos y la posición asociada del remitente omiten la regla de indicativo y radio.
+- `iGate / mensajes`: la regla obligatoria de entrega usa automáticamente todos los TNC activos con TX permitido; los mensajes aptos y la posición asociada del remitente omiten la regla de indicativo y radio, mientras que los campos vacíos activan el modo solo mensajes.
+- `Routing / registros`: los pasos que no se aplican a un paquete o que fueron omitidos se muestran como `omitido` en lugar de `aprobado`.
 
 ## 1.8.54.dev - 2026-07-23
 - `APRS-IS / routing`: se añadió APRS-IS como interfaz y el routing seguro `APRS-IS → RF`.

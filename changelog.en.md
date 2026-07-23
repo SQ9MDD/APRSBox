@@ -1,7 +1,8 @@
 # Changelog
 
 ## 1.8.55.dev - 2026-07-23
-- `iGate / messages`: the mandatory delivery rule now uses every active TX-enabled TNC automatically; eligible messages and the associated sender position bypass the callsign-and-radius rule.
+- `iGate / messages`: the mandatory delivery rule now uses every active TX-enabled TNC automatically; eligible messages and the associated sender position bypass the callsign-and-radius rule, while empty rule fields enable message-only mode.
+- `Routing / logs`: steps that do not apply to a packet or were bypassed are shown as `skipped` instead of `passed`.
 
 ## 1.8.54.dev - 2026-07-23
 - `APRS-IS / routing`: added APRS-IS as an interface and safe `APRS-IS → RF` routing.

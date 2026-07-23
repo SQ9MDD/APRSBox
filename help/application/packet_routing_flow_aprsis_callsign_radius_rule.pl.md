@@ -35,7 +35,7 @@ Pakiet zostanie odrzucony, gdy:
 
 Lista znaków i promień muszą być wypełnione razem albo oba pola muszą pozostać puste. Nie można zapisać konfiguracji z wypełnionym tylko jednym z tych pól.
 
-Pozostawienie obu pól pustych jest prawidłowe i celowo odrzuca wszystkie pakiety. Dzięki temu nieskonfigurowana reguła pozostaje bezpieczna.
+Pozostawienie obu pól pustych jest prawidłowe i tworzy flow tylko dla wiadomości: reguła odrzuca cały zwykły ruch, natomiast wiadomości i powiązana pozycja nadawcy zatwierdzone przez Regułę dostarczania wiadomości nadal ją omijają.
 
 ## Położenie w flow
 

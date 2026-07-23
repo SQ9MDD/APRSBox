@@ -35,7 +35,7 @@ Das Paket wird abgelehnt, wenn:
 
 Rufzeichenliste und Radius müssen beide ausgefüllt oder beide leer sein. Eine teilweise ausgefüllte Konfiguration kann nicht gespeichert werden.
 
-Sind beide Felder leer, ist die Konfiguration gültig und verwirft absichtlich jedes Paket. Dadurch bleibt eine nicht konfigurierte Regel standardmäßig sicher.
+Sind beide Felder leer, ist die Konfiguration gültig und erzeugt einen reinen Nachrichten-Flow: Die Regel verwirft den gesamten gewöhnlichen Verkehr, während von der Nachrichten-Zustellregel zugelassene Nachrichten und die zugehörige Absenderposition sie weiterhin umgehen.
 
 ## Platzierung
 

@@ -747,10 +747,10 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summaries[0]["final_result"], "TX")
         self.assertEqual(
             [step["status"] for step in summaries[0]["steps"]],
-            ["passed", "passed", "passed", "passed", "passed", "executed"],
+            ["passed", "passed", "skipped", "passed", "passed", "executed"],
         )
         self.assertIn("APRS-IS Input Safety Rule passed", summaries[0]["steps"][1]["description"])
-        self.assertIn("not applicable", summaries[0]["steps"][2]["description"])
+        self.assertIn("not message traffic", summaries[0]["steps"][2]["description"])
         self.assertIn("Callsign and Radius Rule matched exact callsign AND radius", summaries[0]["steps"][3]["description"])
         self.assertIn("APRS-IS to RF TX Safety Rule passed final", summaries[0]["steps"][4]["description"])
 
@@ -764,7 +764,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summaries[0]["final_result"], "REJECTED")
         self.assertEqual(
             [step["status"] for step in summaries[0]["steps"]],
-            ["passed", "passed", "passed", "rejected", "not_reached", "not_reached"],
+            ["passed", "passed", "skipped", "rejected", "not_reached", "not_reached"],
         )
         self.assertIn("default_deny_filter_mismatch", summaries[0]["steps"][3]["description"])
 

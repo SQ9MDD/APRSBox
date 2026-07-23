@@ -183,7 +183,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "editor_help_lines": (
             "The exact callsign and radius conditions use AND.",
             "Callsign entries use strict matching including SSID; wildcards are not allowed.",
-            "An empty configuration is valid and forwards no packets.",
+            "Leave callsigns and radius empty to forward only traffic authorized by the Message Delivery Rule.",
         ),
         "config_fields": (
             {
@@ -2434,7 +2434,12 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
                 "filter_icon",
                 "filter_distance",
             }:
-                step_state["status"] = "rejected" if decision == "rejected" else "passed"
+                if decision == "rejected":
+                    step_state["status"] = "rejected"
+                elif decision in {"skipped", "bypassed"}:
+                    step_state["status"] = "skipped"
+                else:
+                    step_state["status"] = "passed"
                 step_state["description"] = message
             elif event_type == "output_action":
                 step_state["status"] = "executed"

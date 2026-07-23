@@ -692,9 +692,9 @@ class DigiFlowRuntimeService:
                 flow_id=flow_id,
                 step_id=step_id,
                 event_type="message_delivery",
-                decision="passed",
-                message=(
-                    "APRS-IS Message Delivery Rule passed as not applicable for this packet; "
+                decision="skipped",
+                message=_t(
+                    "APRS-IS Message Delivery Rule skipped: packet is not message traffic; "
                     "continuing to the callsign-and-radius rule."
                 ),
             )
