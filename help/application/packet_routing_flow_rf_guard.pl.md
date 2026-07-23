@@ -1,12 +1,12 @@
-# APRS-IS jako źródło i RF Guard
+# APRS-IS jako źródło — dwa Guardy
 
 Flow `APRS-IS -> RF` służy do kontrolowanego przekazania wybranych ramek z APRS-IS na fizyczny interfejs radiowy. Celem może być wyłącznie aktywny interfejs TNC z obsługą TX. Interfejs APRS-IS ani odbiornik RX-only nie mogą być celem.
 
 ## Wymagana kolejność
 
-`APRS-IS source -> RF Guard -> filtr default deny: znak + promień -> TX RF`
+`APRS-IS source -> APRS-IS Input Guard -> filtr default deny: znak + promień -> RF TX Guard -> TX RF`
 
-`RF Guard` jest automatycznie dodawany po wyborze źródła APRS-IS. Nie można go usunąć, wyłączyć, ominąć ani dodać drugi raz. Backend i runtime wymuszają ochronę również dla ręcznie zmienionych danych.
+Oba Guardy są automatycznie dodawane dla `APRS-IS -> RF`. Nie można ich usunąć, wyłączyć, ominąć, przestawić ani dodać drugi raz. Backend i runtime wymuszają tę samą ochronę również dla ręcznie zmienionych danych.
 
 ## Filtr znaku i promienia z domyślnym odrzucaniem
 
@@ -16,9 +16,13 @@ Dopasowanie znaku jest ścisłe i obejmuje SSID. `SQ9MDD` pasuje wyłącznie do 
 
 Pusta konfiguracja jest poprawnym `default deny`. Odrzucane są również pakiety bez zdekodowanej pozycji oraz wszystkie pakiety, gdy `My Station` nie ma prawidłowych współrzędnych.
 
-## Ochrona RF
+## APRS-IS Input Guard
 
-Guard zawsze wykonuje walidację APRS i q-construct, ochronę pętli, blokady `NOGATE`, `RFONLY` i `TCPXX`, normalizację duplikatów między RF i APRS-IS, viscous delay, ponowną kontrolę po opóźnieniu, limity tempa, third-party encapsulation i kontrolę długości AX.25. Sam `TCPIP` nie jest automatycznie blokowany — internetowa ścieżka wejściowa jest usuwana przed TX.
+Pierwszy Guard wykonuje walidację APRS i q-construct, ochronę pętli, blokady `NOGATE`, `RFONLY` i `TCPXX` oraz wstępną, znormalizowaną kontrolę duplikatów między RF i APRS-IS. Sam `TCPIP` nie jest automatycznie blokowany.
+
+## RF TX Guard
+
+Końcowy Guard jest umieszczony bezpośrednio przed `TX RF`. Odpowiada za viscous delay, ponowną kontrolę duplikatów po opóźnieniu, limity token bucket per-flow i per-source, gotowość celu, third-party encapsulation oraz kontrolę długości AX.25. Internetowa ścieżka wejściowa jest usuwana przed TX.
 
 Domyślne parametry to:
 

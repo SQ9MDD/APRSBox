@@ -1,12 +1,12 @@
-# APRS-IS als Quelle und RF Guard
+# APRS-IS als Quelle und zwei Guards
 
 Ein Flow `APRS-IS -> RF` leitet ausgewaehlte APRS-IS-Pakete kontrolliert an ein physisches Funkinterface weiter. Ziel darf nur ein aktives, TX-faehiges physisches TNC sein. APRS-IS und RX-only-Interfaces sind als Ziel gesperrt.
 
 ## Erforderliche Reihenfolge
 
-`APRS-IS source -> RF Guard -> Default-Deny-Filter fuer Rufzeichen + Radius -> TX RF`
+`APRS-IS source -> APRS-IS Input Guard -> Default-Deny-Filter fuer Rufzeichen + Radius -> RF TX Guard -> TX RF`
 
-`RF Guard` wird bei der Auswahl einer APRS-IS-Quelle automatisch eingefuegt. Der Block kann nicht entfernt, deaktiviert, umgangen oder doppelt hinzugefuegt werden. Backend und Runtime erzwingen den Schutz auch bei manuell veraenderten gespeicherten Daten.
+Beide Guards werden fuer `APRS-IS -> RF` automatisch eingefuegt. Sie koennen nicht entfernt, deaktiviert, umgangen, verschoben oder doppelt hinzugefuegt werden. Backend und Runtime erzwingen denselben Schutz auch bei manuell veraenderten gespeicherten Daten.
 
 ## Default-Deny-Filter fuer Rufzeichen und Radius
 
@@ -16,9 +16,13 @@ Der Rufzeichenabgleich ist strikt und umfasst die SSID. `SQ9MDD` passt nur zu `S
 
 Eine leere Konfiguration ist gueltiges `default deny`. Pakete ohne dekodierte Position sowie alle Pakete bei fehlenden gueltigen `My Station`-Koordinaten werden ebenfalls abgelehnt.
 
-## RF-Schutz
+## APRS-IS Input Guard
 
-Der Guard erzwingt APRS- und q-construct-Validierung, Loop Prevention, Sperren fuer `NOGATE`, `RFONLY` und `TCPXX`, Duplikatnormalisierung zwischen RF und APRS-IS, viscous delay, eine zweite Duplikatpruefung, Rate Limits, Third-Party-Kapselung und das AX.25-Laengenlimit. `TCPIP` allein wird nicht gesperrt; der Internetpfad wird vor TX entfernt.
+Der erste Guard erzwingt APRS- und q-construct-Validierung, Loop Prevention, Sperren fuer `NOGATE`, `RFONLY` und `TCPXX` sowie eine erste normalisierte Duplikatpruefung zwischen RF und APRS-IS. `TCPIP` allein wird nicht gesperrt.
+
+## RF TX Guard
+
+Der letzte Guard ist direkt vor `TX RF` fixiert. Er steuert viscous delay, die erneute Duplikatpruefung danach, Token-Bucket-Limits pro Flow und Quelle, Zielbereitschaft, Third-Party-Kapselung und das AX.25-Laengenlimit. Der Internetpfad wird vor TX entfernt.
 
 Standardwerte: `5 s` viscous delay, pro Flow `6 Pakete/min` mit Burst `3`, pro Quellrufzeichen `2 Pakete/min` mit Burst `2` und `30 s` Duplikatfenster. Pending-Pakete liegen nur im Speicher, werden durch eine gleiche lokale RF-Kopie abgebrochen und nach einem Neustart nicht wiederhergestellt.
 

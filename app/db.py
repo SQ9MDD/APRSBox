@@ -407,6 +407,7 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
         'filter_rate_limit',
         'filter_rate_limit_per_callsign',
         'filter_rf_guard',
+        'filter_rf_tx_guard',
         'filter_allow_rules',
         'tx_rf',
         'tx_aprsis',
@@ -818,6 +819,7 @@ def init_db() -> None:
         _migrate_digi_flows_table(connection)
         _migrate_digi_flow_steps_table(connection)
         _migrate_digi_flow_event_log_table(connection)
+        _migrate_aprsis_rf_guard_steps(connection)
         _migrate_aprsis_rf_stats_table(connection)
         _cleanup_legacy_digi_flow_tables(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
@@ -2113,6 +2115,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         "filter_rate_limit_per_callsign",
         "filter_strict",
         "filter_rf_guard",
+        "filter_rf_tx_guard",
         "filter_allow_rules",
     )
     foreign_keys = list(connection.execute("PRAGMA foreign_key_list(digi_flow_steps)").fetchall())
@@ -2142,6 +2145,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
                 'filter_rate_limit',
                 'filter_rate_limit_per_callsign',
                 'filter_rf_guard',
+                'filter_rf_tx_guard',
                 'filter_allow_rules',
                 'tx_rf',
                 'tx_aprsis',
@@ -2165,6 +2169,162 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         DROP TABLE digi_flow_steps_old;
         """
     )
+
+
+def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
+    rows = list(
+        connection.execute(
+            """
+            SELECT id, source_kind, target_kind
+            FROM digi_flows
+            WHERE source_kind = 'receiver_aprsis'
+            """
+        ).fetchall()
+    )
+    for flow in rows:
+        flow_id = int(flow["id"])
+        steps = list(
+            connection.execute(
+                """
+                SELECT id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                FROM digi_flow_steps
+                WHERE flow_id = ?
+                ORDER BY step_order ASC, id ASC
+                """,
+                (flow_id,),
+            ).fetchall()
+        )
+        if len(steps) < 2:
+            continue
+
+        input_guard = next((step for step in steps if step["step_type"] == "filter_rf_guard"), None)
+        output_guard = next((step for step in steps if step["step_type"] == "filter_rf_tx_guard"), None)
+        target_step = steps[-1]
+        changed = False
+        timestamp = utc_now()
+
+        if input_guard is None:
+            source_step = steps[0]
+            connection.execute(
+                "UPDATE digi_flow_steps SET step_order = step_order + 1000 WHERE flow_id = ? AND step_order > ?",
+                (flow_id, int(source_step["step_order"])),
+            )
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (?, ?, 'filter_rf_guard', 'APRS-IS Input Guard', 1, '{}', ?, ?)
+                """,
+                (flow_id, int(source_step["step_order"]) + 1, timestamp, timestamp),
+            )
+            changed = True
+        else:
+            legacy_config = str(input_guard["config_json"] or "{}")
+            input_changed = (
+                str(input_guard["title"] or "") != "APRS-IS Input Guard"
+                or int(input_guard["enabled"] or 0) != 1
+                or legacy_config.strip() != "{}"
+            )
+            if input_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'APRS-IS Input Guard', enabled = 1, config_json = '{}', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(input_guard["id"])),
+                )
+                changed = True
+
+        if str(flow["target_kind"] or "") == "tx_rf" and output_guard is None:
+            guard_config = (
+                str(input_guard["config_json"] or "{}")
+                if input_guard is not None and str(input_guard["config_json"] or "").strip() not in {"", "{}"}
+                else (
+                    '{"viscous_delay_sec":5,"flow_rate_per_minute":6,"flow_burst":3,'
+                    '"source_rate_per_minute":2,"source_burst":2,"duplicate_window_sec":30}'
+                )
+            )
+            target_order = int(target_step["step_order"])
+            connection.execute(
+                "UPDATE digi_flow_steps SET step_order = ? WHERE id = ?",
+                (target_order + 1000, int(target_step["id"])),
+            )
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (?, ?, 'filter_rf_tx_guard', 'RF TX Guard', 1, ?, ?, ?)
+                """,
+                (flow_id, target_order, guard_config, timestamp, timestamp),
+            )
+            changed = True
+        elif output_guard is not None:
+            output_changed = (
+                str(output_guard["title"] or "") != "RF TX Guard"
+                or int(output_guard["enabled"] or 0) != 1
+            )
+            if output_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'RF TX Guard', enabled = 1, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(output_guard["id"])),
+                )
+                changed = True
+
+        if input_guard is not None and int(steps[1]["id"]) != int(input_guard["id"]):
+            changed = True
+        if (
+            str(flow["target_kind"] or "") == "tx_rf"
+            and output_guard is not None
+            and int(steps[-2]["id"]) != int(output_guard["id"])
+        ):
+            changed = True
+
+        if not changed:
+            continue
+
+        reordered = list(
+            connection.execute(
+                """
+                SELECT id, step_type
+                FROM digi_flow_steps
+                WHERE flow_id = ?
+                ORDER BY step_order ASC, id ASC
+                """,
+                (flow_id,),
+            ).fetchall()
+        )
+        source = reordered[0]
+        target = reordered[-1]
+        middle = reordered[1:-1]
+        input_steps = [step for step in middle if step["step_type"] == "filter_rf_guard"]
+        allow_steps = [step for step in middle if step["step_type"] == "filter_allow_rules"]
+        output_steps = [step for step in middle if step["step_type"] == "filter_rf_tx_guard"]
+        ordinary_steps = [
+            step
+            for step in middle
+            if step["step_type"] not in {"filter_rf_guard", "filter_allow_rules", "filter_rf_tx_guard"}
+        ]
+        ordered = [source, *input_steps, *allow_steps, *ordinary_steps, *output_steps, target]
+        connection.execute(
+            "UPDATE digi_flow_steps SET step_order = -id WHERE flow_id = ?",
+            (flow_id,),
+        )
+        for step_order, step in enumerate(ordered, start=1):
+            connection.execute(
+                "UPDATE digi_flow_steps SET step_order = ?, updated_at = ? WHERE id = ?",
+                (step_order, timestamp, int(step["id"])),
+            )
+        connection.execute(
+            "UPDATE digi_flows SET updated_at = ? WHERE id = ?",
+            (timestamp, flow_id),
+        )
 
 
 def _migrate_digi_flow_event_log_table(connection: sqlite3.Connection) -> None:

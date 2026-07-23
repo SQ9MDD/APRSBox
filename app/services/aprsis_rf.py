@@ -11,6 +11,7 @@ from app.services.mqtt_url import TX_CAPABLE_MODEM_TYPES
 
 APRSIS_FLOW_SOURCE_KIND = "receiver_aprsis"
 RF_GUARD_STEP_TYPE = "filter_rf_guard"
+RF_TX_GUARD_STEP_TYPE = "filter_rf_tx_guard"
 ALLOW_RULES_STEP_TYPE = "filter_allow_rules"
 
 RF_GUARD_DEFAULTS: dict[str, int] = {

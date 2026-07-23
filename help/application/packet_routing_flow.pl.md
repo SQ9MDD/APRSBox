@@ -15,7 +15,7 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 - `Odbiornik RF -> TX APRS-IS` - klasyczny uplink iGate z eteru do APRS-IS.
 - `Odbiornik RF -> TX RF` - klasyczna ścieżka digipeatera pracującego w radiu.
 - `Local TX -> TX APRS-IS` - wysyłka ramek generowanych lokalnie przez APRSBox, takich jak beacon, pogoda, obiekty, itemy, biuletyny i wiadomości.
-- `APRS-IS -> RF Guard -> TX RF` - bezpieczne, domyślnie blokujące przekazanie jawnie dopuszczonych ramek z sieci na fizyczny TNC.
+- `APRS-IS -> Input Guard -> default deny -> RF TX Guard -> TX RF` - bezpieczne przekazanie jawnie dopuszczonych ramek z sieci na fizyczny TNC.
 - `... -> Black Hole` - diagnostyka, testy i budowa reguły bez dalszego nadawania.
 
 ## Jak budować regułę
@@ -55,4 +55,4 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 - `TX APRS-IS` wymaga bloku `Filtr ścisły`.
 - `TX RF` wymaga bloku `Reguła ścieżki i ochrona DIGI`.
 - `Local TX` może kończyć się tylko na `TX APRS-IS` albo `Black Hole`.
-- Flow ze źródłem `APRS-IS` automatycznie otrzymuje obowiązkowy `RF Guard` i ścisły filtr znaku oraz promienia z domyślnym odrzucaniem. Znak i promień łączą się jako `AND`; pusta konfiguracja nie przepuszcza żadnych ramek.
+- Flow `APRS-IS -> RF` automatycznie otrzymuje obowiązkowe Guardy wejścia i TX RF po obu stronach ścisłego filtra znaku oraz promienia z domyślnym odrzucaniem. Znak i promień łączą się jako `AND`; pusta konfiguracja nie przepuszcza żadnych ramek.

@@ -15,7 +15,7 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 - `Receptor RF -> TX APRS-IS` - subida clásica de iGate desde RF hacia APRS-IS.
 - `Receptor RF -> TX RF` - camino clásico de digipeater en radio.
 - `TX local -> TX APRS-IS` - tramas generadas localmente como balizas, meteo, objetos, items, boletines y mensajes.
-- `APRS-IS -> RF Guard -> TX RF` - reenvía de forma segura paquetes de red permitidos explícitamente a un TNC físico con política default-deny.
+- `APRS-IS -> Input Guard -> default deny -> RF TX Guard -> TX RF` - reenvía de forma segura paquetes de red permitidos explícitamente a un TNC físico.
 - `... -> Agujero negro` - diagnóstico, pruebas y validación de reglas sin reenvío.
 
 ## Cómo construir una regla
@@ -55,4 +55,4 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 - `TX APRS-IS` requiere el bloque `Filtro estricto`.
 - `TX RF` requiere el bloque `Regla de trayectoria y protección DIGI`.
 - `TX local` solo puede terminar en `TX APRS-IS` o `Agujero negro`.
-- Un origen `APRS-IS` recibe automáticamente el `RF Guard` obligatorio y el filtro estricto default-deny de indicativo y radio. El indicativo y el radio usan `AND`; una configuración vacía no reenvía paquetes.
+- Un flujo `APRS-IS -> RF` recibe automáticamente guards obligatorios de entrada y RF TX alrededor del filtro estricto default-deny de indicativo y radio. El indicativo y el radio usan `AND`; una configuración vacía no reenvía paquetes.

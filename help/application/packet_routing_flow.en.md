@@ -15,7 +15,7 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 - `Receiver RF -> TX APRS-IS` - classic iGate uplink from RF to APRS-IS.
 - `Receiver RF -> TX RF` - classic digipeater path on radio.
 - `Local TX -> TX APRS-IS` - locally generated frames such as beacons, weather, objects, items, bulletins, and messages.
-- `APRS-IS -> RF Guard -> TX RF` - safely forwards explicitly allowed network packets to a physical TNC with a default-deny policy.
+- `APRS-IS -> Input Guard -> default deny -> RF TX Guard -> TX RF` - safely forwards explicitly allowed network packets to a physical TNC.
 - `... -> Black Hole` - diagnostics, dry runs, and rule testing without forwarding.
 
 ## How to build a rule
@@ -55,4 +55,4 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 - `TX APRS-IS` requires the `Strict Filter` block.
 - `TX RF` requires the `Path rule and DIGI guard` block.
 - `Local TX` can end only in `TX APRS-IS` or `Black Hole`.
-- An `APRS-IS` source automatically receives the mandatory `RF Guard` and strict callsign-and-radius default-deny filter. Callsign and radius use `AND`; an empty configuration forwards no packets.
+- An `APRS-IS -> RF` flow automatically receives mandatory input and RF TX guards around the strict callsign-and-radius default-deny filter. Callsign and radius use `AND`; an empty configuration forwards no packets.

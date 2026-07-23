@@ -91,6 +91,7 @@ def aprsis_rf_payload(
     radius_km: str = "",
     guard_config: dict | None = None,
     include_guard: bool = True,
+    include_tx_guard: bool = True,
     include_allow: bool = True,
     enabled: int = 1,
     target_kind: str = "tx_rf",
@@ -108,9 +109,9 @@ def aprsis_rf_payload(
         steps.append(
             {
                 "step_type": "filter_rf_guard",
-                "title": "RF Guard",
+                "title": "APRS-IS Input Guard",
                 "enabled": 0,
-                "config": guard_config or dict(RF_GUARD_DEFAULTS),
+                "config": {},
             }
         )
     if include_allow:
@@ -126,6 +127,15 @@ def aprsis_rf_payload(
             }
         )
     if target_kind == "tx_rf":
+        if include_tx_guard:
+            steps.append(
+                {
+                    "step_type": "filter_rf_tx_guard",
+                    "title": "RF TX Guard",
+                    "enabled": 0,
+                    "config": guard_config or dict(RF_GUARD_DEFAULTS),
+                }
+            )
         steps.append(
             {
                 "step_type": "tx_rf",
@@ -191,6 +201,7 @@ class AprsisRfModelTests(unittest.TestCase):
             self.assertIn("tx_rf::RF-OUT", aprsis_targets)
             self.assertNotIn("tx_aprsis::aprsis", aprsis_targets)
             self.assertIn("filter_rf_guard", get_digi_flow_type_meta())
+            self.assertIn("filter_rf_tx_guard", get_digi_flow_type_meta())
             default_deny_meta = get_digi_flow_type_meta()["filter_allow_rules"]
             self.assertEqual(default_deny_meta["label"], "APRS-IS Default Deny Filter")
             self.assertEqual(
@@ -200,8 +211,9 @@ class AprsisRfModelTests(unittest.TestCase):
 
         template = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
         self.assertIn("filter_rf_guard", template)
+        self.assertIn("filter_rf_tx_guard", template)
         self.assertIn("rfGuardSystemManaged", template)
-        self.assertIn("deleteButton.disabled = stepCategory(step.step_type) !== \"filter\" || aprsisLockedFlow || aprsisSourceSystemStep", template)
+        self.assertIn("const aprsisSourceSystemStep = isAprsisSourceFlow() && isAprsisSourceSystemStepType", template)
         self.assertNotIn("data.allowRulesEmpty", template.replace("dataset", "data"))
         self.assertNotIn("data.addAllowRule", template.replace("dataset", "data"))
         self.assertNotIn('["packet_type", i18n.packetType', template)
@@ -219,16 +231,28 @@ class AprsisRfModelTests(unittest.TestCase):
             insert_interface("APRSIS-RX", "APRSIS")
             insert_interface("RF-OUT", "TCP")
             normalized = normalize_digi_flow_payload(
-                aprsis_rf_payload(include_guard=False, include_allow=False)
+                aprsis_rf_payload(include_guard=False, include_tx_guard=False, include_allow=False)
             )
             types = [step["step_type"] for step in normalized["steps"]]
-            self.assertEqual(types, ["receiver_aprsis", "filter_rf_guard", "filter_allow_rules", "tx_rf"])
-            guard = normalized["steps"][1]
-            self.assertEqual(guard["enabled"], 1)
-            self.assertEqual(guard["config"], RF_GUARD_DEFAULTS)
+            self.assertEqual(
+                types,
+                [
+                    "receiver_aprsis",
+                    "filter_rf_guard",
+                    "filter_allow_rules",
+                    "filter_rf_tx_guard",
+                    "tx_rf",
+                ],
+            )
+            input_guard = normalized["steps"][1]
+            self.assertEqual(input_guard["enabled"], 1)
+            self.assertEqual(input_guard["config"], {})
             self.assertEqual(normalized["steps"][2]["config"], {"callsigns": [], "radius_km": ""})
+            self.assertEqual(normalized["steps"][3]["config"], RF_GUARD_DEFAULTS)
 
-            flow_id = create_digi_flow(aprsis_rf_payload(include_guard=False, include_allow=False))
+            flow_id = create_digi_flow(
+                aprsis_rf_payload(include_guard=False, include_tx_guard=False, include_allow=False)
+            )
             set_digi_flow_enabled(flow_id, True)
             self.assertEqual(int(get_digi_flow(flow_id)["enabled"]), 1)
 
@@ -241,11 +265,17 @@ class AprsisRfModelTests(unittest.TestCase):
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["steps"][1]["step_type"], "filter_rf_guard")
             self.assertEqual(normalized["steps"][2]["step_type"], "filter_allow_rules")
+            self.assertEqual(normalized["steps"][-2]["step_type"], "filter_rf_tx_guard")
 
             duplicate = aprsis_rf_payload()
             duplicate["steps"].insert(2, dict(duplicate["steps"][1]))
-            with self.assertRaisesRegex(ValueError, "only one RF Guard"):
+            with self.assertRaisesRegex(ValueError, "only one Input Guard"):
                 normalize_digi_flow_payload(duplicate)
+
+            duplicate_tx_guard = aprsis_rf_payload()
+            duplicate_tx_guard["steps"].insert(-1, dict(duplicate_tx_guard["steps"][-2]))
+            with self.assertRaisesRegex(ValueError, "only one RF TX Guard"):
+                normalize_digi_flow_payload(duplicate_tx_guard)
 
             non_aprs = aprsis_rf_payload()
             non_aprs.update(source_kind="receiver_rf", source_ref="RF-IN")
@@ -293,7 +323,7 @@ class AprsisRfModelTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "invalid address"):
                 normalize_digi_flow_payload(invalid_path)
 
-    def test_editor_repairs_missing_guard_without_changing_database_or_rules(self) -> None:
+    def test_editor_repairs_missing_guards_without_changing_database_or_rules(self) -> None:
         with temporary_database():
             insert_interface("APRSIS-RX", "APRSIS")
             insert_interface("RF-OUT", "TCP")
@@ -307,12 +337,63 @@ class AprsisRfModelTests(unittest.TestCase):
             flow = get_digi_flow(flow_id)
             editor = build_digi_flow_editor_payload(flow)
             self.assertEqual(editor["steps"][1]["step_type"], "filter_rf_guard")
+            self.assertEqual(editor["steps"][-2]["step_type"], "filter_rf_tx_guard")
             allow = next(step for step in editor["steps"] if step["step_type"] == "filter_allow_rules")
             self.assertEqual(allow["config"], filter_config)
             self.assertIsNone(fetch_one(
                 "SELECT id FROM digi_flow_steps WHERE flow_id = ? AND step_type = 'filter_rf_guard'",
                 (flow_id,),
             ))
+
+    def test_database_migrates_legacy_combined_guard_to_two_ordered_guards(self) -> None:
+        with temporary_database():
+            insert_interface("APRSIS-RX", "APRSIS")
+            insert_interface("RF-OUT", "TCP")
+            flow_id = create_digi_flow(aprsis_rf_payload())
+            legacy_config = {
+                **RF_GUARD_DEFAULTS,
+                "flow_rate_per_minute": 9,
+                "source_rate_per_minute": 4,
+            }
+            execute(
+                """
+                UPDATE digi_flow_steps
+                SET title = 'RF Guard', config_json = ?
+                WHERE flow_id = ? AND step_type = 'filter_rf_guard'
+                """,
+                (json.dumps(legacy_config), flow_id),
+            )
+            execute(
+                "DELETE FROM digi_flow_steps WHERE flow_id = ? AND step_type = 'filter_rf_tx_guard'",
+                (flow_id,),
+            )
+
+            init_db()
+
+            flow = get_digi_flow(flow_id)
+            self.assertEqual(
+                [step["step_type"] for step in flow["steps"]],
+                [
+                    "receiver_aprsis",
+                    "filter_rf_guard",
+                    "filter_allow_rules",
+                    "filter_rf_tx_guard",
+                    "tx_rf",
+                ],
+            )
+            self.assertEqual(flow["steps"][1]["title"], "APRS-IS Input Guard")
+            self.assertEqual(flow["steps"][1]["config"], {})
+            self.assertEqual(flow["steps"][3]["title"], "RF TX Guard")
+            self.assertEqual(flow["steps"][3]["config"], legacy_config)
+            migrated_updated_at = flow["updated_at"]
+
+            init_db()
+            idempotent_flow = get_digi_flow(flow_id)
+            self.assertEqual(idempotent_flow["updated_at"], migrated_updated_at)
+            self.assertEqual(
+                sum(1 for step in idempotent_flow["steps"] if step["step_type"] == "filter_rf_tx_guard"),
+                1,
+            )
 
 
 class AprsisRfRuleAndProtocolTests(unittest.TestCase):
@@ -499,10 +580,11 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summaries[0]["final_result"], "TX")
         self.assertEqual(
             [step["status"] for step in summaries[0]["steps"]],
-            ["passed", "passed", "passed", "executed"],
+            ["passed", "passed", "passed", "passed", "executed"],
         )
-        self.assertIn("RF Guard input phase passed", summaries[0]["steps"][1]["description"])
+        self.assertIn("APRS-IS Input Guard passed", summaries[0]["steps"][1]["description"])
         self.assertIn("default-deny filter matched exact callsign AND radius", summaries[0]["steps"][2]["description"])
+        self.assertIn("RF TX Guard passed final", summaries[0]["steps"][3]["description"])
 
     async def test_execution_summary_marks_rejected_default_deny_step_as_reached(self) -> None:
         flow_id = self.create_flow(callsigns=[], radius_km="")
@@ -514,9 +596,40 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summaries[0]["final_result"], "REJECTED")
         self.assertEqual(
             [step["status"] for step in summaries[0]["steps"]],
-            ["passed", "passed", "rejected", "not_reached"],
+            ["passed", "passed", "rejected", "not_reached", "not_reached"],
         )
         self.assertIn("default_deny_filter_mismatch", summaries[0]["steps"][2]["description"])
+
+    async def test_tx_queue_failure_happens_after_rf_tx_guard_passes(self) -> None:
+        flow_id = self.create_flow()
+        with patch(
+            "app.services.digi_flow_runtime.enqueue_digi_tx_job",
+            return_value=(False, "queue_unavailable"),
+        ):
+            _runtime, _frames = await self.run_lines(position_line(text="queue failure"))
+
+        summary = get_digi_flow_execution_summaries(flow_id)[0]
+        self.assertEqual(summary["final_result"], "DROPPED")
+        self.assertEqual(summary["steps"][-2]["status"], "passed")
+        self.assertIn("RF TX Guard passed final", summary["steps"][-2]["description"])
+        self.assertEqual(summary["steps"][-1]["status"], "executed")
+        self.assertIn("queue_unavailable", summary["steps"][-1]["description"])
+        self.assertEqual(get_aprsis_rf_stats(flow_id)["tx_failed"], 1)
+
+    async def test_invalid_input_marks_receiver_reached_before_input_guard_rejects(self) -> None:
+        flow_id = self.create_flow()
+        _runtime, frames = await self.run_lines(
+            "SN5S-S>APDG01,TCPIP*,qAC,SN5S-GS:;SN5S B *231306z5213.77NW02057.15EiRNG0001"
+        )
+
+        summary = get_digi_flow_execution_summaries(flow_id)[0]
+        self.assertEqual(summary["frame_uid"], frames[0]["frame_uid"])
+        self.assertEqual(summary["final_result"], "REJECTED")
+        self.assertEqual(
+            [step["status"] for step in summary["steps"]],
+            ["passed", "rejected", "not_reached", "not_reached", "not_reached"],
+        )
+        self.assertIn("invalid_aprs", summary["steps"][1]["description"])
 
     async def test_existing_outbound_transport_records_separate_transmit_stat_and_source_kind(self) -> None:
         flow_id = self.create_flow()
@@ -623,6 +736,15 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(get_aprsis_rf_stats(flow_id)["dropped_rate_limit"], 1)
         self.assertEqual(int(fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")["total"]), 1)
+        rejected = next(
+            summary
+            for summary in get_digi_flow_execution_summaries(flow_id)
+            if summary["final_result"] == "REJECTED"
+        )
+        self.assertEqual(rejected["steps"][-2]["step_type"], "filter_rf_tx_guard")
+        self.assertEqual(rejected["steps"][-2]["status"], "rejected")
+        self.assertIn("rate_limit_flow", rejected["steps"][-2]["description"])
+        self.assertEqual(rejected["steps"][-1]["status"], "not_reached")
 
         execute("DELETE FROM outbound_jobs")
         execute("DELETE FROM digi_flow_steps WHERE flow_id = ?", (flow_id,))

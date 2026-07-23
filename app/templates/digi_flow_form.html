@@ -12,7 +12,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and a strict callsign-and-radius default-deny filter.") }}</p>
+                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRS-IS to RF uses mandatory input and RF TX guards around a strict callsign-and-radius default-deny filter.") }}</p>
             </div>
             <button
                 class="help-icon-button page-help-button"
@@ -24,7 +24,7 @@
                 <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
             </button>
         </div>
-        <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF receiver to RF target flows require an enabled Path Rule step. APRS-IS source flows use the mandatory RF Guard.") }}</div>
+        <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF receiver to RF target flows require an enabled Path Rule step. APRS-IS to RF flows use mandatory Input Guard and RF TX Guard steps.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -375,7 +375,8 @@
             distanceFilterUsed: {{ t("Distance filter is already used in this flow.")|tojson }},
             latitude: {{ t("Latitude")|tojson }},
             longitude: {{ t("Longitude")|tojson }},
-            rfGuardSystemManaged: {{ t("RF Guard is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
+            rfGuardSystemManaged: {{ t("APRS-IS Input Guard is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
+            rfTxGuardSystemManaged: {{ t("RF TX Guard is mandatory, system-managed, and fixed immediately before TX RF.")|tojson }},
             allowRulesSystemManaged: {{ t("The APRS-IS default-deny filter is mandatory and system-managed; an empty configuration denies every packet.")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
@@ -394,7 +395,8 @@
             filter_distance: ["Distance Filter"],
             filter_rate_limit: ["Rate Limit Filter"],
             filter_rate_limit_per_callsign: ["Rate Limit Per Callsign"],
-            filter_rf_guard: ["RF Guard"],
+            filter_rf_guard: ["RF Guard", "APRS-IS Input Guard"],
+            filter_rf_tx_guard: ["RF TX Guard"],
             filter_allow_rules: ["Inclusive Allow Rules", "APRS-IS Default Deny Filter"],
             tx_rf: ["TX RF"],
             tx_aprsis: ["TX APRS-IS"],
@@ -469,7 +471,8 @@
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
             if (stepType === "receiver_local_tx") return { local_tx_source: refValue || "local_tx" };
-            if (stepType === "filter_rf_guard") return {
+            if (stepType === "filter_rf_guard") return {};
+            if (stepType === "filter_rf_tx_guard") return {
                 viscous_delay_sec: 5,
                 flow_rate_per_minute: 6,
                 flow_burst: 3,
@@ -540,7 +543,10 @@
             if (step.step_type === "receiver_aprsis") return `${i18n.aprsisSource}: ${config.aprsis_source || "-"}`;
             if (step.step_type === "receiver_local_tx") return i18n.localTxFrames;
             if (step.step_type === "filter_rf_guard") {
-                return `loop prevention · duplicate suppression · delay ${config.viscous_delay_sec || 5}s · rate limits · third-party`;
+                return "APRS/q validation · loop prevention · initial duplicate check";
+            }
+            if (step.step_type === "filter_rf_tx_guard") {
+                return `final duplicate check · delay ${config.viscous_delay_sec || 5}s · rate limits · third-party`;
             }
             if (step.step_type === "filter_allow_rules") {
                 return `${i18n.callsigns}: ${Array.isArray(config.callsigns) ? config.callsigns.length : 0} · ${i18n.radiusKm}: ${config.radius_km || "-"} · AND · default deny`;
@@ -604,7 +610,11 @@
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
         const isRateLimitStepType = (stepType) => stepType === "filter_rate_limit";
         const isRfGuardStepType = (stepType) => stepType === "filter_rf_guard";
+        const isRfTxGuardStepType = (stepType) => stepType === "filter_rf_tx_guard";
         const isAllowRulesStepType = (stepType) => stepType === "filter_allow_rules";
+        const isAprsisSourceSystemStepType = (stepType) => (
+            isRfGuardStepType(stepType) || isRfTxGuardStepType(stepType) || isAllowRulesStepType(stepType)
+        );
         const isTxRfTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_rf";
         const isAprsisSourceFlow = () => String(sourceKindInput.value || "").trim() === "receiver_aprsis";
         const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && !isAprsisSourceFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
@@ -656,18 +666,29 @@
             if (!isAprsisSourceFlow()) {
                 steps = [
                     sourceStep,
-                    ...middle.filter((step) => !isRfGuardStepType(step.step_type) && !isAllowRulesStepType(step.step_type)),
+                    ...middle.filter((step) => !isAprsisSourceSystemStepType(step.step_type)),
                     targetStep,
                 ];
                 return;
             }
             const existingGuard = middle.find((step) => isRfGuardStepType(step.step_type));
+            const existingTxGuard = middle.find((step) => isRfTxGuardStepType(step.step_type));
             const existingAllowRules = middle.find((step) => isAllowRulesStepType(step.step_type));
-            const guard = existingGuard ? { ...existingGuard, config: { ...defaultConfig("filter_rf_guard"), ...(existingGuard.config || {}) } } : {
+            const legacyGuardConfig = (existingGuard || {}).config || {};
+            const guard = existingGuard ? { ...existingGuard, config: {} } : {
                 step_type: "filter_rf_guard",
                 title: stepLabel("filter_rf_guard"),
                 enabled: 1,
                 config: defaultConfig("filter_rf_guard"),
+            };
+            const txGuard = existingTxGuard ? {
+                ...existingTxGuard,
+                config: { ...defaultConfig("filter_rf_tx_guard"), ...(existingTxGuard.config || {}) },
+            } : {
+                step_type: "filter_rf_tx_guard",
+                title: stepLabel("filter_rf_tx_guard"),
+                enabled: 1,
+                config: { ...defaultConfig("filter_rf_tx_guard"), ...legacyGuardConfig },
             };
             const existingDefaultDenyConfig = (existingAllowRules || {}).config || {};
             const allowRules = existingAllowRules ? {
@@ -686,10 +707,14 @@
             };
             guard.title = stepLabel("filter_rf_guard");
             guard.enabled = 1;
+            guard.config = {};
+            txGuard.title = stepLabel("filter_rf_tx_guard");
+            txGuard.enabled = 1;
             allowRules.title = stepLabel("filter_allow_rules");
             allowRules.enabled = 1;
-            const ordinary = middle.filter((step) => !isRfGuardStepType(step.step_type) && !isAllowRulesStepType(step.step_type));
-            steps = [sourceStep, guard, allowRules, ...ordinary, targetStep];
+            const ordinary = middle.filter((step) => !isAprsisSourceSystemStepType(step.step_type));
+            const txGuardSteps = isTxRfTargetFlow() ? [txGuard] : [];
+            steps = [sourceStep, guard, allowRules, ...ordinary, ...txGuardSteps, targetStep];
         };
 
         const enforceTxRfFlowRestrictions = () => {
@@ -723,12 +748,17 @@
             const aprsisSource = isAprsisSourceFlow();
             for (const button of paletteButtons) {
                 const stepType = button.dataset.stepType || "";
-                if (isRfGuardStepType(stepType) || isAllowRulesStepType(stepType)) {
+                if (isAprsisSourceSystemStepType(stepType)) {
                     button.disabled = true;
-                    const message = isRfGuardStepType(stepType) ? i18n.rfGuardSystemManaged : i18n.allowRulesSystemManaged;
+                    const message = isRfGuardStepType(stepType)
+                        ? i18n.rfGuardSystemManaged
+                        : (isRfTxGuardStepType(stepType) ? i18n.rfTxGuardSystemManaged : i18n.allowRulesSystemManaged);
                     button.title = message;
                     button.setAttribute("aria-label", message);
-                    button.classList.toggle("is-required", aprsisSource);
+                    button.classList.toggle(
+                        "is-required",
+                        aprsisSource && (!isRfTxGuardStepType(stepType) || isTxRfTargetFlow()),
+                    );
                     continue;
                 }
                 if (aprsisTarget) {
@@ -1500,7 +1530,7 @@
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
                 const aprsisLockedFlow = isAprsisTargetFlow();
-                const aprsisSourceSystemStep = isAprsisSourceFlow() && (isRfGuardStepType(step.step_type) || isAllowRulesStepType(step.step_type));
+                const aprsisSourceSystemStep = isAprsisSourceFlow() && isAprsisSourceSystemStepType(step.step_type);
                 const txRfLockedStep = isFixedTxRfStepType(step.step_type);
                 const previousStepType = String((steps[index - 1] || {}).step_type || "").trim();
                 const nextStepType = String((steps[index + 1] || {}).step_type || "").trim();
@@ -1654,7 +1684,11 @@
                         lockedNote.className = "full muted small";
                         lockedNote.textContent = isRfGuardStepType(step.step_type)
                             ? i18n.rfGuardSystemManaged
-                            : (isAllowRulesStepType(step.step_type) ? i18n.allowRulesSystemManaged : i18n.aprsisSystemFlowLocked);
+                            : (
+                                isRfTxGuardStepType(step.step_type)
+                                    ? i18n.rfTxGuardSystemManaged
+                                    : (isAllowRulesStepType(step.step_type) ? i18n.allowRulesSystemManaged : i18n.aprsisSystemFlowLocked)
+                            );
                         editor.appendChild(lockedNote);
                     }
 
@@ -1756,7 +1790,7 @@
                 if (isAprsisTargetFlow() || stepType === "filter_strict") {
                     return;
                 }
-                if (isRfGuardStepType(stepType) || isAllowRulesStepType(stepType)) {
+                if (isAprsisSourceSystemStepType(stepType)) {
                     return;
                 }
                 if (isRateLimitStepType(stepType) && !isTxRfTargetFlow()) {
