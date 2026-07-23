@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.55.dev - 2026-07-23
+- `iGate / Nachrichten`: die obligatorische Zustellregel verwendet automatisch alle aktiven TNCs mit erlaubtem TX; geeignete Nachrichten und die zugehoerige Absenderposition umgehen die Rufzeichen- und Radiusregel.
+
 ## 1.8.54.dev - 2026-07-23
 - `APRS-IS / Routing`: APRS-IS wurde als Interface sowie sicheres Routing `APRS-IS → RF` hinzugefügt.
 - `iGate / Nachrichten`: bidirektionales APRS-Nachrichten-Gating mit lokaler Erreichbarkeitsprüfung und korrektem `qAR`/`qAO` wurde hinzugefügt.
