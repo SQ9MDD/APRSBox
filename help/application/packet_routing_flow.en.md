@@ -34,6 +34,7 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 ## Filter and rule blocks
 
 - [APRS-IS Uplink Safety Rule](packet_routing_flow_strict_filter.en.md)
+- [APRS-IS Message Delivery Rule](packet_routing_flow_aprsis_message_delivery_rule.en.md)
 - [APRS-IS Callsign and Radius Rule](packet_routing_flow_aprsis_callsign_radius_rule.en.md)
 - [RF Digipeating Path Rule](packet_routing_flow_path_rule_and_digi_guard.en.md)
 - [RF Duplicate Delay Filter](packet_routing_flow_duplicate_filter.en.md)
@@ -56,4 +57,4 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 - `TX APRS-IS` requires the `APRS-IS Uplink Safety Rule`.
 - RF-to-RF transmission requires the `RF Digipeating Path Rule`.
 - `Local TX` can end only in `TX APRS-IS` or `Black Hole`.
-- An `APRS-IS → RF` flow contains exactly three mandatory system rules. Optional filters cannot be added. Callsign and radius use `AND`; an empty configuration forwards no packets.
+- An `APRS-IS → RF` flow contains exactly four mandatory system rules. Optional filters cannot be added. Directed traffic to a recently heard local RF station can be admitted by the message-delivery rule; other traffic requires callsign **and** radius, and an empty configuration forwards no other packets.

@@ -34,6 +34,7 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 ## Filter- und Regelblöcke
 
 - [APRS-IS-Uplink-Sicherheitsregel](packet_routing_flow_strict_filter.de.md)
+- [APRS-IS-Nachrichten-Zustellregel](packet_routing_flow_aprsis_message_delivery_rule.de.md)
 - [APRS-IS-Rufzeichen- und Radiusregel](packet_routing_flow_aprsis_callsign_radius_rule.de.md)
 - [RF-Digipeating-Pfadregel](packet_routing_flow_path_rule_and_digi_guard.de.md)
 - [RF-Duplikatverzögerungsfilter](packet_routing_flow_duplicate_filter.de.md)
@@ -56,4 +57,4 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 - `TX APRS-IS` erfordert die `APRS-IS-Uplink-Sicherheitsregel`.
 - RF-zu-RF-Übertragung erfordert die `RF-Digipeating-Pfadregel`.
 - `Local TX` kann nur in `TX APRS-IS` oder `Black Hole` enden.
-- Ein `APRS-IS → RF`-Flow enthält genau drei obligatorische Systemregeln. Optionale Filter können nicht hinzugefügt werden. Rufzeichen und Radius sind mit `AND` verknüpft; eine leere Konfiguration leitet keine Pakete weiter.
+- Ein `APRS-IS → RF`-Flow enthält genau vier obligatorische Systemregeln. Optionale Filter können nicht hinzugefügt werden. Adressierter Verkehr zu einer kürzlich lokal über RF gehörten Station kann durch die Nachrichtenzustellregel zugelassen werden; anderer Verkehr benötigt Rufzeichen **und** Radius, und eine leere Konfiguration leitet keine weiteren Pakete weiter.

@@ -6,7 +6,7 @@ Flow `APRS-IS -> RF` służy do kontrolowanego przekazania wybranych ramek z APR
 
 `Źródło APRS-IS -> Reguła bezpieczeństwa wejścia APRS-IS -> Reguła znaku i promienia APRS-IS -> Reguła bezpieczeństwa TX APRS-IS → RF -> TX RF`
 
-Wszystkie trzy reguły są automatycznie dodawane dla `APRS-IS → RF`. Nie można ich usunąć, wyłączyć, ominąć, przestawić ani dodać drugi raz. Do tego restrykcyjnego flow nie można dodać żadnego opcjonalnego filtra. Backend i runtime wymuszają tę samą ochronę również dla ręcznie zmienionych danych.
+Wszystkie cztery reguły są automatycznie dodawane dla `APRS-IS → RF`. Nie można ich usunąć, wyłączyć, ominąć, przestawić ani dodać drugi raz. Do tego restrykcyjnego flow nie można dodać żadnego opcjonalnego filtra. Backend i runtime wymuszają tę samą ochronę również dla ręcznie zmienionych danych.
 
 ## Reguła znaku i promienia APRS-IS
 

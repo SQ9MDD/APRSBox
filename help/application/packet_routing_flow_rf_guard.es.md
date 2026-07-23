@@ -6,7 +6,7 @@ Un flow `APRS-IS -> RF` reenvia paquetes APRS-IS seleccionados a una interfaz de
 
 `Origen APRS-IS -> Regla de seguridad de entrada APRS-IS -> Regla APRS-IS de indicativo y radio -> Regla de seguridad TX APRS-IS → RF -> TX RF`
 
-Las tres reglas se añaden automáticamente para `APRS-IS → RF`. No se pueden eliminar, desactivar, evitar, reordenar ni duplicar. No se puede añadir ningún filtro opcional a este flujo restringido. Backend y runtime aplican la misma protección incluso si los datos guardados se modifican manualmente.
+Las cuatro reglas se añaden automáticamente para `APRS-IS → RF`. No se pueden eliminar, desactivar, evitar, reordenar ni duplicar. No se puede añadir ningún filtro opcional a este flujo restringido. Backend y runtime aplican la misma protección incluso si los datos guardados se modifican manualmente.
 
 ## Regla APRS-IS de indicativo y radio
 

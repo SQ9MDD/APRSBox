@@ -12,10 +12,13 @@ from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.aprsis_rf import (
     ALLOW_RULES_STEP_TYPE,
     APRSIS_FLOW_SOURCE_KIND,
+    MESSAGE_DELIVERY_DEFAULTS,
+    MESSAGE_DELIVERY_STEP_TYPE,
     RF_GUARD_DEFAULTS,
     RF_GUARD_STEP_TYPE,
     RF_TX_GUARD_STEP_TYPE,
     normalize_default_deny_config,
+    normalize_message_delivery_config,
     normalize_outbound_rf_path,
     normalize_rf_guard_config,
     validate_aprsis_source,
@@ -28,6 +31,7 @@ LOCAL_TX_SOURCE_REF = "local_tx"
 SOURCE_STEP_TYPES = ("receiver_rf", APRSIS_FLOW_SOURCE_KIND, LOCAL_TX_SOURCE_KIND)
 FILTER_STEP_TYPES = (
     RF_GUARD_STEP_TYPE,
+    MESSAGE_DELIVERY_STEP_TYPE,
     ALLOW_RULES_STEP_TYPE,
     RF_TX_GUARD_STEP_TYPE,
     "filter_path",
@@ -48,6 +52,7 @@ APRSIS_ALLOWED_SOURCE_KINDS = {"receiver_rf", LOCAL_TX_SOURCE_KIND}
 APRSIS_SOURCE_ALLOWED_TARGET_KINDS = {"tx_rf", "action_drop", "action_log"}
 APRSIS_TO_RF_SYSTEM_STEP_TYPES = {
     RF_GUARD_STEP_TYPE,
+    MESSAGE_DELIVERY_STEP_TYPE,
     ALLOW_RULES_STEP_TYPE,
     RF_TX_GUARD_STEP_TYPE,
 }
@@ -74,6 +79,7 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     APRSIS_FLOW_SOURCE_KIND,
     LOCAL_TX_SOURCE_KIND,
     RF_GUARD_STEP_TYPE,
+    MESSAGE_DELIVERY_STEP_TYPE,
     RF_TX_GUARD_STEP_TYPE,
     ALLOW_RULES_STEP_TYPE,
     "filter_dupe",
@@ -127,6 +133,56 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
             "An initial duplicate check prevents rejected network traffic from entering the flow.",
         ),
         "config_fields": (),
+    },
+    MESSAGE_DELIVERY_STEP_TYPE: {
+        "category": "filter",
+        "label": "APRS-IS Message Delivery Rule",
+        "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS → RF",
+        "scope_tone": "aprsis-to-rf",
+        "description": "Delivers messages, acknowledgements and associated sender positions only to recently heard local RF stations.",
+        "help_page": "application/packet_routing_flow_aprsis_message_delivery_rule",
+        "editor_help_lines": (
+            "Messages use the exact addressee including SSID and do not depend on the callsign-and-radius rule.",
+            "The recipient must have been heard recently on one of the configured local RF sources.",
+            "An empty RF source list uses the target RF interface.",
+        ),
+        "config_fields": (
+            {
+                "name": "rf_sources",
+                "label": "Local RF listening sources (one per line)",
+                "type": "textarea",
+                "required": False,
+                "placeholder": "TNC-1",
+                "help_lines": (
+                    "Leave empty to use the target RF interface.",
+                    "Only stations heard through these RF sources are eligible for message delivery.",
+                ),
+            },
+            {
+                "name": "heard_window_minutes",
+                "label": "Local heard validity (minutes)",
+                "type": "number",
+                "required": True,
+                "min": "5",
+                "max": "60",
+                "step": "5",
+            },
+            {
+                "name": "max_consumed_hops",
+                "label": "Maximum consumed DIGI hops",
+                "type": "number",
+                "required": True,
+                "min": "0",
+                "max": "2",
+                "step": "1",
+                "help_lines": (
+                    "0 means direct RF reception only.",
+                    "Use the minimum value needed for the intended local coverage.",
+                ),
+            },
+        ),
     },
     RF_TX_GUARD_STEP_TYPE: {
         "category": "filter",
@@ -530,6 +586,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
 
 LEGACY_DEFAULT_STEP_TITLES = {
     RF_GUARD_STEP_TYPE: {"RF Guard", "APRS-IS Input Guard"},
+    MESSAGE_DELIVERY_STEP_TYPE: {"APRS-IS Message Delivery Rule"},
     RF_TX_GUARD_STEP_TYPE: {"RF TX Guard"},
     ALLOW_RULES_STEP_TYPE: {"Inclusive Allow Rules", "APRS-IS Default Deny Filter", "Filtr APRS-IS — domyślne odrzucanie"},
     "filter_path": {"Path Filter", "Path Rule", "Path rule and DIGI guard", "Reguła ścieżki", "Reguła ścieżki i ochrona DIGI"},
@@ -877,16 +934,26 @@ def _normalize_aprsis_source_step_order(steps: list[dict[str, Any]]) -> None:
     target_step = steps[-1]
     middle_steps = list(steps[1:-1])
     input_guard_steps = [step for step in middle_steps if step["step_type"] == RF_GUARD_STEP_TYPE]
+    message_delivery_steps = [
+        step for step in middle_steps if step["step_type"] == MESSAGE_DELIVERY_STEP_TYPE
+    ]
     output_guard_steps = [step for step in middle_steps if step["step_type"] == RF_TX_GUARD_STEP_TYPE]
     allow_steps = [step for step in middle_steps if step["step_type"] == ALLOW_RULES_STEP_TYPE]
     other_steps = [
         step
         for step in middle_steps
-        if step["step_type"] not in {RF_GUARD_STEP_TYPE, RF_TX_GUARD_STEP_TYPE, ALLOW_RULES_STEP_TYPE}
+        if step["step_type"]
+        not in {
+            RF_GUARD_STEP_TYPE,
+            MESSAGE_DELIVERY_STEP_TYPE,
+            RF_TX_GUARD_STEP_TYPE,
+            ALLOW_RULES_STEP_TYPE,
+        }
     ]
     steps[:] = [
         source_step,
         *input_guard_steps,
+        *message_delivery_steps,
         *allow_steps,
         *other_steps,
         *output_guard_steps,
@@ -923,6 +990,8 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
         return {"local_tx_source": ref_value or LOCAL_TX_SOURCE_REF}
     if step_type == RF_GUARD_STEP_TYPE:
         return {}
+    if step_type == MESSAGE_DELIVERY_STEP_TYPE:
+        return dict(MESSAGE_DELIVERY_DEFAULTS)
     if step_type == RF_TX_GUARD_STEP_TYPE:
         return dict(RF_GUARD_DEFAULTS)
     if step_type == ALLOW_RULES_STEP_TYPE:
@@ -979,6 +1048,8 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         # Keep legacy combined-guard settings long enough for the APRS-IS
         # normalizer to transfer them to the new final RF TX Guard.
         return normalize_rf_guard_config(config) if config else {}
+    if step_type == MESSAGE_DELIVERY_STEP_TYPE:
+        return normalize_message_delivery_config(config)
     if step_type == RF_TX_GUARD_STEP_TYPE:
         return normalize_rf_guard_config(config)
     if step_type == ALLOW_RULES_STEP_TYPE:
@@ -1086,12 +1157,21 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
     if step_type == LOCAL_TX_SOURCE_KIND:
         return _t("Locally generated APRSBox TX frames")
     if step_type == RF_GUARD_STEP_TYPE:
+        return _t("APRS validation, loop prevention and initial duplicate suppression.")
+    if step_type == MESSAGE_DELIVERY_STEP_TYPE:
+        sources = config.get("rf_sources") or []
         return _tf(
-            "Loop prevention, duplicate suppression, delay {delay}s, rate limits ({flow_rate}/{source_rate} per min), third-party encapsulation.",
+            "Local RF messages: {minutes} min, maximum {hops} consumed hops, sources: {sources}.",
             {
-                "delay": config.get("viscous_delay_sec", RF_GUARD_DEFAULTS["viscous_delay_sec"]),
-                "flow_rate": config.get("flow_rate_per_minute", RF_GUARD_DEFAULTS["flow_rate_per_minute"]),
-                "source_rate": config.get("source_rate_per_minute", RF_GUARD_DEFAULTS["source_rate_per_minute"]),
+                "minutes": config.get(
+                    "heard_window_minutes",
+                    MESSAGE_DELIVERY_DEFAULTS["heard_window_minutes"],
+                ),
+                "hops": config.get(
+                    "max_consumed_hops",
+                    MESSAGE_DELIVERY_DEFAULTS["max_consumed_hops"],
+                ),
+                "sources": ", ".join(str(item) for item in sources) or _t("target RF interface"),
             },
         )
     if step_type == ALLOW_RULES_STEP_TYPE:
@@ -1457,9 +1537,40 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
             input_guard["title"] = _default_step_title(RF_GUARD_STEP_TYPE)
             input_guard["enabled"] = 1
             input_guard["config"] = {}
-            if not any(str(step.get("step_type") or "") == ALLOW_RULES_STEP_TYPE for step in middle_steps):
+            if (
+                str(flow.get("target_kind") or "").strip() == "tx_rf"
+                and not any(
+                    str(step.get("step_type") or "") == MESSAGE_DELIVERY_STEP_TYPE
+                    for step in middle_steps
+                )
+            ):
                 middle_steps.insert(
                     1,
+                    {
+                        "id": None,
+                        "step_type": MESSAGE_DELIVERY_STEP_TYPE,
+                        "title": _default_step_title(MESSAGE_DELIVERY_STEP_TYPE),
+                        "enabled": 1,
+                        "config": _default_step_config(MESSAGE_DELIVERY_STEP_TYPE),
+                    },
+                )
+            message_delivery = next(
+                (
+                    step
+                    for step in middle_steps
+                    if str(step.get("step_type") or "") == MESSAGE_DELIVERY_STEP_TYPE
+                ),
+                None,
+            )
+            if message_delivery is not None:
+                message_delivery["title"] = _default_step_title(MESSAGE_DELIVERY_STEP_TYPE)
+                message_delivery["enabled"] = 1
+                message_delivery["config"] = normalize_message_delivery_config(
+                    dict(message_delivery.get("config") or {})
+                )
+            if not any(str(step.get("step_type") or "") == ALLOW_RULES_STEP_TYPE for step in middle_steps):
+                middle_steps.insert(
+                    2 if str(flow.get("target_kind") or "").strip() == "tx_rf" else 1,
                     {
                         "id": None,
                         "step_type": ALLOW_RULES_STEP_TYPE,
@@ -1630,12 +1741,19 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     if target_kind != "tx_rf" and has_rate_limit:
         raise ValueError(_t("Transmission Rate Filter can be used only in RF TX target flows."))
     guard_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == RF_GUARD_STEP_TYPE]
+    message_delivery_steps = [
+        step for step in normalized_steps[1:-1] if step["step_type"] == MESSAGE_DELIVERY_STEP_TYPE
+    ]
     tx_guard_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == RF_TX_GUARD_STEP_TYPE]
     allow_rule_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == ALLOW_RULES_STEP_TYPE]
-    if source_kind != APRSIS_FLOW_SOURCE_KIND and (guard_steps or tx_guard_steps or allow_rule_steps):
+    if source_kind != APRSIS_FLOW_SOURCE_KIND and (
+        guard_steps or message_delivery_steps or tx_guard_steps or allow_rule_steps
+    ):
         raise ValueError(
-            _t("APRS-IS Input Guard, RF TX Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source.")
+            _t("APRS-IS safety and message-delivery rules can be used only with an APRS-IS source.")
         )
+    if message_delivery_steps and target_kind != "tx_rf":
+        raise ValueError(_t("APRS-IS Message Delivery Rule can be used only in APRS-IS to RF flows."))
     if source_kind == APRSIS_FLOW_SOURCE_KIND:
         if target_kind == "tx_rf":
             additional_steps = [
@@ -1647,6 +1765,8 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
                 raise ValueError(_t("APRS-IS to RF flow cannot include additional filters or rules."))
         if len(guard_steps) > 1:
             raise ValueError(_t("APRS-IS source flow can contain only one Input Guard step."))
+        if len(message_delivery_steps) > 1:
+            raise ValueError(_t("APRS-IS to RF flow can contain only one Message Delivery Rule step."))
         if len(tx_guard_steps) > 1:
             raise ValueError(_t("APRS-IS source flow can contain only one RF TX Guard step."))
         if len(allow_rule_steps) > 1:
@@ -1663,6 +1783,17 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
             normalized_steps.insert(1, guard_step)
             guard_steps = [guard_step]
         legacy_guard_config = dict(guard_steps[0].get("config") or {})
+        if target_kind == "tx_rf" and not message_delivery_steps:
+            message_step = {
+                "id": None,
+                "step_order": 0,
+                "step_type": MESSAGE_DELIVERY_STEP_TYPE,
+                "title": _default_step_title(MESSAGE_DELIVERY_STEP_TYPE),
+                "enabled": 1,
+                "config": _default_step_config(MESSAGE_DELIVERY_STEP_TYPE),
+            }
+            normalized_steps.insert(2, message_step)
+            message_delivery_steps = [message_step]
         if not allow_rule_steps:
             allow_step = {
                 "id": None,
@@ -1672,7 +1803,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
                 "enabled": 1,
                 "config": _default_step_config(ALLOW_RULES_STEP_TYPE),
             }
-            normalized_steps.insert(2, allow_step)
+            normalized_steps.insert(3 if target_kind == "tx_rf" else 2, allow_step)
             allow_rule_steps = [allow_step]
         if target_kind == "tx_rf" and not tx_guard_steps:
             tx_guard_step = {
@@ -1690,6 +1821,12 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         guard_steps[0]["enabled"] = 1
         guard_steps[0]["title"] = _default_step_title(RF_GUARD_STEP_TYPE)
         guard_steps[0]["config"] = {}
+        if target_kind == "tx_rf":
+            message_delivery_steps[0]["enabled"] = 1
+            message_delivery_steps[0]["title"] = _default_step_title(MESSAGE_DELIVERY_STEP_TYPE)
+            message_delivery_steps[0]["config"] = normalize_message_delivery_config(
+                dict(message_delivery_steps[0].get("config") or {})
+            )
         allow_rule_steps[0]["enabled"] = 1
         allow_rule_steps[0]["title"] = _default_step_title(ALLOW_RULES_STEP_TYPE)
         allow_rule_steps[0]["config"] = normalize_default_deny_config(
@@ -2031,12 +2168,53 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
                 ]
                 if additional_steps:
                     raise ValueError(_t("APRS-IS to RF flow cannot include additional filters or rules."))
+                message_delivery_steps = [
+                    step
+                    for step in flow_steps[1:-1]
+                    if step.get("step_type") == MESSAGE_DELIVERY_STEP_TYPE
+                ]
+                if (
+                    len(message_delivery_steps) != 1
+                    or int(message_delivery_steps[0].get("enabled") or 0) != 1
+                ):
+                    raise ValueError(
+                        _t(
+                            "APRS-IS to RF flow cannot be enabled without exactly one mandatory enabled Message Delivery Rule step."
+                        )
+                    )
+                allow_rule_steps = [
+                    step
+                    for step in flow_steps[1:-1]
+                    if step.get("step_type") == ALLOW_RULES_STEP_TYPE
+                ]
+                if (
+                    len(allow_rule_steps) != 1
+                    or int(allow_rule_steps[0].get("enabled") or 0) != 1
+                ):
+                    raise ValueError(
+                        _t(
+                            "APRS-IS to RF flow cannot be enabled without exactly one mandatory enabled Callsign and Radius Rule step."
+                        )
+                    )
                 tx_guard_steps = [
                     step for step in flow_steps[1:-1] if step.get("step_type") == RF_TX_GUARD_STEP_TYPE
                 ]
                 if len(tx_guard_steps) != 1 or int(tx_guard_steps[0].get("enabled") or 0) != 1:
                     raise ValueError(
                         _t("APRS-IS to RF flow cannot be enabled without exactly one mandatory enabled RF TX Guard step.")
+                    )
+                system_step_order = [
+                    str(step.get("step_type") or "")
+                    for step in flow_steps[1:-1]
+                ]
+                if system_step_order != [
+                    RF_GUARD_STEP_TYPE,
+                    MESSAGE_DELIVERY_STEP_TYPE,
+                    ALLOW_RULES_STEP_TYPE,
+                    RF_TX_GUARD_STEP_TYPE,
+                ]:
+                    raise ValueError(
+                        _t("APRS-IS to RF mandatory rules are not in the required order.")
                     )
                 _target, target_reason = validate_aprsis_rf_target(flow.get("target_ref"), require_active=True)
                 if target_reason:
@@ -2294,6 +2472,7 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
                 step_state["description"] = _t("Source matched and packet entered the flow.")
             elif event_type in {
                 "rf_guard",
+                "message_delivery",
                 "rf_tx_guard",
                 "inclusive_allow_rules",
                 "filter_callsign",
@@ -2420,6 +2599,8 @@ def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -
         return "filter_callsign"
     if event_type == "rf_guard":
         return RF_GUARD_STEP_TYPE
+    if event_type == "message_delivery":
+        return MESSAGE_DELIVERY_STEP_TYPE
     if event_type == "rf_tx_guard":
         return RF_TX_GUARD_STEP_TYPE
     if event_type == "inclusive_allow_rules":

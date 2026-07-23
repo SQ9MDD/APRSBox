@@ -11,6 +11,7 @@ from app.services.mqtt_url import TX_CAPABLE_MODEM_TYPES
 
 APRSIS_FLOW_SOURCE_KIND = "receiver_aprsis"
 RF_GUARD_STEP_TYPE = "filter_rf_guard"
+MESSAGE_DELIVERY_STEP_TYPE = "filter_aprsis_message_delivery"
 RF_TX_GUARD_STEP_TYPE = "filter_rf_tx_guard"
 ALLOW_RULES_STEP_TYPE = "filter_allow_rules"
 
@@ -33,11 +34,22 @@ RF_GUARD_LIMITS: dict[str, tuple[int, int]] = {
 
 DEFAULT_DENY_CONFIG_FIELDS = frozenset({"callsigns", "radius_km"})
 DEFAULT_DENY_CALLSIGN_LIMIT = 50
+MESSAGE_DELIVERY_DEFAULTS: dict[str, Any] = {
+    "rf_sources": [],
+    "heard_window_minutes": 60,
+    "max_consumed_hops": 0,
+}
+MESSAGE_DELIVERY_CONFIG_FIELDS = frozenset(MESSAGE_DELIVERY_DEFAULTS)
 APRSIS_RF_STAT_COUNTERS = frozenset(
     {
         "received_from_aprsis",
+        "matched_message_rule",
+        "matched_associated_position",
         "matched_allow_rule",
         "dropped_no_allow_rule",
+        "dropped_recipient_not_local",
+        "dropped_recipient_seen_internet",
+        "dropped_sender_heard_rf",
         "dropped_safety_guard",
         "dropped_duplicate",
         "cancelled_during_viscous_delay",
@@ -122,6 +134,67 @@ def normalize_default_deny_config(raw_config: Any) -> dict[str, Any]:
     return {
         "callsigns": callsigns,
         "radius_km": radius_text,
+    }
+
+
+def normalize_message_delivery_config(raw_config: Any) -> dict[str, Any]:
+    if raw_config is None or raw_config == "":
+        config: dict[str, Any] = {}
+    elif isinstance(raw_config, dict):
+        config = dict(raw_config)
+    else:
+        raise ValueError("APRS-IS message delivery config must be an object.")
+
+    unknown_fields = {str(key) for key in config} - MESSAGE_DELIVERY_CONFIG_FIELDS
+    if unknown_fields:
+        unknown = ", ".join(sorted(unknown_fields))
+        raise ValueError(f"APRS-IS message delivery config contains unsupported fields: {unknown}.")
+
+    raw_sources = config.get("rf_sources")
+    if raw_sources is None or raw_sources == "":
+        source_values: list[Any] = []
+    elif isinstance(raw_sources, str):
+        source_values = raw_sources.splitlines()
+    elif isinstance(raw_sources, (list, tuple)):
+        source_values = list(raw_sources)
+    else:
+        raise ValueError("APRS-IS message delivery RF sources must be a list or multiline text.")
+
+    rf_sources: list[str] = []
+    seen_sources: set[str] = set()
+    for raw_source in source_values:
+        source = str(raw_source or "").strip()
+        if not source or source in seen_sources:
+            continue
+        if len(source) > 100 or any(ord(char) < 32 for char in source):
+            raise ValueError("APRS-IS message delivery RF source contains invalid characters.")
+        seen_sources.add(source)
+        rf_sources.append(source)
+    if len(rf_sources) > 16:
+        raise ValueError("APRS-IS message delivery is limited to 16 RF sources per flow.")
+
+    try:
+        heard_window_minutes = int(
+            str(config.get("heard_window_minutes", MESSAGE_DELIVERY_DEFAULTS["heard_window_minutes"])).strip()
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("APRS-IS message delivery heard window must be an integer.") from exc
+    if heard_window_minutes < 5 or heard_window_minutes > 60:
+        raise ValueError("APRS-IS message delivery heard window must be between 5 and 60 minutes.")
+
+    try:
+        max_consumed_hops = int(
+            str(config.get("max_consumed_hops", MESSAGE_DELIVERY_DEFAULTS["max_consumed_hops"])).strip()
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("APRS-IS message delivery maximum consumed hops must be an integer.") from exc
+    if max_consumed_hops < 0 or max_consumed_hops > 2:
+        raise ValueError("APRS-IS message delivery maximum consumed hops must be between 0 and 2.")
+
+    return {
+        "rf_sources": rf_sources,
+        "heard_window_minutes": heard_window_minutes,
+        "max_consumed_hops": max_consumed_hops,
     }
 
 
@@ -322,7 +395,10 @@ def record_aprsis_rf_stat(flow_id: int, counter: str, *, amount: int = 1) -> Non
 def get_aprsis_rf_stats(flow_id: int) -> dict[str, int]:
     row = fetch_one(
         """
-        SELECT received_from_aprsis, matched_allow_rule, dropped_no_allow_rule,
+        SELECT received_from_aprsis, matched_message_rule, matched_associated_position,
+               matched_allow_rule, dropped_no_allow_rule,
+               dropped_recipient_not_local, dropped_recipient_seen_internet,
+               dropped_sender_heard_rf,
                dropped_safety_guard, dropped_duplicate, cancelled_during_viscous_delay,
                dropped_rate_limit, dropped_oversize, queued_to_rf, transmitted_to_rf, tx_failed
         FROM aprsis_rf_stats

@@ -1,6 +1,6 @@
 # APRS-IS-Rufzeichen- und Radiusregel
 
-Diese obligatorische Systemregel ist die explizite Zulassungsliste im eingeschränkten Flow `APRS-IS → RF`. Sie arbeitet nach Default Deny: Ein Paket läuft nur weiter, wenn sowohl das exakte Quellrufzeichen als auch die dekodierte Position zur Konfiguration passen.
+Diese obligatorische Systemregel ist die explizite Zulassungsliste für Nicht-Nachrichtenverkehr im eingeschränkten Flow `APRS-IS → RF`. Sie arbeitet nach Default Deny: Ein Paket läuft nur weiter, wenn sowohl das exakte Quellrufzeichen als auch die dekodierte Position zur Konfiguration passen. Durch die vorherige Nachrichten-Zustellregel zugelassene adressierte Nachrichten umgehen diese Regel.
 
 ## Bedingungen
 
@@ -39,7 +39,7 @@ Sind beide Felder leer, ist die Konfiguration gültig und verwirft absichtlich j
 
 ## Platzierung
 
-Die Regel wird automatisch zwischen `APRS-IS-Eingangssicherheitsregel` und `APRS-IS-zu-RF-TX-Sicherheitsregel` eingefügt und verwaltet. Sie kann nicht entfernt, deaktiviert, dupliziert oder verschoben werden. Diesem Flow können außerdem keine optionalen Filter hinzugefügt werden.
+Die Regel wird automatisch nach der `APRS-IS-Nachrichten-Zustellregel` und vor der `APRS-IS-zu-RF-TX-Sicherheitsregel` eingefügt und verwaltet. Sie kann nicht entfernt, deaktiviert, dupliziert oder verschoben werden. Diesem Flow können außerdem keine optionalen Filter hinzugefügt werden.
 
 ## Navigation
 

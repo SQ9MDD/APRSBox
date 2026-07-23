@@ -19,7 +19,7 @@ from app.services.outbound import build_object_tnc2, persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
 from app.services.serial_broker import SerialKissTcpBroker
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
-from app.services.traffic_source import RF_SOURCE_KIND, normalize_source_kind, should_collect_statistics
+from app.services.traffic_source import APRSIS_SOURCE_KIND, RF_SOURCE_KIND, normalize_source_kind, should_collect_statistics
 
 KISS_FEND = 0xC0
 KISS_FESC = 0xDB
@@ -179,7 +179,8 @@ def process_normalized_tnc2_rx(
     """
 
     normalized_line = str(line or "").rstrip("\r\n")
-    if not normalized_line or parse_tnc2_frame(normalized_line) is None:
+    parsed_frame = parse_tnc2_frame(normalized_line) if normalized_line else None
+    if not normalized_line or parsed_frame is None:
         return False
 
     normalized_kind = normalize_source_kind(source_kind)
@@ -225,6 +226,26 @@ def process_normalized_tnc2_rx(
                 occurred_at,
             ),
         )
+
+    try:
+        from app.services.igate_messaging import (
+            record_aprsis_station_presence,
+            record_rf_heard_station,
+        )
+
+        if normalized_kind == RF_SOURCE_KIND:
+            record_rf_heard_station(
+                parsed_frame,
+                interface_id=source_interface_id,
+                timestamp=occurred_at,
+            )
+        elif normalized_kind == APRSIS_SOURCE_KIND:
+            record_aprsis_station_presence(
+                parsed_frame,
+                timestamp=occurred_at,
+            )
+    except Exception as exc:
+        log_event("WARNING", "igate", f"Failed to update IGate station state: {exc}")
 
     latency_parts = [f"source={source}", f"source_kind={normalized_kind}", f"line={normalized_line[:120]}"]
     if rx_to_igate_enqueue_ms is not None:

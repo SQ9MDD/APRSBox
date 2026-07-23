@@ -13,6 +13,7 @@ from app.db import (
     prune_traffic_frames_batch,
     set_app_setting,
 )
+from app.services.igate_messaging import prune_igate_runtime_state
 
 
 LAST_EVENT_LOG_PRUNE_DATE_KEY = "scheduler.maintenance.event_logs.last_pruned_date"
@@ -69,6 +70,11 @@ class MaintenanceSchedulerService:
         except Exception as exc:
             message = str(exc).strip() or exc.__class__.__name__
             log_event("WARNING", "maintenance", f"Automatic outbound job pruning failed: {message}")
+        try:
+            prune_igate_runtime_state(now=current)
+        except Exception as exc:
+            message = str(exc).strip() or exc.__class__.__name__
+            log_event("WARNING", "maintenance", f"Automatic IGate state pruning failed: {message}")
 
     async def _sleep(self, delay: float) -> None:
         try:

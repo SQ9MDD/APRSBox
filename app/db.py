@@ -33,6 +33,9 @@ RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "event_logs",
     "traffic_frames",
     "digi_flow_event_log",
+    "aprsis_igate_rf_heard",
+    "aprsis_igate_station_state",
+    "aprsis_igate_pending_position",
     "traffic_device_station_device_hourly",
     "radio_activity_5m",
     "aprsis_uplink_minute_stats",
@@ -407,6 +410,7 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
         'filter_rate_limit',
         'filter_rate_limit_per_callsign',
         'filter_rf_guard',
+        'filter_aprsis_message_delivery',
         'filter_rf_tx_guard',
         'filter_allow_rules',
         'tx_rf',
@@ -439,8 +443,13 @@ CREATE TABLE IF NOT EXISTS digi_flow_event_log (
 CREATE TABLE IF NOT EXISTS aprsis_rf_stats (
     flow_id INTEGER PRIMARY KEY,
     received_from_aprsis INTEGER NOT NULL DEFAULT 0,
+    matched_message_rule INTEGER NOT NULL DEFAULT 0,
+    matched_associated_position INTEGER NOT NULL DEFAULT 0,
     matched_allow_rule INTEGER NOT NULL DEFAULT 0,
     dropped_no_allow_rule INTEGER NOT NULL DEFAULT 0,
+    dropped_recipient_not_local INTEGER NOT NULL DEFAULT 0,
+    dropped_recipient_seen_internet INTEGER NOT NULL DEFAULT 0,
+    dropped_sender_heard_rf INTEGER NOT NULL DEFAULT 0,
     dropped_safety_guard INTEGER NOT NULL DEFAULT 0,
     dropped_duplicate INTEGER NOT NULL DEFAULT 0,
     cancelled_during_viscous_delay INTEGER NOT NULL DEFAULT 0,
@@ -450,6 +459,30 @@ CREATE TABLE IF NOT EXISTS aprsis_rf_stats (
     transmitted_to_rf INTEGER NOT NULL DEFAULT 0,
     tx_failed INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
+    FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_igate_rf_heard (
+    station_key TEXT NOT NULL,
+    interface_id INTEGER NOT NULL,
+    last_heard_at TEXT NOT NULL,
+    last_path TEXT NOT NULL DEFAULT '',
+    consumed_hops INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (station_key, interface_id),
+    FOREIGN KEY (interface_id) REFERENCES modems(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_igate_station_state (
+    station_key TEXT PRIMARY KEY,
+    last_internet_origin_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_igate_pending_position (
+    flow_id INTEGER NOT NULL,
+    sender_key TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (flow_id, sender_key),
     FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
 );
 
@@ -803,6 +836,12 @@ CREATE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_interface
     ON radio_activity_5m(bucket_start_utc, interface_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_source
     ON radio_activity_5m(bucket_start_utc, source_name);
+CREATE INDEX IF NOT EXISTS idx_aprsis_igate_rf_heard_time
+    ON aprsis_igate_rf_heard(last_heard_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aprsis_igate_station_state_time
+    ON aprsis_igate_station_state(last_internet_origin_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aprsis_igate_pending_position_expiry
+    ON aprsis_igate_pending_position(expires_at);
 """
 
 
@@ -2115,6 +2154,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         "filter_rate_limit_per_callsign",
         "filter_strict",
         "filter_rf_guard",
+        "filter_aprsis_message_delivery",
         "filter_rf_tx_guard",
         "filter_allow_rules",
     )
@@ -2145,6 +2185,7 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
                 'filter_rate_limit',
                 'filter_rate_limit_per_callsign',
                 'filter_rf_guard',
+                'filter_aprsis_message_delivery',
                 'filter_rf_tx_guard',
                 'filter_allow_rules',
                 'tx_rf',
@@ -2198,8 +2239,23 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
             continue
 
         input_guard = next((step for step in steps if step["step_type"] == "filter_rf_guard"), None)
+        message_delivery = next(
+            (step for step in steps if step["step_type"] == "filter_aprsis_message_delivery"),
+            None,
+        )
+        allow_rule = next(
+            (step for step in steps if step["step_type"] == "filter_allow_rules"),
+            None,
+        )
         output_guard = next((step for step in steps if step["step_type"] == "filter_rf_tx_guard"), None)
-        target_step = steps[-1]
+        target_step = next(
+            (
+                step
+                for step in reversed(steps)
+                if step["step_type"] == str(flow["target_kind"] or "")
+            ),
+            steps[-1],
+        )
         changed = False
         timestamp = utc_now()
 
@@ -2277,8 +2333,95 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
                 )
                 changed = True
 
+        if str(flow["target_kind"] or "") == "tx_rf" and message_delivery is None:
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (
+                    ?,
+                    (SELECT COALESCE(MAX(step_order), 0) + 1000 FROM digi_flow_steps WHERE flow_id = ?),
+                    'filter_aprsis_message_delivery',
+                    'APRS-IS Message Delivery Rule', 1,
+                    '{"rf_sources":[],"heard_window_minutes":60,"max_consumed_hops":0}',
+                    ?, ?
+                )
+                """,
+                (flow_id, flow_id, timestamp, timestamp),
+            )
+            changed = True
+        elif message_delivery is not None:
+            message_changed = (
+                str(message_delivery["title"] or "") != "APRS-IS Message Delivery Rule"
+                or int(message_delivery["enabled"] or 0) != 1
+            )
+            if message_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'APRS-IS Message Delivery Rule', enabled = 1, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(message_delivery["id"])),
+                )
+                changed = True
+
+        if str(flow["target_kind"] or "") == "tx_rf" and allow_rule is None:
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (
+                    ?,
+                    (SELECT COALESCE(MAX(step_order), 0) + 1000 FROM digi_flow_steps WHERE flow_id = ?),
+                    'filter_allow_rules',
+                    'APRS-IS Callsign and Radius Rule', 1,
+                    '{"callsigns":[],"radius_km":""}',
+                    ?, ?
+                )
+                """,
+                (flow_id, flow_id, timestamp, timestamp),
+            )
+            changed = True
+        elif allow_rule is not None:
+            allow_changed = (
+                str(allow_rule["title"] or "") != "APRS-IS Callsign and Radius Rule"
+                or int(allow_rule["enabled"] or 0) != 1
+            )
+            if allow_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'APRS-IS Callsign and Radius Rule', enabled = 1, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(allow_rule["id"])),
+                )
+                changed = True
+
         if input_guard is not None and int(steps[1]["id"]) != int(input_guard["id"]):
             changed = True
+        if str(flow["target_kind"] or "") == "tx_rf":
+            system_order = [
+                str(step["step_type"] or "")
+                for step in steps[1:-1]
+                if str(step["step_type"] or "")
+                in {
+                    "filter_rf_guard",
+                    "filter_aprsis_message_delivery",
+                    "filter_allow_rules",
+                    "filter_rf_tx_guard",
+                }
+            ]
+            if system_order != [
+                "filter_rf_guard",
+                "filter_aprsis_message_delivery",
+                "filter_allow_rules",
+                "filter_rf_tx_guard",
+            ]:
+                changed = True
         if (
             str(flow["target_kind"] or "") == "tx_rf"
             and output_guard is not None
@@ -2300,18 +2443,46 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
                 (flow_id,),
             ).fetchall()
         )
-        source = reordered[0]
-        target = reordered[-1]
-        middle = reordered[1:-1]
+        source = next(
+            (step for step in reordered if step["step_type"] == str(flow["source_kind"] or "")),
+            reordered[0],
+        )
+        target = next(
+            (
+                step
+                for step in reversed(reordered)
+                if step["step_type"] == str(flow["target_kind"] or "")
+            ),
+            reordered[-1],
+        )
+        endpoint_ids = {int(source["id"]), int(target["id"])}
+        middle = [step for step in reordered if int(step["id"]) not in endpoint_ids]
         input_steps = [step for step in middle if step["step_type"] == "filter_rf_guard"]
+        message_steps = [
+            step for step in middle if step["step_type"] == "filter_aprsis_message_delivery"
+        ]
         allow_steps = [step for step in middle if step["step_type"] == "filter_allow_rules"]
         output_steps = [step for step in middle if step["step_type"] == "filter_rf_tx_guard"]
         ordinary_steps = [
             step
             for step in middle
-            if step["step_type"] not in {"filter_rf_guard", "filter_allow_rules", "filter_rf_tx_guard"}
+            if step["step_type"]
+            not in {
+                "filter_rf_guard",
+                "filter_aprsis_message_delivery",
+                "filter_allow_rules",
+                "filter_rf_tx_guard",
+            }
         ]
-        ordered = [source, *input_steps, *allow_steps, *ordinary_steps, *output_steps, target]
+        ordered = [
+            source,
+            *input_steps,
+            *message_steps,
+            *allow_steps,
+            *ordinary_steps,
+            *output_steps,
+            target,
+        ]
         connection.execute(
             "UPDATE digi_flow_steps SET step_order = -id WHERE flow_id = ?",
             (flow_id,),
@@ -2364,6 +2535,21 @@ def _migrate_aprsis_rf_stats_table(connection: sqlite3.Connection) -> None:
     stats_sql = _table_sql(connection, "aprsis_rf_stats")
     if not stats_sql:
         return
+    stats_columns = {
+        str(row["name"] or "")
+        for row in connection.execute("PRAGMA table_info(aprsis_rf_stats)").fetchall()
+    }
+    for column in (
+        "matched_message_rule",
+        "matched_associated_position",
+        "dropped_recipient_not_local",
+        "dropped_recipient_seen_internet",
+        "dropped_sender_heard_rf",
+    ):
+        if column not in stats_columns:
+            connection.execute(
+                f"ALTER TABLE aprsis_rf_stats ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+            )
     foreign_keys = list(connection.execute("PRAGMA foreign_key_list(aprsis_rf_stats)").fetchall())
     if not any(str(row["table"] or "") == "digi_flows_old" for row in foreign_keys):
         return
@@ -2373,8 +2559,13 @@ def _migrate_aprsis_rf_stats_table(connection: sqlite3.Connection) -> None:
         CREATE TABLE aprsis_rf_stats (
             flow_id INTEGER PRIMARY KEY,
             received_from_aprsis INTEGER NOT NULL DEFAULT 0,
+            matched_message_rule INTEGER NOT NULL DEFAULT 0,
+            matched_associated_position INTEGER NOT NULL DEFAULT 0,
             matched_allow_rule INTEGER NOT NULL DEFAULT 0,
             dropped_no_allow_rule INTEGER NOT NULL DEFAULT 0,
+            dropped_recipient_not_local INTEGER NOT NULL DEFAULT 0,
+            dropped_recipient_seen_internet INTEGER NOT NULL DEFAULT 0,
+            dropped_sender_heard_rf INTEGER NOT NULL DEFAULT 0,
             dropped_safety_guard INTEGER NOT NULL DEFAULT 0,
             dropped_duplicate INTEGER NOT NULL DEFAULT 0,
             cancelled_during_viscous_delay INTEGER NOT NULL DEFAULT 0,
@@ -2387,13 +2578,17 @@ def _migrate_aprsis_rf_stats_table(connection: sqlite3.Connection) -> None:
             FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
         );
         INSERT INTO aprsis_rf_stats (
-            flow_id, received_from_aprsis, matched_allow_rule, dropped_no_allow_rule,
+            flow_id, received_from_aprsis, matched_message_rule, matched_associated_position,
+            matched_allow_rule, dropped_no_allow_rule, dropped_recipient_not_local,
+            dropped_recipient_seen_internet, dropped_sender_heard_rf,
             dropped_safety_guard, dropped_duplicate, cancelled_during_viscous_delay,
             dropped_rate_limit, dropped_oversize, queued_to_rf, transmitted_to_rf,
             tx_failed, updated_at
         )
         SELECT
-            flow_id, received_from_aprsis, matched_allow_rule, dropped_no_allow_rule,
+            flow_id, received_from_aprsis, matched_message_rule, matched_associated_position,
+            matched_allow_rule, dropped_no_allow_rule, dropped_recipient_not_local,
+            dropped_recipient_seen_internet, dropped_sender_heard_rf,
             dropped_safety_guard, dropped_duplicate, cancelled_during_viscous_delay,
             dropped_rate_limit, dropped_oversize, queued_to_rf, transmitted_to_rf,
             tx_failed, updated_at

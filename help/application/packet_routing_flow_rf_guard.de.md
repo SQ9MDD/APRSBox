@@ -6,7 +6,7 @@ Ein Flow `APRS-IS -> RF` leitet ausgewaehlte APRS-IS-Pakete kontrolliert an ein 
 
 `APRS-IS-Quelle -> APRS-IS-Eingangssicherheitsregel -> APRS-IS-Rufzeichen- und Radiusregel -> APRS-IS-zu-RF-TX-Sicherheitsregel -> TX RF`
 
-Alle drei Regeln werden für `APRS-IS → RF` automatisch eingefügt. Sie können nicht entfernt, deaktiviert, umgangen, verschoben oder doppelt hinzugefügt werden. Diesem eingeschränkten Flow können keine optionalen Filter hinzugefügt werden. Backend und Runtime erzwingen denselben Schutz auch bei manuell veränderten gespeicherten Daten.
+Alle vier Regeln werden für `APRS-IS → RF` automatisch eingefügt. Sie können nicht entfernt, deaktiviert, umgangen, verschoben oder doppelt hinzugefügt werden. Diesem eingeschränkten Flow können keine optionalen Filter hinzugefügt werden. Backend und Runtime erzwingen denselben Schutz auch bei manuell veränderten gespeicherten Daten.
 
 ## APRS-IS-Rufzeichen- und Radiusregel
 

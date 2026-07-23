@@ -1,6 +1,6 @@
 # Regla APRS-IS de indicativo y radio
 
-Esta regla obligatoria del sistema es la lista explícita de permitidos en el flujo restringido `APRS-IS → RF`. Aplica denegación predeterminada: un paquete solo continúa cuando tanto su indicativo de origen exacto como su posición decodificada coinciden con la configuración.
+Esta regla obligatoria del sistema es la lista explícita de permitidos para el tráfico que no es de mensajes en el flujo restringido `APRS-IS → RF`. Aplica denegación predeterminada: un paquete solo continúa cuando tanto su indicativo de origen exacto como su posición decodificada coinciden con la configuración. Los mensajes dirigidos autorizados por la regla de entrega de mensajes anterior omiten esta regla.
 
 ## Condiciones
 
@@ -39,7 +39,7 @@ Dejar ambos campos vacíos es válido y deniega intencionadamente todos los paqu
 
 ## Ubicación
 
-La regla se inserta y gestiona automáticamente entre `Regla de seguridad de entrada APRS-IS` y `Regla de seguridad TX APRS-IS → RF`. No se puede eliminar, desactivar, duplicar ni mover. Tampoco se pueden añadir filtros opcionales a este flujo.
+La regla se inserta y gestiona automáticamente después de `Regla de entrega de mensajes APRS-IS` y antes de `Regla de seguridad TX APRS-IS → RF`. No se puede eliminar, desactivar, duplicar ni mover. Tampoco se pueden añadir filtros opcionales a este flujo.
 
 ## Navegación
 

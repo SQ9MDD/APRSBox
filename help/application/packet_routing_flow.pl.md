@@ -34,6 +34,7 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 ## Bloki filtrów i reguł
 
 - [Reguła bezpieczeństwa uplinku APRS-IS](packet_routing_flow_strict_filter.pl.md)
+- [Reguła dostarczania wiadomości APRS-IS](packet_routing_flow_aprsis_message_delivery_rule.pl.md)
 - [Reguła znaku i promienia APRS-IS](packet_routing_flow_aprsis_callsign_radius_rule.pl.md)
 - [Reguła ścieżki DIGI RF](packet_routing_flow_path_rule_and_digi_guard.pl.md)
 - [Filtr opóźnienia duplikatów RF](packet_routing_flow_duplicate_filter.pl.md)
@@ -56,4 +57,4 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 - `TX APRS-IS` wymaga `Reguły bezpieczeństwa uplinku APRS-IS`.
 - Transmisja RF → RF wymaga `Reguły ścieżki DIGI RF`.
 - `Local TX` może kończyć się tylko na `TX APRS-IS` albo `Black Hole`.
-- Flow `APRS-IS → RF` zawiera dokładnie trzy obowiązkowe reguły systemowe. Nie można dodać do niego opcjonalnych filtrów. Znak i promień łączą się jako `AND`; pusta konfiguracja nie przepuszcza żadnych ramek.
+- Flow `APRS-IS → RF` zawiera dokładnie cztery obowiązkowe reguły systemowe. Nie można dodać do niego opcjonalnych filtrów. Ruch skierowany do niedawno słyszanej lokalnej stacji RF może dopuścić reguła dostarczania wiadomości; pozostały ruch wymaga znaku **i** promienia, a pusta konfiguracja nie przepuszcza innych ramek.

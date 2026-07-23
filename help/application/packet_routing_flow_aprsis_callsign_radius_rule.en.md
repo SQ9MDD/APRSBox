@@ -1,6 +1,6 @@
 # APRS-IS Callsign and Radius Rule
 
-This mandatory system rule is the explicit allow list in the restricted `APRS-IS → RF` flow. It uses default deny: a packet continues only when both its exact source callsign and its decoded position match the configuration.
+This mandatory system rule is the explicit allow list for non-message traffic in the restricted `APRS-IS → RF` flow. It uses default deny: a packet continues only when both its exact source callsign and its decoded position match the configuration. Directed messages authorized by the preceding Message Delivery Rule bypass this rule.
 
 ## Conditions
 
@@ -39,7 +39,7 @@ Leaving both fields empty is valid and intentionally denies every packet. This m
 
 ## Placement
 
-The rule is inserted and managed automatically between `APRS-IS Input Safety Rule` and `APRS-IS to RF TX Safety Rule`. It cannot be removed, disabled, duplicated, or moved, and no optional filters can be added to this flow.
+The rule is inserted and managed automatically after `APRS-IS Message Delivery Rule` and before `APRS-IS to RF TX Safety Rule`. It cannot be removed, disabled, duplicated, or moved, and no optional filters can be added to this flow.
 
 ## Navigation
 

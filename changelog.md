@@ -2,6 +2,7 @@
 
 ## 1.8.54.dev - 23.07.2026
 - `APRS-IS / routing`: dodano APRS-IS jako interfejs oraz bezpieczny routing `APRS-IS → RF`.
+- `iGate / wiadomości`: dodano dwukierunkowe bramkowanie wiadomości APRS z kontrolą lokalnej osiągalności i poprawnym `qAR`/`qAO`.
 
 ## 1.8.53.dev - 14.07.2026
 - `Wiadomości / rozmowy grupowe`: dodano wątki dla jawnie skonfigurowanych grup docelowych z oznaczeniem nadawcy; pozostałe grupy są ignorowane, a wysyłka grupowa odbywa się jednokrotnie, bez numeru wiadomości, ACK i retry.

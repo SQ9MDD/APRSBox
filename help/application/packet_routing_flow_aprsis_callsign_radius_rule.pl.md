@@ -1,6 +1,6 @@
 # Reguła znaku i promienia APRS-IS
 
-Ta obowiązkowa reguła systemowa jest jawną listą zezwoleń w restrykcyjnym flow `APRS-IS → RF`. Działa jako default deny: pakiet przechodzi dalej tylko wtedy, gdy zarówno jego dokładny znak źródłowy, jak i zdekodowana pozycja pasują do konfiguracji.
+Ta obowiązkowa reguła systemowa jest jawną listą zezwoleń dla ruchu innego niż wiadomości w restrykcyjnym flow `APRS-IS → RF`. Działa jako default deny: pakiet przechodzi dalej tylko wtedy, gdy zarówno jego dokładny znak źródłowy, jak i zdekodowana pozycja pasują do konfiguracji. Wiadomości skierowane do lokalnych stacji i zatwierdzone przez wcześniejszą Regułę dostarczania wiadomości omijają tę regułę.
 
 ## Warunki
 
@@ -39,7 +39,7 @@ Pozostawienie obu pól pustych jest prawidłowe i celowo odrzuca wszystkie pakie
 
 ## Położenie w flow
 
-Reguła jest automatycznie wstawiana i zarządzana pomiędzy `Regułą bezpieczeństwa wejścia APRS-IS` a `Regułą bezpieczeństwa TX APRS-IS → RF`. Nie można jej usunąć, wyłączyć, powielić ani przesunąć. Do tego flow nie można również dodawać opcjonalnych filtrów.
+Reguła jest automatycznie wstawiana i zarządzana za `Regułą dostarczania wiadomości APRS-IS`, a przed `Regułą bezpieczeństwa TX APRS-IS → RF`. Nie można jej usunąć, wyłączyć, powielić ani przesunąć. Do tego flow nie można również dodawać opcjonalnych filtrów.
 
 ## Nawigacja
 

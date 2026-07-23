@@ -34,6 +34,7 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 ## Bloques de filtros y reglas
 
 - [Regla de seguridad de enlace APRS-IS](packet_routing_flow_strict_filter.es.md)
+- [Regla de entrega de mensajes APRS-IS](packet_routing_flow_aprsis_message_delivery_rule.es.md)
 - [Regla APRS-IS de indicativo y radio](packet_routing_flow_aprsis_callsign_radius_rule.es.md)
 - [Regla de ruta de repetición RF](packet_routing_flow_path_rule_and_digi_guard.es.md)
 - [Filtro RF de retardo de duplicados](packet_routing_flow_duplicate_filter.es.md)
@@ -56,4 +57,4 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 - `TX APRS-IS` requiere la `Regla de seguridad de enlace APRS-IS`.
 - La transmisión RF → RF requiere la `Regla de ruta de repetición RF`.
 - `TX local` solo puede terminar en `TX APRS-IS` o `Agujero negro`.
-- Un flujo `APRS-IS → RF` contiene exactamente tres reglas obligatorias del sistema. No se pueden añadir filtros opcionales. El indicativo y el radio usan `AND`; una configuración vacía no reenvía paquetes.
+- Un flujo `APRS-IS → RF` contiene exactamente cuatro reglas obligatorias del sistema. No se pueden añadir filtros opcionales. La regla de entrega puede admitir tráfico dirigido a una estación RF local escuchada recientemente; el resto requiere indicativo **y** radio, y una configuración vacía no reenvía otras tramas.

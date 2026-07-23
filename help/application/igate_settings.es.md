@@ -20,6 +20,18 @@ La guía detallada para crear estas rutas está aquí:
 
 El passcode APRS-IS no es una contraseña de cuenta. Es el código estándar calculado desde el indicativo y requerido por los servidores APRS-IS para enviar tramas.
 
+## Identidad de iGate unidireccional y bidireccional
+
+Ambos modos usan un login APRS-IS verificado. `pass -1` identifica un cliente APRS-IS no verificado de solo recepción y no permite subir paquetes RF.
+
+APRSBox identifica la capacidad de retorno a RF para cada estación:
+
+- `qAO` cuando ningún flujo activo de retorno de mensajes cubre la fuente RF.
+- `qAR` cuando un flujo activo `APRS-IS → RF` puede entregar mensajes a las estaciones escuchadas por esa fuente RF.
+- Los paquetes generados localmente por APRSBox usan `TCPIP*`; no son paquetes procedentes de RF.
+
+Al desactivar el flujo `APRS-IS → RF`, los siguientes uplinks RF vuelven a usar `qAO`.
+
 ## Diagnóstico
 
 El panel de estado muestra la conexión actual, login, flujos APRSIS activos, último error y contadores de tramas enviadas o descartadas antes del TX APRS-IS.

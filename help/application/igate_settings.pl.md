@@ -20,6 +20,18 @@ Szczegółowy opis budowania tych ścieżek znajduje się w pomocy:
 
 Passcode APRS-IS nie jest hasłem do konta. To standardowy kod wyliczany ze znaku wywoławczego, wymagany przez serwery APRS-IS do wysyłania ramek.
 
+## Identyfikacja jednokierunkowego i dwukierunkowego iGate
+
+Oba tryby używają zweryfikowanego logowania APRS-IS. `pass -1` oznacza niezweryfikowanego klienta APRS-IS tylko do odbioru i nie pozwala wysyłać odebranych ramek RF.
+
+APRSBox identyfikuje możliwość powrotu na RF osobno dla każdej bramkowanej stacji:
+
+- `qAO` jest używane, gdy żaden aktywny flow powrotu wiadomości nie obejmuje danego źródła RF.
+- `qAR` jest używane, gdy aktywny flow `APRS-IS → RF` może dostarczać wiadomości do stacji słyszanych przez to źródło RF.
+- Ramki wygenerowane lokalnie przez APRSBox używają `TCPIP*`; są to pakiety klienta, a nie pakiety bramkowane z RF.
+
+Wyłączenie flow `APRS-IS → RF` powoduje użycie `qAO` w kolejnych uplinkach RF.
+
 ## Diagnostyka
 
 Panel stanu pokazuje aktualne połączenie, login, aktywne reguły APRSIS, ostatni błąd oraz liczniki ramek wysłanych i odrzuconych przed TX do APRS-IS.

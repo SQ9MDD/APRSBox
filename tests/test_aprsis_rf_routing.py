@@ -219,6 +219,7 @@ class AprsisRfModelTests(unittest.TestCase):
 
         template = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
         self.assertIn("filter_rf_guard", template)
+        self.assertIn("filter_aprsis_message_delivery", template)
         self.assertIn("filter_rf_tx_guard", template)
         self.assertIn("rfGuardSystemManaged", template)
         self.assertIn("const isStrictAprsisToRfFlow = () => isAprsisSourceFlow() && isTxRfTargetFlow();", template)
@@ -250,6 +251,7 @@ class AprsisRfModelTests(unittest.TestCase):
                 [
                     "receiver_aprsis",
                     "filter_rf_guard",
+                    "filter_aprsis_message_delivery",
                     "filter_allow_rules",
                     "filter_rf_tx_guard",
                     "tx_rf",
@@ -258,8 +260,12 @@ class AprsisRfModelTests(unittest.TestCase):
             input_guard = normalized["steps"][1]
             self.assertEqual(input_guard["enabled"], 1)
             self.assertEqual(input_guard["config"], {})
-            self.assertEqual(normalized["steps"][2]["config"], {"callsigns": [], "radius_km": ""})
-            self.assertEqual(normalized["steps"][3]["config"], RF_GUARD_DEFAULTS)
+            self.assertEqual(
+                normalized["steps"][2]["config"],
+                {"rf_sources": [], "heard_window_minutes": 60, "max_consumed_hops": 0},
+            )
+            self.assertEqual(normalized["steps"][3]["config"], {"callsigns": [], "radius_km": ""})
+            self.assertEqual(normalized["steps"][4]["config"], RF_GUARD_DEFAULTS)
 
             flow_id = create_digi_flow(
                 aprsis_rf_payload(include_guard=False, include_tx_guard=False, include_allow=False)
@@ -275,7 +281,8 @@ class AprsisRfModelTests(unittest.TestCase):
             payload["steps"][1], payload["steps"][2] = payload["steps"][2], payload["steps"][1]
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["steps"][1]["step_type"], "filter_rf_guard")
-            self.assertEqual(normalized["steps"][2]["step_type"], "filter_allow_rules")
+            self.assertEqual(normalized["steps"][2]["step_type"], "filter_aprsis_message_delivery")
+            self.assertEqual(normalized["steps"][3]["step_type"], "filter_allow_rules")
             self.assertEqual(normalized["steps"][-2]["step_type"], "filter_rf_tx_guard")
 
             duplicate = aprsis_rf_payload()
@@ -303,7 +310,7 @@ class AprsisRfModelTests(unittest.TestCase):
 
             restricted_flow_id = create_digi_flow(aprsis_rf_payload(enabled=0))
             execute(
-                "UPDATE digi_flow_steps SET step_order = 6 WHERE flow_id = ? AND step_type = 'tx_rf'",
+                "UPDATE digi_flow_steps SET step_order = 7 WHERE flow_id = ? AND step_type = 'tx_rf'",
                 (restricted_flow_id,),
             )
             execute(
@@ -311,7 +318,7 @@ class AprsisRfModelTests(unittest.TestCase):
                 INSERT INTO digi_flow_steps(
                     flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
                 )
-                VALUES (?, 5, 'filter_callsign', 'Source Callsign Filter', 1, ?, ?, ?)
+                VALUES (?, 6, 'filter_callsign', 'Source Callsign Filter', 1, ?, ?, ?)
                 """,
                 (
                     restricted_flow_id,
@@ -425,7 +432,15 @@ class AprsisRfModelTests(unittest.TestCase):
                 (json.dumps(legacy_config), flow_id),
             )
             execute(
-                "DELETE FROM digi_flow_steps WHERE flow_id = ? AND step_type = 'filter_rf_tx_guard'",
+                """
+                DELETE FROM digi_flow_steps
+                WHERE flow_id = ?
+                  AND step_type IN (
+                      'filter_aprsis_message_delivery',
+                      'filter_allow_rules',
+                      'filter_rf_tx_guard'
+                  )
+                """,
                 (flow_id,),
             )
 
@@ -437,6 +452,7 @@ class AprsisRfModelTests(unittest.TestCase):
                 [
                     "receiver_aprsis",
                     "filter_rf_guard",
+                    "filter_aprsis_message_delivery",
                     "filter_allow_rules",
                     "filter_rf_tx_guard",
                     "tx_rf",
@@ -444,8 +460,13 @@ class AprsisRfModelTests(unittest.TestCase):
             )
             self.assertEqual(flow["steps"][1]["title"], "APRS-IS Input Safety Rule")
             self.assertEqual(flow["steps"][1]["config"], {})
-            self.assertEqual(flow["steps"][3]["title"], "APRS-IS to RF TX Safety Rule")
-            self.assertEqual(flow["steps"][3]["config"], legacy_config)
+            self.assertEqual(flow["steps"][2]["title"], "APRS-IS Message Delivery Rule")
+            self.assertEqual(
+                flow["steps"][2]["config"],
+                {"rf_sources": [], "heard_window_minutes": 60, "max_consumed_hops": 0},
+            )
+            self.assertEqual(flow["steps"][4]["title"], "APRS-IS to RF TX Safety Rule")
+            self.assertEqual(flow["steps"][4]["config"], legacy_config)
             migrated_updated_at = flow["updated_at"]
 
             init_db()
@@ -453,6 +474,14 @@ class AprsisRfModelTests(unittest.TestCase):
             self.assertEqual(idempotent_flow["updated_at"], migrated_updated_at)
             self.assertEqual(
                 sum(1 for step in idempotent_flow["steps"] if step["step_type"] == "filter_rf_tx_guard"),
+                1,
+            )
+            self.assertEqual(
+                sum(
+                    1
+                    for step in idempotent_flow["steps"]
+                    if step["step_type"] == "filter_aprsis_message_delivery"
+                ),
                 1,
             )
 
@@ -689,11 +718,12 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summaries[0]["final_result"], "TX")
         self.assertEqual(
             [step["status"] for step in summaries[0]["steps"]],
-            ["passed", "passed", "passed", "passed", "executed"],
+            ["passed", "passed", "passed", "passed", "passed", "executed"],
         )
         self.assertIn("APRS-IS Input Safety Rule passed", summaries[0]["steps"][1]["description"])
-        self.assertIn("Callsign and Radius Rule matched exact callsign AND radius", summaries[0]["steps"][2]["description"])
-        self.assertIn("APRS-IS to RF TX Safety Rule passed final", summaries[0]["steps"][3]["description"])
+        self.assertIn("not applicable", summaries[0]["steps"][2]["description"])
+        self.assertIn("Callsign and Radius Rule matched exact callsign AND radius", summaries[0]["steps"][3]["description"])
+        self.assertIn("APRS-IS to RF TX Safety Rule passed final", summaries[0]["steps"][4]["description"])
 
     async def test_execution_summary_marks_rejected_default_deny_step_as_reached(self) -> None:
         flow_id = self.create_flow(callsigns=[], radius_km="")
@@ -705,9 +735,9 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summaries[0]["final_result"], "REJECTED")
         self.assertEqual(
             [step["status"] for step in summaries[0]["steps"]],
-            ["passed", "passed", "rejected", "not_reached", "not_reached"],
+            ["passed", "passed", "passed", "rejected", "not_reached", "not_reached"],
         )
-        self.assertIn("default_deny_filter_mismatch", summaries[0]["steps"][2]["description"])
+        self.assertIn("default_deny_filter_mismatch", summaries[0]["steps"][3]["description"])
 
     async def test_tx_queue_failure_happens_after_rf_tx_guard_passes(self) -> None:
         flow_id = self.create_flow()
@@ -736,7 +766,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summary["final_result"], "REJECTED")
         self.assertEqual(
             [step["status"] for step in summary["steps"]],
-            ["passed", "rejected", "not_reached", "not_reached", "not_reached"],
+            ["passed", "rejected", "not_reached", "not_reached", "not_reached", "not_reached"],
         )
         self.assertIn("invalid_aprs", summary["steps"][1]["description"])
 

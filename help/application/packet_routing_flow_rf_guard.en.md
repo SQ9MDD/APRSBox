@@ -6,7 +6,7 @@ An `APRS-IS -> RF` flow forwards selected APRS-IS packets to a physical radio in
 
 `APRS-IS source -> APRS-IS Input Safety Rule -> APRS-IS Callsign and Radius Rule -> APRS-IS to RF TX Safety Rule -> TX RF`
 
-All three rules are inserted automatically for `APRS-IS → RF`. They cannot be removed, disabled, bypassed, reordered, or added twice. No optional filter can be added to this restricted flow. The backend and runtime enforce the same protection even if stored data is modified manually.
+All four rules are inserted automatically for `APRS-IS → RF`. They cannot be removed, disabled, bypassed, reordered, or added twice. No optional filter can be added to this restricted flow. The backend and runtime enforce the same protection even if stored data is modified manually.
 
 ## APRS-IS Callsign and Radius Rule
 

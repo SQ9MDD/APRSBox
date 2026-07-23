@@ -25,6 +25,7 @@ from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.aprsis_rf import (
     ALLOW_RULES_STEP_TYPE,
     APRSIS_FLOW_SOURCE_KIND,
+    MESSAGE_DELIVERY_STEP_TYPE,
     RF_GUARD_DEFAULTS,
     RF_GUARD_STEP_TYPE,
     RF_TX_GUARD_STEP_TYPE,
@@ -32,9 +33,16 @@ from app.services.aprsis_rf import (
     logical_packet_hash,
     matches_default_deny_filter,
     normalize_default_deny_config,
+    normalize_message_delivery_config,
     normalize_rf_guard_config,
     record_aprsis_rf_stat,
     validate_aprsis_rf_target,
+)
+from app.services.igate_messaging import (
+    clear_pending_sender_position,
+    evaluate_message_delivery,
+    mark_pending_sender_position,
+    message_return_capable_for_rf_source,
 )
 from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, get_digi_flow, list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import (
@@ -137,8 +145,9 @@ class DigiFlowRuntimeService:
         self._aprsis_rf_delay_override = aprsis_rf_delay_override
         self._aprsis_rf_seen: OrderedDict[str, _AprsisRfSeenEntry] = OrderedDict()
         self._aprsis_rf_pending: dict[tuple[int, str], _AprsisRfPendingEntry] = {}
-        self._aprsis_rf_flow_buckets: dict[int, _TokenBucket] = {}
-        self._aprsis_rf_source_buckets: dict[tuple[int, str], _TokenBucket] = {}
+        self._aprsis_rf_flow_buckets: dict[tuple[int, str], _TokenBucket] = {}
+        self._aprsis_rf_source_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
+        self._aprsis_rf_recipient_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
 
     async def start(self) -> None:
         if self._task is not None:
@@ -167,6 +176,7 @@ class DigiFlowRuntimeService:
         self._aprsis_rf_seen.clear()
         self._aprsis_rf_flow_buckets.clear()
         self._aprsis_rf_source_buckets.clear()
+        self._aprsis_rf_recipient_buckets.clear()
         for task in aprsis_rf_tasks:
             task.cancel()
         for task in aprsis_rf_tasks:
@@ -443,6 +453,8 @@ class DigiFlowRuntimeService:
             return {"decision": "continue"}
         if step_type == RF_GUARD_STEP_TYPE:
             return self._execute_aprsis_rf_input_guard(context, step)
+        if step_type == MESSAGE_DELIVERY_STEP_TYPE:
+            return self._execute_aprsis_message_delivery(context, step)
         if step_type == RF_TX_GUARD_STEP_TYPE:
             return self._execute_aprsis_rf_tx_guard(context, step)
         if step_type == ALLOW_RULES_STEP_TYPE:
@@ -656,11 +668,110 @@ class DigiFlowRuntimeService:
             )
         return self._schedule_aprsis_rf_pending(context, step, target_step)
 
+    def _execute_aprsis_message_delivery(
+        self,
+        context: dict[str, Any],
+        step: dict[str, Any],
+    ) -> dict[str, str]:
+        if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
+            return {"decision": "continue"}
+        flow = dict(context.get("flow") or {})
+        flow_id = int(flow["id"])
+        step_id = int(step["id"])
+        try:
+            config = normalize_message_delivery_config(dict(step.get("config") or {}))
+        except ValueError:
+            config = normalize_message_delivery_config({})
+        result = evaluate_message_delivery(
+            context.get("parsed"),
+            flow_id=flow_id,
+            target_ref=str(flow.get("target_ref") or ""),
+            config=config,
+            local_igate=_local_station_identity(),
+        )
+        route = str(result.get("route") or "")
+        reason = str(result.get("reason") or "message_policy_rejected")
+        context["aprsis_message_delivery_result"] = dict(result)
+
+        if route == "not_applicable":
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="message_delivery",
+                decision="passed",
+                message=(
+                    "APRS-IS Message Delivery Rule passed as not applicable for this packet; "
+                    "continuing to the callsign-and-radius rule."
+                ),
+            )
+            return {"decision": "continue"}
+
+        if route in {"message", "associated_position"}:
+            context["aprsis_route_authorization"] = route
+            context["aprsis_default_deny_filter_matched"] = True
+            stat_counter = (
+                "matched_message_rule"
+                if route == "message"
+                else "matched_associated_position"
+            )
+            record_aprsis_rf_stat(flow_id, stat_counter)
+            if route == "message":
+                message = (
+                    "APRS-IS Message Delivery Rule passed "
+                    f"| route=igate_message sender={result.get('sender') or '-'} "
+                    f"recipient={result.get('recipient') or '-'} "
+                    f"heard_interface={result.get('heard_interface') or '-'} "
+                    f"heard_age={int(result.get('heard_age_seconds') or 0)}s "
+                    f"consumed_hops={int(result.get('consumed_hops') or 0)}"
+                )
+            else:
+                message = (
+                    "APRS-IS Message Delivery Rule passed "
+                    f"| route=associated_position sender={result.get('sender') or '-'}"
+                )
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="message_delivery",
+                decision="passed",
+                message=message,
+            )
+            return {"decision": "continue"}
+
+        stat_counter = {
+            "message_recipient_seen_internet": "dropped_recipient_seen_internet",
+            "message_sender_heard_local_rf": "dropped_sender_heard_rf",
+        }.get(reason, "dropped_recipient_not_local")
+        return self._drop_aprsis_rf(
+            context,
+            step_id=step_id,
+            reason_code=reason,
+            stat_counter=stat_counter,
+            event_type="message_delivery",
+        )
+
     def _execute_aprsis_allow_rules(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
             return {"decision": "continue"}
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
+        route_authorization = str(context.get("aprsis_route_authorization") or "")
+        if route_authorization in {"message", "associated_position"}:
+            context["aprsis_default_deny_filter_matched"] = True
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="inclusive_allow_rules",
+                decision="bypassed",
+                message=(
+                    "APRS-IS Callsign and Radius Rule bypassed because the mandatory "
+                    f"message-delivery route already authorized this packet ({route_authorization})."
+                ),
+            )
+            return {"decision": "continue"}
         try:
             config = normalize_default_deny_config(dict(step.get("config") or {}))
         except ValueError:
@@ -697,6 +808,11 @@ class DigiFlowRuntimeService:
         step: dict[str, Any],
     ) -> dict[str, str] | None:
         if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
+            return None
+        if str(context.get("aprsis_route_authorization") or "") in {
+            "message",
+            "associated_position",
+        }:
             return None
         if bool(context.get("aprsis_default_deny_filter_matched")):
             return None
@@ -1873,6 +1989,11 @@ class DigiFlowRuntimeService:
             limit_reason = self._consume_aprsis_rf_rate_limit(
                 flow_id=entry.flow_id,
                 source_callsign=entry.source_callsign,
+                recipient_callsign=str(
+                    dict(entry.context.get("aprsis_message_delivery_result") or {}).get("recipient")
+                    or ""
+                ),
+                route_class=str(entry.context.get("aprsis_route_authorization") or "allow_rule"),
                 config=guard_config,
                 now=now,
             )
@@ -1945,6 +2066,18 @@ class DigiFlowRuntimeService:
             self._aprsis_rf_seen.move_to_end(entry.packet_hash)
             record_aprsis_rf_stat(entry.flow_id, "queued_to_rf")
             entry.context["current_line"] = tx_line
+            route_authorization = str(entry.context.get("aprsis_route_authorization") or "")
+            delivery_result = dict(entry.context.get("aprsis_message_delivery_result") or {})
+            if route_authorization == "message":
+                mark_pending_sender_position(
+                    flow_id=entry.flow_id,
+                    sender_key=str(delivery_result.get("sender") or entry.source_callsign),
+                )
+            elif route_authorization == "associated_position":
+                clear_pending_sender_position(
+                    flow_id=entry.flow_id,
+                    sender_key=str(delivery_result.get("sender") or entry.source_callsign),
+                )
             log_digi_flow_event(
                 frame_uid=entry.context["frame_uid"],
                 flow_id=entry.flow_id,
@@ -1978,6 +2111,8 @@ class DigiFlowRuntimeService:
         *,
         flow_id: int,
         source_callsign: str,
+        recipient_callsign: str,
+        route_class: str,
         config: dict[str, int],
         now: float,
     ) -> str | None:
@@ -1985,14 +2120,19 @@ class DigiFlowRuntimeService:
         flow_burst = float(config["flow_burst"])
         source_rate = float(config["source_rate_per_minute"])
         source_burst = float(config["source_burst"])
+        normalized_route = (
+            "message"
+            if route_class in {"message", "associated_position"}
+            else "allow_rule"
+        )
         flow_bucket = self._refill_token_bucket(
             self._aprsis_rf_flow_buckets,
-            flow_id,
+            (flow_id, normalized_route),
             rate_per_minute=flow_rate,
             burst=flow_burst,
             now=now,
         )
-        source_key = (flow_id, source_callsign)
+        source_key = (flow_id, normalized_route, source_callsign)
         source_bucket = self._refill_token_bucket(
             self._aprsis_rf_source_buckets,
             source_key,
@@ -2004,8 +2144,21 @@ class DigiFlowRuntimeService:
             return "rate_limit_flow"
         if source_bucket.tokens < 1.0:
             return "rate_limit_source"
+        recipient_bucket: _TokenBucket | None = None
+        if normalized_route == "message" and recipient_callsign:
+            recipient_bucket = self._refill_token_bucket(
+                self._aprsis_rf_recipient_buckets,
+                (flow_id, normalized_route, recipient_callsign),
+                rate_per_minute=source_rate,
+                burst=source_burst,
+                now=now,
+            )
+            if recipient_bucket.tokens < 1.0:
+                return "rate_limit_recipient"
         flow_bucket.tokens -= 1.0
         source_bucket.tokens -= 1.0
+        if recipient_bucket is not None:
+            recipient_bucket.tokens -= 1.0
         return None
 
     @staticmethod
@@ -2038,6 +2191,10 @@ class DigiFlowRuntimeService:
             oldest = sorted(self._aprsis_rf_source_buckets.items(), key=lambda item: item[1].updated_at)
             for key, _bucket in oldest[: len(oldest) - 4096]:
                 self._aprsis_rf_source_buckets.pop(key, None)
+        if len(self._aprsis_rf_recipient_buckets) > 4096:
+            oldest = sorted(self._aprsis_rf_recipient_buckets.items(), key=lambda item: item[1].updated_at)
+            for key, _bucket in oldest[: len(oldest) - 4096]:
+                self._aprsis_rf_recipient_buckets.pop(key, None)
 
     async def _execute_tx_aprsis(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         flow_id = int(context["flow"]["id"])
@@ -2070,7 +2227,33 @@ class DigiFlowRuntimeService:
             record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
-        tx_line = _build_aprsis_uplink_line(parsed, local_igate=local_igate)
+        source_kind = str(context.get("source_kind") or "")
+        q_construct = ""
+        q_reason = "client_originated"
+        if source_kind == LOCAL_TX_SOURCE_KIND:
+            tx_line = _build_aprsis_uplink_line(
+                parsed,
+                local_igate=local_igate,
+                client_originated=True,
+            )
+        else:
+            consumed_hops = len(
+                _consumed_path_hops(_split_path_tokens(str(parsed.get("path") or "")))
+            )
+            if bool(parsed.get("is_third_party")):
+                return_capable = False
+                q_reason = "third_party_or_translated_source"
+            else:
+                return_capable, q_reason = message_return_capable_for_rf_source(
+                    str(context.get("source_ref") or ""),
+                    consumed_hops=consumed_hops,
+                )
+            q_construct = "qAR" if return_capable else "qAO"
+            tx_line = _build_aprsis_uplink_line(
+                parsed,
+                local_igate=local_igate,
+                q_construct=q_construct,
+            )
         if not tx_line:
             message = _t("APRS-IS TX rejected frame because APRS-IS uplink formatting failed.")
             log_digi_flow_event(
@@ -2118,13 +2301,18 @@ class DigiFlowRuntimeService:
             success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
         decision = "tx" if success else "drop"
         message = detail or ("APRS-IS TX queued." if success else "APRS-IS TX failed.")
+        uplink_identity = (
+            "TCPIP* client-originated"
+            if source_kind == LOCAL_TX_SOURCE_KIND
+            else f"{q_construct} ({q_reason})"
+        )
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
             event_type="output_action",
             decision=decision,
-            message=f"{message} | line={tx_line}",
+            message=f"{message} | uplink={uplink_identity} | line={tx_line}",
         )
         record_aprsis_tx_result(sent=success, frame_line=tx_line)
         return {"decision": decision}
@@ -2467,12 +2655,25 @@ def _build_tnc2_line(parsed: dict[str, Any]) -> str:
     return f"{header}:{str(parsed.get('info') or '')}"
 
 
-def _build_aprsis_uplink_line(parsed: dict[str, Any], *, local_igate: str) -> str:
+def _build_aprsis_uplink_line(
+    parsed: dict[str, Any],
+    *,
+    local_igate: str,
+    q_construct: str = "qAO",
+    client_originated: bool = False,
+) -> str:
     source = str(parsed.get("source") or "").strip()
     destination = str(parsed.get("destination") or "").strip()
     path = str(parsed.get("path") or "").strip()
     info = str(parsed.get("info") or "")
     if not source or not destination:
+        return ""
+
+    if client_originated:
+        return f"{source}>{destination},TCPIP*:{info}"
+
+    normalized_q = str(q_construct or "").strip()
+    if normalized_q not in {"qAR", "qAO"}:
         return ""
 
     if bool(parsed.get("is_third_party")):
@@ -2497,7 +2698,7 @@ def _build_aprsis_uplink_line(parsed: dict[str, Any], *, local_igate: str) -> st
     else:
         merged_path_tokens = [token for token in _split_path_tokens_keep_case(path) if token]
 
-    merged_path_tokens.extend(["qAO", local_igate])
+    merged_path_tokens.extend([normalized_q, local_igate])
     merged_path = ",".join(merged_path_tokens)
     header = f"{source}>{destination}"
     if merged_path:

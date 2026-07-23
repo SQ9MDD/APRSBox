@@ -2,6 +2,7 @@
 
 ## 1.8.54.dev - 2026-07-23
 - `APRS-IS / routing`: added APRS-IS as an interface and safe `APRS-IS → RF` routing.
+- `iGate / messages`: added bidirectional APRS message gating with local reachability checks and correct `qAR`/`qAO`.
 
 ## 1.8.53.dev - 2026-07-14
 - `Messages / group conversations`: added threads for explicitly configured target groups with sender labels; other groups are ignored, while group messages are transmitted once without a message number, ACK, or retry.

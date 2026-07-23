@@ -20,6 +20,18 @@ Detailed guidance for building these paths is available here:
 
 The APRS-IS passcode is not an account password. It is the standard code derived from a callsign and required by APRS-IS servers for sending frames.
 
+## Receive-only and bidirectional IGate identity
+
+Both modes use a verified APRS-IS login. `pass -1` is an unverified receive-only APRS-IS client and cannot upload RF packets.
+
+APRSBox identifies the RF return capability per gated station:
+
+- `qAO` is used when no active message-return flow covers the RF source.
+- `qAR` is used when an active `APRS-IS → RF` flow can deliver messages back to stations heard through that RF source.
+- Locally generated APRSBox packets use `TCPIP*`; they are client-originated packets, not RF-gated packets.
+
+Disabling the `APRS-IS → RF` flow changes subsequent RF uplinks back to `qAO`.
+
 ## Diagnostics
 
 The status panel shows the current connection, login, active APRSIS flows, last error, and counters for frames sent or dropped before APRS-IS TX.

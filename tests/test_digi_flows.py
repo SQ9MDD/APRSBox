@@ -502,6 +502,7 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(len(palette_labels), len(set(palette_labels)))
             mandatory_rules = {
                 "filter_rf_guard",
+                "filter_aprsis_message_delivery",
                 "filter_allow_rules",
                 "filter_rf_tx_guard",
                 "filter_path",
@@ -516,6 +517,11 @@ class DigiFlowsTests(unittest.TestCase):
                 self.assertTrue(type_meta[step_type]["scope_tone"])
             self.assertEqual(type_meta["filter_path"]["scope_label"], "RF → RF")
             self.assertEqual(type_meta["filter_rf_guard"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(type_meta["filter_aprsis_message_delivery"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(
+                type_meta["filter_aprsis_message_delivery"]["help_page"],
+                "application/packet_routing_flow_aprsis_message_delivery_rule",
+            )
             self.assertEqual(type_meta["filter_allow_rules"]["scope_label"], "APRS-IS → RF")
             self.assertEqual(
                 type_meta["filter_allow_rules"]["help_page"],

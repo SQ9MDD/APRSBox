@@ -2,6 +2,7 @@
 
 ## 1.8.54.dev - 2026-07-23
 - `APRS-IS / Routing`: APRS-IS wurde als Interface sowie sicheres Routing `APRS-IS → RF` hinzugefügt.
+- `iGate / Nachrichten`: bidirektionales APRS-Nachrichten-Gating mit lokaler Erreichbarkeitsprüfung und korrektem `qAR`/`qAO` wurde hinzugefügt.
 
 ## 1.8.53.dev - 2026-07-14
 - `Nachrichten / Gruppenunterhaltungen`: Threads fuer explizit konfigurierte Zielgruppen mit Absenderkennzeichnung wurden hinzugefuegt; andere Gruppen werden ignoriert, Gruppennachrichten werden einmalig ohne Nachrichtennummer, ACK oder Wiederholung gesendet.
