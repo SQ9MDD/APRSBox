@@ -31,7 +31,12 @@ from app.services.digi_flows import (
     normalize_digi_flow_payload,
     set_digi_flow_enabled,
 )
-from app.services.outbound import build_aprsis_third_party_tnc2, claim_next_outbound_job, get_outbound_job
+from app.services.outbound import (
+    build_aprsis_third_party_tnc2,
+    build_tnc2_kiss_frame,
+    claim_next_outbound_job,
+    get_outbound_job,
+)
 from app.services.outbound_runtime import OutboundService
 
 
@@ -484,6 +489,54 @@ class AprsisRfRuleAndProtocolTests(unittest.TestCase):
         parsed = parse_tnc2_frame(message_line(text="x" * 250))
         with self.assertRaisesRegex(ValueError, "packet_too_long"):
             build_aprsis_third_party_tnc2(parsed, igate_callsign="SQ9MDD-4")
+
+    def test_aprsis_utf8_payload_is_transliterated_to_ascii_before_rf_tx(self) -> None:
+        incoming = (
+            "SQ5TM-1>AESPG4,TCPIP*,qAC,T2FINLAND:"
+            "@231411z5214.39N/02054.94E_WX Gorce T=27° H=44% P=997 "
+            "PM 1:[0] , 2.5:[1] , 10:[1] (μg/m3)"
+        )
+        parsed = parse_tnc2_frame(incoming)
+        line = build_aprsis_third_party_tnc2(parsed, igate_callsign="SQ9MDD-4")
+
+        self.assertEqual(
+            line,
+            "SQ9MDD-4>APBOX0:}SQ5TM-1>AESPG4,TCPIP,SQ9MDD-4*:"
+            "@231411z5214.39N/02054.94E_WX Gorce T=27deg H=44% P=997 "
+            "PM 1:[0] , 2.5:[1] , 10:[1] (ug/m3)",
+        )
+        self.assertTrue(line.isascii())
+        frame = build_tnc2_kiss_frame(line)
+        self.assertEqual(frame[18:-1].decode("ascii"), line.split(":", 1)[1])
+
+    def test_third_party_builder_checks_size_after_transliteration(self) -> None:
+        inner_prefix = "}SP5ABC>APRS,TCPIP,SQ9MDD-4*:"
+        payload_at_limit = ("x" * (256 - len(inner_prefix) - len("deg"))) + "°"
+        line = build_aprsis_third_party_tnc2(
+            parse_tnc2_frame(f"SP5ABC>APRS:{payload_at_limit}"),
+            igate_callsign="SQ9MDD-4",
+        )
+        self.assertEqual(len(line.split(":", 1)[1].encode("ascii")), 256)
+
+        oversized_payload = f"x{payload_at_limit}"
+        with self.assertRaisesRegex(ValueError, "packet_too_long"):
+            build_aprsis_third_party_tnc2(
+                parse_tnc2_frame(f"SP5ABC>APRS:{oversized_payload}"),
+                igate_callsign="SQ9MDD-4",
+            )
+
+    def test_aprsis_client_decodes_valid_utf8_before_packet_routing(self) -> None:
+        received: list[tuple[tuple, dict]] = []
+        service = AprsisClientService(
+            rx_processor=lambda *_args, **_kwargs: True,
+            frame_consumer=lambda *args, **kwargs: received.append((args, kwargs)),
+        )
+        service._desired_rx_interface = {"id": 9, "name": "APRSIS-RX", "filter": "m/20"}
+        raw_line = "SP5ABC>APRS,TCPIP*,qAC,SERVER:>T=27° (μg/m3)\r\n".encode("utf-8")
+
+        self.assertTrue(service._process_server_line(raw_line))
+        self.assertEqual(received[0][0][0], "SP5ABC>APRS,TCPIP*,qAC,SERVER:>T=27° (μg/m3)")
+        self.assertEqual(received[0][1]["metadata"]["payload"], ">T=27° (μg/m3)")
 
     def test_aprsis_client_dispatches_parsed_metadata_without_creating_rf_rx(self) -> None:
         received: list[tuple[tuple, dict]] = []

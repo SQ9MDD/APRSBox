@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -37,6 +38,22 @@ LOCAL_TX_ORIGIN_UNKNOWN = "unknown"
 LOCAL_TX_KIND_ROUTED = "routed"
 LOCAL_TX_KIND_OTHER = "other"
 INTERNAL_TX_INTERFACE_NAME = "Internal TX"
+_APRSIS_RF_TRANSLITERATIONS = str.maketrans(
+    {
+        "\u00a0": " ",
+        "°": "deg",
+        "µ": "u",
+        "μ": "u",
+        "–": "-",
+        "—": "-",
+        "−": "-",
+        "‘": "'",
+        "’": "'",
+        "“": '"',
+        "”": '"',
+        "…": "...",
+    }
+)
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -707,7 +724,9 @@ def build_aprsis_third_party_tnc2(
         raise ValueError("invalid_third_party")
     original_source = str(parsed.get("source") or "").strip().upper()
     original_destination = str(parsed.get("destination") or "").strip().upper()
-    original_payload = str(parsed.get("info") if parsed.get("info") is not None else "")
+    original_payload = _sanitize_aprsis_payload_for_rf(
+        str(parsed.get("info") if parsed.get("info") is not None else "")
+    )
     normalized_igate = str(igate_callsign or "").strip().upper()
     normalized_destination = str(destination or "").strip().upper()
     normalized_path = str(rf_path or "").strip().upper()
@@ -724,10 +743,7 @@ def build_aprsis_third_party_tnc2(
 
     inner_line = f"{original_source}>{original_destination},TCPIP,{normalized_igate}*:{original_payload}"
     outer_info = f"}}{inner_line}"
-    try:
-        info_length = len(outer_info.encode("latin-1"))
-    except UnicodeEncodeError as exc:
-        raise ValueError("Final APRS packet contains characters outside the AX.25 information encoding.") from exc
+    info_length = len(_encode_ax25_information(outer_info))
     if info_length > AX25_MAX_INFORMATION_BYTES:
         raise ValueError("packet_too_long")
 
@@ -1078,7 +1094,7 @@ def build_tnc2_kiss_frame(line: str) -> bytes:
         ax25.extend(chunk)
     ax25.append(AX25_CONTROL_UI)
     ax25.append(AX25_PID_NO_LAYER3)
-    ax25.extend(info.encode("utf-8"))
+    ax25.extend(_encode_ax25_information(info))
     escaped = bytearray([0x00])
     for byte in ax25:
         if byte == KISS_FEND:
@@ -1088,6 +1104,28 @@ def build_tnc2_kiss_frame(line: str) -> bytes:
         else:
             escaped.append(byte)
     return bytes([KISS_FEND]) + bytes(escaped) + bytes([KISS_FEND])
+
+
+def _encode_ax25_information(info: str) -> bytes:
+    try:
+        return info.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ValueError("AX.25 APRS information must use 7-bit ASCII.") from exc
+
+
+def _sanitize_aprsis_payload_for_rf(payload: str) -> str:
+    """Transliterate APRS-IS text into the 7-bit representation used on RF."""
+
+    normalized = unicodedata.normalize("NFKD", str(payload or "").translate(_APRSIS_RF_TRANSLITERATIONS))
+    safe: list[str] = []
+    for char in normalized:
+        if ord(char) <= 0x7F:
+            safe.append(char)
+        elif unicodedata.combining(char):
+            continue
+        else:
+            safe.append("?")
+    return "".join(safe)
 
 
 def _parse_coordinate(value: Any) -> float | None:

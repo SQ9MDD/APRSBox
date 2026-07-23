@@ -1395,7 +1395,13 @@ class AprsisClientService:
 
     def _process_server_line(self, raw_line: bytes | str) -> bool:
         if isinstance(raw_line, bytes):
-            line = raw_line.decode("latin-1", errors="replace").rstrip("\r\n")
+            try:
+                line = raw_line.decode("utf-8").rstrip("\r\n")
+            except UnicodeDecodeError:
+                # APRS-IS does not advertise a text encoding.  UTF-8 is used
+                # by a number of clients for station comments, while legacy
+                # single-byte traffic still needs a lossless fallback.
+                line = raw_line.decode("latin-1").rstrip("\r\n")
         else:
             line = str(raw_line or "").rstrip("\r\n")
         normalized_control = line.lstrip()

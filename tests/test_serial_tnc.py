@@ -143,6 +143,10 @@ class KISSFrameEncodingTests(unittest.TestCase):
         self.assertTrue(frame.startswith(bytes([0xC0, 0x00])))
         self.assertEqual(frame[-1], 0xC0)
 
+    def test_build_tnc2_kiss_frame_rejects_non_ascii_information(self) -> None:
+        with self.assertRaisesRegex(ValueError, "7-bit ASCII"):
+            build_tnc2_kiss_frame("SQ9XYZ-9>APRS:Temperature 27°")
+
     def test_build_tnc2_kiss_frame_uses_data_command_and_never_uses_kiss_return(self) -> None:
         frame = build_tnc2_kiss_frame("SQ9MDD-7>APRS,WIDE1-1:>test")
         self.assertEqual(frame[0], 0xC0)
