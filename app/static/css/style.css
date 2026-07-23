@@ -2893,7 +2893,7 @@ select:focus-visible,
     justify-content: space-between;
     gap: 0.7rem;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .digi-step-meta,
@@ -2905,12 +2905,13 @@ select:focus-visible,
 }
 
 .digi-step-actions {
+    flex: 0 0 auto;
     flex-wrap: nowrap;
 }
 
 .digi-step-meta {
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 1 1 0;
 }
 
 .digi-step-order,

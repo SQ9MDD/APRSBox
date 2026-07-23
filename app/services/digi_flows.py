@@ -2096,6 +2096,8 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
                 step_state["status"] = "passed"
                 step_state["description"] = _t("Source matched and packet entered the flow.")
             elif event_type in {
+                "rf_guard",
+                "inclusive_allow_rules",
                 "filter_callsign",
                 "filter_digi",
                 "filter_dupe",
@@ -2218,6 +2220,10 @@ def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -
         return str(flow.get("source_kind") or "")
     if event_type == "filter_callsign":
         return "filter_callsign"
+    if event_type == "rf_guard":
+        return RF_GUARD_STEP_TYPE
+    if event_type == "inclusive_allow_rules":
+        return ALLOW_RULES_STEP_TYPE
     if event_type == "filter_dupe":
         return "filter_dupe"
     if event_type == "filter_rate_limit":

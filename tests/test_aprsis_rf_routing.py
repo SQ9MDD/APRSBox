@@ -26,6 +26,7 @@ from app.services.digi_flows import (
     create_digi_flow,
     get_digi_flow,
     get_digi_flow_endpoint_options,
+    get_digi_flow_execution_summaries,
     get_digi_flow_type_meta,
     normalize_digi_flow_payload,
     set_digi_flow_enabled,
@@ -423,7 +424,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_matching_rule_queues_existing_digi_tx_job_with_origin_metadata(self) -> None:
         flow_id = self.create_flow(rules=[{"packet_type": "message", "addressee": "SQ9MDD-7"}])
-        await self.run_lines(message_line(text="queue{123"))
+        _runtime, frames = await self.run_lines(message_line(text="queue{123"))
         row = fetch_one("SELECT kind, payload_json FROM outbound_jobs ORDER BY id DESC LIMIT 1")
         self.assertIsNotNone(row)
         self.assertEqual(row["kind"], "digi_tx")
@@ -436,6 +437,31 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         stats = get_aprsis_rf_stats(flow_id)
         self.assertEqual(stats["matched_allow_rule"], 1)
         self.assertEqual(stats["queued_to_rf"], 1)
+
+        summaries = get_digi_flow_execution_summaries(flow_id)
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["frame_uid"], frames[0]["frame_uid"])
+        self.assertEqual(summaries[0]["final_result"], "TX")
+        self.assertEqual(
+            [step["status"] for step in summaries[0]["steps"]],
+            ["passed", "passed", "passed", "executed"],
+        )
+        self.assertIn("RF Guard input phase passed", summaries[0]["steps"][1]["description"])
+        self.assertIn("Inclusive allow rule", summaries[0]["steps"][2]["description"])
+
+    async def test_execution_summary_marks_rejected_allow_rules_step_as_reached(self) -> None:
+        flow_id = self.create_flow(rules=[])
+        _runtime, frames = await self.run_lines(message_line(text="blocked"))
+
+        summaries = get_digi_flow_execution_summaries(flow_id)
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["frame_uid"], frames[0]["frame_uid"])
+        self.assertEqual(summaries[0]["final_result"], "REJECTED")
+        self.assertEqual(
+            [step["status"] for step in summaries[0]["steps"]],
+            ["passed", "passed", "rejected", "not_reached"],
+        )
+        self.assertIn("no_allow_rule", summaries[0]["steps"][2]["description"])
 
     async def test_existing_outbound_transport_records_separate_transmit_stat_and_source_kind(self) -> None:
         flow_id = self.create_flow()
