@@ -1539,5 +1539,19 @@
   "Last seen via APRS-IS": "Last seen via APRS-IS",
   "Last APRS-IS activity age": "Last APRS-IS activity age",
   "Last heard via RF": "Last heard via RF",
-  "No allow rules. This flow will not forward any frames.": "No allow rules. This flow will not forward any frames."
+  "No allow rules. This flow will not forward any frames.": "No allow rules. This flow will not forward any frames.",
+  "Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and a strict callsign-and-radius default-deny filter.": "Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and a strict callsign-and-radius default-deny filter.",
+  "The APRS-IS default-deny filter is mandatory and system-managed; an empty configuration denies every packet.": "The APRS-IS default-deny filter is mandatory and system-managed; an empty configuration denies every packet.",
+  "APRS-IS Default Deny Filter": "APRS-IS Default Deny Filter",
+  "Default deny": "Default deny",
+  "Passes only exact source callsigns located within the configured radius from My Station.": "Passes only exact source callsigns located within the configured radius from My Station.",
+  "The exact callsign and radius conditions use AND.": "The exact callsign and radius conditions use AND.",
+  "Callsign entries use strict matching including SSID; wildcards are not allowed.": "Callsign entries use strict matching including SSID; wildcards are not allowed.",
+  "An empty configuration is valid and forwards no packets.": "An empty configuration is valid and forwards no packets.",
+  "Source callsigns (one per line)": "Source callsigns (one per line)",
+  "Exact match including SSID: SQ9MDD matches only SQ9MDD, while SQ9MDD-1 matches only SQ9MDD-1.": "Exact match including SSID: SQ9MDD matches only SQ9MDD, while SQ9MDD-1 matches only SQ9MDD-1.",
+  "Wildcards are not allowed.": "Wildcards are not allowed.",
+  "Packets without a decoded position, or when My Station coordinates are missing, are denied.": "Packets without a decoded position, or when My Station coordinates are missing, are denied.",
+  "RF Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source.": "RF Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source.",
+  "APRS-IS source flow can contain only one default-deny filter step.": "APRS-IS source flow can contain only one default-deny filter step."
 }

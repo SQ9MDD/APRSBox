@@ -55,4 +55,4 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 - `TX APRS-IS` erfordert den Block `Strenger Filter`.
 - `TX RF` erfordert den Block `Pfadregel und DIGI-Schutz`.
 - `Local TX` kann nur in `TX APRS-IS` oder `Black Hole` enden.
-- Eine `APRS-IS`-Quelle erhält automatisch den obligatorischen `RF Guard`; ohne Allow-Regeln wird kein Paket weitergeleitet.
+- Eine `APRS-IS`-Quelle erhält automatisch den obligatorischen `RF Guard` und den strikten Default-Deny-Filter für Rufzeichen und Radius. Rufzeichen und Radius sind mit `AND` verknüpft; eine leere Konfiguration leitet keine Pakete weiter.

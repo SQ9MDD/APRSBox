@@ -16,8 +16,8 @@ from app.services.aprsis_rf import (
     aprsis_rf_guard_reject_reason,
     get_aprsis_rf_stats,
     logical_packet_hash,
-    match_allow_rules,
-    normalize_allow_rules,
+    matches_default_deny_filter,
+    normalize_default_deny_config,
 )
 from app.services.content import dashboard_activity_series, dashboard_traffic_summary, parse_tnc2_frame
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
@@ -77,7 +77,9 @@ def set_station_identity() -> None:
     execute(
         """
         UPDATE station_settings
-        SET callsign = 'SQ9MDD', ssid = '4', updated_at = '2026-01-01T00:00:00+00:00'
+        SET callsign = 'SQ9MDD', ssid = '4',
+            latitude = '52.2297', longitude = '21.0122',
+            updated_at = '2026-01-01T00:00:00+00:00'
         WHERE id = 1
         """
     )
@@ -85,7 +87,8 @@ def set_station_identity() -> None:
 
 def aprsis_rf_payload(
     *,
-    rules: list[dict] | None = None,
+    callsigns: list[str] | None = None,
+    radius_km: str = "",
     guard_config: dict | None = None,
     include_guard: bool = True,
     include_allow: bool = True,
@@ -114,9 +117,12 @@ def aprsis_rf_payload(
         steps.append(
             {
                 "step_type": "filter_allow_rules",
-                "title": "Inclusive Allow Rules",
+                "title": "APRS-IS Default Deny Filter",
                 "enabled": 1,
-                "config": {"rules": rules or []},
+                "config": {
+                    "callsigns": callsigns or [],
+                    "radius_km": radius_km,
+                },
             }
         )
     if target_kind == "tx_rf":
@@ -162,6 +168,17 @@ def message_line(*, source: str = "SP5ABC", text: str = "hello", path: str = "TC
     return f"{source}>APRS,{path}::SQ9MDD-7:{text}"
 
 
+def position_line(
+    *,
+    source: str = "SP5ABC",
+    latitude: str = "5213.78N",
+    longitude: str = "02100.72E",
+    text: str = "Test",
+    path: str = "TCPIP*,qAR,IGATE",
+) -> str:
+    return f"{source}>APRS,{path}:!{latitude}/{longitude}>{text}"
+
+
 class AprsisRfModelTests(unittest.TestCase):
     def test_aprsis_source_guard_palette_and_frontend_locks_are_available(self) -> None:
         with temporary_database():
@@ -174,14 +191,28 @@ class AprsisRfModelTests(unittest.TestCase):
             self.assertIn("tx_rf::RF-OUT", aprsis_targets)
             self.assertNotIn("tx_aprsis::aprsis", aprsis_targets)
             self.assertIn("filter_rf_guard", get_digi_flow_type_meta())
+            default_deny_meta = get_digi_flow_type_meta()["filter_allow_rules"]
+            self.assertEqual(default_deny_meta["label"], "APRS-IS Default Deny Filter")
+            self.assertEqual(
+                [field["name"] for field in default_deny_meta["config_fields"]],
+                ["callsigns", "radius_km"],
+            )
 
         template = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
         self.assertIn("filter_rf_guard", template)
         self.assertIn("rfGuardSystemManaged", template)
         self.assertIn("deleteButton.disabled = stepCategory(step.step_type) !== \"filter\" || aprsisLockedFlow || aprsisSourceSystemStep", template)
-        self.assertIn("data.allowRulesEmpty", template.replace("dataset", "data"))
+        self.assertNotIn("data.allowRulesEmpty", template.replace("dataset", "data"))
+        self.assertNotIn("data.addAllowRule", template.replace("dataset", "data"))
+        self.assertNotIn('["packet_type", i18n.packetType', template)
+        self.assertNotIn('["destination", i18n.destination', template)
+        self.assertNotIn('["addressee", i18n.addressee', template)
+        self.assertNotIn('["object_name", i18n.objectName', template)
+        self.assertNotIn('["icon", i18n.icon', template)
+        self.assertNotIn('["center_latitude", i18n.centerLatitude', template)
+        self.assertNotIn('["center_longitude", i18n.centerLongitude', template)
         polish_catalog = Path("app/languages/pl.json").read_text(encoding="utf-8")
-        self.assertIn("Brak reguł przepuszczających. Ten flow nie przekaże żadnych ramek.", polish_catalog)
+        self.assertIn("Warunki dokładnego znaku i promienia są połączone operatorem AND.", polish_catalog)
 
     def test_backend_adds_one_enabled_guard_and_empty_allow_rules(self) -> None:
         with temporary_database():
@@ -195,7 +226,7 @@ class AprsisRfModelTests(unittest.TestCase):
             guard = normalized["steps"][1]
             self.assertEqual(guard["enabled"], 1)
             self.assertEqual(guard["config"], RF_GUARD_DEFAULTS)
-            self.assertEqual(normalized["steps"][2]["config"]["rules"], [])
+            self.assertEqual(normalized["steps"][2]["config"], {"callsigns": [], "radius_km": ""})
 
             flow_id = create_digi_flow(aprsis_rf_payload(include_guard=False, include_allow=False))
             set_digi_flow_enabled(flow_id, True)
@@ -205,7 +236,7 @@ class AprsisRfModelTests(unittest.TestCase):
         with temporary_database():
             insert_interface("APRSIS-RX", "APRSIS")
             insert_interface("RF-OUT", "TCP")
-            payload = aprsis_rf_payload(rules=[{"packet_type": "message"}])
+            payload = aprsis_rf_payload(callsigns=["SP5ABC"], radius_km="25")
             payload["steps"][1], payload["steps"][2] = payload["steps"][2], payload["steps"][1]
             normalized = normalize_digi_flow_payload(payload)
             self.assertEqual(normalized["steps"][1]["step_type"], "filter_rf_guard")
@@ -266,8 +297,8 @@ class AprsisRfModelTests(unittest.TestCase):
         with temporary_database():
             insert_interface("APRSIS-RX", "APRSIS")
             insert_interface("RF-OUT", "TCP")
-            rules = [{"packet_type": "message", "addressee": "SQ9MDD-7"}]
-            flow_id = create_digi_flow(aprsis_rf_payload(rules=rules))
+            filter_config = {"callsigns": ["SP5ABC", "SP5ABC-1"], "radius_km": "25"}
+            flow_id = create_digi_flow(aprsis_rf_payload(**filter_config))
             guard = fetch_one(
                 "SELECT id FROM digi_flow_steps WHERE flow_id = ? AND step_type = 'filter_rf_guard'",
                 (flow_id,),
@@ -277,7 +308,7 @@ class AprsisRfModelTests(unittest.TestCase):
             editor = build_digi_flow_editor_payload(flow)
             self.assertEqual(editor["steps"][1]["step_type"], "filter_rf_guard")
             allow = next(step for step in editor["steps"] if step["step_type"] == "filter_allow_rules")
-            self.assertEqual(allow["config"]["rules"], rules)
+            self.assertEqual(allow["config"], filter_config)
             self.assertIsNone(fetch_one(
                 "SELECT id FROM digi_flow_steps WHERE flow_id = ? AND step_type = 'filter_rf_guard'",
                 (flow_id,),
@@ -285,47 +316,49 @@ class AprsisRfModelTests(unittest.TestCase):
 
 
 class AprsisRfRuleAndProtocolTests(unittest.TestCase):
-    def test_allow_rules_use_and_inside_rule_and_or_between_rules(self) -> None:
-        message = parse_tnc2_frame(message_line(text="hello{123"))
-        rules = normalize_allow_rules(
-            [
-                {"packet_type": "object", "source_callsign": "SP5ABC"},
-                {
-                    "packet_type": "message",
-                    "source_callsign": "SP5*",
-                    "addressee": "SQ9MDD-7",
-                },
-            ]
+    def test_default_deny_filter_uses_exact_callsign_and_my_station_radius_as_and(self) -> None:
+        parsed = parse_tnc2_frame(position_line(source="SP5ABC-1"))
+        station = {"latitude": "52.2297", "longitude": "21.0122"}
+        config = normalize_default_deny_config(
+            {"callsigns": ["sp5abc", "sp5abc-1"], "radius_km": "2"}
         )
-        self.assertEqual(match_allow_rules(message, rules), 2)
-        self.assertIsNone(
-            match_allow_rules(message, [{"packet_type": "message", "addressee": "OTHER"}])
+        self.assertEqual(config, {"callsigns": ["SP5ABC", "SP5ABC-1"], "radius_km": "2"})
+        self.assertTrue(matches_default_deny_filter(parsed, config, station))
+
+        callsign_without_ssid = normalize_default_deny_config(
+            {"callsigns": ["SP5ABC"], "radius_km": "2"}
         )
-        self.assertIsNone(match_allow_rules(message, []))
+        self.assertFalse(matches_default_deny_filter(parsed, callsign_without_ssid, station))
 
-    def test_existing_icon_and_distance_conditions_can_be_used_in_allow_rule(self) -> None:
-        parsed = parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAR,IGATE:!5213.78N/02100.72E>Test")
-        rules = normalize_allow_rules(
-            [{"icon": "/>", "center_latitude": "52.2297", "center_longitude": "21.0122", "radius_km": "2"}]
+        too_small_radius = normalize_default_deny_config(
+            {"callsigns": ["SP5ABC-1"], "radius_km": "0.01"}
         )
-        self.assertEqual(match_allow_rules(parsed, rules), 1)
-        rules[0]["radius_km"] = "0.01"
-        self.assertIsNone(match_allow_rules(parsed, rules))
+        self.assertFalse(matches_default_deny_filter(parsed, too_small_radius, station))
 
-    def test_partial_or_empty_distance_allow_rule_never_matches(self) -> None:
-        parsed = parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAR,IGATE:!5213.78N/02100.72E>Test")
+    def test_default_deny_filter_rejects_wildcards_removed_fields_and_partial_config(self) -> None:
+        with self.assertRaisesRegex(ValueError, "exact AX.25 callsign"):
+            normalize_default_deny_config({"callsigns": ["SP5*"], "radius_km": "25"})
+        with self.assertRaisesRegex(ValueError, "unsupported fields: packet_type"):
+            normalize_default_deny_config(
+                {"callsigns": ["SP5ABC"], "radius_km": "25", "packet_type": "position"}
+            )
+        with self.assertRaisesRegex(ValueError, "requires both callsigns and radius_km"):
+            normalize_default_deny_config({"callsigns": ["SP5ABC"]})
+        with self.assertRaisesRegex(ValueError, "requires both callsigns and radius_km"):
+            normalize_default_deny_config({"radius_km": "25"})
 
-        for rule in (
-            {},
-            {"radius_km": "1"},
-            {"center_latitude": "52.2297"},
-            {"center_latitude": "52.2297", "radius_km": "1"},
-        ):
-            with self.subTest(rule=rule):
-                self.assertIsNone(match_allow_rules(parsed, [rule]))
-
-        with self.assertRaisesRegex(ValueError, "requires center_latitude, center_longitude and radius_km"):
-            normalize_allow_rules([{"radius_km": "1"}])
+    def test_default_deny_filter_rejects_missing_packet_or_my_station_position(self) -> None:
+        config = normalize_default_deny_config({"callsigns": ["SP5ABC"], "radius_km": "25"})
+        self.assertFalse(
+            matches_default_deny_filter(parse_tnc2_frame(message_line()), config, {
+                "latitude": "52.2297",
+                "longitude": "21.0122",
+            })
+        )
+        self.assertFalse(
+            matches_default_deny_filter(parse_tnc2_frame(position_line()), config, {})
+        )
+        self.assertFalse(matches_default_deny_filter(parse_tnc2_frame(position_line()), {}, {}))
 
     def test_guard_blocks_markers_bad_q_and_third_party_but_not_tcpip(self) -> None:
         expected = {
@@ -398,10 +431,17 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         self.database.__exit__(None, None, None)
 
-    def create_flow(self, *, rules: list[dict] | None = None, guard_config: dict | None = None) -> int:
+    def create_flow(
+        self,
+        *,
+        callsigns: list[str] | None = None,
+        radius_km: str = "25",
+        guard_config: dict | None = None,
+    ) -> int:
         return create_digi_flow(
             aprsis_rf_payload(
-                rules=rules if rules is not None else [{"packet_type": "message"}],
+                callsigns=["SP5ABC"] if callsigns is None else callsigns,
+                radius_km=radius_km,
                 guard_config=guard_config,
             )
         )
@@ -423,9 +463,9 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         await runtime.stop()
         return runtime, frames
 
-    async def test_empty_rules_are_valid_and_default_deny_without_pending_or_job(self) -> None:
-        flow_id = self.create_flow(rules=[])
-        _runtime, frames = await self.run_lines(message_line())
+    async def test_empty_filter_is_valid_and_default_deny_without_pending_or_job(self) -> None:
+        flow_id = self.create_flow(callsigns=[], radius_km="")
+        _runtime, frames = await self.run_lines(position_line())
         stats = get_aprsis_rf_stats(flow_id)
         self.assertEqual(stats["received_from_aprsis"], 1)
         self.assertEqual(stats["dropped_no_allow_rule"], 1)
@@ -435,11 +475,11 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
             "SELECT message FROM digi_flow_event_log WHERE frame_uid = ?",
             (frames[0]["frame_uid"],),
         )
-        self.assertTrue(any("no_allow_rule" in row["message"] for row in events))
+        self.assertTrue(any("default_deny_filter_mismatch" in row["message"] for row in events))
 
-    async def test_matching_rule_queues_existing_digi_tx_job_with_origin_metadata(self) -> None:
-        flow_id = self.create_flow(rules=[{"packet_type": "message", "addressee": "SQ9MDD-7"}])
-        _runtime, frames = await self.run_lines(message_line(text="queue{123"))
+    async def test_matching_callsign_and_radius_queue_existing_digi_tx_job_with_origin_metadata(self) -> None:
+        flow_id = self.create_flow(callsigns=["SP5ABC"], radius_km="2")
+        _runtime, frames = await self.run_lines(position_line(text="queue{123"))
         row = fetch_one("SELECT kind, payload_json FROM outbound_jobs ORDER BY id DESC LIMIT 1")
         self.assertIsNotNone(row)
         self.assertEqual(row["kind"], "digi_tx")
@@ -448,7 +488,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["flow_id"], flow_id)
         self.assertEqual(payload["target_interface_id"], self.target_id)
         self.assertTrue(payload["normalized_packet_hash"])
-        self.assertIn("}SP5ABC>APRS,TCPIP,SQ9MDD-4*::SQ9MDD-7:queue{123", payload["line"])
+        self.assertIn("}SP5ABC>APRS,TCPIP,SQ9MDD-4*:!5213.78N/02100.72E>queue{123", payload["line"])
         stats = get_aprsis_rf_stats(flow_id)
         self.assertEqual(stats["matched_allow_rule"], 1)
         self.assertEqual(stats["queued_to_rf"], 1)
@@ -462,11 +502,11 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
             ["passed", "passed", "passed", "executed"],
         )
         self.assertIn("RF Guard input phase passed", summaries[0]["steps"][1]["description"])
-        self.assertIn("Inclusive allow rule", summaries[0]["steps"][2]["description"])
+        self.assertIn("default-deny filter matched exact callsign AND radius", summaries[0]["steps"][2]["description"])
 
-    async def test_execution_summary_marks_rejected_allow_rules_step_as_reached(self) -> None:
-        flow_id = self.create_flow(rules=[])
-        _runtime, frames = await self.run_lines(message_line(text="blocked"))
+    async def test_execution_summary_marks_rejected_default_deny_step_as_reached(self) -> None:
+        flow_id = self.create_flow(callsigns=[], radius_km="")
+        _runtime, frames = await self.run_lines(position_line(text="blocked"))
 
         summaries = get_digi_flow_execution_summaries(flow_id)
         self.assertEqual(len(summaries), 1)
@@ -476,11 +516,11 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
             [step["status"] for step in summaries[0]["steps"]],
             ["passed", "passed", "rejected", "not_reached"],
         )
-        self.assertIn("no_allow_rule", summaries[0]["steps"][2]["description"])
+        self.assertIn("default_deny_filter_mismatch", summaries[0]["steps"][2]["description"])
 
     async def test_existing_outbound_transport_records_separate_transmit_stat_and_source_kind(self) -> None:
         flow_id = self.create_flow()
-        await self.run_lines(message_line(text="physical tx"))
+        await self.run_lines(position_line(text="physical tx"))
         job = claim_next_outbound_job()
         self.assertIsNotNone(job)
         written_frames: list[bytes] = []
@@ -516,7 +556,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_outbound_target_loss_records_tx_failed(self) -> None:
         flow_id = self.create_flow()
-        await self.run_lines(message_line(text="target disappears"))
+        await self.run_lines(position_line(text="target disappears"))
         execute("UPDATE modems SET enabled = 0 WHERE id = ?", (self.target_id,))
         job = claim_next_outbound_job()
         self.assertIsNotNone(job)
@@ -531,7 +571,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_same_aprsis_frame_is_not_added_twice_to_pending(self) -> None:
         flow_id = self.create_flow()
-        await self.run_lines(message_line(text="same{12"), message_line(text="same{12"), delay=0.03)
+        await self.run_lines(position_line(text="same{12"), position_line(text="same{12"), delay=0.03)
         count = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")
         self.assertEqual(int(count["total"]), 1)
         stats = get_aprsis_rf_stats(flow_id)
@@ -545,11 +585,11 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
             runtime.enqueue_tnc2_frame(
                 source_kind=APRSIS_FLOW_SOURCE_KIND,
                 source_ref="APRSIS-RX",
-                raw_payload=message_line(text="cancel{45"),
+                raw_payload=position_line(text="cancel{45"),
             )
             await runtime._queue.join()
             runtime.enqueue_rx_tnc2_frame(
-                "SP5ABC>APRS,WIDE1-1*,WIDE2-1::SQ9MDD-7:cancel{45",
+                "SP5ABC>APRS,WIDE1-1*,WIDE2-1:!5213.78N/02100.72E>cancel{45",
                 source_ref="TNC@RF-OUT",
             )
             await runtime.wait_until_idle()
@@ -559,12 +599,12 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(get_aprsis_rf_stats(flow_id)["cancelled_during_viscous_delay"], 1)
 
     async def test_runtime_guard_still_applies_when_guard_row_was_manually_deleted(self) -> None:
-        flow_id = self.create_flow(rules=[{"packet_type": "message"}])
+        flow_id = self.create_flow()
         execute(
             "DELETE FROM digi_flow_steps WHERE flow_id = ? AND step_type = 'filter_rf_guard'",
             (flow_id,),
         )
-        await self.run_lines(message_line(path="NOGATE,qAR,IGATE"))
+        await self.run_lines(position_line(path="NOGATE,qAR,IGATE"))
         self.assertIsNone(fetch_one("SELECT id FROM outbound_jobs LIMIT 1"))
         stats = get_aprsis_rf_stats(flow_id)
         self.assertEqual(stats["dropped_safety_guard"], 1)
@@ -576,10 +616,10 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
             "source_burst": 5,
             "source_rate_per_minute": 30,
         }
-        flow_id = self.create_flow(guard_config=flow_config)
+        flow_id = self.create_flow(callsigns=["SP5AAA", "SP5BBB"], guard_config=flow_config)
         await self.run_lines(
-            message_line(source="SP5AAA", text="one"),
-            message_line(source="SP5BBB", text="two"),
+            position_line(source="SP5AAA", text="one"),
+            position_line(source="SP5BBB", text="two"),
         )
         self.assertEqual(get_aprsis_rf_stats(flow_id)["dropped_rate_limit"], 1)
         self.assertEqual(int(fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")["total"]), 1)
@@ -592,17 +632,17 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
             "flow_burst": 5,
             "source_burst": 1,
         }
-        source_flow_id = self.create_flow(guard_config=source_config)
+        source_flow_id = self.create_flow(callsigns=["SP5CCC"], guard_config=source_config)
         await self.run_lines(
-            message_line(source="SP5CCC", text="one"),
-            message_line(source="SP5CCC", text="two"),
+            position_line(source="SP5CCC", text="one"),
+            position_line(source="SP5CCC", text="two"),
         )
         self.assertEqual(get_aprsis_rf_stats(source_flow_id)["dropped_rate_limit"], 1)
         self.assertEqual(int(fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs")["total"]), 1)
 
     async def test_oversize_is_dropped_and_runtime_restart_does_not_recover_pending(self) -> None:
         flow_id = self.create_flow()
-        await self.run_lines(message_line(text="x" * 250))
+        await self.run_lines(position_line(text="x" * 250))
         self.assertEqual(get_aprsis_rf_stats(flow_id)["dropped_oversize"], 1)
         self.assertIsNone(fetch_one("SELECT id FROM outbound_jobs LIMIT 1"))
 
@@ -611,7 +651,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         runtime.enqueue_tnc2_frame(
             source_kind=APRSIS_FLOW_SOURCE_KIND,
             source_ref="APRSIS-RX",
-            raw_payload=message_line(text="restart"),
+            raw_payload=position_line(text="restart"),
         )
         await runtime._queue.join()
         self.assertTrue(runtime._aprsis_rf_pending)
@@ -624,7 +664,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_aprsis_runtime_does_not_create_rf_rx_or_classic_digi_traffic_stats(self) -> None:
         flow_id = self.create_flow()
-        await self.run_lines(message_line(text="separate stats"))
+        await self.run_lines(position_line(text="separate stats"))
         self.assertEqual(get_aprsis_rf_stats(flow_id)["received_from_aprsis"], 1)
         self.assertEqual(get_aprsis_rf_stats(flow_id)["queued_to_rf"], 1)
         self.assertIsNone(fetch_one("SELECT id FROM traffic_frames LIMIT 1"))

@@ -1498,5 +1498,19 @@
   "Last seen via APRS-IS": "Visto por última vez vía APRS-IS",
   "Last APRS-IS activity age": "Antigüedad de la última actividad APRS-IS",
   "Last heard via RF": "Escuchado por última vez vía RF",
-  "No allow rules. This flow will not forward any frames.": "No hay reglas allow. Este flow no reenviará ninguna trama."
+  "No allow rules. This flow will not forward any frames.": "No hay reglas allow. Este flow no reenviará ninguna trama.",
+  "Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and a strict callsign-and-radius default-deny filter.": "Defina una fuente, cualquier número de filtros y un destino. APRS-IS a RF usa un RF Guard obligatorio y un filtro estricto de indicativo y radio con denegación predeterminada.",
+  "The APRS-IS default-deny filter is mandatory and system-managed; an empty configuration denies every packet.": "El filtro APRS-IS de denegación predeterminada es obligatorio y está gestionado por el sistema; una configuración vacía deniega todos los paquetes.",
+  "APRS-IS Default Deny Filter": "Filtro APRS-IS de denegación predeterminada",
+  "Default deny": "Denegación predeterminada",
+  "Passes only exact source callsigns located within the configured radius from My Station.": "Solo permite indicativos de origen exactos situados dentro del radio configurado desde My Station.",
+  "The exact callsign and radius conditions use AND.": "Las condiciones de indicativo exacto y radio se combinan con AND.",
+  "Callsign entries use strict matching including SSID; wildcards are not allowed.": "Los indicativos se comparan estrictamente incluido el SSID; no se permiten comodines.",
+  "An empty configuration is valid and forwards no packets.": "Una configuración vacía es válida y no reenvía ningún paquete.",
+  "Source callsigns (one per line)": "Indicativos de origen (uno por línea)",
+  "Exact match including SSID: SQ9MDD matches only SQ9MDD, while SQ9MDD-1 matches only SQ9MDD-1.": "Coincidencia exacta incluido el SSID: SQ9MDD solo coincide con SQ9MDD y SQ9MDD-1 solo con SQ9MDD-1.",
+  "Wildcards are not allowed.": "No se permiten comodines.",
+  "Packets without a decoded position, or when My Station coordinates are missing, are denied.": "Se deniegan los paquetes sin posición decodificada o cuando faltan las coordenadas de My Station.",
+  "RF Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source.": "RF Guard y el filtro APRS-IS de denegación predeterminada solo pueden usarse con una fuente APRS-IS.",
+  "APRS-IS source flow can contain only one default-deny filter step.": "Un flujo con fuente APRS-IS solo puede contener un filtro de denegación predeterminada."
 }

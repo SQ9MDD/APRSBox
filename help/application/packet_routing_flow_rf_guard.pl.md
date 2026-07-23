@@ -4,15 +4,17 @@ Flow `APRS-IS -> RF` służy do kontrolowanego przekazania wybranych ramek z APR
 
 ## Wymagana kolejność
 
-`APRS-IS source -> RF Guard -> jawne reguły przepuszczające -> TX RF`
+`APRS-IS source -> RF Guard -> filtr default deny: znak + promień -> TX RF`
 
 `RF Guard` jest automatycznie dodawany po wyborze źródła APRS-IS. Nie można go usunąć, wyłączyć, ominąć ani dodać drugi raz. Backend i runtime wymuszają ochronę również dla ręcznie zmienionych danych.
 
-## Jawne reguły przepuszczające
+## Filtr znaku i promienia z domyślnym odrzucaniem
 
-Wszystkie reguły są inkluzywne. Warunki w jednej regule łączą się jako `AND`, a osobne reguły jako `OR`. Dostępne warunki wykorzystują dane już dekodowane przez istniejący parser i filtry: typ pakietu, znak źródłowy, destination, adresat wiadomości, nazwa obiektu, symbol oraz obszar odległości.
+Filtr zawiera wyłącznie listę źródłowych znaków i promień. Oba warunki łączą się jako `AND`: źródło pakietu musi dokładnie odpowiadać jednemu z wpisanych znaków, a zdekodowana pozycja pakietu musi znajdować się w promieniu liczonym od współrzędnych skonfigurowanych w `My Station`.
 
-Brak reguł jest poprawną konfiguracją i oznacza `default deny`: flow można zapisać i aktywować, ale nie przekaże żadnej ramki.
+Dopasowanie znaku jest ścisłe i obejmuje SSID. `SQ9MDD` pasuje wyłącznie do `SQ9MDD`, a `SQ9MDD-1` wyłącznie do `SQ9MDD-1`. Symbole wieloznaczne nie są obsługiwane. Każdy znak wpisz w osobnej linii.
+
+Pusta konfiguracja jest poprawnym `default deny`. Odrzucane są również pakiety bez zdekodowanej pozycji oraz wszystkie pakiety, gdy `My Station` nie ma prawidłowych współrzędnych.
 
 ## Ochrona RF
 

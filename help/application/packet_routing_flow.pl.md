@@ -55,4 +55,4 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 - `TX APRS-IS` wymaga bloku `Filtr ścisły`.
 - `TX RF` wymaga bloku `Reguła ścieżki i ochrona DIGI`.
 - `Local TX` może kończyć się tylko na `TX APRS-IS` albo `Black Hole`.
-- Flow ze źródłem `APRS-IS` automatycznie otrzymuje obowiązkowy `RF Guard`; brak reguł allow jest poprawny i nie przepuszcza żadnych ramek.
+- Flow ze źródłem `APRS-IS` automatycznie otrzymuje obowiązkowy `RF Guard` i ścisły filtr znaku oraz promienia z domyślnym odrzucaniem. Znak i promień łączą się jako `AND`; pusta konfiguracja nie przepuszcza żadnych ramek.

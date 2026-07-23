@@ -1565,5 +1565,19 @@
   "Last seen via APRS-IS": "Ostatnio widziana przez APRS-IS",
   "Last APRS-IS activity age": "Czas od ostatniej aktywności APRS-IS",
   "Last heard via RF": "Ostatnio usłyszana przez RF",
-  "No allow rules. This flow will not forward any frames.": "Brak reguł przepuszczających. Ten flow nie przekaże żadnych ramek."
+  "No allow rules. This flow will not forward any frames.": "Brak reguł przepuszczających. Ten flow nie przekaże żadnych ramek.",
+  "Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and a strict callsign-and-radius default-deny filter.": "Zdefiniuj jedno źródło, dowolną liczbę filtrów i jeden cel. APRS-IS do RF używa obowiązkowego RF Guard oraz ścisłego filtra znaku i promienia z domyślnym odrzucaniem.",
+  "The APRS-IS default-deny filter is mandatory and system-managed; an empty configuration denies every packet.": "Filtr APRS-IS z domyślnym odrzucaniem jest obowiązkowy i zarządzany systemowo; pusta konfiguracja odrzuca każdy pakiet.",
+  "APRS-IS Default Deny Filter": "Filtr APRS-IS — domyślne odrzucanie",
+  "Default deny": "Domyślne odrzucanie",
+  "Passes only exact source callsigns located within the configured radius from My Station.": "Przepuszcza wyłącznie dokładne źródłowe znaki znajdujące się w ustawionym promieniu od My Station.",
+  "The exact callsign and radius conditions use AND.": "Warunki dokładnego znaku i promienia są połączone operatorem AND.",
+  "Callsign entries use strict matching including SSID; wildcards are not allowed.": "Znaki są dopasowywane ściśle razem z SSID; symbole wieloznaczne są niedozwolone.",
+  "An empty configuration is valid and forwards no packets.": "Pusta konfiguracja jest prawidłowa i nie przekazuje żadnych pakietów.",
+  "Source callsigns (one per line)": "Źródłowe znaki (jeden na linię)",
+  "Exact match including SSID: SQ9MDD matches only SQ9MDD, while SQ9MDD-1 matches only SQ9MDD-1.": "Dokładne dopasowanie razem z SSID: SQ9MDD pasuje tylko do SQ9MDD, a SQ9MDD-1 tylko do SQ9MDD-1.",
+  "Wildcards are not allowed.": "Symbole wieloznaczne są niedozwolone.",
+  "Packets without a decoded position, or when My Station coordinates are missing, are denied.": "Pakiety bez zdekodowanej pozycji oraz pakiety odbierane przy braku współrzędnych My Station są odrzucane.",
+  "RF Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source.": "RF Guard i filtr APRS-IS z domyślnym odrzucaniem mogą być używane tylko ze źródłem APRS-IS.",
+  "APRS-IS source flow can contain only one default-deny filter step.": "Flow ze źródłem APRS-IS może zawierać tylko jeden filtr z domyślnym odrzucaniem."
 }

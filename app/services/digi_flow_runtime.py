@@ -29,8 +29,8 @@ from app.services.aprsis_rf import (
     RF_GUARD_STEP_TYPE,
     aprsis_rf_guard_reject_reason,
     logical_packet_hash,
-    match_allow_rules,
-    normalize_allow_rules,
+    matches_default_deny_filter,
+    normalize_default_deny_config,
     normalize_rf_guard_config,
     record_aprsis_rf_stat,
     validate_aprsis_rf_target,
@@ -601,20 +601,24 @@ class DigiFlowRuntimeService:
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
         try:
-            rules = normalize_allow_rules(dict(step.get("config") or {}).get("rules"))
+            config = normalize_default_deny_config(dict(step.get("config") or {}))
         except ValueError:
-            rules = []
-        matched_rule = match_allow_rules(context.get("parsed"), rules)
-        if matched_rule is None:
-            context["aprsis_allow_rule_matched"] = False
+            config = normalize_default_deny_config({})
+        matched = matches_default_deny_filter(
+            context.get("parsed"),
+            config,
+            get_station_settings(),
+        )
+        if not matched:
+            context["aprsis_default_deny_filter_matched"] = False
             return self._drop_aprsis_rf(
                 context,
                 step_id=step_id,
-                reason_code="no_allow_rule",
+                reason_code="default_deny_filter_mismatch",
                 stat_counter="dropped_no_allow_rule",
                 event_type="inclusive_allow_rules",
             )
-        context["aprsis_allow_rule_matched"] = True
+        context["aprsis_default_deny_filter_matched"] = True
         record_aprsis_rf_stat(flow_id, "matched_allow_rule")
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
@@ -622,7 +626,7 @@ class DigiFlowRuntimeService:
             step_id=step_id,
             event_type="inclusive_allow_rules",
             decision="passed",
-            message=f"Inclusive allow rule {matched_rule} matched (ANY rule / ALL conditions).",
+            message="APRS-IS default-deny filter matched exact callsign AND radius from My Station.",
         )
         return {"decision": "continue"}
 
@@ -633,12 +637,12 @@ class DigiFlowRuntimeService:
     ) -> dict[str, str] | None:
         if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
             return None
-        if bool(context.get("aprsis_allow_rule_matched")):
+        if bool(context.get("aprsis_default_deny_filter_matched")):
             return None
         return self._drop_aprsis_rf(
             context,
             step_id=_optional_int(step.get("id")),
-            reason_code="no_allow_rule",
+            reason_code="default_deny_filter_mismatch",
             stat_counter="dropped_no_allow_rule",
             event_type="inclusive_allow_rules",
         )

@@ -4,15 +4,17 @@ Ein Flow `APRS-IS -> RF` leitet ausgewaehlte APRS-IS-Pakete kontrolliert an ein 
 
 ## Erforderliche Reihenfolge
 
-`APRS-IS source -> RF Guard -> explizite Allow-Regeln -> TX RF`
+`APRS-IS source -> RF Guard -> Default-Deny-Filter fuer Rufzeichen + Radius -> TX RF`
 
 `RF Guard` wird bei der Auswahl einer APRS-IS-Quelle automatisch eingefuegt. Der Block kann nicht entfernt, deaktiviert, umgangen oder doppelt hinzugefuegt werden. Backend und Runtime erzwingen den Schutz auch bei manuell veraenderten gespeicherten Daten.
 
-## Explizite Allow-Regeln
+## Default-Deny-Filter fuer Rufzeichen und Radius
 
-Alle Regeln sind inklusiv. Bedingungen innerhalb einer Regel sind mit `AND`, getrennte Regeln mit `OR` verknuepft. Die Bedingungen verwenden Daten des vorhandenen Parsers und der Filter: Pakettyp, Quellrufzeichen, Destination, Nachrichtenadressat, Objektname, Symbol und Entfernungsbereich.
+Der Filter enthaelt nur eine Liste von Quellrufzeichen und einen Radius. Beide Bedingungen sind mit `AND` verknuepft: Die Paketquelle muss exakt einem eingetragenen Rufzeichen entsprechen und die dekodierte Paketposition muss innerhalb des Radius um die in `My Station` konfigurierten Koordinaten liegen.
 
-Eine leere Regelliste ist eine gueltige `default deny`-Konfiguration: Der Flow kann gespeichert und aktiviert werden, leitet aber keine Pakete weiter.
+Der Rufzeichenabgleich ist strikt und umfasst die SSID. `SQ9MDD` passt nur zu `SQ9MDD`, `SQ9MDD-1` nur zu `SQ9MDD-1`. Platzhalter werden nicht unterstuetzt. Pro Zeile wird ein Rufzeichen eingetragen.
+
+Eine leere Konfiguration ist gueltiges `default deny`. Pakete ohne dekodierte Position sowie alle Pakete bei fehlenden gueltigen `My Station`-Koordinaten werden ebenfalls abgelehnt.
 
 ## RF-Schutz
 

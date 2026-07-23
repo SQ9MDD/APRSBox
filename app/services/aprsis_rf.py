@@ -30,17 +30,8 @@ RF_GUARD_LIMITS: dict[str, tuple[int, int]] = {
     "duplicate_window_sec": (5, 300),
 }
 
-ALLOW_RULE_FIELDS = (
-    "packet_type",
-    "source_callsign",
-    "destination",
-    "addressee",
-    "object_name",
-    "icon",
-    "center_latitude",
-    "center_longitude",
-    "radius_km",
-)
+DEFAULT_DENY_CONFIG_FIELDS = frozenset({"callsigns", "radius_km"})
+DEFAULT_DENY_CALLSIGN_LIMIT = 50
 APRSIS_RF_STAT_COUNTERS = frozenset(
     {
         "received_from_aprsis",
@@ -79,112 +70,94 @@ def normalize_rf_guard_config(raw_config: Any) -> dict[str, int]:
     return normalized
 
 
-def normalize_allow_rules(raw_rules: Any) -> list[dict[str, str]]:
-    if raw_rules is None or raw_rules == "":
-        return []
-    if not isinstance(raw_rules, list):
-        raise ValueError("Inclusive allow rules must be a list.")
-    if len(raw_rules) > 50:
-        raise ValueError("Inclusive allow rules are limited to 50 rules per flow.")
+def normalize_default_deny_config(raw_config: Any) -> dict[str, Any]:
+    if raw_config is None or raw_config == "":
+        config: dict[str, Any] = {}
+    elif isinstance(raw_config, dict):
+        config = dict(raw_config)
+    else:
+        raise ValueError("APRS-IS default-deny filter config must be an object.")
 
-    normalized: list[dict[str, str]] = []
-    for rule_index, raw_rule in enumerate(raw_rules, start=1):
-        if not isinstance(raw_rule, dict):
-            raise ValueError(f"Allow rule {rule_index} must be an object.")
-        unknown_fields = {str(key) for key in raw_rule} - set(ALLOW_RULE_FIELDS)
-        if unknown_fields:
-            unknown = ", ".join(sorted(unknown_fields))
-            raise ValueError(f"Allow rule {rule_index} contains unsupported fields: {unknown}.")
-        rule: dict[str, str] = {}
-        for field in ALLOW_RULE_FIELDS:
-            value = str(raw_rule.get(field) or "").strip()
-            if not value:
-                continue
-            if len(value) > 80:
-                raise ValueError(f"Allow rule {rule_index} field {field} is too long.")
-            rule[field] = value
-        distance_fields = ("center_latitude", "center_longitude", "radius_km")
-        configured_distance_fields = [field for field in distance_fields if rule.get(field)]
-        if configured_distance_fields and len(configured_distance_fields) != len(distance_fields):
+    unknown_fields = {str(key) for key in config} - DEFAULT_DENY_CONFIG_FIELDS
+    if unknown_fields:
+        unknown = ", ".join(sorted(unknown_fields))
+        raise ValueError(f"APRS-IS default-deny filter contains unsupported fields: {unknown}.")
+
+    raw_callsigns = config.get("callsigns")
+    if raw_callsigns is None or raw_callsigns == "":
+        callsign_values: list[Any] = []
+    elif isinstance(raw_callsigns, str):
+        callsign_values = raw_callsigns.splitlines()
+    elif isinstance(raw_callsigns, (list, tuple)):
+        callsign_values = list(raw_callsigns)
+    else:
+        raise ValueError("APRS-IS default-deny callsigns must be a list or multiline text.")
+
+    callsigns: list[str] = []
+    seen: set[str] = set()
+    for raw_callsign in callsign_values:
+        callsign = str(raw_callsign or "").strip().upper()
+        if not callsign or callsign in seen:
+            continue
+        if not _AX25_ADDRESS_RE.fullmatch(callsign):
             raise ValueError(
-                f"Allow rule {rule_index} distance condition requires center_latitude, center_longitude and radius_km."
+                f"APRS-IS default-deny callsign {callsign!r} must be an exact AX.25 callsign with optional SSID 0-15."
             )
-        if configured_distance_fields:
-            latitude = _finite_float(rule["center_latitude"], label=f"Allow rule {rule_index} center latitude")
-            longitude = _finite_float(rule["center_longitude"], label=f"Allow rule {rule_index} center longitude")
-            radius_km = _finite_float(rule["radius_km"], label=f"Allow rule {rule_index} radius")
-            if latitude < -90.0 or latitude > 90.0:
-                raise ValueError(f"Allow rule {rule_index} center latitude must be between -90 and 90.")
-            if longitude < -180.0 or longitude > 180.0:
-                raise ValueError(f"Allow rule {rule_index} center longitude must be between -180 and 180.")
-            if radius_km <= 0.0 or radius_km > 1000.0:
-                raise ValueError(f"Allow rule {rule_index} radius must be greater than 0 and at most 1000 km.")
-        # Empty cards created and then abandoned in the browser do not become
-        # implicit match-all rules.  An empty rules list is the safe, valid
-        # default-deny configuration.
-        if rule:
-            normalized.append(rule)
-    return normalized
+        seen.add(callsign)
+        callsigns.append(callsign)
+    if len(callsigns) > DEFAULT_DENY_CALLSIGN_LIMIT:
+        raise ValueError(
+            f"APRS-IS default-deny callsigns are limited to {DEFAULT_DENY_CALLSIGN_LIMIT} entries per flow."
+        )
+
+    radius_text = str(config.get("radius_km") or "").strip()
+    if bool(callsigns) != bool(radius_text):
+        raise ValueError("APRS-IS default-deny filter requires both callsigns and radius_km, or neither.")
+    if radius_text:
+        radius_km = _finite_float(radius_text, label="APRS-IS default-deny radius")
+        if radius_km <= 0.0 or radius_km > 1000.0:
+            raise ValueError("APRS-IS default-deny radius must be greater than 0 and at most 1000 km.")
+
+    return {
+        "callsigns": callsigns,
+        "radius_km": radius_text,
+    }
 
 
-def match_allow_rules(parsed: dict[str, Any] | None, rules: list[dict[str, str]]) -> int | None:
-    if not parsed or not rules:
-        return None
+def matches_default_deny_filter(
+    parsed: dict[str, Any] | None,
+    config: dict[str, Any],
+    station_settings: dict[str, Any] | None,
+) -> bool:
+    if not parsed:
+        return False
+    try:
+        normalized = normalize_default_deny_config(config)
+    except ValueError:
+        return False
+
+    callsigns = set(normalized["callsigns"])
+    radius_text = str(normalized["radius_km"] or "").strip()
+    if not callsigns or not radius_text:
+        return False
+
+    source = str(parsed.get("logical_source_key") or parsed.get("source") or "").strip().upper()
+    if source not in callsigns:
+        return False
+
     aprs_data = dict(parsed.get("aprs_data") or {})
-    packet_values = {
-        str(aprs_data.get("packet_group") or "").strip().casefold(),
-        str(aprs_data.get("packet_type_code") or "").strip().casefold(),
-    }
-    values = {
-        "source_callsign": str(parsed.get("logical_source_key") or parsed.get("source") or "").strip().upper(),
-        "destination": str(parsed.get("logical_destination") or parsed.get("destination") or "").strip().upper(),
-        "addressee": str(aprs_data.get("addressee") or "").strip().upper(),
-        "object_name": str(parsed.get("entity_name") or aprs_data.get("entity_name") or "").strip().upper(),
-        "icon": str(aprs_data.get("symbol") or "").strip().upper(),
-    }
-    for index, rule in enumerate(rules, start=1):
-        configured_rule = {
-            str(field): str(expected).strip()
-            for field, expected in rule.items()
-            if str(expected).strip()
-        }
-        if not configured_rule:
-            continue
-        distance_fields = {"center_latitude", "center_longitude", "radius_km"}
-        configured_distance_fields = distance_fields.intersection(configured_rule)
-        if configured_distance_fields and configured_distance_fields != distance_fields:
-            continue
-        matches = True
-        for field, expected in configured_rule.items():
-            if field == "packet_type":
-                if str(expected).strip().casefold() not in packet_values:
-                    matches = False
-                    break
-                continue
-            if field in {"center_latitude", "center_longitude", "radius_km"}:
-                if field != "center_latitude":
-                    continue
-                position = _parsed_position(aprs_data)
-                if position is None:
-                    matches = False
-                    break
-                distance_km = _distance_km(
-                    position[0],
-                    position[1],
-                    float(rule["center_latitude"]),
-                    float(rule["center_longitude"]),
-                )
-                if distance_km > float(rule["radius_km"]):
-                    matches = False
-                    break
-                continue
-            actual = values.get(field, "")
-            if not _wildcard_match(actual, str(expected).strip().upper()):
-                matches = False
-                break
-        if matches:
-            return index
-    return None
+    packet_position = _parsed_position(aprs_data)
+    station_position = _station_position(station_settings)
+    if packet_position is None or station_position is None:
+        return False
+
+    distance_km = _distance_km(
+        packet_position[0],
+        packet_position[1],
+        station_position[0],
+        station_position[1],
+    )
+    return distance_km <= float(radius_text)
 
 
 def logical_packet_hash(parsed: dict[str, Any] | None) -> str:
@@ -368,13 +341,6 @@ def _path_tokens(path: str, *, keep_used_marker: bool) -> list[str]:
     return [token.rstrip("*") for token in tokens]
 
 
-def _wildcard_match(actual: str, expected: str) -> bool:
-    if not actual or not expected:
-        return False
-    pattern = "^" + re.escape(expected).replace(r"\*", ".*") + "$"
-    return re.fullmatch(pattern, actual, flags=re.IGNORECASE) is not None
-
-
 def _finite_float(value: Any, *, label: str) -> float:
     try:
         parsed = float(str(value).strip())
@@ -389,6 +355,20 @@ def _parsed_position(aprs_data: dict[str, Any]) -> tuple[float, float] | None:
     try:
         latitude = float(str(aprs_data.get("latitude") or "").strip())
         longitude = float(str(aprs_data.get("longitude") or "").strip())
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(latitude) or not math.isfinite(longitude):
+        return None
+    if not -90.0 <= latitude <= 90.0 or not -180.0 <= longitude <= 180.0:
+        return None
+    return latitude, longitude
+
+
+def _station_position(station_settings: dict[str, Any] | None) -> tuple[float, float] | None:
+    settings = station_settings or {}
+    try:
+        latitude = float(str(settings.get("latitude") or "").strip())
+        longitude = float(str(settings.get("longitude") or "").strip())
     except (TypeError, ValueError):
         return None
     if not math.isfinite(latitude) or not math.isfinite(longitude):

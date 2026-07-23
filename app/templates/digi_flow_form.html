@@ -12,7 +12,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and explicit inclusive allow rules.") }}</p>
+                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRS-IS to RF uses a mandatory RF Guard and a strict callsign-and-radius default-deny filter.") }}</p>
             </div>
             <button
                 class="help-icon-button page-help-button"
@@ -376,18 +376,7 @@
             latitude: {{ t("Latitude")|tojson }},
             longitude: {{ t("Longitude")|tojson }},
             rfGuardSystemManaged: {{ t("RF Guard is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
-            allowRulesSystemManaged: {{ t("Inclusive allow rules are mandatory for an APRS-IS source; an empty list is valid and denies every packet.")|tojson }},
-            noAllowRules: {{ t("No allow rules. This flow will not forward any frames.")|tojson }},
-            allowRule: {{ t("Allow rule")|tojson }},
-            addAllowRule: {{ t("Add allow rule")|tojson }},
-            packetType: {{ t("Packet type")|tojson }},
-            sourceCallsign: {{ t("Source callsign")|tojson }},
-            destination: {{ t("Destination")|tojson }},
-            addressee: {{ t("Addressee")|tojson }},
-            objectName: {{ t("Object name")|tojson }},
-            icon: {{ t("Icon")|tojson }},
-            centerLatitude: {{ t("Center latitude")|tojson }},
-            centerLongitude: {{ t("Center longitude")|tojson }},
+            allowRulesSystemManaged: {{ t("The APRS-IS default-deny filter is mandatory and system-managed; an empty configuration denies every packet.")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
@@ -406,7 +395,7 @@
             filter_rate_limit: ["Rate Limit Filter"],
             filter_rate_limit_per_callsign: ["Rate Limit Per Callsign"],
             filter_rf_guard: ["RF Guard"],
-            filter_allow_rules: ["Inclusive Allow Rules"],
+            filter_allow_rules: ["Inclusive Allow Rules", "APRS-IS Default Deny Filter"],
             tx_rf: ["TX RF"],
             tx_aprsis: ["TX APRS-IS"],
             action_drop: ["Action Drop"],
@@ -488,7 +477,7 @@
                 source_burst: 2,
                 duplicate_window_sec: 30,
             };
-            if (stepType === "filter_allow_rules") return { rules: [] };
+            if (stepType === "filter_allow_rules") return { callsigns: [], radius_km: "" };
             if (stepType === "filter_dupe") return { window_sec: 5 };
             if (stepType === "filter_direct_only") return {};
             if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
@@ -553,7 +542,9 @@
             if (step.step_type === "filter_rf_guard") {
                 return `loop prevention · duplicate suppression · delay ${config.viscous_delay_sec || 5}s · rate limits · third-party`;
             }
-            if (step.step_type === "filter_allow_rules") return `Rules: ${Array.isArray(config.rules) ? config.rules.length : 0} · default deny`;
+            if (step.step_type === "filter_allow_rules") {
+                return `${i18n.callsigns}: ${Array.isArray(config.callsigns) ? config.callsigns.length : 0} · ${i18n.radiusKm}: ${config.radius_km || "-"} · AND · default deny`;
+            }
             if (step.step_type === "filter_dupe") return `${i18n.window}: ${config.window_sec || "-"} ${i18n.sec}`;
             if (step.step_type === "filter_path") {
                 const tracePaths = config.trace_paths || config.paths || [];
@@ -678,7 +669,16 @@
                 enabled: 1,
                 config: defaultConfig("filter_rf_guard"),
             };
-            const allowRules = existingAllowRules ? { ...existingAllowRules, config: { rules: Array.isArray((existingAllowRules.config || {}).rules) ? existingAllowRules.config.rules : [] } } : {
+            const existingDefaultDenyConfig = (existingAllowRules || {}).config || {};
+            const allowRules = existingAllowRules ? {
+                ...existingAllowRules,
+                config: {
+                    callsigns: Array.isArray(existingDefaultDenyConfig.callsigns)
+                        ? uniqueLines(existingDefaultDenyConfig.callsigns.map((value) => String(value || "").trim().toUpperCase()))
+                        : [],
+                    radius_km: String(existingDefaultDenyConfig.radius_km || "").trim(),
+                },
+            } : {
                 step_type: "filter_allow_rules",
                 title: stepLabel("filter_allow_rules"),
                 enabled: 1,
@@ -1058,8 +1058,8 @@
         };
 
         const renderConfigField = (step, field) => {
-            const wrapper = document.createElement(field.type === "allow_rules" ? "div" : "label");
-            wrapper.className = ["textarea", "allow_rules"].includes(field.type) ? "full" : "";
+            const wrapper = document.createElement("label");
+            wrapper.className = field.type === "textarea" ? "full" : "";
             const title = document.createElement("span");
                 title.textContent = field.label;
             wrapper.appendChild(title);
@@ -1080,116 +1080,6 @@
                     wrapper.appendChild(hint);
                 }
             };
-
-            if (step.step_type === "filter_allow_rules" && field.name === "rules" && field.type === "allow_rules") {
-                const rules = Array.isArray(step.config.rules)
-                    ? step.config.rules.filter((rule) => rule && typeof rule === "object" && !Array.isArray(rule))
-                    : [];
-                step.config.rules = rules;
-                const rulesContainer = document.createElement("div");
-                rulesContainer.className = "digi-distance-zones";
-                rulesContainer.dataset.allowRulesEditor = "1";
-
-                if (!rules.length) {
-                    const emptyNotice = document.createElement("div");
-                    emptyNotice.className = "alert alert-info";
-                    emptyNotice.dataset.allowRulesEmpty = "1";
-                    emptyNotice.textContent = i18n.noAllowRules;
-                    rulesContainer.appendChild(emptyNotice);
-                }
-
-                const conditionFields = [
-                    ["packet_type", i18n.packetType, "message, object, position…"],
-                    ["source_callsign", i18n.sourceCallsign, "SP5ABC or SP5*"],
-                    ["destination", i18n.destination, "APRS"],
-                    ["addressee", i18n.addressee, "SQ9MDD-7"],
-                    ["object_name", i18n.objectName, "TESTWX"],
-                    ["icon", i18n.icon, "/>"],
-                    ["center_latitude", i18n.centerLatitude, "52.2297"],
-                    ["center_longitude", i18n.centerLongitude, "21.0122"],
-                    ["radius_km", i18n.radiusKm, "25"],
-                ];
-                rules.forEach((rule, ruleIndex) => {
-                    const ruleCard = document.createElement("div");
-                    ruleCard.className = "digi-distance-zone-card";
-                    ruleCard.dataset.allowRule = String(ruleIndex + 1);
-
-                    const ruleHeader = document.createElement("div");
-                    ruleHeader.className = "digi-distance-zone-header";
-                    const ruleTitle = document.createElement("strong");
-                    ruleTitle.textContent = `${i18n.allowRule} #${ruleIndex + 1}`;
-                    ruleHeader.appendChild(ruleTitle);
-                    const removeButton = document.createElement("button");
-                    removeButton.type = "button";
-                    removeButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
-                    removeButton.title = i18n.delete;
-                    removeButton.setAttribute("aria-label", `${i18n.delete}: ${i18n.allowRule} #${ruleIndex + 1}`);
-                    const removeIcon = document.createElement("img");
-                    removeIcon.src = iconPath("delete-outline.svg");
-                    removeIcon.alt = "";
-                    removeButton.appendChild(removeIcon);
-                    removeButton.addEventListener("click", () => {
-                        step.config.rules = rules.filter((_, index) => index !== ruleIndex);
-                        render();
-                    });
-                    ruleHeader.appendChild(removeButton);
-                    ruleCard.appendChild(ruleHeader);
-
-                    const fieldsGrid = document.createElement("div");
-                    fieldsGrid.className = "digi-distance-zone-grid";
-                    const distanceConditionNames = new Set(["center_latitude", "center_longitude", "radius_km"]);
-                    const distanceInputs = [];
-                    const syncDistanceRequirements = () => {
-                        const hasDistanceCondition = distanceInputs.some((candidate) => candidate.value.trim() !== "");
-                        for (const candidate of distanceInputs) {
-                            candidate.required = hasDistanceCondition;
-                        }
-                    };
-                    for (const [conditionName, conditionLabel, placeholder] of conditionFields) {
-                        const conditionField = document.createElement("label");
-                        const caption = document.createElement("span");
-                        caption.textContent = conditionLabel;
-                        const input = document.createElement("input");
-                        input.type = distanceConditionNames.has(conditionName)
-                            ? "number"
-                            : "text";
-                        input.step = conditionName === "radius_km" ? "0.1" : "any";
-                        input.placeholder = placeholder;
-                        input.value = rule[conditionName] ?? "";
-                        input.dataset.allowCondition = conditionName;
-                        if (distanceConditionNames.has(conditionName)) {
-                            distanceInputs.push(input);
-                        }
-                        input.addEventListener("input", () => {
-                            rule[conditionName] = input.value;
-                            if (distanceConditionNames.has(conditionName)) {
-                                syncDistanceRequirements();
-                            }
-                        });
-                        conditionField.appendChild(caption);
-                        conditionField.appendChild(input);
-                        fieldsGrid.appendChild(conditionField);
-                    }
-                    syncDistanceRequirements();
-                    ruleCard.appendChild(fieldsGrid);
-                    rulesContainer.appendChild(ruleCard);
-                });
-
-                const addButton = document.createElement("button");
-                addButton.type = "button";
-                addButton.className = "button button-secondary digi-distance-add-zone";
-                addButton.dataset.addAllowRule = "1";
-                addButton.textContent = i18n.addAllowRule;
-                addButton.disabled = rules.length >= 50;
-                addButton.addEventListener("click", () => {
-                    step.config.rules = [...rules, {}];
-                    render();
-                });
-                rulesContainer.appendChild(addButton);
-                wrapper.appendChild(rulesContainer);
-                appendFieldHelp();
-                return wrapper;
-            }
 
             if (step.step_type === "filter_distance" && field.name === "zones" && field.type === "distance_zones") {
                 wrapper.className = "full";
@@ -1542,6 +1432,9 @@
             const input = document.createElement("input");
             input.type = field.type === "number" ? "number" : "text";
             input.value = step.config[field.name] ?? "";
+            if (field.min !== undefined) input.min = String(field.min);
+            if (field.max !== undefined) input.max = String(field.max);
+            if (field.step !== undefined) input.step = String(field.step);
             if (field.placeholder) {
                 input.placeholder = field.placeholder;
             }

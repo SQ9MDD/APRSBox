@@ -14,7 +14,7 @@ from app.services.aprsis_rf import (
     APRSIS_FLOW_SOURCE_KIND,
     RF_GUARD_DEFAULTS,
     RF_GUARD_STEP_TYPE,
-    normalize_allow_rules,
+    normalize_default_deny_config,
     normalize_outbound_rf_path,
     normalize_rf_guard_config,
     validate_aprsis_source,
@@ -127,17 +127,40 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     ALLOW_RULES_STEP_TYPE: {
         "category": "filter",
-        "label": "Inclusive Allow Rules",
+        "label": "APRS-IS Default Deny Filter",
         "badge": "Default deny",
-        "description": "Passes when every condition in any one explicit allow rule matches.",
+        "description": "Passes only exact source callsigns located within the configured radius from My Station.",
         "help_page": "application/packet_routing_flow_rf_guard",
         "editor_help_lines": (
-            "Conditions inside one rule use AND.",
-            "Separate rules use OR.",
-            "An empty rule list is valid and forwards no packets.",
+            "The exact callsign and radius conditions use AND.",
+            "Callsign entries use strict matching including SSID; wildcards are not allowed.",
+            "An empty configuration is valid and forwards no packets.",
         ),
         "config_fields": (
-            {"name": "rules", "label": "Allow rules", "type": "allow_rules", "required": False},
+            {
+                "name": "callsigns",
+                "label": "Source callsigns (one per line)",
+                "type": "textarea",
+                "required": False,
+                "placeholder": "SQ9MDD\nSQ9MDD-1",
+                "help_lines": (
+                    "Exact match including SSID: SQ9MDD matches only SQ9MDD, while SQ9MDD-1 matches only SQ9MDD-1.",
+                    "Wildcards are not allowed.",
+                ),
+            },
+            {
+                "name": "radius_km",
+                "label": "Radius (km)",
+                "type": "number",
+                "required": False,
+                "min": "0.1",
+                "max": "1000",
+                "step": "0.1",
+                "help_lines": (
+                    "Distance is measured from My Station coordinates.",
+                    "Packets without a decoded position, or when My Station coordinates are missing, are denied.",
+                ),
+            },
         ),
     },
     LOCAL_TX_SOURCE_KIND: {
@@ -813,7 +836,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == RF_GUARD_STEP_TYPE:
         return dict(RF_GUARD_DEFAULTS)
     if step_type == ALLOW_RULES_STEP_TYPE:
-        return {"rules": []}
+        return {"callsigns": [], "radius_km": ""}
     if step_type == "filter_dupe":
         return {"window_sec": DUPLICATE_FILTER_DEFAULT_WINDOW_SEC}
     if step_type == "filter_direct_only":
@@ -865,7 +888,7 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == RF_GUARD_STEP_TYPE:
         return normalize_rf_guard_config(config)
     if step_type == ALLOW_RULES_STEP_TYPE:
-        return {"rules": normalize_allow_rules(config.get("rules"))}
+        return normalize_default_deny_config(config)
     if step_type == "filter_dupe":
         window_sec = _normalize_number(config.get("window_sec"), label="Listening window", minimum=2)
         if window_sec not in DUPLICATE_FILTER_WINDOW_SECONDS:
@@ -1483,12 +1506,12 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
     guard_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == RF_GUARD_STEP_TYPE]
     allow_rule_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == ALLOW_RULES_STEP_TYPE]
     if source_kind != APRSIS_FLOW_SOURCE_KIND and (guard_steps or allow_rule_steps):
-        raise ValueError(_t("RF Guard and inclusive allow rules can be used only with an APRS-IS source."))
+        raise ValueError(_t("RF Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source."))
     if source_kind == APRSIS_FLOW_SOURCE_KIND:
         if len(guard_steps) > 1:
             raise ValueError(_t("APRS-IS source flow can contain only one RF Guard step."))
         if len(allow_rule_steps) > 1:
-            raise ValueError(_t("APRS-IS source flow can contain only one Inclusive Allow Rules step."))
+            raise ValueError(_t("APRS-IS source flow can contain only one default-deny filter step."))
         if not guard_steps:
             guard_step = {
                 "id": None,
@@ -1516,9 +1539,9 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         guard_steps[0]["config"] = normalize_rf_guard_config(guard_steps[0].get("config"))
         allow_rule_steps[0]["enabled"] = 1
         allow_rule_steps[0]["title"] = _default_step_title(ALLOW_RULES_STEP_TYPE)
-        allow_rule_steps[0]["config"] = {
-            "rules": normalize_allow_rules(dict(allow_rule_steps[0].get("config") or {}).get("rules"))
-        }
+        allow_rule_steps[0]["config"] = normalize_default_deny_config(
+            dict(allow_rule_steps[0].get("config") or {})
+        )
         if target_kind == "tx_rf":
             normalized_steps[-1]["config"]["rf_path"] = normalize_outbound_rf_path(
                 dict(normalized_steps[-1].get("config") or {}).get("rf_path")

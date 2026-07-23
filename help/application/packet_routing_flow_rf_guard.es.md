@@ -4,15 +4,17 @@ Un flow `APRS-IS -> RF` reenvia paquetes APRS-IS seleccionados a una interfaz de
 
 ## Orden obligatorio
 
-`APRS-IS source -> RF Guard -> reglas allow explicitas -> TX RF`
+`APRS-IS source -> RF Guard -> filtro default-deny de indicativo + radio -> TX RF`
 
 `RF Guard` se añade automaticamente al seleccionar un origen APRS-IS. No se puede eliminar, desactivar, evitar ni duplicar. Backend y runtime aplican la proteccion incluso si los datos guardados se modifican manualmente.
 
-## Reglas allow explicitas
+## Filtro default-deny de indicativo y radio
 
-Todas las reglas son inclusivas. Las condiciones de una regla usan `AND` y las reglas separadas usan `OR`. Las condiciones reutilizan datos del parser y filtros existentes: tipo de paquete, indicativo de origen, destination, destinatario del mensaje, nombre de objeto, simbolo y area de distancia.
+El filtro contiene solo una lista de indicativos de origen y un radio. Ambas condiciones usan `AND`: el origen del paquete debe coincidir exactamente con un indicativo configurado y su posicion decodificada debe estar dentro del radio medido desde las coordenadas de `My Station`.
 
-Una lista vacia es una configuracion `default deny` valida: el flow se puede guardar y activar, pero no reenvia ningun paquete.
+La coincidencia es estricta e incluye el SSID. `SQ9MDD` solo coincide con `SQ9MDD`; `SQ9MDD-1` solo coincide con `SQ9MDD-1`. No se admiten comodines. Introduzca un indicativo por linea.
+
+Una configuracion vacia es un `default deny` valido. Tambien se deniegan los paquetes sin posicion decodificada y todos los paquetes cuando faltan coordenadas validas en `My Station`.
 
 ## Proteccion RF
 

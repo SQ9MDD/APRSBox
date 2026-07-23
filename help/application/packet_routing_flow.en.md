@@ -55,4 +55,4 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 - `TX APRS-IS` requires the `Strict Filter` block.
 - `TX RF` requires the `Path rule and DIGI guard` block.
 - `Local TX` can end only in `TX APRS-IS` or `Black Hole`.
-- An `APRS-IS` source automatically receives the mandatory `RF Guard`; no allow rules is valid and forwards no packets.
+- An `APRS-IS` source automatically receives the mandatory `RF Guard` and strict callsign-and-radius default-deny filter. Callsign and radius use `AND`; an empty configuration forwards no packets.

@@ -55,4 +55,4 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 - `TX APRS-IS` requiere el bloque `Filtro estricto`.
 - `TX RF` requiere el bloque `Regla de trayectoria y protección DIGI`.
 - `TX local` solo puede terminar en `TX APRS-IS` o `Agujero negro`.
-- Un origen `APRS-IS` recibe automáticamente el `RF Guard` obligatorio; sin reglas allow no se reenvía ningún paquete.
+- Un origen `APRS-IS` recibe automáticamente el `RF Guard` obligatorio y el filtro estricto default-deny de indicativo y radio. El indicativo y el radio usan `AND`; una configuración vacía no reenvía paquetes.
