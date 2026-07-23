@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, utc_now
 from app.services.aprsis_rf import (
-    MESSAGE_DELIVERY_DEFAULTS,
     MESSAGE_DELIVERY_STEP_TYPE,
-    normalize_message_delivery_config,
 )
+from app.services.mqtt_url import TX_CAPABLE_MODEM_TYPES
 
 
 _AX25_ADDRESS_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
 _MESSAGE_PACKET_TYPES = frozenset({"message", "ack", "reject"})
 ASSOCIATED_POSITION_WINDOW_MINUTES = 30
 IGATE_STATE_RETENTION_MINUTES = 120
+LOCAL_HEARD_WINDOW_MINUTES = 60
+MAX_LOCAL_CONSUMED_HOPS = 0
 
 
 def normalize_station_key(value: Any) -> str:
@@ -113,14 +113,11 @@ def evaluate_message_delivery(
     parsed: dict[str, Any] | None,
     *,
     flow_id: int,
-    target_ref: str,
-    config: dict[str, Any] | None,
     local_igate: str,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if not parsed:
         return {"route": "drop", "reason": "invalid_aprs"}
-    normalized_config = normalize_message_delivery_config(config or MESSAGE_DELIVERY_DEFAULTS)
     reference = _utc_datetime(now)
     sender = normalize_station_key(parsed.get("source"))
     aprs_data = dict(parsed.get("aprs_data") or {})
@@ -164,15 +161,12 @@ def evaluate_message_delivery(
             "recipient": addressee,
         }
 
-    interface_names = _effective_rf_sources(normalized_config, target_ref=target_ref)
-    interface_ids = _resolve_interface_ids(interface_names)
-    heard_window = int(normalized_config["heard_window_minutes"])
-    cutoff = reference - timedelta(minutes=heard_window)
+    interface_ids = _active_tx_enabled_rf_interface_ids()
+    cutoff = reference - timedelta(minutes=LOCAL_HEARD_WINDOW_MINUTES)
     recipient_heard = _recent_rf_heard(
         addressee,
         interface_ids=interface_ids,
         cutoff=cutoff,
-        max_consumed_hops=int(normalized_config["max_consumed_hops"]),
     )
     if recipient_heard is None:
         return {
@@ -192,7 +186,6 @@ def evaluate_message_delivery(
         sender,
         interface_ids=interface_ids,
         cutoff=cutoff,
-        max_consumed_hops=int(normalized_config["max_consumed_hops"]),
     ) is not None:
         return {
             "route": "drop",
@@ -262,9 +255,25 @@ def message_return_capable_for_rf_source(
     source_ref = str(rf_source_ref or "").strip()
     if not source_ref:
         return False, "missing_rf_source"
+    source_row = fetch_one(
+        f"""
+        SELECT 1
+        FROM modems
+        WHERE name = ?
+          AND enabled = 1
+          AND tx_blocked = 0
+          AND UPPER(modem_type) IN ({", ".join("?" for _ in TX_CAPABLE_MODEM_TYPES)})
+        LIMIT 1
+        """,
+        (source_ref, *TX_CAPABLE_MODEM_TYPES),
+    )
+    if source_row is None:
+        return False, "rf_source_not_tx_enabled"
+    if int(consumed_hops) > MAX_LOCAL_CONSUMED_HOPS:
+        return False, "rf_source_not_direct"
     rows = fetch_all(
-        """
-        SELECT f.id AS flow_id, f.target_ref, s.config_json,
+        f"""
+        SELECT f.id AS flow_id,
                source_modem.enabled AS source_enabled,
                m.enabled AS target_enabled, m.tx_blocked AS target_tx_blocked
         FROM digi_flows AS f
@@ -277,24 +286,17 @@ def message_return_capable_for_rf_source(
         WHERE f.enabled = 1
           AND f.source_kind = 'receiver_aprsis'
           AND f.target_kind = 'tx_rf'
+          AND UPPER(m.modem_type) IN ({", ".join("?" for _ in TX_CAPABLE_MODEM_TYPES)})
         ORDER BY f.id ASC
         """,
-        (MESSAGE_DELIVERY_STEP_TYPE,),
+        (MESSAGE_DELIVERY_STEP_TYPE, *TX_CAPABLE_MODEM_TYPES),
     )
     for row in rows:
         if int(row["source_enabled"] or 0) != 1:
             continue
         if int(row["target_enabled"] or 0) != 1 or int(row["target_tx_blocked"] or 0) == 1:
             continue
-        try:
-            raw_config = json.loads(str(row["config_json"] or "{}"))
-            config = normalize_message_delivery_config(raw_config)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
-        if int(consumed_hops) > int(config["max_consumed_hops"]):
-            continue
-        if source_ref in _effective_rf_sources(config, target_ref=str(row["target_ref"] or "")):
-            return True, f"message_return_flow:{int(row['flow_id'])}"
+        return True, f"message_return_flow:{int(row['flow_id'])}"
     return False, "no_message_return_flow"
 
 
@@ -335,21 +337,17 @@ def _has_pending_sender_position(flow_id: int, sender_key: str, *, now: datetime
     return row is not None
 
 
-def _effective_rf_sources(config: dict[str, Any], *, target_ref: str) -> list[str]:
-    configured = [str(item).strip() for item in config.get("rf_sources") or [] if str(item).strip()]
-    if configured:
-        return configured
-    fallback = str(target_ref or "").strip()
-    return [fallback] if fallback else []
-
-
-def _resolve_interface_ids(interface_names: list[str]) -> list[int]:
-    if not interface_names:
-        return []
-    placeholders = ", ".join("?" for _ in interface_names)
+def _active_tx_enabled_rf_interface_ids() -> list[int]:
+    placeholders = ", ".join("?" for _ in TX_CAPABLE_MODEM_TYPES)
     rows = fetch_all(
-        f"SELECT id FROM modems WHERE name IN ({placeholders})",
-        tuple(interface_names),
+        f"""
+        SELECT id
+        FROM modems
+        WHERE enabled = 1
+          AND tx_blocked = 0
+          AND UPPER(modem_type) IN ({placeholders})
+        """,
+        TX_CAPABLE_MODEM_TYPES,
     )
     return [int(row["id"]) for row in rows]
 
@@ -359,7 +357,6 @@ def _recent_rf_heard(
     *,
     interface_ids: list[int],
     cutoff: datetime,
-    max_consumed_hops: int,
 ) -> Any | None:
     if not station_key or not interface_ids:
         return None
@@ -373,7 +370,7 @@ def _recent_rf_heard(
         WHERE h.station_key = ?
           AND h.interface_id IN ({placeholders})
           AND h.last_heard_at >= ?
-          AND h.consumed_hops <= ?
+          AND h.consumed_hops = ?
         ORDER BY h.last_heard_at DESC
         LIMIT 1
         """,
@@ -381,7 +378,7 @@ def _recent_rf_heard(
             station_key,
             *interface_ids,
             cutoff.isoformat(),
-            int(max_consumed_hops),
+            MAX_LOCAL_CONSUMED_HOPS,
         ),
     )
 

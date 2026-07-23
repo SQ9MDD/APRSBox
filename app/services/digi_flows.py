@@ -12,13 +12,11 @@ from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.aprsis_rf import (
     ALLOW_RULES_STEP_TYPE,
     APRSIS_FLOW_SOURCE_KIND,
-    MESSAGE_DELIVERY_DEFAULTS,
     MESSAGE_DELIVERY_STEP_TYPE,
     RF_GUARD_DEFAULTS,
     RF_GUARD_STEP_TYPE,
     RF_TX_GUARD_STEP_TYPE,
     normalize_default_deny_config,
-    normalize_message_delivery_config,
     normalize_outbound_rf_path,
     normalize_rf_guard_config,
     validate_aprsis_source,
@@ -145,44 +143,10 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "help_page": "application/packet_routing_flow_aprsis_message_delivery_rule",
         "editor_help_lines": (
             "Messages use the exact addressee including SSID and do not depend on the callsign-and-radius rule.",
-            "The recipient must have been heard recently on one of the configured local RF sources.",
-            "An empty RF source list uses the target RF interface.",
+            "The recipient must have been heard direct within 60 minutes on any active TNC interface with RF transmission allowed.",
+            "The interface list and safety criteria are selected automatically and cannot be configured.",
         ),
-        "config_fields": (
-            {
-                "name": "rf_sources",
-                "label": "Local RF listening sources (one per line)",
-                "type": "textarea",
-                "required": False,
-                "placeholder": "TNC-1",
-                "help_lines": (
-                    "Leave empty to use the target RF interface.",
-                    "Only stations heard through these RF sources are eligible for message delivery.",
-                ),
-            },
-            {
-                "name": "heard_window_minutes",
-                "label": "Local heard validity (minutes)",
-                "type": "number",
-                "required": True,
-                "min": "5",
-                "max": "60",
-                "step": "5",
-            },
-            {
-                "name": "max_consumed_hops",
-                "label": "Maximum consumed DIGI hops",
-                "type": "number",
-                "required": True,
-                "min": "0",
-                "max": "2",
-                "step": "1",
-                "help_lines": (
-                    "0 means direct RF reception only.",
-                    "Use the minimum value needed for the intended local coverage.",
-                ),
-            },
-        ),
+        "config_fields": (),
     },
     RF_TX_GUARD_STEP_TYPE: {
         "category": "filter",
@@ -991,7 +955,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == RF_GUARD_STEP_TYPE:
         return {}
     if step_type == MESSAGE_DELIVERY_STEP_TYPE:
-        return dict(MESSAGE_DELIVERY_DEFAULTS)
+        return {}
     if step_type == RF_TX_GUARD_STEP_TYPE:
         return dict(RF_GUARD_DEFAULTS)
     if step_type == ALLOW_RULES_STEP_TYPE:
@@ -1049,7 +1013,7 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         # normalizer to transfer them to the new final RF TX Guard.
         return normalize_rf_guard_config(config) if config else {}
     if step_type == MESSAGE_DELIVERY_STEP_TYPE:
-        return normalize_message_delivery_config(config)
+        return {}
     if step_type == RF_TX_GUARD_STEP_TYPE:
         return normalize_rf_guard_config(config)
     if step_type == ALLOW_RULES_STEP_TYPE:
@@ -1159,20 +1123,8 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
     if step_type == RF_GUARD_STEP_TYPE:
         return _t("APRS validation, loop prevention and initial duplicate suppression.")
     if step_type == MESSAGE_DELIVERY_STEP_TYPE:
-        sources = config.get("rf_sources") or []
-        return _tf(
-            "Local RF messages: {minutes} min, maximum {hops} consumed hops, sources: {sources}.",
-            {
-                "minutes": config.get(
-                    "heard_window_minutes",
-                    MESSAGE_DELIVERY_DEFAULTS["heard_window_minutes"],
-                ),
-                "hops": config.get(
-                    "max_consumed_hops",
-                    MESSAGE_DELIVERY_DEFAULTS["max_consumed_hops"],
-                ),
-                "sources": ", ".join(str(item) for item in sources) or _t("target RF interface"),
-            },
+        return _t(
+            "Automatically uses all active TNC interfaces with RF transmission allowed."
         )
     if step_type == ALLOW_RULES_STEP_TYPE:
         rules = config.get("rules") or []
@@ -1565,9 +1517,7 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
             if message_delivery is not None:
                 message_delivery["title"] = _default_step_title(MESSAGE_DELIVERY_STEP_TYPE)
                 message_delivery["enabled"] = 1
-                message_delivery["config"] = normalize_message_delivery_config(
-                    dict(message_delivery.get("config") or {})
-                )
+                message_delivery["config"] = {}
             if not any(str(step.get("step_type") or "") == ALLOW_RULES_STEP_TYPE for step in middle_steps):
                 middle_steps.insert(
                     2 if str(flow.get("target_kind") or "").strip() == "tx_rf" else 1,
@@ -1824,9 +1774,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         if target_kind == "tx_rf":
             message_delivery_steps[0]["enabled"] = 1
             message_delivery_steps[0]["title"] = _default_step_title(MESSAGE_DELIVERY_STEP_TYPE)
-            message_delivery_steps[0]["config"] = normalize_message_delivery_config(
-                dict(message_delivery_steps[0].get("config") or {})
-            )
+            message_delivery_steps[0]["config"] = {}
         allow_rule_steps[0]["enabled"] = 1
         allow_rule_steps[0]["title"] = _default_step_title(ALLOW_RULES_STEP_TYPE)
         allow_rule_steps[0]["config"] = normalize_default_deny_config(

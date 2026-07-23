@@ -33,7 +33,6 @@ from app.services.aprsis_rf import (
     logical_packet_hash,
     matches_default_deny_filter,
     normalize_default_deny_config,
-    normalize_message_delivery_config,
     normalize_rf_guard_config,
     record_aprsis_rf_stat,
     validate_aprsis_rf_target,
@@ -678,15 +677,9 @@ class DigiFlowRuntimeService:
         flow = dict(context.get("flow") or {})
         flow_id = int(flow["id"])
         step_id = int(step["id"])
-        try:
-            config = normalize_message_delivery_config(dict(step.get("config") or {}))
-        except ValueError:
-            config = normalize_message_delivery_config({})
         result = evaluate_message_delivery(
             context.get("parsed"),
             flow_id=flow_id,
-            target_ref=str(flow.get("target_ref") or ""),
-            config=config,
             local_igate=_local_station_identity(),
         )
         route = str(result.get("route") or "")

@@ -2343,8 +2343,7 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
                     ?,
                     (SELECT COALESCE(MAX(step_order), 0) + 1000 FROM digi_flow_steps WHERE flow_id = ?),
                     'filter_aprsis_message_delivery',
-                    'APRS-IS Message Delivery Rule', 1,
-                    '{"rf_sources":[],"heard_window_minutes":60,"max_consumed_hops":0}',
+                    'APRS-IS Message Delivery Rule', 1, '{}',
                     ?, ?
                 )
                 """,
@@ -2355,12 +2354,16 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
             message_changed = (
                 str(message_delivery["title"] or "") != "APRS-IS Message Delivery Rule"
                 or int(message_delivery["enabled"] or 0) != 1
+                or str(message_delivery["config_json"] or "").strip() != "{}"
             )
             if message_changed:
                 connection.execute(
                     """
                     UPDATE digi_flow_steps
-                    SET title = 'APRS-IS Message Delivery Rule', enabled = 1, updated_at = ?
+                    SET title = 'APRS-IS Message Delivery Rule',
+                        enabled = 1,
+                        config_json = '{}',
+                        updated_at = ?
                     WHERE id = ?
                     """,
                     (timestamp, int(message_delivery["id"])),

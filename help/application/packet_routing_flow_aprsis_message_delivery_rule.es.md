@@ -10,13 +10,11 @@ Los boletines, mensajes de grupo, definiciones de telemetría y consultas genera
 
 ## Destinatario local
 
-El destinatario debe haberse escuchado recientemente por una fuente RF local configurada. El SSID forma parte de la coincidencia. El mensaje se rechaza si el destinatario es demasiado antiguo, necesitó demasiados saltos DIGI consumidos, fue visto recientemente como estación de Internet o el remitente fue escuchado en la misma cobertura RF local.
+El destinatario debe haberse escuchado directamente durante los últimos 60 minutos por cualquier interfaz TNC activa en la que se permita transmitir por RF. El SSID forma parte de la coincidencia. El mensaje se rechaza si el destinatario no fue escuchado directamente en ese plazo, la interfaz está desactivada o tiene bloqueada la transmisión RF, el destinatario fue visto recientemente como estación de Internet o el remitente fue escuchado en la misma cobertura RF local.
 
 ## Configuración
 
-- **Fuentes locales de escucha RF**: un nombre de interfaz por línea; vacío usa la interfaz RF de destino.
-- **Validez de escucha local**: de 5 a 60 minutos; valor predeterminado 60.
-- **Máximo de saltos DIGI consumidos**: de 0 a 2; valor predeterminado 0 para recepción directa.
+Esta regla del sistema no tiene ajustes. APRSBox utiliza automáticamente todas las interfaces TNC activas capaces de transmitir y sin bloqueo de transmisión RF. Las interfaces desactivadas, solo de recepción o con TX bloqueado no se tienen en cuenta.
 
 Un mensaje autorizado omite la regla de indicativo y radio, pero no la seguridad TX, el control de duplicados, los límites de velocidad, la encapsulación de terceros ni el límite AX.25.
 

@@ -89,11 +89,7 @@ def return_flow_payload(*, target: str = "RF-OUT", enabled: int = 1) -> dict:
                 "step_type": "filter_aprsis_message_delivery",
                 "title": "APRS-IS Message Delivery Rule",
                 "enabled": 1,
-                "config": {
-                    "rf_sources": [],
-                    "heard_window_minutes": 60,
-                    "max_consumed_hops": 0,
-                },
+                "config": {},
             },
             {
                 "step_type": "filter_allow_rules",
@@ -192,7 +188,8 @@ class IgateMessagingPolicyTests(unittest.TestCase):
     def test_exact_local_recipient_is_authorized_but_other_ssid_is_not(self) -> None:
         with temporary_database():
             set_station_identity()
-            interface_id = insert_interface("RF-OUT", "TCP")
+            insert_interface("RF-OUT", "TCP")
+            interface_id = insert_interface("RF-AUX", "SERIAL")
             heard = parse_tnc2_frame("SQ9MDD-7>APRS:>local")
             assert heard is not None
             record_rf_heard_station(
@@ -204,16 +201,12 @@ class IgateMessagingPolicyTests(unittest.TestCase):
             exact = evaluate_message_delivery(
                 parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAC,SERVER::SQ9MDD-7:hello{42"),
                 flow_id=1,
-                target_ref="RF-OUT",
-                config={},
                 local_igate="SQ9MDD-4",
                 now=_dt("2026-07-23T13:10:00+00:00"),
             )
             other_ssid = evaluate_message_delivery(
                 parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAC,SERVER::SQ9MDD-1:hello{43"),
                 flow_id=1,
-                target_ref="RF-OUT",
-                config={},
                 local_igate="SQ9MDD-4",
                 now=_dt("2026-07-23T13:10:00+00:00"),
             )
@@ -221,6 +214,39 @@ class IgateMessagingPolicyTests(unittest.TestCase):
             self.assertEqual(exact["recipient"], "SQ9MDD-7")
             self.assertEqual(other_ssid["route"], "drop")
             self.assertEqual(other_ssid["reason"], "message_recipient_not_heard_rf")
+
+            execute("UPDATE modems SET tx_blocked = 1 WHERE id = ?", (interface_id,))
+            blocked_interface = evaluate_message_delivery(
+                parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAC,SERVER::SQ9MDD-7:hello{44"),
+                flow_id=1,
+                local_igate="SQ9MDD-4",
+                now=_dt("2026-07-23T13:10:00+00:00"),
+            )
+            self.assertEqual(blocked_interface["route"], "drop")
+            self.assertEqual(
+                blocked_interface["reason"],
+                "message_recipient_not_heard_rf",
+            )
+
+            execute("UPDATE modems SET tx_blocked = 0 WHERE id = ?", (interface_id,))
+            indirect = parse_tnc2_frame("SQ9MDD-7>APRS,WIDE1-1*:>local through digi")
+            assert indirect is not None
+            record_rf_heard_station(
+                indirect,
+                interface_id=interface_id,
+                timestamp="2026-07-23T13:01:00+00:00",
+            )
+            indirect_recipient = evaluate_message_delivery(
+                parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAC,SERVER::SQ9MDD-7:hello{45"),
+                flow_id=1,
+                local_igate="SQ9MDD-4",
+                now=_dt("2026-07-23T13:10:00+00:00"),
+            )
+            self.assertEqual(indirect_recipient["route"], "drop")
+            self.assertEqual(
+                indirect_recipient["reason"],
+                "message_recipient_not_heard_rf",
+            )
 
     def test_recipient_seen_as_direct_internet_station_is_rejected(self) -> None:
         with temporary_database():
@@ -240,8 +266,6 @@ class IgateMessagingPolicyTests(unittest.TestCase):
             result = evaluate_message_delivery(
                 parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAC,SERVER::SQ9MDD-7:hello{42"),
                 flow_id=1,
-                target_ref="RF-OUT",
-                config={},
                 local_igate="SQ9MDD-4",
                 now=_dt("2026-07-23T13:10:00+00:00"),
             )
@@ -263,8 +287,6 @@ class IgateMessagingPolicyTests(unittest.TestCase):
             result = evaluate_message_delivery(
                 parse_tnc2_frame("SP5ABC>APRS,TCPIP*,qAC,SERVER::SQ9MDD-7:hello{42"),
                 flow_id=1,
-                target_ref="RF-OUT",
-                config={},
                 local_igate="SQ9MDD-4",
                 now=_dt("2026-07-23T13:10:00+00:00"),
             )
@@ -446,6 +468,9 @@ class IgateMessagingRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 message_return_capable_for_rf_source("RF-OUT", consumed_hops=1)[0],
                 False,
             )
+            execute("UPDATE modems SET tx_blocked = 1 WHERE name = 'RF-OUT'")
+            self.assertEqual(message_return_capable_for_rf_source("RF-OUT")[0], False)
+            execute("UPDATE modems SET tx_blocked = 0 WHERE name = 'RF-OUT'")
             create_digi_flow(rf_to_aprsis_flow_payload())
             create_digi_flow(local_tx_to_aprsis_flow_payload())
 

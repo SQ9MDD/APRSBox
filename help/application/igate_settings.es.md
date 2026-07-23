@@ -26,8 +26,8 @@ Ambos modos usan un login APRS-IS verificado. `pass -1` identifica un cliente AP
 
 APRSBox identifica la capacidad de retorno a RF para cada estación:
 
-- `qAO` cuando ningún flujo activo de retorno de mensajes cubre la fuente RF.
-- `qAR` cuando un flujo activo `APRS-IS → RF` puede entregar mensajes a las estaciones escuchadas por esa fuente RF.
+- `qAO` cuando la interfaz TNC receptora no puede transmitir, tiene TX bloqueado o no existe un flujo activo de retorno de mensajes `APRS-IS → RF`.
+- `qAR` cuando la interfaz TNC receptora está activa, tiene TX permitido y un flujo activo `APRS-IS → RF` proporciona la ruta de retorno de mensajes.
 - Los paquetes generados localmente por APRSBox usan `TCPIP*`; no son paquetes procedentes de RF.
 
 Al desactivar el flujo `APRS-IS → RF`, los siguientes uplinks RF vuelven a usar `qAO`.

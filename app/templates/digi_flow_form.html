@@ -368,10 +368,10 @@
             longitude: {{ t("Longitude")|tojson }},
             rfGuardSystemManaged: {{ t("The APRS-IS Input Safety Rule is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
             rfTxGuardSystemManaged: {{ t("The APRS-IS to RF TX Safety Rule is mandatory, system-managed, and fixed immediately before TX RF.")|tojson }},
-            messageDeliverySystemManaged: {{ t("The APRS-IS Message Delivery Rule is mandatory and system-managed; it delivers only directed traffic for recently heard local RF stations.")|tojson }},
+            messageDeliverySystemManaged: {{ t("The APRS-IS Message Delivery Rule is mandatory, system-managed and not configurable. It automatically uses all active TNC interfaces with RF transmission allowed.")|tojson }},
             allowRulesSystemManaged: {{ t("The APRS-IS Callsign and Radius Rule is mandatory and system-managed; an empty configuration denies every packet.")|tojson }},
             inputSafetySummary: {{ t("APRS/q validation · loop prevention · initial duplicate check")|tojson }},
-            messageDeliverySummary: {{ t("Messages for local RF stations · exact SSID · heard {minutes} min · max {hops} hops")|tojson }},
+            messageDeliverySummary: {{ t("All active TX-enabled TNC interfaces · direct RF · exact SSID · 60 min")|tojson }},
             rfTxSafetySummary: {{ t("Final duplicate check · delay {seconds}s · rate limits · third-party")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
@@ -468,11 +468,7 @@
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
             if (stepType === "receiver_local_tx") return { local_tx_source: refValue || "local_tx" };
             if (stepType === "filter_rf_guard") return {};
-            if (stepType === "filter_aprsis_message_delivery") return {
-                rf_sources: [],
-                heard_window_minutes: 60,
-                max_consumed_hops: 0,
-            };
+            if (stepType === "filter_aprsis_message_delivery") return {};
             if (stepType === "filter_rf_tx_guard") return {
                 viscous_delay_sec: 5,
                 flow_rate_per_minute: 6,
@@ -547,10 +543,7 @@
                 return i18n.inputSafetySummary;
             }
             if (step.step_type === "filter_aprsis_message_delivery") {
-                return formatText(i18n.messageDeliverySummary, {
-                    minutes: config.heard_window_minutes || 60,
-                    hops: config.max_consumed_hops ?? 0,
-                });
+                return i18n.messageDeliverySummary;
             }
             if (step.step_type === "filter_rf_tx_guard") {
                 return formatText(i18n.rfTxSafetySummary, { seconds: config.viscous_delay_sec || 5 });
@@ -705,13 +698,7 @@
             };
             const messageDelivery = existingMessageDelivery ? {
                 ...existingMessageDelivery,
-                config: {
-                    ...defaultConfig("filter_aprsis_message_delivery"),
-                    ...(existingMessageDelivery.config || {}),
-                    rf_sources: Array.isArray((existingMessageDelivery.config || {}).rf_sources)
-                        ? uniqueLines((existingMessageDelivery.config || {}).rf_sources)
-                        : [],
-                },
+                config: {},
             } : {
                 step_type: "filter_aprsis_message_delivery",
                 title: stepLabel("filter_aprsis_message_delivery"),
@@ -793,7 +780,11 @@
                     button.disabled = true;
                     const message = isRfGuardStepType(stepType)
                         ? i18n.rfGuardSystemManaged
-                        : (isRfTxGuardStepType(stepType) ? i18n.rfTxGuardSystemManaged : i18n.allowRulesSystemManaged);
+                        : (
+                            isMessageDeliveryStepType(stepType)
+                                ? i18n.messageDeliverySystemManaged
+                                : (isRfTxGuardStepType(stepType) ? i18n.rfTxGuardSystemManaged : i18n.allowRulesSystemManaged)
+                        );
                     button.title = message;
                     button.setAttribute("aria-label", message);
                     button.classList.toggle(

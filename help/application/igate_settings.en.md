@@ -26,8 +26,8 @@ Both modes use a verified APRS-IS login. `pass -1` is an unverified receive-only
 
 APRSBox identifies the RF return capability per gated station:
 
-- `qAO` is used when no active message-return flow covers the RF source.
-- `qAR` is used when an active `APRS-IS → RF` flow can deliver messages back to stations heard through that RF source.
+- `qAO` is used when the receiving TNC cannot transmit, has TX blocked, or there is no active `APRS-IS → RF` message-return flow.
+- `qAR` is used when the receiving TNC is active with TX allowed and an active `APRS-IS → RF` flow can provide the message-return path.
 - Locally generated APRSBox packets use `TCPIP*`; they are client-originated packets, not RF-gated packets.
 
 Disabling the `APRS-IS → RF` flow changes subsequent RF uplinks back to `qAO`.

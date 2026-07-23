@@ -26,8 +26,8 @@ Beide Betriebsarten verwenden ein verifiziertes APRS-IS-Login. `pass -1` ist ein
 
 APRSBox kennzeichnet die RF-Rückwegfähigkeit pro Station:
 
-- `qAO`, wenn kein aktiver Nachrichten-Rückweg die RF-Quelle abdeckt.
-- `qAR`, wenn ein aktiver Flow `APRS-IS → RF` Nachrichten an über diese RF-Quelle gehörte Stationen liefern kann.
+- `qAO`, wenn die empfangende TNC-Schnittstelle nicht senden kann, TX gesperrt ist oder kein aktiver Nachrichten-Rückweg `APRS-IS → RF` vorhanden ist.
+- `qAR`, wenn die empfangende TNC-Schnittstelle aktiv ist, TX erlaubt ist und ein aktiver Flow `APRS-IS → RF` den Nachrichten-Rückweg bereitstellt.
 - Lokal erzeugte APRSBox-Pakete verwenden `TCPIP*` und sind keine von RF gegateten Pakete.
 
 Nach dem Deaktivieren des Flows `APRS-IS → RF` verwenden nachfolgende RF-Uplinks wieder `qAO`.

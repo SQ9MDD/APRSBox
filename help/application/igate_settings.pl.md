@@ -26,8 +26,8 @@ Oba tryby używają zweryfikowanego logowania APRS-IS. `pass -1` oznacza niezwer
 
 APRSBox identyfikuje możliwość powrotu na RF osobno dla każdej bramkowanej stacji:
 
-- `qAO` jest używane, gdy żaden aktywny flow powrotu wiadomości nie obejmuje danego źródła RF.
-- `qAR` jest używane, gdy aktywny flow `APRS-IS → RF` może dostarczać wiadomości do stacji słyszanych przez to źródło RF.
+- `qAO` jest używane, gdy odbierający interfejs TNC nie może nadawać, ma zablokowany TX albo nie ma aktywnego flow powrotu wiadomości `APRS-IS → RF`.
+- `qAR` jest używane, gdy odbierający interfejs TNC jest aktywny, ma dozwolony TX i aktywny flow `APRS-IS → RF` zapewnia ścieżkę powrotu wiadomości.
 - Ramki wygenerowane lokalnie przez APRSBox używają `TCPIP*`; są to pakiety klienta, a nie pakiety bramkowane z RF.
 
 Wyłączenie flow `APRS-IS → RF` powoduje użycie `qAO` w kolejnych uplinkach RF.

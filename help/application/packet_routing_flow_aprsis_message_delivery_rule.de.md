@@ -10,13 +10,11 @@ Bulletins, Gruppennachrichten, Telemetriedefinitionen und allgemeine Anfragen ge
 
 ## Lokaler Empfänger
 
-Der Empfänger muss kürzlich über eine konfigurierte lokale RF-Quelle gehört worden sein. Die SSID ist Bestandteil des Vergleichs. Die Nachricht wird abgelehnt, wenn der Empfänger zu alt ist, zu viele benutzte DIGI-Hops benötigt, kürzlich als Internet-Station gesehen wurde oder der Absender im gleichen lokalen RF-Bereich gehört wurde.
+Der Empfänger muss innerhalb der letzten 60 Minuten direkt über eine beliebige aktive TNC-Schnittstelle gehört worden sein, auf der RF-Senden erlaubt ist. Die SSID ist Bestandteil des Vergleichs. Die Nachricht wird abgelehnt, wenn der Empfänger in diesem Zeitraum nicht direkt gehört wurde, die Schnittstelle deaktiviert ist oder RF-Senden gesperrt hat, der Empfänger kürzlich als Internet-Station gesehen wurde oder der Absender im gleichen lokalen RF-Bereich gehört wurde.
 
 ## Konfiguration
 
-- **Lokale RF-Empfangsquellen**: ein Schnittstellenname pro Zeile; leer verwendet die RF-Zielschnittstelle.
-- **Gültigkeit des lokalen Empfangs**: 5 bis 60 Minuten, Standard 60.
-- **Maximale benutzte DIGI-Hops**: 0 bis 2, Standard 0 für direkten Empfang.
+Diese Systemregel hat keine Einstellungen. APRSBox verwendet automatisch alle aktiven sendefähigen TNC-Schnittstellen, auf denen RF-Senden nicht gesperrt ist. Deaktivierte, reine Empfangs- und TX-gesperrte Schnittstellen werden nicht berücksichtigt.
 
 Eine zugelassene Nachricht umgeht die Rufzeichen- und Radiusregel, nicht jedoch TX-Sicherheit, Duplikatprüfung, Ratenbegrenzung, Third-Party-Kapselung oder AX.25-Längenprüfung.
 

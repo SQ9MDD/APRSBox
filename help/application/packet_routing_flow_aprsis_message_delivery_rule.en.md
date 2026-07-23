@@ -14,17 +14,13 @@ Bulletins, group messages, telemetry definitions and generic queries are not man
 
 ## Local recipient checks
 
-The recipient must have been heard recently through one of the configured local RF sources. Matching includes the SSID: `SQ9MDD` and `SQ9MDD-1` are different stations.
+The recipient must have been heard direct within the last 60 minutes through any active TNC interface on which RF transmission is allowed. Matching includes the SSID: `SQ9MDD` and `SQ9MDD-1` are different stations.
 
-The rule rejects a message when the recipient was not heard within the configured time, required too many consumed DIGI hops, was recently seen as an Internet-origin station, or when the sender was recently heard on the same local RF coverage.
+The rule rejects a message when the recipient was not heard direct within that time, the interface is disabled or has RF transmission blocked, the recipient was recently seen as an Internet-origin station, or the sender was recently heard in the same local RF coverage.
 
 ## Configuration
 
-- **Local RF listening sources**: one interface name per line. An empty list uses the target RF interface.
-- **Local heard validity**: from 5 to 60 minutes; default 60.
-- **Maximum consumed DIGI hops**: from 0 to 2; default 0 means direct reception only.
-
-Use the smallest coverage that reliably reaches the intended local stations.
+This system rule has no settings. APRSBox automatically uses all active TX-capable TNC interfaces on which RF transmission is not blocked. Disabled, receive-only and TX-blocked interfaces do not qualify.
 
 ## Interaction with other rules
 

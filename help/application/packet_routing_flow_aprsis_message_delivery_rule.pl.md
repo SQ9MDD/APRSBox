@@ -14,17 +14,13 @@ Bulletiny, wiadomości grupowe, definicje telemetryczne i zapytania ogólne nie 
 
 ## Sprawdzanie lokalnego adresata
 
-Adresat musi być niedawno słyszany przez jedno ze skonfigurowanych lokalnych źródeł RF. Dopasowanie obejmuje SSID: `SQ9MDD` i `SQ9MDD-1` są różnymi stacjami.
+Adresat musi być słyszany bezpośrednio w ciągu ostatnich 60 minut przez dowolny aktywny interfejs TNC, na którym dozwolone jest nadawanie RF. Dopasowanie obejmuje SSID: `SQ9MDD` i `SQ9MDD-1` są różnymi stacjami.
 
-Reguła odrzuca wiadomość, gdy adresat nie był słyszany w ustawionym czasie, został odebrany przez zbyt wiele wykorzystanych hopów DIGI, był ostatnio widziany jako stacja pochodząca z Internetu albo nadawca wiadomości był ostatnio słyszany w tym samym lokalnym zasięgu RF.
+Reguła odrzuca wiadomość, gdy adresat nie był słyszany bezpośrednio w tym czasie, interfejs jest wyłączony lub ma zablokowane nadawanie RF, adresat był ostatnio widziany jako stacja pochodząca z Internetu albo nadawca wiadomości był ostatnio słyszany w tym samym lokalnym zasięgu RF.
 
 ## Konfiguracja
 
-- **Lokalne źródła nasłuchu RF**: jedna nazwa interfejsu w każdym wierszu. Pusta lista używa docelowego interfejsu RF.
-- **Ważność lokalnego nasłuchu**: od 5 do 60 minut; domyślnie 60.
-- **Maksymalna liczba wykorzystanych hopów DIGI**: od 0 do 2; domyślne 0 oznacza wyłącznie odbiór bezpośredni.
-
-Użyj najmniejszego zasięgu, który niezawodnie dociera do zamierzonych stacji lokalnych.
+Ta reguła systemowa nie ma ustawień. APRSBox automatycznie uwzględnia wszystkie aktywne interfejsy TNC zdolne do nadawania, na których nadawanie RF nie jest zablokowane. Interfejsy wyłączone, tylko odbiorcze oraz z blokadą TX nie kwalifikują stacji do dostarczenia wiadomości.
 
 ## Współpraca z pozostałymi regułami
 

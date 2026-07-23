@@ -518,6 +518,7 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_path"]["scope_label"], "RF → RF")
             self.assertEqual(type_meta["filter_rf_guard"]["scope_label"], "APRS-IS → RF")
             self.assertEqual(type_meta["filter_aprsis_message_delivery"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(type_meta["filter_aprsis_message_delivery"]["config_fields"], [])
             self.assertEqual(
                 type_meta["filter_aprsis_message_delivery"]["help_page"],
                 "application/packet_routing_flow_aprsis_message_delivery_rule",

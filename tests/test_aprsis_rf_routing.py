@@ -221,6 +221,9 @@ class AprsisRfModelTests(unittest.TestCase):
         self.assertIn("filter_rf_guard", template)
         self.assertIn("filter_aprsis_message_delivery", template)
         self.assertIn("filter_rf_tx_guard", template)
+        self.assertNotIn("rf_sources", template)
+        self.assertNotIn("heard_window_minutes", template)
+        self.assertNotIn("max_consumed_hops", template)
         self.assertIn("rfGuardSystemManaged", template)
         self.assertIn("const isStrictAprsisToRfFlow = () => isAprsisSourceFlow() && isTxRfTargetFlow();", template)
         self.assertIn("button.hidden = strictAprsisToRf && !isAprsisSourceSystemStepType(stepType);", template)
@@ -262,7 +265,7 @@ class AprsisRfModelTests(unittest.TestCase):
             self.assertEqual(input_guard["config"], {})
             self.assertEqual(
                 normalized["steps"][2]["config"],
-                {"rf_sources": [], "heard_window_minutes": 60, "max_consumed_hops": 0},
+                {},
             )
             self.assertEqual(normalized["steps"][3]["config"], {"callsigns": [], "radius_km": ""})
             self.assertEqual(normalized["steps"][4]["config"], RF_GUARD_DEFAULTS)
@@ -463,7 +466,7 @@ class AprsisRfModelTests(unittest.TestCase):
             self.assertEqual(flow["steps"][2]["title"], "APRS-IS Message Delivery Rule")
             self.assertEqual(
                 flow["steps"][2]["config"],
-                {"rf_sources": [], "heard_window_minutes": 60, "max_consumed_hops": 0},
+                {},
             )
             self.assertEqual(flow["steps"][4]["title"], "APRS-IS to RF TX Safety Rule")
             self.assertEqual(flow["steps"][4]["config"], legacy_config)
@@ -484,6 +487,32 @@ class AprsisRfModelTests(unittest.TestCase):
                 ),
                 1,
             )
+
+            execute(
+                """
+                UPDATE digi_flow_steps
+                SET config_json = ?
+                WHERE flow_id = ? AND step_type = 'filter_aprsis_message_delivery'
+                """,
+                (
+                    json.dumps(
+                        {
+                            "rf_sources": ["RF-OUT"],
+                            "heard_window_minutes": 15,
+                            "max_consumed_hops": 2,
+                        }
+                    ),
+                    flow_id,
+                ),
+            )
+            init_db()
+            normalized_legacy_flow = get_digi_flow(flow_id)
+            message_step = next(
+                step
+                for step in normalized_legacy_flow["steps"]
+                if step["step_type"] == "filter_aprsis_message_delivery"
+            )
+            self.assertEqual(message_step["config"], {})
 
 
 class AprsisRfRuleAndProtocolTests(unittest.TestCase):
