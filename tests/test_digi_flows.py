@@ -515,8 +515,11 @@ class DigiFlowsTests(unittest.TestCase):
                 self.assertTrue(type_meta[step_type]["scope_label"])
                 self.assertTrue(type_meta[step_type]["scope_tone"])
             self.assertEqual(type_meta["filter_path"]["scope_label"], "RF → RF")
-            self.assertEqual(type_meta["filter_rf_guard"]["scope_label"], "APRS-IS source")
-            self.assertEqual(type_meta["filter_strict"]["scope_label"], "APRS-IS target")
+            self.assertEqual(type_meta["filter_rf_guard"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(type_meta["filter_allow_rules"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(type_meta["filter_direct_only"]["scope_label"], "RF → RF")
+            self.assertEqual(type_meta["filter_callsign"]["scope_label"], "RF → RF")
+            self.assertEqual(type_meta["filter_strict"]["scope_label"], "RF → APRS-IS")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():

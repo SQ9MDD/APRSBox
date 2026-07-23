@@ -46,6 +46,11 @@ TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
 LOCAL_TX_ALLOWED_TARGET_KINDS = {"tx_aprsis", "action_log"}
 APRSIS_ALLOWED_SOURCE_KINDS = {"receiver_rf", LOCAL_TX_SOURCE_KIND}
 APRSIS_SOURCE_ALLOWED_TARGET_KINDS = {"tx_rf", "action_drop", "action_log"}
+APRSIS_TO_RF_SYSTEM_STEP_TYPES = {
+    RF_GUARD_STEP_TYPE,
+    ALLOW_RULES_STEP_TYPE,
+    RF_TX_GUARD_STEP_TYPE,
+}
 DIGI_FLOW_EXECUTION_RETENTION_LIMIT = 200
 PACKET_TYPE_FILTER_GROUPS = (
     "position",
@@ -113,8 +118,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "APRS-IS Input Safety Rule",
         "badge": "Rule",
         "palette_kind": "rule",
-        "scope_label": "APRS-IS source",
-        "scope_tone": "aprsis-source",
+        "scope_label": "APRS-IS → RF",
+        "scope_tone": "aprsis-to-rf",
         "description": "Validates APRS syntax, q-constructs, paths, loops and early duplicates at an APRS-IS source.",
         "help_page": "application/packet_routing_flow_rf_guard",
         "editor_help_lines": (
@@ -151,8 +156,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "APRS-IS Callsign and Radius Rule",
         "badge": "Rule",
         "palette_kind": "rule",
-        "scope_label": "APRS-IS source",
-        "scope_tone": "aprsis-source",
+        "scope_label": "APRS-IS → RF",
+        "scope_tone": "aprsis-to-rf",
         "description": "Passes only exact source callsigns located within the configured radius from My Station.",
         "help_page": "application/packet_routing_flow_rf_guard",
         "editor_help_lines": (
@@ -275,7 +280,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "APRS-IS Uplink Safety Rule",
         "badge": "Rule",
         "palette_kind": "rule",
-        "scope_label": "APRS-IS target",
+        "scope_label": "RF → APRS-IS",
         "scope_tone": "aprsis-target",
         "description": "Rejects unsafe paths and malformed third-party packets before an APRS-IS target.",
         "help_page": "application/packet_routing_flow_strict_filter",
@@ -291,8 +296,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Direct RF Reception Filter",
         "badge": "Filter",
         "palette_kind": "filter",
-        "scope_label": "RF source",
-        "scope_tone": "rf-source",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Passes only packets heard direct, without any consumed digipeater hop in the path.",
         "help_page": "application/packet_routing_flow_direct_only",
         "editor_help_lines": (
@@ -307,8 +312,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Consumed DIGI Hop Filter",
         "badge": "Filter",
         "palette_kind": "filter",
-        "scope_label": "RF source",
-        "scope_tone": "rf-source",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Matches already consumed path hops against allow or deny patterns.",
         "help_page": "application/packet_routing_flow_digi_filter",
         "editor_help_lines": (
@@ -334,8 +339,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Source Callsign Filter",
         "badge": "Filter",
         "palette_kind": "filter",
-        "scope_label": "Multiple flows",
-        "scope_tone": "multi-flow",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Matches the source callsign against allow or deny patterns.",
         "help_page": "application/packet_routing_flow_callsign_filter",
         "editor_help_lines": (
@@ -361,8 +366,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "APRS Packet Type Filter",
         "badge": "Filter",
         "palette_kind": "filter",
-        "scope_label": "Multiple flows",
-        "scope_tone": "multi-flow",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Matches decoded APRS packet groups against allow or deny lists.",
         "help_page": "application/packet_routing_flow_packet_type_filter",
         "config_fields": (
@@ -394,8 +399,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "APRS Symbol Filter",
         "badge": "Filter",
         "palette_kind": "filter",
-        "scope_label": "Multiple flows",
-        "scope_tone": "multi-flow",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Matches decoded APRS symbols against allow or deny lists.",
         "help_page": "application/packet_routing_flow_icon_filter",
         "config_fields": (
@@ -415,8 +420,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Position Zone Filter",
         "badge": "Filter",
         "palette_kind": "filter",
-        "scope_label": "Multiple flows",
-        "scope_tone": "multi-flow",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Allows packets only when decoded position is inside at least one configured zone.",
         "help_page": "application/packet_routing_flow_distance_filter",
         "editor_help_lines": (
@@ -466,8 +471,8 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "label": "Rate Limit Per Callsign",
         "badge": "Filter",
         "palette_kind": "filter",
-        "scope_label": "Multiple flows",
-        "scope_tone": "multi-flow",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Stores a packet rate limit applied separately for each callsign.",
         "config_fields": (
             {"name": "packets_per_minute", "label": "Packets / Minute", "type": "number", "required": True},
@@ -1419,6 +1424,12 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
         flow_steps = [dict(step) for step in flow.get("steps", [])]
         if str(flow.get("source_kind") or "").strip() == APRSIS_FLOW_SOURCE_KIND and len(flow_steps) >= 2:
             middle_steps = flow_steps[1:-1]
+            if str(flow.get("target_kind") or "").strip() == "tx_rf":
+                middle_steps = [
+                    step
+                    for step in middle_steps
+                    if str(step.get("step_type") or "").strip() in APRSIS_TO_RF_SYSTEM_STEP_TYPES
+                ]
             input_guard = next(
                 (step for step in middle_steps if str(step.get("step_type") or "") == RF_GUARD_STEP_TYPE),
                 None,
@@ -1619,6 +1630,14 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
             _t("APRS-IS Input Guard, RF TX Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source.")
         )
     if source_kind == APRSIS_FLOW_SOURCE_KIND:
+        if target_kind == "tx_rf":
+            additional_steps = [
+                step
+                for step in normalized_steps[1:-1]
+                if step["step_type"] not in APRSIS_TO_RF_SYSTEM_STEP_TYPES
+            ]
+            if additional_steps:
+                raise ValueError(_t("APRS-IS to RF flow cannot include additional filters or rules."))
         if len(guard_steps) > 1:
             raise ValueError(_t("APRS-IS source flow can contain only one Input Guard step."))
         if len(tx_guard_steps) > 1:
@@ -1998,6 +2017,13 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
                     _t("APRS-IS source flow cannot be enabled without exactly one mandatory enabled Input Guard step.")
                 )
             if target_kind == "tx_rf":
+                additional_steps = [
+                    step
+                    for step in flow_steps[1:-1]
+                    if str(step.get("step_type") or "") not in APRSIS_TO_RF_SYSTEM_STEP_TYPES
+                ]
+                if additional_steps:
+                    raise ValueError(_t("APRS-IS to RF flow cannot include additional filters or rules."))
                 tx_guard_steps = [
                     step for step in flow_steps[1:-1] if step.get("step_type") == RF_TX_GUARD_STEP_TYPE
                 ]

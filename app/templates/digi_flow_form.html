@@ -331,6 +331,7 @@
             cardTitle: {{ t("Card Title")|tojson }},
             minimumPathRuleRf: {{ t("The RF Digipeating Path Rule is required before an RF TX target.")|tojson }},
             aprsisSystemFlowLocked: {{ t("An APRS-IS target flow is system-restricted to one mandatory uplink safety rule.")|tojson }},
+            aprsisToRfFlowLocked: {{ t("APRS-IS to RF is restricted to the three mandatory safety rules.")|tojson }},
             strictGuardSystemManaged: {{ t("The APRS-IS Uplink Safety Rule is mandatory, system-managed, and available only for APRS-IS target flows.")|tojson }},
             flowSteps: {{ t("Flow {count} steps")|tojson }},
             inputPacket: {{ t("Input packet")|tojson }},
@@ -609,6 +610,7 @@
         );
         const isTxRfTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_rf";
         const isAprsisSourceFlow = () => String(sourceKindInput.value || "").trim() === "receiver_aprsis";
+        const isStrictAprsisToRfFlow = () => isAprsisSourceFlow() && isTxRfTargetFlow();
         const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && !isAprsisSourceFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
         const isDistanceFilterStepType = (stepType) => stepType === "filter_distance";
         const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
@@ -704,7 +706,9 @@
             txGuard.enabled = 1;
             allowRules.title = stepLabel("filter_allow_rules");
             allowRules.enabled = 1;
-            const ordinary = middle.filter((step) => !isAprsisSourceSystemStepType(step.step_type));
+            const ordinary = isStrictAprsisToRfFlow()
+                ? []
+                : middle.filter((step) => !isAprsisSourceSystemStepType(step.step_type));
             const txGuardSteps = isTxRfTargetFlow() ? [txGuard] : [];
             steps = [sourceStep, guard, allowRules, ...ordinary, ...txGuardSteps, targetStep];
         };
@@ -738,8 +742,16 @@
             const hasDistanceFilter = hasDistanceFilterStep();
             const aprsisTarget = isAprsisTargetFlow();
             const aprsisSource = isAprsisSourceFlow();
+            const strictAprsisToRf = isStrictAprsisToRfFlow();
             for (const button of paletteButtons) {
                 const stepType = button.dataset.stepType || "";
+                button.hidden = strictAprsisToRf && !isAprsisSourceSystemStepType(stepType);
+                if (button.hidden) {
+                    button.disabled = true;
+                    button.title = i18n.aprsisToRfFlowLocked;
+                    button.setAttribute("aria-label", i18n.aprsisToRfFlowLocked);
+                    continue;
+                }
                 if (isAprsisSourceSystemStepType(stepType)) {
                     button.disabled = true;
                     const message = isRfGuardStepType(stepType)
@@ -1780,6 +1792,9 @@
                     return;
                 }
                 if (isAprsisTargetFlow() || stepType === "filter_strict") {
+                    return;
+                }
+                if (isStrictAprsisToRfFlow()) {
                     return;
                 }
                 if (isAprsisSourceSystemStepType(stepType)) {

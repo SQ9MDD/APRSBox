@@ -210,7 +210,8 @@ class AprsisRfModelTests(unittest.TestCase):
             default_deny_meta = get_digi_flow_type_meta()["filter_allow_rules"]
             self.assertEqual(default_deny_meta["label"], "APRS-IS Callsign and Radius Rule")
             self.assertEqual(default_deny_meta["badge"], "Rule")
-            self.assertEqual(default_deny_meta["scope_label"], "APRS-IS source")
+            self.assertEqual(default_deny_meta["scope_label"], "APRS-IS → RF")
+            self.assertEqual(default_deny_meta["scope_tone"], "aprsis-to-rf")
             self.assertEqual(
                 [field["name"] for field in default_deny_meta["config_fields"]],
                 ["callsigns", "radius_km"],
@@ -220,6 +221,9 @@ class AprsisRfModelTests(unittest.TestCase):
         self.assertIn("filter_rf_guard", template)
         self.assertIn("filter_rf_tx_guard", template)
         self.assertIn("rfGuardSystemManaged", template)
+        self.assertIn("const isStrictAprsisToRfFlow = () => isAprsisSourceFlow() && isTxRfTargetFlow();", template)
+        self.assertIn("button.hidden = strictAprsisToRf && !isAprsisSourceSystemStepType(stepType);", template)
+        self.assertIn("if (isStrictAprsisToRfFlow())", template)
         self.assertIn("const aprsisSourceSystemStep = isAprsisSourceFlow() && isAprsisSourceSystemStepType", template)
         self.assertNotIn("data.allowRulesEmpty", template.replace("dataset", "data"))
         self.assertNotIn("data.addAllowRule", template.replace("dataset", "data"))
@@ -284,6 +288,41 @@ class AprsisRfModelTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "only one RF TX Guard"):
                 normalize_digi_flow_payload(duplicate_tx_guard)
 
+            additional_filter = aprsis_rf_payload()
+            additional_filter["steps"].insert(
+                -1,
+                {
+                    "step_type": "filter_callsign",
+                    "title": "Source Callsign Filter",
+                    "enabled": 1,
+                    "config": {"mode": "allow", "callsigns": ["SP5ABC"]},
+                },
+            )
+            with self.assertRaisesRegex(ValueError, "cannot include additional filters or rules"):
+                normalize_digi_flow_payload(additional_filter)
+
+            restricted_flow_id = create_digi_flow(aprsis_rf_payload(enabled=0))
+            execute(
+                "UPDATE digi_flow_steps SET step_order = 6 WHERE flow_id = ? AND step_type = 'tx_rf'",
+                (restricted_flow_id,),
+            )
+            execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (?, 5, 'filter_callsign', 'Source Callsign Filter', 1, ?, ?, ?)
+                """,
+                (
+                    restricted_flow_id,
+                    json.dumps({"mode": "allow", "callsigns": ["SP5ABC"]}),
+                    "2026-01-01T00:00:00+00:00",
+                    "2026-01-01T00:00:00+00:00",
+                ),
+            )
+            with self.assertRaisesRegex(ValueError, "cannot include additional filters or rules"):
+                set_digi_flow_enabled(restricted_flow_id, True)
+
             non_aprs = aprsis_rf_payload()
             non_aprs.update(source_kind="receiver_rf", source_ref="RF-IN")
             non_aprs["steps"][0] = {
@@ -341,12 +380,27 @@ class AprsisRfModelTests(unittest.TestCase):
                 (flow_id,),
             )
             execute("DELETE FROM digi_flow_steps WHERE id = ?", (int(guard["id"]),))
+            execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (?, 2, 'filter_callsign', 'Source Callsign Filter', 1, ?, ?, ?)
+                """,
+                (
+                    flow_id,
+                    json.dumps({"mode": "allow", "callsigns": ["SP5ABC"]}),
+                    "2026-01-01T00:00:00+00:00",
+                    "2026-01-01T00:00:00+00:00",
+                ),
+            )
             flow = get_digi_flow(flow_id)
             editor = build_digi_flow_editor_payload(flow)
             self.assertEqual(editor["steps"][1]["step_type"], "filter_rf_guard")
             self.assertEqual(editor["steps"][-2]["step_type"], "filter_rf_tx_guard")
             allow = next(step for step in editor["steps"] if step["step_type"] == "filter_allow_rules")
             self.assertEqual(allow["config"], filter_config)
+            self.assertNotIn("filter_callsign", [step["step_type"] for step in editor["steps"]])
             self.assertIsNone(fetch_one(
                 "SELECT id FROM digi_flow_steps WHERE flow_id = ? AND step_type = 'filter_rf_guard'",
                 (flow_id,),
