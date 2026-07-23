@@ -34,6 +34,7 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 ## Filter- und Regelblöcke
 
 - [APRS-IS-Uplink-Sicherheitsregel](packet_routing_flow_strict_filter.de.md)
+- [APRS-IS-Rufzeichen- und Radiusregel](packet_routing_flow_aprsis_callsign_radius_rule.de.md)
 - [RF-Digipeating-Pfadregel](packet_routing_flow_path_rule_and_digi_guard.de.md)
 - [RF-Duplikatverzögerungsfilter](packet_routing_flow_duplicate_filter.de.md)
 - [Filter für direkten RF-Empfang](packet_routing_flow_direct_only.de.md)

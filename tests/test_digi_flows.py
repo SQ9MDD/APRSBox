@@ -517,6 +517,10 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_path"]["scope_label"], "RF → RF")
             self.assertEqual(type_meta["filter_rf_guard"]["scope_label"], "APRS-IS → RF")
             self.assertEqual(type_meta["filter_allow_rules"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(
+                type_meta["filter_allow_rules"]["help_page"],
+                "application/packet_routing_flow_aprsis_callsign_radius_rule",
+            )
             self.assertEqual(type_meta["filter_direct_only"]["scope_label"], "RF → RF")
             self.assertEqual(type_meta["filter_callsign"]["scope_label"], "RF → RF")
             self.assertEqual(type_meta["filter_strict"]["scope_label"], "RF → APRS-IS")

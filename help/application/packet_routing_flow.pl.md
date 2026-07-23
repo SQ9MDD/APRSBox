@@ -34,6 +34,7 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 ## Bloki filtrów i reguł
 
 - [Reguła bezpieczeństwa uplinku APRS-IS](packet_routing_flow_strict_filter.pl.md)
+- [Reguła znaku i promienia APRS-IS](packet_routing_flow_aprsis_callsign_radius_rule.pl.md)
 - [Reguła ścieżki DIGI RF](packet_routing_flow_path_rule_and_digi_guard.pl.md)
 - [Filtr opóźnienia duplikatów RF](packet_routing_flow_duplicate_filter.pl.md)
 - [Filtr bezpośredniego odbioru RF](packet_routing_flow_direct_only.pl.md)

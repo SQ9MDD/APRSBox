@@ -159,7 +159,7 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "scope_label": "APRS-IS → RF",
         "scope_tone": "aprsis-to-rf",
         "description": "Passes only exact source callsigns located within the configured radius from My Station.",
-        "help_page": "application/packet_routing_flow_rf_guard",
+        "help_page": "application/packet_routing_flow_aprsis_callsign_radius_rule",
         "editor_help_lines": (
             "The exact callsign and radius conditions use AND.",
             "Callsign entries use strict matching including SSID; wildcards are not allowed.",

@@ -34,6 +34,7 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 ## Filter and rule blocks
 
 - [APRS-IS Uplink Safety Rule](packet_routing_flow_strict_filter.en.md)
+- [APRS-IS Callsign and Radius Rule](packet_routing_flow_aprsis_callsign_radius_rule.en.md)
 - [RF Digipeating Path Rule](packet_routing_flow_path_rule_and_digi_guard.en.md)
 - [RF Duplicate Delay Filter](packet_routing_flow_duplicate_filter.en.md)
 - [Direct RF Reception Filter](packet_routing_flow_direct_only.en.md)

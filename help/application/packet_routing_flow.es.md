@@ -34,6 +34,7 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 ## Bloques de filtros y reglas
 
 - [Regla de seguridad de enlace APRS-IS](packet_routing_flow_strict_filter.es.md)
+- [Regla APRS-IS de indicativo y radio](packet_routing_flow_aprsis_callsign_radius_rule.es.md)
 - [Regla de ruta de repetición RF](packet_routing_flow_path_rule_and_digi_guard.es.md)
 - [Filtro RF de retardo de duplicados](packet_routing_flow_duplicate_filter.es.md)
 - [Filtro de recepción RF directa](packet_routing_flow_direct_only.es.md)
