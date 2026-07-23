@@ -64,6 +64,7 @@ from app.services.content import (
     get_section_row,
     get_section_rows,
     get_related_ssids,
+    get_rf_heard_station_snapshots,
     get_visible_station_snapshots,
     recent_station_outbound_jobs,
     recent_object_outbound_jobs,
@@ -182,6 +183,7 @@ from app.services.system import (
     start_service_restart_job,
 )
 from app.services.traffic_stream import TrafficSnapshotBroadcaster, TrafficStreamCapacityError
+from app.services.traffic_source import APRSIS_MODEM_TYPE
 from app.template_helpers import build_template_context
 from app.ui_palette import get_ui_palette_label, get_ui_palette_options, is_supported_ui_palette, normalize_ui_palette
 from app.services.wx import (
@@ -1044,7 +1046,7 @@ def stations_page(
         current_user=current_user,
         active_nav="stations",
         stations=stations,
-        station_summary=station_summary(stations),
+        station_summary=station_summary(get_rf_heard_station_snapshots()),
         default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
@@ -1144,7 +1146,7 @@ def stations_snapshot(
     return JSONResponse(
         {
             "stations": stations,
-            "summary": station_summary(stations),
+            "summary": station_summary(get_rf_heard_station_snapshots()),
             "default_units": station_settings.get("default_units", "metric"),
         }
     )
@@ -1185,8 +1187,8 @@ def modems_create(
     normalized_modem_type = modem_type.strip().upper()
     if normalized_modem_type == "SERIAL":
         normalized_modem_type = "SERIALL"
-    if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE}:
-        context = _section_template_context(request, current_user, "modems", flash="Unsupported TNC type.")
+    if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE, APRSIS_MODEM_TYPE}:
+        context = _section_template_context(request, current_user, "modems", flash="Unsupported interface type.")
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     normalized_device_path = device_path.strip()
     if record_id is not None and normalized_modem_type == OPENWEBRX_MQTT_MODEM_TYPE and "***" in normalized_device_path:
@@ -1213,6 +1215,18 @@ def modems_create(
         "expose_whitelist": expose_whitelist,
     }
     if record_id is None:
+        if normalized_modem_type == APRSIS_MODEM_TYPE:
+            existing_aprsis = fetch_one("SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' LIMIT 1")
+            if existing_aprsis is not None:
+                existing_id = int(existing_aprsis["id"])
+                context = _section_template_context(
+                    request,
+                    current_user,
+                    "modems",
+                    flash="An APRSIS interface already exists. Edit the existing interface instead.",
+                    edit_row=get_section_row("modems", existing_id),
+                )
+                return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
         success, error = safe_create_section_row("modems", payload)
         edit_row = None
     else:

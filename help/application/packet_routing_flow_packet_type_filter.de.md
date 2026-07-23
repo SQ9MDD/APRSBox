@@ -1,4 +1,4 @@
-# Pakettypfilter
+# APRS-Pakettypfilter
 
 Dieser Filter arbeitet auf dem, was der APRSBox-Decoder als APRS-Gruppe oder APRS-Typ erkannt hat.
 

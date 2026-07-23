@@ -1,4 +1,4 @@
-# Filtr ikon
+# Filtr symbolu APRS
 
 Ten filtr działa na symbolu APRS zapisanym dokładnie w postaci `table+code`.
 

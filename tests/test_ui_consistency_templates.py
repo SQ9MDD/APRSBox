@@ -55,6 +55,17 @@ class UiConsistencyTemplateTests(unittest.TestCase):
         self.assertIn("gap: var(--space-4);", station_page_form_block)
         self.assertIn("gap: var(--space-4);", station_subgrid_block)
 
+    def test_digi_step_actions_stay_right_aligned_when_step_summary_wraps(self) -> None:
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        header_block = stylesheet_source.partition(".digi-step-card-header {")[2].split("}", 1)[0]
+        meta_block = stylesheet_source.partition(".digi-step-meta {")[2].split("}", 1)[0]
+        actions_blocks = stylesheet_source.split(".digi-step-actions {")
+        actions_block = actions_blocks[2].split("}", 1)[0]
+
+        self.assertIn("flex-wrap: nowrap;", header_block)
+        self.assertIn("flex: 1 1 0;", meta_block)
+        self.assertIn("flex: 0 0 auto;", actions_block)
+
 
 if __name__ == "__main__":
     unittest.main()

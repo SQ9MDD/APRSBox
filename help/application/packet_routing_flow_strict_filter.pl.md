@@ -1,6 +1,6 @@
-# Filtr ścisły
+# Reguła bezpieczeństwa uplinku APRS-IS
 
-To systemowy filtr bezpieczeństwa dla ścieżek kończących się na `TX APRS-IS`.
+To systemowa reguła bezpieczeństwa dla ścieżek kończących się na `TX APRS-IS`.
 
 Jak działa dla ramek z `Odbiornik RF`:
 
@@ -18,14 +18,14 @@ Jak działa dla `Local TX`:
 
 Najważniejsze uwagi:
 
-- przy `TX APRS-IS` ten filtr jest obowiązkowy,
-- to nie jest filtr do sterowania digipeaterem RF,
+- przy `TX APRS-IS` ta reguła jest obowiązkowa,
+- to nie jest reguła do sterowania digipeaterem RF,
 - jeśli parser TNC2 nie rozpozna ramki, filtr ją odrzuca.
 
 Typowe use case'y:
 
-- `Odbiornik RF -> Filtr ścisły -> TX APRS-IS`,
-- `Local TX -> Filtr ścisły -> TX APRS-IS`.
+- `Odbiornik RF -> Reguła bezpieczeństwa uplinku APRS-IS -> TX APRS-IS`,
+- `Local TX -> Reguła bezpieczeństwa uplinku APRS-IS -> TX APRS-IS`.
 
 ## Nawigacja
 

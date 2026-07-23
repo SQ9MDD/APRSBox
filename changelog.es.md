@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.54.dev - 2026-07-23
+- `APRS-IS / routing`: se añadió APRS-IS como interfaz y el routing seguro `APRS-IS → RF`.
+
 ## 1.8.53.dev - 2026-07-14
 - `Mensajes / conversaciones de grupo`: se añadieron hilos para los grupos de destino configurados explícitamente, con identificación del remitente; los demás grupos se ignoran y los mensajes de grupo se transmiten una sola vez, sin número, ACK ni reintentos.
 - `Mensajes / configuración / GUI`: se añadieron la ruta predeterminada, la recepción para cualquier SSID del indicativo local y una lista de grupos validada (`ALL`, `QST`, `CQ` en el primer uso); el panel se simplificó y se amplió la ayuda multilingüe.

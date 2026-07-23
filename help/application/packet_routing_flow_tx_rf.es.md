@@ -11,12 +11,8 @@ Usalo para:
 Esquema tipico:
 
 ```text
-Receptor RF -> Filtro duplicado (retraso viscoso) -> Regla de trayectoria y protección DIGI -> TX RF
+Receptor RF -> Filtro RF de retardo de duplicados -> Regla de ruta de repetición RF -> TX RF
 ```
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

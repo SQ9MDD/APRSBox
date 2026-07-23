@@ -11,7 +11,7 @@ Używaj go:
 Typowy schemat:
 
 ```text
-Odbiornik RF -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
+Odbiornik RF -> Filtr opóźnienia duplikatów RF -> Reguła ścieżki DIGI RF -> TX RF
 ```
 
 ## Nawigacja

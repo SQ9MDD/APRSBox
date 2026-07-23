@@ -1,8 +1,8 @@
-# TNC
+# Interfaces
 
-La pestaña TNC configura las interfaces de radio usadas por APRSBox para recibir KISS/TNC2, transmitir tramas outbound y, opcionalmente, compartir un puerto KISS en la LAN.
+La pestaña Interfaces configura las entradas de APRSBox. Las interfaces de radio pueden recibir KISS/TNC2, transmitir tramas outbound y compartir opcionalmente un puerto KISS en la LAN. APRS-IS puede activarse como entrada de solo recepción.
 
-## Lista TNC
+## Lista de interfaces
 
 La tabla muestra las interfaces configuradas. Haz clic en una fila para editarla.
 
@@ -10,15 +10,18 @@ La tabla muestra las interfaces configuradas. Haz clic en una fila para editarla
 - `TX Block` muestra si la transmisión por esa interfaz está bloqueada.
 - `LAN` muestra si APRSBox expone un proxy KISS/TNC para clientes LAN.
 
-Desactivar un TNC impide que el monitor de tráfico y el servicio outbound lo usen. Beacon, WX, objetos, boletines y mensajes todavía pueden apuntar a esa interfaz, pero la transmisión se omitirá o fallará según el contexto.
+Desactivar una interfaz detiene su recepción. Desactivar una interfaz de radio también impide que el servicio outbound la use.
 
 ## Tipos de interfaz
 
-- `TCP` conecta con un TNC o software que expone KISS por TCP. `Path / Adress` normalmente tiene formato `host:port`, por ejemplo `127.0.0.1:8001`.
+- `TCP` conecta con un TNC o software que expone KISS por TCP. `Ruta / Dirección / Filtro` normalmente tiene formato `host:port`, por ejemplo `127.0.0.1:8001`.
 - `SERIALL` usa un puerto serie local, por ejemplo `/dev/ttyUSB0` o `/dev/ttyACM0`, y requiere un `Baud Rate` válido.
 - `OpenWebRX MQTT (RX only)` recibe paquetes desde OpenWebRX MQTT. Este tipo es solo RX: TX queda bloqueado y el proxy LAN se desactiva.
+- `APRSIS` recibe líneas TNC2 mediante la conexión APRS-IS existente configurada en iGate. No usa KISS y esta interfaz es solo de recepción. Solo puede existir una interfaz APRSIS.
 
 Para OpenWebRX MQTT, el campo de dirección debe ser una URL `mqtt://` o `mqtts://` con el topic en la ruta, por ejemplo `mqtt://user:pass@127.0.0.1:1883/openwebrx/aprs`.
+
+Para APRSIS, `Ruta / Dirección / Filtro` es el filtro del servidor APRS-IS. Las interfaces nuevas usan `m/20` por defecto; se puede introducir otro filtro válido como `r/52.23/21.01/50`. El servidor, el puerto, el indicativo y el passcode siguen procediendo de los ajustes de iGate.
 
 ## Campos de configuración
 
@@ -29,7 +32,7 @@ Para OpenWebRX MQTT, el campo de dirección debe ser una URL `mqtt://` o `mqtts:
 - `TX Min Gap (s)` define la pausa mínima entre transmisiones en este TNC. El rango permitido es de `0.2` a `1.2` segundos.
 - `RX Silence Reconnect Timeout (s)` se aplica a interfaces serie. Tras una ausencia de RX más larga que este valor, el broker serie puede forzar una reconexión. `0` desactiva este watchdog.
 
-`Baud Rate` se usa solo para `SERIALL`. Se ignora para `TCP` y `OpenWebRX MQTT`.
+`Baud Rate` se usa solo para `SERIALL`. Para APRSIS se ocultan los campos serie, TX y proxy LAN.
 
 ## Expose Port
 
@@ -42,8 +45,8 @@ Para OpenWebRX MQTT, el campo de dirección debe ser una URL `mqtt://` o `mqtts:
 
 No actives TX remoto en una red no confiable. Si expones el puerto fuera de la máquina local, configura una whitelist.
 
-## Cuándo usar varios TNC
+## Cuándo usar varias interfaces
 
-Varios TNC activos pueden funcionar en paralelo. El tráfico recibido se maneja por interfaz, mientras que la transmisión depende del selector usado en cada pestaña, como `My Station`, `WX`, objetos, boletines, mensajes o reglas de `Packet Routing`.
+Varias interfaces activas pueden funcionar en paralelo. El tráfico recibido se maneja por interfaz, mientras que la transmisión de radio depende del selector usado en cada pestaña. El tráfico recibido mediante APRS-IS aparece en el historial, los detalles de estación y el mapa, pero se excluye de todas las estadísticas de APRSBox.
 
 Si solo necesitas entrada desde OpenWebRX, usa `OpenWebRX MQTT (RX only)`. Si necesitas RX/TX completo por radio, usa `TCP` o `SERIALL`.

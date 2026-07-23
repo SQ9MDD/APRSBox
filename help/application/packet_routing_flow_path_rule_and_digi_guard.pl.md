@@ -1,4 +1,4 @@
-# Reguła ścieżki i ochrona DIGI
+# Reguła ścieżki DIGI RF
 
 To najważniejszy blok dla ścieżek `... -> TX RF`. Ten krok robi dwie rzeczy naraz: najpierw wykonuje ochronę DIGI, a dopiero potem obsługuje pierwszy jeszcze niezużyty element ścieżki. Ten blok powinien być zawsze ostatnim blokiem we flow, bo modyfikuje ścieżkę i może zakłócić działanie innych filtrów.
 
@@ -74,7 +74,7 @@ Najważniejsze uwagi:
 Typowy schemat:
 
 ```text
-Odbiornik RF -> Filtr duplikatów -> Reguła ścieżki i ochrona DIGI -> TX RF
+Odbiornik RF -> Filtr opóźnienia duplikatów RF -> Reguła ścieżki DIGI RF -> TX RF
 ```
 
 ## Nawigacja

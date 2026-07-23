@@ -59,7 +59,7 @@
         const hideText = {{ t("Hide")|tojson }};
         const visibleIconPath = `${staticIconsRoot}/eye.svg`;
         const hiddenIconPath = `${staticIconsRoot}/eye-off.svg`;
-        const noInterfacesText = {{ t("No enabled TNC is configured.")|tojson }};
+        const noInterfacesText = {{ t("No enabled interface is configured.")|tojson }};
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
         const frameNodeByKey = new Map();
         const interfaceVisibilityByKey = new Map();
@@ -139,6 +139,7 @@
             }
             const searchableText = [
                 frame.source,
+                frame.source_kind,
                 frame.band,
                 frame.direction,
                 frame.command,

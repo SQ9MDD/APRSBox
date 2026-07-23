@@ -1,4 +1,4 @@
-# Packet Type Filter
+# APRS Packet Type Filter
 
 This filter works on whatever APRSBox decoder recognized as APRS packet group or packet type.
 

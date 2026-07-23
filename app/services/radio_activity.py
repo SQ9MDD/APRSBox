@@ -8,6 +8,7 @@ from typing import Any, Callable
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.aprs_device_identification import get_aprs_device_identification_database, lookup_aprs_device_identification
 from app.services.content import parse_tnc2_frame
+from app.services.traffic_source import STATISTICS_TRAFFIC_SQL_PREDICATE
 
 
 RADIO_ACTIVITY_BUCKET_MINUTES = 5
@@ -614,10 +615,11 @@ def get_traffic_devices_statistics(
         labels_by_key=labels_by_key,
     )
     frame_rows = fetch_all(
-        """
+        f"""
         SELECT direction, format, line, created_at
         FROM traffic_frames
         WHERE format LIKE 'TNC2%'
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
           AND created_at >= ?
           AND created_at < ?
         ORDER BY created_at ASC, id ASC
@@ -739,10 +741,11 @@ def get_traffic_users_statistics(
 
     if not station_counts:
         frame_rows = fetch_all(
-            """
+            f"""
             SELECT direction, format, line
             FROM traffic_frames
             WHERE format LIKE 'TNC2%'
+              AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
               AND created_at >= ?
               AND created_at < ?
             ORDER BY created_at ASC, id ASC
@@ -807,10 +810,11 @@ def get_traffic_direct_heard_statistics(
 
     station_counts: dict[str, int] = {}
     frame_rows = fetch_all(
-        """
+        f"""
         SELECT direction, format, line
         FROM traffic_frames
         WHERE format LIKE 'TNC2%'
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
           AND created_at >= ?
           AND created_at < ?
         ORDER BY created_at ASC, id ASC
@@ -1450,11 +1454,12 @@ def _collect_bucket_source_rows(
     bucket_end_utc: datetime,
 ) -> list[dict[str, Any]]:
     frame_rows = fetch_all(
-        """
+        f"""
         SELECT source, interface_id, direction, format, line, command
         FROM traffic_frames
         WHERE created_at >= ?
           AND created_at < ?
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
         ORDER BY created_at ASC, id ASC
         """,
         (bucket_start_utc.isoformat(), bucket_end_utc.isoformat()),
@@ -1742,10 +1747,11 @@ def _oldest_closed_bucket_start(
     bucket_minutes: int,
 ) -> datetime | None:
     oldest_row = fetch_one(
-        """
+        f"""
         SELECT created_at
         FROM traffic_frames
         WHERE created_at < ?
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
         ORDER BY created_at ASC, id ASC
         LIMIT 1
         """,

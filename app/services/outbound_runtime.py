@@ -17,7 +17,9 @@ from app.services.messages import (
     register_query_message_transmission,
 )
 from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, LOCAL_TX_SOURCE_REF
+from app.services.aprsis_rf import record_aprsis_rf_stat
 from app.services.outbound import (
+    APRSIS_TO_RF_ORIGIN,
     LOCAL_TX_ORIGIN,
     LOCAL_TX_ORIGIN_ROUTED,
     OUTBOUND_KIND_DIGI_TX,
@@ -139,9 +141,12 @@ class OutboundService:
 
             kind = str(job.get("kind") or "").strip()
             payload = job.get("payload") or {}
+            aprsis_to_rf = str(payload.get("origin") or payload.get("tx_origin") or "").strip() == APRSIS_TO_RF_ORIGIN
+            traffic_source_kind = "aprsis_to_rf" if aprsis_to_rf else "rf"
             skip_reason = _skip_reason_for_inactive_aprs_content(kind=kind, payload=payload, now=datetime.now(timezone.utc))
             if skip_reason:
                 mark_outbound_job_skipped(job_id, skip_reason)
+                self._record_aprsis_rf_tx_result(payload, sent=False)
                 log_event("INFO", "outbound", f"Skipped {kind} outbound job #{job_id}: {skip_reason}")
                 return
             if kind == "beacon":
@@ -160,6 +165,17 @@ class OutboundService:
                     raise ValueError("DIGI TX outbound job is missing packet line.")
             else:
                 raise ValueError(f"Unsupported outbound job kind: {kind or '-'}")
+            if aprsis_to_rf:
+                target_reject_reason = self._aprsis_rf_target_reject_reason(normalized_interface_id)
+                if target_reject_reason:
+                    mark_outbound_job_skipped(job_id, target_reject_reason)
+                    self._record_aprsis_rf_tx_result(payload, sent=False)
+                    log_event(
+                        "WARNING",
+                        "outbound",
+                        f"Skipped APRS-IS to RF outbound job #{job_id}: {target_reject_reason}",
+                    )
+                    return
             if kind != OUTBOUND_KIND_DIGI_TX and _payload_flag(payload.get("internal_tx_only"), default=False):
                 self._forward_local_tx_to_digi_flow(job=job, kind=kind, payload=payload, tnc2_line=tnc2_line)
                 log_event("INFO", "outbound", f"Generating {kind} frame for outbound job #{job_id}")
@@ -194,6 +210,7 @@ class OutboundService:
             if job.get("interface_enabled") in {0, "0", False}:
                 skip_reason = f"TX skipped: interface {interface_name} is disabled in configuration."
                 mark_outbound_job_skipped(job_id, skip_reason)
+                self._record_aprsis_rf_tx_result(payload, sent=False)
                 persist_outbound_frame(
                     source=interface_name,
                     interface_id=normalized_interface_id,
@@ -201,6 +218,7 @@ class OutboundService:
                     line=tnc2_line,
                     command="TX-SKIP",
                     payload_hex=frame.hex(" ").upper(),
+                    source_kind=traffic_source_kind,
                 )
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:
@@ -217,6 +235,7 @@ class OutboundService:
             if normalized_interface_id is not None and self._is_interface_tx_blocked(normalized_interface_id):
                 skip_reason = f"TX skipped: TX is blocked on interface {interface_name}."
                 mark_outbound_job_skipped(job_id, skip_reason)
+                self._record_aprsis_rf_tx_result(payload, sent=False)
                 persist_outbound_frame(
                     source=interface_name,
                     interface_id=normalized_interface_id,
@@ -224,6 +243,7 @@ class OutboundService:
                     line=tnc2_line,
                     command="TX-SKIP",
                     payload_hex=frame.hex(" ").upper(),
+                    source_kind=traffic_source_kind,
                 )
                 message_kind = str(payload.get("message_kind") or "").strip()
                 if kind == "message" and payload.get("aprs_message_id") is not None:
@@ -256,8 +276,10 @@ class OutboundService:
                             band=str(job.get("band") or "").strip(),
                             line=tnc2_line,
                             payload_hex=frame.hex(" ").upper(),
+                            source_kind=traffic_source_kind,
                         )
                         mark_outbound_job_sent(job_id)
+                        self._record_aprsis_rf_tx_result(payload, sent=True)
                         self._remember_tx_timestamp(interface_id=normalized_interface_id)
                         message_kind = str(payload.get("message_kind") or "").strip()
                         if kind == "message" and payload.get("aprs_message_id") is not None:
@@ -319,8 +341,10 @@ class OutboundService:
                         band=str(job.get("band") or "").strip(),
                         line=tnc2_line,
                         payload_hex=frame.hex(" ").upper(),
+                        source_kind=traffic_source_kind,
                     )
                     mark_outbound_job_sent(job_id)
+                    self._record_aprsis_rf_tx_result(payload, sent=True)
                     self._remember_tx_timestamp(interface_id=normalized_interface_id)
                     message_kind = str(payload.get("message_kind") or "").strip()
                     if kind == "message" and payload.get("aprs_message_id") is not None:
@@ -357,8 +381,10 @@ class OutboundService:
                 band=str(job.get("band") or "").strip(),
                 line=tnc2_line,
                 payload_hex=frame.hex(" ").upper(),
+                source_kind=traffic_source_kind,
             )
             mark_outbound_job_sent(job_id)
+            self._record_aprsis_rf_tx_result(payload, sent=True)
             self._remember_tx_timestamp(interface_id=normalized_interface_id)
             message_kind = str(payload.get("message_kind") or "").strip()
             if kind == "message" and payload.get("aprs_message_id") is not None:
@@ -374,6 +400,7 @@ class OutboundService:
         except Exception as exc:
             error = str(exc).strip() or exc.__class__.__name__
             mark_outbound_job_failed(job_id, error)
+            self._record_aprsis_rf_tx_result(job.get("payload") or {}, sent=False)
             kind = str(job.get("kind") or "unknown").strip() or "unknown"
             payload = job.get("payload") or {}
             if kind in {"message", "beacon", "status"} and (
@@ -387,6 +414,22 @@ class OutboundService:
             log_event("WARNING", "outbound", f"{kind.capitalize()} outbound job #{job_id} failed: {error}")
             if kind == "wx":
                 log_event("WARNING", "wx", f"WX outbound job #{job_id} failed: {error}")
+
+    @staticmethod
+    def _record_aprsis_rf_tx_result(payload: dict[str, Any], *, sent: bool) -> None:
+        if str(payload.get("origin") or payload.get("tx_origin") or "").strip() != APRSIS_TO_RF_ORIGIN:
+            return
+        try:
+            flow_id = int(payload.get("flow_id"))
+        except (TypeError, ValueError):
+            return
+        try:
+            record_aprsis_rf_stat(flow_id, "transmitted_to_rf" if sent else "tx_failed")
+        except Exception:
+            # The flow may have been deleted after its outbound job was
+            # queued.  Statistics must never turn a completed transport into
+            # a failed job in that race.
+            return
 
     async def _sleep(self, delay: float) -> None:
         try:
@@ -676,6 +719,25 @@ class OutboundService:
             return bool(int(row["tx_blocked"]))
         except (TypeError, ValueError, KeyError):
             return False
+
+    @staticmethod
+    def _aprsis_rf_target_reject_reason(interface_id: int | None) -> str | None:
+        if interface_id is None:
+            return "invalid_target_type"
+        try:
+            row = fetch_one(
+                "SELECT modem_type, enabled, tx_blocked FROM modems WHERE id = ?",
+                (interface_id,),
+            )
+        except Exception:
+            return "target_unavailable"
+        if row is None or int(row["enabled"] or 0) != 1:
+            return "target_unavailable"
+        if str(row["modem_type"] or "").strip().upper() not in {"TCP", "SERIALL", "SERIAL"}:
+            return "invalid_target_type"
+        if int(row["tx_blocked"] or 0) == 1:
+            return "target_rx_only"
+        return None
 
     def _log_monitor_fallback(self, *, job_id: int, kind: str, interface_name: str, transport: str) -> None:
         message = (

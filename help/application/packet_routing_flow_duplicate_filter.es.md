@@ -1,9 +1,10 @@
-# Filtro duplicado (retraso viscoso)
+# Filtro RF de retardo de duplicados
 
 Este bloque no deja pasar la trama inmediatamente. La primera trama con una huella dada queda retenida hasta que termine la ventana de escucha.
 
 Comportamiento real:
 
+- la ventana de escucha puede ajustarse entre `2` y `7` segundos,
 - la huella se construye con `source callsign + info field`,
 - la ruta no participa en la comparacion de duplicados,
 - la primera trama espera hasta el final de la ventana,
@@ -20,10 +21,6 @@ Usalo cuando:
 
 - varios digis pueden escuchar la misma estacion origen,
 - quieres reducir repeticiones innecesarias sin transmitir de inmediato.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

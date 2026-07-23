@@ -1,6 +1,6 @@
-# Filtro de limite de ritmo
+# Filtro de tasa de transmisión
 
-Este filtro no cuenta paquetes por minuto. Es una compuerta temporal simple basada en el indicativo de origen.
+Este filtro no cuenta paquetes por minuto. Es una compuerta temporal que puede limitar por separado cada indicativo de origen coincidente o todos los orígenes globalmente.
 
 Formato de regla:
 
@@ -21,7 +21,9 @@ Como funciona:
 
 - actua solo sobre el indicativo de origen,
 - la primera trama que coincide siempre pasa,
-- la siguiente trama de la misma fuente bajo la misma regla coincidente se bloquea hasta que expire el limite,
+- los patrones de indicativo normales mantienen un temporizador separado por origen,
+- `*` por sí solo es especial: mantiene un único temporizador global compartido por todos los orígenes del filtro,
+- la siguiente trama cubierta por el mismo temporizador se bloquea hasta que expire el límite,
 - el temporizador solo se actualiza con tramas que realmente pasaron,
 - si ninguna regla coincide con la fuente, el filtro no bloquea nada y la trama sigue.
 
@@ -42,10 +44,6 @@ Usalo cuando:
 
 - estaciones muy activas generan demasiado trafico,
 - una ruta RF necesita control suave sin bloquear completamente la fuente.
-
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
 
 ## Navegación
 

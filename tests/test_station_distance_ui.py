@@ -117,6 +117,14 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function filteredMapData(stations, mobileTracks, interfaces)", script_source)
         self.assertIn("interface_id", script_source)
 
+    def test_map_script_rebuilds_tracks_from_currently_visible_points(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("const mobileTrackMaxRenderedPoints = 60;", script_source)
+        self.assertIn("function rebuildVisibleTrackPoints(points, interfacesById, visibleInterfaceIds)", script_source)
+        self.assertIn("isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds)", script_source)
+        self.assertIn("isSameTrackPointPosition(previous, point)", script_source)
+        self.assertIn("return rebuilt.slice(-mobileTrackMaxRenderedPoints);", script_source)
+
     def test_station_detail_map_script_renders_station_track(self) -> None:
         script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")
         self.assertIn("function renderTrack(station, stationTrack)", script_source)
@@ -164,6 +172,14 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('classList.add("map-mask-pane");', detail_script_source)
         self.assertIn("createPane(mapMaskPaneName)", map_script_source)
         self.assertIn("createPane(mapMaskPaneName)", detail_script_source)
+        self.assertIn("window.L.DomUtil.getPosition(mapPaneElement)", map_script_source)
+        self.assertIn("window.L.DomUtil.getPosition(mapPaneElement)", detail_script_source)
+        self.assertIn('mapMaskPane.style.left = `${-offsetX}px`;', map_script_source)
+        self.assertIn('mapMaskPane.style.left = `${-offsetX}px`;', detail_script_source)
+        self.assertIn('mapMaskPane.style.width = `${size.x}px`;', map_script_source)
+        self.assertIn('mapMaskPane.style.width = `${size.x}px`;', detail_script_source)
+        self.assertNotIn("const bleedX = size.x;", map_script_source)
+        self.assertNotIn("const bleedX = size.x;", detail_script_source)
         self.assertIn(".map-canvas .leaflet-pane.map-mask-pane", map_stylesheet_source)
         self.assertIn(".station-detail-map-canvas .leaflet-pane.map-mask-pane", app_stylesheet_source)
         self.assertIn(".map-canvas .map-mask-layer", map_stylesheet_source)

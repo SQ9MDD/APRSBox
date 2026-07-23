@@ -9,27 +9,48 @@ from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
+from app.services.aprsis_rf import (
+    ALLOW_RULES_STEP_TYPE,
+    APRSIS_FLOW_SOURCE_KIND,
+    RF_GUARD_DEFAULTS,
+    RF_GUARD_STEP_TYPE,
+    RF_TX_GUARD_STEP_TYPE,
+    normalize_default_deny_config,
+    normalize_outbound_rf_path,
+    normalize_rf_guard_config,
+    validate_aprsis_source,
+    validate_aprsis_rf_target,
+)
 from app.services.mqtt_url import RX_CAPABLE_MODEM_TYPES, TX_CAPABLE_MODEM_TYPES
 
 LOCAL_TX_SOURCE_KIND = "receiver_local_tx"
 LOCAL_TX_SOURCE_REF = "local_tx"
-SOURCE_STEP_TYPES = ("receiver_rf", LOCAL_TX_SOURCE_KIND)
+SOURCE_STEP_TYPES = ("receiver_rf", APRSIS_FLOW_SOURCE_KIND, LOCAL_TX_SOURCE_KIND)
 FILTER_STEP_TYPES = (
+    RF_GUARD_STEP_TYPE,
+    ALLOW_RULES_STEP_TYPE,
+    RF_TX_GUARD_STEP_TYPE,
     "filter_path",
     "filter_strict",
     "filter_dupe",
+    "filter_rate_limit",
     "filter_direct_only",
     "filter_digi",
     "filter_callsign",
     "filter_packet_type",
     "filter_icon",
     "filter_distance",
-    "filter_rate_limit",
     "filter_rate_limit_per_callsign",
 )
 TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
 LOCAL_TX_ALLOWED_TARGET_KINDS = {"tx_aprsis", "action_log"}
 APRSIS_ALLOWED_SOURCE_KINDS = {"receiver_rf", LOCAL_TX_SOURCE_KIND}
+APRSIS_SOURCE_ALLOWED_TARGET_KINDS = {"tx_rf", "action_drop", "action_log"}
+APRSIS_TO_RF_SYSTEM_STEP_TYPES = {
+    RF_GUARD_STEP_TYPE,
+    ALLOW_RULES_STEP_TYPE,
+    RF_TX_GUARD_STEP_TYPE,
+}
 DIGI_FLOW_EXECUTION_RETENTION_LIMIT = 200
 PACKET_TYPE_FILTER_GROUPS = (
     "position",
@@ -50,7 +71,11 @@ DISTANCE_FILTER_MAX_ZONES = 3
 ALL_STEP_TYPES = SOURCE_STEP_TYPES + FILTER_STEP_TYPES + TARGET_STEP_TYPES
 RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "receiver_rf",
+    APRSIS_FLOW_SOURCE_KIND,
     LOCAL_TX_SOURCE_KIND,
+    RF_GUARD_STEP_TYPE,
+    RF_TX_GUARD_STEP_TYPE,
+    ALLOW_RULES_STEP_TYPE,
     "filter_dupe",
     "filter_path",
     "filter_strict",
@@ -88,6 +113,85 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
             {"name": "aprsis_source", "label": "APRS-IS Source", "type": "text", "required": True},
         ),
     },
+    RF_GUARD_STEP_TYPE: {
+        "category": "filter",
+        "label": "APRS-IS Input Safety Rule",
+        "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS → RF",
+        "scope_tone": "aprsis-to-rf",
+        "description": "Validates APRS syntax, q-constructs, paths, loops and early duplicates at an APRS-IS source.",
+        "help_page": "application/packet_routing_flow_rf_guard",
+        "editor_help_lines": (
+            "APRS syntax, q-constructs, unsafe path markers and loops are checked here.",
+            "An initial duplicate check prevents rejected network traffic from entering the flow.",
+        ),
+        "config_fields": (),
+    },
+    RF_TX_GUARD_STEP_TYPE: {
+        "category": "filter",
+        "label": "APRS-IS to RF TX Safety Rule",
+        "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS → RF",
+        "scope_tone": "aprsis-to-rf",
+        "description": "Applies final duplicate, delay, rate, encapsulation and size checks before APRS-IS traffic reaches RF.",
+        "help_page": "application/packet_routing_flow_rf_guard",
+        "editor_help_lines": (
+            "The viscous delay, final duplicate check and token-bucket limits run at this last gate.",
+            "Third-party encapsulation, target readiness and AX.25 packet size are verified before queueing TX.",
+            "Only safe delay, duplicate-window and token-bucket limits can be adjusted.",
+        ),
+        "config_fields": (
+            {"name": "viscous_delay_sec", "label": "Viscous delay (seconds)", "type": "number", "required": True},
+            {"name": "flow_rate_per_minute", "label": "Per-flow average (packets/minute)", "type": "number", "required": True},
+            {"name": "flow_burst", "label": "Per-flow burst", "type": "number", "required": True},
+            {"name": "source_rate_per_minute", "label": "Per-source average (packets/minute)", "type": "number", "required": True},
+            {"name": "source_burst", "label": "Per-source burst", "type": "number", "required": True},
+            {"name": "duplicate_window_sec", "label": "Duplicate window (seconds)", "type": "number", "required": True},
+        ),
+    },
+    ALLOW_RULES_STEP_TYPE: {
+        "category": "filter",
+        "label": "APRS-IS Callsign and Radius Rule",
+        "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS → RF",
+        "scope_tone": "aprsis-to-rf",
+        "description": "Passes only exact source callsigns located within the configured radius from My Station.",
+        "help_page": "application/packet_routing_flow_aprsis_callsign_radius_rule",
+        "editor_help_lines": (
+            "The exact callsign and radius conditions use AND.",
+            "Callsign entries use strict matching including SSID; wildcards are not allowed.",
+            "An empty configuration is valid and forwards no packets.",
+        ),
+        "config_fields": (
+            {
+                "name": "callsigns",
+                "label": "Source callsigns (one per line)",
+                "type": "textarea",
+                "required": False,
+                "placeholder": "SQ9MDD\nSQ9MDD-1",
+                "help_lines": (
+                    "Exact match including SSID: SQ9MDD matches only SQ9MDD, while SQ9MDD-1 matches only SQ9MDD-1.",
+                    "Wildcards are not allowed.",
+                ),
+            },
+            {
+                "name": "radius_km",
+                "label": "Radius (km)",
+                "type": "number",
+                "required": False,
+                "min": "0.1",
+                "max": "1000",
+                "step": "0.1",
+                "help_lines": (
+                    "Distance is measured from My Station coordinates.",
+                    "Packets without a decoded position, or when My Station coordinates are missing, are denied.",
+                ),
+            },
+        ),
+    },
     LOCAL_TX_SOURCE_KIND: {
         "category": "source",
         "label": "Local TX",
@@ -100,8 +204,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_dupe": {
         "category": "filter",
-        "label": "Duplicate Filter (viscous-delay)",
+        "label": "RF Duplicate Delay Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Waits a short viscous-delay window and drops the frame if another digi repeats it first.",
         "help_page": "application/packet_routing_flow_duplicate_filter",
         "config_fields": (
@@ -116,8 +223,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_path": {
         "category": "filter",
-        "label": "Path rule and DIGI guard",
+        "label": "RF Digipeating Path Rule",
         "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Protects the digi path and handles the first unconsumed hop for RF repeating.",
         "help_page": "application/packet_routing_flow_path_rule_and_digi_guard",
         "editor_help_lines": (
@@ -167,9 +277,12 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_strict": {
         "category": "filter",
-        "label": "Strict Filter",
+        "label": "APRS-IS Uplink Safety Rule",
         "badge": "Rule",
-        "description": "Mandatory APRS-IS safety guard for RF and Local TX uplink flows.",
+        "palette_kind": "rule",
+        "scope_label": "RF → APRS-IS",
+        "scope_tone": "aprsis-target",
+        "description": "Rejects unsafe paths and malformed third-party packets before an APRS-IS target.",
         "help_page": "application/packet_routing_flow_strict_filter",
         "editor_help_lines": (
             "This system guard rejects packets containing TCPIP, TCPXX, NOGATE or RFONLY in the outer path.",
@@ -180,8 +293,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_direct_only": {
         "category": "filter",
-        "label": "Direct Only",
+        "label": "Direct RF Reception Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Passes only packets heard direct, without any consumed digipeater hop in the path.",
         "help_page": "application/packet_routing_flow_direct_only",
         "editor_help_lines": (
@@ -195,7 +311,10 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "DIGI Filter",
         "badge": "Filter",
-        "description": "Matches already consumed path hops against allow or deny patterns.",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
+        "description": "Passes or blocks frames already repeated by matching DIGI stations.",
         "help_page": "application/packet_routing_flow_digi_filter",
         "editor_help_lines": (
             "Only already consumed hops are inspected, which means only path elements marked with * are checked.",
@@ -217,8 +336,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_callsign": {
         "category": "filter",
-        "label": "Callsign Filter",
+        "label": "Source Callsign Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Matches the source callsign against allow or deny patterns.",
         "help_page": "application/packet_routing_flow_callsign_filter",
         "editor_help_lines": (
@@ -241,8 +363,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_packet_type": {
         "category": "filter",
-        "label": "Packet Type Filter",
+        "label": "APRS Packet Type Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Matches decoded APRS packet groups against allow or deny lists.",
         "help_page": "application/packet_routing_flow_packet_type_filter",
         "config_fields": (
@@ -254,43 +379,49 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
                 "required": False,
                 "placeholder": "position\nobject\nitem\nmessage\nstatus\nweather\ntelemetry\nquery",
                 "help_lines": (
-                    "Wpisuj jedna wartosc na linie:",
-                    "**Przyklad**: position - wszystkie ramki z pozycja (takze timestamped, compressed i Mic-E).",
-                    "object - obiekty APRS (;).",
-                    "item - itemy APRS (zaczynajace sie od ')').",
-                    "message - wiadomosci APRS, ACK/REJ, bulletin i announcement.",
-                    "status - ramki status (>...).",
-                    "weather - tylko ramki weather-only (_...).",
-                    "Uwaga: pozycja z danymi pogody nadal liczy sie jako position, nie weather.",
-                    "telemetry - T# oraz definicje PARM/UNIT/EQNS/BITS.",
-                    "query - zapytania APRS zaczynajace sie od ?.",
+                    "Enter one value per line:",
+                    "**Example**: position - all frames with a position (including timestamped, compressed and Mic-E).",
+                    "object - APRS objects (;).",
+                    "item - APRS items (starting with ')').",
+                    "message - APRS messages, ACK/REJ, bulletins and announcements.",
+                    "status - status frames (>...).",
+                    "weather - weather-only frames (_...).",
+                    "Note: a position with weather data still counts as position, not weather.",
+                    "telemetry - T# plus PARM/UNIT/EQNS/BITS definitions.",
+                    "query - APRS queries starting with ?.",
                 ),
-                "help_text": "Zgodnosc wsteczna: nadal dzialaja kody M, S, O, W.",
+                "help_text": "Backward compatibility: M, S, O and W codes are still supported.",
             },
         ),
     },
     "filter_icon": {
         "category": "filter",
-        "label": "Icon Filter",
+        "label": "APRS Symbol Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Matches decoded APRS symbols against allow or deny lists.",
         "help_page": "application/packet_routing_flow_icon_filter",
         "config_fields": (
             {"name": "mode", "label": "Mode", "type": "select", "required": True, "options": ("allow", "deny")},
             {
                 "name": "icons",
-                "label": "Icons (one per line)",
+                "label": "APRS symbols (one per line)",
                 "type": "textarea",
                 "required": False,
                 "placeholder": "/>\n\\l",
-                "help_text": "Use APRS symbol values in table+code form, exactly as decoded by APRSBox, for example /> or \\l.",
+                "help_text": "Use APRS symbols in table+code form exactly as decoded by APRSBox, for example /> or \\l.",
             },
         ),
     },
     "filter_distance": {
         "category": "filter",
-        "label": "Distance Filter",
+        "label": "Position Zone Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Allows packets only when decoded position is inside at least one configured zone.",
         "help_page": "application/packet_routing_flow_distance_filter",
         "editor_help_lines": (
@@ -312,23 +443,26 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_rate_limit": {
         "category": "filter",
-        "label": "Rate Limit Filter",
+        "label": "Transmission Rate Filter",
         "badge": "Filter",
-        "description": "Applies per-source holdoff timers based on configured callsign patterns.",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
+        "description": "Limits transmission frequency per matching source callsign or globally with *.",
         "help_page": "application/packet_routing_flow_rate_limit_filter",
         "editor_help_lines": (
             "Enter one rule per line in the format CALL_OR_PATTERN - LIMIT.",
             "LIMIT accepts 30, 30s or 30S and must be between 5 and 300 seconds in 5-second steps.",
-            "Wildcard * is supported; use it anywhere in the pattern, for example SQ* - 30s.",
+            "Patterns such as SQ* use a separate timer per source callsign; * alone uses one global timer.",
         ),
         "config_fields": (
             {
                 "name": "rate_limit_rules_text",
-                "label": "Source callsign limits (one per line)",
+                "label": "Transmission limits (one per line)",
                 "type": "textarea",
                 "required": True,
                 "placeholder": "SQ9MDD-7 - 30s\nSQ2IDB* - 10s\nSP5XYZ - 60s\n* - 20s",
-                "help_text": "Format: CALL_OR_PATTERN - LIMIT. LIMIT can be written as 30, 30s or 30S.",
+                "help_text": "Format: CALL_OR_PATTERN - LIMIT. Use * alone for one global limit.",
             },
         ),
     },
@@ -336,6 +470,9 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Rate Limit Per Callsign",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Stores a packet rate limit applied separately for each callsign.",
         "config_fields": (
             {"name": "packets_per_minute", "label": "Packets / Minute", "type": "number", "required": True},
@@ -349,6 +486,14 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "help_page": "application/packet_routing_flow_tx_rf",
         "config_fields": (
             {"name": "rf_target", "label": "RF Target", "type": "text", "required": True},
+            {
+                "name": "rf_path",
+                "label": "RF Path",
+                "type": "text",
+                "required": False,
+                "placeholder": "",
+                "help_text": "Optional outbound RF path. Empty means direct; no wide path is added automatically.",
+            },
         ),
     },
     "tx_aprsis": {
@@ -384,8 +529,26 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
 }
 
 LEGACY_DEFAULT_STEP_TITLES = {
-    "filter_path": {"Path Filter", "Path Rule", "Reguła ścieżki"},
-    "filter_dupe": {"Duplicate Filter"},
+    RF_GUARD_STEP_TYPE: {"RF Guard", "APRS-IS Input Guard"},
+    RF_TX_GUARD_STEP_TYPE: {"RF TX Guard"},
+    ALLOW_RULES_STEP_TYPE: {"Inclusive Allow Rules", "APRS-IS Default Deny Filter", "Filtr APRS-IS — domyślne odrzucanie"},
+    "filter_path": {"Path Filter", "Path Rule", "Path rule and DIGI guard", "Reguła ścieżki", "Reguła ścieżki i ochrona DIGI"},
+    "filter_strict": {"Strict Filter", "Filtr ścisły"},
+    "filter_dupe": {"Duplicate Filter", "Duplicate Filter (viscous-delay)", "Filtr duplikatów (viscous-delay)"},
+    "filter_direct_only": {"Direct Only", "Tylko direct"},
+    "filter_digi": {"Consumed DIGI Hop Filter", "DIGI Filter", "Filtr DIGI"},
+    "filter_callsign": {"Callsign Filter", "Filtr znaków"},
+    "filter_packet_type": {"Packet Type Filter", "Filtr typu pakietu"},
+    "filter_icon": {"Icon Filter", "Filtr ikon"},
+    "filter_distance": {"Distance Filter", "Filtr odległości"},
+    "filter_rate_limit": {
+        "RF Callsign Holdoff Filter",
+        "Rate Limit Filter",
+        "Transmission Rate Filter",
+        "Filtr limitu tempa",
+        "Filtr odstępów czasowych znaków RF",
+        "Filtr tempa transmisji",
+    },
 }
 
 STEP_TYPE_TO_REF_FIELD = {
@@ -610,7 +773,7 @@ def _normalize_rate_limit_rules(value: Any) -> list[dict[str, Any]]:
                 continue
             raise ValueError(_tf("Rate limit line #{line_number} is invalid.", {"line_number": index}))
         if not normalized_rules:
-            raise ValueError(_t("Rate limit filter requires at least one rule."))
+            raise ValueError(_t("Transmission Rate Filter requires at least one rule."))
         return normalized_rules
 
     normalized_rules = []
@@ -619,7 +782,7 @@ def _normalize_rate_limit_rules(value: Any) -> list[dict[str, Any]]:
         if parsed:
             normalized_rules.append(parsed)
     if not normalized_rules:
-        raise ValueError(_t("Rate limit filter requires at least one rule."))
+        raise ValueError(_t("Transmission Rate Filter requires at least one rule."))
     return normalized_rules
 
 
@@ -669,8 +832,8 @@ def _packet_type_filter_value_label(value: Any) -> str:
     return normalized
 
 
-def _flow_requires_path_rule(target_kind: str) -> bool:
-    return target_kind == "tx_rf"
+def _flow_requires_path_rule(source_kind: str, target_kind: str) -> bool:
+    return source_kind == "receiver_rf" and target_kind == "tx_rf"
 
 
 def _has_enabled_step_type(steps: list[dict[str, Any]], step_type: str) -> bool:
@@ -707,6 +870,31 @@ def _normalize_tx_rf_flow_step_order(steps: list[dict[str, Any]]) -> None:
     _reindex_steps(steps)
 
 
+def _normalize_aprsis_source_step_order(steps: list[dict[str, Any]]) -> None:
+    if len(steps) < 2:
+        return
+    source_step = steps[0]
+    target_step = steps[-1]
+    middle_steps = list(steps[1:-1])
+    input_guard_steps = [step for step in middle_steps if step["step_type"] == RF_GUARD_STEP_TYPE]
+    output_guard_steps = [step for step in middle_steps if step["step_type"] == RF_TX_GUARD_STEP_TYPE]
+    allow_steps = [step for step in middle_steps if step["step_type"] == ALLOW_RULES_STEP_TYPE]
+    other_steps = [
+        step
+        for step in middle_steps
+        if step["step_type"] not in {RF_GUARD_STEP_TYPE, RF_TX_GUARD_STEP_TYPE, ALLOW_RULES_STEP_TYPE}
+    ]
+    steps[:] = [
+        source_step,
+        *input_guard_steps,
+        *allow_steps,
+        *other_steps,
+        *output_guard_steps,
+        target_step,
+    ]
+    _reindex_steps(steps)
+
+
 def _reindex_steps(steps: list[dict[str, Any]]) -> None:
     for index, step in enumerate(steps, start=1):
         step["step_order"] = index
@@ -733,6 +921,12 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
         return {"aprsis_source": ref_value}
     if step_type == LOCAL_TX_SOURCE_KIND:
         return {"local_tx_source": ref_value or LOCAL_TX_SOURCE_REF}
+    if step_type == RF_GUARD_STEP_TYPE:
+        return {}
+    if step_type == RF_TX_GUARD_STEP_TYPE:
+        return dict(RF_GUARD_DEFAULTS)
+    if step_type == ALLOW_RULES_STEP_TYPE:
+        return {"callsigns": [], "radius_km": ""}
     if step_type == "filter_dupe":
         return {"window_sec": DUPLICATE_FILTER_DEFAULT_WINDOW_SEC}
     if step_type == "filter_direct_only":
@@ -756,7 +950,7 @@ def _default_step_config(step_type: str, ref_value: str = "") -> dict[str, Any]:
     if step_type == "filter_rate_limit_per_callsign":
         return {"packets_per_minute": 30}
     if step_type == "tx_rf":
-        return {"rf_target": ref_value}
+        return {"rf_target": ref_value, "rf_path": ""}
     if step_type == "tx_aprsis":
         return {"aprsis_target": ref_value or "aprsis"}
     if step_type == "action_drop":
@@ -781,6 +975,14 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
     if step_type == LOCAL_TX_SOURCE_KIND:
         value = _normalize_text(config.get("local_tx_source")) or LOCAL_TX_SOURCE_REF
         return {"local_tx_source": value}
+    if step_type == RF_GUARD_STEP_TYPE:
+        # Keep legacy combined-guard settings long enough for the APRS-IS
+        # normalizer to transfer them to the new final RF TX Guard.
+        return normalize_rf_guard_config(config) if config else {}
+    if step_type == RF_TX_GUARD_STEP_TYPE:
+        return normalize_rf_guard_config(config)
+    if step_type == ALLOW_RULES_STEP_TYPE:
+        return normalize_default_deny_config(config)
     if step_type == "filter_dupe":
         window_sec = _normalize_number(config.get("window_sec"), label="Listening window", minimum=2)
         if window_sec not in DUPLICATE_FILTER_WINDOW_SECONDS:
@@ -853,7 +1055,10 @@ def _normalize_step_config(step_type: str, raw_config: dict[str, Any]) -> dict[s
         value = _normalize_text(config.get("rf_target"))
         if not value:
             raise ValueError(_t("TX RF step requires an RF Target value."))
-        return {"rf_target": value}
+        rf_path = _normalize_text(config.get("rf_path"))
+        if len(rf_path) > 80 or any(char in "\r\n:" for char in rf_path):
+            raise ValueError(_t("RF Path must be a single TNC2 path with at most 80 characters."))
+        return {"rf_target": value, "rf_path": rf_path}
     if step_type == "tx_aprsis":
         return {"aprsis_target": _normalize_text(config.get("aprsis_target")) or "aprsis"}
     if step_type == "action_drop":
@@ -880,6 +1085,18 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
         return f"APRS-IS source: {_normalize_text(config.get('aprsis_source')) or '-'}"
     if step_type == LOCAL_TX_SOURCE_KIND:
         return _t("Locally generated APRSBox TX frames")
+    if step_type == RF_GUARD_STEP_TYPE:
+        return _tf(
+            "Loop prevention, duplicate suppression, delay {delay}s, rate limits ({flow_rate}/{source_rate} per min), third-party encapsulation.",
+            {
+                "delay": config.get("viscous_delay_sec", RF_GUARD_DEFAULTS["viscous_delay_sec"]),
+                "flow_rate": config.get("flow_rate_per_minute", RF_GUARD_DEFAULTS["flow_rate_per_minute"]),
+                "source_rate": config.get("source_rate_per_minute", RF_GUARD_DEFAULTS["source_rate_per_minute"]),
+            },
+        )
+    if step_type == ALLOW_RULES_STEP_TYPE:
+        rules = config.get("rules") or []
+        return _tf("Inclusive rules: {count} (default deny).", {"count": len(rules)})
     if step_type == "filter_dupe":
         return f"Window: {config.get('window_sec', '-')!s} sec"
     if step_type == "filter_digi":
@@ -919,7 +1136,8 @@ def _step_summary(step_type: str, config: dict[str, Any]) -> str:
     if step_type == "filter_rate_limit_per_callsign":
         return f"Per callsign: {config.get('packets_per_minute', '-')!s} pkt/min"
     if step_type == "tx_rf":
-        return f"RF target: {_normalize_text(config.get('rf_target')) or '-'}"
+        path = _normalize_text(config.get("rf_path"))
+        return f"RF target: {_normalize_text(config.get('rf_target')) or '-'}, path: {path or 'direct'}"
     if step_type == "tx_aprsis":
         return _t("APRS-IS uplink")
     if step_type == "action_drop":
@@ -939,8 +1157,12 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
             "category": meta["category"],
             "label": _t(meta["label"]),
             "badge": _t(meta["badge"]),
+            **({"palette_kind": meta["palette_kind"]} if meta.get("palette_kind") else {}),
+            **({"scope_label": _t(meta["scope_label"])} if meta.get("scope_label") else {}),
+            **({"scope_tone": meta["scope_tone"]} if meta.get("scope_tone") else {}),
             "description": _t(meta["description"]),
             **({"help_page": meta["help_page"]} if meta.get("help_page") else {}),
+            **({"editor_help_lines": [_t(line) for line in meta["editor_help_lines"]]} if meta.get("editor_help_lines") else {}),
             "runtime_status": _runtime_status(step_type),
             "runtime_label": _runtime_status_label(step_type),
             "config_fields": [
@@ -975,8 +1197,16 @@ def get_digi_flow_reference_options() -> dict[str, list[str]]:
         ORDER BY name COLLATE NOCASE ASC, id ASC
         """
     )
+    aprsis_rows = fetch_all(
+        """
+        SELECT name FROM modems
+        WHERE UPPER(modem_type) = 'APRSIS'
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
     return {
         "receiver_rf": [str(row["name"]) for row in source_rows if row["name"]],
+        APRSIS_FLOW_SOURCE_KIND: [str(row["name"]) for row in aprsis_rows if row["name"]],
         LOCAL_TX_SOURCE_KIND: [LOCAL_TX_SOURCE_REF],
         "tx_rf": [str(row["name"]) for row in target_rows if row["name"]],
         "tx_aprsis": ["aprsis"],
@@ -1002,8 +1232,15 @@ def get_digi_flow_endpoint_options(
     )
     target_rows = fetch_all(
         f"""
-        SELECT name FROM modems
+        SELECT name, enabled, tx_blocked FROM modems
         WHERE modem_type IN ({target_type_filter})
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+        """
+    )
+    aprsis_rows = fetch_all(
+        """
+        SELECT name FROM modems
+        WHERE UPPER(modem_type) = 'APRSIS'
         ORDER BY name COLLATE NOCASE ASC, id ASC
         """
     )
@@ -1019,6 +1256,16 @@ def get_digi_flow_endpoint_options(
             "kind": LOCAL_TX_SOURCE_KIND,
             "ref": LOCAL_TX_SOURCE_REF,
         }
+    )
+    source_options.extend(
+        {
+            "value": f"{APRSIS_FLOW_SOURCE_KIND}::{row['name']}",
+            "label": f"APRS-IS · {row['name']}",
+            "kind": APRSIS_FLOW_SOURCE_KIND,
+            "ref": str(row["name"]),
+        }
+        for row in aprsis_rows
+        if row["name"]
     )
     target_options = [
         {"value": f"tx_rf::{row['name']}", "label": str(row["name"]), "kind": "tx_rf", "ref": str(row["name"])}
@@ -1038,6 +1285,22 @@ def get_digi_flow_endpoint_options(
     target_options.append({"value": "action_log::log-only", "label": _t("Black Hole"), "kind": "action_log", "ref": "log-only"})
     target_by_source_kind = {
         "receiver_rf": list(target_options),
+        APRSIS_FLOW_SOURCE_KIND: [
+            option
+            for option in target_options
+            if (
+                str(option.get("kind") or "").strip() in {"action_log", "action_drop"}
+                or (
+                    str(option.get("kind") or "").strip() == "tx_rf"
+                    and any(
+                        str(row["name"]) == str(option.get("ref") or "")
+                        and int(row["enabled"] or 0) == 1
+                        and int(row["tx_blocked"] or 0) == 0
+                        for row in target_rows
+                    )
+                )
+            )
+        ],
         LOCAL_TX_SOURCE_KIND: [
             option for option in target_options if str(option.get("kind") or "").strip() in LOCAL_TX_ALLOWED_TARGET_KINDS
         ],
@@ -1165,6 +1428,61 @@ def get_digi_flow(flow_id: int) -> dict[str, Any] | None:
 
 def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[str, Any]:
     if flow:
+        flow_steps = [dict(step) for step in flow.get("steps", [])]
+        if str(flow.get("source_kind") or "").strip() == APRSIS_FLOW_SOURCE_KIND and len(flow_steps) >= 2:
+            middle_steps = flow_steps[1:-1]
+            if str(flow.get("target_kind") or "").strip() == "tx_rf":
+                middle_steps = [
+                    step
+                    for step in middle_steps
+                    if str(step.get("step_type") or "").strip() in APRSIS_TO_RF_SYSTEM_STEP_TYPES
+                ]
+            input_guard = next(
+                (step for step in middle_steps if str(step.get("step_type") or "") == RF_GUARD_STEP_TYPE),
+                None,
+            )
+            legacy_guard_config = dict((input_guard or {}).get("config") or {})
+            if input_guard is None:
+                input_guard = {
+                    "id": None,
+                    "step_type": RF_GUARD_STEP_TYPE,
+                    "title": _default_step_title(RF_GUARD_STEP_TYPE),
+                    "enabled": 1,
+                    "config": {},
+                }
+                middle_steps.insert(
+                    0,
+                    input_guard,
+                )
+            input_guard["title"] = _default_step_title(RF_GUARD_STEP_TYPE)
+            input_guard["enabled"] = 1
+            input_guard["config"] = {}
+            if not any(str(step.get("step_type") or "") == ALLOW_RULES_STEP_TYPE for step in middle_steps):
+                middle_steps.insert(
+                    1,
+                    {
+                        "id": None,
+                        "step_type": ALLOW_RULES_STEP_TYPE,
+                        "title": _default_step_title(ALLOW_RULES_STEP_TYPE),
+                        "enabled": 1,
+                        "config": _default_step_config(ALLOW_RULES_STEP_TYPE),
+                    },
+                )
+            if (
+                str(flow.get("target_kind") or "").strip() == "tx_rf"
+                and not any(str(step.get("step_type") or "") == RF_TX_GUARD_STEP_TYPE for step in middle_steps)
+            ):
+                middle_steps.append(
+                    {
+                        "id": None,
+                        "step_type": RF_TX_GUARD_STEP_TYPE,
+                        "title": _default_step_title(RF_TX_GUARD_STEP_TYPE),
+                        "enabled": 1,
+                        "config": normalize_rf_guard_config(legacy_guard_config or RF_GUARD_DEFAULTS),
+                    }
+                )
+            flow_steps = [flow_steps[0], *middle_steps, flow_steps[-1]]
+            _normalize_aprsis_source_step_order(flow_steps)
         return {
             "name": flow.get("name", ""),
             "description": flow.get("description", ""),
@@ -1183,7 +1501,7 @@ def build_digi_flow_editor_payload(flow: dict[str, Any] | None = None) -> dict[s
                     "enabled": int(step.get("enabled") or 0),
                     "config": dict(step.get("config") or {}),
                 }
-                for step in flow.get("steps", [])
+                for step in flow_steps
             ],
         }
     return {
@@ -1234,8 +1552,21 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Flow source reference is required."))
     if source_kind == LOCAL_TX_SOURCE_KIND and target_kind not in LOCAL_TX_ALLOWED_TARGET_KINDS:
         raise ValueError(_t("Local TX source can target only APRS-IS uplink or Black Hole."))
+    if source_kind == APRSIS_FLOW_SOURCE_KIND and target_kind not in APRSIS_SOURCE_ALLOWED_TARGET_KINDS:
+        raise ValueError(_t("APRS-IS source can target only an active physical RF interface, Drop, or Black Hole."))
+    if source_kind == APRSIS_FLOW_SOURCE_KIND and validate_aprsis_source(source_ref) is None:
+        raise ValueError(_t("APRS-IS source must reference an existing APRSIS interface."))
     if target_kind in {"tx_rf", "tx_aprsis"} and not target_ref:
         raise ValueError(_t("Flow target reference is required."))
+    if source_kind == APRSIS_FLOW_SOURCE_KIND and target_kind == "tx_rf":
+        _target, target_reason = validate_aprsis_rf_target(target_ref, require_active=True)
+        if target_reason:
+            raise ValueError(
+                _tf(
+                    "APRS-IS to RF target is not a usable active physical TX interface ({reason}).",
+                    {"reason": target_reason},
+                )
+            )
 
     raw_steps = payload.get("steps") or []
     if not isinstance(raw_steps, list) or not raw_steps:
@@ -1288,7 +1619,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Duplicate filter (viscous-delay) can be used only once in a flow."))
     rate_limit_positions = [index for index, step in enumerate(normalized_steps) if step["step_type"] == "filter_rate_limit"]
     if len(rate_limit_positions) > 1:
-        raise ValueError(_t("Rate limit filter can be used only once in a flow."))
+        raise ValueError(_t("Transmission Rate Filter can be used only once in a flow."))
     distance_filter_count = sum(1 for step in normalized_steps if step["step_type"] == "filter_distance")
     if distance_filter_count > 1:
         raise ValueError(_t("Distance filter can be used only once in a flow."))
@@ -1297,8 +1628,84 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Strict APRS-IS guard can be used only in APRS-IS target flows."))
     has_rate_limit = any(step["step_type"] == "filter_rate_limit" for step in normalized_steps[1:-1])
     if target_kind != "tx_rf" and has_rate_limit:
-        raise ValueError(_t("Rate limit filter can be used only in RF TX target flows."))
-    if target_kind == "tx_rf":
+        raise ValueError(_t("Transmission Rate Filter can be used only in RF TX target flows."))
+    guard_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == RF_GUARD_STEP_TYPE]
+    tx_guard_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == RF_TX_GUARD_STEP_TYPE]
+    allow_rule_steps = [step for step in normalized_steps[1:-1] if step["step_type"] == ALLOW_RULES_STEP_TYPE]
+    if source_kind != APRSIS_FLOW_SOURCE_KIND and (guard_steps or tx_guard_steps or allow_rule_steps):
+        raise ValueError(
+            _t("APRS-IS Input Guard, RF TX Guard and the APRS-IS default-deny filter can be used only with an APRS-IS source.")
+        )
+    if source_kind == APRSIS_FLOW_SOURCE_KIND:
+        if target_kind == "tx_rf":
+            additional_steps = [
+                step
+                for step in normalized_steps[1:-1]
+                if step["step_type"] not in APRSIS_TO_RF_SYSTEM_STEP_TYPES
+            ]
+            if additional_steps:
+                raise ValueError(_t("APRS-IS to RF flow cannot include additional filters or rules."))
+        if len(guard_steps) > 1:
+            raise ValueError(_t("APRS-IS source flow can contain only one Input Guard step."))
+        if len(tx_guard_steps) > 1:
+            raise ValueError(_t("APRS-IS source flow can contain only one RF TX Guard step."))
+        if len(allow_rule_steps) > 1:
+            raise ValueError(_t("APRS-IS source flow can contain only one default-deny filter step."))
+        if not guard_steps:
+            guard_step = {
+                "id": None,
+                "step_order": 0,
+                "step_type": RF_GUARD_STEP_TYPE,
+                "title": _default_step_title(RF_GUARD_STEP_TYPE),
+                "enabled": 1,
+                "config": _default_step_config(RF_GUARD_STEP_TYPE),
+            }
+            normalized_steps.insert(1, guard_step)
+            guard_steps = [guard_step]
+        legacy_guard_config = dict(guard_steps[0].get("config") or {})
+        if not allow_rule_steps:
+            allow_step = {
+                "id": None,
+                "step_order": 0,
+                "step_type": ALLOW_RULES_STEP_TYPE,
+                "title": _default_step_title(ALLOW_RULES_STEP_TYPE),
+                "enabled": 1,
+                "config": _default_step_config(ALLOW_RULES_STEP_TYPE),
+            }
+            normalized_steps.insert(2, allow_step)
+            allow_rule_steps = [allow_step]
+        if target_kind == "tx_rf" and not tx_guard_steps:
+            tx_guard_step = {
+                "id": None,
+                "step_order": 0,
+                "step_type": RF_TX_GUARD_STEP_TYPE,
+                "title": _default_step_title(RF_TX_GUARD_STEP_TYPE),
+                "enabled": 1,
+                "config": normalize_rf_guard_config(legacy_guard_config or RF_GUARD_DEFAULTS),
+            }
+            normalized_steps.insert(len(normalized_steps) - 1, tx_guard_step)
+            tx_guard_steps = [tx_guard_step]
+        elif target_kind != "tx_rf" and tx_guard_steps:
+            raise ValueError(_t("RF TX Guard can be used only in RF TX target flows."))
+        guard_steps[0]["enabled"] = 1
+        guard_steps[0]["title"] = _default_step_title(RF_GUARD_STEP_TYPE)
+        guard_steps[0]["config"] = {}
+        allow_rule_steps[0]["enabled"] = 1
+        allow_rule_steps[0]["title"] = _default_step_title(ALLOW_RULES_STEP_TYPE)
+        allow_rule_steps[0]["config"] = normalize_default_deny_config(
+            dict(allow_rule_steps[0].get("config") or {})
+        )
+        if target_kind == "tx_rf":
+            tx_guard_steps[0]["enabled"] = 1
+            tx_guard_steps[0]["title"] = _default_step_title(RF_TX_GUARD_STEP_TYPE)
+            tx_guard_steps[0]["config"] = normalize_rf_guard_config(
+                tx_guard_steps[0].get("config") or legacy_guard_config or RF_GUARD_DEFAULTS
+            )
+            normalized_steps[-1]["config"]["rf_path"] = normalize_outbound_rf_path(
+                dict(normalized_steps[-1].get("config") or {}).get("rf_path")
+            )
+        _normalize_aprsis_source_step_order(normalized_steps)
+    elif target_kind == "tx_rf":
         _normalize_tx_rf_flow_step_order(normalized_steps)
     elif duplicate_filter_positions and duplicate_filter_positions[0] != 1:
         raise ValueError(_t("Duplicate filter (viscous-delay) must be the first filter step in the flow."))
@@ -1337,7 +1744,7 @@ def normalize_digi_flow_payload(payload: dict[str, Any], *, existing_flow_id: in
         raise ValueError(_t("Flow source must match the first step type and reference."))
     if target_kind != last_step["step_type"] or target_ref != last_ref:
         raise ValueError(_t("Flow target must match the last step type and reference."))
-    if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(normalized_steps):
+    if _flow_requires_path_rule(source_kind, target_kind) and not _has_enabled_path_rule(normalized_steps):
         raise ValueError(_t("Flow with an RF TX target must include at least one enabled Path rule and DIGI guard step."))
 
     return {
@@ -1606,8 +2013,39 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
         flow_steps = list(flow.get("steps") or [])
         if source_kind == LOCAL_TX_SOURCE_KIND and target_kind not in LOCAL_TX_ALLOWED_TARGET_KINDS:
             raise ValueError(_t("Local TX source can target only APRS-IS uplink or Black Hole."))
-        if _flow_requires_path_rule(target_kind) and not _has_enabled_path_rule(flow_steps):
+        if _flow_requires_path_rule(source_kind, target_kind) and not _has_enabled_path_rule(flow_steps):
             raise ValueError(_t("DIGI Flow with an RF TX target cannot be enabled without an enabled Path rule and DIGI guard step."))
+        if source_kind == APRSIS_FLOW_SOURCE_KIND:
+            if target_kind not in APRSIS_SOURCE_ALLOWED_TARGET_KINDS:
+                raise ValueError(_t("APRS-IS source can target only an active physical RF interface, Drop, or Black Hole."))
+            guard_steps = [step for step in flow_steps[1:-1] if step.get("step_type") == RF_GUARD_STEP_TYPE]
+            if len(guard_steps) != 1 or int(guard_steps[0].get("enabled") or 0) != 1:
+                raise ValueError(
+                    _t("APRS-IS source flow cannot be enabled without exactly one mandatory enabled Input Guard step.")
+                )
+            if target_kind == "tx_rf":
+                additional_steps = [
+                    step
+                    for step in flow_steps[1:-1]
+                    if str(step.get("step_type") or "") not in APRSIS_TO_RF_SYSTEM_STEP_TYPES
+                ]
+                if additional_steps:
+                    raise ValueError(_t("APRS-IS to RF flow cannot include additional filters or rules."))
+                tx_guard_steps = [
+                    step for step in flow_steps[1:-1] if step.get("step_type") == RF_TX_GUARD_STEP_TYPE
+                ]
+                if len(tx_guard_steps) != 1 or int(tx_guard_steps[0].get("enabled") or 0) != 1:
+                    raise ValueError(
+                        _t("APRS-IS to RF flow cannot be enabled without exactly one mandatory enabled RF TX Guard step.")
+                    )
+                _target, target_reason = validate_aprsis_rf_target(flow.get("target_ref"), require_active=True)
+                if target_reason:
+                    raise ValueError(
+                        _tf(
+                            "APRS-IS to RF target is not a usable active physical TX interface ({reason}).",
+                            {"reason": target_reason},
+                        )
+                    )
         if target_kind == "tx_aprsis" and source_kind not in APRSIS_ALLOWED_SOURCE_KINDS:
             raise ValueError(_t("APRS-IS target flow must use Receiver RF or Local TX as source."))
         if target_kind == "tx_aprsis" and not _has_enabled_aprsis_strict_guard(flow_steps):
@@ -1851,10 +2289,13 @@ def _build_execution_summary(flow: dict[str, Any], events_desc: list[dict[str, A
 
         step_state = _resolve_execution_step_state(flow=flow, steps=steps, step_state_by_id=step_state_by_id, step_id=step_id, event=event)
         if step_state is not None:
-            if event_type == "source_step":
+            if event_type in {"frame_received", "source_step"}:
                 step_state["status"] = "passed"
                 step_state["description"] = _t("Source matched and packet entered the flow.")
             elif event_type in {
+                "rf_guard",
+                "rf_tx_guard",
+                "inclusive_allow_rules",
                 "filter_callsign",
                 "filter_digi",
                 "filter_dupe",
@@ -1973,10 +2414,16 @@ def _resolve_execution_step_state(
 
 def _execution_event_step_type(*, flow: dict[str, Any], event: dict[str, Any]) -> str:
     event_type = str(event.get("event_type") or "")
-    if event_type == "source_step":
+    if event_type in {"frame_received", "source_step"}:
         return str(flow.get("source_kind") or "")
     if event_type == "filter_callsign":
         return "filter_callsign"
+    if event_type == "rf_guard":
+        return RF_GUARD_STEP_TYPE
+    if event_type == "rf_tx_guard":
+        return RF_TX_GUARD_STEP_TYPE
+    if event_type == "inclusive_allow_rules":
+        return ALLOW_RULES_STEP_TYPE
     if event_type == "filter_dupe":
         return "filter_dupe"
     if event_type == "filter_rate_limit":

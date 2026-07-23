@@ -15,6 +15,7 @@ from app.services.content import (
     get_visible_station_snapshots,
     parse_tnc2_frame,
 )
+from app.services.traffic_source import RF_SOURCE_KIND
 
 DEFAULT_STATION_ZOOM = 10
 DETAIL_STATION_ZOOM = 14
@@ -681,6 +682,19 @@ def _build_map_station_marker_rows(snapshots: list[dict[str, Any]]) -> list[dict
         longitude = _parse_coordinate(station.get("longitude"))
         if latitude is None or longitude is None:
             continue
+        last_heard_rf_at = station.get("last_heard_rf_at")
+        has_rf_source = bool(last_heard_rf_at)
+        marker_source_kind = RF_SOURCE_KIND if has_rf_source else station.get("source_kind", RF_SOURCE_KIND)
+        marker_source = (
+            station.get("last_heard_rf_source")
+            if has_rf_source
+            else station.get("source")
+        )
+        marker_interface_id = (
+            station.get("last_heard_rf_interface_id")
+            if has_rf_source
+            else station.get("interface_id")
+        )
         stations.append(
             {
                 "callsign": station["callsign"],
@@ -688,6 +702,17 @@ def _build_map_station_marker_rows(snapshots: list[dict[str, Any]]) -> list[dict
                 "display_callsign": station["display_callsign"],
                 "detail_href": build_station_detail_href(station["display_callsign"]),
                 "origin": station.get("origin", "heard"),
+                "source_kind": marker_source_kind,
+                "is_rf": has_rf_source or bool(station.get("is_rf")),
+                "last_seen_any_at": station.get("last_seen_any_at"),
+                "last_heard_rf_at": last_heard_rf_at,
+                "last_heard_rf_interface_id": _normalize_interface_id(
+                    station.get("last_heard_rf_interface_id")
+                ),
+                "last_seen_aprsis_at": station.get("last_seen_aprsis_at"),
+                "last_seen_aprsis_interface_id": _normalize_interface_id(
+                    station.get("last_seen_aprsis_interface_id")
+                ),
                 "activity_label": station.get("activity_label", "Last heard"),
                 "activity_age_label": station.get("activity_age_label", "Last heard age"),
                 "latitude": latitude,
@@ -697,8 +722,8 @@ def _build_map_station_marker_rows(snapshots: list[dict[str, Any]]) -> list[dict
                 "symbol_icon": station["symbol_icon"],
                 "symbol_table": station["symbol_table"],
                 "symbol_code": station["symbol_code"],
-                "source": station["source"],
-                "interface_id": _normalize_interface_id(station.get("interface_id")),
+                "source": marker_source,
+                "interface_id": _normalize_interface_id(marker_interface_id),
                 "last_heard_at": station["last_heard_at"],
                 "last_heard_age_s": station["last_heard_age_s"],
                 "distance_km": station.get("distance_km"),
@@ -993,6 +1018,22 @@ def _is_same_track_position(point: dict[str, Any], latitude: float, longitude: f
     return abs(point_latitude - latitude) < 1e-6 and abs(point_longitude - longitude) < 1e-6
 
 
+def _limit_mobile_track_points_by_interface(
+    points: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    kept_reversed: list[dict[str, Any]] = []
+    counts_by_interface: dict[int | None, int] = {}
+    for point in reversed(points):
+        interface_id = _normalize_interface_id(point.get("interface_id"))
+        interface_count = counts_by_interface.get(interface_id, 0)
+        if interface_count >= MOBILE_TRACK_MAX_POINTS_PER_STATION:
+            continue
+        counts_by_interface[interface_id] = interface_count + 1
+        kept_reversed.append(point)
+    kept_reversed.reverse()
+    return kept_reversed
+
+
 def _build_mobile_track_points_by_station_keys(
     station_keys: dict[str, str],
 ) -> dict[str, list[dict[str, Any]]]:
@@ -1015,6 +1056,7 @@ def _build_mobile_track_points_by_station_keys(
     )
 
     points_by_station: dict[str, list[dict[str, Any]]] = {}
+    last_point_by_station_interface: dict[tuple[str, int | None], dict[str, Any]] = {}
     for row in rows:
         parsed = parse_tnc2_frame(str(row["line"] or ""))
         if parsed is None:
@@ -1034,17 +1076,21 @@ def _build_mobile_track_points_by_station_keys(
         if _is_null_island_point(latitude, longitude):
             continue
 
+        interface_id = _normalize_interface_id(row["interface_id"])
         points = points_by_station.setdefault(resolved_key, [])
-        if points and _is_same_track_position(points[-1], latitude, longitude):
+        interface_point_key = (resolved_key.casefold(), interface_id)
+        previous_interface_point = last_point_by_station_interface.get(interface_point_key)
+        if previous_interface_point and _is_same_track_position(previous_interface_point, latitude, longitude):
             continue
-        points.append(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "interface_id": _normalize_interface_id(row["interface_id"]),
-                "heard_at": str(row["created_at"] or ""),
-            }
-        )
-        if len(points) > MOBILE_TRACK_MAX_POINTS_PER_STATION:
-            points.pop(0)
-    return points_by_station
+        point = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "interface_id": interface_id,
+            "heard_at": str(row["created_at"] or ""),
+        }
+        points.append(point)
+        last_point_by_station_interface[interface_point_key] = point
+    return {
+        station_key: _limit_mobile_track_points_by_interface(points)
+        for station_key, points in points_by_station.items()
+    }

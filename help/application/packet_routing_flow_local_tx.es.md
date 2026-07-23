@@ -23,10 +23,6 @@ En la practica:
 - es el flujo interno de transmision de la aplicacion,
 - `TX local` solo puede llevar a `TX APRS-IS` o `Agujero negro`.
 
-## Navegacion
-
-[Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)
-
 ## Navegación
 
 [Volver a la referencia de la regla Packet Flow](packet_routing_flow.es.md)

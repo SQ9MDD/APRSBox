@@ -1,4 +1,4 @@
-# Direct Only
+# Direct RF Reception Filter
 
 This filter passes only directly heard packets.
 

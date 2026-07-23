@@ -5,10 +5,11 @@ import contextlib
 import re
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app import get_version
 from app.db import fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.services.traffic_source import DEFAULT_APRSIS_FILTER, normalize_aprsis_filter
 
 DEFAULT_APRSIS_SERVER = "rotate.aprs2.net"
 DEFAULT_APRSIS_PORT = 14580
@@ -204,6 +205,44 @@ def has_enabled_aprsis_target_flow() -> bool:
         """
     )
     return row is not None
+
+
+def get_enabled_aprsis_interface() -> dict[str, Any] | None:
+    row = fetch_one(
+        """
+        SELECT id, name, device_path, enabled, updated_at
+        FROM modems
+        WHERE enabled = 1
+          AND UPPER(modem_type) = 'APRSIS'
+        ORDER BY id ASC
+        LIMIT 1
+        """
+    )
+    if row is None:
+        return None
+    result = dict(row)
+    try:
+        result["filter"] = normalize_aprsis_filter(result.get("device_path"))
+    except ValueError as exc:
+        result["filter"] = DEFAULT_APRSIS_FILTER
+        log_event("WARNING", "aprsis", f"Invalid stored APRS-IS filter; using {DEFAULT_APRSIS_FILTER}: {exc}")
+    return result
+
+
+def aprsis_connection_required() -> bool:
+    return get_enabled_aprsis_interface() is not None or has_enabled_aprsis_target_flow()
+
+
+def build_aprsis_login_line(*, login: str, passcode: str, server_filter: str = "") -> str:
+    line = f"user {login} pass {passcode or '-1'} vers APRSBox {get_version()}"
+    normalized_filter = (
+        normalize_aprsis_filter(server_filter)
+        if str(server_filter or "").strip()
+        else ""
+    )
+    if normalized_filter:
+        line += f" filter {normalized_filter}"
+    return line
 
 
 def persist_aprsis_runtime_status(
@@ -1042,7 +1081,14 @@ def aprsis_runtime_badge(status: str) -> str:
 
 
 class AprsisClientService:
-    def __init__(self, *, poll_interval: float = 1.0, reconnect_delay: float = 5.0) -> None:
+    def __init__(
+        self,
+        *,
+        poll_interval: float = 1.0,
+        reconnect_delay: float = 5.0,
+        rx_processor: Callable[..., bool] | None = None,
+        frame_consumer: Callable[..., None] | None = None,
+    ) -> None:
         self._poll_interval = poll_interval
         self._reconnect_delay = reconnect_delay
         self._task: asyncio.Task[None] | None = None
@@ -1051,8 +1097,15 @@ class AprsisClientService:
         self._reader_task: asyncio.Task[None] | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._connected_config: tuple[str, int, str, str] | None = None
+        self._connected_rx_signature: tuple[int, str] | None = None
+        self._desired_rx_interface: dict[str, Any] | None = None
         self._connected_since: str | None = None
         self._retry_not_before = 0.0
+        self._rx_processor = rx_processor
+        self._frame_consumer = frame_consumer
+
+    def set_frame_consumer(self, frame_consumer: Callable[..., None] | None) -> None:
+        self._frame_consumer = frame_consumer
 
     async def start(self) -> None:
         if self._task is not None:
@@ -1106,7 +1159,11 @@ class AprsisClientService:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            desired_active = has_enabled_aprsis_target_flow()
+            rx_interface = get_enabled_aprsis_interface()
+            self._desired_rx_interface = dict(rx_interface) if rx_interface is not None else None
+            aprsis_rx_enabled = rx_interface is not None
+            aprsis_tx_required = has_enabled_aprsis_target_flow()
+            desired_active = aprsis_rx_enabled or aprsis_tx_required
             config = get_aprsis_config()
             config_key = (
                 str(config["server"]),
@@ -1117,7 +1174,7 @@ class AprsisClientService:
 
             if not desired_active:
                 await self._disconnect(
-                    reason="APRS-IS uplink inactive because no enabled Packet Routing flow targets APRS-IS.",
+                    reason="APRS-IS inactive because neither RX nor TX requires a connection.",
                     status=APRSIS_STATUS_INACTIVE,
                 )
                 await self._sleep(self._poll_interval)
@@ -1138,11 +1195,12 @@ class AprsisClientService:
                 continue
 
             should_reconnect = False
+            desired_rx_signature = self._rx_signature(rx_interface)
             async with self._connection_lock:
-                if self._reader_task is not None and self._reader_task.done():
-                    should_reconnect = True
-                if self._writer is not None and self._connected_config != config_key:
-                    should_reconnect = True
+                should_reconnect = self._connection_needs_reconnect(
+                    config_key=config_key,
+                    desired_rx_signature=desired_rx_signature,
+                )
             if should_reconnect:
                 await self._disconnect(
                     reason="APRS-IS uplink reconnecting because configuration changed.",
@@ -1154,10 +1212,15 @@ class AprsisClientService:
             if not has_connection:
                 now = time.monotonic()
                 if now >= self._retry_not_before:
-                    await self._connect(config_key)
+                    await self._connect(config_key, rx_interface=rx_interface)
             await self._sleep(self._poll_interval)
 
-    async def _connect(self, config_key: tuple[str, int, str, str]) -> None:
+    async def _connect(
+        self,
+        config_key: tuple[str, int, str, str],
+        *,
+        rx_interface: dict[str, Any] | None = None,
+    ) -> None:
         server, port, login, passcode = config_key
         persist_aprsis_runtime_status(
             status=APRSIS_STATUS_CONNECTING,
@@ -1185,7 +1248,8 @@ class AprsisClientService:
             log_event("WARNING", "aprsis", f"APRS-IS connect failed for {server}:{port} ({error})")
             return
 
-        login_line = f"user {login} pass {passcode or '-1'} vers APRSBox {get_version()}"
+        server_filter = str((rx_interface or {}).get("filter") or "").strip()
+        login_line = build_aprsis_login_line(login=login, passcode=passcode, server_filter=server_filter)
         try:
             writer.write(login_line.encode("ascii", errors="replace") + b"\r\n")
             await writer.drain()
@@ -1211,6 +1275,7 @@ class AprsisClientService:
         async with self._connection_lock:
             self._writer = writer
             self._connected_config = config_key
+            self._connected_rx_signature = self._rx_signature(rx_interface)
             self._connected_since = connected_since
             self._reader_task = asyncio.create_task(
                 self._reader_loop(reader=reader, config_key=config_key),
@@ -1236,9 +1301,10 @@ class AprsisClientService:
                 if not line:
                     reason = "APRS-IS server closed the connection."
                     break
+                self._process_server_line(line)
         except asyncio.CancelledError:
             return
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             reason = f"APRS-IS read failed: {exc}"
         if not reason:
             return
@@ -1257,6 +1323,7 @@ class AprsisClientService:
         self._reader_task = None
         self._writer = None
         self._connected_config = None
+        self._connected_rx_signature = None
         self._connected_since = None
 
         if reader_task is not None and not reader_task.done() and reader_task is not asyncio.current_task():
@@ -1295,3 +1362,118 @@ class AprsisClientService:
             await asyncio.wait_for(self._stop_event.wait(), timeout=max(delay, 0.05))
         except TimeoutError:
             return
+
+    @staticmethod
+    def _rx_signature(rx_interface: dict[str, Any] | None) -> tuple[int, str] | None:
+        if rx_interface is None:
+            return None
+        try:
+            interface_id = int(rx_interface["id"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        return interface_id, str(rx_interface.get("filter") or "").strip()
+
+    def _connection_needs_reconnect(
+        self,
+        *,
+        config_key: tuple[str, int, str, str],
+        desired_rx_signature: tuple[int, str] | None,
+    ) -> bool:
+        if self._reader_task is not None and self._reader_task.done():
+            return True
+        if self._writer is None:
+            return False
+        if self._connected_config != config_key:
+            return True
+        # Disabling APRS-IS RX must not tear down a session still needed for
+        # TX.  The reader stops dispatching immediately via
+        # _desired_rx_interface, while a later reconnect (if needed for any
+        # other reason) logs in without the RX filter.
+        if desired_rx_signature is None:
+            return False
+        return self._connected_rx_signature != desired_rx_signature
+
+    def _process_server_line(self, raw_line: bytes | str) -> bool:
+        if isinstance(raw_line, bytes):
+            try:
+                line = raw_line.decode("utf-8").rstrip("\r\n")
+            except UnicodeDecodeError:
+                # APRS-IS does not advertise a text encoding.  UTF-8 is used
+                # by a number of clients for station comments, while legacy
+                # single-byte traffic still needs a lossless fallback.
+                line = raw_line.decode("latin-1").rstrip("\r\n")
+        else:
+            line = str(raw_line or "").rstrip("\r\n")
+        normalized_control = line.lstrip()
+        if (
+            not normalized_control
+            or normalized_control.startswith("#")
+            or normalized_control.lower().startswith("logresp ")
+        ):
+            return False
+
+        rx_interface = self._desired_rx_interface
+        if rx_interface is None:
+            return False
+        try:
+            interface_id = int(rx_interface["id"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        interface_name = str(rx_interface.get("name") or f"APRSIS #{interface_id}").strip()
+        processor = self._rx_processor
+        if processor is None:
+            from app.services.traffic import process_normalized_tnc2_rx
+
+            processor = process_normalized_tnc2_rx
+        occurred_at = utc_now()
+        received_monotonic = time.monotonic()
+        try:
+            processed = bool(
+                processor(
+                    line,
+                    source=f"APRS-IS · {interface_name}",
+                    source_kind="aprsis",
+                    source_interface_id=interface_id,
+                    band="",
+                    timestamp=occurred_at,
+                    rx_received_monotonic=received_monotonic,
+                )
+            )
+        except Exception as exc:
+            log_event("WARNING", "aprsis", f"APRS-IS RX line processing failed: {exc}")
+            return False
+        if not processed or self._frame_consumer is None:
+            return processed
+
+        try:
+            from app.services.aprsis_rf import extract_q_construct
+            from app.services.content import parse_tnc2_frame
+
+            parsed = parse_tnc2_frame(line)
+            if parsed is None:
+                return False
+            aprs_data = dict(parsed.get("aprs_data") or {})
+            self._frame_consumer(
+                line,
+                source_ref=interface_name,
+                source_interface_id=interface_id,
+                rx_received_at=occurred_at,
+                rx_received_monotonic=received_monotonic,
+                metadata={
+                    "source_type": "APRSIS",
+                    "aprsis_interface_id": interface_id,
+                    "original_tnc2_line": line,
+                    "received_at": occurred_at,
+                    "source_callsign": str(parsed.get("source") or ""),
+                    "destination": str(parsed.get("destination") or ""),
+                    "path": str(parsed.get("path") or ""),
+                    "payload": str(parsed.get("info") or ""),
+                    "packet_type": str(aprs_data.get("packet_group") or aprs_data.get("packet_type_code") or ""),
+                    "q_construct": extract_q_construct(parsed),
+                    "is_third_party": bool(parsed.get("is_third_party")),
+                },
+            )
+        except Exception as exc:
+            log_event("WARNING", "aprsis", f"APRS-IS Packet Routing dispatch failed: {exc}")
+            return False
+        return True

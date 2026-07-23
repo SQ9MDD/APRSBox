@@ -1,6 +1,6 @@
-# Rate Limit Filter
+# Transmission Rate Filter
 
-This filter is not a packets-per-minute counter. It is a simple time gate based on the source callsign.
+This filter is not a packets-per-minute counter. It is a time gate that can limit each matching source callsign separately or all sources globally.
 
 Rule format:
 
@@ -21,7 +21,9 @@ How it works:
 
 - it operates only on the source callsign,
 - the first matching frame always passes,
-- the next frame from the same source under the same matched rule is blocked until the limit expires,
+- normal callsign patterns keep a separate timer for each source,
+- `*` alone is special: it keeps one global timer shared by every source in this filter,
+- the next frame covered by the same timer is blocked until the limit expires,
 - timer state is updated only by frames that actually passed,
 - if no rule matches the source, the filter does nothing and the frame passes.
 

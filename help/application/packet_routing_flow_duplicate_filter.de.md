@@ -1,9 +1,10 @@
-# Duplikatfilter (viscous-delay)
+# RF-Duplikatverzögerungsfilter
 
 Dieser Block laesst den Frame nicht sofort durch. Der erste Frame mit einem bestimmten Fingerprint wird bis zum Ende des Horfensters zurueckgehalten.
 
 Tatsaechliches Verhalten:
 
+- das Hörfenster kann auf `2` bis `7` Sekunden eingestellt werden,
 - der Fingerprint besteht aus `source callsign + info field`,
 - der Pfad spielt beim Duplikatvergleich keine Rolle,
 - der erste Frame wartet bis zum Ende des Fensters,

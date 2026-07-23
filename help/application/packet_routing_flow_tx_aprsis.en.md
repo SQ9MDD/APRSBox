@@ -9,7 +9,7 @@ Use it for:
 
 Important limitation:
 
-- this target always keeps the mandatory `Strict Filter`.
+- this target always keeps the mandatory `APRS-IS Uplink Safety Rule`.
 
 ## Navigation
 

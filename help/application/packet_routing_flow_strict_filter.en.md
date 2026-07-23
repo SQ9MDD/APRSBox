@@ -1,4 +1,4 @@
-# Strict Filter
+# APRS-IS Uplink Safety Rule
 
 This is the system safety block for rules ending in `TX APRS-IS`.
 
@@ -18,14 +18,14 @@ For `Local TX` it is even stricter:
 
 Important notes:
 
-- with `TX APRS-IS` this filter is mandatory,
+- with `TX APRS-IS` this rule is mandatory,
 - it is not a replacement for RF digi path logic,
 - if TNC2 parsing fails, the frame is rejected.
 
 Typical use cases:
 
-- `Receiver RF -> Strict Filter -> TX APRS-IS`,
-- `Local TX -> Strict Filter -> TX APRS-IS`.
+- `Receiver RF -> APRS-IS Uplink Safety Rule -> TX APRS-IS`,
+- `Local TX -> APRS-IS Uplink Safety Rule -> TX APRS-IS`.
 
 ## Navigation
 

@@ -1,4 +1,4 @@
-# Tylko direct
+# Filtr bezpośredniego odbioru RF
 
 Ten filtr przepuszcza tylko pakiety usłyszane bezpośrednio.
 

@@ -1,4 +1,4 @@
-# Strenger Filter
+# APRS-IS-Uplink-Sicherheitsregel
 
 Dies ist der Systemsicherheitsblock fur Regeln, die in `TX APRS-IS` enden.
 
@@ -18,14 +18,14 @@ Fur `Local TX` ist er strenger:
 
 Wichtige Hinweise:
 
-- bei `TX APRS-IS` ist dieser Filter verpflichtend,
+- bei `TX APRS-IS` ist diese Regel verpflichtend,
 - er ersetzt keine RF-Digi-Pfadlogik,
 - wenn TNC2-Parsing fehlschlaegt, wird der Frame abgelehnt.
 
 Typische Anwendungsfalle:
 
-- `Empfänger RF -> Strenger Filter -> TX APRS-IS`,
-- `Local TX -> Strenger Filter -> TX APRS-IS`.
+- `Empfänger RF -> APRS-IS-Uplink-Sicherheitsregel -> TX APRS-IS`,
+- `Local TX -> APRS-IS-Uplink-Sicherheitsregel -> TX APRS-IS`.
 
 ## Navigation
 

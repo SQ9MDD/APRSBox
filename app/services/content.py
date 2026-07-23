@@ -45,6 +45,15 @@ from app.services.activation_schedule import (
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_object_tnc2, build_status_tnc2, resolve_message_addressee
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
+from app.services.traffic_source import (
+    APRSIS_MODEM_TYPE,
+    APRSIS_SOURCE_KIND,
+    DEFAULT_APRSIS_FILTER,
+    RF_SOURCE_KIND,
+    STATISTICS_TRAFFIC_SQL_PREDICATE,
+    normalize_aprsis_filter,
+    normalize_source_kind,
+)
 from app.services.tx_scope import (
     ALL_ACTIVE_INTERFACE_OPTION_VALUE,
     INTERNAL_TX_INTERFACE_OPTION_VALUE,
@@ -57,10 +66,10 @@ from app.sections import SECTION_DEFINITIONS
 
 STATION_SNAPSHOT_ROW_LIMIT_FACTOR = 40
 STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
-_STATION_SNAPSHOT_CACHE: dict[tuple[int, int | None, str, str], list[dict[str, Any]]] = {}
-_VISIBLE_STATION_SNAPSHOT_TTL_CACHE: dict[tuple[int, str, str], tuple[float, list[dict[str, Any]]]] = {}
+_STATION_SNAPSHOT_CACHE: dict[tuple[str, int, int | None, str, str], list[dict[str, Any]]] = {}
+_VISIBLE_STATION_SNAPSHOT_TTL_CACHE: dict[tuple[str, int, str, str], tuple[float, list[dict[str, Any]]]] = {}
 _VISIBLE_STATION_SNAPSHOT_TTL_SECONDS = 2.0
-_TRAFFIC_SNAPSHOT_CACHE: dict[tuple[int], tuple[float, dict[str, Any]]] = {}
+_TRAFFIC_SNAPSHOT_CACHE: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
 _TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS = 1.0
 SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS = 150
 SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
@@ -176,6 +185,13 @@ def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
     )
     runtime_by_modem_id = {int(row["modem_id"]): dict(row) for row in runtime_rows if row["modem_id"] is not None}
+    aprsis_runtime_row = fetch_one(
+        "SELECT status, status_detail, last_error FROM aprsis_runtime_state WHERE id = 1"
+    )
+    if aprsis_runtime_row is not None:
+        for modem_row in rows:
+            if str(modem_row.get("modem_type") or "").strip().upper() == APRSIS_MODEM_TYPE:
+                runtime_by_modem_id[int(modem_row["id"])] = dict(aprsis_runtime_row)
     return [_decorate_modem_row(row, runtime_by_modem_id.get(int(row["id"]))) for row in rows]
 
 
@@ -198,13 +214,13 @@ def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None)
         result["modem_runtime_status"] = "error"
         result["modem_runtime_label"] = "Error"
         result["modem_runtime_icon"] = "alert-circle-outline.svg"
-        result["modem_runtime_title"] = runtime_error or runtime_detail or "TNC connection error."
+        result["modem_runtime_title"] = runtime_error or runtime_detail or "Interface connection error."
         return result
     if runtime_status == "connecting":
         result["modem_runtime_status"] = "connecting"
         result["modem_runtime_label"] = "Connecting"
         result["modem_runtime_icon"] = "progress-clock.svg"
-        result["modem_runtime_title"] = runtime_detail or "Connecting to TNC."
+        result["modem_runtime_title"] = runtime_detail or "Connecting interface."
         return result
 
     result["modem_runtime_status"] = "enabled"
@@ -218,6 +234,8 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
     definition = SECTION_DEFINITIONS[slug]
     timestamp = utc_now()
     normalized_payload = _normalize_section_payload(slug, payload)
+    if slug == "modems" and normalized_payload.get("modem_type") == APRSIS_MODEM_TYPE:
+        _ensure_single_aprsis_interface()
     values: dict[str, Any] = {}
     for field in definition.fields:
         name = field["name"]
@@ -248,6 +266,8 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
 def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
     definition = SECTION_DEFINITIONS[slug]
     normalized_payload = _normalize_section_payload(slug, payload)
+    if slug == "modems" and normalized_payload.get("modem_type") == APRSIS_MODEM_TYPE:
+        _ensure_single_aprsis_interface(exclude_id=row_id)
     previous_row: dict[str, Any] | None = None
     if slug == "modems":
         row = fetch_one(
@@ -306,7 +326,7 @@ def _propagate_modem_rename_to_digi_flows(
         """
         UPDATE digi_flows
         SET source_ref = ?, updated_at = ?
-        WHERE source_kind = 'receiver_rf'
+        WHERE source_kind IN ('receiver_rf', 'receiver_aprsis')
           AND source_ref = ?
         """,
         (current_name, timestamp, previous_name),
@@ -324,7 +344,7 @@ def _propagate_modem_rename_to_digi_flows(
         """
         SELECT id, step_type, config_json
         FROM digi_flow_steps
-        WHERE step_type IN ('receiver_rf', 'tx_rf')
+        WHERE step_type IN ('receiver_rf', 'receiver_aprsis', 'tx_rf')
         """,
     ).fetchall()
     for row in rows:
@@ -336,6 +356,9 @@ def _propagate_modem_rename_to_digi_flows(
         updated = False
         if step_type == "receiver_rf" and str(config.get("rf_port") or "").strip() == previous_name:
             config["rf_port"] = current_name
+            updated = True
+        elif step_type == "receiver_aprsis" and str(config.get("aprsis_source") or "").strip() == previous_name:
+            config["aprsis_source"] = current_name
             updated = True
         elif step_type == "tx_rf" and str(config.get("rf_target") or "").strip() == previous_name:
             config["rf_target"] = current_name
@@ -701,7 +724,7 @@ def recent_bulletin_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
 
 
 def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
-    cache_key = (int(limit),)
+    cache_key = (str(settings.database_path), int(limit))
     cached_snapshot = _TRAFFIC_SNAPSHOT_CACHE.get(cache_key)
     current_time = time.monotonic()
     if cached_snapshot is not None and current_time - cached_snapshot[0] < _TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS:
@@ -763,7 +786,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     )
     frame_rows = fetch_all(
         """
-        SELECT source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+        SELECT source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
         FROM traffic_frames
         ORDER BY created_at DESC, id DESC
         LIMIT ?
@@ -787,6 +810,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             {
                 "modem_id": int(row["modem_id"]),
                 "name": row["modem_name"] or "",
+                "modem_type": "",
                 "device_path": row["modem_endpoint"] or "",
                 "band": row["band"] or "",
                 "status": row["status"] or "idle",
@@ -802,6 +826,47 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "duplicates_dropped": int(row["mqtt_duplicates_dropped"]) if row["mqtt_duplicates_dropped"] is not None else 0,
                 "invalid_json_dropped": int(row["mqtt_invalid_json_dropped"]) if row["mqtt_invalid_json_dropped"] is not None else 0,
                 "expose": expose,
+            }
+        )
+    aprsis_interface_row = fetch_one(
+        """
+        SELECT id, name, device_path
+        FROM modems
+        WHERE enabled = 1 AND UPPER(modem_type) = 'APRSIS'
+        ORDER BY id ASC
+        LIMIT 1
+        """
+    )
+    if aprsis_interface_row is not None:
+        from app.services.aprsis import get_aprsis_runtime_status
+
+        aprsis_runtime = get_aprsis_runtime_status()
+        interfaces.append(
+            {
+                "modem_id": int(aprsis_interface_row["id"]),
+                "name": str(aprsis_interface_row["name"] or "APRSIS"),
+                "modem_type": APRSIS_MODEM_TYPE,
+                "device_path": str(aprsis_interface_row["device_path"] or DEFAULT_APRSIS_FILTER),
+                "band": "APRS-IS",
+                "status": str(aprsis_runtime.get("status") or "inactive"),
+                "status_detail": str(aprsis_runtime.get("status_detail") or ""),
+                "last_error": aprsis_runtime.get("last_error"),
+                "updated_at": _format_monitor_timestamp(aprsis_runtime.get("updated_at")),
+                "connected": str(aprsis_runtime.get("status") or "").lower() == "connected",
+                "subscribed_topic": "",
+                "broker_host": str(aprsis_runtime.get("server") or ""),
+                "broker_port": aprsis_runtime.get("port"),
+                "last_frame_time": None,
+                "frames_received": 0,
+                "duplicates_dropped": 0,
+                "invalid_json_dropped": 0,
+                "expose": {
+                    "enabled": False,
+                    "bind_address": None,
+                    "port": None,
+                    "active_clients": 0,
+                    "listen_endpoint": None,
+                },
             }
         )
     active_modem = None
@@ -832,15 +897,19 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     status = state_row["status"] if state_row else "idle"
     status_detail = state_row["status_detail"] if state_row else "Traffic monitor state unavailable."
     updated_at = _format_monitor_timestamp(state_row["updated_at"]) if state_row else None
+    if len(interfaces) == 1 and interfaces[0].get("modem_type") == APRSIS_MODEM_TYPE:
+        status = str(interfaces[0].get("status") or "inactive")
+        status_detail = str(interfaces[0].get("status_detail") or "")
+        updated_at = interfaces[0].get("updated_at")
     if interfaces and len(interfaces) > 1:
         connected = [item for item in interfaces if item["status"] == "connected"]
         connecting = [item for item in interfaces if item["status"] == "connecting"]
         if connected:
             status = "connected"
-            status_detail = f"{len(connected)}/{len(interfaces)} TNC interfaces connected."
+            status_detail = f"{len(connected)}/{len(interfaces)} interfaces connected."
         elif connecting:
             status = "connecting"
-            status_detail = f"Connecting {len(connecting)} TNC interface(s)."
+            status_detail = f"Connecting {len(connecting)} interface(s)."
         else:
             status = "error" if any(item["last_error"] for item in interfaces) else interfaces[0]["status"]
             status_detail = (
@@ -876,10 +945,15 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             station_source_key=station_source_key,
             wx_source_key=wx_source_key,
         )
+        source_kind = normalize_source_kind(row["source_kind"])
+        if source_kind == APRSIS_SOURCE_KIND:
+            row_class = f"{row_class} traffic-log-row-aprsis-rx".strip()
         frames.append(
             {
                 "timestamp": _format_monitor_timestamp(row["created_at"]),
                 "source": row["source"],
+                "source_kind": source_kind,
+                "is_rf": source_kind == RF_SOURCE_KIND,
                 "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
                 "direction": direction,
                 "band": row["band"] or "",
@@ -1070,10 +1144,11 @@ def monitoring_public_snapshot() -> dict[str, Any]:
     hourly_mobile_frames = sum(item["mobile_frames"] for item in hourly_by_band)
     hourly_fixed_frames = sum(item["fixed_frames"] for item in hourly_by_band)
     raw_hourly_row = fetch_one(
-        """
+        f"""
         SELECT COUNT(*) AS total
         FROM traffic_frames
         WHERE created_at >= ?
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
         """,
         (hour_window_start_utc,),
     )
@@ -1103,7 +1178,7 @@ def monitoring_public_snapshot() -> dict[str, Any]:
 
     station_unit_system = str(station_settings.get("default_units") or "metric") or "metric"
     stations = heard_stations(unit_system=station_unit_system)
-    stations_summary = station_summary(stations)
+    stations_summary = station_summary(get_rf_heard_station_snapshots())
     traffic_monitor_status = str(traffic.get("status") or "").strip().lower()
     traffic_monitor_detail = str(traffic.get("status_detail") or "").strip()
     runtime_interfaces = list(runtime_by_modem_id.values())
@@ -1113,13 +1188,13 @@ def monitoring_public_snapshot() -> dict[str, Any]:
         runtime_error = [item for item in runtime_interfaces if str(item.get("status") or "").strip().lower() == "error"]
         if runtime_connected:
             traffic_monitor_status = "connected"
-            traffic_monitor_detail = f"{len(runtime_connected)}/{len(runtime_interfaces)} TNC interfaces connected."
+            traffic_monitor_detail = f"{len(runtime_connected)}/{len(runtime_interfaces)} interfaces connected."
         elif runtime_connecting:
             traffic_monitor_status = "connecting"
-            traffic_monitor_detail = f"Connecting {len(runtime_connecting)} TNC interface(s)."
+            traffic_monitor_detail = f"Connecting {len(runtime_connecting)} interface(s)."
         elif runtime_error:
             traffic_monitor_status = "error"
-            traffic_monitor_detail = str(runtime_error[0].get("last_error") or runtime_error[0].get("status_detail") or "TNC runtime error.")
+            traffic_monitor_detail = str(runtime_error[0].get("last_error") or runtime_error[0].get("status_detail") or "Interface runtime error.")
         elif not traffic_monitor_status:
             traffic_monitor_status = "idle"
 
@@ -1292,13 +1367,18 @@ def _format_monitor_timestamp(timestamp: str | None) -> str:
 
 
 def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    total_frames_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames")
-    decoded_frames_row = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames WHERE format = 'TNC2'")
+    total_frames_row = fetch_one(
+        f"SELECT COUNT(*) AS total FROM traffic_frames WHERE {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+    )
+    decoded_frames_row = fetch_one(
+        f"SELECT COUNT(*) AS total FROM traffic_frames WHERE format = 'TNC2' AND {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+    )
     unique_sources_row = fetch_one(
-        """
+        f"""
         SELECT COUNT(DISTINCT source) AS total
         FROM traffic_frames
         WHERE COALESCE(source, '') <> ''
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
         """
     )
 
@@ -1306,7 +1386,11 @@ def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = 
         "received_frames": total_frames_row["total"] if total_frames_row else 0,
         "decoded_aprs": decoded_frames_row["total"] if decoded_frames_row else 0,
         "unique_sources": unique_sources_row["total"] if unique_sources_row else 0,
-        "heard_stations": len(heard_snapshots) if heard_snapshots is not None else len(get_heard_station_snapshots()),
+        "heard_stations": (
+            len(heard_snapshots)
+            if heard_snapshots is not None
+            else len(get_rf_heard_station_snapshots())
+        ),
     }
 
 
@@ -1344,10 +1428,11 @@ def dashboard_activity_series(
     wx_source_key = _build_source_key(wx_config.get("callsign"), wx_config.get("ssid"))
 
     frame_rows = fetch_all(
-        """
+        f"""
         SELECT created_at, direction, format, line, command
         FROM traffic_frames
         WHERE created_at >= ?
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
         ORDER BY created_at ASC, id ASC
         """,
         (first_bucket_start.isoformat(),),
@@ -1450,10 +1535,11 @@ def _dashboard_age_seconds(timestamp: str | None) -> int | None:
 
 def _dashboard_last_rf_rx_at() -> str | None:
     row = fetch_one(
-        """
+        f"""
         SELECT created_at
         FROM traffic_frames
         WHERE UPPER(COALESCE(direction, '')) = 'RX'
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
         ORDER BY created_at DESC, id DESC
         LIMIT 1
         """
@@ -1465,7 +1551,7 @@ def _dashboard_last_rf_rx_at() -> str | None:
 
 def _dashboard_last_rf_tx_at() -> str | None:
     row = fetch_one(
-        """
+        f"""
         SELECT created_at
         FROM traffic_frames
         WHERE (
@@ -1473,6 +1559,7 @@ def _dashboard_last_rf_tx_at() -> str | None:
             OR UPPER(COALESCE(format, '')) LIKE '%-TX'
         )
           AND UPPER(COALESCE(command, '')) NOT LIKE 'TX-SKIP%'
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
         ORDER BY created_at DESC, id DESC
         LIMIT 1
         """
@@ -1546,7 +1633,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     from app.services.wx import get_wx_config
 
     station_settings = get_station_settings()
-    heard_snapshots = get_heard_station_snapshots(limit=500)
+    heard_snapshots = get_rf_heard_station_snapshots(limit=500)
     traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
@@ -1977,6 +2064,12 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "callsign": snapshot["callsign"],
                 "display_callsign": snapshot["display_callsign"],
                 "origin": snapshot.get("origin", "heard"),
+                "source_kind": snapshot.get("source_kind", RF_SOURCE_KIND),
+                "is_rf": bool(snapshot.get("is_rf")),
+                "statistics_eligible": bool(snapshot.get("statistics_eligible")),
+                "last_seen_any_at": snapshot.get("last_seen_any_at"),
+                "last_heard_rf_at": snapshot.get("last_heard_rf_at"),
+                "last_seen_aprsis_at": snapshot.get("last_seen_aprsis_at"),
                 "activity_label": snapshot.get("activity_label", _t("Last heard")),
                 "activity_age_label": snapshot.get("activity_age_label", _t("Last heard age")),
                 "last_heard_at": snapshot["last_heard_at"],
@@ -2031,6 +2124,14 @@ def get_station_detail(
 
     latitude = _parse_coordinate(snapshot.get("latitude"))
     longitude = _parse_coordinate(snapshot.get("longitude"))
+    last_heard_rf_at = str(snapshot.get("last_heard_rf_at") or "")
+    last_seen_aprsis_at = str(snapshot.get("last_seen_aprsis_at") or "")
+    last_heard_rf_date, last_heard_rf_relative = (
+        _format_last_heard_parts(last_heard_rf_at) if last_heard_rf_at else ("", "")
+    )
+    last_seen_aprsis_date, last_seen_aprsis_relative = (
+        _format_last_heard_parts(last_seen_aprsis_at) if last_seen_aprsis_at else ("", "")
+    )
     return {
         "callsign": snapshot["callsign"],
         "ssid": snapshot["ssid"],
@@ -2038,6 +2139,16 @@ def get_station_detail(
         "detail_href": build_station_detail_href(snapshot["display_callsign"]),
         "base_callsign": snapshot["callsign"],
         "origin": snapshot.get("origin", "heard"),
+        "source_kind": snapshot.get("source_kind", RF_SOURCE_KIND),
+        "is_rf": bool(snapshot.get("is_rf")),
+        "statistics_eligible": bool(snapshot.get("statistics_eligible")),
+        "last_seen_any_at": snapshot.get("last_seen_any_at"),
+        "last_heard_rf_at": snapshot.get("last_heard_rf_at"),
+        "last_heard_rf_date": last_heard_rf_date,
+        "last_heard_rf_relative": last_heard_rf_relative,
+        "last_seen_aprsis_at": snapshot.get("last_seen_aprsis_at"),
+        "last_seen_aprsis_date": last_seen_aprsis_date,
+        "last_seen_aprsis_relative": last_seen_aprsis_relative,
         "activity_label": snapshot.get("activity_label", _t("Last heard")),
         "activity_age_label": snapshot.get("activity_age_label", _t("Last heard age")),
         "source": snapshot["source"],
@@ -2182,7 +2293,36 @@ def _find_station_snapshot(
 
 
 def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
-    rows = _station_snapshot_rows(("TNC2",), row_limit=_station_snapshot_row_limit(limit))
+    row_limit = _station_snapshot_row_limit(limit)
+    # APRS-IS can be much busier than the local RF channel. Query both source
+    # groups independently so an APRS-IS burst cannot push locally heard RF
+    # frames outside the scan window, then use RF as the primary snapshot and
+    # APRS-IS only to fill fields that RF did not provide.
+    rf_rows = _station_snapshot_rows(
+        ("TNC2",),
+        row_limit=row_limit,
+        statistics_only=True,
+    )
+    aprsis_rows = _station_snapshot_rows(
+        ("TNC2",),
+        row_limit=row_limit,
+        source_kind=APRSIS_SOURCE_KIND,
+    )
+    rf_snapshots = _build_station_snapshots_from_rows(rf_rows, origin="heard", limit=limit)
+    aprsis_snapshots = _build_station_snapshots_from_rows(aprsis_rows, origin="heard", limit=limit)
+    return _merge_rf_primary_station_snapshots(
+        rf_snapshots,
+        aprsis_snapshots,
+        limit=limit,
+    )
+
+
+def get_rf_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
+    rows = _station_snapshot_rows(
+        ("TNC2",),
+        row_limit=_station_snapshot_row_limit(limit),
+        statistics_only=True,
+    )
     return _build_station_snapshots_from_rows(rows, origin="heard", limit=limit)
 
 
@@ -2197,6 +2337,7 @@ def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     station_latitude = str(station_settings.get("latitude") or "")
     station_longitude = str(station_settings.get("longitude") or "")
     ttl_cache_key = (
+        str(settings.database_path),
         normalized_limit,
         station_latitude,
         station_longitude,
@@ -2206,6 +2347,7 @@ def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
     if cached_visible is not None and current_time - cached_visible[0] < _VISIBLE_STATION_SNAPSHOT_TTL_SECONDS:
         return [dict(item) for item in cached_visible[1]]
     cache_key = (
+        str(settings.database_path),
         normalized_limit,
         _latest_station_snapshot_frame_id(),
         station_latitude,
@@ -2260,19 +2402,86 @@ def get_visible_station_snapshot_revision() -> int | None:
     return _latest_station_snapshot_frame_id()
 
 
-def _station_snapshot_rows(formats: tuple[str, ...], *, row_limit: int) -> list[dict[str, Any]]:
+def _station_snapshot_rows(
+    formats: tuple[str, ...],
+    *,
+    row_limit: int,
+    statistics_only: bool = False,
+    source_kind: str | None = None,
+) -> list[dict[str, Any]]:
     placeholders = ", ".join("?" for _ in formats)
+    params: tuple[Any, ...] = formats
+    if source_kind is not None:
+        source_clause = " AND LOWER(COALESCE(source_kind, 'rf')) = ?"
+        params += (normalize_source_kind(source_kind),)
+    elif statistics_only:
+        source_clause = f" AND {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+    else:
+        source_clause = ""
     rows = fetch_all(
         f"""
-        SELECT source, interface_id, line, created_at
+        SELECT source, source_kind, interface_id, line, created_at
         FROM traffic_frames
         WHERE format IN ({placeholders})
+          {source_clause}
         ORDER BY created_at DESC, id DESC
         LIMIT ?
         """,
-        formats + (row_limit,),
+        params + (row_limit,),
     )
     return [dict(row) for row in rows]
+
+
+def _merge_rf_primary_station_snapshots(
+    rf_snapshots: list[dict[str, Any]],
+    aprsis_snapshots: list[dict[str, Any]],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    aprsis_by_key = {
+        str(snapshot.get("display_callsign") or "").casefold(): snapshot
+        for snapshot in aprsis_snapshots
+        if str(snapshot.get("display_callsign") or "").strip()
+    }
+    merged: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    for rf_snapshot in rf_snapshots:
+        key = str(rf_snapshot.get("display_callsign") or "").casefold()
+        supplemental = aprsis_by_key.get(key)
+        if supplemental is None:
+            combined = dict(rf_snapshot)
+        else:
+            combined = _merge_station_snapshots(
+                rf_snapshot,
+                supplemental,
+                prefer_primary_activity=True,
+            )
+        merged.append(combined)
+        seen_keys.add(key)
+
+    merged.sort(
+        key=lambda item: (
+            str(item.get("last_heard_rf_at") or item.get("last_heard_at") or ""),
+            str(item.get("display_callsign") or ""),
+        ),
+        reverse=True,
+    )
+    aprsis_only = [
+        snapshot
+        for key, snapshot in aprsis_by_key.items()
+        if key not in seen_keys
+    ]
+    aprsis_only.sort(
+        key=lambda item: (
+            str(item.get("last_seen_aprsis_at") or item.get("last_heard_at") or ""),
+            str(item.get("display_callsign") or ""),
+        ),
+        reverse=True,
+    )
+    # The map has a finite station limit. Keep locally heard stations first and
+    # use APRS-IS-only stations to fill the remaining capacity.
+    return (merged + aprsis_only)[: max(1, int(limit or 0))]
 
 
 def _normalize_interface_id(value: Any) -> int | None:
@@ -2324,6 +2533,8 @@ def _build_station_snapshots_from_rows(
         if not station_key:
             continue
 
+        row_source_kind = normalize_source_kind(row.get("source_kind"))
+
         if station_key not in stations:
             stations[station_key] = _new_station_snapshot(
                 station_key,
@@ -2333,11 +2544,20 @@ def _build_station_snapshots_from_rows(
                 str(parsed.get("logical_path") or parsed.get("path") or ""),
                 row["line"],
                 _normalize_interface_id(row.get("interface_id")),
+                source_kind=row_source_kind,
                 origin=origin,
             )
             station_key_index[station_key_folded] = station_key
 
         station = stations[station_key]
+        _record_station_source_observation(
+            station,
+            source_kind=row_source_kind,
+            created_at=str(row["created_at"] or ""),
+            source=str(row["source"] or ""),
+            interface_id=_normalize_interface_id(row.get("interface_id")),
+            origin=origin,
+        )
         if not str(station.get("status_text") or "").strip():
             pending_status = pending_status_by_station_key.pop(station_key_folded, "")
             if pending_status:
@@ -2386,7 +2606,12 @@ def _build_station_snapshots_from_rows(
     return list(stations.values())[:limit]
 
 
-def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any]) -> dict[str, Any]:
+def _merge_station_snapshots(
+    primary: dict[str, Any],
+    secondary: dict[str, Any],
+    *,
+    prefer_primary_activity: bool = False,
+) -> dict[str, Any]:
     merged = dict(primary)
     latest = secondary if str(secondary.get("last_heard_at") or "") > str(primary.get("last_heard_at") or "") else primary
     for field in (
@@ -2412,7 +2637,17 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
         merged["position_ambiguous"] = True
     if (not merged.get("data_raw")) and secondary.get("data_raw"):
         merged["data_raw"] = dict(secondary["data_raw"])
-    if latest is secondary:
+    for field in (
+        "last_heard_rf_at",
+        "last_heard_rf_source",
+        "last_heard_rf_interface_id",
+        "last_seen_aprsis_at",
+        "last_seen_aprsis_source",
+        "last_seen_aprsis_interface_id",
+    ):
+        if not merged.get(field) and secondary.get(field):
+            merged[field] = secondary[field]
+    if latest is secondary and not prefer_primary_activity:
         for field in (
             "origin",
             "activity_label",
@@ -2427,8 +2662,17 @@ def _merge_station_snapshots(primary: dict[str, Any], secondary: dict[str, Any])
             "path",
             "raw_text",
             "interface_id",
+            "source_kind",
+            "is_rf",
+            "last_seen_any_at",
         ):
             merged[field] = secondary.get(field)
+    if prefer_primary_activity:
+        merged["last_seen_any_at"] = max(
+            str(primary.get("last_seen_any_at") or primary.get("last_heard_at") or ""),
+            str(secondary.get("last_seen_any_at") or secondary.get("last_heard_at") or ""),
+        )
+    merged["statistics_eligible"] = bool(merged.get("last_heard_rf_at"))
     return merged
 
 
@@ -2441,19 +2685,34 @@ def _new_station_snapshot(
     raw_text: str,
     interface_id: int | None,
     *,
+    source_kind: str,
     origin: str,
 ) -> dict[str, Any]:
     heard_date, heard_relative = _format_last_heard_parts(created_at)
     base_callsign, ssid = _split_ssid(name)
-    activity_label, activity_age_label = _station_snapshot_activity_labels(origin)
+    normalized_kind = normalize_source_kind(source_kind)
+    resolved_origin = APRSIS_SOURCE_KIND if origin == "heard" and normalized_kind == APRSIS_SOURCE_KIND else origin
+    activity_label, activity_age_label = _station_snapshot_activity_labels(resolved_origin)
+    is_rf_heard = origin == "heard" and normalized_kind == RF_SOURCE_KIND
+    is_aprsis_seen = origin == "heard" and normalized_kind == APRSIS_SOURCE_KIND
     return {
         "callsign": base_callsign,
         "ssid": ssid,
         "display_callsign": name,
-        "origin": origin,
+        "origin": resolved_origin,
+        "source_kind": normalized_kind,
+        "is_rf": is_rf_heard,
+        "statistics_eligible": is_rf_heard,
         "activity_label": activity_label,
         "activity_age_label": activity_age_label,
         "last_heard_at": created_at,
+        "last_seen_any_at": created_at,
+        "last_heard_rf_at": created_at if is_rf_heard else None,
+        "last_heard_rf_source": source if is_rf_heard else None,
+        "last_heard_rf_interface_id": interface_id if is_rf_heard else None,
+        "last_seen_aprsis_at": created_at if is_aprsis_seen else None,
+        "last_seen_aprsis_source": source if is_aprsis_seen else None,
+        "last_seen_aprsis_interface_id": interface_id if is_aprsis_seen else None,
         "last_heard_age_s": _last_heard_age_seconds(created_at),
         "last_heard_label": _format_last_heard(created_at),
         "last_heard_date": heard_date,
@@ -2487,7 +2746,32 @@ def _new_station_snapshot(
 def _station_snapshot_activity_labels(origin: str) -> tuple[str, str]:
     if origin == "local_tx":
         return _t("Last local TX"), _t("Last local TX age")
+    if origin == APRSIS_SOURCE_KIND:
+        return _t("Last seen via APRS-IS"), _t("Last APRS-IS activity age")
     return _t("Last heard"), _t("Last heard age")
+
+
+def _record_station_source_observation(
+    station: dict[str, Any],
+    *,
+    source_kind: str,
+    created_at: str,
+    source: str,
+    interface_id: int | None,
+    origin: str,
+) -> None:
+    if origin != "heard":
+        return
+    normalized_kind = normalize_source_kind(source_kind)
+    if normalized_kind == RF_SOURCE_KIND and not station.get("last_heard_rf_at"):
+        station["last_heard_rf_at"] = created_at
+        station["last_heard_rf_source"] = source
+        station["last_heard_rf_interface_id"] = interface_id
+        station["statistics_eligible"] = True
+    elif normalized_kind == APRSIS_SOURCE_KIND and not station.get("last_seen_aprsis_at"):
+        station["last_seen_aprsis_at"] = created_at
+        station["last_seen_aprsis_source"] = source
+        station["last_seen_aprsis_interface_id"] = interface_id
 
 
 def _aprs_data_has_station_snapshot_fields(aprs_data: dict[str, Any]) -> bool:
@@ -3994,6 +4278,8 @@ def safe_create_section_row(slug: str, payload: dict[str, Any]) -> tuple[bool, s
     except ValueError as exc:
         return False, str(exc)
     except sqlite3.IntegrityError as exc:
+        if "idx_modems_single_aprsis" in str(exc) or "modems.modem_type" in str(exc):
+            return False, "An APRSIS interface already exists. Edit the existing interface instead."
         return False, str(exc)
     return True, None
 
@@ -4004,6 +4290,8 @@ def safe_update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> 
     except ValueError as exc:
         return False, str(exc)
     except sqlite3.IntegrityError as exc:
+        if "idx_modems_single_aprsis" in str(exc) or "modems.modem_type" in str(exc):
+            return False, "An APRSIS interface already exists. Edit the existing interface instead."
         return False, str(exc)
     return True, None
 
@@ -4025,13 +4313,26 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     modem_type = str(payload.get("modem_type") or "").strip().upper()
     if modem_type == "SERIAL":
         modem_type = "SERIALL"
-    supported_modem_types = set(TX_CAPABLE_MODEM_TYPES) | {OPENWEBRX_MQTT_MODEM_TYPE}
+    supported_modem_types = set(TX_CAPABLE_MODEM_TYPES) | {OPENWEBRX_MQTT_MODEM_TYPE, APRSIS_MODEM_TYPE}
     if modem_type not in supported_modem_types:
-        raise ValueError("Unsupported TNC type.")
+        raise ValueError("Unsupported interface type.")
 
     normalized["modem_type"] = modem_type
     normalized["name"] = str(payload.get("name") or "").strip()
     normalized["band"] = str(payload.get("band") or "").strip().lower()
+    if modem_type == APRSIS_MODEM_TYPE:
+        normalized["band"] = ""
+        normalized["device_path"] = normalize_aprsis_filter(payload.get("device_path"))
+        normalized["baud_rate"] = None
+        normalized["serial_rx_silence_reconnect_seconds"] = SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS
+        normalized["tx_blocked"] = 1
+        normalized["tx_min_gap_seconds"] = MODEM_TX_MIN_GAP_SECONDS_DEFAULT
+        normalized["expose_port_enabled"] = 0
+        normalized["expose_allow_tx"] = 0
+        normalized["expose_bind_address"] = "0.0.0.0"
+        normalized["expose_port"] = 8002
+        normalized["expose_whitelist"] = ""
+        return normalized
     if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
         endpoint = parse_mqtt_url(payload.get("device_path"), label="OpenWebRX MQTT URL")
         normalized["device_path"] = endpoint.normalized_url
@@ -4072,6 +4373,18 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
         payload.get("serial_rx_silence_reconnect_seconds")
     )
     return normalized
+
+
+def _ensure_single_aprsis_interface(*, exclude_id: int | None = None) -> None:
+    query = "SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS'"
+    params: tuple[Any, ...] = ()
+    if exclude_id is not None:
+        query += " AND id <> ?"
+        params = (int(exclude_id),)
+    query += " LIMIT 1"
+    existing = fetch_one(query, params)
+    if existing is not None:
+        raise ValueError("An APRSIS interface already exists. Edit the existing interface instead.")
 
 
 def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-# Icon Filter
+# APRS Symbol Filter
 
 This filter compares the APRS symbol exactly in `table+code` form.
 

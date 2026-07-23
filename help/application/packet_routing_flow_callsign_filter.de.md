@@ -1,4 +1,4 @@
-# Rufzeichenfilter
+# Quellrufzeichenfilter
 
 Dieser Filter prueft nur das Quellrufzeichen. Pfad, Digi-Hops und Ziel spielen keine Rolle.
 
