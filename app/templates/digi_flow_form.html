@@ -12,7 +12,7 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRS-IS to RF uses mandatory input and RF TX guards around a strict callsign-and-radius default-deny filter.") }}</p>
+                <p class="section-lead">{{ t("Define one source, optional filters and one target. Mandatory rules are inserted automatically for RF to RF, APRS-IS source and APRS-IS target flows.") }}</p>
             </div>
             <button
                 class="help-icon-button page-help-button"
@@ -24,7 +24,7 @@
                 <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
             </button>
         </div>
-        <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF receiver to RF target flows require an enabled Path Rule step. APRS-IS to RF flows use mandatory Input Guard and RF TX Guard steps.") }}</div>
+        <div class="notice">{{ t("Source must be first and target last. RF to RF requires the RF Digipeating Path Rule; APRS-IS to RF uses three mandatory APRS-IS safety rules; an APRS-IS target uses the mandatory Uplink Safety Rule.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -82,8 +82,8 @@
                 <aside class="digi-flow-palette">
                     <div class="panel-header">
                         <div class="panel-header-copy">
-                            <h2>{{ t("Available filter and rules") }}</h2>
-                            <p class="section-lead">{{ t("Click once to insert a step before the target.") }}</p>
+                            <h2>{{ t("Available filters and rules") }}</h2>
+                            <p class="section-lead">{{ t("Rules are mandatory and managed automatically. Click an available filter to add it before the target.") }}</p>
                         </div>
                     </div>
                     <div class="digi-step-palette" id="digi-step-palette">
@@ -94,22 +94,10 @@
                             class="digi-palette-button"
                             data-step-type="{{ step_type }}"
                         >
-                            {% if type_meta[step_type].runtime_status == 'implemented' %}
-                            <img
-                                class="digi-runtime-icon digi-runtime-icon-ready"
-                                src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg"
-                                alt="{{ t('Ready for use') }}"
-                                title="{{ t('Ready for use') }}"
-                            >
-                            {% else %}
-                            <img
-                                class="digi-runtime-icon digi-runtime-icon-planned"
-                                src="{{ request.scope.root_path }}/static/icons/clock-fast.svg"
-                                alt="{{ t('Planned / not ready yet') }}"
-                                title="{{ t('Planned / not ready yet') }}"
-                            >
-                            {% endif %}
-                            <span class="digi-step-badge">{{ type_meta[step_type].badge }}</span>
+                            <span class="digi-step-badge digi-step-badge-{{ type_meta[step_type].palette_kind }}">{{ type_meta[step_type].badge }}</span>
+                            <span class="digi-palette-scope digi-palette-scope-{{ type_meta[step_type].scope_tone }}">
+                                {{ type_meta[step_type].scope_label }}
+                            </span>
                             <span class="digi-palette-copy">
                                 <strong>{{ type_meta[step_type].label }}</strong>
                                 <span class="muted small">{{ type_meta[step_type].description }}</span>
@@ -316,6 +304,8 @@
             icons: {{ t("icons")|tojson }},
             distanceZones: {{ t("Distance zones")|tojson }},
             radiusKm: {{ t("Radius (km)")|tojson }},
+            defaultDeny: {{ t("default deny")|tojson }},
+            rules: {{ t("Rules")|tojson }},
             zone: {{ t("Zone")|tojson }},
             removeZone: {{ t("Remove zone")|tojson }},
             addZone: {{ t("Add zone")|tojson }},
@@ -339,9 +329,9 @@
             deleteStep: {{ t("Delete step")|tojson }},
             primarySymbolTable: {{ t("Primary (/)")|tojson }},
             cardTitle: {{ t("Card Title")|tojson }},
-            minimumPathRuleRf: {{ t("Minimum Path rule and DIGI guard is required before an RF TX target.")|tojson }},
-            aprsisSystemFlowLocked: {{ t("APRSIS target flow is system-restricted to one mandatory strict guard step.")|tojson }},
-            strictGuardSystemManaged: {{ t("Strict APRS-IS guard is system-managed and available only in APRSIS target flows.")|tojson }},
+            minimumPathRuleRf: {{ t("The RF Digipeating Path Rule is required before an RF TX target.")|tojson }},
+            aprsisSystemFlowLocked: {{ t("An APRS-IS target flow is system-restricted to one mandatory uplink safety rule.")|tojson }},
+            strictGuardSystemManaged: {{ t("The APRS-IS Uplink Safety Rule is mandatory, system-managed, and available only for APRS-IS target flows.")|tojson }},
             flowSteps: {{ t("Flow {count} steps")|tojson }},
             inputPacket: {{ t("Input packet")|tojson }},
             outputPacket: {{ t("Output packet")|tojson }},
@@ -375,29 +365,31 @@
             distanceFilterUsed: {{ t("Distance filter is already used in this flow.")|tojson }},
             latitude: {{ t("Latitude")|tojson }},
             longitude: {{ t("Longitude")|tojson }},
-            rfGuardSystemManaged: {{ t("APRS-IS Input Guard is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
-            rfTxGuardSystemManaged: {{ t("RF TX Guard is mandatory, system-managed, and fixed immediately before TX RF.")|tojson }},
-            allowRulesSystemManaged: {{ t("The APRS-IS default-deny filter is mandatory and system-managed; an empty configuration denies every packet.")|tojson }},
+            rfGuardSystemManaged: {{ t("The APRS-IS Input Safety Rule is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
+            rfTxGuardSystemManaged: {{ t("The APRS-IS to RF TX Safety Rule is mandatory, system-managed, and fixed immediately before TX RF.")|tojson }},
+            allowRulesSystemManaged: {{ t("The APRS-IS Callsign and Radius Rule is mandatory and system-managed; an empty configuration denies every packet.")|tojson }},
+            inputSafetySummary: {{ t("APRS/q validation · loop prevention · initial duplicate check")|tojson }},
+            rfTxSafetySummary: {{ t("Final duplicate check · delay {seconds}s · rate limits · third-party")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
             receiver_rf: ["Receiver RF"],
             receiver_aprsis: ["Receiver APRS-IS"],
             receiver_local_tx: ["Local TX"],
-            filter_dupe: ["Duplicate Filter"],
-            filter_direct_only: ["Direct Only"],
-            filter_path: ["Path Filter", "Path Rule", "Reguła ścieżki"],
-            filter_strict: ["Strict Filter"],
-            filter_digi: ["DIGI Filter"],
-            filter_callsign: ["Callsign Filter"],
-            filter_packet_type: ["Packet Type Filter"],
-            filter_icon: ["Icon Filter"],
-            filter_distance: ["Distance Filter"],
-            filter_rate_limit: ["Rate Limit Filter"],
+            filter_dupe: ["Duplicate Filter", "Duplicate Filter (viscous-delay)", "Filtr duplikatów (viscous-delay)"],
+            filter_direct_only: ["Direct Only", "Tylko direct"],
+            filter_path: ["Path Filter", "Path Rule", "Path rule and DIGI guard", "Reguła ścieżki", "Reguła ścieżki i ochrona DIGI"],
+            filter_strict: ["Strict Filter", "Filtr ścisły"],
+            filter_digi: ["DIGI Filter", "Filtr DIGI"],
+            filter_callsign: ["Callsign Filter", "Filtr znaków"],
+            filter_packet_type: ["Packet Type Filter", "Filtr typu pakietu"],
+            filter_icon: ["Icon Filter", "Filtr ikon"],
+            filter_distance: ["Distance Filter", "Filtr odległości"],
+            filter_rate_limit: ["Rate Limit Filter", "Filtr limitu tempa"],
             filter_rate_limit_per_callsign: ["Rate Limit Per Callsign"],
             filter_rf_guard: ["RF Guard", "APRS-IS Input Guard"],
             filter_rf_tx_guard: ["RF TX Guard"],
-            filter_allow_rules: ["Inclusive Allow Rules", "APRS-IS Default Deny Filter"],
+            filter_allow_rules: ["Inclusive Allow Rules", "APRS-IS Default Deny Filter", "Filtr APRS-IS — domyślne odrzucanie"],
             tx_rf: ["TX RF"],
             tx_aprsis: ["TX APRS-IS"],
             action_drop: ["Action Drop"],
@@ -543,13 +535,13 @@
             if (step.step_type === "receiver_aprsis") return `${i18n.aprsisSource}: ${config.aprsis_source || "-"}`;
             if (step.step_type === "receiver_local_tx") return i18n.localTxFrames;
             if (step.step_type === "filter_rf_guard") {
-                return "APRS/q validation · loop prevention · initial duplicate check";
+                return i18n.inputSafetySummary;
             }
             if (step.step_type === "filter_rf_tx_guard") {
-                return `final duplicate check · delay ${config.viscous_delay_sec || 5}s · rate limits · third-party`;
+                return formatText(i18n.rfTxSafetySummary, { seconds: config.viscous_delay_sec || 5 });
             }
             if (step.step_type === "filter_allow_rules") {
-                return `${i18n.callsigns}: ${Array.isArray(config.callsigns) ? config.callsigns.length : 0} · ${i18n.radiusKm}: ${config.radius_km || "-"} · AND · default deny`;
+                return `${i18n.callsigns}: ${Array.isArray(config.callsigns) ? config.callsigns.length : 0} · ${i18n.radiusKm}: ${config.radius_km || "-"} · AND · ${i18n.defaultDeny}`;
             }
             if (step.step_type === "filter_dupe") return `${i18n.window}: ${config.window_sec || "-"} ${i18n.sec}`;
             if (step.step_type === "filter_path") {
@@ -569,7 +561,7 @@
             if (step.step_type === "filter_rate_limit") {
                 const rulesText = String(config.rate_limit_rules_text || "");
                 const ruleCount = rulesText ? rulesText.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#")).length : (Array.isArray(config.rate_limit_rules) ? config.rate_limit_rules.length : 0);
-                return `Rules: ${ruleCount || "-"}`;
+                return `${i18n.rules}: ${ruleCount || "-"}`;
             }
             if (step.step_type === "filter_rate_limit_per_callsign") return `${i18n.perCallsign}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
             if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"} · path: ${config.rf_path || "direct"}`;

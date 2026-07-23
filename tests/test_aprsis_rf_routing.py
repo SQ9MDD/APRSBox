@@ -203,7 +203,9 @@ class AprsisRfModelTests(unittest.TestCase):
             self.assertIn("filter_rf_guard", get_digi_flow_type_meta())
             self.assertIn("filter_rf_tx_guard", get_digi_flow_type_meta())
             default_deny_meta = get_digi_flow_type_meta()["filter_allow_rules"]
-            self.assertEqual(default_deny_meta["label"], "APRS-IS Default Deny Filter")
+            self.assertEqual(default_deny_meta["label"], "APRS-IS Callsign and Radius Rule")
+            self.assertEqual(default_deny_meta["badge"], "Rule")
+            self.assertEqual(default_deny_meta["scope_label"], "APRS-IS source")
             self.assertEqual(
                 [field["name"] for field in default_deny_meta["config_fields"]],
                 ["callsigns", "radius_km"],
@@ -381,9 +383,9 @@ class AprsisRfModelTests(unittest.TestCase):
                     "tx_rf",
                 ],
             )
-            self.assertEqual(flow["steps"][1]["title"], "APRS-IS Input Guard")
+            self.assertEqual(flow["steps"][1]["title"], "APRS-IS Input Safety Rule")
             self.assertEqual(flow["steps"][1]["config"], {})
-            self.assertEqual(flow["steps"][3]["title"], "RF TX Guard")
+            self.assertEqual(flow["steps"][3]["title"], "APRS-IS to RF TX Safety Rule")
             self.assertEqual(flow["steps"][3]["config"], legacy_config)
             migrated_updated_at = flow["updated_at"]
 
@@ -582,9 +584,9 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
             [step["status"] for step in summaries[0]["steps"]],
             ["passed", "passed", "passed", "passed", "executed"],
         )
-        self.assertIn("APRS-IS Input Guard passed", summaries[0]["steps"][1]["description"])
-        self.assertIn("default-deny filter matched exact callsign AND radius", summaries[0]["steps"][2]["description"])
-        self.assertIn("RF TX Guard passed final", summaries[0]["steps"][3]["description"])
+        self.assertIn("APRS-IS Input Safety Rule passed", summaries[0]["steps"][1]["description"])
+        self.assertIn("Callsign and Radius Rule matched exact callsign AND radius", summaries[0]["steps"][2]["description"])
+        self.assertIn("APRS-IS to RF TX Safety Rule passed final", summaries[0]["steps"][3]["description"])
 
     async def test_execution_summary_marks_rejected_default_deny_step_as_reached(self) -> None:
         flow_id = self.create_flow(callsigns=[], radius_km="")
@@ -611,7 +613,7 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         summary = get_digi_flow_execution_summaries(flow_id)[0]
         self.assertEqual(summary["final_result"], "DROPPED")
         self.assertEqual(summary["steps"][-2]["status"], "passed")
-        self.assertIn("RF TX Guard passed final", summary["steps"][-2]["description"])
+        self.assertIn("APRS-IS to RF TX Safety Rule passed final", summary["steps"][-2]["description"])
         self.assertEqual(summary["steps"][-1]["status"], "executed")
         self.assertIn("queue_unavailable", summary["steps"][-1]["description"])
         self.assertEqual(get_aprsis_rf_stats(flow_id)["tx_failed"], 1)

@@ -8,6 +8,7 @@ from pathlib import Path
 from app.db import connect, fetch_one, init_db
 from app.services.content import get_section_row, safe_update_section_row
 from app.services.digi_flows import (
+    FILTER_STEP_TYPES,
     create_digi_flow,
     get_digi_flow,
     get_digi_flow_endpoint_options,
@@ -496,6 +497,26 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_rate_limit"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][0]["name"], "rate_limit_rules_text")
             self.assertEqual(type_meta["action_log"]["help_page"], "application/packet_routing_flow_black_hole")
+            palette_types = [step_type for step_type in FILTER_STEP_TYPES if step_type != "filter_rate_limit_per_callsign"]
+            palette_labels = [type_meta[step_type]["label"] for step_type in palette_types]
+            self.assertEqual(len(palette_labels), len(set(palette_labels)))
+            mandatory_rules = {
+                "filter_rf_guard",
+                "filter_allow_rules",
+                "filter_rf_tx_guard",
+                "filter_path",
+                "filter_strict",
+            }
+            for step_type in palette_types:
+                expected_kind = "rule" if step_type in mandatory_rules else "filter"
+                expected_badge = "Rule" if step_type in mandatory_rules else "Filter"
+                self.assertEqual(type_meta[step_type]["palette_kind"], expected_kind)
+                self.assertEqual(type_meta[step_type]["badge"], expected_badge)
+                self.assertTrue(type_meta[step_type]["scope_label"])
+                self.assertTrue(type_meta[step_type]["scope_tone"])
+            self.assertEqual(type_meta["filter_path"]["scope_label"], "RF → RF")
+            self.assertEqual(type_meta["filter_rf_guard"]["scope_label"], "APRS-IS source")
+            self.assertEqual(type_meta["filter_strict"]["scope_label"], "APRS-IS target")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():

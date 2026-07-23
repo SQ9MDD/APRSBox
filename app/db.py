@@ -2214,7 +2214,7 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
                 INSERT INTO digi_flow_steps(
                     flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
                 )
-                VALUES (?, ?, 'filter_rf_guard', 'APRS-IS Input Guard', 1, '{}', ?, ?)
+                VALUES (?, ?, 'filter_rf_guard', 'APRS-IS Input Safety Rule', 1, '{}', ?, ?)
                 """,
                 (flow_id, int(source_step["step_order"]) + 1, timestamp, timestamp),
             )
@@ -2222,7 +2222,7 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
         else:
             legacy_config = str(input_guard["config_json"] or "{}")
             input_changed = (
-                str(input_guard["title"] or "") != "APRS-IS Input Guard"
+                str(input_guard["title"] or "") != "APRS-IS Input Safety Rule"
                 or int(input_guard["enabled"] or 0) != 1
                 or legacy_config.strip() != "{}"
             )
@@ -2230,7 +2230,7 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
                 connection.execute(
                     """
                     UPDATE digi_flow_steps
-                    SET title = 'APRS-IS Input Guard', enabled = 1, config_json = '{}', updated_at = ?
+                    SET title = 'APRS-IS Input Safety Rule', enabled = 1, config_json = '{}', updated_at = ?
                     WHERE id = ?
                     """,
                     (timestamp, int(input_guard["id"])),
@@ -2256,21 +2256,21 @@ def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
                 INSERT INTO digi_flow_steps(
                     flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
                 )
-                VALUES (?, ?, 'filter_rf_tx_guard', 'RF TX Guard', 1, ?, ?, ?)
+                VALUES (?, ?, 'filter_rf_tx_guard', 'APRS-IS to RF TX Safety Rule', 1, ?, ?, ?)
                 """,
                 (flow_id, target_order, guard_config, timestamp, timestamp),
             )
             changed = True
         elif output_guard is not None:
             output_changed = (
-                str(output_guard["title"] or "") != "RF TX Guard"
+                str(output_guard["title"] or "") != "APRS-IS to RF TX Safety Rule"
                 or int(output_guard["enabled"] or 0) != 1
             )
             if output_changed:
                 connection.execute(
                     """
                     UPDATE digi_flow_steps
-                    SET title = 'RF TX Guard', enabled = 1, updated_at = ?
+                    SET title = 'APRS-IS to RF TX Safety Rule', enabled = 1, updated_at = ?
                     WHERE id = ?
                     """,
                     (timestamp, int(output_guard["id"])),

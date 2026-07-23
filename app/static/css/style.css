@@ -2815,7 +2815,7 @@ select:focus-visible,
     position: relative;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    gap: var(--space-3);
+    gap: 0.55rem 0.7rem;
     align-items: start;
     width: 100%;
     padding: 0.85rem 0.9rem;
@@ -2832,32 +2832,85 @@ select:focus-visible,
 }
 
 .digi-palette-copy {
+    grid-column: 1 / -1;
     display: grid;
-    gap: 0.15rem;
+    gap: 0.3rem;
     min-width: 0;
 }
 
-.digi-runtime-icon {
-    position: absolute;
-    top: 0.45rem;
-    right: 0.45rem;
-    width: 1rem;
-    height: 1rem;
-    opacity: 0.9;
+.digi-palette-scope {
+    display: inline-flex;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.45rem;
+    max-width: 10rem;
+    padding: 0.08rem 0.48rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.67rem;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: 0.045em;
+    text-align: center;
+    text-transform: uppercase;
 }
 
-.digi-runtime-icon-ready {
-    background: color-mix(in srgb, var(--success) 18%, transparent);
-    border: 1px solid color-mix(in srgb, var(--success) 45%, transparent);
-    border-radius: 999px;
-    padding: 0.1rem;
+.digi-palette-button > .digi-step-badge {
+    min-height: 1.55rem;
+    padding: 0.08rem 0.5rem;
+    font-size: 0.69rem;
 }
 
-.digi-runtime-icon-planned {
-    background: color-mix(in srgb, var(--warning) 18%, transparent);
-    border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
-    border-radius: 999px;
-    padding: 0.1rem;
+.digi-step-badge-rule {
+    color: color-mix(in srgb, var(--warning) 72%, var(--text));
+    border-color: color-mix(in srgb, var(--warning) 48%, var(--border));
+    background: color-mix(in srgb, var(--warning) 15%, var(--panel-soft));
+}
+
+.digi-step-badge-filter {
+    color: color-mix(in srgb, var(--accent) 72%, var(--text));
+    border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+    background: color-mix(in srgb, var(--accent) 13%, var(--panel-soft));
+}
+
+.digi-palette-scope-aprsis-source {
+    color: color-mix(in srgb, #55c7de 78%, var(--text));
+    border-color: color-mix(in srgb, #55c7de 48%, var(--border));
+    background: color-mix(in srgb, #55c7de 14%, var(--panel-soft));
+}
+
+.digi-palette-scope-aprsis-to-rf {
+    color: color-mix(in srgb, #b99cff 76%, var(--text));
+    border-color: color-mix(in srgb, #b99cff 48%, var(--border));
+    background: color-mix(in srgb, #b99cff 14%, var(--panel-soft));
+}
+
+.digi-palette-scope-rf-to-rf {
+    color: color-mix(in srgb, var(--warning) 78%, var(--text));
+    border-color: color-mix(in srgb, var(--warning) 48%, var(--border));
+    background: color-mix(in srgb, var(--warning) 14%, var(--panel-soft));
+}
+
+.digi-palette-scope-aprsis-target {
+    color: color-mix(in srgb, var(--success) 76%, var(--text));
+    border-color: color-mix(in srgb, var(--success) 48%, var(--border));
+    background: color-mix(in srgb, var(--success) 14%, var(--panel-soft));
+}
+
+.digi-palette-scope-rf-source {
+    color: color-mix(in srgb, #ef9f62 78%, var(--text));
+    border-color: color-mix(in srgb, #ef9f62 48%, var(--border));
+    background: color-mix(in srgb, #ef9f62 14%, var(--panel-soft));
+}
+
+.digi-palette-scope-multi-flow {
+    color: var(--muted);
+    border-color: var(--border);
+    background: var(--panel-soft);
 }
 
 .digi-steps-chain {

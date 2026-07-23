@@ -603,7 +603,7 @@ class DigiFlowRuntimeService:
             step_id=step_id,
             event_type="rf_guard",
             decision="passed",
-            message=f"APRS-IS Input Guard passed | normalized_packet_hash={packet_hash[:16]}",
+            message=f"APRS-IS Input Safety Rule passed | normalized_packet_hash={packet_hash[:16]}",
         )
         return {"decision": "continue"}
 
@@ -687,7 +687,7 @@ class DigiFlowRuntimeService:
             step_id=step_id,
             event_type="inclusive_allow_rules",
             decision="passed",
-            message="APRS-IS default-deny filter matched exact callsign AND radius from My Station.",
+            message="APRS-IS Callsign and Radius Rule matched exact callsign AND radius from My Station.",
         )
         return {"decision": "continue"}
 
@@ -992,7 +992,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS payload starts with third-party encapsulation marker {marker}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because APRS payload starts with third-party encapsulation marker {marker}.",
                     {"reason_code": DIGI_GUARD_THIRD_PARTY, "marker": "}"},
                 ),
             )
@@ -1012,7 +1012,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS message is addressed to local {identity_label} {local_identity}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because APRS message is addressed to local {identity_label} {local_identity}.",
                     {
                         "reason_code": reason_code,
                         "identity_label": identity_label,
@@ -1036,7 +1036,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS query is addressed to local {identity_label} {local_identity}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because APRS query is addressed to local {identity_label} {local_identity}.",
                     {
                         "reason_code": reason_code,
                         "identity_label": identity_label,
@@ -1085,7 +1085,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because local identity {local_identity} is already marked as consumed in path {path}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because local identity {local_identity} is already marked as consumed in path {path}.",
                     {
                         "reason_code": DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL,
                         "local_identity": consumed_identity,
@@ -1779,7 +1779,7 @@ class DigiFlowRuntimeService:
             step_id=guard_step_id,
             event_type="rf_tx_guard",
             decision="waiting",
-            message=f"RF TX Guard pending viscous delay {delay_sec:g}s | normalized_packet_hash={packet_hash[:16]}",
+            message=f"APRS-IS to RF TX Safety Rule pending viscous delay {delay_sec:g}s | normalized_packet_hash={packet_hash[:16]}",
         )
         return {"decision": "defer"}
 
@@ -1904,7 +1904,7 @@ class DigiFlowRuntimeService:
                 event_type="rf_tx_guard",
                 decision="passed",
                 message=(
-                    "RF TX Guard passed final duplicate, rate, target, encapsulation and packet-size checks "
+                    "APRS-IS to RF TX Safety Rule passed final duplicate, rate, target, encapsulation and packet-size checks "
                     f"| normalized_packet_hash={entry.packet_hash[:16]}"
                 ),
             )

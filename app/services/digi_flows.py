@@ -28,18 +28,18 @@ LOCAL_TX_SOURCE_REF = "local_tx"
 SOURCE_STEP_TYPES = ("receiver_rf", APRSIS_FLOW_SOURCE_KIND, LOCAL_TX_SOURCE_KIND)
 FILTER_STEP_TYPES = (
     RF_GUARD_STEP_TYPE,
-    RF_TX_GUARD_STEP_TYPE,
     ALLOW_RULES_STEP_TYPE,
+    RF_TX_GUARD_STEP_TYPE,
     "filter_path",
     "filter_strict",
     "filter_dupe",
+    "filter_rate_limit",
     "filter_direct_only",
     "filter_digi",
     "filter_callsign",
     "filter_packet_type",
     "filter_icon",
     "filter_distance",
-    "filter_rate_limit",
     "filter_rate_limit_per_callsign",
 )
 TARGET_STEP_TYPES = ("tx_rf", "tx_aprsis", "action_drop", "action_log")
@@ -110,9 +110,12 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     RF_GUARD_STEP_TYPE: {
         "category": "filter",
-        "label": "APRS-IS Input Guard",
-        "badge": "Mandatory",
-        "description": "Validates APRS-IS input before any allow filter or routing rule runs.",
+        "label": "APRS-IS Input Safety Rule",
+        "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS source",
+        "scope_tone": "aprsis-source",
+        "description": "Validates APRS syntax, q-constructs, paths, loops and early duplicates at an APRS-IS source.",
         "help_page": "application/packet_routing_flow_rf_guard",
         "editor_help_lines": (
             "APRS syntax, q-constructs, unsafe path markers and loops are checked here.",
@@ -122,9 +125,12 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     RF_TX_GUARD_STEP_TYPE: {
         "category": "filter",
-        "label": "RF TX Guard",
-        "badge": "Mandatory",
-        "description": "Applies the final duplicate, delay, rate, encapsulation and size checks immediately before RF TX.",
+        "label": "APRS-IS to RF TX Safety Rule",
+        "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS → RF",
+        "scope_tone": "aprsis-to-rf",
+        "description": "Applies final duplicate, delay, rate, encapsulation and size checks before APRS-IS traffic reaches RF.",
         "help_page": "application/packet_routing_flow_rf_guard",
         "editor_help_lines": (
             "The viscous delay, final duplicate check and token-bucket limits run at this last gate.",
@@ -142,8 +148,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     ALLOW_RULES_STEP_TYPE: {
         "category": "filter",
-        "label": "APRS-IS Default Deny Filter",
-        "badge": "Default deny",
+        "label": "APRS-IS Callsign and Radius Rule",
+        "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS source",
+        "scope_tone": "aprsis-source",
         "description": "Passes only exact source callsigns located within the configured radius from My Station.",
         "help_page": "application/packet_routing_flow_rf_guard",
         "editor_help_lines": (
@@ -190,8 +199,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_dupe": {
         "category": "filter",
-        "label": "Duplicate Filter (viscous-delay)",
+        "label": "RF Duplicate Delay Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Waits a short viscous-delay window and drops the frame if another digi repeats it first.",
         "help_page": "application/packet_routing_flow_duplicate_filter",
         "config_fields": (
@@ -206,8 +218,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_path": {
         "category": "filter",
-        "label": "Path rule and DIGI guard",
+        "label": "RF Digipeating Path Rule",
         "badge": "Rule",
+        "palette_kind": "rule",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Protects the digi path and handles the first unconsumed hop for RF repeating.",
         "help_page": "application/packet_routing_flow_path_rule_and_digi_guard",
         "editor_help_lines": (
@@ -257,9 +272,12 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_strict": {
         "category": "filter",
-        "label": "Strict Filter",
+        "label": "APRS-IS Uplink Safety Rule",
         "badge": "Rule",
-        "description": "Mandatory APRS-IS safety guard for RF and Local TX uplink flows.",
+        "palette_kind": "rule",
+        "scope_label": "APRS-IS target",
+        "scope_tone": "aprsis-target",
+        "description": "Rejects unsafe paths and malformed third-party packets before an APRS-IS target.",
         "help_page": "application/packet_routing_flow_strict_filter",
         "editor_help_lines": (
             "This system guard rejects packets containing TCPIP, TCPXX, NOGATE or RFONLY in the outer path.",
@@ -270,8 +288,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_direct_only": {
         "category": "filter",
-        "label": "Direct Only",
+        "label": "Direct RF Reception Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF source",
+        "scope_tone": "rf-source",
         "description": "Passes only packets heard direct, without any consumed digipeater hop in the path.",
         "help_page": "application/packet_routing_flow_direct_only",
         "editor_help_lines": (
@@ -283,8 +304,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_digi": {
         "category": "filter",
-        "label": "DIGI Filter",
+        "label": "Consumed DIGI Hop Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF source",
+        "scope_tone": "rf-source",
         "description": "Matches already consumed path hops against allow or deny patterns.",
         "help_page": "application/packet_routing_flow_digi_filter",
         "editor_help_lines": (
@@ -307,8 +331,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_callsign": {
         "category": "filter",
-        "label": "Callsign Filter",
+        "label": "Source Callsign Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "Multiple flows",
+        "scope_tone": "multi-flow",
         "description": "Matches the source callsign against allow or deny patterns.",
         "help_page": "application/packet_routing_flow_callsign_filter",
         "editor_help_lines": (
@@ -331,8 +358,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_packet_type": {
         "category": "filter",
-        "label": "Packet Type Filter",
+        "label": "APRS Packet Type Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "Multiple flows",
+        "scope_tone": "multi-flow",
         "description": "Matches decoded APRS packet groups against allow or deny lists.",
         "help_page": "application/packet_routing_flow_packet_type_filter",
         "config_fields": (
@@ -361,8 +391,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_icon": {
         "category": "filter",
-        "label": "Icon Filter",
+        "label": "APRS Symbol Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "Multiple flows",
+        "scope_tone": "multi-flow",
         "description": "Matches decoded APRS symbols against allow or deny lists.",
         "help_page": "application/packet_routing_flow_icon_filter",
         "config_fields": (
@@ -379,8 +412,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_distance": {
         "category": "filter",
-        "label": "Distance Filter",
+        "label": "Position Zone Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "Multiple flows",
+        "scope_tone": "multi-flow",
         "description": "Allows packets only when decoded position is inside at least one configured zone.",
         "help_page": "application/packet_routing_flow_distance_filter",
         "editor_help_lines": (
@@ -402,8 +438,11 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
     },
     "filter_rate_limit": {
         "category": "filter",
-        "label": "Rate Limit Filter",
+        "label": "RF Callsign Holdoff Filter",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "RF → RF",
+        "scope_tone": "rf-to-rf",
         "description": "Applies per-source holdoff timers based on configured callsign patterns.",
         "help_page": "application/packet_routing_flow_rate_limit_filter",
         "editor_help_lines": (
@@ -426,6 +465,9 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "category": "filter",
         "label": "Rate Limit Per Callsign",
         "badge": "Filter",
+        "palette_kind": "filter",
+        "scope_label": "Multiple flows",
+        "scope_tone": "multi-flow",
         "description": "Stores a packet rate limit applied separately for each callsign.",
         "config_fields": (
             {"name": "packets_per_minute", "label": "Packets / Minute", "type": "number", "required": True},
@@ -482,8 +524,19 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
 }
 
 LEGACY_DEFAULT_STEP_TITLES = {
-    "filter_path": {"Path Filter", "Path Rule", "Reguła ścieżki"},
-    "filter_dupe": {"Duplicate Filter"},
+    RF_GUARD_STEP_TYPE: {"RF Guard", "APRS-IS Input Guard"},
+    RF_TX_GUARD_STEP_TYPE: {"RF TX Guard"},
+    ALLOW_RULES_STEP_TYPE: {"Inclusive Allow Rules", "APRS-IS Default Deny Filter", "Filtr APRS-IS — domyślne odrzucanie"},
+    "filter_path": {"Path Filter", "Path Rule", "Path rule and DIGI guard", "Reguła ścieżki", "Reguła ścieżki i ochrona DIGI"},
+    "filter_strict": {"Strict Filter", "Filtr ścisły"},
+    "filter_dupe": {"Duplicate Filter", "Duplicate Filter (viscous-delay)", "Filtr duplikatów (viscous-delay)"},
+    "filter_direct_only": {"Direct Only", "Tylko direct"},
+    "filter_digi": {"DIGI Filter", "Filtr DIGI"},
+    "filter_callsign": {"Callsign Filter", "Filtr znaków"},
+    "filter_packet_type": {"Packet Type Filter", "Filtr typu pakietu"},
+    "filter_icon": {"Icon Filter", "Filtr ikon"},
+    "filter_distance": {"Distance Filter", "Filtr odległości"},
+    "filter_rate_limit": {"Rate Limit Filter", "Filtr limitu tempa"},
 }
 
 STEP_TYPE_TO_REF_FIELD = {
@@ -1092,6 +1145,9 @@ def get_digi_flow_type_meta() -> dict[str, dict[str, Any]]:
             "category": meta["category"],
             "label": _t(meta["label"]),
             "badge": _t(meta["badge"]),
+            **({"palette_kind": meta["palette_kind"]} if meta.get("palette_kind") else {}),
+            **({"scope_label": _t(meta["scope_label"])} if meta.get("scope_label") else {}),
+            **({"scope_tone": meta["scope_tone"]} if meta.get("scope_tone") else {}),
             "description": _t(meta["description"]),
             **({"help_page": meta["help_page"]} if meta.get("help_page") else {}),
             **({"editor_help_lines": [_t(line) for line in meta["editor_help_lines"]]} if meta.get("editor_help_lines") else {}),
