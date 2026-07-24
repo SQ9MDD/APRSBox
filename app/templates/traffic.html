@@ -19,6 +19,19 @@
                 <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
             </div>
         </div>
+        <div class="traffic-color-legend" role="list" aria-label="{{ t('Traffic colors') }}">
+            <span class="traffic-color-legend-label">{{ t("Traffic colors") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-tx" aria-hidden="true"></i>{{ t("Own beacon TX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-rx" aria-hidden="true"></i>{{ t("Own beacon echo RX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-tx" aria-hidden="true"></i>{{ t("Own weather TX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-rx" aria-hidden="true"></i>{{ t("Own weather echo RX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-tx" aria-hidden="true"></i>{{ t("Own message/query/ACK TX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-rx" aria-hidden="true"></i>{{ t("Own message/query/ACK echo RX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-repeated-tx" aria-hidden="true"></i>{{ t("DIGI repeated TX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-proxy-tx" aria-hidden="true"></i>{{ t("Shared KISS port TX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-rx" aria-hidden="true"></i>{{ t("APRS-IS RX") }}</span>
+            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-to-rf-tx" aria-hidden="true"></i>{{ t("APRS-IS to RF TX") }}</span>
+        </div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}

@@ -48,6 +48,7 @@ from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial
 from app.services.traffic_source import (
     APRSIS_MODEM_TYPE,
     APRSIS_SOURCE_KIND,
+    APRSIS_TO_RF_SOURCE_KIND,
     DEFAULT_APRSIS_FILTER,
     RF_SOURCE_KIND,
     STATISTICS_TRAFFIC_SQL_PREDICATE,
@@ -938,16 +939,15 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             ).strip()
         display_icon_path = get_aprs_symbol_icon_path(symbol) if packet_group in {"object", "item"} else ""
         emergency_data = _build_emergency_frame_data(parsed=parsed, row=row, line=line) if parsed else None
+        source_kind = normalize_source_kind(row["source_kind"])
         row_class = _traffic_frame_row_class(
             direction=direction,
             line=line,
             command=str(row["command"] or ""),
             station_source_key=station_source_key,
             wx_source_key=wx_source_key,
+            source_kind=source_kind,
         )
-        source_kind = normalize_source_kind(row["source_kind"])
-        if source_kind == APRSIS_SOURCE_KIND:
-            row_class = f"{row_class} traffic-log-row-aprsis-rx".strip()
         frames.append(
             {
                 "timestamp": _format_monitor_timestamp(row["created_at"]),
@@ -1298,10 +1298,12 @@ def _traffic_frame_row_class(
     command: str,
     station_source_key: str,
     wx_source_key: str = "",
+    source_kind: str = RF_SOURCE_KIND,
 ) -> str:
     classes: list[str] = []
     normalized_direction = str(direction or "").strip().upper()
     normalized_command = str(command or "").strip().upper()
+    normalized_source_kind = normalize_source_kind(source_kind)
     is_skipped_tx = normalized_direction == "TX" and normalized_command.startswith("TX-SKIP")
     is_proxy_tx = normalized_direction == "TX" and normalized_command.startswith("TX-PROXY")
     if is_skipped_tx:
@@ -1334,6 +1336,8 @@ def _traffic_frame_row_class(
     if normalized_direction == "TX":
         if is_proxy_tx:
             classes.append("traffic-log-row-proxy-tx")
+        elif normalized_source_kind == APRSIS_TO_RF_SOURCE_KIND:
+            classes.append("traffic-log-row-aprsis-to-rf-tx")
         elif (is_own_wx_source or is_own_callsign) and is_weather:
             classes.append("traffic-log-row-own-wx-tx")
         elif is_own_station_source:
@@ -1346,7 +1350,9 @@ def _traffic_frame_row_class(
         elif source_key:
             classes.append("traffic-log-row-repeated-tx")
     elif normalized_direction == "RX":
-        if (is_own_wx_source or is_own_callsign) and is_weather:
+        if normalized_source_kind == APRSIS_SOURCE_KIND:
+            classes.append("traffic-log-row-aprsis-rx")
+        elif (is_own_wx_source or is_own_callsign) and is_weather:
             classes.append("traffic-log-row-own-wx-rx")
         elif is_own_station_source:
             if is_position_like:

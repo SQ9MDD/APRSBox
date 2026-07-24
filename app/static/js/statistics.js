@@ -61,11 +61,11 @@
         const rootStyle = window.getComputedStyle(document.documentElement);
         const trafficColorDefaultFromCss = rootStyle.getPropertyValue("--traffic-color-default").trim();
         const trafficColorDefault = trafficColorDefaultFromCss || (isLightTheme ? "#000000" : "#ffffff");
-        const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#4f8dff";
-        const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
+        const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#76a7ff";
+        const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#70c784";
         const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
-        const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
-        const trafficColorProxyTx = rootStyle.getPropertyValue("--traffic-color-proxy-tx").trim() || "#a65fc1";
+        const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#ff8a8a";
+        const trafficColorProxyTx = rootStyle.getPropertyValue("--traffic-color-proxy-tx").trim() || "#dc9bf0";
         return {
             trafficColorDefault,
             trafficColorOwnBeaconTx,

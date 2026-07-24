@@ -30,14 +30,16 @@
     --space-5: 1.13rem;
     --space-6: 1.45rem;
     --map-mask-layer-color: rgba(0, 0, 0, 0.78);
-    --traffic-color-own-beacon-tx: #4f8dff;
+    --traffic-color-own-beacon-tx: #76a7ff;
     --traffic-color-own-beacon-rx: #7aa9ff;
-    --traffic-color-own-wx-tx: #46a85f;
+    --traffic-color-own-wx-tx: #70c784;
     --traffic-color-own-wx-rx: #75c98a;
     --traffic-color-own-message-tx: #e8913a;
     --traffic-color-own-message-rx: #f0b36e;
-    --traffic-color-repeated-tx: #d24b4b;
-    --traffic-color-proxy-tx: #a65fc1;
+    --traffic-color-repeated-tx: #ff8a8a;
+    --traffic-color-proxy-tx: #dc9bf0;
+    --traffic-color-aprsis-rx: #53b9c8;
+    --traffic-color-aprsis-to-rf-tx: #5fc2d2;
     --logo-bg: transparent;
     --logo-bg-inner: #000e31;
     --logo-border: #08182e;
@@ -119,6 +121,16 @@
     --message-bubble-tx-bg-top: color-mix(in srgb, var(--accent) 19%, transparent);
     --message-bubble-tx-bg-bottom: color-mix(in srgb, var(--accent) 8%, transparent);
     --message-bubble-tx-border: color-mix(in srgb, var(--accent) 33%, transparent);
+    --traffic-color-own-beacon-tx: #174a99;
+    --traffic-color-own-beacon-rx: #345d97;
+    --traffic-color-own-wx-tx: #155726;
+    --traffic-color-own-wx-rx: #2d653c;
+    --traffic-color-own-message-tx: #7f4206;
+    --traffic-color-own-message-rx: #7d4806;
+    --traffic-color-repeated-tx: #8e2525;
+    --traffic-color-proxy-tx: #67317f;
+    --traffic-color-aprsis-rx: #1c606c;
+    --traffic-color-aprsis-to-rf-tx: #075664;
     --map-mask-layer-color: color-mix(in srgb, #fff 82%, var(--panel));
     --map-mask-default-opacity: 0.16;
     --logo-bg: transparent;
@@ -4868,6 +4880,11 @@ select:focus-visible,
     margin: 0;
 }
 
+.traffic-toolbar {
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
 .traffic-toolbar-actions {
     display: flex;
     align-items: center;
@@ -4913,6 +4930,91 @@ select:focus-visible,
 
 .inline-form {
     margin: 0;
+}
+
+.traffic-color-legend {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem 0.7rem;
+    flex-wrap: wrap;
+    padding: 0.58rem 0.7rem;
+    border: 1px solid var(--border);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.traffic-color-legend-label {
+    color: var(--text);
+    font-weight: 650;
+}
+
+.traffic-color-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    white-space: nowrap;
+}
+
+.traffic-color-legend-swatch {
+    width: 0.78rem;
+    height: 0.78rem;
+    flex: 0 0 0.78rem;
+    border: 2px solid var(--traffic-legend-color, var(--border));
+    border-radius: 3px;
+    background: var(--traffic-legend-background, transparent);
+}
+
+.traffic-color-legend-swatch-own-beacon-tx {
+    --traffic-legend-color: var(--traffic-color-own-beacon-tx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-own-beacon-tx) 20%, transparent);
+}
+
+.traffic-color-legend-swatch-own-beacon-rx {
+    --traffic-legend-color: var(--traffic-color-own-beacon-rx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-own-beacon-rx) 9%, transparent);
+}
+
+.traffic-color-legend-swatch-own-wx-tx {
+    --traffic-legend-color: var(--traffic-color-own-wx-tx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-own-wx-tx) 20%, transparent);
+}
+
+.traffic-color-legend-swatch-own-wx-rx {
+    --traffic-legend-color: var(--traffic-color-own-wx-rx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-own-wx-rx) 9%, transparent);
+}
+
+.traffic-color-legend-swatch-own-message-tx {
+    --traffic-legend-color: var(--traffic-color-own-message-tx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-own-message-tx) 20%, transparent);
+}
+
+.traffic-color-legend-swatch-own-message-rx {
+    --traffic-legend-color: var(--traffic-color-own-message-rx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-own-message-rx) 9%, transparent);
+}
+
+.traffic-color-legend-swatch-repeated-tx {
+    --traffic-legend-color: var(--traffic-color-repeated-tx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-repeated-tx) 17%, transparent);
+}
+
+.traffic-color-legend-swatch-proxy-tx {
+    --traffic-legend-color: var(--traffic-color-proxy-tx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-proxy-tx) 20%, transparent);
+}
+
+.traffic-color-legend-swatch-aprsis-rx {
+    --traffic-legend-color: var(--traffic-color-aprsis-rx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-aprsis-rx) 9%, transparent);
+}
+
+.traffic-color-legend-swatch-aprsis-to-rf-tx {
+    --traffic-legend-color: var(--traffic-color-aprsis-to-rf-tx);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 18%, transparent);
 }
 
 .traffic-details {
@@ -4971,6 +5073,8 @@ select:focus-visible,
 }
 
 .traffic-log-row {
+    --traffic-row-color: transparent;
+    --traffic-row-background: transparent;
     display: grid;
     grid-template-columns: 11rem fit-content(14rem) minmax(0, 1fr);
     column-gap: 0;
@@ -4981,6 +5085,8 @@ select:focus-visible,
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.74rem;
     line-height: 1.3;
+    background: var(--traffic-row-background);
+    box-shadow: inset 3px 0 0 var(--traffic-row-color);
 }
 
 .traffic-log-row:last-child {
@@ -4988,83 +5094,68 @@ select:focus-visible,
 }
 
 .traffic-log-row-own-beacon-tx {
-    background: rgba(79, 141, 255, 0.2);
-}
-
-.traffic-log-row-own-beacon-tx .traffic-log-time,
-.traffic-log-row-own-beacon-tx .traffic-log-source,
-.traffic-log-row-own-beacon-tx .traffic-log-line {
-    color: var(--traffic-color-own-beacon-tx);
+    --traffic-row-color: var(--traffic-color-own-beacon-tx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-own-beacon-tx) 20%, transparent);
 }
 
 .traffic-log-row-own-beacon-rx {
-    background: rgba(79, 141, 255, 0.08);
-}
-
-.traffic-log-row-own-beacon-rx .traffic-log-time,
-.traffic-log-row-own-beacon-rx .traffic-log-source,
-.traffic-log-row-own-beacon-rx .traffic-log-line {
-    color: var(--traffic-color-own-beacon-rx);
+    --traffic-row-color: var(--traffic-color-own-beacon-rx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-own-beacon-rx) 9%, transparent);
 }
 
 .traffic-log-row-own-wx-tx {
-    background: rgba(70, 168, 95, 0.2);
-}
-
-.traffic-log-row-own-wx-tx .traffic-log-time,
-.traffic-log-row-own-wx-tx .traffic-log-source,
-.traffic-log-row-own-wx-tx .traffic-log-line {
-    color: var(--traffic-color-own-wx-tx);
+    --traffic-row-color: var(--traffic-color-own-wx-tx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-own-wx-tx) 20%, transparent);
 }
 
 .traffic-log-row-own-wx-rx {
-    background: rgba(70, 168, 95, 0.08);
-}
-
-.traffic-log-row-own-wx-rx .traffic-log-time,
-.traffic-log-row-own-wx-rx .traffic-log-source,
-.traffic-log-row-own-wx-rx .traffic-log-line {
-    color: var(--traffic-color-own-wx-rx);
+    --traffic-row-color: var(--traffic-color-own-wx-rx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-own-wx-rx) 9%, transparent);
 }
 
 .traffic-log-row-own-message-tx {
-    background: rgba(230, 145, 58, 0.2);
-}
-
-.traffic-log-row-own-message-tx .traffic-log-time,
-.traffic-log-row-own-message-tx .traffic-log-source,
-.traffic-log-row-own-message-tx .traffic-log-line {
-    color: var(--traffic-color-own-message-tx);
+    --traffic-row-color: var(--traffic-color-own-message-tx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-own-message-tx) 20%, transparent);
 }
 
 .traffic-log-row-own-message-rx {
-    background: rgba(230, 145, 58, 0.09);
-}
-
-.traffic-log-row-own-message-rx .traffic-log-time,
-.traffic-log-row-own-message-rx .traffic-log-source,
-.traffic-log-row-own-message-rx .traffic-log-line {
-    color: var(--traffic-color-own-message-rx);
+    --traffic-row-color: var(--traffic-color-own-message-rx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-own-message-rx) 9%, transparent);
 }
 
 .traffic-log-row-repeated-tx {
-    background: rgba(210, 75, 75, 0.16);
-}
-
-.traffic-log-row-repeated-tx .traffic-log-time,
-.traffic-log-row-repeated-tx .traffic-log-source,
-.traffic-log-row-repeated-tx .traffic-log-line {
-    color: var(--traffic-color-repeated-tx);
+    --traffic-row-color: var(--traffic-color-repeated-tx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-repeated-tx) 17%, transparent);
 }
 
 .traffic-log-row-proxy-tx {
-    background: rgba(166, 95, 193, 0.2);
+    --traffic-row-color: var(--traffic-color-proxy-tx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-proxy-tx) 20%, transparent);
 }
 
-.traffic-log-row-proxy-tx .traffic-log-time,
-.traffic-log-row-proxy-tx .traffic-log-source,
-.traffic-log-row-proxy-tx .traffic-log-line {
-    color: var(--traffic-color-proxy-tx);
+.traffic-log-row-aprsis-rx {
+    --traffic-row-color: var(--traffic-color-aprsis-rx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-aprsis-rx) 9%, transparent);
+}
+
+.traffic-log-row-aprsis-to-rf-tx {
+    --traffic-row-color: var(--traffic-color-aprsis-to-rf-tx);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 18%, transparent);
+}
+
+:is(
+    .traffic-log-row-own-beacon-tx,
+    .traffic-log-row-own-beacon-rx,
+    .traffic-log-row-own-wx-tx,
+    .traffic-log-row-own-wx-rx,
+    .traffic-log-row-own-message-tx,
+    .traffic-log-row-own-message-rx,
+    .traffic-log-row-repeated-tx,
+    .traffic-log-row-proxy-tx,
+    .traffic-log-row-aprsis-rx,
+    .traffic-log-row-aprsis-to-rf-tx
+) :is(.traffic-log-time, .traffic-log-source, .traffic-log-line) {
+    color: var(--traffic-row-color);
 }
 
 .traffic-log-row-skipped .traffic-log-time,

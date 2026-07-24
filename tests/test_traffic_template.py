@@ -24,6 +24,23 @@ class TrafficTemplateTests(unittest.TestCase):
         self.assertIn(".traffic-summary-stream {", stylesheet_source)
         self.assertIn(".traffic-summary-stream {\n    max-height: none;\n    margin-bottom: 0;", stylesheet_source)
 
+    def test_traffic_page_has_global_color_legend_for_interface_analysis(self) -> None:
+        template_source = Path("app/templates/traffic.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn('class="traffic-color-legend"', template_source)
+        for row_class in (
+            "traffic-log-row-own-wx-tx",
+            "traffic-log-row-own-wx-rx",
+            "traffic-log-row-own-message-tx",
+            "traffic-log-row-own-message-rx",
+            "traffic-log-row-repeated-tx",
+            "traffic-log-row-proxy-tx",
+            "traffic-log-row-aprsis-rx",
+            "traffic-log-row-aprsis-to-rf-tx",
+        ):
+            self.assertIn(f".{row_class}", stylesheet_source)
+
 
 if __name__ == "__main__":
     unittest.main()
