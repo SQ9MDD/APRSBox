@@ -41,7 +41,7 @@
             {% for frame in traffic_snapshot.frames %}
             <div class="traffic-log-row{% if frame.row_class %} {{ frame.row_class }}{% endif %}">
                 <span class="traffic-log-time">{{ frame.timestamp }}</span>
-                <span class="traffic-log-source">{{ frame.source }}{% if frame.band %} · {{ frame.band }}{% endif %} · {{ frame.direction }}</span>
+                <span class="traffic-log-source">{{ frame.source }}{% if frame.band %} · {{ frame.band }}{% endif %} · {{ frame.direction }}{% if frame.row_class and "traffic-log-row-aprsis-to-rf-tx" in frame.row_class %}<span class="traffic-direction-warning-badge" aria-label="{{ t('APRS-IS to RF TX') }}">IS → RF</span>{% endif %}</span>
                 <span class="traffic-log-line">{{ frame.line }}</span>
             </div>
             {% endfor %}
@@ -80,7 +80,7 @@
                     <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-repeated-tx" aria-hidden="true"></i>{{ t("DIGI repeated TX") }}</span>
                     <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-proxy-tx" aria-hidden="true"></i>{{ t("Shared KISS port TX") }}</span>
                     <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-rx" aria-hidden="true"></i>{{ t("APRS-IS RX") }}</span>
-                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-to-rf-tx" aria-hidden="true"></i>{{ t("APRS-IS to RF TX") }}</span>
+                    <span class="traffic-color-legend-item traffic-color-legend-item-warning" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-to-rf-tx" aria-hidden="true"></i>{{ t("APRS-IS to RF TX") }}</span>
                 </div>
                 <div class="traffic-legend-footer">
                     <button type="button" class="button button-secondary" data-close-traffic-legend>{{ t("Close") }}</button>
@@ -117,6 +117,7 @@
         const visibleIconPath = `${staticIconsRoot}/eye.svg`;
         const hiddenIconPath = `${staticIconsRoot}/eye-off.svg`;
         const noInterfacesText = {{ t("No enabled interface is configured.")|tojson }};
+        const aprsisToRfWarningText = {{ t("APRS-IS to RF TX")|tojson }};
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
         const frameNodeByKey = new Map();
         const interfaceVisibilityByKey = new Map();
@@ -338,11 +339,32 @@
 
         const frameRowClassName = (frame) => `traffic-log-row${frame.row_class ? " " + frame.row_class : ""}`;
 
+        const isAprsisToRfFrame = (frame) =>
+            String(frame.row_class || "").split(/\s+/).includes("traffic-log-row-aprsis-to-rf-tx");
+
         const frameSourceText = (frame) => {
             const sourceParts = [frame.source];
             if (frame.band) sourceParts.push(frame.band);
             if (frame.direction) sourceParts.push(frame.direction);
             return sourceParts.join(" · ");
+        };
+
+        const updateFrameSource = (sourceNode, frame) => {
+            const sourceText = frameSourceText(frame);
+            const hasWarning = isAprsisToRfFrame(frame);
+            const signature = `${sourceText}|${hasWarning ? "aprsis-to-rf" : "standard"}`;
+            if (sourceNode.dataset.sourceSignature === signature) {
+                return;
+            }
+            sourceNode.dataset.sourceSignature = signature;
+            sourceNode.textContent = sourceText;
+            if (hasWarning) {
+                const badge = document.createElement("span");
+                badge.className = "traffic-direction-warning-badge";
+                badge.setAttribute("aria-label", aprsisToRfWarningText);
+                badge.textContent = "IS → RF";
+                sourceNode.append(" ", badge);
+            }
         };
 
         const createFrameRow = (frame, key) => {
@@ -356,7 +378,7 @@
 
             const sourceNode = document.createElement("span");
             sourceNode.className = "traffic-log-source";
-            sourceNode.textContent = frameSourceText(frame);
+            updateFrameSource(sourceNode, frame);
 
             const lineNode = document.createElement("span");
             lineNode.className = "traffic-log-line";
@@ -378,9 +400,8 @@
             if (timeNode && timeNode.textContent !== frame.timestamp) {
                 timeNode.textContent = frame.timestamp;
             }
-            const nextSourceText = frameSourceText(frame);
-            if (sourceNode && sourceNode.textContent !== nextSourceText) {
-                sourceNode.textContent = nextSourceText;
+            if (sourceNode) {
+                updateFrameSource(sourceNode, frame);
             }
             if (lineNode && lineNode.textContent !== frame.line) {
                 lineNode.textContent = frame.line;

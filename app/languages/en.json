@@ -586,7 +586,7 @@
   "DIGI repeated TX": "DIGI repeated TX",
   "Shared KISS port TX": "Shared KISS port TX",
   "APRS-IS RX": "APRS-IS RX",
-  "APRS-IS to RF TX": "APRS-IS to RF TX",
+  "APRS-IS to RF TX": "APRS-IS → RF TX — WARNING",
   "Remote": "Remote",
   "entries": "entries",
   "No frames received yet.": "No frames received yet.",

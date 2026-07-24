@@ -32,8 +32,13 @@ class TrafficTemplateTests(unittest.TestCase):
         self.assertIn('aria-haspopup="dialog"', template_source)
         self.assertIn('id="traffic-color-legend-modal" hidden', template_source)
         self.assertIn('class="traffic-color-legend"', template_source)
+        self.assertIn("traffic-color-legend-item-warning", template_source)
+        self.assertIn("traffic-direction-warning-badge", template_source)
         self.assertIn(".traffic-legend-modal[hidden]", stylesheet_source)
         self.assertIn(".traffic-legend-dialog {", stylesheet_source)
+        self.assertIn("--traffic-color-aprsis-to-rf-tx: #ffd84a;", stylesheet_source)
+        self.assertIn("--traffic-color-aprsis-to-rf-tx: #725400;", stylesheet_source)
+        self.assertIn("box-shadow: inset 5px 0 0 var(--traffic-row-color);", stylesheet_source)
         for row_class in (
             "traffic-log-row-own-wx-tx",
             "traffic-log-row-own-wx-rx",

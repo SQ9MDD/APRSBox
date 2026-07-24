@@ -972,7 +972,7 @@
   "DIGI repeated TX": "DIGI repeated TX",
   "Shared KISS port TX": "shared KISS port TX",
   "APRS-IS RX": "APRS-IS RX",
-  "APRS-IS to RF TX": "APRS-IS to RF TX",
+  "APRS-IS to RF TX": "APRS-IS → RF TX — WARNING",
   "Traffic Monitor": "traffic monitor",
   "Statistics": "Statistics",
   "APRS Frame Types": "APRS Frame Types",

@@ -39,7 +39,7 @@
     --traffic-color-repeated-tx: #ff8a8a;
     --traffic-color-proxy-tx: #dc9bf0;
     --traffic-color-aprsis-rx: #53b9c8;
-    --traffic-color-aprsis-to-rf-tx: #5fc2d2;
+    --traffic-color-aprsis-to-rf-tx: #ffd84a;
     --logo-bg: transparent;
     --logo-bg-inner: #000e31;
     --logo-border: #08182e;
@@ -130,7 +130,7 @@
     --traffic-color-repeated-tx: #8e2525;
     --traffic-color-proxy-tx: #67317f;
     --traffic-color-aprsis-rx: #1c606c;
-    --traffic-color-aprsis-to-rf-tx: #075664;
+    --traffic-color-aprsis-to-rf-tx: #725400;
     --map-mask-layer-color: color-mix(in srgb, #fff 82%, var(--panel));
     --map-mask-default-opacity: 0.16;
     --logo-bg: transparent;
@@ -5066,7 +5066,13 @@ select:focus-visible,
 
 .traffic-color-legend-swatch-aprsis-to-rf-tx {
     --traffic-legend-color: var(--traffic-color-aprsis-to-rf-tx);
-    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 18%, transparent);
+    --traffic-legend-background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 26%, transparent);
+    border-width: 3px;
+}
+
+.traffic-color-legend-item-warning {
+    color: var(--traffic-color-aprsis-to-rf-tx);
+    font-weight: 700;
 }
 
 @media (max-width: 640px) {
@@ -5204,7 +5210,8 @@ select:focus-visible,
 
 .traffic-log-row-aprsis-to-rf-tx {
     --traffic-row-color: var(--traffic-color-aprsis-to-rf-tx);
-    --traffic-row-background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 18%, transparent);
+    --traffic-row-background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 26%, transparent);
+    box-shadow: inset 5px 0 0 var(--traffic-row-color);
 }
 
 :is(
@@ -5270,6 +5277,22 @@ select:focus-visible,
 .traffic-log-source {
     white-space: nowrap;
     padding-inline: 0.55rem;
+}
+
+.traffic-direction-warning-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-inline-start: 0.35rem;
+    padding: 0.05rem 0.32rem;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 24%, var(--panel));
+    color: var(--traffic-color-aprsis-to-rf-tx);
+    font-size: 0.64rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    vertical-align: 0.08em;
 }
 
 .traffic-log-line {

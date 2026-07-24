@@ -589,7 +589,7 @@
   "DIGI repeated TX": "DIGI-Wiederholung TX",
   "Shared KISS port TX": "Freigegebener KISS-Port TX",
   "APRS-IS RX": "APRS-IS RX",
-  "APRS-IS to RF TX": "APRS-IS zu RF TX",
+  "APRS-IS to RF TX": "APRS-IS → RF TX — WARNUNG",
   "Remote": "Remote",
   "entries": "Einträge",
   "No frames received yet.": "Es wurden noch keine Frames empfangen.",
