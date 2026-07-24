@@ -28,7 +28,12 @@ class TrafficTemplateTests(unittest.TestCase):
         template_source = Path("app/templates/traffic.html").read_text(encoding="utf-8")
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
 
+        self.assertIn('id="traffic-open-color-legend"', template_source)
+        self.assertIn('aria-haspopup="dialog"', template_source)
+        self.assertIn('id="traffic-color-legend-modal" hidden', template_source)
         self.assertIn('class="traffic-color-legend"', template_source)
+        self.assertIn(".traffic-legend-modal[hidden]", stylesheet_source)
+        self.assertIn(".traffic-legend-dialog {", stylesheet_source)
         for row_class in (
             "traffic-log-row-own-wx-tx",
             "traffic-log-row-own-wx-rx",

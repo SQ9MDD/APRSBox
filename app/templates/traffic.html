@@ -5,7 +5,20 @@
 <section class="panel traffic-page-panel">
     <div class="panel-body">
         <div class="traffic-toolbar">
-            <h2>{{ t("Traffic Log") }}</h2>
+            <div class="traffic-toolbar-title">
+                <h2>{{ t("Traffic Log") }}</h2>
+                <button
+                    type="button"
+                    class="table-icon-button traffic-legend-open-button"
+                    id="traffic-open-color-legend"
+                    title="{{ t('Traffic colors') }}"
+                    aria-label="{{ t('Traffic colors') }}"
+                    aria-haspopup="dialog"
+                    aria-controls="traffic-color-legend-modal"
+                >
+                    <img src="{{ request.scope.root_path }}/static/icons/palette-swatch-outline.svg" alt="">
+                </button>
+            </div>
             <div class="traffic-toolbar-actions">
                 <div class="traffic-filter-group" role="group" aria-label="{{ t('Filter') }}">
                     <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="rx" aria-pressed="false" title="{{ t('Show only RX frames') }}" aria-label="{{ t('Show only RX frames') }}">RX</button>
@@ -18,19 +31,6 @@
                 <button type="button" class="button-secondary" id="traffic-clear-filters" title="{{ t('Clear filters') }}" aria-label="{{ t('Clear filters') }}" disabled>{{ t("Clear filters") }}</button>
                 <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
             </div>
-        </div>
-        <div class="traffic-color-legend" role="list" aria-label="{{ t('Traffic colors') }}">
-            <span class="traffic-color-legend-label">{{ t("Traffic colors") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-tx" aria-hidden="true"></i>{{ t("Own beacon TX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-rx" aria-hidden="true"></i>{{ t("Own beacon echo RX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-tx" aria-hidden="true"></i>{{ t("Own weather TX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-rx" aria-hidden="true"></i>{{ t("Own weather echo RX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-tx" aria-hidden="true"></i>{{ t("Own message/query/ACK TX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-rx" aria-hidden="true"></i>{{ t("Own message/query/ACK echo RX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-repeated-tx" aria-hidden="true"></i>{{ t("DIGI repeated TX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-proxy-tx" aria-hidden="true"></i>{{ t("Shared KISS port TX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-rx" aria-hidden="true"></i>{{ t("APRS-IS RX") }}</span>
-            <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-to-rf-tx" aria-hidden="true"></i>{{ t("APRS-IS to RF TX") }}</span>
         </div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
@@ -49,6 +49,44 @@
             <div class="empty-state muted" id="traffic-empty-state">{{ t("No frames received yet.") }}</div>
             {% endif %}
         </div>
+        <div class="traffic-legend-modal" id="traffic-color-legend-modal" hidden>
+            <div class="traffic-legend-backdrop" data-close-traffic-legend></div>
+            <div
+                class="traffic-legend-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="traffic-color-legend-title"
+                tabindex="-1"
+            >
+                <div class="traffic-legend-header">
+                    <h3 id="traffic-color-legend-title">{{ t("Traffic colors") }}</h3>
+                    <button
+                        type="button"
+                        class="sidebar-action-button"
+                        data-close-traffic-legend
+                        aria-label="{{ t('Close') }}"
+                        title="{{ t('Close') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+                    </button>
+                </div>
+                <div class="traffic-color-legend" role="list" aria-label="{{ t('Traffic colors') }}">
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-tx" aria-hidden="true"></i>{{ t("Own beacon TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-rx" aria-hidden="true"></i>{{ t("Own beacon echo RX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-tx" aria-hidden="true"></i>{{ t("Own weather TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-rx" aria-hidden="true"></i>{{ t("Own weather echo RX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-tx" aria-hidden="true"></i>{{ t("Own message/query/ACK TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-rx" aria-hidden="true"></i>{{ t("Own message/query/ACK echo RX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-repeated-tx" aria-hidden="true"></i>{{ t("DIGI repeated TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-proxy-tx" aria-hidden="true"></i>{{ t("Shared KISS port TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-rx" aria-hidden="true"></i>{{ t("APRS-IS RX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-to-rf-tx" aria-hidden="true"></i>{{ t("APRS-IS to RF TX") }}</span>
+                </div>
+                <div class="traffic-legend-footer">
+                    <button type="button" class="button button-secondary" data-close-traffic-legend>{{ t("Close") }}</button>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -62,6 +100,12 @@
         const quickFilterButtons = Array.from(document.querySelectorAll("[data-traffic-quick-filter]"));
         const textFilterInput = document.getElementById("traffic-text-filter");
         const clearFiltersButton = document.getElementById("traffic-clear-filters");
+        const colorLegendModal = document.getElementById("traffic-color-legend-modal");
+        const colorLegendDialog = colorLegendModal ? colorLegendModal.querySelector(".traffic-legend-dialog") : null;
+        const colorLegendOpenButton = document.getElementById("traffic-open-color-legend");
+        const colorLegendCloseButtons = colorLegendModal
+            ? Array.from(colorLegendModal.querySelectorAll("[data-close-traffic-legend]"))
+            : [];
         const staticIconsRoot = {{ (request.scope.root_path ~ '/static/icons')|tojson }};
         const noFramesText = {{ t("No frames received yet.")|tojson }};
         const noFilteredFramesText = {{ t("No frames match current filters.")|tojson }};
@@ -81,6 +125,38 @@
         let latestSnapshot = { interfaces: [], frames: [] };
 
         const normalizeFilterText = (value) => String(value || "").trim().toLowerCase();
+
+        const openColorLegend = () => {
+            if (!colorLegendModal) {
+                return;
+            }
+            colorLegendModal.hidden = false;
+            document.body.classList.add("modal-open");
+            if (colorLegendDialog instanceof HTMLElement) {
+                colorLegendDialog.focus();
+            }
+        };
+
+        const closeColorLegend = () => {
+            if (!colorLegendModal) {
+                return;
+            }
+            colorLegendModal.hidden = true;
+            document.body.classList.remove("modal-open");
+            if (colorLegendOpenButton instanceof HTMLElement) {
+                colorLegendOpenButton.focus();
+            }
+        };
+
+        if (colorLegendOpenButton) {
+            colorLegendOpenButton.addEventListener("click", openColorLegend);
+        }
+        colorLegendCloseButtons.forEach((button) => button.addEventListener("click", closeColorLegend));
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && colorLegendModal && !colorLegendModal.hidden) {
+                closeColorLegend();
+            }
+        });
 
         const updateQuickFilterButtons = () => {
             quickFilterButtons.forEach((button) => {

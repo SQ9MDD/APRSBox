@@ -4880,9 +4880,17 @@ select:focus-visible,
     margin: 0;
 }
 
-.traffic-toolbar {
-    border-bottom-right-radius: 0;
-    border-bottom-left-radius: 0;
+.traffic-toolbar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.traffic-legend-open-button {
+    width: 1.75rem;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
 }
 
 .traffic-toolbar-actions {
@@ -4932,23 +4940,67 @@ select:focus-visible,
     margin: 0;
 }
 
-.traffic-color-legend {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem 0.7rem;
-    flex-wrap: wrap;
-    padding: 0.58rem 0.7rem;
-    border: 1px solid var(--border);
-    border-top: 0;
-    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-    background: var(--panel);
-    color: var(--muted);
-    font-size: 0.72rem;
+.traffic-legend-modal[hidden] {
+    display: none;
 }
 
-.traffic-color-legend-label {
-    color: var(--text);
-    font-weight: 650;
+.traffic-legend-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 85;
+}
+
+.traffic-legend-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.traffic-legend-dialog {
+    position: relative;
+    width: min(42rem, calc(100vw - 2rem));
+    max-height: 82vh;
+    margin: 6vh auto 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+}
+
+.traffic-legend-header,
+.traffic-legend-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 0.9rem;
+}
+
+.traffic-legend-header {
+    border-bottom: 1px solid var(--border);
+}
+
+.traffic-legend-header h3 {
+    margin: 0;
+}
+
+.traffic-legend-footer {
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+}
+
+.traffic-color-legend {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem 0.85rem;
+    min-height: 0;
+    padding: 1rem;
+    overflow: auto;
+    color: var(--muted);
+    font-size: 0.78rem;
 }
 
 .traffic-color-legend-item {
@@ -5015,6 +5067,18 @@ select:focus-visible,
 .traffic-color-legend-swatch-aprsis-to-rf-tx {
     --traffic-legend-color: var(--traffic-color-aprsis-to-rf-tx);
     --traffic-legend-background: color-mix(in srgb, var(--traffic-color-aprsis-to-rf-tx) 18%, transparent);
+}
+
+@media (max-width: 640px) {
+    .traffic-legend-dialog {
+        width: calc(100vw - 1rem);
+        max-height: 90vh;
+        margin-top: 2vh;
+    }
+
+    .traffic-color-legend {
+        grid-template-columns: 1fr;
+    }
 }
 
 .traffic-details {
