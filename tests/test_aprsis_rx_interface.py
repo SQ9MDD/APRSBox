@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from app.db import execute, fetch_one, init_db, set_app_setting, utc_now
+from app.db import execute, fetch_all, fetch_one, init_db, set_app_setting, utc_now
 from app.services import content
 from app.services.aprsis import (
     AprsisClientService,
@@ -200,6 +200,61 @@ class AprsisReceivePipelineTests(unittest.TestCase):
             marker = next(item for item in marker_payload["stations"] if item["display_callsign"] == "SP5ABC-9")
             self.assertEqual(marker["source_kind"], "aprsis")
             self.assertFalse(marker["is_rf"])
+
+    def test_local_numbered_message_from_aprsis_queues_ack_for_internal_tx_only(self) -> None:
+        with temporary_database():
+            rf_interface_id = create_rf_interface(name="Local RF")
+            aprsis_interface_id = create_aprsis_interface()
+            content.update_station_settings(
+                {
+                    "callsign": "SQ5BIH",
+                    "ssid": "1",
+                    "beacon_interface_id": str(rf_interface_id),
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "WIDE1-1",
+                    "latitude": "36.7533",
+                    "longitude": "-3.3033",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                }
+            )
+
+            self.assertTrue(
+                self._service(aprsis_interface_id)._process_server_line(
+                    "SQ9MDD-4>APBOX0,TCPIP*,qAC,T2WARSPL::SQ5BIH-1 :test{3P"
+                )
+            )
+
+            message = fetch_one(
+                """
+                SELECT sender, addressee, message_text, message_number
+                FROM aprs_messages
+                WHERE direction = 'rx'
+                """
+            )
+            self.assertIsNotNone(message)
+            assert message is not None
+            self.assertEqual(
+                (message["sender"], message["addressee"], message["message_text"], message["message_number"]),
+                ("SQ9MDD-4", "SQ5BIH-1", "test", "3P"),
+            )
+
+            jobs = fetch_all(
+                """
+                SELECT interface_id, payload_json
+                FROM outbound_jobs
+                WHERE kind = 'message'
+                ORDER BY id ASC
+                """
+            )
+            self.assertEqual(len(jobs), 2)
+            self.assertTrue(all(job["interface_id"] is None for job in jobs))
+            self.assertTrue(all('"internal_tx_only":true' in str(job["payload_json"]) for job in jobs))
+            self.assertTrue(all('"message_text":"ack3P"' in str(job["payload_json"]) for job in jobs))
+            self.assertTrue(any('"trigger":"ack-now"' in str(job["payload_json"]) for job in jobs))
+            self.assertTrue(any('"trigger":"ack-delayed"' in str(job["payload_json"]) for job in jobs))
 
     def test_comments_logresp_empty_and_malformed_lines_are_not_history(self) -> None:
         with temporary_database():

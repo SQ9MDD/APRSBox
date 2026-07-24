@@ -21,6 +21,10 @@ from app.services.igate_messaging import (
     record_aprsis_station_presence,
     record_rf_heard_station,
 )
+from app.services.messages import queue_outgoing_message
+from app.services.outbound import claim_next_outbound_job
+from app.services.outbound_runtime import OutboundService
+from app.services.traffic import process_normalized_tnc2_rx
 
 
 @contextlib.contextmanager
@@ -357,6 +361,118 @@ class IgateMessagingPolicyTests(unittest.TestCase):
 
 
 class IgateMessagingRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_aprsis_message_to_local_station_returns_ack_only_through_local_tx_uplink(self) -> None:
+        with temporary_database():
+            set_station_identity()
+            aprsis_interface_id = insert_interface("APRSIS-RX", "APRSIS")
+            rf_interface_id = insert_interface("RF-OUT", "TCP")
+            execute(
+                "UPDATE station_settings SET beacon_interface_id = ? WHERE id = 1",
+                (rf_interface_id,),
+            )
+            create_digi_flow(local_tx_to_aprsis_flow_payload())
+
+            class FakeAprsisClient:
+                def __init__(self) -> None:
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    return True, "queued"
+
+            fake_client = FakeAprsisClient()
+            routing_runtime = DigiFlowRuntimeService(aprsis_client=fake_client)
+            await routing_runtime.start()
+            try:
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        "SQ5BIH-1>APBOX0,TCPIP*,qAC,T2WARSPL::SQ9MDD-4 :test{3P",
+                        source="APRS-IS · APRSIS-RX",
+                        source_kind="aprsis",
+                        source_interface_id=aprsis_interface_id,
+                    )
+                )
+                job = claim_next_outbound_job()
+                self.assertIsNotNone(job)
+                assert job is not None
+                self.assertIsNone(job["interface_id"])
+                self.assertTrue(job["payload"]["internal_tx_only"])
+
+                await OutboundService(digi_flow_runtime=routing_runtime)._process_job(job)
+                await routing_runtime.wait_until_idle()
+            finally:
+                await routing_runtime.stop()
+
+            self.assertEqual(
+                fake_client.lines,
+                ["SQ9MDD-4>APBOX0,TCPIP*::SQ5BIH-1 :ack3P"],
+            )
+            rf_tx = fetch_one(
+                """
+                SELECT COUNT(*) AS total
+                FROM traffic_frames
+                WHERE direction = 'tx' AND interface_id = ?
+                """,
+                (rf_interface_id,),
+            )
+            self.assertEqual(int((rf_tx or {"total": -1})["total"]), 0)
+
+    async def test_manual_message_is_transmitted_on_rf_and_forwarded_to_aprsis_as_local_tx(self) -> None:
+        with temporary_database():
+            set_station_identity()
+            insert_interface("APRSIS-RX", "APRSIS")
+            rf_interface_id = insert_interface("RF-OUT", "TCP")
+            execute(
+                "UPDATE station_settings SET beacon_interface_id = ? WHERE id = 1",
+                (rf_interface_id,),
+            )
+            create_digi_flow(local_tx_to_aprsis_flow_payload())
+            queue_outgoing_message(
+                callsign="SQ5BIH-1",
+                message_text="test",
+                path="WIDE1-1",
+            )
+
+            class FakeAprsisClient:
+                def __init__(self) -> None:
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    return True, "queued"
+
+            class FakeTrafficMonitor:
+                def __init__(self) -> None:
+                    self.frames: list[tuple[int | None, bytes]] = []
+
+                async def send_outbound_frame(self, *, interface_id: int | None, frame: bytes) -> bool:
+                    self.frames.append((interface_id, frame))
+                    return True
+
+            fake_client = FakeAprsisClient()
+            fake_monitor = FakeTrafficMonitor()
+            routing_runtime = DigiFlowRuntimeService(aprsis_client=fake_client)
+            await routing_runtime.start()
+            try:
+                job = claim_next_outbound_job()
+                self.assertIsNotNone(job)
+                assert job is not None
+                self.assertEqual(job["interface_id"], rf_interface_id)
+                self.assertFalse(bool(job["payload"].get("internal_tx_only")))
+
+                await OutboundService(
+                    traffic_monitor=fake_monitor,
+                    digi_flow_runtime=routing_runtime,
+                )._process_job(job)
+                await routing_runtime.wait_until_idle()
+            finally:
+                await routing_runtime.stop()
+
+            self.assertEqual(len(fake_monitor.frames), 1)
+            self.assertEqual(fake_monitor.frames[0][0], rf_interface_id)
+            self.assertEqual(len(fake_client.lines), 1)
+            self.assertTrue(fake_client.lines[0].startswith("SQ9MDD-4>APBOX0,TCPIP*::SQ5BIH-1 :test{"))
+
     async def test_empty_allowlist_still_delivers_local_message_and_next_sender_position_once(self) -> None:
         with temporary_database():
             set_station_identity()

@@ -81,8 +81,12 @@ def _get_modem_by_id(interface_id: int) -> dict[str, Any] | None:
     return dict(modem) if modem is not None else None
 
 
-def _resolve_station_target_modems(station_settings: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
-    if bool(station_settings.get("beacon_internal_tx")):
+def _resolve_station_target_modems(
+    station_settings: dict[str, Any],
+    *,
+    internal_tx_only: bool = False,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    if internal_tx_only or bool(station_settings.get("beacon_internal_tx")):
         return [
             {
                 "id": None,
@@ -264,12 +268,16 @@ def enqueue_beacon_job(
     aprs_message_id: int | None = None,
     beacon_path_override: str | None = None,
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
     if not callsign:
         return False, "Callsign is required."
-    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    target_modems, target_error = _resolve_station_target_modems(
+        station_settings,
+        internal_tx_only=internal_tx_only,
+    )
     if not target_modems:
         return False, str(target_error or "Interface is required.")
 
@@ -319,6 +327,7 @@ def enqueue_status_job(
     aprs_message_id: int | None = None,
     path: str = "",
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -327,7 +336,10 @@ def enqueue_status_job(
         return False, "Callsign is required."
     if not status_text:
         return False, "Status text is required."
-    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    target_modems, target_error = _resolve_station_target_modems(
+        station_settings,
+        internal_tx_only=internal_tx_only,
+    )
     if not target_modems:
         return False, str(target_error or "Interface is required.")
 
@@ -811,6 +823,7 @@ def enqueue_query_response_job(
     path: str = "",
     aprs_message_id: int | None = None,
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     payload = {
         "aprs_message_id": aprs_message_id,
@@ -822,7 +835,12 @@ def enqueue_query_response_job(
         "message_text": str(message_text or "").strip(),
         "trigger": str(trigger or "query-response").strip() or "query-response",
     }
-    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+    return _enqueue_generic_message_payload(
+        payload,
+        station_settings,
+        scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
+    )
 
 
 def enqueue_ack_job(
@@ -833,6 +851,7 @@ def enqueue_ack_job(
     path: str = "",
     trigger: str = "ack",
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     payload = {
         "callsign": str(station_settings.get("callsign") or "").strip().upper(),
@@ -843,7 +862,12 @@ def enqueue_ack_job(
         "message_text": f"ack{str(ack_number or '').strip().upper()}",
         "trigger": str(trigger or "ack").strip() or "ack",
     }
-    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+    return _enqueue_generic_message_payload(
+        payload,
+        station_settings,
+        scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
+    )
 
 
 def claim_next_outbound_job() -> dict[str, Any] | None:
@@ -1335,11 +1359,15 @@ def _enqueue_generic_message_payload(
     station_settings: dict[str, Any],
     *,
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     if not callsign:
         return False, "Callsign is required."
-    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    target_modems, target_error = _resolve_station_target_modems(
+        station_settings,
+        internal_tx_only=internal_tx_only,
+    )
     if not target_modems:
         return False, str(target_error or "Interface is required.")
     scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()

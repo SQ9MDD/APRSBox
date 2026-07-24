@@ -898,6 +898,7 @@ def process_incoming_tnc2_message(
     *,
     timestamp: str | None = None,
     allow_automatic_responses: bool = True,
+    automatic_response_internal_tx_only: bool = False,
 ) -> None:
     parsed = _parse_effective_incoming_tnc2_line(line, log_invalid_third_party=True)
     if parsed is None:
@@ -970,9 +971,16 @@ def process_incoming_tnc2_message(
             path=parsed["path"],
             timestamp=received_at,
             acknowledge=allow_automatic_responses,
+            automatic_response_internal_tx_only=automatic_response_internal_tx_only,
         )
         if is_new_query and allow_automatic_responses:
-            _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
+            _handle_incoming_query(
+                sender=sender,
+                query_text=query_text,
+                query_number=query_number,
+                timestamp=received_at,
+                automatic_response_internal_tx_only=automatic_response_internal_tx_only,
+            )
         return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
@@ -1005,10 +1013,18 @@ def process_incoming_tnc2_message(
         path=parsed["path"],
         timestamp=received_at,
         acknowledge=allow_automatic_responses,
+        automatic_response_internal_tx_only=automatic_response_internal_tx_only,
     )
 
 
-def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | None, timestamp: str) -> None:
+def _handle_incoming_query(
+    *,
+    sender: str,
+    query_text: str,
+    query_number: str | None,
+    timestamp: str,
+    automatic_response_internal_tx_only: bool = False,
+) -> None:
     query_type = str(query_text or "").strip().upper().split()[0]
     station_settings = _get_station_settings()
     scheduled_for = _query_response_scheduled_for(query_number)
@@ -1020,6 +1036,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprs",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     if query_type == "?APRSP":
@@ -1029,6 +1046,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprsp",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSP from {sender}: {error or 'position unavailable'}")
@@ -1040,6 +1058,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprss",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSS from {sender}: {error or 'status unavailable'}")
@@ -1052,6 +1071,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprsd",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     if query_type == "?DX":
@@ -1062,6 +1082,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-dx",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     if query_type in {"?APRSV", "?VER"}:
@@ -1072,6 +1093,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-version",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     log_event("INFO", "messages", f"Ignored unsupported query from {sender}: {query_text.strip()[:80]}")
@@ -1085,6 +1107,7 @@ def enqueue_automatic_query_text_response(
     trigger: str,
     scheduled_for: datetime | None,
     timestamp: str,
+    internal_tx_only: bool = False,
 ) -> None:
     response_text = normalize_aprs_message_text(message_text)
     response_path = str(get_message_settings()["default_path"])
@@ -1102,6 +1125,7 @@ def enqueue_automatic_query_text_response(
         path=response_path,
         aprs_message_id=message_id,
         scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
     )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRS query response.")
@@ -1117,6 +1141,7 @@ def enqueue_automatic_query_position_response(
     trigger: str,
     scheduled_for: datetime | None,
     timestamp: str,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_position_text(station_settings)
     response_path = str(get_message_settings()["default_path"])
@@ -1132,6 +1157,7 @@ def enqueue_automatic_query_position_response(
         aprs_message_id=message_id,
         beacon_path_override=response_path,
         scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
     )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRSP response.")
@@ -1147,6 +1173,7 @@ def enqueue_automatic_query_status_response(
     trigger: str,
     scheduled_for: datetime | None,
     timestamp: str,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_status_text(station_settings)
     response_path = str(get_message_settings()["default_path"])
@@ -1162,6 +1189,7 @@ def enqueue_automatic_query_status_response(
         aprs_message_id=message_id,
         path=response_path,
         scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
     )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRSS response.")
@@ -1254,6 +1282,7 @@ def store_incoming_message(
     path: str,
     timestamp: str,
     acknowledge: bool = True,
+    automatic_response_internal_tx_only: bool = False,
     conversation_callsign: str | None = None,
     conversation_kind: str = CONVERSATION_KIND_DIRECT,
 ) -> None:
@@ -1324,7 +1353,14 @@ def store_incoming_message(
     ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else message_number)
     if not acknowledge or not ack_number_for_tx:
         return
-    enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
+    enqueue_ack_job(
+        sender,
+        ack_number_for_tx,
+        station_settings,
+        path=ack_path,
+        trigger="ack-now",
+        internal_tx_only=automatic_response_internal_tx_only,
+    )
     enqueue_ack_job(
         sender,
         ack_number_for_tx,
@@ -1332,6 +1368,7 @@ def store_incoming_message(
         path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
+        internal_tx_only=automatic_response_internal_tx_only,
     )
 
 
@@ -1345,6 +1382,7 @@ def store_incoming_query(
     path: str,
     timestamp: str,
     acknowledge: bool = True,
+    automatic_response_internal_tx_only: bool = False,
 ) -> bool:
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
@@ -1370,7 +1408,14 @@ def store_incoming_query(
         # multiple times through nearby digipeaters. Limit duplicate ACKs to one short-window
         # transmission per sender/query-number pair to keep TX serialization predictable.
         if acknowledge and ack_number_for_tx and not _has_recent_duplicate_ack(sender=sender, query_number=ack_number_for_tx):
-            enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-duplicate")
+            enqueue_ack_job(
+                sender,
+                ack_number_for_tx,
+                station_settings,
+                path=ack_path,
+                trigger="ack-duplicate",
+                internal_tx_only=automatic_response_internal_tx_only,
+            )
         return False
     with get_connection() as connection:
         connection.execute(
@@ -1398,7 +1443,14 @@ def store_incoming_query(
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
     if not acknowledge or not ack_number_for_tx:
         return True
-    enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
+    enqueue_ack_job(
+        sender,
+        ack_number_for_tx,
+        station_settings,
+        path=ack_path,
+        trigger="ack-now",
+        internal_tx_only=automatic_response_internal_tx_only,
+    )
     enqueue_ack_job(
         sender,
         ack_number_for_tx,
@@ -1406,6 +1458,7 @@ def store_incoming_query(
         path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
+        internal_tx_only=automatic_response_internal_tx_only,
     )
     return True
 

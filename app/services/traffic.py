@@ -266,10 +266,14 @@ def process_normalized_tnc2_rx(
             log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {exc}")
         process_incoming_frame(normalized_line, band=str(band or "").strip(), timestamp=occurred_at)
 
+    # APRS-IS traffic stays excluded from RF statistics, but a numbered
+    # message addressed to this station still requires an Internet ACK.
+    # Keep that response on Internal TX so it cannot key a local TNC.
     process_incoming_tnc2_message(
         normalized_line,
         timestamp=occurred_at,
-        allow_automatic_responses=collect_statistics,
+        allow_automatic_responses=collect_statistics or normalized_kind == APRSIS_SOURCE_KIND,
+        automatic_response_internal_tx_only=normalized_kind == APRSIS_SOURCE_KIND,
     )
     queue_radar_notifications(timestamp=occurred_at)
     return True

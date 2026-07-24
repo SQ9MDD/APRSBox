@@ -2,6 +2,7 @@
 
 ## 1.8.55.dev - 2026-07-23
 - `iGate / Nachrichten`: die obligatorische Zustellregel verwendet automatisch alle aktiven TNCs mit erlaubtem TX; geeignete Nachrichten und die zugehoerige Absenderposition umgehen die Rufzeichen- und Radiusregel, leere Regelfelder aktivieren den reinen Nachrichtenmodus.
+- `Nachrichten / APRS-IS`: automatische ACKs und Query-Antworten an die lokale Station wurden korrigiert; sie laufen ausschliesslich ueber `Local TX → APRS-IS` zurueck, ohne RF-Sendung.
 - `Routing / Logs`: Schritte, die fuer ein Paket nicht gelten oder umgangen wurden, erscheinen als `uebersprungen` statt `bestanden`.
 
 ## 1.8.54.dev - 2026-07-23
