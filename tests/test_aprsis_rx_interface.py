@@ -282,6 +282,8 @@ class AprsisReceivePipelineTests(unittest.TestCase):
                 "band_condition_audibility_buckets",
                 "band_condition_activity_station_buckets",
                 "band_condition_activity_buckets",
+                "band_condition_station_hours",
+                "band_condition_hourly",
             ):
                 row = fetch_one(f"SELECT COUNT(*) AS total FROM {table_name}")
                 self.assertEqual(int((row or {"total": -1})["total"]), 0, table_name)
@@ -314,14 +316,14 @@ class AprsisReceivePipelineTests(unittest.TestCase):
 
             self.assertEqual(dashboard_traffic_summary()["decoded_aprs"], 1)
             device_rows = fetch_one("SELECT COUNT(*) AS total FROM traffic_device_station_device_hourly")
-            band_rows = fetch_one("SELECT COUNT(*) AS total FROM band_condition_activity_buckets")
             self.assertGreater(int((device_rows or {"total": 0})["total"]), 0)
-            self.assertGreater(int((band_rows or {"total": 0})["total"]), 0)
 
             run_radio_activity_aggregation(
                 now_utc=datetime.now(timezone.utc) + timedelta(minutes=10),
                 safety_delay_seconds=0,
             )
+            band_rows = fetch_one("SELECT COUNT(*) AS total FROM band_condition_station_hours")
+            self.assertGreater(int((band_rows or {"total": 0})["total"]), 0)
             radio_rx = fetch_one("SELECT COALESCE(SUM(rx_total), 0) AS total FROM radio_activity_5m")
             self.assertEqual(int((radio_rx or {"total": 0})["total"]), 1)
 

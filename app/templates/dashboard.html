@@ -96,7 +96,7 @@
                         <h2>{{ t("Band Condition") }}</h2>
                         <p class="section-lead">
                             {% if dashboard_band %}
-                            {{ t("Current estimate for") }} {{ dashboard_band.band_label }}.
+                            {{ t("Current estimate for") }} {{ dashboard_band.interface_name }} · {{ dashboard_band.band_label }}.
                             {% else %}
                             {{ t("No band data yet.") }}
                             {% endif %}
@@ -107,7 +107,7 @@
                 </div>
                 {% if dashboard_band %}
                 <section class="dashboard-v2-band-summary dashboard-v2-band-summary-{{ dashboard_band.diagnosis_tone }}">
-                    <strong>{{ t(dashboard_band.label) }}</strong>
+                    <strong>{% if dashboard_band.condition_index is none %}W–{% else %}W{{ dashboard_band.condition_index }}{% endif %} · {{ t(dashboard_band.label) }}</strong>
                     <p>{{ t(dashboard_home.band_summary) }}</p>
                 </section>
                 {% else %}

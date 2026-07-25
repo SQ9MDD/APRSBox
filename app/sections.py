@@ -60,13 +60,14 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             {"name": "name", "label": "Name", "type": "text", "required": True},
             {
                 "name": "band",
-                "label": "Band",
+                "label": "Band condition assessment",
                 "type": "select",
-                "required": True,
+                "required": False,
+                "default": "",
                 "options": [
-                    {"value": "2m", "label": "2m"},
-                    {"value": "70cm", "label": "70cm"},
-                    {"value": "6m", "label": "6m"},
+                    {"value": "", "label": "No band condition assessment"},
+                    {"value": "2m", "label": "2m — assess propagation"},
+                    {"value": "70cm", "label": "70cm — assess propagation"},
                 ],
             },
             {

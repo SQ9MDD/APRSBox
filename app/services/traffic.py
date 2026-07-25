@@ -11,7 +11,6 @@ from typing import Any, Callable
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
-from app.services.band_condition import process_incoming_frame
 from app.services.content import parse_tnc2_frame
 from app.services.messages import process_incoming_tnc2_message
 from app.services.notifications import queue_radar_notifications
@@ -264,7 +263,6 @@ def process_normalized_tnc2_rx(
             )
         except Exception as exc:
             log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {exc}")
-        process_incoming_frame(normalized_line, band=str(band or "").strip(), timestamp=occurred_at)
 
     # APRS-IS traffic stays excluded from RF statistics, but a numbered
     # message addressed to this station still requires an Internet ACK.

@@ -2018,16 +2018,19 @@ body {
     line-height: 1.35;
 }
 
-.dashboard-v2-band-summary-good {
+.dashboard-v2-band-summary-good,
+.dashboard-v2-band-summary-excellent {
     background: color-mix(in srgb, var(--success) 12%, var(--panel-alt));
 }
 
-.dashboard-v2-band-summary-neutral {
+.dashboard-v2-band-summary-neutral,
+.dashboard-v2-band-summary-noticeable {
     background: color-mix(in srgb, var(--accent) 10%, var(--panel-alt));
 }
 
 .dashboard-v2-band-summary-caution,
-.dashboard-v2-band-summary-busy {
+.dashboard-v2-band-summary-busy,
+.dashboard-v2-band-summary-learning {
     background: color-mix(in srgb, var(--warning) 10%, var(--panel-alt));
 }
 
@@ -3873,16 +3876,11 @@ select:focus-visible,
     background: linear-gradient(180deg, var(--accent-soft), var(--panel-soft));
 }
 
-.band-condition-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: var(--space-4);
-}
-
 .band-condition-layout {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr));
     gap: var(--space-4);
+    align-items: start;
 }
 
 .band-condition-layout-full {
@@ -3893,8 +3891,12 @@ select:focus-visible,
     min-width: 0;
 }
 
-.band-condition-card-heading,
-.band-condition-card-header {
+.band-condition-card .panel-body {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.band-condition-card-heading {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -3903,86 +3905,18 @@ select:focus-visible,
 }
 
 .band-condition-card-heading h2 {
-    margin: 0 0 0.45rem;
-}
-
-.band-condition-confidence {
-    display: grid;
-    gap: 0.15rem;
-    justify-items: end;
-}
-
-.band-condition-confidence strong {
-    font-size: 1.2rem;
-}
-
-.band-condition-score-explainer {
-    display: grid;
-    gap: 0.18rem;
-    max-width: 30rem;
-}
-
-.band-condition-confidence-panel {
-    display: grid;
-    gap: var(--space-4);
-}
-
-.band-condition-confidence-score {
-    display: grid;
-    gap: var(--space-2);
-    justify-items: start;
-}
-
-.band-condition-confidence-score strong {
-    font-size: clamp(2rem, 5vw, 3rem);
-    line-height: 1;
+    margin: 0.2rem 0 0;
 }
 
 .band-condition-status {
     min-width: 0;
 }
 
-.band-condition-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-3);
-    padding: 1rem 1.05rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow-soft);
-}
-
-.band-condition-hero-good {
-    background: linear-gradient(135deg, rgba(107, 170, 121, 0.18), rgba(107, 170, 121, 0.06));
-    border-color: rgba(107, 170, 121, 0.32);
-}
-
-.band-condition-hero-neutral {
-    background: linear-gradient(135deg, rgba(114, 143, 173, 0.18), rgba(114, 143, 173, 0.06));
-    border-color: rgba(114, 143, 173, 0.3);
-}
-
-.band-condition-hero-busy,
-.band-condition-hero-caution {
-    background: linear-gradient(135deg, rgba(205, 178, 110, 0.18), rgba(205, 178, 110, 0.06));
-    border-color: rgba(205, 178, 110, 0.32);
-}
-
-.band-condition-hero-bad {
-    background: linear-gradient(135deg, rgba(201, 122, 122, 0.18), rgba(201, 122, 122, 0.06));
-    border-color: rgba(201, 122, 122, 0.32);
-}
-
-.band-condition-hero-copy {
-    display: grid;
-    gap: 0.32rem;
-}
-
 .band-condition-eyebrow {
     color: var(--muted);
     font-size: 0.76rem;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
@@ -4048,138 +3982,160 @@ select:focus-visible,
     background: linear-gradient(180deg, rgba(187, 65, 82, 0.18), var(--panel));
 }
 
-.band-condition-hero-copy strong {
-    font-size: 1.42rem;
-    line-height: 1.05;
-}
-
-.band-condition-hero-copy p {
-    margin: 0;
-    color: var(--text);
-    max-width: 54ch;
-}
-
-.band-condition-hero-score {
+.band-condition-index {
     display: grid;
-    align-content: start;
-    justify-items: end;
-    gap: 0.16rem;
-}
-
-.band-condition-hero-score strong {
-    font-size: 2rem;
-    line-height: 1;
-}
-
-.band-condition-pill-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-3);
-}
-
-.band-condition-pill {
-    display: grid;
-    gap: 0.18rem;
-    padding: 0.82rem 0.88rem;
-    border-radius: var(--radius-sm);
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-4);
+    padding: clamp(1rem, 3vw, 1.4rem);
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-soft);
+    background: linear-gradient(135deg, var(--panel-alt), var(--panel-soft));
 }
 
-.band-condition-pill-label,
-.band-condition-pill-value {
+.band-condition-index-excellent {
+    background: linear-gradient(135deg, rgba(44, 224, 106, 0.26), rgba(44, 224, 106, 0.05));
+    border-color: rgba(44, 224, 106, 0.48);
+}
+
+.band-condition-index-good {
+    background: linear-gradient(135deg, rgba(89, 189, 119, 0.22), rgba(89, 189, 119, 0.05));
+    border-color: rgba(89, 189, 119, 0.38);
+}
+
+.band-condition-index-noticeable {
+    background: linear-gradient(135deg, rgba(116, 173, 135, 0.18), rgba(116, 173, 135, 0.04));
+    border-color: rgba(116, 173, 135, 0.32);
+}
+
+.band-condition-index-neutral {
+    background: linear-gradient(135deg, rgba(114, 144, 173, 0.18), rgba(114, 144, 173, 0.04));
+    border-color: rgba(114, 144, 173, 0.30);
+}
+
+.band-condition-index-caution,
+.band-condition-index-learning {
+    background: linear-gradient(135deg, rgba(213, 154, 98, 0.18), rgba(213, 154, 98, 0.04));
+    border-color: rgba(213, 154, 98, 0.30);
+}
+
+.band-condition-index-bad {
+    background: linear-gradient(135deg, rgba(201, 122, 122, 0.22), rgba(201, 122, 122, 0.05));
+    border-color: rgba(201, 122, 122, 0.38);
+}
+
+.band-condition-index-value {
+    display: grid;
+    justify-items: center;
+    gap: 0.12rem;
+    min-width: 6rem;
+}
+
+.band-condition-index-value span {
     color: var(--muted);
-}
-
-.band-condition-pill strong {
-    font-size: 1.08rem;
-    line-height: 1.1;
-}
-
-.band-condition-pill-good {
-    background: linear-gradient(180deg, rgba(107, 170, 121, 0.16), rgba(107, 170, 121, 0.05));
-    border-color: rgba(107, 170, 121, 0.28);
-}
-
-.band-condition-pill-neutral {
-    background: linear-gradient(180deg, rgba(114, 143, 173, 0.16), rgba(114, 143, 173, 0.05));
-    border-color: rgba(114, 143, 173, 0.26);
-}
-
-.band-condition-pill-caution {
-    background: linear-gradient(180deg, rgba(205, 178, 110, 0.16), rgba(205, 178, 110, 0.05));
-    border-color: rgba(205, 178, 110, 0.28);
-}
-
-.band-condition-pill-bad {
-    background: linear-gradient(180deg, rgba(201, 122, 122, 0.16), rgba(201, 122, 122, 0.05));
-    border-color: rgba(201, 122, 122, 0.28);
-}
-
-.band-condition-pill-muted {
-    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
-}
-
-.band-condition-why {
-    display: grid;
-    gap: var(--space-2);
-    padding: 0.82rem 0.9rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
-    box-shadow: var(--shadow-soft);
-}
-
-.band-condition-why-title {
-    font-size: 0.76rem;
+    font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+}
+
+.band-condition-index-value strong {
+    font-size: clamp(2.8rem, 8vw, 4.5rem);
+    line-height: 1;
+}
+
+.band-condition-index-copy {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.band-condition-index-copy strong {
+    font-size: clamp(1.15rem, 3vw, 1.45rem);
+}
+
+.band-condition-index-copy p {
+    margin: 0;
+    max-width: 52ch;
+}
+
+.band-condition-confidence-simple {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.band-condition-confidence-simple > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.band-condition-confidence-simple > div span {
     color: var(--muted);
 }
 
-.band-condition-why-list {
-    margin: 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.26rem;
+.band-condition-confidence-simple progress {
+    width: 100%;
+    height: 0.55rem;
+    border: 0;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--panel-alt);
 }
 
-.band-condition-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-3);
-    margin: 0;
+.band-condition-confidence-simple progress::-webkit-progress-bar {
+    background: var(--panel-alt);
 }
 
-.band-condition-stats div {
-    padding: 0.62rem 0.72rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
-    box-shadow: var(--shadow-soft);
+.band-condition-confidence-simple progress::-webkit-progress-value {
+    background: linear-gradient(90deg, var(--accent), var(--success));
 }
 
-.band-condition-stats dt {
-    color: var(--muted);
-    margin: 0 0 0.24rem;
+.band-condition-confidence-simple progress::-moz-progress-bar {
+    background: linear-gradient(90deg, var(--accent), var(--success));
 }
 
-.band-condition-stats dd {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-.band-condition-details summary {
-    cursor: pointer;
-    color: var(--text);
-    font-weight: 600;
-}
-
-.band-condition-details[open] {
+.band-condition-chart-section {
     display: grid;
     gap: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+}
+
+.band-condition-chart-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.band-condition-chart-heading h3 {
+    margin: 0 0 0.25rem;
+}
+
+.band-condition-chart-heading p {
+    margin: 0;
+}
+
+.band-condition-chart-wrap {
+    position: relative;
+    min-height: 15rem;
+}
+
+.band-condition-chart-wrap canvas {
+    width: 100%;
+    min-height: 15rem;
+    max-height: 15rem;
+}
+
+.band-condition-chart-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    text-align: center;
 }
 
 .alert {
@@ -6522,17 +6478,16 @@ button.message-delivery-badge {
         grid-template-columns: 1fr;
     }
 
-    .band-condition-stats {
+    .band-condition-index {
         grid-template-columns: 1fr;
     }
 
-    .band-condition-hero,
-    .band-condition-pill-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .band-condition-hero-score {
+    .band-condition-index-value {
         justify-items: start;
+    }
+
+    .band-condition-chart-heading {
+        display: grid;
     }
 
     .sidebar-user-meta,

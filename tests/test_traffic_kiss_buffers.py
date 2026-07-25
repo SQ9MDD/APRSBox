@@ -164,9 +164,6 @@ class TrafficRxHotPathOrderingTests(unittest.TestCase):
             }
 
             with patch("app.services.traffic.record_traffic_device_station_observation", side_effect=lambda **_kwargs: call_order.append("device_stats")), patch(
-                "app.services.traffic.process_incoming_frame",
-                side_effect=lambda *_args, **_kwargs: call_order.append("band_condition"),
-            ), patch(
                 "app.services.traffic.process_incoming_tnc2_message",
                 side_effect=lambda *_args, **_kwargs: call_order.append("messages"),
             ):
@@ -174,7 +171,7 @@ class TrafficRxHotPathOrderingTests(unittest.TestCase):
 
             self.assertTrue(call_order)
             self.assertEqual(call_order[0], "consumer")
-            self.assertEqual(call_order[1:], ["device_stats", "band_condition", "messages"])
+            self.assertEqual(call_order[1:], ["device_stats", "messages"])
             self.assertEqual(len(consumer_calls), 1)
             self.assertEqual(consumer_calls[0]["line"], entry["line"])
             self.assertEqual(consumer_calls[0]["source_ref"], "TNC")

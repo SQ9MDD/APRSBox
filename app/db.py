@@ -45,6 +45,9 @@ RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "band_condition_audibility_buckets",
     "band_condition_activity_station_buckets",
     "band_condition_activity_buckets",
+    "band_condition_station_hours",
+    "band_condition_station_profiles",
+    "band_condition_hourly",
 )
 VACUUM_RECOMMEND_FREE_BYTES_MIN = 16 * 1024 * 1024
 VACUUM_RECOMMEND_FREE_RATIO_MIN = 0.20
@@ -752,6 +755,64 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
     PRIMARY KEY (band, station_key, hour_of_day)
 );
 
+CREATE TABLE IF NOT EXISTS band_condition_station_hours (
+    hour_start_utc TEXT NOT NULL,
+    interface_id INTEGER NOT NULL,
+    interface_name TEXT NOT NULL DEFAULT '',
+    band TEXT NOT NULL CHECK (band IN ('2m', '70cm')),
+    station_key TEXT NOT NULL,
+    segment_mask INTEGER NOT NULL DEFAULT 0,
+    direct_segment_mask INTEGER NOT NULL DEFAULT 0,
+    fixed_hint INTEGER NOT NULL DEFAULT 0 CHECK (fixed_hint IN (0, 1)),
+    mobile_hint INTEGER NOT NULL DEFAULT 0 CHECK (mobile_hint IN (0, 1)),
+    latitude REAL,
+    longitude REAL,
+    distance_km REAL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (hour_start_utc, interface_id, band, station_key)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_station_profiles (
+    interface_id INTEGER NOT NULL,
+    band TEXT NOT NULL CHECK (band IN ('2m', '70cm')),
+    station_key TEXT NOT NULL,
+    first_heard_at TEXT NOT NULL,
+    last_heard_at TEXT NOT NULL,
+    observed_hours INTEGER NOT NULL DEFAULT 0,
+    direct_hours INTEGER NOT NULL DEFAULT 0,
+    positioned_hours INTEGER NOT NULL DEFAULT 0,
+    fixed_hours INTEGER NOT NULL DEFAULT 0,
+    mobile_hours INTEGER NOT NULL DEFAULT 0,
+    latitude REAL,
+    longitude REAL,
+    distance_km REAL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (interface_id, band, station_key)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_hourly (
+    hour_start_utc TEXT NOT NULL,
+    interface_id INTEGER NOT NULL,
+    interface_name TEXT NOT NULL DEFAULT '',
+    band TEXT NOT NULL CHECK (band IN ('2m', '70cm')),
+    condition_index INTEGER CHECK (condition_index BETWEEN 0 AND 5),
+    confidence_score REAL NOT NULL DEFAULT 0 CHECK (confidence_score BETWEEN 0 AND 1),
+    fixed_station_count INTEGER NOT NULL DEFAULT 0,
+    positioned_station_count INTEGER NOT NULL DEFAULT 0,
+    direct_station_count INTEGER NOT NULL DEFAULT 0,
+    median_distance_km REAL,
+    p90_distance_km REAL,
+    max_confirmed_distance_km REAL,
+    normal_station_count REAL NOT NULL DEFAULT 0,
+    normal_p90_distance_km REAL,
+    far_station_count INTEGER NOT NULL DEFAULT 0,
+    very_far_station_count INTEGER NOT NULL DEFAULT 0,
+    new_area_count INTEGER NOT NULL DEFAULT 0,
+    history_hours INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (hour_start_utc, interface_id, band)
+);
+
 CREATE TABLE IF NOT EXISTS radio_activity_5m (
     bucket_start_utc TEXT NOT NULL,
     bucket_end_utc TEXT NOT NULL,
@@ -830,6 +891,14 @@ CREATE INDEX IF NOT EXISTS idx_band_condition_activity_processed
     ON band_condition_activity_buckets(baseline_processed_at, bucket_start_utc);
 CREATE INDEX IF NOT EXISTS idx_band_condition_fixed_station_baseline_band_hour
     ON band_condition_fixed_station_baseline(band, hour_of_day);
+CREATE INDEX IF NOT EXISTS idx_band_condition_station_hours_interface_time
+    ON band_condition_station_hours(interface_id, band, hour_start_utc);
+CREATE INDEX IF NOT EXISTS idx_band_condition_station_hours_station_time
+    ON band_condition_station_hours(interface_id, band, station_key, hour_start_utc);
+CREATE INDEX IF NOT EXISTS idx_band_condition_profiles_interface_band
+    ON band_condition_station_profiles(interface_id, band, observed_hours DESC);
+CREATE INDEX IF NOT EXISTS idx_band_condition_hourly_interface_time
+    ON band_condition_hourly(interface_id, band, hour_start_utc);
 CREATE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_start
     ON radio_activity_5m(bucket_start_utc);
 CREATE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_interface

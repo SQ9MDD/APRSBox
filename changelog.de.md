@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.57.dev - 2026-07-25
+- `Bandbedingungen / Schnittstellen`: die Ausbreitungsbewertung ist jetzt pro Schnittstelle optional und standardmaessig deaktiviert; als ueberwachte Baender stehen `2 m` und `70 cm` zur Wahl, ohne manuelle Auswahl von Referenzstationen.
+- `Bandbedingungen / W0–W5-Modell`: die uebliche Reichweite und Hoerbarkeit fester Stationen wird fuer jede Schnittstelle automatisch gelernt. Die erste Bewertung erscheint nach 24 Stunden; zur Erkennung von Bandoeffnungen werden Stationszahl, typische Reichweite, Entfernungen, weit entfernte Stationen und neu gehoerte geografische Gebiete beruecksichtigt.
+- `Bandbedingungen / Sicherheit und Verlauf`: ein mit der Datenmenge wachsender Sicherheitsindex sowie eine einfache W0–W5-Anzeige mit stuendlichem Verlauf der letzten 365 Tage wurden hinzugefuegt.
+- `Bandbedingungen / Leistung`: die Analyse wurde aus dem Hot Path des Frame-Empfangs in den gemeinsamen Fuenf-Minuten-Aggregator verschoben; Frames werden nur einmal geparst und Detailbeobachtungen sowie Verlauf besitzen eine begrenzte Aufbewahrungszeit.
+
 ## 1.8.56.dev - 2026-07-24
 - `Nachrichten / APRS-IS`: ACKs und automatische Antworten an die lokale Station wurden korrigiert; sie laufen ueber `Local TX → APRS-IS` zurueck, ohne RF-Sendung.
 - `Traffic Monitor / Farben`: Zeilen werden jetzt nach Herkunft und Richtung der Frames markiert; hinzu kamen eine modale Legende sowie eine gelbe Warnmarkierung für `APRS-IS → RF` mit dem Badge `IS → RF`.

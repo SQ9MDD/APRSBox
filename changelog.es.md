@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.57.dev - 2026-07-25
+- `Condiciones de banda / interfaces`: la evaluación de propagación ahora es opcional para cada interfaz y está desactivada de forma predeterminada; las bandas supervisadas disponibles son `2 m` y `70 cm`, sin selección manual de estaciones de referencia.
+- `Condiciones de banda / modelo W0–W5`: se añadió el aprendizaje automático del alcance y la audibilidad habituales de las estaciones fijas por separado para cada interfaz. La primera evaluación aparece después de 24 horas y la detección de aperturas considera la cantidad de estaciones, el alcance típico, las distancias, las estaciones lejanas y las nuevas áreas geográficas escuchadas.
+- `Condiciones de banda / confianza e historial`: se añadió un índice de confianza que aumenta con la cantidad de datos, junto con un indicador W0–W5 sencillo y un gráfico horario de los últimos 365 días.
+- `Condiciones de banda / rendimiento`: el análisis se trasladó de la ruta crítica de recepción al agregador compartido de cinco minutos; cada trama se analiza una sola vez y las observaciones detalladas y el historial tienen una retención limitada.
+
 ## 1.8.56.dev - 2026-07-24
 - `Mensajes / APRS-IS`: se corrigieron los ACK y las respuestas automáticas dirigidas a la estación local; vuelven mediante `Local TX → APRS-IS`, sin transmisión RF.
 - `Monitor de tráfico / colores`: se añadió el resaltado de filas según el origen y la dirección de las tramas, una leyenda modal y una alerta amarilla para `APRS-IS → RF` con la etiqueta `IS → RF`.

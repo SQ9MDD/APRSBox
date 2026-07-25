@@ -320,6 +320,16 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 self.assertIn("tx_blocked", modem_columns)
                 self.assertIn("tx_min_gap_seconds", modem_columns)
                 self.assertIn("serial_rx_silence_reconnect_seconds", modem_columns)
+                for table_name in (
+                    "band_condition_station_hours",
+                    "band_condition_station_profiles",
+                    "band_condition_hourly",
+                ):
+                    table_row = connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        (table_name,),
+                    ).fetchone()
+                    self.assertIsNotNone(table_row, table_name)
                 station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
                 self.assertIn("symbol_overlay", station_columns)
                 self.assertIn("beacon_interval_mode", station_columns)

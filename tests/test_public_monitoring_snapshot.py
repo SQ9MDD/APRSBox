@@ -110,23 +110,14 @@ class PublicMonitoringSnapshotTests(unittest.TestCase):
             )
             execute(
                 """
-                INSERT INTO band_condition_activity_buckets(
-                    bucket_start_utc, band, total_frames, total_unique_stations,
-                    mobile_frames, mobile_unique_stations, fixed_frames, fixed_unique_stations, baseline_processed_at
+                INSERT INTO radio_activity_5m(
+                    bucket_start_utc, bucket_end_utc, interface_id, source_name,
+                    rx_total, mobile_total, fixed_total, unique_stations_total,
+                    created_at_utc, updated_at_utc
                 )
-                VALUES (?, '2m', 120, 22, 30, 8, 90, 14, NULL)
+                VALUES (?, ?, ?, 'Primary TNC', 140, 40, 100, 22, ?, ?)
                 """,
-                (now_utc,),
-            )
-            execute(
-                """
-                INSERT INTO band_condition_activity_buckets(
-                    bucket_start_utc, band, total_frames, total_unique_stations,
-                    mobile_frames, mobile_unique_stations, fixed_frames, fixed_unique_stations, baseline_processed_at
-                )
-                VALUES (?, '70cm', 20, 5, 10, 3, 10, 2, NULL)
-                """,
-                (now_utc,),
+                (now_utc, now_utc, primary_modem_id, now_utc, now_utc),
             )
 
             snapshot = monitoring_public_snapshot()

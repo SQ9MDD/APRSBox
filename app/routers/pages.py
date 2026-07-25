@@ -120,12 +120,9 @@ from app.services.notifications import (
     test_notification_transport,
 )
 from app.services.band_condition import (
-    build_station_key,
-    delete_reference_station,
+    get_band_condition_history,
     get_band_condition_page_data,
     get_band_condition_snapshot,
-    save_reference_station,
-    split_station_key,
 )
 from app.services.aprsis import (
     aprsis_runtime_badge,
@@ -228,6 +225,9 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
     "band_condition_audibility_buckets": "Band condition audibility buckets",
     "band_condition_activity_station_buckets": "Band condition station buckets",
     "band_condition_activity_buckets": "Band condition activity buckets",
+    "band_condition_station_hours": "Band condition hourly station observations",
+    "band_condition_station_profiles": "Band condition learned station profiles",
+    "band_condition_hourly": "Band condition hourly history",
 }
 
 
@@ -960,10 +960,9 @@ def dashboard(
 def band_condition_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
-    edit_reference: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    page_data = get_band_condition_page_data(edit_reference_id=edit_reference)
+    page_data = get_band_condition_page_data()
     context = build_template_context(
         request,
         page_title="Band Condition",
@@ -982,57 +981,12 @@ def band_condition_snapshot(
     return JSONResponse(get_band_condition_snapshot())
 
 
-@router.post("/band-condition")
-@router.post("/band-condition/reference-stations")
-def band_condition_reference_station_save(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-    record_id: int | None = Form(None),
-    band: str = Form(...),
-    station_key: str = Form(""),
-    station_type: str = Form(...),
-    enabled: str | None = Form(None),
-    weight: str = Form("1.0"),
-) -> object:
-    templates = request.app.state.templates
-    callsign, ssid = split_station_key(station_key)
-    if not callsign and record_id is not None:
-        page_data = get_band_condition_page_data(edit_reference_id=record_id)
-        edit_reference = page_data.get("edit_reference") or {}
-        callsign = str(edit_reference.get("callsign") or "")
-        ssid = str(edit_reference.get("ssid") or "")
-    success, error = save_reference_station(
-        {
-            "band": band,
-            "callsign": callsign,
-            "ssid": ssid,
-            "station_type": station_type,
-            "enabled": enabled,
-            "weight": weight,
-        },
-        record_id=record_id,
-    )
-    page_data = get_band_condition_page_data(edit_reference_id=record_id if error else None)
-    context = build_template_context(
-        request,
-        page_title="Band Condition",
-        current_user=current_user,
-        active_nav="band-condition",
-        flash=None if success else error,
-        selected_station_key=build_station_key(callsign, ssid),
-        **page_data,
-    )
-    return templates.TemplateResponse("band_condition.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
-
-
-@router.post("/band-condition/reference-stations/{record_id}/delete")
-def band_condition_reference_station_delete(
-    record_id: int,
-    request: Request,
-    _: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> RedirectResponse:
-    delete_reference_station(record_id)
-    return RedirectResponse(url=_path(request, "/band-condition"), status_code=status.HTTP_303_SEE_OTHER)
+@router.get("/api/band-condition/history")
+def band_condition_history(
+    days: int = 365,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_band_condition_history(days=days))
 
 
 @router.get("/stations")

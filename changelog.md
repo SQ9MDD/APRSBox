@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.57.dev - 25.07.2026
+- `Warunki pasma / interfejsy`: ocena propagacji jest teraz opcjonalna dla każdego interfejsu i domyślnie wyłączona; do wyboru pozostają `2 m` oraz `70 cm`, bez ręcznego wskazywania stacji referencyjnych.
+- `Warunki pasma / model W0–W5`: dodano automatyczne uczenie typowej słyszalności stacji stałych osobno dla każdego interfejsu. Pierwsza ocena pojawia się po 24 godzinach, a wykrywanie otwarć uwzględnia liczbę stacji, typowy zasięg, odległości, dalekie stacje i nowe obszary geograficzne.
+- `Warunki pasma / pewność i historia`: dodano rosnący wraz z ilością danych indeks pewności oraz prosty wskaźnik W0–W5 z wykresem godzinowym obejmującym ostatnie 365 dni.
+- `Warunki pasma / wydajność`: analizę przeniesiono z gorącej ścieżki odbioru ramek do wspólnego agregatora pięciominutowego; ramki są parsowane jednokrotnie, a szczegółowe obserwacje i historia mają ograniczoną retencję.
+
 ## 1.8.56.dev - 24.07.2026
 - `Wiadomości / APRS-IS`: naprawiono ACK i automatyczne odpowiedzi do lokalnej stacji; wracają przez `Local TX → APRS-IS`, bez TX RF.
 - `Monitor ruchu / kolory`: dodano oznaczanie wierszy według pochodzenia i kierunku ramek, modalną legendę oraz alarmowe wyróżnienie `APRS-IS → RF` na żółto ze znacznikiem `IS → RF`.

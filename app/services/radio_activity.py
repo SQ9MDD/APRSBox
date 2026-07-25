@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.aprs_device_identification import get_aprs_device_identification_database, lookup_aprs_device_identification
+from app.services.band_condition import aggregate_band_condition_parsed_bucket, finalize_band_condition_hours
 from app.services.content import parse_tnc2_frame
 from app.services.traffic_source import STATISTICS_TRAFFIC_SQL_PREDICATE
 
@@ -168,6 +169,7 @@ def run_radio_activity_aggregation(
     processed_buckets = 0
 
     if latest_closed_bucket_start is None:
+        finalize_band_condition_hours(now_utc=now)
         _upsert_aggregator_state(
             normalized_state_key,
             last_processed_bucket_start_utc=_iso_or_none(last_processed_for_state),
@@ -189,6 +191,7 @@ def run_radio_activity_aggregation(
         next_bucket_start = current_last_processed + timedelta(minutes=normalized_bucket_minutes)
 
     if next_bucket_start is None or next_bucket_start > latest_closed_bucket_start:
+        finalize_band_condition_hours(now_utc=now)
         _upsert_aggregator_state(
             normalized_state_key,
             last_processed_bucket_start_utc=_iso_or_none(last_processed_for_state),
@@ -205,7 +208,7 @@ def run_radio_activity_aggregation(
     try:
         while current_bucket_start <= latest_closed_bucket_start:
             current_bucket_end = current_bucket_start + timedelta(minutes=normalized_bucket_minutes)
-            source_rows = _collect_bucket_source_rows(
+            source_rows, band_frame_rows = _collect_bucket_source_rows(
                 bucket_start_utc=current_bucket_start,
                 bucket_end_utc=current_bucket_end,
             )
@@ -214,10 +217,15 @@ def run_radio_activity_aggregation(
                 bucket_end_utc=current_bucket_end,
                 source_rows=source_rows,
             )
+            aggregate_band_condition_parsed_bucket(
+                bucket_start_utc=current_bucket_start,
+                parsed_frame_rows=band_frame_rows,
+            )
             processed_buckets += 1
             last_processed_for_state = current_bucket_start
             current_bucket_start = current_bucket_end
 
+        finalize_band_condition_hours(now_utc=now)
         _upsert_aggregator_state(
             normalized_state_key,
             last_processed_bucket_start_utc=_iso_or_none(last_processed_for_state),
@@ -1452,7 +1460,7 @@ def _collect_bucket_source_rows(
     *,
     bucket_start_utc: datetime,
     bucket_end_utc: datetime,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     frame_rows = fetch_all(
         f"""
         SELECT source, interface_id, direction, format, line, command
@@ -1465,10 +1473,11 @@ def _collect_bucket_source_rows(
         (bucket_start_utc.isoformat(), bucket_end_utc.isoformat()),
     )
     if not frame_rows:
-        return []
+        return [], []
 
     station_source_key, station_callsign, wx_source_key = _station_identity_keys()
     grouped: dict[str, dict[str, Any]] = {}
+    band_frame_rows: list[dict[str, Any]] = []
 
     for row in frame_rows:
         source_name = str(row["source"] or "").strip() or "Unknown source"
@@ -1500,6 +1509,13 @@ def _collect_bucket_source_rows(
             source_bucket["parse_error_total"] += 1
             source_bucket["type_other_unknown_total"] += 1
             continue
+        if direction == "RX" and frame_format == "TNC2" and interface_id is not None:
+            band_frame_rows.append(
+                {
+                    "interface_id": interface_id,
+                    "parsed": parsed,
+                }
+            )
 
         frame_type_bucket_key = _classify_frame_type_bucket_key(parsed=parsed)
         source_bucket[frame_type_bucket_key] += 1
@@ -1581,7 +1597,7 @@ def _collect_bucket_source_rows(
         source_bucket.pop("_hop_count_total", None)
         source_bucket.pop("_hop_samples", None)
         source_rows.append(source_bucket)
-    return source_rows
+    return source_rows, band_frame_rows
 
 
 def _upsert_radio_activity_bucket_rows(

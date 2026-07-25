@@ -1119,14 +1119,16 @@ def monitoring_public_snapshot() -> dict[str, Any]:
     hourly_rows = fetch_all(
         """
         SELECT
-            COALESCE(band, '') AS band,
-            SUM(total_frames) AS total_frames,
-            SUM(mobile_frames) AS mobile_frames,
-            SUM(fixed_frames) AS fixed_frames
-        FROM band_condition_activity_buckets
-        WHERE bucket_start_utc >= ?
-        GROUP BY band
-        ORDER BY band ASC
+            COALESCE(modems.band, '') AS band,
+            SUM(radio_activity_5m.rx_total) AS total_frames,
+            SUM(radio_activity_5m.mobile_total) AS mobile_frames,
+            SUM(radio_activity_5m.fixed_total) AS fixed_frames
+        FROM radio_activity_5m
+        LEFT JOIN modems ON modems.id = radio_activity_5m.interface_id
+        WHERE radio_activity_5m.bucket_start_utc >= ?
+          AND LOWER(TRIM(COALESCE(modems.band, ''))) IN ('2m', '70cm')
+        GROUP BY modems.band
+        ORDER BY modems.band ASC
         """,
         (hour_window_start_utc,),
     )
@@ -1978,7 +1980,7 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
             "status": "Needs setup",
         }
 
-    if dashboard_band and dashboard_band.get("label") == "Insufficient data":
+    if dashboard_band and dashboard_band.get("condition_index") is None:
         band_summary = "Band condition will become more useful after more traffic is collected."
     elif dashboard_band:
         band_summary = dashboard_band.get("diagnosis_summary") or ""
@@ -4326,6 +4328,8 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized["modem_type"] = modem_type
     normalized["name"] = str(payload.get("name") or "").strip()
     normalized["band"] = str(payload.get("band") or "").strip().lower()
+    if normalized["band"] not in {"", "2m", "70cm"}:
+        raise ValueError("Band condition assessment must be disabled, 2m or 70cm.")
     if modem_type == APRSIS_MODEM_TYPE:
         normalized["band"] = ""
         normalized["device_path"] = normalize_aprsis_filter(payload.get("device_path"))
