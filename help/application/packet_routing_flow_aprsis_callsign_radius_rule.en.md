@@ -37,6 +37,8 @@ Both the callsign list and radius must be filled, or both must be empty. A parti
 
 Leaving both fields empty is valid. It creates a message-only flow: the rule denies all ordinary traffic while messages and the associated sender position authorized by the Message Delivery Rule still bypass it.
 
+Use `Clear callsigns and radius` to clear both fields together and restore this mode.
+
 ## Placement
 
 The rule is inserted and managed automatically after `APRS-IS Message Delivery Rule` and before `APRS-IS to RF TX Safety Rule`. It cannot be removed, disabled, duplicated, or moved, and no optional filters can be added to this flow.

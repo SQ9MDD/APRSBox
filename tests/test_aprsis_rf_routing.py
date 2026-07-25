@@ -30,6 +30,7 @@ from app.services.digi_flows import (
     get_digi_flow_type_meta,
     normalize_digi_flow_payload,
     set_digi_flow_enabled,
+    update_digi_flow,
 )
 from app.services.outbound import (
     build_aprsis_third_party_tnc2,
@@ -229,6 +230,10 @@ class AprsisRfModelTests(unittest.TestCase):
         self.assertIn("button.hidden = strictAprsisToRf && !isAprsisSourceSystemStepType(stepType);", template)
         self.assertIn("if (isStrictAprsisToRfFlow())", template)
         self.assertIn("const aprsisSourceSystemStep = isAprsisSourceFlow() && isAprsisSourceSystemStepType", template)
+        self.assertIn('clearCallsignsAndRadius: {{ t("Clear callsigns and radius")|tojson }}', template)
+        self.assertIn('step.config.callsigns = [];', template)
+        self.assertIn('step.config.radius_km = "";', template)
+        self.assertIn("return i18n.messageOnlyMode;", template)
         self.assertNotIn("data.allowRulesEmpty", template.replace("dataset", "data"))
         self.assertNotIn("data.addAllowRule", template.replace("dataset", "data"))
         self.assertNotIn('["packet_type", i18n.packetType', template)
@@ -275,6 +280,26 @@ class AprsisRfModelTests(unittest.TestCase):
             )
             set_digi_flow_enabled(flow_id, True)
             self.assertEqual(int(get_digi_flow(flow_id)["enabled"]), 1)
+
+    def test_existing_callsign_and_radius_rule_can_be_cleared_for_message_only_mode(self) -> None:
+        with temporary_database():
+            insert_interface("APRSIS-RX", "APRSIS")
+            insert_interface("RF-OUT", "TCP")
+            flow_id = create_digi_flow(
+                aprsis_rf_payload(callsigns=["SP5ABC"], radius_km="25")
+            )
+
+            update_digi_flow(
+                flow_id,
+                aprsis_rf_payload(callsigns=[], radius_km=""),
+            )
+
+            flow = get_digi_flow(flow_id)
+            allow_step = next(
+                step for step in flow["steps"] if step["step_type"] == "filter_allow_rules"
+            )
+            self.assertEqual(allow_step["config"], {"callsigns": [], "radius_km": ""})
+            self.assertEqual(int(flow["enabled"]), 1)
 
     def test_backend_reorders_guard_before_rules_and_rejects_duplicates_or_non_aprs_flow(self) -> None:
         with temporary_database():

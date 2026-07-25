@@ -3,6 +3,7 @@
 ## 1.8.56.dev - 2026-07-24
 - `Mensajes / APRS-IS`: se corrigieron los ACK y las respuestas automáticas dirigidas a la estación local; vuelven mediante `Local TX → APRS-IS`, sin transmisión RF.
 - `Monitor de tráfico / colores`: se añadió el resaltado de filas según el origen y la dirección de las tramas, una leyenda modal y una alerta amarilla para `APRS-IS → RF` con la etiqueta `IS → RF`.
+- `APRS-IS → RF`: se añadió el borrado conjunto del indicativo y el radio para restaurar el modo solo mensajes.
 
 ## 1.8.55.dev - 2026-07-23
 - `iGate / mensajes`: la regla obligatoria de entrega usa automáticamente todos los TNC activos con TX permitido; los mensajes aptos y la posición asociada del remitente omiten la regla de indicativo y radio, mientras que los campos vacíos activan el modo solo mensajes.

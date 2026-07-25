@@ -3,6 +3,7 @@
 ## 1.8.56.dev - 24.07.2026
 - `Wiadomości / APRS-IS`: naprawiono ACK i automatyczne odpowiedzi do lokalnej stacji; wracają przez `Local TX → APRS-IS`, bez TX RF.
 - `Monitor ruchu / kolory`: dodano oznaczanie wierszy według pochodzenia i kierunku ramek, modalną legendę oraz alarmowe wyróżnienie `APRS-IS → RF` na żółto ze znacznikiem `IS → RF`.
+- `APRS-IS → RF`: dodano szybkie czyszczenie znaku i promienia, przywracające tryb tylko wiadomości.
 
 ## 1.8.55.dev - 23.07.2026
 - `iGate / wiadomości`: obowiązkowa reguła dostarczania automatycznie używa wszystkich aktywnych TNC z dozwolonym TX; zakwalifikowane wiadomości i powiązana pozycja omijają regułę znaku i promienia, a jej puste pola ustawiają tryb tylko wiadomości.

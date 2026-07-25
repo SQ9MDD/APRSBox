@@ -371,6 +371,8 @@
             rfTxGuardSystemManaged: {{ t("The APRS-IS to RF TX Safety Rule is mandatory, system-managed, and fixed immediately before TX RF.")|tojson }},
             messageDeliverySystemManaged: {{ t("The APRS-IS Message Delivery Rule is mandatory, system-managed and not configurable. It automatically uses all active TNC interfaces with RF transmission allowed.")|tojson }},
             allowRulesSystemManaged: {{ t("The APRS-IS Callsign and Radius Rule is mandatory and system-managed; an empty configuration denies traffic not authorized by the Message Delivery Rule.")|tojson }},
+            clearCallsignsAndRadius: {{ t("Clear callsigns and radius")|tojson }},
+            messageOnlyMode: {{ t("Message-only mode (no ordinary station traffic)")|tojson }},
             inputSafetySummary: {{ t("APRS/q validation · loop prevention · initial duplicate check")|tojson }},
             messageDeliverySummary: {{ t("All active TX-enabled TNC interfaces · direct RF · exact SSID · 60 min")|tojson }},
             rfTxSafetySummary: {{ t("Final duplicate check · delay {seconds}s · rate limits · third-party")|tojson }},
@@ -550,6 +552,10 @@
                 return formatText(i18n.rfTxSafetySummary, { seconds: config.viscous_delay_sec || 5 });
             }
             if (step.step_type === "filter_allow_rules") {
+                const callsigns = Array.isArray(config.callsigns) ? config.callsigns : [];
+                if (!callsigns.length && !String(config.radius_km || "").trim()) {
+                    return i18n.messageOnlyMode;
+                }
                 return `${i18n.callsigns}: ${Array.isArray(config.callsigns) ? config.callsigns.length : 0} · ${i18n.radiusKm}: ${config.radius_km || "-"} · AND · ${i18n.defaultDeny}`;
             }
             if (step.step_type === "filter_dupe") return `${i18n.window}: ${config.window_sec || "-"} ${i18n.sec}`;
@@ -1752,6 +1758,23 @@
                     const fields = (typeMeta[step.step_type] || {}).config_fields || [];
                     for (const field of fields) {
                         editor.appendChild(renderConfigField(step, field));
+                    }
+                    if (isAllowRulesStepType(step.step_type)) {
+                        const clearActions = document.createElement("div");
+                        clearActions.className = "form-actions";
+                        const clearButton = document.createElement("button");
+                        clearButton.type = "button";
+                        clearButton.className = "button button-secondary";
+                        clearButton.textContent = i18n.clearCallsignsAndRadius;
+                        const configuredCallsigns = Array.isArray(step.config.callsigns) ? step.config.callsigns : [];
+                        clearButton.disabled = !configuredCallsigns.length && !String(step.config.radius_km || "").trim();
+                        clearButton.addEventListener("click", () => {
+                            step.config.callsigns = [];
+                            step.config.radius_km = "";
+                            render();
+                        });
+                        clearActions.appendChild(clearButton);
+                        editor.appendChild(clearActions);
                     }
                     stepCard.appendChild(editor);
                 }

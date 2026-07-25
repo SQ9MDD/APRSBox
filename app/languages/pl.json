@@ -1663,6 +1663,8 @@
   "The APRS-IS Input Safety Rule is mandatory, system-managed, and available only for an APRS-IS source.": "Reguła bezpieczeństwa wejścia APRS-IS jest obowiązkowa, zarządzana systemowo i dostępna tylko dla źródła APRS-IS.",
   "The APRS-IS to RF TX Safety Rule is mandatory, system-managed, and fixed immediately before TX RF.": "Reguła bezpieczeństwa TX APRS-IS → RF jest obowiązkowa, zarządzana systemowo i umieszczona bezpośrednio przed TX RF.",
   "The APRS-IS Callsign and Radius Rule is mandatory and system-managed; an empty configuration denies traffic not authorized by the Message Delivery Rule.": "Reguła znaku i promienia APRS-IS jest obowiązkowa i zarządzana systemowo; pusta konfiguracja odrzuca ruch niezatwierdzony przez Regułę dostarczania wiadomości.",
+  "Clear callsigns and radius": "Wyczyść znaki i promień",
+  "Message-only mode (no ordinary station traffic)": "Tryb tylko wiadomości (bez zwykłego ruchu stacji)",
   "APRS-IS Message Delivery Rule skipped: packet is not message traffic; continuing to the callsign-and-radius rule.": "Pominięto Regułę dostarczania wiadomości APRS-IS: pakiet nie jest ruchem wiadomościowym; przejście do Reguły znaku i promienia.",
   "Viscous delay (seconds)": "Viscous delay (sekundy)",
   "Per-flow average (packets/minute)": "Średnia dla flow (pakiety/minutę)",

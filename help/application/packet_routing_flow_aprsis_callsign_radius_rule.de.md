@@ -37,6 +37,8 @@ Rufzeichenliste und Radius müssen beide ausgefüllt oder beide leer sein. Eine 
 
 Sind beide Felder leer, ist die Konfiguration gültig und erzeugt einen reinen Nachrichten-Flow: Die Regel verwirft den gesamten gewöhnlichen Verkehr, während von der Nachrichten-Zustellregel zugelassene Nachrichten und die zugehörige Absenderposition sie weiterhin umgehen.
 
+Mit `Rufzeichen und Radius leeren` werden beide Felder gleichzeitig geleert und dieser Modus wiederhergestellt.
+
 ## Platzierung
 
 Die Regel wird automatisch nach der `APRS-IS-Nachrichten-Zustellregel` und vor der `APRS-IS-zu-RF-TX-Sicherheitsregel` eingefügt und verwaltet. Sie kann nicht entfernt, deaktiviert, dupliziert oder verschoben werden. Diesem Flow können außerdem keine optionalen Filter hinzugefügt werden.

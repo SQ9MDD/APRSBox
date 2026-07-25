@@ -37,6 +37,8 @@ Lista znaków i promień muszą być wypełnione razem albo oba pola muszą pozo
 
 Pozostawienie obu pól pustych jest prawidłowe i tworzy flow tylko dla wiadomości: reguła odrzuca cały zwykły ruch, natomiast wiadomości i powiązana pozycja nadawcy zatwierdzone przez Regułę dostarczania wiadomości nadal ją omijają.
 
+Przycisk `Wyczyść znaki i promień` zeruje oba pola jednocześnie i przywraca ten tryb.
+
 ## Położenie w flow
 
 Reguła jest automatycznie wstawiana i zarządzana za `Regułą dostarczania wiadomości APRS-IS`, a przed `Regułą bezpieczeństwa TX APRS-IS → RF`. Nie można jej usunąć, wyłączyć, powielić ani przesunąć. Do tego flow nie można również dodawać opcjonalnych filtrów.

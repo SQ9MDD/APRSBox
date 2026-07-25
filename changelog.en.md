@@ -3,6 +3,7 @@
 ## 1.8.56.dev - 2026-07-24
 - `Messages / APRS-IS`: fixed ACKs and automatic replies to the local station; they return through `Local TX → APRS-IS` without RF transmission.
 - `Traffic Monitor / colors`: added row highlighting by frame origin and direction, a modal legend, and high-visibility yellow `APRS-IS → RF` warnings with an `IS → RF` badge.
+- `APRS-IS → RF`: added one-click callsign and radius clearing to restore message-only mode.
 
 ## 1.8.55.dev - 2026-07-23
 - `iGate / messages`: the mandatory delivery rule now uses every active TX-enabled TNC automatically; eligible messages and the associated sender position bypass the callsign-and-radius rule, while empty rule fields enable message-only mode.

@@ -3,6 +3,7 @@
 ## 1.8.56.dev - 2026-07-24
 - `Nachrichten / APRS-IS`: ACKs und automatische Antworten an die lokale Station wurden korrigiert; sie laufen ueber `Local TX → APRS-IS` zurueck, ohne RF-Sendung.
 - `Traffic Monitor / Farben`: Zeilen werden jetzt nach Herkunft und Richtung der Frames markiert; hinzu kamen eine modale Legende sowie eine gelbe Warnmarkierung für `APRS-IS → RF` mit dem Badge `IS → RF`.
+- `APRS-IS → RF`: Rufzeichen und Radius lassen sich nun gemeinsam leeren, um den reinen Nachrichtenmodus wiederherzustellen.
 
 ## 1.8.55.dev - 2026-07-23
 - `iGate / Nachrichten`: die obligatorische Zustellregel verwendet automatisch alle aktiven TNCs mit erlaubtem TX; geeignete Nachrichten und die zugehoerige Absenderposition umgehen die Rufzeichen- und Radiusregel, leere Regelfelder aktivieren den reinen Nachrichtenmodus.

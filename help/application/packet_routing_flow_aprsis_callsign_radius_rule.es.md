@@ -37,6 +37,8 @@ La lista de indicativos y el radio deben rellenarse juntos o dejarse ambos vací
 
 Dejar ambos campos vacíos es válido y crea un flujo solo para mensajes: la regla deniega todo el tráfico ordinario, mientras que los mensajes y la posición asociada del remitente autorizados por la regla de entrega de mensajes siguen omitiéndola.
 
+Use `Borrar indicativos y radio` para vaciar ambos campos a la vez y restaurar este modo.
+
 ## Ubicación
 
 La regla se inserta y gestiona automáticamente después de `Regla de entrega de mensajes APRS-IS` y antes de `Regla de seguridad TX APRS-IS → RF`. No se puede eliminar, desactivar, duplicar ni mover. Tampoco se pueden añadir filtros opcionales a este flujo.
