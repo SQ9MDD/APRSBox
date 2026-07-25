@@ -4069,8 +4069,8 @@ select:focus-visible,
 
 .band-condition-index-legend {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.35rem 0.55rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
     min-width: 0;
     padding-left: var(--space-4);
     border-left: 1px solid var(--border);
@@ -4133,7 +4133,6 @@ select:focus-visible,
 
     .band-condition-index-legend {
         grid-column: 1 / -1;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
         padding-top: var(--space-3);
         padding-left: 0;
         border-top: 1px solid var(--border);
@@ -6674,7 +6673,6 @@ button.message-delivery-badge {
     }
 
     .band-condition-index-legend {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
         padding-top: var(--space-3);
         padding-left: 0;
         border-top: 1px solid var(--border);

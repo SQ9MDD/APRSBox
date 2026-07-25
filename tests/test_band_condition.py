@@ -447,6 +447,10 @@ class BandConditionHelpersTests(unittest.TestCase):
         self.assertIn("<strong>W0</strong>", template)
         self.assertIn("<strong>W5</strong>", template)
         self.assertIn('aria-current="true"', template)
+        self.assertLess(
+            template.index("<strong>W5</strong>"),
+            template.index("<strong>W0</strong>"),
+        )
         self.assertIn("band-condition-model-data", template)
         self.assertIn("30-day baseline", template)
         self.assertIn("/api/band-condition/history?days=365", template)
