@@ -1071,35 +1071,15 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "pipeline_finished" and row["decision"] == "drop" for row in rfonly_rows))
             self.assertEqual(len(fake_client.lines), 1)
             self.assertIn("qAO,SQ9MDD-4", fake_client.lines[0])
-            traffic_rows = fetch_all(
+            traffic_row = fetch_one(
                 """
-                SELECT source, source_kind, interface_id, direction, format, line, command
+                SELECT id
                 FROM traffic_frames
                 WHERE direction = 'tx'
-                ORDER BY id ASC
+                LIMIT 1
                 """
             )
-            self.assertEqual(len(traffic_rows), 1)
-            self.assertEqual(
-                (
-                    traffic_rows[0]["source"],
-                    traffic_rows[0]["source_kind"],
-                    traffic_rows[0]["interface_id"],
-                    traffic_rows[0]["direction"],
-                    traffic_rows[0]["format"],
-                    traffic_rows[0]["line"],
-                    traffic_rows[0]["command"],
-                ),
-                (
-                    "APRS-IS",
-                    "aprsis",
-                    None,
-                    "tx",
-                    "TNC2-TX",
-                    fake_client.lines[0],
-                    "TX",
-                ),
-            )
+            self.assertIsNone(traffic_row)
 
     async def test_local_tx_strict_filter_enforces_local_metadata_and_blocks_disallowed_paths(self) -> None:
         with temporary_database():

@@ -2309,7 +2309,7 @@ class DigiFlowRuntimeService:
             decision=decision,
             message=f"{message} | uplink={uplink_identity} | line={tx_line}",
         )
-        if success:
+        if success and source_kind == LOCAL_TX_SOURCE_KIND:
             persist_outbound_frame(
                 source="APRS-IS",
                 line=tx_line,
