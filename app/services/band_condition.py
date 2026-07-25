@@ -420,6 +420,7 @@ def _history_summary(interface_id: int, band: str, hour_start: datetime) -> dict
         """
         SELECT
             COUNT(*) AS history_hours,
+            SUM(CASE WHEN fixed_station_count > 0 THEN 1 ELSE 0 END) AS data_hours,
             MIN(hour_start_utc) AS first_hour,
             MAX(hour_start_utc) AS last_hour
         FROM band_condition_hourly
@@ -429,7 +430,91 @@ def _history_summary(interface_id: int, band: str, hour_start: datetime) -> dict
         """,
         (int(interface_id), normalize_band(band), _floor_to_hour(hour_start).isoformat()),
     )
-    return dict(row) if row is not None else {"history_hours": 0, "first_hour": None, "last_hour": None}
+    return (
+        dict(row)
+        if row is not None
+        else {"history_hours": 0, "data_hours": 0, "first_hour": None, "last_hour": None}
+    )
+
+
+def _profile_summary(interface_id: int, band: str, hour_start: datetime) -> dict[str, int]:
+    cutoff = _floor_to_hour(hour_start) - timedelta(days=BAND_CONDITION_STATION_HISTORY_DAYS)
+    row = fetch_one(
+        """
+        SELECT
+            COUNT(*) AS learned_station_count,
+            SUM(CASE WHEN positioned_hours > 0 THEN 1 ELSE 0 END) AS learned_positioned_station_count,
+            SUM(CASE WHEN observed_hours >= 2 THEN 1 ELSE 0 END) AS repeatable_station_count
+        FROM band_condition_station_profiles
+        WHERE interface_id = ?
+          AND band = ?
+          AND last_heard_at >= ?
+          AND NOT (mobile_hours > fixed_hours AND mobile_hours >= 2)
+        """,
+        (int(interface_id), normalize_band(band), cutoff.isoformat()),
+    )
+    item = dict(row) if row is not None else {}
+    return {
+        "learned_station_count": int(item.get("learned_station_count") or 0),
+        "learned_positioned_station_count": int(item.get("learned_positioned_station_count") or 0),
+        "repeatable_station_count": int(item.get("repeatable_station_count") or 0),
+    }
+
+
+def _model_progress(interface_id: int, band: str, hour_start: datetime, *, model_ready: bool) -> dict[str, Any]:
+    hour = _floor_to_hour(hour_start)
+    history = _history_summary(interface_id, band, hour)
+    profiles = _profile_summary(interface_id, band, hour)
+    history_hours = int(history.get("history_hours") or 0)
+    data_hours = int(history.get("data_hours") or 0)
+    first_hour = _parse_iso_datetime(history.get("first_hour"))
+    history_span_hours = (
+        max(0.0, (hour - first_hour).total_seconds() / 3600.0)
+        if first_hour is not None
+        else 0.0
+    )
+    first_assessment_percent = int(
+        round(min(1.0, history_span_hours / float(BAND_CONDITION_MIN_MODEL_HOURS)) * 100.0)
+    )
+    hours_to_first_assessment = max(
+        0,
+        int(math.ceil(BAND_CONDITION_MIN_MODEL_HOURS - history_span_hours)),
+    )
+    mature_hours = 30 * 24
+    maturity_percent = int(round(min(1.0, history_span_hours / float(mature_hours)) * 100.0))
+    days_to_mature = max(0, int(math.ceil((mature_hours - history_span_hours) / 24.0)))
+
+    if not model_ready:
+        stage_label = "Collecting data"
+        stage_summary = (
+            "The first assessment appears after 24 hours. At first it will intentionally have low confidence."
+        )
+    elif history_span_hours < 7 * 24:
+        stage_label = "Initial assessment"
+        stage_summary = "The assessment is available, but the first days can still noticeably change the learned norm."
+    elif history_span_hours < mature_hours:
+        stage_label = "Building confidence"
+        stage_summary = "Each regular day improves the comparison with the usual fixed-station footprint."
+    else:
+        stage_label = "Mature baseline"
+        stage_summary = (
+            "At least 30 days have been collected; confidence still depends on regular traffic and known positions."
+        )
+
+    return {
+        "history_hours": history_hours,
+        "data_hours": data_hours,
+        "history_days": round(history_span_hours / 24.0, 1),
+        "learned_station_count": profiles["learned_station_count"],
+        "learned_positioned_station_count": profiles["learned_positioned_station_count"],
+        "repeatable_station_count": profiles["repeatable_station_count"],
+        "first_assessment_percent": first_assessment_percent,
+        "hours_to_first_assessment": hours_to_first_assessment,
+        "maturity_percent": maturity_percent,
+        "days_to_mature": days_to_mature,
+        "model_stage_label": stage_label,
+        "model_stage_summary": stage_summary,
+    }
 
 
 def _hour_rx_total(interface_id: int, hour_start: datetime) -> int:
@@ -597,6 +682,7 @@ def _evaluate_hour(
 
     history = _history_summary(interface_id, normalized_band, hour)
     history_hours = int(history.get("history_hours") or 0)
+    data_hours = int(history.get("data_hours") or 0)
     first_hour = _parse_iso_datetime(history.get("first_hour"))
     history_span_hours = (
         max(0.0, (hour - first_hour).total_seconds() / 3600.0)
@@ -615,7 +701,7 @@ def _evaluate_hour(
     )
     positioned_ratio = positioned_station_count / float(max(1, fixed_station_count))
     confidence = _confidence_score(
-        history_hours=history_hours,
+        history_hours=data_hours,
         history_span_hours=history_span_hours,
         baseline_rows=len(baseline),
         stable_station_count=stable_station_count,
@@ -644,7 +730,7 @@ def _evaluate_hour(
             rx_total=rx_total,
         )
 
-    label = CONDITION_LABELS.get(condition_index, "Learning normal conditions")
+    label = CONDITION_LABELS.get(condition_index, "Collecting data")
     summary = CONDITION_SUMMARIES.get(
         condition_index,
         "The first assessment will appear after 24 hours of monitored RF data.",
@@ -665,6 +751,7 @@ def _evaluate_hour(
         "confidence_score": round(confidence, 4),
         "confidence_percent": int(round(confidence * 100.0)),
         "history_hours": history_hours,
+        "data_hours": data_hours,
         "history_days": round(history_span_hours / 24.0, 1),
         "model_ready": model_ready,
         "fixed_station_count": fixed_station_count,
@@ -866,7 +953,7 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
     condition_index = item.get("condition_index")
     condition_index = int(condition_index) if condition_index is not None else None
     model_ready = int(item.get("history_hours") or 0) >= BAND_CONDITION_MIN_MODEL_HOURS
-    label = CONDITION_LABELS.get(condition_index, "Learning normal conditions")
+    label = CONDITION_LABELS.get(condition_index, "Collecting data")
     summary = CONDITION_SUMMARIES.get(
         condition_index,
         "The first assessment will appear after 24 hours of monitored RF data.",
@@ -897,13 +984,21 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
         band=normalize_band(interface.get("band")),
         hour_start=current_hour,
     )
-    if current["current_segment_count"] >= BAND_CONDITION_CURRENT_MIN_SEGMENTS:
-        return current
-    saved = _latest_saved_snapshot(interface)
-    saved_hour = _parse_iso_datetime((saved or {}).get("hour_start_utc"))
-    if saved is not None and saved_hour is not None and saved_hour >= current_hour - timedelta(hours=1):
-        return saved
-    return current
+    selected = current
+    if current["current_segment_count"] < BAND_CONDITION_CURRENT_MIN_SEGMENTS:
+        saved = _latest_saved_snapshot(interface)
+        saved_hour = _parse_iso_datetime((saved or {}).get("hour_start_utc"))
+        if saved is not None and saved_hour is not None and saved_hour >= current_hour - timedelta(hours=1):
+            selected = saved
+    selected.update(
+        _model_progress(
+            int(interface["id"]),
+            normalize_band(interface.get("band")),
+            current_hour,
+            model_ready=bool(selected.get("model_ready")),
+        )
+    )
+    return selected
 
 
 def get_band_condition_snapshot(*, now_utc: datetime | None = None) -> dict[str, Any]:

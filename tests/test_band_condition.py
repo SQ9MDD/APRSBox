@@ -9,6 +9,7 @@ from app.db import execute, fetch_one, init_db
 from app.services.band_condition import (
     _confidence_score,
     _evaluate_hour,
+    _model_progress,
     _score_condition,
     aggregate_band_condition_bucket,
     format_band_label,
@@ -276,7 +277,39 @@ class BandConditionHelpersTests(unittest.TestCase):
             )
             self.assertTrue(ready["model_ready"])
             self.assertEqual(ready["history_hours"], 24)
+            self.assertEqual(ready["data_hours"], 24)
             self.assertEqual(ready["condition_index"], 5)
+
+            execute(
+                """
+                INSERT INTO band_condition_station_profiles(
+                    interface_id, band, station_key, first_heard_at, last_heard_at,
+                    observed_hours, direct_hours, positioned_hours, fixed_hours, mobile_hours,
+                    latitude, longitude, distance_km, updated_at
+                )
+                VALUES (?, '2m', 'SP5BASE', ?, ?, 8, 6, 8, 8, 0, 52.5, 21.5, 42, ?)
+                """,
+                (
+                    interface_id,
+                    (assessed_hour - timedelta(hours=20)).isoformat(),
+                    (assessed_hour - timedelta(hours=1)).isoformat(),
+                    assessed_hour.isoformat(),
+                ),
+            )
+            progress = _model_progress(
+                interface_id,
+                "2m",
+                assessed_hour,
+                model_ready=True,
+            )
+            self.assertEqual(progress["model_stage_label"], "Initial assessment")
+            self.assertEqual(progress["first_assessment_percent"], 100)
+            self.assertEqual(progress["maturity_percent"], 3)
+            self.assertEqual(progress["days_to_mature"], 29)
+            self.assertEqual(progress["data_hours"], 24)
+            self.assertEqual(progress["learned_station_count"], 1)
+            self.assertEqual(progress["learned_positioned_station_count"], 1)
+            self.assertEqual(progress["repeatable_station_count"], 1)
 
     def test_disabled_interface_does_not_collect_band_condition_rows(self) -> None:
         with temporary_database():
@@ -373,6 +406,8 @@ class BandConditionHelpersTests(unittest.TestCase):
     def test_template_is_simple_and_has_no_manual_reference_station_form(self) -> None:
         template = Path("app/templates/band_condition.html").read_text(encoding="utf-8")
         self.assertIn("band-condition-index", template)
+        self.assertIn("band-condition-model-data", template)
+        self.assertIn("30-day baseline", template)
         self.assertIn("/api/band-condition/history?days=365", template)
         self.assertNotIn("reference-stations", template)
 

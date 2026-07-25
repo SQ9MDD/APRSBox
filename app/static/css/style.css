@@ -4138,6 +4138,111 @@ select:focus-visible,
     text-align: center;
 }
 
+.band-condition-model-data {
+    display: grid;
+    gap: var(--space-3);
+    padding: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--panel-alt) 72%, transparent);
+}
+
+.band-condition-model-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.band-condition-model-heading h3 {
+    margin: 0 0 0.2rem;
+}
+
+.band-condition-model-heading p,
+.band-condition-model-summary,
+.band-condition-model-note {
+    margin: 0;
+}
+
+.band-condition-model-summary {
+    max-width: 72ch;
+}
+
+.band-condition-model-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-2);
+    margin: 0;
+}
+
+.band-condition-model-stats > div {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.65rem 0.7rem;
+    border-radius: var(--radius-sm);
+    background: var(--panel-soft);
+}
+
+.band-condition-model-stats dt {
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.band-condition-model-stats dd {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.band-condition-learning-progress {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+.band-condition-learning-progress > div {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.band-condition-learning-progress-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    font-size: 0.82rem;
+}
+
+.band-condition-learning-progress-label span {
+    color: var(--muted);
+}
+
+.band-condition-learning-progress progress {
+    width: 100%;
+    height: 0.42rem;
+    border: 0;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--panel-soft);
+}
+
+.band-condition-learning-progress progress::-webkit-progress-bar {
+    background: var(--panel-soft);
+}
+
+.band-condition-learning-progress progress::-webkit-progress-value {
+    background: var(--accent);
+}
+
+.band-condition-learning-progress progress::-moz-progress-bar {
+    background: var(--accent);
+}
+
+.band-condition-model-note {
+    font-size: 0.78rem;
+}
+
 .alert {
     padding: 0.65rem 0.78rem;
     border-radius: var(--radius-sm);
@@ -6488,6 +6593,14 @@ button.message-delivery-badge {
 
     .band-condition-chart-heading {
         display: grid;
+    }
+
+    .band-condition-model-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .band-condition-learning-progress {
+        grid-template-columns: 1fr;
     }
 
     .sidebar-user-meta,

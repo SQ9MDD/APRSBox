@@ -58,6 +58,72 @@
                         </p>
                     </div>
                 </section>
+
+                <section class="band-condition-model-data" aria-label="{{ t('Model data') }}">
+                    <div class="band-condition-model-heading">
+                        <div>
+                            <h3>{{ t("Model data") }}</h3>
+                            <p class="muted">{{ t("What has been collected and how close the model is to a stable baseline.") }}</p>
+                        </div>
+                        <span class="status-pill status-{% if item.model_ready %}running{% else %}unknown{% endif %}">
+                            {{ t(item.model_stage_label) }}
+                        </span>
+                    </div>
+
+                    <p class="band-condition-model-summary">{{ t(item.model_stage_summary) }}</p>
+
+                    <dl class="band-condition-model-stats">
+                        <div>
+                            <dt>{{ t("Hourly periods recorded") }}</dt>
+                            <dd>{{ item.history_hours }}</dd>
+                        </div>
+                        <div>
+                            <dt>{{ t("Hours with fixed stations") }}</dt>
+                            <dd>{{ item.data_hours }}</dd>
+                        </div>
+                        <div>
+                            <dt>{{ t("Learned fixed stations") }}</dt>
+                            <dd>{{ item.learned_station_count }}</dd>
+                        </div>
+                        <div>
+                            <dt>{{ t("Stations with known position") }}</dt>
+                            <dd>{{ item.learned_positioned_station_count }}</dd>
+                        </div>
+                    </dl>
+
+                    <div class="band-condition-learning-progress">
+                        <div>
+                            <div class="band-condition-learning-progress-label">
+                                <span>{{ t("First assessment") }}</span>
+                                <strong>
+                                    {% if item.model_ready %}
+                                    {{ t("Available") }}
+                                    {% else %}
+                                    {{ item.hours_to_first_assessment }} {{ t("hours remaining") }}
+                                    {% endif %}
+                                </strong>
+                            </div>
+                            <progress value="{{ item.first_assessment_percent }}" max="100">{{ item.first_assessment_percent }}%</progress>
+                        </div>
+                        <div>
+                            <div class="band-condition-learning-progress-label">
+                                <span>{{ t("30-day baseline") }}</span>
+                                <strong>
+                                    {% if item.days_to_mature == 0 %}
+                                    {{ t("Complete") }}
+                                    {% else %}
+                                    {{ item.days_to_mature }} {{ t("days remaining") }}
+                                    {% endif %}
+                                </strong>
+                            </div>
+                            <progress value="{{ item.maturity_percent }}" max="100">{{ item.maturity_percent }}%</progress>
+                        </div>
+                    </div>
+
+                    <p class="band-condition-model-note muted">
+                        {{ t("Confidence grows mainly with regular observations, repeatable fixed stations, and known positions.") }}
+                    </p>
+                </section>
             </div>
         </article>
         {% endfor %}
