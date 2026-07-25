@@ -406,9 +406,20 @@ class BandConditionHelpersTests(unittest.TestCase):
     def test_template_is_simple_and_has_no_manual_reference_station_form(self) -> None:
         template = Path("app/templates/band_condition.html").read_text(encoding="utf-8")
         self.assertIn("band-condition-index", template)
+        self.assertIn("band-condition-interface-stack", template)
+        self.assertIn('<article class="panel band-condition-card">', template)
+        self.assertIn('<article class="panel band-condition-model-card">', template)
+        self.assertIn("band-condition-index-legend", template)
+        self.assertIn("<strong>W0</strong>", template)
+        self.assertIn("<strong>W5</strong>", template)
+        self.assertIn('aria-current="true"', template)
         self.assertIn("band-condition-model-data", template)
         self.assertIn("30-day baseline", template)
         self.assertIn("/api/band-condition/history?days=365", template)
+        self.assertLess(
+            template.index('<article class="panel band-condition-card">'),
+            template.index('<article class="panel band-condition-model-card">'),
+        )
         self.assertNotIn("reference-stations", template)
 
 

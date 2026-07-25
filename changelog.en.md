@@ -3,7 +3,7 @@
 ## 1.8.57.dev - 2026-07-25
 - `Band Condition / interfaces`: propagation assessment is now optional per interface and disabled by default; the available monitored bands are `2 m` and `70 cm`, with no manual reference-station selection.
 - `Band Condition / W0–W5 model`: added automatic learning of the usual fixed-station footprint separately for each interface. The first assessment appears after 24 hours, while opening detection considers station counts, typical reach, distances, distant stations, and newly heard geographic areas.
-- `Band Condition / confidence and history`: added a confidence index that improves as more data is collected, a simple W0–W5 indicator, an hourly chart covering the last 365 days, and a subtle model-data panel showing collected samples, learning stage, and progress toward initial and mature assessments.
+- `Band Condition / confidence and history`: added a confidence index that improves as more data is collected, a simple W0–W5 indicator with a clear scale legend, an hourly chart covering the last 365 days, and a separate subtle model-data panel showing collected samples, learning stage, and progress toward initial and mature assessments.
 - `Band Condition / performance`: moved analysis out of the frame-receive hot path and into the shared five-minute aggregator; frames are parsed once, and detailed observations and history use bounded retention.
 
 ## 1.8.56.dev - 2026-07-24

@@ -3887,8 +3887,16 @@ select:focus-visible,
     grid-column: 1 / -1;
 }
 
+.band-condition-interface-stack {
+    display: grid;
+    gap: var(--space-4);
+    min-width: 0;
+    align-content: start;
+}
+
 .band-condition-card {
     min-width: 0;
+    container-type: inline-size;
 }
 
 .band-condition-card .panel-body {
@@ -3984,7 +3992,7 @@ select:focus-visible,
 
 .band-condition-index {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) minmax(17rem, 0.8fr);
     align-items: center;
     gap: var(--space-4);
     padding: clamp(1rem, 3vw, 1.4rem);
@@ -4057,6 +4065,80 @@ select:focus-visible,
 .band-condition-index-copy p {
     margin: 0;
     max-width: 52ch;
+}
+
+.band-condition-index-legend {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.55rem;
+    min-width: 0;
+    padding-left: var(--space-4);
+    border-left: 1px solid var(--border);
+}
+
+.band-condition-index-legend-item {
+    --condition-color: var(--muted);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.28rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+
+.band-condition-index-legend-item strong {
+    color: var(--condition-color);
+    font-size: 0.78rem;
+}
+
+.band-condition-index-legend-item.is-active {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--condition-color) 44%, transparent);
+    background: color-mix(in srgb, var(--condition-color) 14%, transparent);
+}
+
+.band-condition-index-legend-bad {
+    --condition-color: #c97a7a;
+}
+
+.band-condition-index-legend-caution {
+    --condition-color: #d59a62;
+}
+
+.band-condition-index-legend-neutral {
+    --condition-color: #7290ad;
+}
+
+.band-condition-index-legend-noticeable {
+    --condition-color: #74ad87;
+}
+
+.band-condition-index-legend-good {
+    --condition-color: #59bd77;
+}
+
+.band-condition-index-legend-excellent {
+    --condition-color: #2ce06a;
+}
+
+@container (max-width: 46rem) {
+    .band-condition-index {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .band-condition-index-legend {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        padding-top: var(--space-3);
+        padding-left: 0;
+        border-top: 1px solid var(--border);
+        border-left: 0;
+    }
 }
 
 .band-condition-confidence-simple {
@@ -4141,10 +4223,10 @@ select:focus-visible,
 .band-condition-model-data {
     display: grid;
     gap: var(--space-3);
-    padding: 0.9rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--panel-alt) 72%, transparent);
+}
+
+.band-condition-model-card {
+    min-width: 0;
 }
 
 .band-condition-model-heading {
@@ -6589,6 +6671,14 @@ button.message-delivery-badge {
 
     .band-condition-index-value {
         justify-items: start;
+    }
+
+    .band-condition-index-legend {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding-top: var(--space-3);
+        padding-left: 0;
+        border-top: 1px solid var(--border);
+        border-left: 0;
     }
 
     .band-condition-chart-heading {

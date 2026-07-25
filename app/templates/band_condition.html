@@ -4,8 +4,9 @@
 <section class="band-condition-layout">
     {% if interfaces %}
         {% for item in interfaces %}
-        <article class="panel band-condition-card">
-            <div class="panel-body">
+        <div class="band-condition-interface-stack">
+            <article class="panel band-condition-card">
+                <div class="panel-body">
                 <div class="band-condition-card-heading">
                     <div>
                         <span class="band-condition-eyebrow">{{ item.band_label }}</span>
@@ -24,6 +25,32 @@
                     <div class="band-condition-index-copy">
                         <strong>{{ t(item.label) }}</strong>
                         <p>{{ t(item.diagnosis_summary) }}</p>
+                    </div>
+                    <div class="band-condition-index-legend" aria-label="{{ t('Propagation index') }}">
+                        <span class="band-condition-index-legend-item band-condition-index-legend-bad{% if item.condition_index == 0 %} is-active{% endif %}"{% if item.condition_index == 0 %} aria-current="true"{% endif %}>
+                            <strong>W0</strong>
+                            <span>{{ t("Severely degraded") }}</span>
+                        </span>
+                        <span class="band-condition-index-legend-item band-condition-index-legend-caution{% if item.condition_index == 1 %} is-active{% endif %}"{% if item.condition_index == 1 %} aria-current="true"{% endif %}>
+                            <strong>W1</strong>
+                            <span>{{ t("Degraded propagation") }}</span>
+                        </span>
+                        <span class="band-condition-index-legend-item band-condition-index-legend-neutral{% if item.condition_index == 2 %} is-active{% endif %}"{% if item.condition_index == 2 %} aria-current="true"{% endif %}>
+                            <strong>W2</strong>
+                            <span>{{ t("Normal conditions") }}</span>
+                        </span>
+                        <span class="band-condition-index-legend-item band-condition-index-legend-noticeable{% if item.condition_index == 3 %} is-active{% endif %}"{% if item.condition_index == 3 %} aria-current="true"{% endif %}>
+                            <strong>W3</strong>
+                            <span>{{ t("Moderate opening") }}</span>
+                        </span>
+                        <span class="band-condition-index-legend-item band-condition-index-legend-good{% if item.condition_index == 4 %} is-active{% endif %}"{% if item.condition_index == 4 %} aria-current="true"{% endif %}>
+                            <strong>W4</strong>
+                            <span>{{ t("Strong opening") }}</span>
+                        </span>
+                        <span class="band-condition-index-legend-item band-condition-index-legend-excellent{% if item.condition_index == 5 %} is-active{% endif %}"{% if item.condition_index == 5 %} aria-current="true"{% endif %}>
+                            <strong>W5</strong>
+                            <span>{{ t("Very strong opening") }}</span>
+                        </span>
                     </div>
                 </section>
 
@@ -58,7 +85,11 @@
                         </p>
                     </div>
                 </section>
+                </div>
+            </article>
 
+            <article class="panel band-condition-model-card">
+                <div class="panel-body">
                 <section class="band-condition-model-data" aria-label="{{ t('Model data') }}">
                     <div class="band-condition-model-heading">
                         <div>
@@ -124,8 +155,9 @@
                         {{ t("Confidence grows mainly with regular observations, repeatable fixed stations, and known positions.") }}
                     </p>
                 </section>
-            </div>
-        </article>
+                </div>
+            </article>
+        </div>
         {% endfor %}
     {% else %}
     <section class="panel band-condition-layout-full">
