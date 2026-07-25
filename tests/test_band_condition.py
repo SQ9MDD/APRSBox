@@ -158,6 +158,40 @@ class BandConditionHelpersTests(unittest.TestCase):
         self.assertLess(early, 0.6)
         self.assertGreater(mature, 0.85)
 
+    def test_confidence_is_conservatively_capped_by_model_age(self) -> None:
+        rich_observations = {
+            "baseline_rows": 14,
+            "stable_station_count": 16,
+            "positioned_ratio": 1.0,
+            "current_segment_count": 12,
+            "fixed_station_count": 20,
+        }
+        first_hours = _confidence_score(
+            history_hours=3,
+            history_span_hours=2.4,
+            **rich_observations,
+        )
+        first_day = _confidence_score(
+            history_hours=24,
+            history_span_hours=24,
+            **rich_observations,
+        )
+        first_week = _confidence_score(
+            history_hours=7 * 24,
+            history_span_hours=7 * 24,
+            **rich_observations,
+        )
+        first_month = _confidence_score(
+            history_hours=30 * 24,
+            history_span_hours=30 * 24,
+            **rich_observations,
+        )
+
+        self.assertAlmostEqual(first_hours, 0.03, places=3)
+        self.assertAlmostEqual(first_day, 0.30, places=3)
+        self.assertAlmostEqual(first_week, 0.55, places=3)
+        self.assertAlmostEqual(first_month, 0.90, places=3)
+
     def test_first_assessment_appears_after_24_hours_and_detects_opening(self) -> None:
         with temporary_database():
             interface_id = insert_interface(band="2m")

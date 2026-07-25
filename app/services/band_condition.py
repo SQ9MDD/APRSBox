@@ -607,7 +607,19 @@ def _confidence_score(
         + (position_factor * 0.10)
         + (current_factor * 0.10)
     )
-    return max(0.0, min(0.97, score))
+    maturity_ceiling = _confidence_maturity_ceiling(history_span_hours)
+    return max(0.0, min(0.97, maturity_ceiling, score))
+
+
+def _confidence_maturity_ceiling(history_span_hours: float) -> float:
+    history_days = max(0.0, float(history_span_hours) / 24.0)
+    if history_days <= 1.0:
+        return history_days * 0.30
+    if history_days <= 7.0:
+        return 0.30 + (((history_days - 1.0) / 6.0) * 0.25)
+    if history_days <= 30.0:
+        return 0.55 + (((history_days - 7.0) / 23.0) * 0.35)
+    return 0.90 + (min(1.0, (history_days - 30.0) / 60.0) * 0.07)
 
 
 def _evaluate_hour(
@@ -990,14 +1002,19 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
         saved_hour = _parse_iso_datetime((saved or {}).get("hour_start_utc"))
         if saved is not None and saved_hour is not None and saved_hour >= current_hour - timedelta(hours=1):
             selected = saved
-    selected.update(
-        _model_progress(
-            int(interface["id"]),
-            normalize_band(interface.get("band")),
-            current_hour,
-            model_ready=bool(selected.get("model_ready")),
-        )
+    progress = _model_progress(
+        int(interface["id"]),
+        normalize_band(interface.get("band")),
+        current_hour,
+        model_ready=bool(selected.get("model_ready")),
     )
+    selected.update(progress)
+    displayed_confidence = min(
+        float(selected.get("confidence_score") or 0.0),
+        _confidence_maturity_ceiling(float(progress.get("history_days") or 0.0) * 24.0),
+    )
+    selected["confidence_score"] = round(displayed_confidence, 4)
+    selected["confidence_percent"] = int(round(displayed_confidence * 100.0))
     return selected
 
 

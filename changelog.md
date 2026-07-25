@@ -3,7 +3,7 @@
 ## 1.8.57.dev - 25.07.2026
 - `Warunki pasma / interfejsy`: ocena propagacji jest teraz opcjonalna dla każdego interfejsu i domyślnie wyłączona; do wyboru pozostają `2 m` oraz `70 cm`, bez ręcznego wskazywania stacji referencyjnych.
 - `Warunki pasma / model W0–W5`: dodano automatyczne uczenie typowej słyszalności stacji stałych osobno dla każdego interfejsu. Pierwsza ocena pojawia się po 24 godzinach, a wykrywanie otwarć uwzględnia liczbę stacji, typowy zasięg, odległości, dalekie stacje i nowe obszary geograficzne.
-- `Warunki pasma / pewność i historia`: dodano rosnący wraz z ilością danych indeks pewności, prosty wskaźnik W0–W5 z czytelną legendą skali, wykres godzinowy obejmujący ostatnie 365 dni oraz osobny, dyskretny blok pokazujący zebrane dane, etap uczenia i postęp do pierwszej oraz dojrzałej oceny.
+- `Warunki pasma / pewność i historia`: dodano konserwatywny, rosnący wraz z ilością danych indeks pewności — ograniczony do 30% po pierwszej dobie, 55% po tygodniu i 90% po 30 dniach — prosty wskaźnik W0–W5 z czytelną legendą skali, wykres godzinowy obejmujący ostatnie 365 dni oraz osobny, dyskretny blok pokazujący zebrane dane, etap uczenia i postęp do pierwszej oraz dojrzałej oceny.
 - `Warunki pasma / wydajność`: analizę przeniesiono z gorącej ścieżki odbioru ramek do wspólnego agregatora pięciominutowego; ramki są parsowane jednokrotnie, a szczegółowe obserwacje i historia mają ograniczoną retencję.
 
 ## 1.8.56.dev - 24.07.2026
