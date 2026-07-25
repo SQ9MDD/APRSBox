@@ -48,7 +48,9 @@ from app.services.outbound import (
     APRSIS_TO_RF_ORIGIN,
     build_aprsis_third_party_tnc2,
     enqueue_digi_tx_job,
+    persist_outbound_frame,
 )
+from app.services.traffic_source import APRSIS_SOURCE_KIND
 from app.services.messages import split_callsign_ssid
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
@@ -2307,6 +2309,12 @@ class DigiFlowRuntimeService:
             decision=decision,
             message=f"{message} | uplink={uplink_identity} | line={tx_line}",
         )
+        if success:
+            persist_outbound_frame(
+                source="APRS-IS",
+                line=tx_line,
+                source_kind=APRSIS_SOURCE_KIND,
+            )
         record_aprsis_tx_result(sent=success, frame_line=tx_line)
         return {"decision": decision}
 

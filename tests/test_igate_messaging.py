@@ -407,6 +407,37 @@ class IgateMessagingRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 fake_client.lines,
                 ["SQ9MDD-4>APBOX0,TCPIP*::SQ5BIH-1 :ack3P"],
             )
+            aprsis_tx = fetch_one(
+                """
+                SELECT source, source_kind, interface_id, direction, format, line, command
+                FROM traffic_frames
+                WHERE direction = 'tx' AND source_kind = 'aprsis'
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            self.assertIsNotNone(aprsis_tx)
+            assert aprsis_tx is not None
+            self.assertEqual(
+                (
+                    aprsis_tx["source"],
+                    aprsis_tx["source_kind"],
+                    aprsis_tx["interface_id"],
+                    aprsis_tx["direction"],
+                    aprsis_tx["format"],
+                    aprsis_tx["line"],
+                    aprsis_tx["command"],
+                ),
+                (
+                    "APRS-IS",
+                    "aprsis",
+                    None,
+                    "tx",
+                    "TNC2-TX",
+                    "SQ9MDD-4>APBOX0,TCPIP*::SQ5BIH-1 :ack3P",
+                    "TX",
+                ),
+            )
             rf_tx = fetch_one(
                 """
                 SELECT COUNT(*) AS total
