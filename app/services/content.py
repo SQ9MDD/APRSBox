@@ -1816,15 +1816,23 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     processing_total = int(queue_row["processing_total"] or 0) if queue_row is not None else 0
     if processing_total > 0:
         queue_status_label = f"Processing ({processing_total})"
+        queue_status_key = "Processing ({count})"
+        queue_status_params: dict[str, object] = {"count": processing_total}
         queue_status_tone = "ok"
     elif queued_total == 0:
         queue_status_label = "Idle"
+        queue_status_key = "Idle"
+        queue_status_params = {}
         queue_status_tone = "ok"
     elif queued_total <= 3:
         queue_status_label = f"Queued ({queued_total})"
+        queue_status_key = "Queued ({count})"
+        queue_status_params = {"count": queued_total}
         queue_status_tone = "ok"
     else:
         queue_status_label = f"Backlog ({queued_total})"
+        queue_status_key = "Backlog ({count})"
+        queue_status_params = {"count": queued_total}
         queue_status_tone = "warn"
 
     scheduler_row = fetch_one(
@@ -1839,18 +1847,26 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     )
     if scheduler_row is None:
         scheduler_status_label = "No scheduler events yet"
+        scheduler_status_key = "No scheduler events yet"
+        scheduler_status_params: dict[str, object] = {}
         scheduler_status_tone = "neutral"
     else:
         scheduler_level = str(scheduler_row["level"] or "").strip().upper()
         scheduler_time = _format_monitor_timestamp(str(scheduler_row["created_at"] or ""))
         if scheduler_level == "ERROR":
             scheduler_status_label = f"Error at {scheduler_time}"
+            scheduler_status_key = "Error at {time}"
+            scheduler_status_params = {"time": scheduler_time}
             scheduler_status_tone = "error"
         elif scheduler_level == "WARNING":
             scheduler_status_label = f"Warning at {scheduler_time}"
+            scheduler_status_key = "Warning at {time}"
+            scheduler_status_params = {"time": scheduler_time}
             scheduler_status_tone = "warn"
         else:
             scheduler_status_label = f"Active at {scheduler_time}"
+            scheduler_status_key = "Active at {time}"
+            scheduler_status_params = {"time": scheduler_time}
             scheduler_status_tone = "ok"
 
     database_ready = fetch_one("SELECT 1 AS ok") is not None
@@ -1861,8 +1877,20 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         {"name": "RF RX freshness", "status": rx_runtime_status, "tone": rx_runtime_tone},
         {"name": "RF TX freshness", "status": tx_runtime_status, "tone": tx_runtime_tone},
         {"name": "APRS-IS/iGate uplink", "status": aprsis_runtime_label, "tone": aprsis_runtime_tone},
-        {"name": "TX queue", "status": queue_status_label, "tone": queue_status_tone},
-        {"name": "Schedulers", "status": scheduler_status_label, "tone": scheduler_status_tone},
+        {
+            "name": "TX queue",
+            "status": queue_status_label,
+            "status_key": queue_status_key,
+            "status_params": queue_status_params,
+            "tone": queue_status_tone,
+        },
+        {
+            "name": "Schedulers",
+            "status": scheduler_status_label,
+            "status_key": scheduler_status_key,
+            "status_params": scheduler_status_params,
+            "tone": scheduler_status_tone,
+        },
         {"name": "Database", "status": database_status_label, "tone": database_status_tone},
     ]
     runtime_check_state = "ok"

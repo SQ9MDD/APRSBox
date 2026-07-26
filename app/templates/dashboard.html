@@ -53,37 +53,62 @@
     <section class="dashboard-v2-top-grid">
         <section class="panel dashboard-v2-station-panel">
             <div class="panel-body">
-                <div class="dashboard-v2-station-header">
-                    <div class="panel-header-copy">
-                        <span class="status-pill dashboard-v2-health dashboard-v2-health-{{ health.tone }}">{{ health.label }}</span>
+                <div class="dashboard-v2-station-stage">
+                    <div class="dashboard-v2-station-copy">
+                        <span class="dashboard-v2-eyebrow">{{ t("Station status") }}</span>
+                        <strong class="dashboard-v2-health dashboard-v2-health-{{ health.tone }}">
+                            {{ t(health.label) }}
+                            <span class="dashboard-v2-health-dot" aria-hidden="true"></span>
+                        </strong>
                         <h2>{{ t(dashboard_home.hero.title) }}</h2>
                         <p class="muted small">{{ t("Last RF activity") }}: {{ t(station.last_rf) }}</p>
+                        <div class="dashboard-v2-station-identity">
+                            <span>{{ t("Callsign") }}</span>
+                            <strong>{{ station.callsign if station.callsign != "Not set" else t("Not set") }}</strong>
+                        </div>
+                    </div>
+                    <div class="dashboard-v2-radio-visual" aria-hidden="true">
+                        <span class="dashboard-v2-radio-pulse dashboard-v2-radio-pulse-one"></span>
+                        <span class="dashboard-v2-radio-pulse dashboard-v2-radio-pulse-two"></span>
+                        <span class="dashboard-v2-radio-pulse dashboard-v2-radio-pulse-three"></span>
+                        <img src="{{ request.scope.root_path }}/static/icons/radio-tower.svg" alt="">
                     </div>
                 </div>
-                <ul class="dashboard-v2-station-facts">
-                    <li class="dashboard-v2-fact">
-                        <span class="dashboard-v2-fact-label">{{ t("Callsign") }}</span>
-                        <span class="dashboard-v2-fact-value">{{ station.callsign if station.callsign != "Not set" else t("Not set") }}</span>
-                    </li>
-                    <li class="dashboard-v2-fact">
-                        <span class="dashboard-v2-fact-label">{{ t("RF RX freshness") }}</span>
-                        <span class="dashboard-v2-fact-value dashboard-v2-state dashboard-v2-state-{{ station.rx_tone }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ station.rx_tone }}"></span>
-                            {{ t(station.rx_value) }}
+                <ul class="dashboard-v2-link-statuses" aria-label="{{ t('Radio links') }}">
+                    <li class="dashboard-v2-link-status dashboard-v2-link-status-{{ station.rx_tone }}">
+                        <span class="dashboard-v2-link-icon" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/download-circle-outline.svg" alt="">
+                        </span>
+                        <span class="dashboard-v2-link-copy">
+                            <span class="dashboard-v2-link-label">RF RX</span>
+                            <strong class="dashboard-v2-state dashboard-v2-state-{{ station.rx_tone }}">
+                                <span class="dashboard-indicator dashboard-indicator-{{ station.rx_tone }}"></span>
+                                {{ t(station.rx_value) }}
+                            </strong>
                         </span>
                     </li>
-                    <li class="dashboard-v2-fact">
-                        <span class="dashboard-v2-fact-label">{{ t("RF TX freshness") }}</span>
-                        <span class="dashboard-v2-fact-value dashboard-v2-state dashboard-v2-state-{{ station.tx_tone }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ station.tx_tone }}"></span>
-                            {{ t(station.tx_value) }}
+                    <li class="dashboard-v2-link-status dashboard-v2-link-status-{{ station.tx_tone }}">
+                        <span class="dashboard-v2-link-icon" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/upload-circle-outline.svg" alt="">
+                        </span>
+                        <span class="dashboard-v2-link-copy">
+                            <span class="dashboard-v2-link-label">RF TX</span>
+                            <strong class="dashboard-v2-state dashboard-v2-state-{{ station.tx_tone }}">
+                                <span class="dashboard-indicator dashboard-indicator-{{ station.tx_tone }}"></span>
+                                {{ t(station.tx_value) }}
+                            </strong>
                         </span>
                     </li>
-                    <li class="dashboard-v2-fact">
-                        <span class="dashboard-v2-fact-label">{{ t("APRS-IS/iGate uplink") }}</span>
-                        <span class="dashboard-v2-fact-value dashboard-v2-state dashboard-v2-state-{{ station.aprsis_tone }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ station.aprsis_tone }}"></span>
-                            {{ t(station.aprsis_value) }}
+                    <li class="dashboard-v2-link-status dashboard-v2-link-status-{{ station.aprsis_tone }}">
+                        <span class="dashboard-v2-link-icon" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/lan-connect.svg" alt="">
+                        </span>
+                        <span class="dashboard-v2-link-copy">
+                            <span class="dashboard-v2-link-label">APRS-IS</span>
+                            <strong class="dashboard-v2-state dashboard-v2-state-{{ station.aprsis_tone }}">
+                                <span class="dashboard-indicator dashboard-indicator-{{ station.aprsis_tone }}"></span>
+                                {{ t(station.aprsis_value) }}
+                            </strong>
                         </span>
                     </li>
                 </ul>
@@ -107,8 +132,20 @@
                 </div>
                 {% if dashboard_band %}
                 <section class="dashboard-v2-band-summary dashboard-v2-band-summary-{{ dashboard_band.diagnosis_tone }}">
-                    <strong>{% if dashboard_band.condition_index is none %}W–{% else %}W{{ dashboard_band.condition_index }}{% endif %} · {{ t(dashboard_band.label) }}</strong>
+                    <span class="dashboard-v2-eyebrow">{{ t("Current propagation") }}</span>
+                    <div class="dashboard-v2-band-current">
+                        <strong class="dashboard-v2-band-index">{% if dashboard_band.condition_index is none %}W–{% else %}W{{ dashboard_band.condition_index }}{% endif %}</strong>
+                        <strong class="dashboard-v2-band-label">{{ t(dashboard_band.label) }}</strong>
+                    </div>
                     <p>{{ t(dashboard_home.band_summary) }}</p>
+                    <ol class="dashboard-v2-band-meter{% if dashboard_band.condition_index is none %} dashboard-v2-band-meter-empty{% endif %}" aria-label="{{ t('Propagation scale W0 to W5') }}">
+                        {% for level in range(6) %}
+                        <li class="{% if dashboard_band.condition_index is not none and level <= dashboard_band.condition_index %}is-reached{% endif %}{% if dashboard_band.condition_index == level %} is-current{% endif %}">
+                            <span class="dashboard-v2-band-meter-bar" aria-hidden="true"></span>
+                            <span>W{{ level }}</span>
+                        </li>
+                        {% endfor %}
+                    </ol>
                 </section>
                 {% else %}
                 <div class="notice">{{ t("Band condition is not available yet.") }}</div>
@@ -118,29 +155,59 @@
     </section>
 
     <section class="dashboard-v2-kpi-strip" aria-label="dashboard-kpis">
-        <article class="dashboard-v2-kpi-tile">
-            <span class="dashboard-v2-kpi-label">{{ t("Heard stations") }}</span>
-            <strong class="dashboard-v2-kpi-value">{{ kpi.heard }}</strong>
+        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-blue">
+            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
+                <img src="{{ request.scope.root_path }}/static/icons/account-multiple.svg" alt="">
+            </span>
+            <span class="dashboard-v2-kpi-copy">
+                <span class="dashboard-v2-kpi-label">{{ t("Heard stations") }}</span>
+                <strong class="dashboard-v2-kpi-value">{{ kpi.heard }}</strong>
+            </span>
         </article>
-        <article class="dashboard-v2-kpi-tile">
-            <span class="dashboard-v2-kpi-label">{{ t("APRS frames") }}</span>
-            <strong class="dashboard-v2-kpi-value">{{ kpi.frames }}</strong>
+        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-cyan">
+            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
+                <img src="{{ request.scope.root_path }}/static/icons/file-document-outline.svg" alt="">
+            </span>
+            <span class="dashboard-v2-kpi-copy">
+                <span class="dashboard-v2-kpi-label">{{ t("APRS frames") }}</span>
+                <strong class="dashboard-v2-kpi-value">{{ kpi.frames }}</strong>
+            </span>
         </article>
-        <article class="dashboard-v2-kpi-tile">
-            <span class="dashboard-v2-kpi-label">{{ t("Interfaces") }}</span>
-            <strong class="dashboard-v2-kpi-value">{{ kpi.interfaces }}</strong>
+        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-violet">
+            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
+                <img src="{{ request.scope.root_path }}/static/icons/tune-variant.svg" alt="">
+            </span>
+            <span class="dashboard-v2-kpi-copy">
+                <span class="dashboard-v2-kpi-label">{{ t("Interfaces") }}</span>
+                <strong class="dashboard-v2-kpi-value">{{ kpi.interfaces }}</strong>
+            </span>
         </article>
-        <article class="dashboard-v2-kpi-tile">
-            <span class="dashboard-v2-kpi-label">{{ t("Last RF RX") }}</span>
-            <strong class="dashboard-v2-kpi-value">{{ t(kpi.last_rx) }}</strong>
+        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-green">
+            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
+                <img src="{{ request.scope.root_path }}/static/icons/download-circle-outline.svg" alt="">
+            </span>
+            <span class="dashboard-v2-kpi-copy">
+                <span class="dashboard-v2-kpi-label">{{ t("Last RF RX") }}</span>
+                <strong class="dashboard-v2-kpi-value dashboard-v2-kpi-value-time">{{ t(kpi.last_rx) }}</strong>
+            </span>
         </article>
-        <article class="dashboard-v2-kpi-tile">
-            <span class="dashboard-v2-kpi-label">{{ t("Last RF TX") }}</span>
-            <strong class="dashboard-v2-kpi-value">{{ t(kpi.last_tx) }}</strong>
+        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-amber">
+            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
+                <img src="{{ request.scope.root_path }}/static/icons/upload-circle-outline.svg" alt="">
+            </span>
+            <span class="dashboard-v2-kpi-copy">
+                <span class="dashboard-v2-kpi-label">{{ t("Last RF TX") }}</span>
+                <strong class="dashboard-v2-kpi-value dashboard-v2-kpi-value-time">{{ t(kpi.last_tx) }}</strong>
+            </span>
         </article>
-        <article class="dashboard-v2-kpi-tile">
-            <span class="dashboard-v2-kpi-label">{{ t("Last APRS-IS uplink") }}</span>
-            <strong class="dashboard-v2-kpi-value">{{ t(kpi.aprsis) }}</strong>
+        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-blue">
+            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
+                <img src="{{ request.scope.root_path }}/static/icons/web.svg" alt="">
+            </span>
+            <span class="dashboard-v2-kpi-copy">
+                <span class="dashboard-v2-kpi-label">{{ t("Last APRS-IS uplink") }}</span>
+                <strong class="dashboard-v2-kpi-value dashboard-v2-kpi-value-time">{{ t(kpi.aprsis) }}</strong>
+            </span>
         </article>
     </section>
 
@@ -148,9 +215,14 @@
         <section class="panel dashboard-v2-activity-panel">
             <div class="panel-body">
                 <div class="panel-header">
-                    <div class="panel-header-copy">
-                        <h2>{{ t("Activity Charts") }}</h2>
-                        <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
+                    <div class="dashboard-v2-section-title">
+                        <span class="dashboard-v2-section-icon" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/chart-line.svg" alt="">
+                        </span>
+                        <div class="panel-header-copy">
+                            <h2>{{ t("Activity Charts") }}</h2>
+                            <p class="section-lead">{{ t("Historical activity from 5-minute aggregates.") }}</p>
+                        </div>
                     </div>
                     <div class="dashboard-activity-controls">
                         <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
@@ -177,11 +249,14 @@
                     <canvas id="dashboard-direction-activity-chart"></canvas>
                 </div>
                 <div class="dashboard-activity-totals dashboard-v2-activity-totals">
-                    <span>{{ t("All frames") }}: <strong id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</strong></span>
-                    <span>{{ t("Received (RX)") }}: <strong id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</strong></span>
-                    <span>{{ t("Sent (TX)") }}: <strong id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</strong></span>
-                    <span>{{ t("Repeated TX") }}: <strong id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</strong></span>
+                    <span><small>{{ t("All frames") }}</small><strong id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</strong></span>
+                    <span><small>{{ t("Received (RX)") }}</small><strong id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</strong></span>
+                    <span><small>{{ t("Sent (TX)") }}</small><strong id="dashboard-total-tx">{{ dashboard_home.activity_chart.totals.tx }}</strong></span>
+                    <span><small>{{ t("Repeated TX") }}</small><strong id="dashboard-total-repeated">{{ dashboard_home.activity_chart.totals.repeated_tx }}</strong></span>
                 </div>
+                <a class="button button-secondary dashboard-v2-statistics-link" href="{{ request.scope.root_path }}/statistics">
+                    {{ t("Open detailed statistics") }}
+                </a>
                 {% else %}
                 <div class="notice">{{ t("Recent activity data will appear here.") }}</div>
                 {% endif %}
@@ -200,7 +275,8 @@
                 {% if dashboard_home.recent_events %}
                 <ul class="dashboard-v2-event-feed">
                     {% for event in (dashboard_home.recent_events or [])[:5] %}
-                    <li>
+                    <li class="dashboard-v2-event-item dashboard-v2-event-item-{{ event.tone }}">
+                        <span class="dashboard-v2-event-marker" aria-hidden="true"></span>
                         <time class="dashboard-v2-event-time">{{ event.timestamp }}</time>
                         <span class="dashboard-v2-event-message">{{ t(event.message) }}</span>
                         <span class="dashboard-v2-event-level dashboard-v2-event-level-{{ event.tone }}">{{ t(event.level) }}</span>
@@ -218,8 +294,13 @@
         <section class="panel dashboard-v2-readiness-panel">
             <div class="panel-body">
                 <div class="panel-header">
-                    <div class="panel-header-copy">
-                        <h2>{{ t("Station Readiness") }}</h2>
+                    <div class="dashboard-v2-section-title">
+                        <span class="dashboard-v2-section-icon dashboard-v2-section-icon-success" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg" alt="">
+                        </span>
+                        <div class="panel-header-copy">
+                            <h2>{{ t("Station Readiness") }}</h2>
+                        </div>
                     </div>
                 </div>
                 <ul class="dashboard-v2-readiness-list">
@@ -235,7 +316,11 @@
                         <span class="dashboard-v2-check-label">{{ t(check_label) }}</span>
                         <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
                             <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                            {% if entry.status_key %}
+                            {{ tf(entry.status_key, entry.status_params) }}
+                            {% else %}
                             {{ t(entry.status) }}
+                            {% endif %}
                         </span>
                     </li>
                         {% endif %}
@@ -464,8 +549,8 @@
                 },
             },
             elements: {
-                point: { radius: 1.8, hoverRadius: 3.2 },
-                line: { tension: 0.25, borderWidth: 2 },
+                point: { radius: 0, hoverRadius: 3.2 },
+                line: { tension: 0.28, borderWidth: 1.8 },
             },
         });
 
@@ -823,8 +908,8 @@
                                 label: {{ t("Received (RX)")|tojson }},
                                 data: toSeries(series.rx, labels.length),
                                 borderColor: chartPalette.trafficColorDefault,
-                                backgroundColor: withAlpha(chartPalette.trafficColorDefault, 0.14),
-                                fill: true,
+                                backgroundColor: withAlpha(chartPalette.trafficColorDefault, 0.08),
+                                fill: false,
                             },
                             {
                                 label: {{ t("Sent (TX)")|tojson }},

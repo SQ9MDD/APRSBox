@@ -129,6 +129,24 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(services["iGate enabled"], "Disabled")
             service_names = [entry["name"] for entry in checks["Enabled services"].get("entries") or []]
             self.assertLess(service_names.index("Digi routine"), service_names.index("iGate enabled"))
+            runtime_entries = {entry["name"]: entry for entry in checks["Runtime readiness"].get("entries") or []}
+            self.assertEqual(runtime_entries["TX queue"]["status_key"], "Idle")
+            self.assertEqual(runtime_entries["TX queue"]["status_params"], {})
+
+    def test_dashboard_template_uses_visual_first_pack(self) -> None:
+        template = Path("app/templates/dashboard.html").read_text(encoding="utf-8")
+        stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn("dashboard-v2-radio-visual", template)
+        self.assertIn("dashboard-v2-link-statuses", template)
+        self.assertIn("dashboard-v2-kpi-icon", template)
+        self.assertIn("dashboard-v2-band-meter", template)
+        self.assertIn("dashboard-v2-event-marker", template)
+        self.assertIn("Open detailed statistics", template)
+        self.assertIn("point: { radius: 0", template)
+        self.assertIn(".dashboard-v2-station-panel::before", stylesheet)
+        self.assertIn(".dashboard-v2-band-meter .is-current", stylesheet)
+        self.assertIn(".dashboard-v2-event-item:not(:last-child)", stylesheet)
 
     def test_dashboard_does_not_expose_traffic_monitor_check(self) -> None:
         with temporary_database():
