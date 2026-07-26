@@ -28,6 +28,7 @@ WEB_PIDFILE="/run/aprsbox-web.pid"
 SERIAL_DEVICE_GLOBS="${APRSBOX_SERIAL_DEVICE_GLOBS:-/dev/ttyACM* /dev/ttyUSB*}"
 PRIV_WRAPPER_DIR="/usr/local/libexec/aprsbox"
 SUDOERS_FILE="/etc/sudoers.d/aprsbox"
+DOAS_CONF_FILE="/etc/doas.d/aprsbox.conf"
 
 log() {
     printf '%s\n' "$*"
@@ -74,7 +75,7 @@ detect_os() {
 install_system_packages() {
     case "$OS_ID" in
         alpine)
-            apk add --no-cache python3 py3-pip py3-virtualenv sqlite openrc shadow curl git rsync ca-certificates sudo
+            apk add --no-cache python3 py3-pip py3-virtualenv sqlite openrc curl git rsync ca-certificates doas
             ;;
         debian|raspbian)
             apt-get update
@@ -462,6 +463,36 @@ EOF
     fi
 }
 
+install_doas_policy() {
+    if ! command -v doas >/dev/null 2>&1; then
+        fail "doas is required but not available."
+    fi
+    mkdir -p "$(dirname "$DOAS_CONF_FILE")"
+    cat > "$DOAS_CONF_FILE" <<EOF
+permit nopass setenv { APRSBOX_INSTALL_ROOT APRSBOX_LOG_DIR APRSBOX_DB_PATH APRSBOX_JOB_ID APRSBOX_GIT_URL APRSBOX_GIT_BRANCH } $APP_USER as root cmd $TARGET_APP_DIR/scripts/update.sh
+permit nopass setenv { APRSBOX_INSTALL_ROOT APRSBOX_LOG_DIR APRSBOX_DB_PATH APRSBOX_JOB_ID } $APP_USER as root cmd $TARGET_APP_DIR/scripts/restart-services.sh
+permit nopass setenv { APRSBOX_INSTALL_ROOT APRSBOX_LOG_DIR APRSBOX_DB_PATH APRSBOX_JOB_ID } $APP_USER as root cmd $TARGET_APP_DIR/scripts/reboot-host.sh
+permit nopass setenv { APRSBOX_INSTALL_ROOT APRSBOX_LOG_DIR APRSBOX_DB_PATH APRSBOX_JOB_ID } $APP_USER as root cmd $TARGET_APP_DIR/scripts/poweroff-host.sh
+permit nopass setenv { APRSBOX_INSTALL_ROOT APRSBOX_LOG_DIR APRSBOX_DB_PATH APRSBOX_JOB_ID } $APP_USER as root cmd $PRIV_WRAPPER_DIR/restart-services
+permit nopass setenv { APRSBOX_INSTALL_ROOT APRSBOX_LOG_DIR APRSBOX_DB_PATH APRSBOX_JOB_ID } $APP_USER as root cmd $PRIV_WRAPPER_DIR/reboot-host
+permit nopass setenv { APRSBOX_INSTALL_ROOT APRSBOX_LOG_DIR APRSBOX_DB_PATH APRSBOX_JOB_ID } $APP_USER as root cmd $PRIV_WRAPPER_DIR/poweroff-host
+EOF
+    chmod 0600 "$DOAS_CONF_FILE"
+    chown root:root "$DOAS_CONF_FILE"
+    doas -C "$DOAS_CONF_FILE" >/dev/null
+}
+
+install_privilege_policy() {
+    case "$OS_ID" in
+        alpine)
+            install_doas_policy
+            ;;
+        *)
+            install_sudoers_policy
+            ;;
+    esac
+}
+
 enable_services() {
     case "$SERVICE_MANAGER" in
         systemd)
@@ -544,7 +575,7 @@ main() {
     create_admin_user
     activate_staged_installation
     install_privileged_wrappers
-    install_sudoers_policy
+    install_privilege_policy
     install_service_units
     enable_services
     verify_services
