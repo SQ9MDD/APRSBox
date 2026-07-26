@@ -1659,7 +1659,10 @@ def _dashboard_recent_important_events(limit: int = 6) -> list[dict[str, str]]:
     return events
 
 
-def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[str, Any]:
+def dashboard_home_data(
+    dashboard_band: dict[str, Any] | None = None,
+    dashboard_activity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     from app.services.aprsis import get_aprsis_runtime_status, has_enabled_aprsis_target_flow
     from app.services.wx import get_wx_config
 
@@ -2086,18 +2089,19 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     if igate_enabled:
         hero_summary.append({"label": "APRS-IS", "value": aprsis_runtime_label, "tone": aprsis_runtime_tone})
 
+    activity_kpis = dict((dashboard_activity or {}).get("kpis") or {})
+    dashboard_heard_stations = int(activity_kpis.get("heard_stations", traffic["heard_stations"]) or 0)
+    dashboard_aprs_frames = int(activity_kpis.get("aprs_frames", traffic["decoded_aprs"]) or 0)
     stats = [
         {
             "label": "Heard stations",
-            "value": str(traffic["heard_stations"]),
+            "value": str(dashboard_heard_stations),
             "suffix": "",
-            "scope": "Last 24 hours",
         },
         {
             "label": "APRS frames",
-            "value": str(traffic["decoded_aprs"]),
+            "value": str(dashboard_aprs_frames),
             "suffix": "",
-            "scope": "Last 24 hours",
         },
         {"label": "Interfaces", "value": f"{len(enabled_interfaces)} / {len(interfaces)}", "suffix": ""},
         {"label": "Last RF RX", "value": last_rf_rx_display, "suffix": ""},
@@ -2119,7 +2123,6 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         "interface_entries": interface_entries,
         "last_rf_activity": last_rf_activity,
         "recent_events": _dashboard_recent_important_events(limit=6),
-        "band_updated_at": _format_monitor_timestamp(utc_now()),
         "band_summary": band_summary,
     }
 

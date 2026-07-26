@@ -131,6 +131,21 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(len(series.get("tx") or []), len(labels))
             self.assertEqual(sum(series.get("total") or []), int((chart.get("totals") or {}).get("total", 0)))
 
+    def test_dashboard_uses_initial_activity_range_kpis(self) -> None:
+        with temporary_database():
+            view = dashboard_home_data(
+                dashboard_activity={
+                    "kpis": {
+                        "heard_stations": 17,
+                        "aprs_frames": 1234,
+                    }
+                }
+            )
+            stats = {item["label"]: item for item in view["stats"]}
+
+            self.assertEqual(stats["Heard stations"]["value"], "17")
+            self.assertEqual(stats["APRS frames"]["value"], "1234")
+
     def test_dashboard_exposes_compact_station_readiness_lists(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="Main TNC", enabled=1, tx_blocked=0)
@@ -174,9 +189,15 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("dashboard-v2-link-statuses", template)
         self.assertIn("dashboard-v2-kpi-icon", template)
         self.assertIn("dashboard-v2-kpi-meta", template)
+        self.assertIn("dashboard-kpi-heard-stations", template)
+        self.assertIn("dashboard-kpi-aprs-frames", template)
+        self.assertIn("rawPayload?.kpis?.heard_stations", template)
+        self.assertIn('`${rangePrefix}: ${rangeLabel}`', template)
         self.assertIn("dashboard-v2-band-meter", template)
-        self.assertIn("dashboard-v2-band-meter-current", template)
         self.assertIn('aria-current="true"', template)
+        self.assertNotIn("dashboard_home.band_updated_at", template)
+        self.assertNotIn("Current estimate for", template)
+        self.assertNotIn("dashboard-v2-band-meter-current", template)
         self.assertIn("dashboard-v2-event-marker", template)
         self.assertIn("Open detailed statistics", template)
         self.assertIn("point: { radius: 0", template)

@@ -351,6 +351,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
             bucket_start = _floor_to_bucket_start(now_utc - timedelta(minutes=10), bucket_minutes=5)
             bucket_end = bucket_start + timedelta(minutes=5)
+            hour_start = bucket_start.replace(minute=0, second=0, microsecond=0)
             execute(
                 """
                 INSERT INTO radio_activity_5m(
@@ -374,6 +375,17 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 """,
                 (bucket_start.isoformat(), bucket_end.isoformat(), now_utc.isoformat(), now_utc.isoformat()),
             )
+            for station_key in ("SP5ABC-1", "SP5XYZ-2"):
+                execute(
+                    """
+                    INSERT INTO traffic_device_station_device_hourly(
+                        bucket_start_utc, station_key, device_key, destination_key,
+                        device_label, recognized_flag, frame_count, last_seen_at
+                    )
+                    VALUES (?, ?, 'unknown', 'APRS', 'Unknown', 0, 1, ?)
+                    """,
+                    (hour_start.isoformat(), station_key, bucket_start.isoformat()),
+                )
 
             from fastapi.testclient import TestClient
             from app.dependencies import get_current_user
@@ -395,6 +407,8 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertIn("rx_total", payload["series"])
                 self.assertGreaterEqual(sum(payload["series"]["rx_total"]), 5)
                 self.assertEqual(payload.get("range"), "24h")
+                self.assertEqual(int((payload.get("kpis") or {}).get("heard_stations") or 0), 2)
+                self.assertEqual(int((payload.get("kpis") or {}).get("aprs_frames") or 0), 5)
 
                 response_1h = client.get("/api/dashboard/radio-activity?range=1h")
                 self.assertEqual(response_1h.status_code, 200)
@@ -402,6 +416,8 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(payload_1h.get("range"), "1h")
                 self.assertEqual(int(payload_1h.get("output_bucket_minutes") or 0), 5)
                 self.assertFalse(bool(payload_1h.get("downsampled")))
+                self.assertEqual(int((payload_1h.get("kpis") or {}).get("heard_stations") or 0), 2)
+                self.assertEqual(int((payload_1h.get("kpis") or {}).get("aprs_frames") or 0), 5)
 
                 response_3h = client.get("/api/dashboard/radio-activity?range=3h")
                 self.assertEqual(response_3h.status_code, 200)

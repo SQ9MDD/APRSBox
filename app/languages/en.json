@@ -1775,7 +1775,5 @@
   "IGate Internet station state": "IGate Internet station state",
   "IGate pending sender positions": "IGate pending sender positions",
   "APRS-IS to RF flow cannot be enabled without exactly one mandatory enabled Callsign and Radius Rule step.": "APRS-IS to RF flow cannot be enabled without exactly one mandatory enabled Callsign and Radius Rule step.",
-  "APRS-IS to RF mandatory rules are not in the required order.": "APRS-IS to RF mandatory rules are not in the required order.",
-  "Last 24 hours": "Last 24 hours",
-  "Current": "Current"
+  "APRS-IS to RF mandatory rules are not in the required order.": "APRS-IS to RF mandatory rules are not in the required order."
 }

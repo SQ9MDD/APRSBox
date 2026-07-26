@@ -379,6 +379,11 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
             series[key].append(value)
             totals[key] += value
 
+    heard_station_keys = _dashboard_heard_station_keys(
+        window_start_utc=window_start_utc,
+        window_end_utc=window_end_utc,
+    )
+
     return {
         "range": normalized_range,
         "range_minutes": total_minutes,
@@ -392,7 +397,64 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
         "points": output_bucket_count,
         "series": series,
         "totals": totals,
+        "kpis": {
+            "heard_stations": len(heard_station_keys),
+            "aprs_frames": int(totals.get("rx_total") or 0),
+        },
     }
+
+
+def _dashboard_heard_station_keys(
+    *,
+    window_start_utc: datetime,
+    window_end_utc: datetime,
+) -> set[str]:
+    station_keys: set[str] = set()
+    hourly_rows = fetch_all(
+        """
+        SELECT DISTINCT station_key
+        FROM traffic_device_station_device_hourly
+        WHERE last_seen_at >= ?
+          AND last_seen_at < ?
+          AND bucket_start_utc < ?
+        """,
+        (
+            window_start_utc.isoformat(),
+            window_end_utc.isoformat(),
+            window_end_utc.isoformat(),
+        ),
+    )
+    for row in hourly_rows:
+        station_key = _normalize_station_key_for_devices(row["station_key"])
+        if station_key:
+            station_keys.add(station_key)
+
+    recent_frame_rows = fetch_all(
+        f"""
+        SELECT direction, format, line
+        FROM traffic_frames
+        WHERE format = 'TNC2'
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+          AND created_at >= ?
+          AND created_at < ?
+        ORDER BY created_at ASC, id ASC
+        """,
+        (window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+    for row in recent_frame_rows:
+        direction = _normalize_direction(row["direction"], row["format"])
+        if direction != "RX":
+            continue
+        parsed = parse_tnc2_frame(str(row["line"] or ""))
+        if parsed is None:
+            continue
+        station_key = _normalize_station_key_for_devices(
+            parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or ""
+        )
+        if station_key:
+            station_keys.add(station_key)
+
+    return station_keys
 
 
 def get_traffic_statistics(

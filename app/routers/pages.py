@@ -951,13 +951,14 @@ def dashboard(
 ) -> object:
     templates = request.app.state.templates
     dashboard_band = _dashboard_band_condition_card()
+    dashboard_activity = get_dashboard_radio_activity(range_value="24h")
     context = build_template_context(
         request,
         page_title="Dashboard",
         current_user=current_user,
         active_nav="dashboard",
         dashboard_band=dashboard_band,
-        dashboard_home=dashboard_home_data(dashboard_band),
+        dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
     )
     return templates.TemplateResponse("dashboard.html", context)
 

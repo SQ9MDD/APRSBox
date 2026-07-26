@@ -119,14 +119,6 @@
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Band Condition") }}</h2>
-                        <p class="section-lead">
-                            {% if dashboard_band %}
-                            {{ t("Current estimate for") }} {{ dashboard_band.interface_name }} · {{ dashboard_band.band_label }}.
-                            {% else %}
-                            {{ t("No band data yet.") }}
-                            {% endif %}
-                        </p>
-                        <p class="muted small">{{ t("Updated") }} {{ dashboard_home.band_updated_at }}</p>
                     </div>
                     <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">{{ t("Open") }}</a>
                 </div>
@@ -141,9 +133,6 @@
                     <ol class="dashboard-v2-band-meter{% if dashboard_band.condition_index is none %} dashboard-v2-band-meter-empty{% endif %}" aria-label="{{ t('Propagation scale W0 to W5') }}">
                         {% for level in range(6) %}
                         <li class="{% if dashboard_band.condition_index is not none and level < dashboard_band.condition_index %}is-reached{% endif %}{% if dashboard_band.condition_index == level %} is-current{% endif %}"{% if dashboard_band.condition_index == level %} aria-current="true"{% endif %}>
-                            {% if dashboard_band.condition_index == level %}
-                            <span class="dashboard-v2-band-meter-current">{{ t("Current") }}</span>
-                            {% endif %}
                             <span class="dashboard-v2-band-meter-bar" aria-hidden="true"></span>
                             <span class="dashboard-v2-band-meter-level">W{{ level }}</span>
                         </li>
@@ -164,8 +153,8 @@
             </span>
             <span class="dashboard-v2-kpi-copy">
                 <span class="dashboard-v2-kpi-label">{{ t("Heard stations") }}</span>
-                <strong class="dashboard-v2-kpi-value">{{ kpi.heard }}</strong>
-                <span class="dashboard-v2-kpi-meta">{{ t("Last 24 hours") }}</span>
+                <strong class="dashboard-v2-kpi-value" id="dashboard-kpi-heard-stations">{{ kpi.heard }}</strong>
+                <span class="dashboard-v2-kpi-meta" id="dashboard-kpi-heard-range">{{ t("Range") }}: 24h</span>
             </span>
         </article>
         <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-cyan">
@@ -174,8 +163,8 @@
             </span>
             <span class="dashboard-v2-kpi-copy">
                 <span class="dashboard-v2-kpi-label">{{ t("APRS frames") }}</span>
-                <strong class="dashboard-v2-kpi-value">{{ kpi.frames }}</strong>
-                <span class="dashboard-v2-kpi-meta">{{ t("Last 24 hours") }}</span>
+                <strong class="dashboard-v2-kpi-value" id="dashboard-kpi-aprs-frames">{{ kpi.frames }}</strong>
+                <span class="dashboard-v2-kpi-meta" id="dashboard-kpi-frames-range">{{ t("Range") }}: 24h</span>
             </span>
         </article>
         <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-violet">
@@ -407,6 +396,10 @@
         const totalRxNode = document.getElementById("dashboard-total-rx");
         const totalTxNode = document.getElementById("dashboard-total-tx");
         const totalRepeatedNode = document.getElementById("dashboard-total-repeated");
+        const heardStationsKpiNode = document.getElementById("dashboard-kpi-heard-stations");
+        const aprsFramesKpiNode = document.getElementById("dashboard-kpi-aprs-frames");
+        const heardStationsRangeNode = document.getElementById("dashboard-kpi-heard-range");
+        const aprsFramesRangeNode = document.getElementById("dashboard-kpi-frames-range");
         if (
             !(payloadNode instanceof HTMLScriptElement)
             || !(directionCanvas instanceof HTMLCanvasElement)
@@ -590,6 +583,7 @@
                     tx: txSeries.reduce((acc, value) => acc + value, 0),
                     repeated_tx: repeatedSeries.reduce((acc, value) => acc + value, 0),
                 },
+                kpis: null,
             };
         };
 
@@ -624,6 +618,10 @@
                     rx: rxSeries.reduce((acc, value) => acc + value, 0),
                     tx: txSeries.reduce((acc, value) => acc + value, 0),
                     repeated_tx: repeatedSeries.reduce((acc, value) => acc + value, 0),
+                },
+                kpis: {
+                    heardStations: Number(rawPayload?.kpis?.heard_stations || 0),
+                    aprsFrames: Number(rawPayload?.kpis?.aprs_frames || 0),
                 },
             };
         };
@@ -970,6 +968,21 @@
             }
             if (totalRepeatedNode) {
                 totalRepeatedNode.textContent = String(Number(chartPayload?.totals?.repeated_tx || 0));
+            }
+            const rangeLabel = rangeDisplayMap[chartPayload.range] || chartPayload.range || "-";
+            if (chartPayload?.kpis && rangeLabel && rangeLabel !== "legacy") {
+                if (heardStationsKpiNode) {
+                    heardStationsKpiNode.textContent = String(Number(chartPayload.kpis.heardStations || 0));
+                }
+                if (aprsFramesKpiNode) {
+                    aprsFramesKpiNode.textContent = String(Number(chartPayload.kpis.aprsFrames || 0));
+                }
+                if (heardStationsRangeNode) {
+                    heardStationsRangeNode.textContent = `${rangePrefix}: ${rangeLabel}`;
+                }
+                if (aprsFramesRangeNode) {
+                    aprsFramesRangeNode.textContent = `${rangePrefix}: ${rangeLabel}`;
+                }
             }
         };
 

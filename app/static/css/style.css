@@ -2242,7 +2242,7 @@ body {
 .dashboard-v2-band-meter {
     list-style: none;
     margin: 0.22rem 0 0;
-    padding: 1.18rem 0 0;
+    padding: 0;
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0.32rem;
@@ -2312,36 +2312,6 @@ body {
     opacity: 1;
 }
 
-.dashboard-v2-band-meter-current {
-    position: absolute;
-    bottom: calc(100% + 0.16rem);
-    left: 50%;
-    padding: 0.12rem 0.3rem;
-    border: 1px solid color-mix(in srgb, var(--dashboard-band-level) 72%, var(--border));
-    border-radius: 999px;
-    color: var(--text);
-    background: color-mix(in srgb, var(--dashboard-band-level) 22%, var(--panel));
-    font-size: 0.5rem;
-    line-height: 1.1;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    transform: translateX(-50%);
-    white-space: nowrap;
-}
-
-.dashboard-v2-band-meter-current::after {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-right: 0.2rem solid transparent;
-    border-left: 0.2rem solid transparent;
-    border-top: 0.24rem solid var(--dashboard-band-level);
-    content: "";
-    transform: translateX(-50%);
-}
-
 .dashboard-v2-band-meter-level {
     justify-self: center;
     min-width: 2rem;
@@ -2353,10 +2323,6 @@ body {
     color: var(--text);
     background: color-mix(in srgb, var(--dashboard-band-level) 28%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dashboard-band-level) 50%, transparent);
-}
-
-.dashboard-v2-band-meter-empty {
-    padding-top: 0;
 }
 
 .dashboard-v2-band-meter-empty .dashboard-v2-band-meter-bar {
