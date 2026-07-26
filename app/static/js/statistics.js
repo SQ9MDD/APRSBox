@@ -10,7 +10,6 @@
     const frameCanvas = document.getElementById("statistics-frame-types-chart");
     const heardCanvas = document.getElementById("statistics-heard-chart");
     const actionsCanvas = document.getElementById("statistics-actions-chart");
-    const devicesCanvas = document.getElementById("statistics-devices-chart");
     const usersListNode = document.getElementById("statistics-users-list");
     const directHeardListNode = document.getElementById("statistics-direct-heard-list");
     const frameEmptyNode = document.getElementById("statistics-frame-types-empty");
@@ -43,8 +42,6 @@
     const directHeardApiUrl = String(root.dataset.directHeardApiUrl || "").trim();
     const noDataText = String(root.dataset.noDataText || "No data for selected range.");
     const aggregationLabel = String(root.dataset.aggregationLabel || "aggregation");
-    const devicesCountStationsLabel = String(root.dataset.devicesCountStationsLabel || "Unique CALLSIGN-SSID stations");
-    const devicesTocallLabel = String(root.dataset.devicesTocallLabel || "TOCALL");
     const devicesPairsTooltipLabel = String(
         root.dataset.devicesPairsTooltipLabel || "Counted unique CALLSIGN-SSID stations in this model"
     );
@@ -54,22 +51,21 @@
     const supportedRanges = new Set(["1h", "24h", "7d", "30d"]);
     const defaultRange = "24h";
     const storageKey = "aprsbox-statistics-range";
+    const directHeardVisibleLimit = 20;
 
     let frameChart = null;
     let heardChart = null;
     let actionsChart = null;
-    let devicesChart = null;
-
     const readChartPalette = () => {
         const isLightTheme = document.documentElement.getAttribute("data-theme") === "light";
         const rootStyle = window.getComputedStyle(document.documentElement);
         const trafficColorDefaultFromCss = rootStyle.getPropertyValue("--traffic-color-default").trim();
         const trafficColorDefault = trafficColorDefaultFromCss || (isLightTheme ? "#000000" : "#ffffff");
-        const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#4f8dff";
-        const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#46a85f";
+        const trafficColorOwnBeaconTx = rootStyle.getPropertyValue("--traffic-color-own-beacon-tx").trim() || "#76a7ff";
+        const trafficColorOwnWxTx = rootStyle.getPropertyValue("--traffic-color-own-wx-tx").trim() || "#70c784";
         const trafficColorOwnMessageTx = rootStyle.getPropertyValue("--traffic-color-own-message-tx").trim() || "#e8913a";
-        const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#d24b4b";
-        const trafficColorProxyTx = rootStyle.getPropertyValue("--traffic-color-proxy-tx").trim() || "#a65fc1";
+        const trafficColorRepeatedTx = rootStyle.getPropertyValue("--traffic-color-repeated-tx").trim() || "#ff8a8a";
+        const trafficColorProxyTx = rootStyle.getPropertyValue("--traffic-color-proxy-tx").trim() || "#dc9bf0";
         return {
             trafficColorDefault,
             trafficColorOwnBeaconTx,
@@ -537,9 +533,6 @@
     };
 
     const renderDevices = (payloadValue) => {
-        if (!(devicesCanvas instanceof HTMLCanvasElement)) {
-            return;
-        }
         const total = Math.max(0, Number(payloadValue && payloadValue.total) || 0);
         const items = normalizeDeviceItems(payloadValue && payloadValue.items, total);
         const hasData = total > 0 && items.length > 0;
@@ -547,63 +540,6 @@
 
         toggleEmptyState(devicesEmptyNode, !hasData);
         renderDeviceList(hasData ? items : [], colors);
-
-        if (devicesChart) {
-            devicesChart.destroy();
-            devicesChart = null;
-        }
-
-        if (!hasData) {
-            return;
-        }
-
-        const labels = items.map((item) => resolveDeviceLabel(item));
-        const counts = items.map((item) => Number(item.count) || 0);
-        const palette = readChartPalette();
-        const countBasisLabel = devicesCountStationsLabel;
-
-        const context = devicesCanvas.getContext("2d");
-        if (!context) {
-            return;
-        }
-
-        devicesChart = new ChartConstructor(context, {
-            type: "doughnut",
-            data: {
-                labels,
-                datasets: [
-                    {
-                        data: counts,
-                        backgroundColor: colors,
-                        borderColor: withAlpha(palette.colorBorder, 0.7),
-                        borderWidth: 1,
-                        hoverOffset: 4,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: "62%",
-                plugins: {
-                    legend: {
-                        display: false,
-                    },
-                    tooltip: {
-                        displayColors: true,
-                        callbacks: {
-                            label: (contextValue) => {
-                                const item = items[contextValue.dataIndex] || { count: 0, percent: 0, label: "" };
-                                const label = resolveDeviceLabel(item);
-                                const count = Math.max(0, Number(item.count) || 0);
-                                const percent = Number(item.percent) || 0;
-                                return `${label}: ${count} (${percent.toFixed(1)}%) • ${countBasisLabel}`;
-                            },
-                        },
-                    },
-                },
-            },
-        });
     };
 
     const renderUsersList = (items, colors) => {
@@ -655,8 +591,9 @@
             return;
         }
         directHeardListNode.textContent = "";
-        for (let index = 0; index < items.length; index += 1) {
-            const item = items[index];
+        const visibleItems = Array.isArray(items) ? items.slice(0, directHeardVisibleLimit) : [];
+        for (let index = 0; index < visibleItems.length; index += 1) {
+            const item = visibleItems[index];
             const row = document.createElement("li");
             row.className = "statistics-users-list-item";
 
@@ -677,6 +614,36 @@
             const valueNode = document.createElement("span");
             valueNode.className = "statistics-users-list-value";
             valueNode.textContent = `${Math.round(Number(item.count) || 0)} (${(Number(item.percent) || 0).toFixed(1)}%)`;
+
+            row.appendChild(indexNode);
+            row.appendChild(labelNode);
+            row.appendChild(valueNode);
+            directHeardListNode.appendChild(row);
+        }
+        if (visibleItems.length <= 0) {
+            return;
+        }
+        for (let index = visibleItems.length; index < directHeardVisibleLimit; index += 1) {
+            const row = document.createElement("li");
+            row.className = "statistics-users-list-item statistics-users-list-item-placeholder";
+            row.setAttribute("aria-hidden", "true");
+
+            const indexNode = document.createElement("span");
+            indexNode.className = "statistics-list-index";
+            indexNode.textContent = String(index + 1);
+
+            const labelNode = document.createElement("span");
+            labelNode.className = "statistics-users-list-label";
+            const markerNode = document.createElement("span");
+            markerNode.className = "statistics-devices-color-marker";
+            const labelTextNode = document.createElement("span");
+            labelTextNode.textContent = "\u00A0";
+            labelNode.appendChild(markerNode);
+            labelNode.appendChild(labelTextNode);
+
+            const valueNode = document.createElement("span");
+            valueNode.className = "statistics-users-list-value";
+            valueNode.textContent = "\u00A0";
 
             row.appendChild(indexNode);
             row.appendChild(labelNode);
@@ -720,7 +687,7 @@
     };
 
     const loadDevicesPayload = async (rangeValue, shiftValue) => {
-        if (!(devicesCanvas instanceof HTMLCanvasElement) || !devicesApiUrl) {
+        if (!devicesApiUrl) {
             return;
         }
         const normalizedRange = normalizeRange(rangeValue);

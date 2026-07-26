@@ -315,10 +315,21 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 self.assertIn("interface_id", columns)
                 self.assertIn("direction", columns)
                 self.assertIn("band", columns)
+                self.assertIn("source_kind", columns)
                 modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
                 self.assertIn("tx_blocked", modem_columns)
                 self.assertIn("tx_min_gap_seconds", modem_columns)
                 self.assertIn("serial_rx_silence_reconnect_seconds", modem_columns)
+                for table_name in (
+                    "band_condition_station_hours",
+                    "band_condition_station_profiles",
+                    "band_condition_hourly",
+                ):
+                    table_row = connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        (table_name,),
+                    ).fetchone()
+                    self.assertIsNotNone(table_row, table_name)
                 station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
                 self.assertIn("symbol_overlay", station_columns)
                 self.assertIn("beacon_interval_mode", station_columns)
@@ -338,6 +349,34 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                     """
                 ).fetchone()
                 self.assertIsNotNone(index_row)
+                source_kind_index_row = connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index' AND name = 'idx_traffic_frames_source_kind_created_at'
+                    """
+                ).fetchone()
+                self.assertIsNotNone(source_kind_index_row)
+                aprsis_unique_index_row = connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index' AND name = 'idx_modems_single_aprsis'
+                    """
+                ).fetchone()
+                self.assertIsNotNone(aprsis_unique_index_row)
+                aprs_message_index_rows = connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index'
+                      AND name IN (
+                          'idx_aprs_messages_direction_status_last_attempt_at',
+                          'idx_aprs_messages_direction_unread_conversation'
+                      )
+                    """
+                ).fetchall()
+                self.assertEqual(2, len(aprs_message_index_rows))
             finally:
                 connection.close()
 

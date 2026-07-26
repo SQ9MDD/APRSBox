@@ -3,10 +3,22 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from app.db import DEFAULT_EVENT_LOG_KEEP_ROWS, get_app_setting, log_event, prune_event_logs, set_app_setting
+from app.db import (
+    DEFAULT_EVENT_LOG_KEEP_ROWS,
+    DEFAULT_OUTBOUND_JOB_PRUNE_BATCH_SIZE,
+    get_app_setting,
+    log_event,
+    prune_event_logs,
+    prune_outbound_jobs_batch,
+    prune_traffic_frames_batch,
+    set_app_setting,
+)
+from app.services.igate_messaging import prune_igate_runtime_state
 
 
 LAST_EVENT_LOG_PRUNE_DATE_KEY = "scheduler.maintenance.event_logs.last_pruned_date"
+TRAFFIC_FRAME_PRUNE_BATCH_SIZE = 1000
+OUTBOUND_JOB_PRUNE_BATCH_SIZE = DEFAULT_OUTBOUND_JOB_PRUNE_BATCH_SIZE
 
 
 class MaintenanceSchedulerService:
@@ -41,14 +53,28 @@ class MaintenanceSchedulerService:
     def _tick(self, now: datetime | None = None) -> None:
         current = now if now is not None else datetime.now(timezone.utc)
         current_date = current.date().isoformat()
-        if str(get_app_setting(LAST_EVENT_LOG_PRUNE_DATE_KEY) or "").strip() == current_date:
-            return
+        if str(get_app_setting(LAST_EVENT_LOG_PRUNE_DATE_KEY) or "").strip() != current_date:
+            try:
+                prune_event_logs(keep_rows=self._event_log_keep_rows)
+                set_app_setting(LAST_EVENT_LOG_PRUNE_DATE_KEY, current_date)
+            except Exception as exc:
+                message = str(exc).strip() or exc.__class__.__name__
+                log_event("WARNING", "maintenance", f"Automatic event log pruning failed: {message}")
         try:
-            prune_event_logs(keep_rows=self._event_log_keep_rows)
-            set_app_setting(LAST_EVENT_LOG_PRUNE_DATE_KEY, current_date)
+            prune_traffic_frames_batch(limit=TRAFFIC_FRAME_PRUNE_BATCH_SIZE)
         except Exception as exc:
             message = str(exc).strip() or exc.__class__.__name__
-            log_event("WARNING", "maintenance", f"Automatic event log pruning failed: {message}")
+            log_event("WARNING", "maintenance", f"Automatic traffic frame pruning failed: {message}")
+        try:
+            prune_outbound_jobs_batch(limit=OUTBOUND_JOB_PRUNE_BATCH_SIZE)
+        except Exception as exc:
+            message = str(exc).strip() or exc.__class__.__name__
+            log_event("WARNING", "maintenance", f"Automatic outbound job pruning failed: {message}")
+        try:
+            prune_igate_runtime_state(now=current)
+        except Exception as exc:
+            message = str(exc).strip() or exc.__class__.__name__
+            log_event("WARNING", "maintenance", f"Automatic IGate state pruning failed: {message}")
 
     async def _sleep(self, delay: float) -> None:
         try:

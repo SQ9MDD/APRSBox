@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import json
 import os
@@ -718,7 +719,7 @@ class WxServiceTests(unittest.TestCase):
 
             scheduler = WxSchedulerService()
             with patch("app.services.wx_sources.urlopen", side_effect=scheduler_response):
-                scheduler._tick()
+                asyncio.run(scheduler._tick())
 
             row = fetch_one(
                 "SELECT status, normalized_value, value_origin FROM wx_runtime_cache WHERE parameter_name = ?",
@@ -788,7 +789,7 @@ class WxServiceTests(unittest.TestCase):
             )
 
             scheduler = WxSchedulerService()
-            scheduler._tick()
+            asyncio.run(scheduler._tick())
 
             log_row = fetch_one(
                 """
@@ -880,7 +881,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             scheduler = WxSchedulerService()
             with patch("app.services.wx_sources.urlopen", side_effect=temperature_only_response):
-                scheduler._tick()
+                await scheduler._tick()
 
             job = claim_next_outbound_job()
             assert job is not None
@@ -1018,7 +1019,7 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             scheduler = WxSchedulerService()
             with patch("app.services.wx_sources.urlopen", side_effect=scheduler_response):
-                scheduler._tick()
+                await scheduler._tick()
 
             job = claim_next_outbound_job()
             assert job is not None
@@ -1120,6 +1121,16 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 """
             )
             self.assertIsNotNone(wx_log)
+
+    def test_wx_template_includes_help_viewer(self) -> None:
+        template_source = Path("app/templates/wx.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/wx"', template_source)
+        self.assertIn('class="help-icon-button page-help-button"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+        for language in ("pl", "en", "es", "de"):
+            self.assertTrue(Path(f"help/application/wx.{language}.md").exists())
 
 
 if __name__ == "__main__":

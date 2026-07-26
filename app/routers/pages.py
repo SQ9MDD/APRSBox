@@ -12,9 +12,12 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from app.dependencies import get_current_user, require_roles
 from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
+    DEFAULT_TRAFFIC_RETENTION_MINUTES,
     EVENT_LOG_DEBUG_ENABLED_SETTING_KEY,
     EVENT_LOG_MIN_LEVEL_SETTING_KEY,
     RUNTIME_MAINTENANCE_RESET_TABLES,
+    TRAFFIC_RETENTION_ALLOWED_MINUTES,
+    TRAFFIC_RETENTION_MINUTES_SETTING_KEY,
     VACUUM_RECOMMEND_FREE_BYTES_MIN,
     VACUUM_RECOMMEND_FREE_RATIO_MIN,
     create_system_job,
@@ -25,10 +28,12 @@ from app.db import (
     get_event_log_debug_enabled,
     get_event_log_min_level,
     get_app_setting,
+    get_traffic_retention_minutes,
     log_event,
     mark_system_job_error,
     mark_system_job_running,
     normalize_event_log_level,
+    normalize_traffic_retention_minutes,
     reset_runtime_operational_data,
     set_app_setting,
     vacuum_database,
@@ -59,6 +64,7 @@ from app.services.content import (
     get_section_row,
     get_section_rows,
     get_related_ssids,
+    get_rf_heard_station_snapshots,
     get_visible_station_snapshots,
     recent_station_outbound_jobs,
     recent_object_outbound_jobs,
@@ -101,6 +107,7 @@ from app.services.messages import (
     mark_conversation_read,
     queue_outgoing_message,
     retry_failed_message,
+    save_message_settings,
     update_conversation_path,
 )
 from app.services.notifications import (
@@ -113,12 +120,9 @@ from app.services.notifications import (
     test_notification_transport,
 )
 from app.services.band_condition import (
-    build_station_key,
-    delete_reference_station,
+    get_band_condition_history,
     get_band_condition_page_data,
     get_band_condition_snapshot,
-    save_reference_station,
-    split_station_key,
 )
 from app.services.aprsis import (
     aprsis_runtime_badge,
@@ -148,6 +152,9 @@ from app.services.map_service import (
     get_map_source,
     list_map_sources,
     get_map_page_config,
+    get_map_mobile_tracks_payload,
+    get_map_station_details_payload,
+    get_map_station_markers_payload,
     get_map_station_payload,
     safe_move_map_source,
     safe_delete_map_source,
@@ -173,6 +180,7 @@ from app.services.system import (
     start_service_restart_job,
 )
 from app.services.traffic_stream import TrafficSnapshotBroadcaster, TrafficStreamCapacityError
+from app.services.traffic_source import APRSIS_MODEM_TYPE
 from app.template_helpers import build_template_context
 from app.ui_palette import get_ui_palette_label, get_ui_palette_options, is_supported_ui_palette, normalize_ui_palette
 from app.services.wx import (
@@ -206,6 +214,9 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
     "event_logs": "Event logs",
     "traffic_frames": "Traffic frames",
     "digi_flow_event_log": "DIGI flow event log",
+    "aprsis_igate_rf_heard": "IGate RF heard state",
+    "aprsis_igate_station_state": "IGate Internet station state",
+    "aprsis_igate_pending_position": "IGate pending sender positions",
     "traffic_device_station_device_hourly": "Traffic devices hourly stats",
     "radio_activity_5m": "Radio activity buckets",
     "aprsis_uplink_minute_stats": "APRS-IS uplink minute stats",
@@ -214,6 +225,9 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
     "band_condition_audibility_buckets": "Band condition audibility buckets",
     "band_condition_activity_station_buckets": "Band condition station buckets",
     "band_condition_activity_buckets": "Band condition activity buckets",
+    "band_condition_station_hours": "Band condition hourly station observations",
+    "band_condition_station_profiles": "Band condition learned station profiles",
+    "band_condition_hourly": "Band condition hourly history",
 }
 
 
@@ -722,6 +736,20 @@ def _normalize_event_log_min_level(value: Any) -> str:
     return normalized
 
 
+def _normalize_traffic_retention_minutes_option(value: Any) -> int:
+    normalized = normalize_traffic_retention_minutes(value)
+    if normalized not in TRAFFIC_RETENTION_ALLOWED_MINUTES:
+        return DEFAULT_TRAFFIC_RETENTION_MINUTES
+    return normalized
+
+
+def _format_traffic_retention_minutes_option(value: int) -> str:
+    hours, minutes = divmod(int(value), 60)
+    if minutes == 0:
+        return f"{hours}h"
+    return f"{hours}h {minutes}m"
+
+
 def _empty_map_source_form() -> dict[str, Any]:
     return {
         "record_id": None,
@@ -821,6 +849,7 @@ def _settings_page_context(
     resolved_aprs_symbol_set = get_aprs_symbol_set() if current_aprs_symbol_set is None else current_aprs_symbol_set
     event_log_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
     event_log_debug_enabled = get_event_log_debug_enabled()
+    traffic_retention_minutes = _normalize_traffic_retention_minutes_option(get_traffic_retention_minutes())
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -859,6 +888,12 @@ def _settings_page_context(
         event_log_min_level=event_log_min_level,
         event_log_debug_enabled=event_log_debug_enabled,
         event_log_min_level_options=[{"value": value, "label": value} for value in EVENT_LOG_MIN_LEVEL_OPTIONS],
+        traffic_retention_minutes=traffic_retention_minutes,
+        traffic_retention_minutes_label=_format_traffic_retention_minutes_option(traffic_retention_minutes),
+        traffic_retention_minutes_options=[
+            {"value": value, "label": _format_traffic_retention_minutes_option(value)}
+            for value in TRAFFIC_RETENTION_ALLOWED_MINUTES
+        ],
         database_vacuum_blocked=database_vacuum_blocked,
         database_maintenance_snapshot=db_maintenance_snapshot,
         database_path=str(db_maintenance_snapshot.get("database_path") or ""),
@@ -925,10 +960,9 @@ def dashboard(
 def band_condition_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
-    edit_reference: int | None = None,
 ) -> object:
     templates = request.app.state.templates
-    page_data = get_band_condition_page_data(edit_reference_id=edit_reference)
+    page_data = get_band_condition_page_data()
     context = build_template_context(
         request,
         page_title="Band Condition",
@@ -947,57 +981,12 @@ def band_condition_snapshot(
     return JSONResponse(get_band_condition_snapshot())
 
 
-@router.post("/band-condition")
-@router.post("/band-condition/reference-stations")
-def band_condition_reference_station_save(
-    request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-    record_id: int | None = Form(None),
-    band: str = Form(...),
-    station_key: str = Form(""),
-    station_type: str = Form(...),
-    enabled: str | None = Form(None),
-    weight: str = Form("1.0"),
-) -> object:
-    templates = request.app.state.templates
-    callsign, ssid = split_station_key(station_key)
-    if not callsign and record_id is not None:
-        page_data = get_band_condition_page_data(edit_reference_id=record_id)
-        edit_reference = page_data.get("edit_reference") or {}
-        callsign = str(edit_reference.get("callsign") or "")
-        ssid = str(edit_reference.get("ssid") or "")
-    success, error = save_reference_station(
-        {
-            "band": band,
-            "callsign": callsign,
-            "ssid": ssid,
-            "station_type": station_type,
-            "enabled": enabled,
-            "weight": weight,
-        },
-        record_id=record_id,
-    )
-    page_data = get_band_condition_page_data(edit_reference_id=record_id if error else None)
-    context = build_template_context(
-        request,
-        page_title="Band Condition",
-        current_user=current_user,
-        active_nav="band-condition",
-        flash=None if success else error,
-        selected_station_key=build_station_key(callsign, ssid),
-        **page_data,
-    )
-    return templates.TemplateResponse("band_condition.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
-
-
-@router.post("/band-condition/reference-stations/{record_id}/delete")
-def band_condition_reference_station_delete(
-    record_id: int,
-    request: Request,
-    _: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> RedirectResponse:
-    delete_reference_station(record_id)
-    return RedirectResponse(url=_path(request, "/band-condition"), status_code=status.HTTP_303_SEE_OTHER)
+@router.get("/api/band-condition/history")
+def band_condition_history(
+    days: int = 365,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_band_condition_history(days=days))
 
 
 @router.get("/stations")
@@ -1014,7 +1003,7 @@ def stations_page(
         current_user=current_user,
         active_nav="stations",
         stations=stations,
-        station_summary=station_summary(stations),
+        station_summary=station_summary(get_rf_heard_station_snapshots()),
         default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
@@ -1114,7 +1103,7 @@ def stations_snapshot(
     return JSONResponse(
         {
             "stations": stations,
-            "summary": station_summary(stations),
+            "summary": station_summary(get_rf_heard_station_snapshots()),
             "default_units": station_settings.get("default_units", "metric"),
         }
     )
@@ -1155,8 +1144,8 @@ def modems_create(
     normalized_modem_type = modem_type.strip().upper()
     if normalized_modem_type == "SERIAL":
         normalized_modem_type = "SERIALL"
-    if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE}:
-        context = _section_template_context(request, current_user, "modems", flash="Unsupported TNC type.")
+    if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE, APRSIS_MODEM_TYPE}:
+        context = _section_template_context(request, current_user, "modems", flash="Unsupported interface type.")
         return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     normalized_device_path = device_path.strip()
     if record_id is not None and normalized_modem_type == OPENWEBRX_MQTT_MODEM_TYPE and "***" in normalized_device_path:
@@ -1183,6 +1172,18 @@ def modems_create(
         "expose_whitelist": expose_whitelist,
     }
     if record_id is None:
+        if normalized_modem_type == APRSIS_MODEM_TYPE:
+            existing_aprsis = fetch_one("SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' LIMIT 1")
+            if existing_aprsis is not None:
+                existing_id = int(existing_aprsis["id"])
+                context = _section_template_context(
+                    request,
+                    current_user,
+                    "modems",
+                    flash="An APRSIS interface already exists. Edit the existing interface instead.",
+                    edit_row=get_section_row("modems", existing_id),
+                )
+                return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
         success, error = safe_create_section_row("modems", payload)
         edit_row = None
     else:
@@ -1498,6 +1499,7 @@ def settings_update_global(
     request: Request,
     language: str = Form(...),
     default_units: str = Form(...),
+    traffic_retention_minutes: str = Form(""),
     ui_palette: str = Form(""),
     aprs_symbol_set: str = Form(""),
     event_log_min_level: str = Form(""),
@@ -1509,6 +1511,8 @@ def settings_update_global(
     raw_aprs_symbol_set = str(aprs_symbol_set or "").strip().lower()
     selected_language = normalize_language(language)
     selected_default_units = str(default_units or "").strip().lower()
+    raw_traffic_retention_minutes = str(traffic_retention_minutes or "").strip()
+    selected_traffic_retention_minutes = _normalize_traffic_retention_minutes_option(raw_traffic_retention_minutes)
     selected_ui_palette = normalize_ui_palette(raw_ui_palette)
     selected_aprs_symbol_set = raw_aprs_symbol_set if raw_aprs_symbol_set in {APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN} else APRS_SYMBOL_SET_LEGACY
     raw_event_log_min_level = str(event_log_min_level or "").strip().upper()
@@ -1520,6 +1524,11 @@ def settings_update_global(
         return JSONResponse({"ok": False, "error": _translate("Unsupported language selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if selected_default_units not in {"metric", "imperial"}:
         return JSONResponse({"ok": False, "error": _translate("Unsupported unit selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if raw_traffic_retention_minutes != str(selected_traffic_retention_minutes):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Unsupported traffic history retention selection.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     if not is_supported_ui_palette(raw_ui_palette):
         return JSONResponse({"ok": False, "error": _translate("Unsupported color palette selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if raw_aprs_symbol_set and raw_aprs_symbol_set not in {APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN}:
@@ -1537,6 +1546,7 @@ def settings_update_global(
         )
 
     set_app_setting("app_language", selected_language)
+    set_app_setting(TRAFFIC_RETENTION_MINUTES_SETTING_KEY, str(selected_traffic_retention_minutes))
     set_app_setting("ui_palette", selected_ui_palette)
     set_app_setting(APRS_SYMBOL_SET_SETTING_KEY, selected_aprs_symbol_set)
     set_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY, selected_event_log_min_level)
@@ -1547,6 +1557,7 @@ def settings_update_global(
             "message": _translate("Global settings updated."),
             "current_language": selected_language,
             "current_default_units": selected_default_units,
+            "traffic_retention_minutes": selected_traffic_retention_minutes,
             "current_ui_palette": selected_ui_palette,
             "current_aprs_symbol_set": selected_aprs_symbol_set,
             "event_log_min_level": selected_event_log_min_level,
@@ -2338,11 +2349,34 @@ def map_page(
         body_class="page-map",
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_station_source_key=map_station_source_key,
-        map_stations_endpoint=_path(request, "/api/map/stations"),
+        map_stations_endpoint=_path(request, "/api/map/stations-lite"),
+        map_station_details_endpoint=_path(request, "/api/map/stations-details"),
+        map_mobile_tracks_endpoint=_path(request, "/api/map/mobile-tracks"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
         map_traffic_stream_endpoint=_path(request, "/api/traffic/stream"),
     )
     return templates.TemplateResponse("map.html", context)
+
+
+@router.get("/api/map/stations-lite")
+def map_stations_lite(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_map_station_markers_payload())
+
+
+@router.get("/api/map/stations-details")
+def map_station_details(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_map_station_details_payload())
+
+
+@router.get("/api/map/mobile-tracks")
+def map_mobile_tracks(
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    return JSONResponse(get_map_mobile_tracks_payload())
 
 
 @router.get("/api/map/stations")
@@ -3139,6 +3173,19 @@ async def messages_create_conversation(
     return JSONResponse({"conversation_id": str(conversation.get("id") or ""), "messages_view": get_live_messages_page_data()})
 
 
+@router.put("/api/messages/settings")
+async def messages_save_settings(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    try:
+        settings = save_message_settings(payload if isinstance(payload, dict) else {})
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse({"ok": True, "settings": settings, "messages_view": get_live_messages_page_data()})
+
+
 @router.post("/api/messages/send")
 async def messages_send(
     request: Request,
@@ -3330,18 +3377,3 @@ async def traffic_stream(
         "X-Accel-Buffering": "no",
     }
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
-
-
-@router.get("/map")
-def map_page(
-    request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
-) -> object:
-    templates = request.app.state.templates
-    context = build_template_context(
-        request,
-        page_title="Map",
-        current_user=current_user,
-        active_nav="map",
-    )
-    return templates.TemplateResponse("placeholder.html", context)

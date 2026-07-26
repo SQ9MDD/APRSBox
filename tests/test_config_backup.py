@@ -56,6 +56,7 @@ class ConfigBackupTests(unittest.TestCase):
                 """
             )
             set_app_setting("app_language", "pl")
+            set_app_setting("traffic_retention_minutes", "180")
             set_app_setting("scheduler.wx.last_refresh_at", "2026-01-01T00:00:00+00:00")
 
             payload = export_configuration_backup()
@@ -66,6 +67,7 @@ class ConfigBackupTests(unittest.TestCase):
             self.assertEqual(1, len(modem_rows))
             self.assertEqual("TNC-A", modem_rows[0]["name"])
             self.assertEqual("pl", payload["app_settings"]["app_language"])
+            self.assertEqual("180", payload["app_settings"]["traffic_retention_minutes"])
             self.assertNotIn("scheduler.wx.last_refresh_at", payload["app_settings"])
 
     def test_import_restores_configuration_without_overwriting_runtime_app_settings(self) -> None:

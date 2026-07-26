@@ -1,8 +1,55 @@
 # Changelog
 
+## 1.8.57.dev - 2026-07-25
+- `Band Condition / interfaces`: propagation assessment is now optional per interface and disabled by default; the available monitored bands are `2 m` and `70 cm`, with no manual reference-station selection.
+- `Band Condition / W0–W5 model`: added automatic learning of the usual fixed-station footprint separately for each interface. The first assessment appears after 24 hours, while opening detection considers station counts, typical reach, distances, distant stations, and newly heard geographic areas.
+- `Band Condition / confidence and history`: added a conservative confidence index that improves as more data is collected and is capped at 30% after the first day, 55% after one week, and 90% after 30 days; the view also includes a simple W0–W5 indicator with a clear scale legend, an hourly chart covering the last 365 days, and a separate subtle model-data panel showing collected samples, learning stage, and progress toward initial and mature assessments.
+- `Band Condition / performance`: moved analysis out of the frame-receive hot path and into the shared five-minute aggregator; frames are parsed once, and detailed observations and history use bounded retention.
+
+## 1.8.56.dev - 2026-07-24
+- `Messages / APRS-IS`: fixed ACKs and automatic replies to the local station; they return through `Local TX → APRS-IS` without RF transmission.
+- `Traffic Monitor / colors`: added row highlighting by frame origin and direction, a modal legend, and high-visibility yellow `APRS-IS → RF` warnings with an `IS → RF` badge.
+- `APRS-IS → RF`: added one-click callsign and radius clearing to restore message-only mode.
+
+## 1.8.55.dev - 2026-07-23
+- `iGate / messages`: the mandatory delivery rule now uses every active TX-enabled TNC automatically; eligible messages and the associated sender position bypass the callsign-and-radius rule, while empty rule fields enable message-only mode.
+- `Routing / logs`: steps that do not apply to a packet or were bypassed are shown as `skipped` instead of `passed`.
+
+## 1.8.54.dev - 2026-07-23
+- `APRS-IS / routing`: added APRS-IS as an interface and safe `APRS-IS → RF` routing.
+- `iGate / messages`: added bidirectional APRS message gating with local reachability checks and correct `qAR`/`qAO`.
+
+## 1.8.53.dev - 2026-07-14
+- `Messages / group conversations`: added threads for explicitly configured target groups with sender labels; other groups are ignored, while group messages are transmitted once without a message number, ACK, or retry.
+- `Messages / settings / GUI`: added a default path, reception for any SSID of the local callsign, and a validated group list (`ALL`, `QST`, `CQ` on first use); the panel was simplified and multilingual help was expanded.
+
+## 1.8.52.dev - 2026-07-08
+- `GUI / layout / consistency`: normalized margins, spacing, and panel borders across screens; aligned `Map`, `Traffic Monitor`, `Statistics`, `My Station`, and settings forms with the shared style, and refined the collapsible sidebar.
+
+## 1.8.50.dev - 2026-07-05
+- `Help / GUI / I18N`: added complete local Markdown help files in `PL/EN/ES/DE` for `iGate settings`, `Notifications`, `Messages`, `WX`, `My Station`, and `TNC`, wired them to the contextual help icon, and normalized the icon placement across page headers.
+
+## 1.8.49.dev - 2026-06-29
+- `Performance / runtime / SQLite`: trimmed hot paths for low-end hardware: radar now checks `radar_enabled` before heavy evaluation, `traffic_frames` cleanup moved out of the RX hot path into batched maintenance cleanup, short caches were added for traffic/station snapshots, SQLite hot-path indexes were added for outbound/messages, the WX scheduler offloads blocking refresh work to a thread, and the `Messages` page no longer polls `unread-status` twice.
+- `Map / first load / rendering`: first map entry now uses a lightweight marker payload (`stations-lite`), while station details and `mobile_tracks` are fetched separately after the first render; the frontend now updates markers, PHG coverage, and tracks incrementally instead of doing a full redraw, which shortens the wait for visible points and removes overlay flicker.
+
+## 1.8.48.dev - 2026-06-25
+- `Traffic Monitor / filters`: in response to GitHub `issue #53` (`Traffic monitor - filters`), the main toolbar now provides frontend-only quick filters for `RX`, `TX`, and remote-client `TX` frames, a grep-like text filter, and `Clear filters`; all filters are applied live to incoming SSE refreshes without backend changes.
+
+## 1.8.47.dev - 2026-06-25
+- `GUI / sidebar / scrolling`: in response to GitHub `issue #54` (`Menu panel independent scrolling`), the desktop sidebar now scrolls independently from the main content while keeping its scrollbar hidden.
+
+## 1.8.46.dev - 2026-06-23
+- `Settings / Global settings / Traffic frames`: added a global traffic history retention setting (`1h` to `6h` in `30 min` steps, plus `12h` and `24h`, default `1h`) that controls `traffic_frames` cleanup; map visibility for stations, objects, and tracks now follows this data-retention window directly.
+- `Messages / TX / multi-TNC`: fixed outbound error handling for `Transmit on all active interfaces`; a single TNC failure no longer marks the whole message as `failed` while the same TX round is still running on other interfaces or one of them already transmitted successfully.
+- `Messages / retry`: a message now moves to `failed` only after the whole send round for the same `scheduled_at` finishes without any `sent` job, restoring normal retry/ACK flow for `fail + success` multi-TNC cases.
+
 ## 1.8.45.dev - 2026-06-22
 - `My Station / Beacon`: limited the station callsign in the beacon form to at most 6 printable ASCII characters, with backend validation as well.
+- `My Station / Beacon`: the `callsign` and `Beacon Path` fields are now normalized to uppercase both in the form and on save.
 - `My Station / Location`: blocked manual editing of `latitude` and `longitude`; coordinates are now set only through the `Get location` button.
+- `Settings / Global settings`: moved the `Save Global Settings` button to the bottom of the block, and `Coverage fill opacity` now defaults to `10%` unless the user already saved a custom value.
+- `Settings / Global settings / I18N`: added missing translations for the `Icon set` field, its option list, and the helper text below the select.
 
 ## 1.8.44 - 2026-06-22
 

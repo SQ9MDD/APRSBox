@@ -35,6 +35,12 @@ DIRECT_MESSAGE_KIND = "direct_message"
 QUERY_MESSAGE_KIND = "query"
 ACK_MESSAGE_KIND = "ack"
 MESSAGE_NUMBER_KEY = "messages.next_message_number"
+MESSAGE_DEFAULT_PATH_SETTING_KEY = "messages.default_path"
+MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY = "messages.receive_any_ssid"
+MESSAGE_TARGET_GROUPS_SETTING_KEY = "messages.target_groups"
+CONVERSATION_KIND_DIRECT = "direct"
+CONVERSATION_KIND_GROUP = "group"
+DEFAULT_MESSAGE_TARGET_GROUPS = ("ALL", "QST", "CQ")
 MESSAGE_NUMBER_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 MESSAGE_MAX_LENGTH = 67
 RETRY_DELAYS_SECONDS = (8, 16, 32)
@@ -69,6 +75,14 @@ APRS_SERVICE_DESTINATIONS = (
     "WXBOT",
 )
 _APRS_SERVICE_DESTINATION_SET = frozenset(APRS_SERVICE_DESTINATIONS)
+MESSAGE_PATH_OPTIONS = (
+    ("", "Direct (no path)"),
+    ("WIDE1-1", "WIDE1-1"),
+    ("WIDE2-1", "WIDE2-1"),
+    ("WIDE2-2", "WIDE2-2"),
+    ("RFONLY", "RFONLY"),
+    ("NOGATE", "NOGATE"),
+)
 
 
 def _t(message: str) -> str:
@@ -108,41 +122,185 @@ def normalize_aprs_path(value: str) -> str:
     return path
 
 
-def create_or_update_conversation(callsign: str, *, path: str | None = None) -> dict[str, Any]:
-    remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
+def normalize_message_target_groups(value: Any) -> list[str]:
+    """Normalize user-defined APRS message group addressees.
+
+    APRS addressees are exactly nine characters on air.  Group names are local
+    receive filters, so accept ordinary callsign-like aliases but never a
+    station SSID or a bulletin address here.
+    """
+    if isinstance(value, list):
+        raw_values = value
+    else:
+        raw_text = str(value or "").replace("\n", ",")
+        if not raw_text.strip():
+            return []
+        raw_values = raw_text.split(",")
+    groups: list[str] = []
+    for raw_value in raw_values:
+        group = str(raw_value or "").strip().upper()
+        if not group:
+            raise ValueError(_t("Target groups cannot contain empty entries between commas."))
+        if not re.fullmatch(r"[A-Z0-9]{1,9}", group):
+            raise ValueError(_t("Target groups must contain 1-9 letters or digits, separated by commas."))
+        if group.startswith("BLN"):
+            raise ValueError(_t("Bulletin addresses are configured separately from message target groups."))
+        if group not in groups:
+            groups.append(group)
+    return groups
+
+
+def get_message_settings() -> dict[str, Any]:
+    raw_saved_path = get_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY)
+    saved_path = str(raw_saved_path or "").strip().upper()
+    allowed_paths = {value for value, _label in MESSAGE_PATH_OPTIONS}
+    if raw_saved_path is None:
+        try:
+            saved_path = str(_get_station_settings().get("beacon_path") or "").strip().upper()
+        except Exception:
+            saved_path = ""
+    default_path = saved_path if saved_path in allowed_paths else ""
+    saved_groups = get_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY)
+    if saved_groups is None:
+        target_groups = list(DEFAULT_MESSAGE_TARGET_GROUPS)
+    else:
+        try:
+            target_groups = normalize_message_target_groups(saved_groups)
+        except ValueError:
+            target_groups = []
+    receive_any_ssid = str(get_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY) or "").strip().lower() in {"1", "true", "yes", "on"}
+    return {
+        "default_path": default_path,
+        "path_options": [{"value": value, "label": label} for value, label in MESSAGE_PATH_OPTIONS],
+        "receive_any_ssid": receive_any_ssid,
+        "target_groups": target_groups,
+    }
+
+
+def save_message_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    path = normalize_aprs_path(str(payload.get("default_path") or ""))
+    if path not in {value for value, _label in MESSAGE_PATH_OPTIONS}:
+        raise ValueError(_t("Choose a default path from the list."))
+    groups = normalize_message_target_groups(payload.get("target_groups") or [])
+    receive_any_ssid = bool(payload.get("receive_any_ssid"))
+    set_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY, path)
+    set_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY, "1" if receive_any_ssid else "0")
+    set_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY, ",".join(groups))
+    _reconcile_message_group_conversations(groups)
+    return get_message_settings()
+
+
+def _reconcile_message_group_conversations(target_groups: list[str]) -> None:
+    """Move previously stored group traffic into its destination-group thread."""
+    for group in normalize_message_target_groups(target_groups):
+        message_rows = fetch_all(
+            """
+            SELECT id, conversation_id
+            FROM aprs_messages
+            WHERE direction = ? AND UPPER(TRIM(addressee)) = ?
+            """,
+            (MESSAGE_DIRECTION_RX, group),
+        )
+        existing_group_conversation = _get_conversation(group)
+        if not message_rows and existing_group_conversation is None:
+            continue
+        group_conversation = create_or_update_conversation(
+            group,
+            conversation_kind=CONVERSATION_KIND_GROUP,
+        )
+        group_conversation_id = int(group_conversation["id"])
+        source_conversation_ids = {
+            int(row["conversation_id"])
+            for row in message_rows
+            if int(row["conversation_id"]) != group_conversation_id
+        }
+        if not source_conversation_ids:
+            continue
+        with get_connection() as connection:
+            connection.execute(
+                """
+                UPDATE aprs_messages
+                SET conversation_id = ?
+                WHERE direction = ? AND UPPER(TRIM(addressee)) = ? AND conversation_id <> ?
+                """,
+                (group_conversation_id, MESSAGE_DIRECTION_RX, group, group_conversation_id),
+            )
+            connection.execute(
+                """
+                UPDATE aprs_message_conversations
+                SET updated_at = COALESCE(
+                    (SELECT MAX(created_at) FROM aprs_messages WHERE conversation_id = ?),
+                    updated_at
+                )
+                WHERE id = ?
+                """,
+                (group_conversation_id, group_conversation_id),
+            )
+            for source_conversation_id in source_conversation_ids:
+                connection.execute(
+                    """
+                    DELETE FROM aprs_message_conversations
+                    WHERE id = ?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM aprs_messages WHERE conversation_id = aprs_message_conversations.id
+                      )
+                    """,
+                    (source_conversation_id,),
+                )
+
+
+def create_or_update_conversation(
+    callsign: str,
+    *,
+    path: str | None = None,
+    conversation_kind: str | None = None,
+) -> dict[str, Any]:
+    normalized_callsign = normalize_aprs_destination_callsign(callsign)
+    remote_callsign, remote_ssid = split_callsign_ssid(normalized_callsign)
+    requested_kind = str(conversation_kind or "").strip().lower()
+    if requested_kind and requested_kind not in {CONVERSATION_KIND_DIRECT, CONVERSATION_KIND_GROUP}:
+        raise ValueError(_t("Unsupported message conversation type."))
     timestamp = utc_now()
     with get_connection() as connection:
         row = connection.execute(
             """
-            SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+            SELECT id, remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
             FROM aprs_message_conversations
             WHERE remote_callsign = ? AND remote_ssid = ?
             """,
             (remote_callsign, remote_ssid),
         ).fetchone()
         if row is None:
+            normalized_kind = requested_kind or (
+                CONVERSATION_KIND_GROUP
+                if normalized_callsign in set(get_message_settings()["target_groups"])
+                else CONVERSATION_KIND_DIRECT
+            )
             cursor = connection.execute(
                 """
-                INSERT INTO aprs_message_conversations(remote_callsign, remote_ssid, path, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO aprs_message_conversations(
+                    remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (remote_callsign, remote_ssid, path or "", timestamp, timestamp),
+                (remote_callsign, remote_ssid, normalized_kind, path or "", timestamp, timestamp),
             )
             conversation_id = int(cursor.lastrowid)
         else:
             conversation_id = int(row["id"])
-            if path is not None:
+            normalized_kind = requested_kind or str(row["conversation_kind"] or CONVERSATION_KIND_DIRECT)
+            if path is not None or str(row["conversation_kind"] or "") != normalized_kind:
                 connection.execute(
                     """
                     UPDATE aprs_message_conversations
-                    SET path = ?, updated_at = ?
+                    SET path = ?, conversation_kind = ?, updated_at = ?
                     WHERE id = ?
                     """,
-                    (path, timestamp, conversation_id),
+                    (str(row["path"] or "") if path is None else path, normalized_kind, timestamp, conversation_id),
                 )
     conversation = fetch_one(
         """
-        SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+        SELECT id, remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
         FROM aprs_message_conversations
         WHERE id = ?
         """,
@@ -168,7 +326,7 @@ def _get_conversation(callsign: str) -> dict[str, Any] | None:
     remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
     row = fetch_one(
         """
-        SELECT id, remote_callsign, remote_ssid, path, created_at, updated_at
+        SELECT id, remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
         FROM aprs_message_conversations
         WHERE remote_callsign = ? AND remote_ssid = ?
         LIMIT 1
@@ -179,11 +337,9 @@ def _get_conversation(callsign: str) -> dict[str, Any] | None:
 
 
 def _resolve_auto_ack_path(*, sender: str, station_settings: dict[str, Any]) -> str:
-    default_path = ""
-    try:
-        default_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
-    except ValueError:
-        default_path = ""
+    # The message setting is the default for automatic responses. A saved
+    # conversation path remains an explicit peer-specific override.
+    default_path = str(get_message_settings()["default_path"])
     try:
         existing_conversation = _get_conversation(sender)
     except ValueError:
@@ -215,9 +371,18 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
     if duplicate is not None:
         log_event("INFO", "messages", f"Ignored duplicate outbound APRS send burst to {normalized_callsign}")
         return duplicate
+    existing_conversation = _get_conversation(normalized_callsign)
+    is_group = (
+        normalized_callsign in set(get_message_settings()["target_groups"])
+        or str((existing_conversation or {}).get("conversation_kind") or "") == CONVERSATION_KIND_GROUP
+    )
     message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
-    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND else None
-    conversation = create_or_update_conversation(normalized_callsign, path=normalized_path)
+    message_number = next_message_number() if message_kind == DIRECT_MESSAGE_KIND and not is_group else None
+    conversation = create_or_update_conversation(
+        normalized_callsign,
+        path=normalized_path,
+        conversation_kind=CONVERSATION_KIND_GROUP if is_group else CONVERSATION_KIND_DIRECT,
+    )
     update_conversation_path(int(conversation["id"]), normalized_path)
 
     with get_connection() as connection:
@@ -293,6 +458,11 @@ def get_messages_page_data() -> dict[str, Any]:
         expire_direct_message_timeouts()
     except sqlite3.Error as exc:
         _safe_messages_warning(f"Failed to expire direct message timeouts: {exc}")
+    message_settings = get_message_settings()
+    try:
+        _reconcile_message_group_conversations(message_settings["target_groups"])
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to reconcile APRS message group conversations: {exc}")
     try:
         heard_by_key = _heard_station_lookup()
     except sqlite3.Error as exc:
@@ -301,7 +471,7 @@ def get_messages_page_data() -> dict[str, Any]:
     try:
         conversation_rows = fetch_all(
             """
-            SELECT c.id, c.remote_callsign, c.remote_ssid, c.path, c.created_at, c.updated_at
+            SELECT c.id, c.remote_callsign, c.remote_ssid, c.conversation_kind, c.path, c.created_at, c.updated_at
             FROM aprs_message_conversations c
             ORDER BY c.updated_at DESC, c.id DESC
             """
@@ -314,6 +484,7 @@ def get_messages_page_data() -> dict[str, Any]:
     local_sender = _local_station_identity()
     for row in conversation_rows:
         display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
+        conversation_kind = str(row["conversation_kind"] or CONVERSATION_KIND_DIRECT)
         if local_sender and _callsign_identity_matches(display_callsign, local_sender):
             continue
         conversation_id = int(row["id"])
@@ -328,7 +499,9 @@ def get_messages_page_data() -> dict[str, Any]:
             """,
             (conversation_id,),
         )]
-        heard_snapshot = heard_by_key.get(display_callsign.casefold()) or heard_by_key.get(str(row["remote_callsign"]).casefold())
+        heard_snapshot = None
+        if conversation_kind != CONVERSATION_KIND_GROUP:
+            heard_snapshot = heard_by_key.get(display_callsign.casefold()) or heard_by_key.get(str(row["remote_callsign"]).casefold())
         unread_count = sum(1 for item in messages if item["direction"] == MESSAGE_DIRECTION_RX and int(item["is_unread"] or 0))
         if active_conversation_id is None and unread_count > 0:
             active_conversation_id = str(conversation_id)
@@ -351,6 +524,7 @@ def get_messages_page_data() -> dict[str, Any]:
             {
                 "id": str(conversation_id),
                 "callsign": display_callsign,
+                "kind": conversation_kind,
                 "messages": prepared_messages,
                 "created_at": str(row["created_at"]),
                 "last_activity_at": last_activity_at,
@@ -364,13 +538,13 @@ def get_messages_page_data() -> dict[str, Any]:
         )
     if active_conversation_id is None and conversations:
         active_conversation_id = conversations[0]["id"]
-    station_settings = _get_station_settings()
     return {
         "conversations": conversations,
         "active_conversation_id": active_conversation_id,
         "composer_limit": MESSAGE_MAX_LENGTH,
         "recently_heard_window_minutes": HEARD_WARN_SECONDS // 60,
-        "default_path": str(station_settings.get("beacon_path") or "").strip(),
+        "default_path": message_settings["default_path"],
+        "message_settings": message_settings,
         "service_destinations": list(APRS_SERVICE_DESTINATIONS),
     }
 
@@ -501,7 +675,8 @@ def _register_outbound_message_transmission(message_id: int, job_id: int, *, all
             (now, int(message["conversation_id"])),
         )
     delay_index = next_attempt - 1
-    if allow_retry and next_attempt < MAX_TX_ATTEMPTS and 0 <= delay_index < len(RETRY_DELAYS_SECONDS):
+    expects_ack = bool(str(message.get("message_number") or "").strip())
+    if allow_retry and expects_ack and next_attempt < MAX_TX_ATTEMPTS and 0 <= delay_index < len(RETRY_DELAYS_SECONDS):
         schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[delay_index])
 
 
@@ -532,6 +707,46 @@ def mark_message_failed(message_id: int, reason: str) -> None:
                 MESSAGE_STATUS_REJECTED,
             ),
         )
+
+
+def mark_message_failed_if_round_exhausted(message_id: int, scheduled_at: str | None, reason: str) -> bool:
+    normalized_scheduled_at = str(scheduled_at or "").strip()
+    if not normalized_scheduled_at:
+        mark_message_failed(message_id, reason)
+        return True
+    pending_row = fetch_one(
+        """
+        SELECT COUNT(*) AS pending
+        FROM outbound_jobs
+        WHERE aprs_message_id = ?
+          AND scheduled_at = ?
+          AND status IN ('queued', 'processing')
+        """,
+        (message_id, normalized_scheduled_at),
+    )
+    if pending_row is not None and int(pending_row["pending"] or 0) > 0:
+        return False
+    sent_row = fetch_one(
+        """
+        SELECT COUNT(*) AS sent
+        FROM outbound_jobs
+        WHERE aprs_message_id = ?
+          AND scheduled_at = ?
+          AND status = 'sent'
+        """,
+        (message_id, normalized_scheduled_at),
+    )
+    sent_count = int(sent_row["sent"] or 0) if sent_row is not None else 0
+    if sent_count > 0:
+        message = get_message(message_id)
+        if message is not None:
+            current_attempt = int(message.get("tx_attempt_count") or 0)
+            delay_index = current_attempt - 1
+            if 0 <= delay_index < len(RETRY_DELAYS_SECONDS) and current_attempt < MAX_TX_ATTEMPTS:
+                schedule_message_retry(message_id, RETRY_DELAYS_SECONDS[delay_index])
+        return False
+    mark_message_failed(message_id, reason)
+    return True
 
 
 def retry_failed_message(message_id: int) -> dict[str, Any]:
@@ -612,6 +827,8 @@ def schedule_message_retry(message_id: int, delay_seconds: int) -> None:
     message = get_message(message_id)
     if message is None or str(message.get("status")) in {MESSAGE_STATUS_ACKED, MESSAGE_STATUS_REJECTED, MESSAGE_STATUS_FAILED}:
         return
+    if not str(message.get("message_number") or "").strip():
+        return
     existing = fetch_one(
         """
         SELECT id
@@ -653,6 +870,8 @@ def expire_direct_message_timeouts() -> None:
         FROM aprs_messages
         WHERE direction = ?
           AND status = ?
+          AND message_number IS NOT NULL
+          AND TRIM(message_number) <> ''
           AND tx_attempt_count >= ?
           AND last_attempt_at IS NOT NULL
           AND last_attempt_at <= ?
@@ -674,7 +893,13 @@ def expire_direct_message_timeouts() -> None:
             mark_message_failed(int(row["id"]), "No ACK received after APRS retry window.")
 
 
-def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) -> None:
+def process_incoming_tnc2_message(
+    line: str,
+    *,
+    timestamp: str | None = None,
+    allow_automatic_responses: bool = True,
+    automatic_response_internal_tx_only: bool = False,
+) -> None:
     parsed = _parse_effective_incoming_tnc2_line(line, log_invalid_third_party=True)
     if parsed is None:
         return
@@ -707,12 +932,32 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         return
 
     local_sender = _local_station_identity()
-    if not local_sender or not _callsign_identity_matches(addressee.upper(), local_sender):
+    recipient_kind = _incoming_message_recipient_kind(addressee, local_sender)
+    if recipient_kind is None:
         return
 
     if local_sender and _callsign_identity_matches(sender, local_sender):
         return
     received_at = _normalize_timestamp(timestamp)
+    # Only the configured callsign-SSID is a true local addressee.  APRS
+    # message groups and the optional same-callsign/other-SSID receive mode
+    # are display filters; they must never ACK or trigger a query response.
+    if recipient_kind != "local":
+        suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
+        if suffix_match is None:
+            return
+        store_incoming_message(
+            sender=sender,
+            addressee=addressee.upper(),
+            message_text=suffix_match.group("text") or "",
+            message_number=_normalize_message_number(suffix_match.group("number")),
+            path=parsed["path"],
+            timestamp=received_at,
+            acknowledge=False,
+            conversation_callsign=addressee.upper() if recipient_kind == "group" else sender,
+            conversation_kind=CONVERSATION_KIND_GROUP if recipient_kind == "group" else CONVERSATION_KIND_DIRECT,
+        )
+        return
     if text_field.startswith("?"):
         query_text, query_number, query_ack_number = _parse_query_text(text_field)
         if not query_text:
@@ -725,9 +970,17 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
             ack_number=query_ack_number,
             path=parsed["path"],
             timestamp=received_at,
+            acknowledge=allow_automatic_responses,
+            automatic_response_internal_tx_only=automatic_response_internal_tx_only,
         )
-        if is_new_query:
-            _handle_incoming_query(sender=sender, query_text=query_text, query_number=query_number, timestamp=received_at)
+        if is_new_query and allow_automatic_responses:
+            _handle_incoming_query(
+                sender=sender,
+                query_text=query_text,
+                query_number=query_number,
+                timestamp=received_at,
+                automatic_response_internal_tx_only=automatic_response_internal_tx_only,
+            )
         return
     ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
     reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
@@ -759,10 +1012,19 @@ def process_incoming_tnc2_message(line: str, *, timestamp: str | None = None) ->
         ack_number=ack_number,
         path=parsed["path"],
         timestamp=received_at,
+        acknowledge=allow_automatic_responses,
+        automatic_response_internal_tx_only=automatic_response_internal_tx_only,
     )
 
 
-def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | None, timestamp: str) -> None:
+def _handle_incoming_query(
+    *,
+    sender: str,
+    query_text: str,
+    query_number: str | None,
+    timestamp: str,
+    automatic_response_internal_tx_only: bool = False,
+) -> None:
     query_type = str(query_text or "").strip().upper().split()[0]
     station_settings = _get_station_settings()
     scheduled_for = _query_response_scheduled_for(query_number)
@@ -774,6 +1036,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprs",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     if query_type == "?APRSP":
@@ -783,6 +1046,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprsp",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSP from {sender}: {error or 'position unavailable'}")
@@ -794,6 +1058,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprss",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         if not success:
             log_event("INFO", "messages", f"Ignored ?APRSS from {sender}: {error or 'status unavailable'}")
@@ -806,6 +1071,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-aprsd",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     if query_type == "?DX":
@@ -816,6 +1082,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-dx",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     if query_type in {"?APRSV", "?VER"}:
@@ -826,6 +1093,7 @@ def _handle_incoming_query(*, sender: str, query_text: str, query_number: str | 
             trigger="query-version",
             scheduled_for=scheduled_for,
             timestamp=timestamp,
+            internal_tx_only=automatic_response_internal_tx_only,
         )
         return
     log_event("INFO", "messages", f"Ignored unsupported query from {sender}: {query_text.strip()[:80]}")
@@ -839,9 +1107,10 @@ def enqueue_automatic_query_text_response(
     trigger: str,
     scheduled_for: datetime | None,
     timestamp: str,
+    internal_tx_only: bool = False,
 ) -> None:
     response_text = normalize_aprs_message_text(message_text)
-    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    response_path = str(get_message_settings()["default_path"])
     message_id = create_automatic_query_response(
         sender=sender,
         message_text=response_text,
@@ -856,6 +1125,7 @@ def enqueue_automatic_query_text_response(
         path=response_path,
         aprs_message_id=message_id,
         scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
     )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRS query response.")
@@ -871,9 +1141,10 @@ def enqueue_automatic_query_position_response(
     trigger: str,
     scheduled_for: datetime | None,
     timestamp: str,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_position_text(station_settings)
-    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    response_path = str(get_message_settings()["default_path"])
     message_id = create_automatic_query_response(
         sender=sender,
         message_text=response_text,
@@ -884,7 +1155,9 @@ def enqueue_automatic_query_position_response(
         station_settings,
         trigger=trigger,
         aprs_message_id=message_id,
+        beacon_path_override=response_path,
         scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
     )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRSP response.")
@@ -900,9 +1173,10 @@ def enqueue_automatic_query_status_response(
     trigger: str,
     scheduled_for: datetime | None,
     timestamp: str,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str | None]:
     response_text = _build_query_status_text(station_settings)
-    response_path = normalize_aprs_path(str(station_settings.get("beacon_path") or ""))
+    response_path = str(get_message_settings()["default_path"])
     message_id = create_automatic_query_response(
         sender=sender,
         message_text=response_text,
@@ -913,7 +1187,9 @@ def enqueue_automatic_query_status_response(
         station_settings,
         trigger=trigger,
         aprs_message_id=message_id,
+        path=response_path,
         scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
     )
     if not success:
         mark_message_failed(message_id, error or "Failed to queue automatic APRSS response.")
@@ -1005,10 +1281,17 @@ def store_incoming_message(
     ack_number: str | None = None,
     path: str,
     timestamp: str,
+    acknowledge: bool = True,
+    automatic_response_internal_tx_only: bool = False,
+    conversation_callsign: str | None = None,
+    conversation_kind: str = CONVERSATION_KIND_DIRECT,
 ) -> None:
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(
+        conversation_callsign or sender,
+        conversation_kind=conversation_kind,
+    )
     duplicate_unnumbered = (
         not message_number
         and _has_recent_unnumbered_incoming_message_duplicate(
@@ -1068,9 +1351,16 @@ def store_incoming_message(
             timestamp=timestamp,
         )
     ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else message_number)
-    if not ack_number_for_tx:
+    if not acknowledge or not ack_number_for_tx:
         return
-    enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
+    enqueue_ack_job(
+        sender,
+        ack_number_for_tx,
+        station_settings,
+        path=ack_path,
+        trigger="ack-now",
+        internal_tx_only=automatic_response_internal_tx_only,
+    )
     enqueue_ack_job(
         sender,
         ack_number_for_tx,
@@ -1078,6 +1368,7 @@ def store_incoming_message(
         path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
+        internal_tx_only=automatic_response_internal_tx_only,
     )
 
 
@@ -1090,11 +1381,13 @@ def store_incoming_query(
     ack_number: str | None = None,
     path: str,
     timestamp: str,
+    acknowledge: bool = True,
+    automatic_response_internal_tx_only: bool = False,
 ) -> bool:
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
     ack_number_for_tx = _normalize_ack_number(ack_number if ack_number is not None else query_number)
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     existing = None
     if query_number:
         existing = fetch_one(
@@ -1114,8 +1407,15 @@ def store_incoming_query(
         # Duplicate bursts for the same query number can appear when a frame is heard
         # multiple times through nearby digipeaters. Limit duplicate ACKs to one short-window
         # transmission per sender/query-number pair to keep TX serialization predictable.
-        if ack_number_for_tx and not _has_recent_duplicate_ack(sender=sender, query_number=ack_number_for_tx):
-            enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-duplicate")
+        if acknowledge and ack_number_for_tx and not _has_recent_duplicate_ack(sender=sender, query_number=ack_number_for_tx):
+            enqueue_ack_job(
+                sender,
+                ack_number_for_tx,
+                station_settings,
+                path=ack_path,
+                trigger="ack-duplicate",
+                internal_tx_only=automatic_response_internal_tx_only,
+            )
         return False
     with get_connection() as connection:
         connection.execute(
@@ -1141,9 +1441,16 @@ def store_incoming_query(
             ),
         )
     log_event("INFO", "messages", f"Stored incoming APRS query from {sender} to {addressee}")
-    if not ack_number_for_tx:
+    if not acknowledge or not ack_number_for_tx:
         return True
-    enqueue_ack_job(sender, ack_number_for_tx, station_settings, path=ack_path, trigger="ack-now")
+    enqueue_ack_job(
+        sender,
+        ack_number_for_tx,
+        station_settings,
+        path=ack_path,
+        trigger="ack-now",
+        internal_tx_only=automatic_response_internal_tx_only,
+    )
     enqueue_ack_job(
         sender,
         ack_number_for_tx,
@@ -1151,6 +1458,7 @@ def store_incoming_query(
         path=ack_path,
         trigger="ack-delayed",
         scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=FINAL_ACK_WAIT_SECONDS),
+        internal_tx_only=automatic_response_internal_tx_only,
     )
     return True
 
@@ -1163,7 +1471,7 @@ def store_incoming_bulletin(
     path: str,
     timestamp: str,
 ) -> None:
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     display_text = _format_bulletin_display_text(addressee, message_text)
     existing = fetch_one(
         """
@@ -1210,7 +1518,7 @@ def create_automatic_query_response(*, sender: str, message_text: str, path: str
     local_sender = _local_station_identity()
     if not local_sender:
         raise ValueError(_t("Local station callsign is required."))
-    conversation = create_or_update_conversation(sender)
+    conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -1607,6 +1915,8 @@ def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
         "direction": str(row["direction"]),
+        "sender": str(row.get("sender") or ""),
+        "addressee": str(row.get("addressee") or ""),
         "text": str(row["message_text"] or ""),
         "timestamp": timestamp,
         "unread": bool(int(row.get("is_unread") or 0)),
@@ -1774,6 +2084,24 @@ def _callsign_identity_matches(left: str, right: str) -> bool:
     if not left_canonical or not right_canonical:
         return False
     return left_canonical == right_canonical
+
+
+def _incoming_message_recipient_kind(addressee: str, local_sender: str) -> str | None:
+    normalized_addressee = _canonical_callsign_identity(addressee)
+    normalized_local = _canonical_callsign_identity(local_sender)
+    if not normalized_addressee or not normalized_local:
+        return None
+    if normalized_addressee == normalized_local:
+        return "local"
+
+    local_callsign, _local_ssid = split_callsign_ssid(normalized_local)
+    addressee_callsign, _addressee_ssid = split_callsign_ssid(normalized_addressee)
+    if get_message_settings()["receive_any_ssid"] and local_callsign == addressee_callsign:
+        return "other_ssid"
+
+    if normalized_addressee in set(get_message_settings()["target_groups"]):
+        return "group"
+    return None
 
 
 def _safe_messages_warning(message: str) -> None:

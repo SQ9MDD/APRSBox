@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -16,6 +17,8 @@ KISS_TFESC = 0xDD
 AX25_CONTROL_UI = 0x03
 AX25_PID_NO_LAYER3 = 0xF0
 APRSBOX_DESTINATION = "APBOX0"
+APRSIS_TO_RF_ORIGIN = "aprsis_to_rf"
+AX25_MAX_INFORMATION_BYTES = 256
 OUTBOUND_KIND_BEACON = "beacon"
 OUTBOUND_KIND_STATUS = "status"
 OUTBOUND_KIND_OBJECT = "object"
@@ -35,6 +38,22 @@ LOCAL_TX_ORIGIN_UNKNOWN = "unknown"
 LOCAL_TX_KIND_ROUTED = "routed"
 LOCAL_TX_KIND_OTHER = "other"
 INTERNAL_TX_INTERFACE_NAME = "Internal TX"
+_APRSIS_RF_TRANSLITERATIONS = str.maketrans(
+    {
+        "\u00a0": " ",
+        "°": "deg",
+        "µ": "u",
+        "μ": "u",
+        "–": "-",
+        "—": "-",
+        "−": "-",
+        "‘": "'",
+        "’": "'",
+        "“": '"',
+        "”": '"',
+        "…": "...",
+    }
+)
 
 
 def _list_active_tnc_modems() -> list[dict[str, Any]]:
@@ -62,8 +81,12 @@ def _get_modem_by_id(interface_id: int) -> dict[str, Any] | None:
     return dict(modem) if modem is not None else None
 
 
-def _resolve_station_target_modems(station_settings: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
-    if bool(station_settings.get("beacon_internal_tx")):
+def _resolve_station_target_modems(
+    station_settings: dict[str, Any],
+    *,
+    internal_tx_only: bool = False,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    if internal_tx_only or bool(station_settings.get("beacon_internal_tx")):
         return [
             {
                 "id": None,
@@ -80,7 +103,7 @@ def _resolve_station_target_modems(station_settings: dict[str, Any]) -> tuple[li
     if scope == TX_SCOPE_ALL_ACTIVE:
         modems = _list_active_tnc_modems()
         if not modems:
-            return None, "No active TNC interfaces are available."
+            return None, "No active RF interfaces are available."
         return modems, None
 
     beacon_interface_id = station_settings.get("beacon_interface_id")
@@ -106,7 +129,7 @@ def _resolve_wx_target_modems(payload: dict[str, Any]) -> tuple[list[dict[str, A
             except (TypeError, ValueError):
                 continue
         if not interface_ids:
-            return None, "No active TNC interfaces are available."
+            return None, "No active RF interfaces are available."
         modems: list[dict[str, Any]] = []
         missing = False
         for interface_id in interface_ids:
@@ -116,7 +139,7 @@ def _resolve_wx_target_modems(payload: dict[str, Any]) -> tuple[list[dict[str, A
                 continue
             modems.append(modem)
         if not modems:
-            return None, "No active TNC interfaces are available."
+            return None, "No active RF interfaces are available."
         if missing:
             log_event("WARNING", "outbound", "WX all-active target list contained unavailable interfaces.")
         return modems, None
@@ -245,12 +268,16 @@ def enqueue_beacon_job(
     aprs_message_id: int | None = None,
     beacon_path_override: str | None = None,
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
     if not callsign:
         return False, "Callsign is required."
-    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    target_modems, target_error = _resolve_station_target_modems(
+        station_settings,
+        internal_tx_only=internal_tx_only,
+    )
     if not target_modems:
         return False, str(target_error or "Interface is required.")
 
@@ -298,7 +325,9 @@ def enqueue_status_job(
     *,
     trigger: str = "manual",
     aprs_message_id: int | None = None,
+    path: str = "",
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -307,7 +336,10 @@ def enqueue_status_job(
         return False, "Callsign is required."
     if not status_text:
         return False, "Status text is required."
-    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    target_modems, target_error = _resolve_station_target_modems(
+        station_settings,
+        internal_tx_only=internal_tx_only,
+    )
     if not target_modems:
         return False, str(target_error or "Interface is required.")
 
@@ -316,6 +348,7 @@ def enqueue_status_job(
         "callsign": callsign,
         "ssid": ssid,
         "status_text": status_text,
+        "path": str(path or "").strip(),
         "trigger": str(trigger or "manual").strip() or "manual",
     }
     scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()
@@ -616,6 +649,7 @@ def enqueue_digi_tx_job(
     trigger: str = "digi_flow",
     flow_id: int | None = None,
     frame_uid: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     target_name = str(interface_name or "").strip()
     tnc2_line = str(line or "").strip()
@@ -626,7 +660,7 @@ def enqueue_digi_tx_job(
 
     modem = fetch_one(
         """
-        SELECT id, name, modem_type, band, device_path, enabled
+        SELECT id, name, modem_type, band, device_path, enabled, tx_blocked
         FROM modems
         WHERE name = ?
         ORDER BY id ASC
@@ -637,6 +671,16 @@ def enqueue_digi_tx_job(
     if modem is None:
         return False, "Selected interface does not exist."
 
+    normalized_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    if str(normalized_metadata.get("origin") or "").strip() == APRSIS_TO_RF_ORIGIN:
+        modem_type = str(modem["modem_type"] or "").strip().upper()
+        if modem_type not in {"TCP", "SERIALL", "SERIAL"}:
+            return False, "invalid_target_type"
+        if int(modem["enabled"] or 0) != 1:
+            return False, "target_unavailable"
+        if int(modem["tx_blocked"] or 0) == 1:
+            return False, "target_rx_only"
+
     payload = {
         "line": tnc2_line,
         "trigger": str(trigger or "digi_flow").strip() or "digi_flow",
@@ -645,6 +689,11 @@ def enqueue_digi_tx_job(
         "tx_origin": LOCAL_TX_ORIGIN_ROUTED,
         "tx_kind": LOCAL_TX_KIND_ROUTED,
     }
+    for key in ("origin", "aprsis_interface_id", "target_interface_id", "normalized_packet_hash", "rf_guard_reason"):
+        if key in normalized_metadata and normalized_metadata[key] is not None:
+            payload[key] = normalized_metadata[key]
+    if str(payload.get("origin") or "").strip() == APRSIS_TO_RF_ORIGIN:
+        payload["tx_origin"] = APRSIS_TO_RF_ORIGIN
     now_text = utc_now()
     with get_connection() as connection:
         cursor = connection.execute(
@@ -668,6 +717,55 @@ def enqueue_digi_tx_job(
         job_id = int(cursor.lastrowid)
     log_event("INFO", "outbound", f"Queued {payload['trigger']} DIGI TX job #{job_id} for interface {modem['name']}")
     return True, f"DIGI TX queued as job #{job_id}."
+
+
+def build_aprsis_third_party_tnc2(
+    parsed: dict[str, Any],
+    *,
+    igate_callsign: str,
+    rf_path: str = "",
+    destination: str = APRSBOX_DESTINATION,
+) -> str:
+    """Build the mandatory APRS third-party RF representation.
+
+    The APRS-IS/q path is intentionally ignored.  Only the original source,
+    destination and information field are copied into the inner header.
+    """
+
+    if not isinstance(parsed, dict) or bool(parsed.get("is_third_party")):
+        raise ValueError("invalid_third_party")
+    original_source = str(parsed.get("source") or "").strip().upper()
+    original_destination = str(parsed.get("destination") or "").strip().upper()
+    original_payload = _sanitize_aprsis_payload_for_rf(
+        str(parsed.get("info") if parsed.get("info") is not None else "")
+    )
+    normalized_igate = str(igate_callsign or "").strip().upper()
+    normalized_destination = str(destination or "").strip().upper()
+    normalized_path = str(rf_path or "").strip().upper()
+
+    for address in (original_source, original_destination, normalized_igate, normalized_destination):
+        _split_callsign_ssid(address)
+    path_tokens = [token.strip() for token in normalized_path.split(",") if token.strip()]
+    if len(path_tokens) > 8:
+        raise ValueError("RF path cannot contain more than eight digipeater addresses.")
+    for token in path_tokens:
+        if token.endswith("*"):
+            raise ValueError("Outbound RF path cannot contain consumed path markers.")
+        _split_callsign_ssid(token)
+
+    inner_line = f"{original_source}>{original_destination},TCPIP,{normalized_igate}*:{original_payload}"
+    outer_info = f"}}{inner_line}"
+    info_length = len(_encode_ax25_information(outer_info))
+    if info_length > AX25_MAX_INFORMATION_BYTES:
+        raise ValueError("packet_too_long")
+
+    header = f"{normalized_igate}>{normalized_destination}"
+    if path_tokens:
+        header = f"{header},{','.join(path_tokens)}"
+    line = f"{header}:{outer_info}"
+    # Reuse the existing AX.25/KISS builder as the final structural check.
+    build_tnc2_kiss_frame(line)
+    return line
 
 
 def enqueue_direct_message_job(
@@ -725,6 +823,7 @@ def enqueue_query_response_job(
     path: str = "",
     aprs_message_id: int | None = None,
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     payload = {
         "aprs_message_id": aprs_message_id,
@@ -736,7 +835,12 @@ def enqueue_query_response_job(
         "message_text": str(message_text or "").strip(),
         "trigger": str(trigger or "query-response").strip() or "query-response",
     }
-    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+    return _enqueue_generic_message_payload(
+        payload,
+        station_settings,
+        scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
+    )
 
 
 def enqueue_ack_job(
@@ -747,6 +851,7 @@ def enqueue_ack_job(
     path: str = "",
     trigger: str = "ack",
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     payload = {
         "callsign": str(station_settings.get("callsign") or "").strip().upper(),
@@ -757,7 +862,12 @@ def enqueue_ack_job(
         "message_text": f"ack{str(ack_number or '').strip().upper()}",
         "trigger": str(trigger or "ack").strip() or "ack",
     }
-    return _enqueue_generic_message_payload(payload, station_settings, scheduled_for=scheduled_for)
+    return _enqueue_generic_message_payload(
+        payload,
+        station_settings,
+        scheduled_for=scheduled_for,
+        internal_tx_only=internal_tx_only,
+    )
 
 
 def claim_next_outbound_job() -> dict[str, Any] | None:
@@ -880,17 +990,19 @@ def persist_outbound_frame(
     port: str = "0",
     command: str = "TX",
     payload_hex: str = "",
+    source_kind: str = "rf",
 ) -> None:
     with get_connection() as connection:
         connection.execute(
             """
             INSERT INTO traffic_frames(
-                source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
             )
-            VALUES (?, ?, 'tx', ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, 'tx', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 source,
+                str(source_kind or "rf").strip().lower() or "rf",
                 interface_id,
                 str(band or "").strip(),
                 "TNC2-TX",
@@ -926,8 +1038,12 @@ def build_object_tnc2(payload: dict[str, Any]) -> str:
 
 def build_status_tnc2(payload: dict[str, Any]) -> str:
     source = _format_station_callsign(payload.get("callsign"), payload.get("ssid"))
+    path = str(payload.get("path") or "").strip()
     info = _build_status_info(payload)
-    return f"{source}>{APRSBOX_DESTINATION}:{info}"
+    header = f"{source}>{APRSBOX_DESTINATION}"
+    if path:
+        header = f"{header},{path}"
+    return f"{header}:{info}"
 
 
 def build_message_tnc2(payload: dict[str, Any]) -> str:
@@ -1002,7 +1118,7 @@ def build_tnc2_kiss_frame(line: str) -> bytes:
         ax25.extend(chunk)
     ax25.append(AX25_CONTROL_UI)
     ax25.append(AX25_PID_NO_LAYER3)
-    ax25.extend(info.encode("utf-8"))
+    ax25.extend(_encode_ax25_information(info))
     escaped = bytearray([0x00])
     for byte in ax25:
         if byte == KISS_FEND:
@@ -1012,6 +1128,28 @@ def build_tnc2_kiss_frame(line: str) -> bytes:
         else:
             escaped.append(byte)
     return bytes([KISS_FEND]) + bytes(escaped) + bytes([KISS_FEND])
+
+
+def _encode_ax25_information(info: str) -> bytes:
+    try:
+        return info.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ValueError("AX.25 APRS information must use 7-bit ASCII.") from exc
+
+
+def _sanitize_aprsis_payload_for_rf(payload: str) -> str:
+    """Transliterate APRS-IS text into the 7-bit representation used on RF."""
+
+    normalized = unicodedata.normalize("NFKD", str(payload or "").translate(_APRSIS_RF_TRANSLITERATIONS))
+    safe: list[str] = []
+    for char in normalized:
+        if ord(char) <= 0x7F:
+            safe.append(char)
+        elif unicodedata.combining(char):
+            continue
+        else:
+            safe.append("?")
+    return "".join(safe)
 
 
 def _parse_coordinate(value: Any) -> float | None:
@@ -1221,11 +1359,15 @@ def _enqueue_generic_message_payload(
     station_settings: dict[str, Any],
     *,
     scheduled_for: datetime | None = None,
+    internal_tx_only: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     if not callsign:
         return False, "Callsign is required."
-    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    target_modems, target_error = _resolve_station_target_modems(
+        station_settings,
+        internal_tx_only=internal_tx_only,
+    )
     if not target_modems:
         return False, str(target_error or "Interface is required.")
     scheduled_at = scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now()

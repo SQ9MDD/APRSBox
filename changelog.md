@@ -1,8 +1,55 @@
 # Changelog
 
+## 1.8.57.dev - 25.07.2026
+- `Warunki pasma / interfejsy`: ocena propagacji jest teraz opcjonalna dla każdego interfejsu i domyślnie wyłączona; do wyboru pozostają `2 m` oraz `70 cm`, bez ręcznego wskazywania stacji referencyjnych.
+- `Warunki pasma / model W0–W5`: dodano automatyczne uczenie typowej słyszalności stacji stałych osobno dla każdego interfejsu. Pierwsza ocena pojawia się po 24 godzinach, a wykrywanie otwarć uwzględnia liczbę stacji, typowy zasięg, odległości, dalekie stacje i nowe obszary geograficzne.
+- `Warunki pasma / pewność i historia`: dodano konserwatywny, rosnący wraz z ilością danych indeks pewności — ograniczony do 30% po pierwszej dobie, 55% po tygodniu i 90% po 30 dniach — prosty wskaźnik W0–W5 z czytelną legendą skali, wykres godzinowy obejmujący ostatnie 365 dni oraz osobny, dyskretny blok pokazujący zebrane dane, etap uczenia i postęp do pierwszej oraz dojrzałej oceny.
+- `Warunki pasma / wydajność`: analizę przeniesiono z gorącej ścieżki odbioru ramek do wspólnego agregatora pięciominutowego; ramki są parsowane jednokrotnie, a szczegółowe obserwacje i historia mają ograniczoną retencję.
+
+## 1.8.56.dev - 24.07.2026
+- `Wiadomości / APRS-IS`: naprawiono ACK i automatyczne odpowiedzi do lokalnej stacji; wracają przez `Local TX → APRS-IS`, bez TX RF.
+- `Monitor ruchu / kolory`: dodano oznaczanie wierszy według pochodzenia i kierunku ramek, modalną legendę oraz alarmowe wyróżnienie `APRS-IS → RF` na żółto ze znacznikiem `IS → RF`.
+- `APRS-IS → RF`: dodano szybkie czyszczenie znaku i promienia, przywracające tryb tylko wiadomości.
+
+## 1.8.55.dev - 23.07.2026
+- `iGate / wiadomości`: obowiązkowa reguła dostarczania automatycznie używa wszystkich aktywnych TNC z dozwolonym TX; zakwalifikowane wiadomości i powiązana pozycja omijają regułę znaku i promienia, a jej puste pola ustawiają tryb tylko wiadomości.
+- `Routing / logi`: kroki, które nie dotyczą pakietu lub zostały ominięte, mają stan `pominięto` zamiast `przeszedł`.
+
+## 1.8.54.dev - 23.07.2026
+- `APRS-IS / routing`: dodano APRS-IS jako interfejs oraz bezpieczny routing `APRS-IS → RF`.
+- `iGate / wiadomości`: dodano dwukierunkowe bramkowanie wiadomości APRS z kontrolą lokalnej osiągalności i poprawnym `qAR`/`qAO`.
+
+## 1.8.53.dev - 14.07.2026
+- `Wiadomości / rozmowy grupowe`: dodano wątki dla jawnie skonfigurowanych grup docelowych z oznaczeniem nadawcy; pozostałe grupy są ignorowane, a wysyłka grupowa odbywa się jednokrotnie, bez numeru wiadomości, ACK i retry.
+- `Wiadomości / ustawienia / GUI`: dodano domyślną ścieżkę, odbiór dla dowolnego SSID własnego znaku oraz walidowaną listę grup (`ALL`, `QST`, `CQ` przy pierwszym użyciu); panel uproszczono i uzupełniono wielojęzyczną pomoc.
+
+## 1.8.52.dev - 08.07.2026
+- `GUI / layout / spójność`: uporządkowano marginesy, odstępy i ramki między ekranami; ujednolicono widoki `Mapa`, `Monitor ruchu`, `Statystyki`, `Moja stacja` i formularze ustawień oraz dopracowano zwijany sidebar.
+
+## 1.8.50.dev - 05.07.2026
+- `Pomoc / GUI / I18N`: dodano komplet lokalnych plików pomocy Markdown w `PL/EN/ES/DE` dla zakładek `Ustawienia iGate`, `Powiadomienia`, `Wiadomości`, `WX`, `Moja stacja` i `TNC`, podpięto je pod kontekstową ikonę pomocy oraz ujednolicono jej pozycję w nagłówkach ekranów.
+
+## 1.8.49.dev - 29.06.2026
+- `Wydajność / runtime / SQLite`: odciążono gorące ścieżki na słabszych maszynach: radar sprawdza `radar_enabled` przed kosztowną analizą, cleanup `traffic_frames` wypadł z RX hot path do batch cleanupu w maintenance schedulerze, dodano krótkie cache dla snapshotów traffic/stations, indeksy SQLite dla hot-path wiadomości/outbound, scheduler WX przenosi blokujące odświeżanie do wątku, a strona `Messages` nie odpytuje już podwójnie `unread-status`.
+- `Mapa / pierwsze wczytanie / render`: pierwsze wejście na mapę używa lekkiego payloadu markerów (`stations-lite`), a szczegóły stacji i `mobile_tracks` są dociągane osobno po pierwszym renderze; frontend aktualizuje teraz markery, zasięgi PHG i tracki przyrostowo zamiast pełnego redraw, co skraca oczekiwanie na punkty i usuwa mruganie overlayów.
+
+## 1.8.48.dev - 25.06.2026
+- `Traffic Monitor / filtry`: w odpowiedzi na GitHub `issue #53` (`Traffic monitor - filters`) główny toolbar dostał frontendowe szybkie filtry `RX`, `TX` i zdalnego `TX` od klientów, tekstowy filtr typu grep oraz przycisk `Clear filters`; wszystkie filtry działają na żywo także dla kolejnych odświeżeń SSE, bez zmian w backendzie.
+
+## 1.8.47.dev - 25.06.2026
+- `GUI / sidebar / scrolling`: w odpowiedzi na GitHub `issue #54` (`Menu panel independent scrolling`) sidebar na desktopie przewija się teraz niezależnie od głównej zawartości, a jego scrollbar pozostaje ukryty.
+
+## 1.8.46.dev - 23.06.2026
+- `Settings / Global settings / Traffic frames`: dodano globalne ustawienie retencji historii ruchu (`1h` do `6h` co `30 min`, plus `12h` i `24h`, domyślnie `1h`), które steruje cleanupem tabeli `traffic_frames`; widoczność stacji, obiektów i śladów na mapie wynika teraz bezpośrednio z tego okna retencji danych.
+- `Wiadomości / TX / multi-TNC`: naprawiono obsługę błędów wysyłki przy `Transmit on all active interfaces`; pojedynczy błąd jednego TNC nie oznacza już całej wiadomości jako `failed`, jeśli ta sama runda TX nadal trwa na innych interfejsach albo jeden z nich nadał poprawnie.
+- `Wiadomości / retry`: wiadomość przechodzi teraz na `failed` dopiero wtedy, gdy cała runda wysyłki dla danego `scheduled_at` zakończy się bez żadnego `sent`, co przywraca retry/ACK flow dla przypadków `fail + success` w multi-TNC.
+
 ## 1.8.45.dev - 22.06.2026
 - `Moja stacja / Beacon`: znak stacji w formularzu beaconu ograniczono do maksymalnie 6 drukowalnych znaków ASCII, z walidacją także po stronie backendu.
+- `Moja stacja / Beacon`: pola `znak stacji` i `Beacon Path` są teraz automatycznie normalizowane do wielkich liter w formularzu i przy zapisie.
 - `Moja stacja / Lokalizacja`: ręczna edycja pól `szerokość` i `długość geograficzna` została zablokowana; współrzędne są teraz ustawiane wyłącznie przez przycisk `Pobierz lokalizację`.
+- `Settings / Global settings`: przycisk `Save Global Settings` przeniesiono na dół bloku, a `Coverage fill opacity` ma domyślnie `10%`, o ile użytkownik nie zapisał własnej wartości.
+- `Settings / Global settings / I18N`: uzupełniono brakujące tłumaczenia pola `Icon set`, listy opcji oraz opisu pod selectem.
 
 ## 1.8.44 - 22.06.2026
 

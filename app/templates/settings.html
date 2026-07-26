@@ -18,6 +18,7 @@
             method="post"
             action="{{ request.scope.root_path }}/settings/global"
             class="form-grid"
+            id="global-settings-form"
             data-settings-action-id="save-global-settings"
             onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-global-settings', message: {{ t('Saving global settings...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500});"
         >
@@ -35,6 +36,15 @@
                     <option value="metric" {% if current_default_units != "imperial" %}selected{% endif %}>{{ t("Metric") }}</option>
                     <option value="imperial" {% if current_default_units == "imperial" %}selected{% endif %}>{{ t("Imperial") }}</option>
                 </select>
+            </label>
+            <label>
+                <span>{{ t("Traffic history retention") }}</span>
+                <select name="traffic_retention_minutes">
+                    {% for option in traffic_retention_minutes_options %}
+                    <option value="{{ option.value }}" {% if traffic_retention_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+                <span class="muted small">{{ t("Controls how long runtime traffic frames are kept in the database. Map and station visibility follow this window.") }}</span>
             </label>
             <label>
                 <span>{{ t("Icon set") }}</span>
@@ -68,9 +78,6 @@
                 <span>{{ t("Enable DEBUG logs") }}</span>
                 <span class="muted small">{{ t("DEBUG entries are disabled by default and should be enabled only for troubleshooting.") }}</span>
             </label>
-            <div class="form-actions">
-                <button type="submit" class="button">{{ t("Save Global Settings") }}</button>
-            </div>
         </form>
         {% else %}
         <dl class="details-grid">
@@ -78,6 +85,8 @@
             <dd><code>{{ current_language }}</code></dd>
             <dt>{{ t("Units") }}</dt>
             <dd>{{ t("Imperial") if current_default_units == "imperial" else t("Metric") }}</dd>
+            <dt>{{ t("Traffic history retention") }}</dt>
+            <dd><code>{{ traffic_retention_minutes_label }}</code></dd>
             <dt>{{ t("Icon set") }}</dt>
             <dd>{{ current_aprs_symbol_set_label }}</dd>
             <dt>{{ t("Color palette") }}</dt>
@@ -107,6 +116,11 @@
                 </select>
             </label>
         </div>
+        {% if can_manage_global_settings %}
+        <div class="form-actions">
+            <button type="submit" class="button" form="global-settings-form">{{ t("Save Global Settings") }}</button>
+        </div>
+        {% endif %}
     </div>
 </section>
 
@@ -614,7 +628,7 @@
         const mapCoverageFillOpacityStorageKey = "aprsbox-map-coverage-fill-opacity";
         const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
 
-        const normalizeCoverageOpacityPercent = (value, fallback = 20) => {
+        const normalizeCoverageOpacityPercent = (value, fallback = 10) => {
             if (Number.isInteger(value) && value >= 0 && value <= 20) {
                 return value;
             }
@@ -631,11 +645,11 @@
         const coverageFillOpacitySelect = document.getElementById("map-coverage-fill-opacity");
         if (coverageFillOpacitySelect) {
             const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageFillOpacityStorageKey) || "", 10);
-            const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 20);
+            const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 10);
             coverageFillOpacitySelect.value = String(normalizedOpacity);
             coverageFillOpacitySelect.addEventListener("change", () => {
                 const nextValue = Number.parseInt(coverageFillOpacitySelect.value || "", 10);
-                const normalizedNextValue = normalizeCoverageOpacityPercent(nextValue, 20);
+                const normalizedNextValue = normalizeCoverageOpacityPercent(nextValue, 10);
                 coverageFillOpacitySelect.value = String(normalizedNextValue);
                 window.localStorage.setItem(mapCoverageFillOpacityStorageKey, String(normalizedNextValue));
             });

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import connect, get_app_setting, init_db, log_event
 from app.services.maintenance_scheduler import LAST_EVENT_LOG_PRUNE_DATE_KEY, MaintenanceSchedulerService
@@ -63,6 +64,14 @@ class MaintenanceSchedulerTests(unittest.TestCase):
                 connection.close()
             self.assertEqual([row["message"] for row in next_day_rows], ["message-7", "message-6"])
             self.assertEqual(get_app_setting(LAST_EVENT_LOG_PRUNE_DATE_KEY), "2026-04-06")
+
+    def test_scheduler_runs_outbound_job_pruning(self) -> None:
+        with temporary_database(), patch("app.services.maintenance_scheduler.prune_outbound_jobs_batch") as prune_outbound:
+            scheduler = MaintenanceSchedulerService(event_log_keep_rows=2)
+            scheduler._tick(now=datetime(2026, 4, 5, 0, 5, tzinfo=timezone.utc))
+
+            prune_outbound.assert_called_once()
+            self.assertEqual({"limit": 500}, prune_outbound.call_args.kwargs)
 
 
 if __name__ == "__main__":

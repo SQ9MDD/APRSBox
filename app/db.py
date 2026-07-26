@@ -12,7 +12,18 @@ DEFAULT_EVENT_LOG_KEEP_ROWS = 5000
 EVENT_LOG_LEVELS: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR")
 EVENT_LOG_MIN_LEVEL_SETTING_KEY = "event_log_min_level"
 EVENT_LOG_DEBUG_ENABLED_SETTING_KEY = "event_log_debug_enabled"
+TRAFFIC_RETENTION_MINUTES_SETTING_KEY = "traffic_retention_minutes"
 DEFAULT_EVENT_LOG_MIN_LEVEL = "INFO"
+DEFAULT_TRAFFIC_RETENTION_MINUTES = 60
+TRAFFIC_RETENTION_ALLOWED_MINUTES: tuple[int, ...] = (*range(60, 361, 30), 720, 1440)
+DATABASE_INDEX_REPAIR_SETTING_KEY = "database.index_repair.version"
+DATABASE_INDEX_REPAIR_VERSION = "2026-07-index-repair-v1"
+DEFAULT_OUTBOUND_JOB_PRUNE_BATCH_SIZE = 500
+DEFAULT_OUTBOUND_SENT_RETENTION_DAYS = 7
+DEFAULT_OUTBOUND_FAILURE_RETENTION_DAYS = 30
+DEFAULT_OUTBOUND_RETENTION_MIN_ROWS_PER_GROUP = 200
+OUTBOUND_RETENTION_KINDS: tuple[str, ...] = ("beacon", "status", "object", "wx", "digi_tx")
+OUTBOUND_RETENTION_FAILURE_STATUSES: tuple[str, ...] = ("failed", "cancelled")
 _EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LEVELS)}
 
 _event_log_min_level_cache: str | None = None
@@ -22,6 +33,9 @@ RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "event_logs",
     "traffic_frames",
     "digi_flow_event_log",
+    "aprsis_igate_rf_heard",
+    "aprsis_igate_station_state",
+    "aprsis_igate_pending_position",
     "traffic_device_station_device_hourly",
     "radio_activity_5m",
     "aprsis_uplink_minute_stats",
@@ -31,6 +45,9 @@ RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "band_condition_audibility_buckets",
     "band_condition_activity_station_buckets",
     "band_condition_activity_buckets",
+    "band_condition_station_hours",
+    "band_condition_station_profiles",
+    "band_condition_hourly",
 )
 VACUUM_RECOMMEND_FREE_BYTES_MIN = 16 * 1024 * 1024
 VACUUM_RECOMMEND_FREE_RATIO_MIN = 0.20
@@ -312,6 +329,7 @@ CREATE TABLE IF NOT EXISTS aprs_message_conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     remote_callsign TEXT NOT NULL,
     remote_ssid TEXT NOT NULL DEFAULT '',
+    conversation_kind TEXT NOT NULL DEFAULT 'direct' CHECK (conversation_kind IN ('direct', 'group')),
     path TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -394,6 +412,10 @@ CREATE TABLE IF NOT EXISTS digi_flow_steps (
         'filter_distance',
         'filter_rate_limit',
         'filter_rate_limit_per_callsign',
+        'filter_rf_guard',
+        'filter_aprsis_message_delivery',
+        'filter_rf_tx_guard',
+        'filter_allow_rules',
         'tx_rf',
         'tx_aprsis',
         'action_drop',
@@ -419,6 +441,52 @@ CREATE TABLE IF NOT EXISTS digi_flow_event_log (
     created_at TEXT NOT NULL,
     FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE,
     FOREIGN KEY (step_id) REFERENCES digi_flow_steps(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_rf_stats (
+    flow_id INTEGER PRIMARY KEY,
+    received_from_aprsis INTEGER NOT NULL DEFAULT 0,
+    matched_message_rule INTEGER NOT NULL DEFAULT 0,
+    matched_associated_position INTEGER NOT NULL DEFAULT 0,
+    matched_allow_rule INTEGER NOT NULL DEFAULT 0,
+    dropped_no_allow_rule INTEGER NOT NULL DEFAULT 0,
+    dropped_recipient_not_local INTEGER NOT NULL DEFAULT 0,
+    dropped_recipient_seen_internet INTEGER NOT NULL DEFAULT 0,
+    dropped_sender_heard_rf INTEGER NOT NULL DEFAULT 0,
+    dropped_safety_guard INTEGER NOT NULL DEFAULT 0,
+    dropped_duplicate INTEGER NOT NULL DEFAULT 0,
+    cancelled_during_viscous_delay INTEGER NOT NULL DEFAULT 0,
+    dropped_rate_limit INTEGER NOT NULL DEFAULT 0,
+    dropped_oversize INTEGER NOT NULL DEFAULT 0,
+    queued_to_rf INTEGER NOT NULL DEFAULT 0,
+    transmitted_to_rf INTEGER NOT NULL DEFAULT 0,
+    tx_failed INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_igate_rf_heard (
+    station_key TEXT NOT NULL,
+    interface_id INTEGER NOT NULL,
+    last_heard_at TEXT NOT NULL,
+    last_path TEXT NOT NULL DEFAULT '',
+    consumed_hops INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (station_key, interface_id),
+    FOREIGN KEY (interface_id) REFERENCES modems(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_igate_station_state (
+    station_key TEXT PRIMARY KEY,
+    last_internet_origin_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS aprsis_igate_pending_position (
+    flow_id INTEGER NOT NULL,
+    sender_key TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (flow_id, sender_key),
+    FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS aprs_objects (
@@ -505,6 +573,7 @@ CREATE TABLE IF NOT EXISTS event_logs (
 CREATE TABLE IF NOT EXISTS traffic_frames (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,
+    source_kind TEXT NOT NULL DEFAULT 'rf',
     interface_id INTEGER,
     direction TEXT,
     band TEXT,
@@ -686,6 +755,64 @@ CREATE TABLE IF NOT EXISTS band_condition_fixed_station_baseline (
     PRIMARY KEY (band, station_key, hour_of_day)
 );
 
+CREATE TABLE IF NOT EXISTS band_condition_station_hours (
+    hour_start_utc TEXT NOT NULL,
+    interface_id INTEGER NOT NULL,
+    interface_name TEXT NOT NULL DEFAULT '',
+    band TEXT NOT NULL CHECK (band IN ('2m', '70cm')),
+    station_key TEXT NOT NULL,
+    segment_mask INTEGER NOT NULL DEFAULT 0,
+    direct_segment_mask INTEGER NOT NULL DEFAULT 0,
+    fixed_hint INTEGER NOT NULL DEFAULT 0 CHECK (fixed_hint IN (0, 1)),
+    mobile_hint INTEGER NOT NULL DEFAULT 0 CHECK (mobile_hint IN (0, 1)),
+    latitude REAL,
+    longitude REAL,
+    distance_km REAL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (hour_start_utc, interface_id, band, station_key)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_station_profiles (
+    interface_id INTEGER NOT NULL,
+    band TEXT NOT NULL CHECK (band IN ('2m', '70cm')),
+    station_key TEXT NOT NULL,
+    first_heard_at TEXT NOT NULL,
+    last_heard_at TEXT NOT NULL,
+    observed_hours INTEGER NOT NULL DEFAULT 0,
+    direct_hours INTEGER NOT NULL DEFAULT 0,
+    positioned_hours INTEGER NOT NULL DEFAULT 0,
+    fixed_hours INTEGER NOT NULL DEFAULT 0,
+    mobile_hours INTEGER NOT NULL DEFAULT 0,
+    latitude REAL,
+    longitude REAL,
+    distance_km REAL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (interface_id, band, station_key)
+);
+
+CREATE TABLE IF NOT EXISTS band_condition_hourly (
+    hour_start_utc TEXT NOT NULL,
+    interface_id INTEGER NOT NULL,
+    interface_name TEXT NOT NULL DEFAULT '',
+    band TEXT NOT NULL CHECK (band IN ('2m', '70cm')),
+    condition_index INTEGER CHECK (condition_index BETWEEN 0 AND 5),
+    confidence_score REAL NOT NULL DEFAULT 0 CHECK (confidence_score BETWEEN 0 AND 1),
+    fixed_station_count INTEGER NOT NULL DEFAULT 0,
+    positioned_station_count INTEGER NOT NULL DEFAULT 0,
+    direct_station_count INTEGER NOT NULL DEFAULT 0,
+    median_distance_km REAL,
+    p90_distance_km REAL,
+    max_confirmed_distance_km REAL,
+    normal_station_count REAL NOT NULL DEFAULT 0,
+    normal_p90_distance_km REAL,
+    far_station_count INTEGER NOT NULL DEFAULT 0,
+    very_far_station_count INTEGER NOT NULL DEFAULT 0,
+    new_area_count INTEGER NOT NULL DEFAULT 0,
+    history_hours INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (hour_start_utc, interface_id, band)
+);
+
 CREATE TABLE IF NOT EXISTS radio_activity_5m (
     bucket_start_utc TEXT NOT NULL,
     bucket_end_utc TEXT NOT NULL,
@@ -737,6 +864,9 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_modems_single_aprsis
+    ON modems(UPPER(modem_type))
+    WHERE UPPER(modem_type) = 'APRSIS';
 CREATE INDEX IF NOT EXISTS idx_traffic_device_station_device_hourly_bucket
     ON traffic_device_station_device_hourly(bucket_start_utc, station_key);
 CREATE INDEX IF NOT EXISTS idx_traffic_runtime_interfaces_status_updated_at ON traffic_runtime_interfaces(status, updated_at DESC);
@@ -745,6 +875,7 @@ CREATE INDEX IF NOT EXISTS idx_map_sources_enabled_sort ON map_sources(enabled D
 CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_log(frame_uid);
 CREATE INDEX IF NOT EXISTS idx_digi_flows_route_pair ON digi_flows(source_kind, source_ref, target_kind, target_ref);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_status_scheduled_at ON outbound_jobs(kind, status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
@@ -760,12 +891,26 @@ CREATE INDEX IF NOT EXISTS idx_band_condition_activity_processed
     ON band_condition_activity_buckets(baseline_processed_at, bucket_start_utc);
 CREATE INDEX IF NOT EXISTS idx_band_condition_fixed_station_baseline_band_hour
     ON band_condition_fixed_station_baseline(band, hour_of_day);
+CREATE INDEX IF NOT EXISTS idx_band_condition_station_hours_interface_time
+    ON band_condition_station_hours(interface_id, band, hour_start_utc);
+CREATE INDEX IF NOT EXISTS idx_band_condition_station_hours_station_time
+    ON band_condition_station_hours(interface_id, band, station_key, hour_start_utc);
+CREATE INDEX IF NOT EXISTS idx_band_condition_profiles_interface_band
+    ON band_condition_station_profiles(interface_id, band, observed_hours DESC);
+CREATE INDEX IF NOT EXISTS idx_band_condition_hourly_interface_time
+    ON band_condition_hourly(interface_id, band, hour_start_utc);
 CREATE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_start
     ON radio_activity_5m(bucket_start_utc);
 CREATE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_interface
     ON radio_activity_5m(bucket_start_utc, interface_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_radio_activity_5m_bucket_source
     ON radio_activity_5m(bucket_start_utc, source_name);
+CREATE INDEX IF NOT EXISTS idx_aprsis_igate_rf_heard_time
+    ON aprsis_igate_rf_heard(last_heard_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aprsis_igate_station_state_time
+    ON aprsis_igate_station_state(last_internet_origin_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aprsis_igate_pending_position_expiry
+    ON aprsis_igate_pending_position(expires_at);
 """
 
 
@@ -782,6 +927,8 @@ def init_db() -> None:
         _migrate_digi_flows_table(connection)
         _migrate_digi_flow_steps_table(connection)
         _migrate_digi_flow_event_log_table(connection)
+        _migrate_aprsis_rf_guard_steps(connection)
+        _migrate_aprsis_rf_stats_table(connection)
         _cleanup_legacy_digi_flow_tables(connection)
         station_columns = {row["name"] for row in connection.execute("PRAGMA table_info(station_settings)").fetchall()}
         user_columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
@@ -792,6 +939,9 @@ def init_db() -> None:
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
         outbound_columns = {row["name"] for row in connection.execute("PRAGMA table_info(outbound_jobs)").fetchall()}
+        message_conversation_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(aprs_message_conversations)").fetchall()
+        }
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         traffic_runtime_interface_columns = {
@@ -799,6 +949,14 @@ def init_db() -> None:
         }
         digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
         radio_activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_5m)").fetchall()}
+        if "conversation_kind" not in message_conversation_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_message_conversations
+                ADD COLUMN conversation_kind TEXT NOT NULL DEFAULT 'direct'
+                CHECK (conversation_kind IN ('direct', 'group'))
+                """
+            )
         if "last_login_at" not in user_columns:
             connection.execute(
                 """
@@ -1032,6 +1190,13 @@ def init_db() -> None:
                 ADD COLUMN interface_id INTEGER
                 """
             )
+        if "source_kind" not in traffic_frame_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_frames
+                ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'rf'
+                """
+            )
         if "direction" not in traffic_frame_columns:
             connection.execute(
                 """
@@ -1128,6 +1293,12 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
     ON traffic_frames(format, created_at DESC, id DESC)
 """
         )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_source_kind_created_at
+    ON traffic_frames(source_kind, created_at DESC, id DESC)
+"""
+        )
         if "expose_port_enabled" not in traffic_runtime_columns:
             connection.execute(
                 """
@@ -1218,6 +1389,24 @@ CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at
             """
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
     ON outbound_jobs(aprs_message_id, status, scheduled_at, id)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_status_scheduled_at
+    ON outbound_jobs(kind, status, scheduled_at, id)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_status_last_attempt_at
+    ON aprs_messages(direction, status, last_attempt_at, id)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
+    ON aprs_messages(direction, is_unread, conversation_id)
 """
         )
         connection.execute(
@@ -1398,6 +1587,8 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_aprs_message_id
             ),
         )
         _normalize_map_sources_table(connection)
+        connection.commit()
+        _run_database_index_repair_for_update(connection)
 
 
 def _normalize_map_sources_table(connection: sqlite3.Connection) -> None:
@@ -1464,6 +1655,130 @@ def _normalize_map_sources_table(connection: sqlite3.Connection) -> None:
             ON map_sources(is_default)
             WHERE is_default = 1
         """
+    )
+
+
+def _run_database_index_repair_for_update(connection: sqlite3.Connection) -> None:
+    try:
+        marker = _get_app_setting_on_connection(connection, DATABASE_INDEX_REPAIR_SETTING_KEY)
+        if marker == DATABASE_INDEX_REPAIR_VERSION:
+            return
+
+        check_messages = _database_check_messages(connection, "quick_check")
+        if _database_check_ok(check_messages):
+            _set_app_setting_on_connection(
+                connection,
+                DATABASE_INDEX_REPAIR_SETTING_KEY,
+                DATABASE_INDEX_REPAIR_VERSION,
+            )
+            return
+
+        if not _is_reindex_repairable_check_messages(check_messages):
+            _insert_event_log_on_connection(
+                connection,
+                "WARNING",
+                "database",
+                "Skipped automatic database index repair; quick_check reported non-index issues: "
+                f"{_format_database_check_messages(check_messages)}",
+            )
+            return
+
+        connection.execute("REINDEX")
+        integrity_messages = _database_check_messages(connection, "integrity_check")
+        if _database_check_ok(integrity_messages):
+            _set_app_setting_on_connection(
+                connection,
+                DATABASE_INDEX_REPAIR_SETTING_KEY,
+                DATABASE_INDEX_REPAIR_VERSION,
+            )
+            _insert_event_log_on_connection(
+                connection,
+                "INFO",
+                "database",
+                "Automatic database index repair completed after quick_check reported index inconsistencies.",
+            )
+            return
+
+        _insert_event_log_on_connection(
+            connection,
+            "WARNING",
+            "database",
+            "Automatic database index repair ran, but integrity_check still reports issues: "
+            f"{_format_database_check_messages(integrity_messages)}",
+        )
+    except sqlite3.DatabaseError as exc:
+        message = str(exc).strip() or exc.__class__.__name__
+        try:
+            connection.rollback()
+        except sqlite3.DatabaseError:
+            pass
+        try:
+            _insert_event_log_on_connection(
+                connection,
+                "WARNING",
+                "database",
+                f"Automatic database index repair failed: {message}",
+            )
+        except sqlite3.DatabaseError:
+            pass
+
+
+def _database_check_messages(connection: sqlite3.Connection, pragma_name: str) -> list[str]:
+    if pragma_name not in {"quick_check", "integrity_check"}:
+        raise ValueError(f"Unsupported database check pragma: {pragma_name}")
+    rows = connection.execute(f"PRAGMA {pragma_name}").fetchall()
+    return [str(row[0]) for row in rows]
+
+
+def _database_check_ok(messages: list[str]) -> bool:
+    return len(messages) == 1 and messages[0].strip().lower() == "ok"
+
+
+def _is_reindex_repairable_check_messages(messages: list[str]) -> bool:
+    if not messages or _database_check_ok(messages):
+        return False
+    for message in messages:
+        normalized = str(message or "").strip()
+        if normalized.startswith("wrong # of entries in index "):
+            continue
+        if normalized.startswith("row ") and " missing from index " in normalized:
+            continue
+        return False
+    return True
+
+
+def _format_database_check_messages(messages: list[str], *, max_messages: int = 3) -> str:
+    visible_messages = [str(message or "").strip() for message in messages[:max(1, max_messages)]]
+    suffix = ""
+    if len(messages) > len(visible_messages):
+        suffix = f" and {len(messages) - len(visible_messages)} more"
+    return "; ".join(visible_messages) + suffix
+
+
+def _get_app_setting_on_connection(connection: sqlite3.Connection, key: str) -> str | None:
+    row = connection.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    if row is None:
+        return None
+    return str(row["value"])
+
+
+def _set_app_setting_on_connection(connection: sqlite3.Connection, key: str, value: str) -> None:
+    connection.execute(
+        """
+        INSERT INTO app_settings(key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, value, utc_now()),
+    )
+
+
+def _insert_event_log_on_connection(connection: sqlite3.Connection, level: str, category: str, message: str) -> None:
+    connection.execute(
+        "INSERT INTO event_logs(level, category, message, created_at) VALUES (?, ?, ?, ?)",
+        (normalize_event_log_level(level), str(category or "").strip(), str(message or ""), utc_now()),
     )
 
 
@@ -1705,6 +2020,10 @@ def _migrate_aprs_messages_table(connection: sqlite3.Connection) -> None:
         DROP TABLE aprs_messages_old;
         CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
         CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
+        CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_status_last_attempt_at
+            ON aprs_messages(direction, status, last_attempt_at, id);
+        CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
+            ON aprs_messages(direction, is_unread, conversation_id);
         """
     )
 
@@ -1903,6 +2222,10 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         "filter_icon",
         "filter_rate_limit_per_callsign",
         "filter_strict",
+        "filter_rf_guard",
+        "filter_aprsis_message_delivery",
+        "filter_rf_tx_guard",
+        "filter_allow_rules",
     )
     foreign_keys = list(connection.execute("PRAGMA foreign_key_list(digi_flow_steps)").fetchall())
     references_legacy_flows = any(str(row["table"] or "") == "digi_flows_old" for row in foreign_keys)
@@ -1930,6 +2253,10 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
                 'filter_distance',
                 'filter_rate_limit',
                 'filter_rate_limit_per_callsign',
+                'filter_rf_guard',
+                'filter_aprsis_message_delivery',
+                'filter_rf_tx_guard',
+                'filter_allow_rules',
                 'tx_rf',
                 'tx_aprsis',
                 'action_drop',
@@ -1952,6 +2279,295 @@ def _migrate_digi_flow_steps_table(connection: sqlite3.Connection) -> None:
         DROP TABLE digi_flow_steps_old;
         """
     )
+
+
+def _migrate_aprsis_rf_guard_steps(connection: sqlite3.Connection) -> None:
+    rows = list(
+        connection.execute(
+            """
+            SELECT id, source_kind, target_kind
+            FROM digi_flows
+            WHERE source_kind = 'receiver_aprsis'
+            """
+        ).fetchall()
+    )
+    for flow in rows:
+        flow_id = int(flow["id"])
+        steps = list(
+            connection.execute(
+                """
+                SELECT id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                FROM digi_flow_steps
+                WHERE flow_id = ?
+                ORDER BY step_order ASC, id ASC
+                """,
+                (flow_id,),
+            ).fetchall()
+        )
+        if len(steps) < 2:
+            continue
+
+        input_guard = next((step for step in steps if step["step_type"] == "filter_rf_guard"), None)
+        message_delivery = next(
+            (step for step in steps if step["step_type"] == "filter_aprsis_message_delivery"),
+            None,
+        )
+        allow_rule = next(
+            (step for step in steps if step["step_type"] == "filter_allow_rules"),
+            None,
+        )
+        output_guard = next((step for step in steps if step["step_type"] == "filter_rf_tx_guard"), None)
+        target_step = next(
+            (
+                step
+                for step in reversed(steps)
+                if step["step_type"] == str(flow["target_kind"] or "")
+            ),
+            steps[-1],
+        )
+        changed = False
+        timestamp = utc_now()
+
+        if input_guard is None:
+            source_step = steps[0]
+            connection.execute(
+                "UPDATE digi_flow_steps SET step_order = step_order + 1000 WHERE flow_id = ? AND step_order > ?",
+                (flow_id, int(source_step["step_order"])),
+            )
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (?, ?, 'filter_rf_guard', 'APRS-IS Input Safety Rule', 1, '{}', ?, ?)
+                """,
+                (flow_id, int(source_step["step_order"]) + 1, timestamp, timestamp),
+            )
+            changed = True
+        else:
+            legacy_config = str(input_guard["config_json"] or "{}")
+            input_changed = (
+                str(input_guard["title"] or "") != "APRS-IS Input Safety Rule"
+                or int(input_guard["enabled"] or 0) != 1
+                or legacy_config.strip() != "{}"
+            )
+            if input_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'APRS-IS Input Safety Rule', enabled = 1, config_json = '{}', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(input_guard["id"])),
+                )
+                changed = True
+
+        if str(flow["target_kind"] or "") == "tx_rf" and output_guard is None:
+            guard_config = (
+                str(input_guard["config_json"] or "{}")
+                if input_guard is not None and str(input_guard["config_json"] or "").strip() not in {"", "{}"}
+                else (
+                    '{"viscous_delay_sec":5,"flow_rate_per_minute":6,"flow_burst":3,'
+                    '"source_rate_per_minute":2,"source_burst":2,"duplicate_window_sec":30}'
+                )
+            )
+            target_order = int(target_step["step_order"])
+            connection.execute(
+                "UPDATE digi_flow_steps SET step_order = ? WHERE id = ?",
+                (target_order + 1000, int(target_step["id"])),
+            )
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (?, ?, 'filter_rf_tx_guard', 'APRS-IS to RF TX Safety Rule', 1, ?, ?, ?)
+                """,
+                (flow_id, target_order, guard_config, timestamp, timestamp),
+            )
+            changed = True
+        elif output_guard is not None:
+            output_changed = (
+                str(output_guard["title"] or "") != "APRS-IS to RF TX Safety Rule"
+                or int(output_guard["enabled"] or 0) != 1
+            )
+            if output_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'APRS-IS to RF TX Safety Rule', enabled = 1, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(output_guard["id"])),
+                )
+                changed = True
+
+        if str(flow["target_kind"] or "") == "tx_rf" and message_delivery is None:
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (
+                    ?,
+                    (SELECT COALESCE(MAX(step_order), 0) + 1000 FROM digi_flow_steps WHERE flow_id = ?),
+                    'filter_aprsis_message_delivery',
+                    'APRS-IS Message Delivery Rule', 1, '{}',
+                    ?, ?
+                )
+                """,
+                (flow_id, flow_id, timestamp, timestamp),
+            )
+            changed = True
+        elif message_delivery is not None:
+            message_changed = (
+                str(message_delivery["title"] or "") != "APRS-IS Message Delivery Rule"
+                or int(message_delivery["enabled"] or 0) != 1
+                or str(message_delivery["config_json"] or "").strip() != "{}"
+            )
+            if message_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'APRS-IS Message Delivery Rule',
+                        enabled = 1,
+                        config_json = '{}',
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(message_delivery["id"])),
+                )
+                changed = True
+
+        if str(flow["target_kind"] or "") == "tx_rf" and allow_rule is None:
+            connection.execute(
+                """
+                INSERT INTO digi_flow_steps(
+                    flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+                )
+                VALUES (
+                    ?,
+                    (SELECT COALESCE(MAX(step_order), 0) + 1000 FROM digi_flow_steps WHERE flow_id = ?),
+                    'filter_allow_rules',
+                    'APRS-IS Callsign and Radius Rule', 1,
+                    '{"callsigns":[],"radius_km":""}',
+                    ?, ?
+                )
+                """,
+                (flow_id, flow_id, timestamp, timestamp),
+            )
+            changed = True
+        elif allow_rule is not None:
+            allow_changed = (
+                str(allow_rule["title"] or "") != "APRS-IS Callsign and Radius Rule"
+                or int(allow_rule["enabled"] or 0) != 1
+            )
+            if allow_changed:
+                connection.execute(
+                    """
+                    UPDATE digi_flow_steps
+                    SET title = 'APRS-IS Callsign and Radius Rule', enabled = 1, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (timestamp, int(allow_rule["id"])),
+                )
+                changed = True
+
+        if input_guard is not None and int(steps[1]["id"]) != int(input_guard["id"]):
+            changed = True
+        if str(flow["target_kind"] or "") == "tx_rf":
+            system_order = [
+                str(step["step_type"] or "")
+                for step in steps[1:-1]
+                if str(step["step_type"] or "")
+                in {
+                    "filter_rf_guard",
+                    "filter_aprsis_message_delivery",
+                    "filter_allow_rules",
+                    "filter_rf_tx_guard",
+                }
+            ]
+            if system_order != [
+                "filter_rf_guard",
+                "filter_aprsis_message_delivery",
+                "filter_allow_rules",
+                "filter_rf_tx_guard",
+            ]:
+                changed = True
+        if (
+            str(flow["target_kind"] or "") == "tx_rf"
+            and output_guard is not None
+            and int(steps[-2]["id"]) != int(output_guard["id"])
+        ):
+            changed = True
+
+        if not changed:
+            continue
+
+        reordered = list(
+            connection.execute(
+                """
+                SELECT id, step_type
+                FROM digi_flow_steps
+                WHERE flow_id = ?
+                ORDER BY step_order ASC, id ASC
+                """,
+                (flow_id,),
+            ).fetchall()
+        )
+        source = next(
+            (step for step in reordered if step["step_type"] == str(flow["source_kind"] or "")),
+            reordered[0],
+        )
+        target = next(
+            (
+                step
+                for step in reversed(reordered)
+                if step["step_type"] == str(flow["target_kind"] or "")
+            ),
+            reordered[-1],
+        )
+        endpoint_ids = {int(source["id"]), int(target["id"])}
+        middle = [step for step in reordered if int(step["id"]) not in endpoint_ids]
+        input_steps = [step for step in middle if step["step_type"] == "filter_rf_guard"]
+        message_steps = [
+            step for step in middle if step["step_type"] == "filter_aprsis_message_delivery"
+        ]
+        allow_steps = [step for step in middle if step["step_type"] == "filter_allow_rules"]
+        output_steps = [step for step in middle if step["step_type"] == "filter_rf_tx_guard"]
+        ordinary_steps = [
+            step
+            for step in middle
+            if step["step_type"]
+            not in {
+                "filter_rf_guard",
+                "filter_aprsis_message_delivery",
+                "filter_allow_rules",
+                "filter_rf_tx_guard",
+            }
+        ]
+        ordered = [
+            source,
+            *input_steps,
+            *message_steps,
+            *allow_steps,
+            *ordinary_steps,
+            *output_steps,
+            target,
+        ]
+        connection.execute(
+            "UPDATE digi_flow_steps SET step_order = -id WHERE flow_id = ?",
+            (flow_id,),
+        )
+        for step_order, step in enumerate(ordered, start=1):
+            connection.execute(
+                "UPDATE digi_flow_steps SET step_order = ?, updated_at = ? WHERE id = ?",
+                (step_order, timestamp, int(step["id"])),
+            )
+        connection.execute(
+            "UPDATE digi_flows SET updated_at = ? WHERE id = ?",
+            (timestamp, flow_id),
+        )
 
 
 def _migrate_digi_flow_event_log_table(connection: sqlite3.Connection) -> None:
@@ -1987,6 +2603,73 @@ def _migrate_digi_flow_event_log_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_aprsis_rf_stats_table(connection: sqlite3.Connection) -> None:
+    stats_sql = _table_sql(connection, "aprsis_rf_stats")
+    if not stats_sql:
+        return
+    stats_columns = {
+        str(row["name"] or "")
+        for row in connection.execute("PRAGMA table_info(aprsis_rf_stats)").fetchall()
+    }
+    for column in (
+        "matched_message_rule",
+        "matched_associated_position",
+        "dropped_recipient_not_local",
+        "dropped_recipient_seen_internet",
+        "dropped_sender_heard_rf",
+    ):
+        if column not in stats_columns:
+            connection.execute(
+                f"ALTER TABLE aprsis_rf_stats ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+            )
+    foreign_keys = list(connection.execute("PRAGMA foreign_key_list(aprsis_rf_stats)").fetchall())
+    if not any(str(row["table"] or "") == "digi_flows_old" for row in foreign_keys):
+        return
+    connection.executescript(
+        """
+        ALTER TABLE aprsis_rf_stats RENAME TO aprsis_rf_stats_old;
+        CREATE TABLE aprsis_rf_stats (
+            flow_id INTEGER PRIMARY KEY,
+            received_from_aprsis INTEGER NOT NULL DEFAULT 0,
+            matched_message_rule INTEGER NOT NULL DEFAULT 0,
+            matched_associated_position INTEGER NOT NULL DEFAULT 0,
+            matched_allow_rule INTEGER NOT NULL DEFAULT 0,
+            dropped_no_allow_rule INTEGER NOT NULL DEFAULT 0,
+            dropped_recipient_not_local INTEGER NOT NULL DEFAULT 0,
+            dropped_recipient_seen_internet INTEGER NOT NULL DEFAULT 0,
+            dropped_sender_heard_rf INTEGER NOT NULL DEFAULT 0,
+            dropped_safety_guard INTEGER NOT NULL DEFAULT 0,
+            dropped_duplicate INTEGER NOT NULL DEFAULT 0,
+            cancelled_during_viscous_delay INTEGER NOT NULL DEFAULT 0,
+            dropped_rate_limit INTEGER NOT NULL DEFAULT 0,
+            dropped_oversize INTEGER NOT NULL DEFAULT 0,
+            queued_to_rf INTEGER NOT NULL DEFAULT 0,
+            transmitted_to_rf INTEGER NOT NULL DEFAULT 0,
+            tx_failed INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (flow_id) REFERENCES digi_flows(id) ON DELETE CASCADE
+        );
+        INSERT INTO aprsis_rf_stats (
+            flow_id, received_from_aprsis, matched_message_rule, matched_associated_position,
+            matched_allow_rule, dropped_no_allow_rule, dropped_recipient_not_local,
+            dropped_recipient_seen_internet, dropped_sender_heard_rf,
+            dropped_safety_guard, dropped_duplicate, cancelled_during_viscous_delay,
+            dropped_rate_limit, dropped_oversize, queued_to_rf, transmitted_to_rf,
+            tx_failed, updated_at
+        )
+        SELECT
+            flow_id, received_from_aprsis, matched_message_rule, matched_associated_position,
+            matched_allow_rule, dropped_no_allow_rule, dropped_recipient_not_local,
+            dropped_recipient_seen_internet, dropped_sender_heard_rf,
+            dropped_safety_guard, dropped_duplicate, cancelled_during_viscous_delay,
+            dropped_rate_limit, dropped_oversize, queued_to_rf, transmitted_to_rf,
+            tx_failed, updated_at
+        FROM aprsis_rf_stats_old;
+        DROP TABLE aprsis_rf_stats_old;
+        """
+    )
+
+
 def _cleanup_legacy_digi_flow_tables(connection: sqlite3.Connection) -> None:
     legacy_flows_exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'digi_flows_old' LIMIT 1"
@@ -1995,7 +2678,8 @@ def _cleanup_legacy_digi_flow_tables(connection: sqlite3.Connection) -> None:
         return
     step_fk = list(connection.execute("PRAGMA foreign_key_list(digi_flow_steps)").fetchall())
     event_log_fk = list(connection.execute("PRAGMA foreign_key_list(digi_flow_event_log)").fetchall())
-    if any(str(row["table"] or "") == "digi_flows_old" for row in step_fk + event_log_fk):
+    stats_fk = list(connection.execute("PRAGMA foreign_key_list(aprsis_rf_stats)").fetchall())
+    if any(str(row["table"] or "") == "digi_flows_old" for row in step_fk + event_log_fk + stats_fk):
         return
     connection.execute("DROP TABLE digi_flows_old")
 
@@ -2150,6 +2834,20 @@ def get_event_log_debug_enabled() -> bool:
     return _event_log_debug_enabled_cache
 
 
+def normalize_traffic_retention_minutes(value: Any) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_TRAFFIC_RETENTION_MINUTES
+    if normalized in TRAFFIC_RETENTION_ALLOWED_MINUTES:
+        return normalized
+    return DEFAULT_TRAFFIC_RETENTION_MINUTES
+
+
+def get_traffic_retention_minutes() -> int:
+    return normalize_traffic_retention_minutes(get_app_setting(TRAFFIC_RETENTION_MINUTES_SETTING_KEY))
+
+
 def _normalize_app_setting_bool(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "on", "yes"}
 
@@ -2177,6 +2875,121 @@ def prune_event_logs(*, keep_rows: int) -> int:
         after_row = connection.execute("SELECT COUNT(*) AS total FROM event_logs").fetchone()
         after_total = int(after_row["total"]) if after_row is not None else 0
     return before_total - after_total
+
+
+def prune_traffic_frames_batch(*, limit: int = 1000) -> int:
+    normalized_limit = max(1, int(limit))
+    cutoff = traffic_retention_cutoff()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM traffic_frames
+            WHERE id IN (
+                SELECT id
+                FROM (
+                    SELECT id
+                    FROM traffic_frames
+                    WHERE created_at < ?
+                    ORDER BY created_at ASC, id ASC
+                    LIMIT ?
+                )
+            )
+            """,
+            (cutoff, normalized_limit),
+        )
+        deleted = cursor.rowcount
+    return max(int(deleted or 0), 0)
+
+
+def prune_outbound_jobs_batch(
+    *,
+    limit: int = DEFAULT_OUTBOUND_JOB_PRUNE_BATCH_SIZE,
+    sent_retention_days: int = DEFAULT_OUTBOUND_SENT_RETENTION_DAYS,
+    failure_retention_days: int = DEFAULT_OUTBOUND_FAILURE_RETENTION_DAYS,
+    min_rows_per_group: int = DEFAULT_OUTBOUND_RETENTION_MIN_ROWS_PER_GROUP,
+) -> int:
+    normalized_limit = max(1, int(limit))
+    normalized_min_rows = max(0, int(min_rows_per_group))
+    sent_cutoff = _retention_cutoff_days(sent_retention_days)
+    failure_cutoff = _retention_cutoff_days(failure_retention_days)
+    deleted_total = 0
+
+    with get_connection() as connection:
+        for kind in OUTBOUND_RETENTION_KINDS:
+            remaining_limit = normalized_limit - deleted_total
+            if remaining_limit <= 0:
+                break
+            deleted_total += _delete_outbound_jobs_for_policy(
+                connection,
+                kind=kind,
+                status="sent",
+                cutoff=sent_cutoff,
+                keep_rows=normalized_min_rows,
+                limit=remaining_limit,
+            )
+
+        for status in OUTBOUND_RETENTION_FAILURE_STATUSES:
+            for kind in OUTBOUND_RETENTION_KINDS:
+                remaining_limit = normalized_limit - deleted_total
+                if remaining_limit <= 0:
+                    break
+                deleted_total += _delete_outbound_jobs_for_policy(
+                    connection,
+                    kind=kind,
+                    status=status,
+                    cutoff=failure_cutoff,
+                    keep_rows=normalized_min_rows,
+                    limit=remaining_limit,
+                )
+            if deleted_total >= normalized_limit:
+                break
+
+    return deleted_total
+
+
+def _delete_outbound_jobs_for_policy(
+    connection: sqlite3.Connection,
+    *,
+    kind: str,
+    status: str,
+    cutoff: str,
+    keep_rows: int,
+    limit: int,
+) -> int:
+    cursor = connection.execute(
+        """
+        DELETE FROM outbound_jobs
+        WHERE id IN (
+            SELECT id
+            FROM (
+                SELECT id
+                FROM outbound_jobs
+                WHERE kind = ?
+                  AND status = ?
+                  AND aprs_message_id IS NULL
+                  AND COALESCE(sent_at, updated_at, started_at, scheduled_at, created_at) < ?
+                  AND id NOT IN (
+                      SELECT id
+                      FROM outbound_jobs
+                      WHERE kind = ?
+                        AND status = ?
+                        AND aprs_message_id IS NULL
+                      ORDER BY COALESCE(sent_at, updated_at, started_at, scheduled_at, created_at) DESC, id DESC
+                      LIMIT ?
+                  )
+                ORDER BY COALESCE(sent_at, updated_at, started_at, scheduled_at, created_at) ASC, id ASC
+                LIMIT ?
+            )
+        )
+        """,
+        (kind, status, cutoff, kind, status, keep_rows, limit),
+    )
+    return max(int(cursor.rowcount or 0), 0)
+
+
+def _retention_cutoff_days(days: int) -> str:
+    normalized_days = max(1, int(days))
+    return (datetime.now(timezone.utc) - timedelta(days=normalized_days)).replace(microsecond=0).isoformat()
 
 
 def vacuum_database() -> None:
@@ -2279,4 +3092,5 @@ def log_event(level: str, category: str, message: str) -> None:
 
 
 def traffic_retention_cutoff() -> str:
-    return (datetime.now(timezone.utc) - timedelta(hours=1)).replace(microsecond=0).isoformat()
+    retention_minutes = get_traffic_retention_minutes()
+    return (datetime.now(timezone.utc) - timedelta(minutes=retention_minutes)).replace(microsecond=0).isoformat()

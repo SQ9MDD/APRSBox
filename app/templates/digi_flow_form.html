@@ -3,6 +3,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 {% endblock %}
 
 {% block content %}
@@ -11,10 +12,19 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, zero or more filter steps and one target. APRSIS target uses a mandatory system strict guard step.") }}</p>
+                <p class="section-lead">{{ t("Define one source, optional filters and one target. Mandatory rules are inserted automatically for RF to RF, APRS-IS source and APRS-IS target flows.") }}</p>
             </div>
+            <button
+                class="help-icon-button page-help-button"
+                type="button"
+                data-help-page="application/packet_routing_flow"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
-        <div class="notice">{{ t("Source must be the first step and target must be the last step. You can store multiple flows for the same source+target pair, but only one can stay enabled at a time. RF TX flows require an enabled Path Rule step. APRSIS flows are system-restricted.") }}</div>
+        <div class="notice">{{ t("Source must be first and target last. RF to RF requires the RF Digipeating Path Rule; APRS-IS to RF uses four mandatory APRS-IS rules; an APRS-IS target uses the mandatory Uplink Safety Rule.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -72,8 +82,8 @@
                 <aside class="digi-flow-palette">
                     <div class="panel-header">
                         <div class="panel-header-copy">
-                            <h2>{{ t("Available filter and rules") }}</h2>
-                            <p class="section-lead">{{ t("Click once to insert a step before the target.") }}</p>
+                            <h2>{{ t("Available filters and rules") }}</h2>
+                            <p class="section-lead">{{ t("Rules are mandatory and managed automatically. Click an available filter to add it before the target.") }}</p>
                         </div>
                     </div>
                     <div class="digi-step-palette" id="digi-step-palette">
@@ -84,22 +94,10 @@
                             class="digi-palette-button"
                             data-step-type="{{ step_type }}"
                         >
-                            {% if type_meta[step_type].runtime_status == 'implemented' %}
-                            <img
-                                class="digi-runtime-icon digi-runtime-icon-ready"
-                                src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg"
-                                alt="{{ t('Ready for use') }}"
-                                title="{{ t('Ready for use') }}"
-                            >
-                            {% else %}
-                            <img
-                                class="digi-runtime-icon digi-runtime-icon-planned"
-                                src="{{ request.scope.root_path }}/static/icons/clock-fast.svg"
-                                alt="{{ t('Planned / not ready yet') }}"
-                                title="{{ t('Planned / not ready yet') }}"
-                            >
-                            {% endif %}
-                            <span class="digi-step-badge">{{ type_meta[step_type].badge }}</span>
+                            <span class="digi-step-badge digi-step-badge-{{ type_meta[step_type].palette_kind }}">{{ type_meta[step_type].badge }}</span>
+                            <span class="digi-palette-scope digi-palette-scope-{{ type_meta[step_type].scope_tone }}">
+                                {{ type_meta[step_type].scope_label }}
+                            </span>
                             <span class="digi-palette-copy">
                                 <strong>{{ type_meta[step_type].label }}</strong>
                                 <span class="muted small">{{ type_meta[step_type].description }}</span>
@@ -306,6 +304,8 @@
             icons: {{ t("icons")|tojson }},
             distanceZones: {{ t("Distance zones")|tojson }},
             radiusKm: {{ t("Radius (km)")|tojson }},
+            defaultDeny: {{ t("default deny")|tojson }},
+            rules: {{ t("Rules")|tojson }},
             zone: {{ t("Zone")|tojson }},
             removeZone: {{ t("Remove zone")|tojson }},
             addZone: {{ t("Add zone")|tojson }},
@@ -329,9 +329,10 @@
             deleteStep: {{ t("Delete step")|tojson }},
             primarySymbolTable: {{ t("Primary (/)")|tojson }},
             cardTitle: {{ t("Card Title")|tojson }},
-            minimumPathRuleRf: {{ t("Minimum Path rule and DIGI guard is required before an RF TX target.")|tojson }},
-            aprsisSystemFlowLocked: {{ t("APRSIS target flow is system-restricted to one mandatory strict guard step.")|tojson }},
-            strictGuardSystemManaged: {{ t("Strict APRS-IS guard is system-managed and available only in APRSIS target flows.")|tojson }},
+            minimumPathRuleRf: {{ t("The RF Digipeating Path Rule is required before an RF TX target.")|tojson }},
+            aprsisSystemFlowLocked: {{ t("An APRS-IS target flow is system-restricted to one mandatory uplink safety rule.")|tojson }},
+            aprsisToRfFlowLocked: {{ t("APRS-IS to RF is restricted to the four mandatory system rules.")|tojson }},
+            strictGuardSystemManaged: {{ t("The APRS-IS Uplink Safety Rule is mandatory, system-managed, and available only for APRS-IS target flows.")|tojson }},
             flowSteps: {{ t("Flow {count} steps")|tojson }},
             inputPacket: {{ t("Input packet")|tojson }},
             outputPacket: {{ t("Output packet")|tojson }},
@@ -346,6 +347,7 @@
             localTxFrames: {{ t("Locally generated APRSBox TX frames")|tojson }},
             localTxSourceHelp: {{ t("Local TX includes only frames generated locally by APRSBox, such as beacons, status packets, weather, objects, items, bulletins and messages. It does not include RF-received or digipeated frames.")|tojson }},
             directPacketsOnly: {{ t("Passes only direct packets")|tojson }},
+            help: {{ t("Help")|tojson }},
             LOGGED: {{ t("LOGGED")|tojson }},
             DROPPED: {{ t("DROPPED")|tojson }},
             REJECTED: {{ t("REJECTED")|tojson }},
@@ -354,33 +356,47 @@
             allow: {{ t("allow")|tojson }},
             deny: {{ t("deny")|tojson }},
             passed: {{ t("passed")|tojson }},
+            skipped: {{ t("skipped")|tojson }},
             executed: {{ t("executed")|tojson }},
             rejected: {{ t("rejected")|tojson }},
             selectSymbol: {{ t("Select symbol")|tojson }},
             symbolCode: {{ t("Symbol Code")|tojson }},
             symbolTable: {{ t("Symbol Table")|tojson }},
             duplicateFilterUsed: {{ t("Duplicate filter (viscous-delay) is already used in this flow.")|tojson }},
-            rateLimitFilterUsed: {{ t("Rate limit filter is already used in this flow.")|tojson }},
+            rateLimitFilterUsed: {{ t("Transmission Rate Filter is already used in this flow.")|tojson }},
             distanceFilterUsed: {{ t("Distance filter is already used in this flow.")|tojson }},
             latitude: {{ t("Latitude")|tojson }},
             longitude: {{ t("Longitude")|tojson }},
+            rfGuardSystemManaged: {{ t("The APRS-IS Input Safety Rule is mandatory, system-managed, and available only for an APRS-IS source.")|tojson }},
+            rfTxGuardSystemManaged: {{ t("The APRS-IS to RF TX Safety Rule is mandatory, system-managed, and fixed immediately before TX RF.")|tojson }},
+            messageDeliverySystemManaged: {{ t("The APRS-IS Message Delivery Rule is mandatory, system-managed and not configurable. It automatically uses all active TNC interfaces with RF transmission allowed.")|tojson }},
+            allowRulesSystemManaged: {{ t("The APRS-IS Callsign and Radius Rule is mandatory and system-managed; an empty configuration denies traffic not authorized by the Message Delivery Rule.")|tojson }},
+            clearCallsignsAndRadius: {{ t("Clear callsigns and radius")|tojson }},
+            messageOnlyMode: {{ t("Message-only mode (no ordinary station traffic)")|tojson }},
+            inputSafetySummary: {{ t("APRS/q validation · loop prevention · initial duplicate check")|tojson }},
+            messageDeliverySummary: {{ t("All active TX-enabled TNC interfaces · direct RF · exact SSID · 60 min")|tojson }},
+            rfTxSafetySummary: {{ t("Final duplicate check · delay {seconds}s · rate limits · third-party")|tojson }},
         });
         let steps = {{ form_data.steps|tojson }};
         const legacyDefaultTitles = {
             receiver_rf: ["Receiver RF"],
             receiver_aprsis: ["Receiver APRS-IS"],
             receiver_local_tx: ["Local TX"],
-            filter_dupe: ["Duplicate Filter"],
-            filter_direct_only: ["Direct Only"],
-            filter_path: ["Path Filter", "Path Rule", "Reguła ścieżki"],
-            filter_strict: ["Strict Filter"],
-            filter_digi: ["DIGI Filter"],
-            filter_callsign: ["Callsign Filter"],
-            filter_packet_type: ["Packet Type Filter"],
-            filter_icon: ["Icon Filter"],
-            filter_distance: ["Distance Filter"],
-            filter_rate_limit: ["Rate Limit Filter"],
+            filter_dupe: ["Duplicate Filter", "Duplicate Filter (viscous-delay)", "Filtr duplikatów (viscous-delay)"],
+            filter_direct_only: ["Direct Only", "Tylko direct"],
+            filter_path: ["Path Filter", "Path Rule", "Path rule and DIGI guard", "Reguła ścieżki", "Reguła ścieżki i ochrona DIGI"],
+            filter_strict: ["Strict Filter", "Filtr ścisły"],
+            filter_digi: ["Consumed DIGI Hop Filter", "DIGI Filter", "Filtr DIGI"],
+            filter_callsign: ["Callsign Filter", "Filtr znaków"],
+            filter_packet_type: ["Packet Type Filter", "Filtr typu pakietu"],
+            filter_icon: ["Icon Filter", "Filtr ikon"],
+            filter_distance: ["Distance Filter", "Filtr odległości"],
+            filter_rate_limit: ["RF Callsign Holdoff Filter", "Rate Limit Filter", "Transmission Rate Filter", "Filtr limitu tempa", "Filtr odstępów czasowych znaków RF", "Filtr tempa transmisji"],
             filter_rate_limit_per_callsign: ["Rate Limit Per Callsign"],
+            filter_rf_guard: ["RF Guard", "APRS-IS Input Guard"],
+            filter_aprsis_message_delivery: ["APRS-IS Message Delivery Rule"],
+            filter_rf_tx_guard: ["RF TX Guard"],
+            filter_allow_rules: ["Inclusive Allow Rules", "APRS-IS Default Deny Filter", "Filtr APRS-IS — domyślne odrzucanie"],
             tx_rf: ["TX RF"],
             tx_aprsis: ["TX APRS-IS"],
             action_drop: ["Action Drop"],
@@ -454,6 +470,17 @@
             if (stepType === "receiver_rf") return { rf_port: refValue || "" };
             if (stepType === "receiver_aprsis") return { aprsis_source: refValue || "" };
             if (stepType === "receiver_local_tx") return { local_tx_source: refValue || "local_tx" };
+            if (stepType === "filter_rf_guard") return {};
+            if (stepType === "filter_aprsis_message_delivery") return {};
+            if (stepType === "filter_rf_tx_guard") return {
+                viscous_delay_sec: 5,
+                flow_rate_per_minute: 6,
+                flow_burst: 3,
+                source_rate_per_minute: 2,
+                source_burst: 2,
+                duplicate_window_sec: 30,
+            };
+            if (stepType === "filter_allow_rules") return { callsigns: [], radius_km: "" };
             if (stepType === "filter_dupe") return { window_sec: 5 };
             if (stepType === "filter_direct_only") return {};
             if (stepType === "filter_path") return { mode: "allow", trace_paths: [], no_trace_paths: [] };
@@ -464,7 +491,7 @@
             if (stepType === "filter_distance") return { zones: [{ latitude: "", longitude: "", radius_km: "" }] };
             if (stepType === "filter_rate_limit") return { rate_limit_rules_text: "* - 60s" };
             if (stepType === "filter_rate_limit_per_callsign") return { packets_per_minute: 30 };
-            if (stepType === "tx_rf") return { rf_target: refValue || "" };
+            if (stepType === "tx_rf") return { rf_target: refValue || "", rf_path: "" };
             if (stepType === "tx_aprsis") return { aprsis_target: refValue || "" };
             if (stepType === "action_drop") return { note: "" };
             if (stepType === "action_log") return { log_tag: "", note: "" };
@@ -515,6 +542,22 @@
             if (step.step_type === "receiver_rf") return `${i18n.rfPort}: ${config.rf_port || "-"}`;
             if (step.step_type === "receiver_aprsis") return `${i18n.aprsisSource}: ${config.aprsis_source || "-"}`;
             if (step.step_type === "receiver_local_tx") return i18n.localTxFrames;
+            if (step.step_type === "filter_rf_guard") {
+                return i18n.inputSafetySummary;
+            }
+            if (step.step_type === "filter_aprsis_message_delivery") {
+                return i18n.messageDeliverySummary;
+            }
+            if (step.step_type === "filter_rf_tx_guard") {
+                return formatText(i18n.rfTxSafetySummary, { seconds: config.viscous_delay_sec || 5 });
+            }
+            if (step.step_type === "filter_allow_rules") {
+                const callsigns = Array.isArray(config.callsigns) ? config.callsigns : [];
+                if (!callsigns.length && !String(config.radius_km || "").trim()) {
+                    return i18n.messageOnlyMode;
+                }
+                return `${i18n.callsigns}: ${Array.isArray(config.callsigns) ? config.callsigns.length : 0} · ${i18n.radiusKm}: ${config.radius_km || "-"} · AND · ${i18n.defaultDeny}`;
+            }
             if (step.step_type === "filter_dupe") return `${i18n.window}: ${config.window_sec || "-"} ${i18n.sec}`;
             if (step.step_type === "filter_path") {
                 const tracePaths = config.trace_paths || config.paths || [];
@@ -533,10 +576,10 @@
             if (step.step_type === "filter_rate_limit") {
                 const rulesText = String(config.rate_limit_rules_text || "");
                 const ruleCount = rulesText ? rulesText.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#")).length : (Array.isArray(config.rate_limit_rules) ? config.rate_limit_rules.length : 0);
-                return `Rules: ${ruleCount || "-"}`;
+                return `${i18n.rules}: ${ruleCount || "-"}`;
             }
             if (step.step_type === "filter_rate_limit_per_callsign") return `${i18n.perCallsign}: ${config.packets_per_minute || "-"} ${i18n.pktPerMin}`;
-            if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"}`;
+            if (step.step_type === "tx_rf") return `${i18n.rfTarget}: ${config.rf_target || "-"} · path: ${config.rf_path || "direct"}`;
             if (step.step_type === "tx_aprsis") return `${i18n.aprsisTarget}: ${config.aprsis_target || "-"}`;
             if (step.step_type === "action_drop") return config.note || i18n.dropPacket;
             if (step.step_type === "action_log") {
@@ -573,8 +616,20 @@
         const stepCategory = (stepType) => (typeMeta[stepType] || {}).category || "";
         const isViscousDelayStepType = (stepType) => stepType === "filter_dupe";
         const isRateLimitStepType = (stepType) => stepType === "filter_rate_limit";
+        const isRfGuardStepType = (stepType) => stepType === "filter_rf_guard";
+        const isMessageDeliveryStepType = (stepType) => stepType === "filter_aprsis_message_delivery";
+        const isRfTxGuardStepType = (stepType) => stepType === "filter_rf_tx_guard";
+        const isAllowRulesStepType = (stepType) => stepType === "filter_allow_rules";
+        const isAprsisSourceSystemStepType = (stepType) => (
+            isRfGuardStepType(stepType)
+            || isMessageDeliveryStepType(stepType)
+            || isRfTxGuardStepType(stepType)
+            || isAllowRulesStepType(stepType)
+        );
         const isTxRfTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_rf";
-        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
+        const isAprsisSourceFlow = () => String(sourceKindInput.value || "").trim() === "receiver_aprsis";
+        const isStrictAprsisToRfFlow = () => isAprsisSourceFlow() && isTxRfTargetFlow();
+        const isFixedTxRfStepType = (stepType) => isTxRfTargetFlow() && !isAprsisSourceFlow() && (stepType === "filter_dupe" || stepType === "filter_rate_limit" || stepType === "filter_path");
         const isDistanceFilterStepType = (stepType) => stepType === "filter_distance";
         const isAprsisTargetFlow = () => String(targetKindInput.value || "").trim() === "tx_aprsis";
         const hasViscousDelayStep = () => steps.some(
@@ -615,8 +670,82 @@
             steps = [sourceStep, strictStep, targetStep];
         };
 
+        const enforceAprsisSourceRestrictions = () => {
+            if (!Array.isArray(steps) || steps.length < 2) return;
+            const sourceStep = steps[0];
+            const targetStep = steps[steps.length - 1];
+            const middle = steps.slice(1, -1);
+            if (!isAprsisSourceFlow()) {
+                steps = [
+                    sourceStep,
+                    ...middle.filter((step) => !isAprsisSourceSystemStepType(step.step_type)),
+                    targetStep,
+                ];
+                return;
+            }
+            const existingGuard = middle.find((step) => isRfGuardStepType(step.step_type));
+            const existingMessageDelivery = middle.find((step) => isMessageDeliveryStepType(step.step_type));
+            const existingTxGuard = middle.find((step) => isRfTxGuardStepType(step.step_type));
+            const existingAllowRules = middle.find((step) => isAllowRulesStepType(step.step_type));
+            const legacyGuardConfig = (existingGuard || {}).config || {};
+            const guard = existingGuard ? { ...existingGuard, config: {} } : {
+                step_type: "filter_rf_guard",
+                title: stepLabel("filter_rf_guard"),
+                enabled: 1,
+                config: defaultConfig("filter_rf_guard"),
+            };
+            const txGuard = existingTxGuard ? {
+                ...existingTxGuard,
+                config: { ...defaultConfig("filter_rf_tx_guard"), ...(existingTxGuard.config || {}) },
+            } : {
+                step_type: "filter_rf_tx_guard",
+                title: stepLabel("filter_rf_tx_guard"),
+                enabled: 1,
+                config: { ...defaultConfig("filter_rf_tx_guard"), ...legacyGuardConfig },
+            };
+            const messageDelivery = existingMessageDelivery ? {
+                ...existingMessageDelivery,
+                config: {},
+            } : {
+                step_type: "filter_aprsis_message_delivery",
+                title: stepLabel("filter_aprsis_message_delivery"),
+                enabled: 1,
+                config: defaultConfig("filter_aprsis_message_delivery"),
+            };
+            const existingDefaultDenyConfig = (existingAllowRules || {}).config || {};
+            const allowRules = existingAllowRules ? {
+                ...existingAllowRules,
+                config: {
+                    callsigns: Array.isArray(existingDefaultDenyConfig.callsigns)
+                        ? uniqueLines(existingDefaultDenyConfig.callsigns.map((value) => String(value || "").trim().toUpperCase()))
+                        : [],
+                    radius_km: String(existingDefaultDenyConfig.radius_km || "").trim(),
+                },
+            } : {
+                step_type: "filter_allow_rules",
+                title: stepLabel("filter_allow_rules"),
+                enabled: 1,
+                config: defaultConfig("filter_allow_rules"),
+            };
+            guard.title = stepLabel("filter_rf_guard");
+            guard.enabled = 1;
+            guard.config = {};
+            messageDelivery.title = stepLabel("filter_aprsis_message_delivery");
+            messageDelivery.enabled = 1;
+            txGuard.title = stepLabel("filter_rf_tx_guard");
+            txGuard.enabled = 1;
+            allowRules.title = stepLabel("filter_allow_rules");
+            allowRules.enabled = 1;
+            const ordinary = isStrictAprsisToRfFlow()
+                ? []
+                : middle.filter((step) => !isAprsisSourceSystemStepType(step.step_type));
+            const txGuardSteps = isTxRfTargetFlow() ? [txGuard] : [];
+            const messageDeliverySteps = isTxRfTargetFlow() ? [messageDelivery] : [];
+            steps = [sourceStep, guard, ...messageDeliverySteps, allowRules, ...ordinary, ...txGuardSteps, targetStep];
+        };
+
         const enforceTxRfFlowRestrictions = () => {
-            if (!Array.isArray(steps) || steps.length < 2 || !isTxRfTargetFlow()) {
+            if (!Array.isArray(steps) || steps.length < 2 || !isTxRfTargetFlow() || isAprsisSourceFlow()) {
                 if (Array.isArray(steps) && steps.length >= 2) {
                     const sourceStep = steps[0];
                     const targetStep = steps[steps.length - 1];
@@ -643,8 +772,34 @@
             const hasRateLimit = hasRateLimitStep();
             const hasDistanceFilter = hasDistanceFilterStep();
             const aprsisTarget = isAprsisTargetFlow();
+            const aprsisSource = isAprsisSourceFlow();
+            const strictAprsisToRf = isStrictAprsisToRfFlow();
             for (const button of paletteButtons) {
                 const stepType = button.dataset.stepType || "";
+                button.hidden = strictAprsisToRf && !isAprsisSourceSystemStepType(stepType);
+                if (button.hidden) {
+                    button.disabled = true;
+                    button.title = i18n.aprsisToRfFlowLocked;
+                    button.setAttribute("aria-label", i18n.aprsisToRfFlowLocked);
+                    continue;
+                }
+                if (isAprsisSourceSystemStepType(stepType)) {
+                    button.disabled = true;
+                    const message = isRfGuardStepType(stepType)
+                        ? i18n.rfGuardSystemManaged
+                        : (
+                            isMessageDeliveryStepType(stepType)
+                                ? i18n.messageDeliverySystemManaged
+                                : (isRfTxGuardStepType(stepType) ? i18n.rfTxGuardSystemManaged : i18n.allowRulesSystemManaged)
+                        );
+                    button.title = message;
+                    button.setAttribute("aria-label", message);
+                    button.classList.toggle(
+                        "is-required",
+                        aprsisSource && (!isRfTxGuardStepType(stepType) || isTxRfTargetFlow()),
+                    );
+                    continue;
+                }
                 if (aprsisTarget) {
                     button.disabled = true;
                     button.title = i18n.aprsisSystemFlowLocked;
@@ -944,6 +1099,7 @@
             }
             if (targetStep.step_type === "tx_rf") {
                 targetStep.config.rf_target = targetRefInput.value;
+                if (targetStep.config.rf_path == null) targetStep.config.rf_path = "";
             } else if (targetStep.step_type === "tx_aprsis") {
                 targetStep.config.aprsis_target = targetRefInput.value;
             } else if (targetStep.step_type === "action_log") {
@@ -1345,6 +1501,9 @@
             const input = document.createElement("input");
             input.type = field.type === "number" ? "number" : "text";
             input.value = step.config[field.name] ?? "";
+            if (field.min !== undefined) input.min = String(field.min);
+            if (field.max !== undefined) input.max = String(field.max);
+            if (field.step !== undefined) input.step = String(field.step);
             if (field.placeholder) {
                 input.placeholder = field.placeholder;
             }
@@ -1360,6 +1519,7 @@
         const render = () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceAprsisSourceRestrictions();
             enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             syncPaletteState();
@@ -1409,6 +1569,7 @@
                 const actions = document.createElement("div");
                 actions.className = "digi-step-actions";
                 const aprsisLockedFlow = isAprsisTargetFlow();
+                const aprsisSourceSystemStep = isAprsisSourceFlow() && isAprsisSourceSystemStepType(step.step_type);
                 const txRfLockedStep = isFixedTxRfStepType(step.step_type);
                 const previousStepType = String((steps[index - 1] || {}).step_type || "").trim();
                 const nextStepType = String((steps[index + 1] || {}).step_type || "").trim();
@@ -1419,10 +1580,10 @@
                 const enabledInput = document.createElement("input");
                 enabledInput.type = "checkbox";
                 enabledInput.value = "1";
-                enabledInput.checked = aprsisSystemStrictStep ? true : !!step.enabled;
-                enabledInput.disabled = aprsisSystemStrictStep;
+                enabledInput.checked = (aprsisSystemStrictStep || aprsisSourceSystemStep) ? true : !!step.enabled;
+                enabledInput.disabled = aprsisSystemStrictStep || aprsisSourceSystemStep;
                 enabledInput.addEventListener("change", () => {
-                    if (aprsisSystemStrictStep) {
+                    if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
                         step.enabled = 1;
                         return;
                     }
@@ -1461,9 +1622,11 @@
                 moveUpButton.setAttribute("aria-label", i18n.moveStepUp);
                 moveUpButton.disabled = (
                     index <= 1
+                    || stepCategory(step.step_type) !== "filter"
                     || txRfLockedStep
                     || (isTxRfTargetFlow() && previousStepType === "filter_dupe")
                     || aprsisLockedFlow
+                    || aprsisSourceSystemStep
                 );
                 const moveUpIcon = document.createElement("img");
                 moveUpIcon.src = iconPath("arrow-up.svg");
@@ -1485,9 +1648,11 @@
                 moveDownButton.setAttribute("aria-label", i18n.moveStepDown);
                 moveDownButton.disabled = (
                     index >= steps.length - 2
+                    || stepCategory(step.step_type) !== "filter"
                     || txRfLockedStep
                     || (isTxRfTargetFlow() && nextStepType === "filter_path")
                     || aprsisLockedFlow
+                    || aprsisSourceSystemStep
                 );
                 const moveDownIcon = document.createElement("img");
                 moveDownIcon.src = iconPath("arrow-down.svg");
@@ -1507,7 +1672,7 @@
                 deleteButton.className = "table-icon-button digi-step-icon-button digi-step-icon-button-danger";
                 deleteButton.title = i18n.deleteStep;
                 deleteButton.setAttribute("aria-label", i18n.deleteStep);
-                deleteButton.disabled = stepCategory(step.step_type) !== "filter" || aprsisLockedFlow;
+                deleteButton.disabled = stepCategory(step.step_type) !== "filter" || aprsisLockedFlow || aprsisSourceSystemStep;
                 const deleteIcon = document.createElement("img");
                 deleteIcon.src = iconPath("delete-outline.svg");
                 deleteIcon.alt = "";
@@ -1528,7 +1693,7 @@
                     editor.className = "form-grid digi-step-editor-grid";
 
                     const stepMeta = typeMeta[step.step_type] || {};
-                    if (stepMeta.description || (Array.isArray(stepMeta.editor_help_lines) && stepMeta.editor_help_lines.length)) {
+                    if (stepMeta.description || stepMeta.help_page) {
                         const helpBlock = document.createElement("div");
                         helpBlock.className = "full";
                         if (stepMeta.description) {
@@ -1537,20 +1702,36 @@
                             lead.textContent = stepMeta.description;
                             helpBlock.appendChild(lead);
                         }
-                        if (Array.isArray(stepMeta.editor_help_lines) && stepMeta.editor_help_lines.length) {
-                            const lines = document.createElement("div");
-                            lines.className = "muted small";
-                            for (const line of stepMeta.editor_help_lines) {
-                                appendHelpLine(lines, line);
-                            }
-                            helpBlock.appendChild(lines);
+                        if (stepMeta.help_page) {
+                            const helpButton = document.createElement("button");
+                            helpButton.type = "button";
+                            helpButton.className = "help-icon-button";
+                            helpButton.setAttribute("data-help-page", stepMeta.help_page);
+                            const helpLabel = stepMeta.label ? `${i18n.help}: ${stepMeta.label}` : i18n.help;
+                            helpButton.title = helpLabel;
+                            helpButton.setAttribute("aria-label", helpLabel);
+                            const helpIcon = document.createElement("img");
+                            helpIcon.src = iconPath("help-circle-outline.svg");
+                            helpIcon.alt = "";
+                            helpButton.appendChild(helpIcon);
+                            helpBlock.appendChild(helpButton);
                         }
                         editor.appendChild(helpBlock);
                     }
-                    if (aprsisSystemStrictStep) {
+                    if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
                         const lockedNote = document.createElement("div");
                         lockedNote.className = "full muted small";
-                        lockedNote.textContent = i18n.aprsisSystemFlowLocked;
+                        lockedNote.textContent = isRfGuardStepType(step.step_type)
+                            ? i18n.rfGuardSystemManaged
+                            : (
+                                isMessageDeliveryStepType(step.step_type)
+                                    ? i18n.messageDeliverySystemManaged
+                                    : (
+                                        isRfTxGuardStepType(step.step_type)
+                                            ? i18n.rfTxGuardSystemManaged
+                                            : (isAllowRulesStepType(step.step_type) ? i18n.allowRulesSystemManaged : i18n.aprsisSystemFlowLocked)
+                                    )
+                            );
                         editor.appendChild(lockedNote);
                     }
 
@@ -1560,7 +1741,7 @@
                     const titleInput = document.createElement("input");
                     titleInput.type = "text";
                     titleInput.value = normalizedStepTitle(step);
-                    if (aprsisSystemStrictStep) {
+                    if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
                         titleInput.disabled = true;
                     }
                     titleInput.addEventListener("input", () => {
@@ -1578,6 +1759,23 @@
                     for (const field of fields) {
                         editor.appendChild(renderConfigField(step, field));
                     }
+                    if (isAllowRulesStepType(step.step_type)) {
+                        const clearActions = document.createElement("div");
+                        clearActions.className = "form-actions";
+                        const clearButton = document.createElement("button");
+                        clearButton.type = "button";
+                        clearButton.className = "button button-secondary";
+                        clearButton.textContent = i18n.clearCallsignsAndRadius;
+                        const configuredCallsigns = Array.isArray(step.config.callsigns) ? step.config.callsigns : [];
+                        clearButton.disabled = !configuredCallsigns.length && !String(step.config.radius_km || "").trim();
+                        clearButton.addEventListener("click", () => {
+                            step.config.callsigns = [];
+                            step.config.radius_km = "";
+                            render();
+                        });
+                        clearActions.appendChild(clearButton);
+                        editor.appendChild(clearActions);
+                    }
                     stepCard.appendChild(editor);
                 }
 
@@ -1588,7 +1786,8 @@
                     const showMinimumPathFilterWarning =
                         steps.length === 2 &&
                         index === 0 &&
-                        steps[steps.length - 1]?.step_type === "tx_rf";
+                        steps[steps.length - 1]?.step_type === "tx_rf" &&
+                        !isAprsisSourceFlow();
                     if (showMinimumPathFilterWarning) {
                         connector.className = "digi-step-connector digi-step-connector-warning";
 
@@ -1651,6 +1850,12 @@
                 if (isAprsisTargetFlow() || stepType === "filter_strict") {
                     return;
                 }
+                if (isStrictAprsisToRfFlow()) {
+                    return;
+                }
+                if (isAprsisSourceSystemStepType(stepType)) {
+                    return;
+                }
                 if (isRateLimitStepType(stepType) && !isTxRfTargetFlow()) {
                     return;
                 }
@@ -1706,6 +1911,7 @@
         form.addEventListener("submit", () => {
             syncBoundarySteps();
             enforceAprsisFlowRestrictions();
+            enforceAprsisSourceRestrictions();
             enforceTxRfFlowRestrictions();
             syncBoundarySteps();
             for (const step of steps) {
@@ -1926,4 +2132,6 @@
         });
     })();
 </script>
+{% include "partials/help_modal.html" %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endblock %}

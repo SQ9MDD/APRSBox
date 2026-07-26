@@ -2,11 +2,33 @@
 
 {% block content %}
 {% set traffic_stream_url = request.scope.root_path ~ '/api/traffic/stream' %}
-<section class="panel">
+<section class="panel traffic-page-panel">
     <div class="panel-body">
         <div class="traffic-toolbar">
-            <h2>{{ t("Traffic Log") }}</h2>
+            <div class="traffic-toolbar-title">
+                <h2>{{ t("Traffic Log") }}</h2>
+                <button
+                    type="button"
+                    class="table-icon-button traffic-legend-open-button"
+                    id="traffic-open-color-legend"
+                    title="{{ t('Traffic colors') }}"
+                    aria-label="{{ t('Traffic colors') }}"
+                    aria-haspopup="dialog"
+                    aria-controls="traffic-color-legend-modal"
+                >
+                    <img src="{{ request.scope.root_path }}/static/icons/palette-swatch-outline.svg" alt="">
+                </button>
+            </div>
             <div class="traffic-toolbar-actions">
+                <div class="traffic-filter-group" role="group" aria-label="{{ t('Filter') }}">
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="rx" aria-pressed="false" title="{{ t('Show only RX frames') }}" aria-label="{{ t('Show only RX frames') }}">RX</button>
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="tx" aria-pressed="false" title="{{ t('Show only TX frames') }}" aria-label="{{ t('Show only TX frames') }}">{{ t("TX") }}</button>
+                    <button type="button" class="button-secondary traffic-filter-button" data-traffic-quick-filter="remote" aria-pressed="false" title="{{ t('Show only remote client TX frames') }}" aria-label="{{ t('Show only remote client TX frames') }}">{{ t("Remote") }}</button>
+                </div>
+                <label class="traffic-text-filter">
+                    <input type="text" id="traffic-text-filter" placeholder="{{ t('Filter') }}" aria-label="{{ t('Filter') }}" autocomplete="off" spellcheck="false">
+                </label>
+                <button type="button" class="button-secondary" id="traffic-clear-filters" title="{{ t('Clear filters') }}" aria-label="{{ t('Clear filters') }}" disabled>{{ t("Clear filters") }}</button>
                 <span class="muted small" id="traffic-frame-count">{{ traffic_snapshot.frames|length }} {{ t("entries") }}</span>
             </div>
         </div>
@@ -19,13 +41,51 @@
             {% for frame in traffic_snapshot.frames %}
             <div class="traffic-log-row{% if frame.row_class %} {{ frame.row_class }}{% endif %}">
                 <span class="traffic-log-time">{{ frame.timestamp }}</span>
-                <span class="traffic-log-source">{{ frame.source }}{% if frame.band %} · {{ frame.band }}{% endif %} · {{ frame.direction }}</span>
+                <span class="traffic-log-source">{{ frame.source }}{% if frame.band %} · {{ frame.band }}{% endif %} · {{ frame.direction }}{% if frame.row_class and "traffic-log-row-aprsis-to-rf-tx" in frame.row_class %}<span class="traffic-direction-warning-badge" aria-label="{{ t('APRS-IS to RF TX') }}">IS → RF</span>{% endif %}</span>
                 <span class="traffic-log-line">{{ frame.line }}</span>
             </div>
             {% endfor %}
             {% else %}
             <div class="empty-state muted" id="traffic-empty-state">{{ t("No frames received yet.") }}</div>
             {% endif %}
+        </div>
+        <div class="traffic-legend-modal" id="traffic-color-legend-modal" hidden>
+            <div class="traffic-legend-backdrop" data-close-traffic-legend></div>
+            <div
+                class="traffic-legend-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="traffic-color-legend-title"
+                tabindex="-1"
+            >
+                <div class="traffic-legend-header">
+                    <h3 id="traffic-color-legend-title">{{ t("Traffic colors") }}</h3>
+                    <button
+                        type="button"
+                        class="sidebar-action-button"
+                        data-close-traffic-legend
+                        aria-label="{{ t('Close') }}"
+                        title="{{ t('Close') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
+                    </button>
+                </div>
+                <div class="traffic-color-legend" role="list" aria-label="{{ t('Traffic colors') }}">
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-tx" aria-hidden="true"></i>{{ t("Own beacon TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-beacon-rx" aria-hidden="true"></i>{{ t("Own beacon echo RX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-tx" aria-hidden="true"></i>{{ t("Own weather TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-wx-rx" aria-hidden="true"></i>{{ t("Own weather echo RX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-tx" aria-hidden="true"></i>{{ t("Own message/query/ACK TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-own-message-rx" aria-hidden="true"></i>{{ t("Own message/query/ACK echo RX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-repeated-tx" aria-hidden="true"></i>{{ t("DIGI repeated TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-proxy-tx" aria-hidden="true"></i>{{ t("Shared KISS port TX") }}</span>
+                    <span class="traffic-color-legend-item" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-rx" aria-hidden="true"></i>{{ t("APRS-IS RX") }}</span>
+                    <span class="traffic-color-legend-item traffic-color-legend-item-warning" role="listitem"><i class="traffic-color-legend-swatch traffic-color-legend-swatch-aprsis-to-rf-tx" aria-hidden="true"></i>{{ t("APRS-IS to RF TX") }}</span>
+                </div>
+                <div class="traffic-legend-footer">
+                    <button type="button" class="button button-secondary" data-close-traffic-legend>{{ t("Close") }}</button>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -37,8 +97,18 @@
         const count = document.getElementById("traffic-frame-count");
         const interfaceSummary = document.getElementById("traffic-interface-summary");
         const initialDataNode = document.getElementById("traffic-initial-data");
+        const quickFilterButtons = Array.from(document.querySelectorAll("[data-traffic-quick-filter]"));
+        const textFilterInput = document.getElementById("traffic-text-filter");
+        const clearFiltersButton = document.getElementById("traffic-clear-filters");
+        const colorLegendModal = document.getElementById("traffic-color-legend-modal");
+        const colorLegendDialog = colorLegendModal ? colorLegendModal.querySelector(".traffic-legend-dialog") : null;
+        const colorLegendOpenButton = document.getElementById("traffic-open-color-legend");
+        const colorLegendCloseButtons = colorLegendModal
+            ? Array.from(colorLegendModal.querySelectorAll("[data-close-traffic-legend]"))
+            : [];
         const staticIconsRoot = {{ (request.scope.root_path ~ '/static/icons')|tojson }};
         const noFramesText = {{ t("No frames received yet.")|tojson }};
+        const noFilteredFramesText = {{ t("No frames match current filters.")|tojson }};
         const entriesText = {{ t("entries")|tojson }};
         const listeningText = {{ t("Listening")|tojson }};
         const clientsText = {{ t("Clients")|tojson }};
@@ -46,11 +116,63 @@
         const hideText = {{ t("Hide")|tojson }};
         const visibleIconPath = `${staticIconsRoot}/eye.svg`;
         const hiddenIconPath = `${staticIconsRoot}/eye-off.svg`;
-        const noInterfacesText = {{ t("No enabled TNC is configured.")|tojson }};
+        const noInterfacesText = {{ t("No enabled interface is configured.")|tojson }};
+        const aprsisToRfWarningText = {{ t("APRS-IS to RF TX")|tojson }};
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
         const frameNodeByKey = new Map();
         const interfaceVisibilityByKey = new Map();
+        let activeQuickFilter = "";
+        let textFilterValue = "";
         let latestSnapshot = { interfaces: [], frames: [] };
+
+        const normalizeFilterText = (value) => String(value || "").trim().toLowerCase();
+
+        const openColorLegend = () => {
+            if (!colorLegendModal) {
+                return;
+            }
+            colorLegendModal.hidden = false;
+            document.body.classList.add("modal-open");
+            if (colorLegendDialog instanceof HTMLElement) {
+                colorLegendDialog.focus();
+            }
+        };
+
+        const closeColorLegend = () => {
+            if (!colorLegendModal) {
+                return;
+            }
+            colorLegendModal.hidden = true;
+            document.body.classList.remove("modal-open");
+            if (colorLegendOpenButton instanceof HTMLElement) {
+                colorLegendOpenButton.focus();
+            }
+        };
+
+        if (colorLegendOpenButton) {
+            colorLegendOpenButton.addEventListener("click", openColorLegend);
+        }
+        colorLegendCloseButtons.forEach((button) => button.addEventListener("click", closeColorLegend));
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && colorLegendModal && !colorLegendModal.hidden) {
+                closeColorLegend();
+            }
+        });
+
+        const updateQuickFilterButtons = () => {
+            quickFilterButtons.forEach((button) => {
+                const isActive = (button.dataset.trafficQuickFilter || "") === activeQuickFilter;
+                button.classList.toggle("is-active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
+        };
+
+        const syncClearFiltersButton = () => {
+            if (!clearFiltersButton) {
+                return;
+            }
+            clearFiltersButton.disabled = !(activeQuickFilter || textFilterValue);
+        };
 
         const interfaceKey = (item) => {
             if (Number.isInteger(item.modem_id)) {
@@ -86,6 +208,39 @@
             return visibleInterfaceIds.has(interfaceId);
         };
 
+        const matchesQuickFilter = (frame) => {
+            const direction = String(frame.direction || "").trim().toUpperCase();
+            const command = String(frame.command || "").trim().toUpperCase();
+            if (activeQuickFilter === "rx") {
+                return direction === "RX";
+            }
+            if (activeQuickFilter === "tx") {
+                return direction === "TX";
+            }
+            if (activeQuickFilter === "remote") {
+                return command.startsWith("TX-PROXY");
+            }
+            return true;
+        };
+
+        const matchesTextFilter = (frame) => {
+            if (!textFilterValue) {
+                return true;
+            }
+            const searchableText = [
+                frame.source,
+                frame.source_kind,
+                frame.band,
+                frame.direction,
+                frame.command,
+                frame.line,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+            return searchableText.includes(textFilterValue);
+        };
+
         const filteredFrames = (snapshot) => {
             const interfaces = Array.isArray(snapshot.interfaces) ? snapshot.interfaces : [];
             const frames = Array.isArray(snapshot.frames) ? snapshot.frames : [];
@@ -100,7 +255,12 @@
                     visibleInterfaceIds.add(item.modem_id);
                 }
             });
-            return frames.filter((frame) => isFrameVisible(frame, interfacesById, visibleInterfaceIds));
+            return frames.filter(
+                (frame) =>
+                    isFrameVisible(frame, interfacesById, visibleInterfaceIds)
+                    && matchesQuickFilter(frame)
+                    && matchesTextFilter(frame),
+            );
         };
 
         const renderInterfaces = (interfaces) => {
@@ -179,11 +339,32 @@
 
         const frameRowClassName = (frame) => `traffic-log-row${frame.row_class ? " " + frame.row_class : ""}`;
 
+        const isAprsisToRfFrame = (frame) =>
+            String(frame.row_class || "").split(/\s+/).includes("traffic-log-row-aprsis-to-rf-tx");
+
         const frameSourceText = (frame) => {
             const sourceParts = [frame.source];
             if (frame.band) sourceParts.push(frame.band);
             if (frame.direction) sourceParts.push(frame.direction);
             return sourceParts.join(" · ");
+        };
+
+        const updateFrameSource = (sourceNode, frame) => {
+            const sourceText = frameSourceText(frame);
+            const hasWarning = isAprsisToRfFrame(frame);
+            const signature = `${sourceText}|${hasWarning ? "aprsis-to-rf" : "standard"}`;
+            if (sourceNode.dataset.sourceSignature === signature) {
+                return;
+            }
+            sourceNode.dataset.sourceSignature = signature;
+            sourceNode.textContent = sourceText;
+            if (hasWarning) {
+                const badge = document.createElement("span");
+                badge.className = "traffic-direction-warning-badge";
+                badge.setAttribute("aria-label", aprsisToRfWarningText);
+                badge.textContent = "IS → RF";
+                sourceNode.append(" ", badge);
+            }
         };
 
         const createFrameRow = (frame, key) => {
@@ -197,7 +378,7 @@
 
             const sourceNode = document.createElement("span");
             sourceNode.className = "traffic-log-source";
-            sourceNode.textContent = frameSourceText(frame);
+            updateFrameSource(sourceNode, frame);
 
             const lineNode = document.createElement("span");
             lineNode.className = "traffic-log-line";
@@ -219,19 +400,18 @@
             if (timeNode && timeNode.textContent !== frame.timestamp) {
                 timeNode.textContent = frame.timestamp;
             }
-            const nextSourceText = frameSourceText(frame);
-            if (sourceNode && sourceNode.textContent !== nextSourceText) {
-                sourceNode.textContent = nextSourceText;
+            if (sourceNode) {
+                updateFrameSource(sourceNode, frame);
             }
             if (lineNode && lineNode.textContent !== frame.line) {
                 lineNode.textContent = frame.line;
             }
         };
 
-        const renderFrames = (frames) => {
+        const renderFrames = (frames, hasSnapshotFrames) => {
             if (!frames.length) {
                 frameNodeByKey.clear();
-                streamContainer.innerHTML = `<div class="empty-state muted" id="traffic-empty-state">${noFramesText}</div>`;
+                streamContainer.innerHTML = `<div class="empty-state muted" id="traffic-empty-state">${hasSnapshotFrames ? noFilteredFramesText : noFramesText}</div>`;
                 return;
             }
 
@@ -285,10 +465,44 @@
             const visibleFrames = filteredFrames(latestSnapshot);
             count.textContent = `${visibleFrames.length} ${entriesText}`;
             renderInterfaces(latestSnapshot.interfaces);
-            renderFrames(visibleFrames);
+            renderFrames(visibleFrames, latestSnapshot.frames.length > 0);
         };
 
+        quickFilterButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const nextFilter = button.dataset.trafficQuickFilter || "";
+                activeQuickFilter = activeQuickFilter === nextFilter ? "" : nextFilter;
+                updateQuickFilterButtons();
+                syncClearFiltersButton();
+                applySnapshot(latestSnapshot);
+            });
+        });
+
+        if (textFilterInput) {
+            textFilterInput.addEventListener("input", () => {
+                textFilterValue = normalizeFilterText(textFilterInput.value);
+                syncClearFiltersButton();
+                applySnapshot(latestSnapshot);
+            });
+            textFilterValue = normalizeFilterText(textFilterInput.value);
+        }
+
+        if (clearFiltersButton) {
+            clearFiltersButton.addEventListener("click", () => {
+                activeQuickFilter = "";
+                textFilterValue = "";
+                if (textFilterInput) {
+                    textFilterInput.value = "";
+                }
+                updateQuickFilterButtons();
+                syncClearFiltersButton();
+                applySnapshot(latestSnapshot);
+            });
+        }
+
         streamContainer.textContent = "";
+        updateQuickFilterButtons();
+        syncClearFiltersButton();
         applySnapshot(initialSnapshot);
 
         const eventSource = new EventSource({{ traffic_stream_url|tojson }});

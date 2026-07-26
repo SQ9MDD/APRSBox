@@ -2,17 +2,27 @@ import contextlib
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import (
+    DATABASE_INDEX_REPAIR_SETTING_KEY,
+    DATABASE_INDEX_REPAIR_VERSION,
     database_maintenance_snapshot,
     connect,
+    get_app_setting,
+    get_traffic_retention_minutes,
     init_db,
     log_event,
+    prune_outbound_jobs_batch,
+    set_app_setting,
     reset_runtime_operational_data,
+    traffic_retention_cutoff,
     utc_now,
     prune_event_logs,
     vacuum_database,
+    _is_reindex_repairable_check_messages,
 )
 
 
@@ -33,6 +43,38 @@ def temporary_database() -> Path:
 
 
 class DatabaseMaintenanceTests(unittest.TestCase):
+    def test_traffic_retention_defaults_to_one_hour(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            self.assertEqual(60, get_traffic_retention_minutes())
+            self.assertEqual("2026-01-01T11:00:00+00:00", traffic_retention_cutoff())
+
+    def test_init_db_marks_clean_database_index_repair_version(self) -> None:
+        with temporary_database():
+            self.assertEqual(DATABASE_INDEX_REPAIR_VERSION, get_app_setting(DATABASE_INDEX_REPAIR_SETTING_KEY))
+
+    def test_reindex_repairable_check_messages_are_index_only(self) -> None:
+        self.assertTrue(
+            _is_reindex_repairable_check_messages(
+                [
+                    "wrong # of entries in index idx_event_logs_created_at",
+                    "row 521 missing from index idx_traffic_frames_created_at",
+                ]
+            )
+        )
+        self.assertFalse(_is_reindex_repairable_check_messages(["database disk image is malformed"]))
+
+    def test_traffic_retention_uses_configured_minutes(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            set_app_setting("traffic_retention_minutes", "180")
+            self.assertEqual(180, get_traffic_retention_minutes())
+            self.assertEqual("2026-01-01T09:00:00+00:00", traffic_retention_cutoff())
+
+    def test_traffic_retention_accepts_twenty_four_hours(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            set_app_setting("traffic_retention_minutes", "1440")
+            self.assertEqual(1440, get_traffic_retention_minutes())
+            self.assertEqual("2025-12-31T12:00:00+00:00", traffic_retention_cutoff())
+
     def test_prune_event_logs_keeps_only_newest_rows(self) -> None:
         with temporary_database():
             for index in range(6):
@@ -130,6 +172,120 @@ class DatabaseMaintenanceTests(unittest.TestCase):
             self.assertEqual(0, event_logs_total)
             self.assertEqual(0, traffic_frames_total)
             self.assertEqual(1, modems_total)
+
+    def test_prune_outbound_jobs_batch_keeps_pending_messages_and_recent_rows(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            connection = connect()
+            try:
+                for day in ("01", "02", "03"):
+                    _insert_outbound_job(connection, "beacon", "sent", f"2025-12-{day}T00:00:00+00:00")
+                _insert_outbound_job(connection, "beacon", "sent", "2025-12-31T00:00:00+00:00")
+                _insert_outbound_job(connection, "beacon", "queued", "2025-12-01T00:00:00+00:00")
+                _insert_outbound_job(connection, "wx", "processing", "2025-12-01T00:00:00+00:00")
+                _insert_outbound_job(connection, "message", "sent", "2025-12-01T00:00:00+00:00", aprs_message_id=123)
+                _insert_outbound_job(connection, "wx", "failed", "2025-11-01T00:00:00+00:00")
+                _insert_outbound_job(connection, "wx", "failed", "2025-11-02T00:00:00+00:00")
+                _insert_outbound_job(
+                    connection,
+                    "wx",
+                    "failed",
+                    "2025-11-01T00:00:00+00:00",
+                    updated_at="2025-12-31T00:00:00+00:00",
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            deleted = prune_outbound_jobs_batch(
+                limit=10,
+                sent_retention_days=7,
+                failure_retention_days=30,
+                min_rows_per_group=1,
+            )
+            self.assertEqual(5, deleted)
+
+            connection = connect()
+            try:
+                sent_beacons = connection.execute(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'beacon' AND status = 'sent'"
+                ).fetchone()
+                queued_beacons = connection.execute(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'beacon' AND status = 'queued'"
+                ).fetchone()
+                processing_wx = connection.execute(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'wx' AND status = 'processing'"
+                ).fetchone()
+                message_jobs = connection.execute(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'"
+                ).fetchone()
+                failed_wx = connection.execute(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'wx' AND status = 'failed'"
+                ).fetchone()
+            finally:
+                connection.close()
+
+            self.assertEqual(1, int(sent_beacons["total"]))
+            self.assertEqual(1, int(queued_beacons["total"]))
+            self.assertEqual(1, int(processing_wx["total"]))
+            self.assertEqual(1, int(message_jobs["total"]))
+            self.assertEqual(1, int(failed_wx["total"]))
+
+    def test_prune_outbound_jobs_batch_keeps_minimum_rows_per_group(self) -> None:
+        with temporary_database(), patch("app.db.datetime", _FixedDatetime):
+            connection = connect()
+            try:
+                for day in ("01", "02", "03"):
+                    _insert_outbound_job(connection, "object", "sent", f"2025-12-{day}T00:00:00+00:00")
+                connection.commit()
+            finally:
+                connection.close()
+
+            deleted = prune_outbound_jobs_batch(
+                limit=10,
+                sent_retention_days=7,
+                failure_retention_days=30,
+                min_rows_per_group=1,
+            )
+            self.assertEqual(2, deleted)
+
+            connection = connect()
+            try:
+                remaining = connection.execute(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'object' AND status = 'sent'"
+                ).fetchone()
+            finally:
+                connection.close()
+            self.assertEqual(1, int(remaining["total"]))
+
+
+def _insert_outbound_job(
+    connection,
+    kind: str,
+    status: str,
+    timestamp: str,
+    *,
+    updated_at: str | None = None,
+    aprs_message_id: int | None = None,
+) -> None:
+    effective_updated_at = updated_at or timestamp
+    sent_at = timestamp if status == "sent" else None
+    connection.execute(
+        """
+        INSERT INTO outbound_jobs(
+            kind, interface_id, aprs_message_id, payload_json, status,
+            scheduled_at, locked_at, started_at, sent_at, attempt_count,
+            last_error, created_at, updated_at
+        )
+        VALUES (?, NULL, ?, '{}', ?, ?, NULL, NULL, ?, 0, NULL, ?, ?)
+        """,
+        (kind, aprs_message_id, status, timestamp, sent_at, timestamp, effective_updated_at),
+    )
+
+
+class _FixedDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):  # type: ignore[override]
+        return cls(2026, 1, 1, 12, 0, 0, tzinfo=tz or timezone.utc)
 
 
 if __name__ == "__main__":

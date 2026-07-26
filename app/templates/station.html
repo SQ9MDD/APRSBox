@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <style>
     .field-counter-inline {
@@ -260,7 +261,7 @@
 {% endblock %}
 
 {% block content %}
-<section class="panel">
+<section class="panel{% if can_edit %} station-page-panel{% endif %}">
     <div class="panel-body">
         {% set selected_beacon_interface_id = '__INTERNAL_TX__' if station.beacon_internal_tx else ('__ALL_ACTIVE__' if station.beacon_tx_scope == 'all_active' else (station.beacon_interface_id|string if station.beacon_interface_id is not none else '')) %}
         {% set beacon_comment_max = beacon_comment_max|default(43) %}
@@ -277,11 +278,20 @@
                 <div class="station-settings-group-header">
                     <h2>{{ t("Position Beacon") }}</h2>
                     <p class="section-lead">{{ t("Configure the APRS position beacon. Beacon comment stays part of the position frame.") }}</p>
+                    <button
+                        class="help-icon-button page-help-button"
+                        type="button"
+                        data-help-page="application/station"
+                        title="{{ t('Help') }}"
+                        aria-label="{{ t('Help') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+                    </button>
                 </div>
                 <div class="form-grid station-settings-subgrid">
                     <label>
                         <span>{{ t("Callsign") }}</span>
-                        <input type="text" name="callsign" value="{{ station.callsign }}" maxlength="6">
+                        <input type="text" name="callsign" value="{{ station.callsign }}" maxlength="6" autocapitalize="characters" spellcheck="false" data-force-uppercase="true">
                     </label>
                     <label>
                         <span>{{ t("SSID") }}</span>
@@ -346,7 +356,7 @@
                     </label>
                     <label>
                         <span>{{ t("Beacon Path") }}</span>
-                        <input type="text" name="beacon_path" id="station-beacon-path" value="{{ station.beacon_path }}">
+                        <input type="text" name="beacon_path" id="station-beacon-path" value="{{ station.beacon_path }}" autocapitalize="characters" spellcheck="false" data-force-uppercase="true">
                     </label>
                     <input type="hidden" name="beacon_interval_mode" id="station-beacon-interval-mode" value="{{ beacon_interval_mode }}">
                     <input type="hidden" name="beacon_interval_minutes_fixed" id="station-beacon-interval-fixed" value="{{ beacon_interval_fixed_value }}">
@@ -662,9 +672,11 @@
         </div>
     </div>
 </section>
+{% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
     (() => {
@@ -792,6 +804,20 @@
             };
 
             inputs.forEach(bindLengthCounter);
+        };
+
+        const initUppercaseInputs = () => {
+            const inputs = document.querySelectorAll("input[data-force-uppercase]");
+            if (!inputs.length) {
+                return;
+            }
+
+            for (const input of inputs) {
+                input.addEventListener("input", () => {
+                    input.value = input.value.toUpperCase();
+                });
+                input.value = input.value.toUpperCase();
+            }
         };
 
         const initBeaconPathHealth = () => {
@@ -1463,6 +1489,7 @@
 
         initSymbolPicker();
         initLengthCounters();
+        initUppercaseInputs();
         initBeaconPathHealth();
         initLocationPicker();
         initPhgGenerator();

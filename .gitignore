@@ -3,10 +3,25 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
 .venv/
 venv/
+
+# Local SQLite runtime databases and sidecar files.
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
 data/
 logs/
 config/
 backups/
-
+/docs

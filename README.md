@@ -62,6 +62,8 @@ curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install
   env APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git APRSBOX_GIT_BRANCH=main sh
 ```
 
+The Alpine installer uses BusyBox user-management tools and Alpine's preferred `doas`, so it does not require the `shadow` or `sudo` packages.
+
 **Raspberry Pi OS / Debian / Debian-like** (use `sudo`):
 
 ```bash
@@ -145,6 +147,8 @@ Alpine Linux:
 curl -fsSL https://raw.githubusercontent.com/SQ9MDD/APRSBox/main/scripts/install.sh | \
   env APRSBOX_GIT_URL=https://github.com/SQ9MDD/APRSBox.git APRSBOX_GIT_BRANCH=main sh
 ```
+
+Instalator dla Alpine używa narzędzi BusyBox do zarządzania użytkownikami oraz zalecanego w Alpine `doas`, dlatego nie wymaga pakietów `shadow` ani `sudo`.
 
 Raspberry Pi OS / Debian:
 

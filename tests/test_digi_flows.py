@@ -8,6 +8,7 @@ from pathlib import Path
 from app.db import connect, fetch_one, init_db
 from app.services.content import get_section_row, safe_update_section_row
 from app.services.digi_flows import (
+    FILTER_STEP_TYPES,
     create_digi_flow,
     get_digi_flow,
     get_digi_flow_endpoint_options,
@@ -152,6 +153,30 @@ def sample_local_tx_flow_payload(
 
 
 class DigiFlowsTests(unittest.TestCase):
+    def test_digi_flows_template_includes_help_and_footer_create_action(self) -> None:
+        template_source = Path("app/templates/digi_flows.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/packet_routing"', template_source)
+        self.assertIn('class="help-icon-button page-help-button"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+
+        table_index = template_source.index('<div class="table-wrap">')
+        create_action_index = template_source.index('{{ t("New routing flow") }}')
+        self.assertGreater(create_action_index, table_index)
+
+    def test_digi_flow_form_template_includes_detailed_help(self) -> None:
+        template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/packet_routing_flow"', template_source)
+        self.assertIn('class="help-icon-button page-help-button"', template_source)
+        self.assertNotIn('data-help-autoload="1"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+
+        script_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
+        self.assertNotIn('data-help-autoload="1"', script_source)
+
     def test_init_db_creates_digi_flow_tables_and_allows_duplicate_route_pairs(self) -> None:
         with temporary_database():
             connection = connect()
@@ -457,6 +482,7 @@ class DigiFlowsTests(unittest.TestCase):
             type_meta = get_digi_flow_type_meta()
             self.assertEqual(type_meta["filter_path"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
+            self.assertEqual(type_meta["filter_path"]["help_page"], "application/packet_routing_flow_path_rule_and_digi_guard")
             self.assertIn("WIDE1-1", type_meta["filter_path"]["config_fields"][1]["help_lines"])
             self.assertEqual(type_meta["filter_direct_only"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_direct_only"]["runtime_label"], "Runtime")
@@ -470,6 +496,41 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_distance"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_rate_limit"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_rate_limit"]["config_fields"][0]["name"], "rate_limit_rules_text")
+            self.assertEqual(type_meta["action_log"]["help_page"], "application/packet_routing_flow_black_hole")
+            palette_types = [step_type for step_type in FILTER_STEP_TYPES if step_type != "filter_rate_limit_per_callsign"]
+            palette_labels = [type_meta[step_type]["label"] for step_type in palette_types]
+            self.assertEqual(len(palette_labels), len(set(palette_labels)))
+            mandatory_rules = {
+                "filter_rf_guard",
+                "filter_aprsis_message_delivery",
+                "filter_allow_rules",
+                "filter_rf_tx_guard",
+                "filter_path",
+                "filter_strict",
+            }
+            for step_type in palette_types:
+                expected_kind = "rule" if step_type in mandatory_rules else "filter"
+                expected_badge = "Rule" if step_type in mandatory_rules else "Filter"
+                self.assertEqual(type_meta[step_type]["palette_kind"], expected_kind)
+                self.assertEqual(type_meta[step_type]["badge"], expected_badge)
+                self.assertTrue(type_meta[step_type]["scope_label"])
+                self.assertTrue(type_meta[step_type]["scope_tone"])
+            self.assertEqual(type_meta["filter_path"]["scope_label"], "RF → RF")
+            self.assertEqual(type_meta["filter_rf_guard"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(type_meta["filter_aprsis_message_delivery"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(type_meta["filter_aprsis_message_delivery"]["config_fields"], [])
+            self.assertEqual(
+                type_meta["filter_aprsis_message_delivery"]["help_page"],
+                "application/packet_routing_flow_aprsis_message_delivery_rule",
+            )
+            self.assertEqual(type_meta["filter_allow_rules"]["scope_label"], "APRS-IS → RF")
+            self.assertEqual(
+                type_meta["filter_allow_rules"]["help_page"],
+                "application/packet_routing_flow_aprsis_callsign_radius_rule",
+            )
+            self.assertEqual(type_meta["filter_direct_only"]["scope_label"], "RF → RF")
+            self.assertEqual(type_meta["filter_callsign"]["scope_label"], "RF → RF")
+            self.assertEqual(type_meta["filter_strict"]["scope_label"], "RF → APRS-IS")
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():

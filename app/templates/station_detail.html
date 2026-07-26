@@ -44,6 +44,8 @@
                     {% if station.last_heard_relative %}<span class="muted">({{ station.last_heard_relative }})</span>{% endif %}
                     {% if station.source %}<span class="muted"> • {{ t("Source") }} {{ station.source }}</span>{% endif %}
                     {% if station.path %}<span class="muted"> • {{ t("Path") }} {{ station.path }}</span>{% endif %}
+                    {% if station.last_heard_rf_at %}<span class="muted"> • {{ t("Last heard via RF") }} {{ station.last_heard_rf_date }}{% if station.last_heard_rf_relative %} ({{ station.last_heard_rf_relative }}){% endif %}</span>{% endif %}
+                    {% if station.last_seen_aprsis_at %}<span class="muted"> • {{ t("Last seen via APRS-IS") }} {{ station.last_seen_aprsis_date }}{% if station.last_seen_aprsis_relative %} ({{ station.last_seen_aprsis_relative }}){% endif %}</span>{% endif %}
                 </p>
             </div>
             {% if current_user.role in ("admin", "operator") %}

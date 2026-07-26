@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 {% if flash %}
 <section class="panel">
@@ -15,6 +19,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("Notification transports") }}</h2>
             </div>
+            <button
+                class="help-icon-button page-help-button"
+                type="button"
+                data-help-page="application/notifications"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <div class="grid two">
             <div class="table-wrap">
@@ -251,38 +264,42 @@
             {% endif %}
         </div>
 
-        <div class="table-wrap" style="margin-top: 1rem;">
-            <div class="panel-header" style="padding: 0 0 0.75rem 0;">
+        <div class="panel-subsection">
+            <div class="panel-subsection-header">
                 <div class="panel-header-copy">
-                    <h3 style="margin: 0; font-size: 1.1rem;">{{ t("Radar event log") }}</h3>
+                    <h3>{{ t("Radar event log") }}</h3>
                 </div>
             </div>
-            <table class="data-table compact-table">
-                <thead>
-                    <tr>
-                        <th>{{ t("Time (UTC)") }}</th>
-                        <th>{{ t("Message") }}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for log_row in notification_radar_event_logs %}
-                    <tr>
-                        <td>{{ format_datetime(log_row.created_at, use_utc=True) }}</td>
-                        <td><code>{{ log_row.message }}</code></td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="2">{{ t("No records yet.") }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrap">
+                <table class="data-table compact-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t("Time (UTC)") }}</th>
+                            <th>{{ t("Message") }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log_row in notification_radar_event_logs %}
+                        <tr>
+                            <td>{{ format_datetime(log_row.created_at, use_utc=True) }}</td>
+                            <td><code>{{ log_row.message }}</code></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="2">{{ t("No records yet.") }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </section>
+{% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script>
     (() => {
         const form = document.querySelector("[data-notification-transport-form]");

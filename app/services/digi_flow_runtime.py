@@ -6,6 +6,7 @@ import math
 import re
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,8 +22,35 @@ from app.services.aprsis import (
     record_aprsis_tx_result,
 )
 from app.services.content import get_station_settings, parse_tnc2_frame
-from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, list_enabled_digi_flows, log_digi_flow_event
-from app.services.outbound import enqueue_digi_tx_job
+from app.services.aprsis_rf import (
+    ALLOW_RULES_STEP_TYPE,
+    APRSIS_FLOW_SOURCE_KIND,
+    MESSAGE_DELIVERY_STEP_TYPE,
+    RF_GUARD_DEFAULTS,
+    RF_GUARD_STEP_TYPE,
+    RF_TX_GUARD_STEP_TYPE,
+    aprsis_rf_guard_reject_reason,
+    logical_packet_hash,
+    matches_default_deny_filter,
+    normalize_default_deny_config,
+    normalize_rf_guard_config,
+    record_aprsis_rf_stat,
+    validate_aprsis_rf_target,
+)
+from app.services.igate_messaging import (
+    clear_pending_sender_position,
+    evaluate_message_delivery,
+    mark_pending_sender_position,
+    message_return_capable_for_rf_source,
+)
+from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, get_digi_flow, list_enabled_digi_flows, log_digi_flow_event
+from app.services.outbound import (
+    APRSIS_TO_RF_ORIGIN,
+    build_aprsis_third_party_tnc2,
+    enqueue_digi_tx_job,
+    persist_outbound_frame,
+)
+from app.services.traffic_source import APRSIS_SOURCE_KIND
 from app.services.messages import split_callsign_ssid
 
 _N_N_PATH_RE = re.compile(r"^(?P<alias>[A-Z0-9]+)(?P<width>\d+)-(?P<remaining>\d+)$")
@@ -70,8 +98,42 @@ class _ViscousDelayEntry:
     cleanup_task: asyncio.Task[None] | None = None
 
 
+@dataclass
+class _AprsisRfSeenEntry:
+    is_seen_at: float | None = None
+    is_frame_uid: str | None = None
+    rf_seen_at: float | None = None
+    queued_at: float | None = None
+
+
+@dataclass
+class _AprsisRfPendingEntry:
+    flow_id: int
+    guard_step_id: int | None
+    target_step_id: int
+    packet_hash: str
+    source_callsign: str
+    context: dict[str, Any]
+    created_at: float
+    delay_sec: float
+    cancel_event: asyncio.Event
+    cleanup_task: asyncio.Task[None] | None = None
+
+
+@dataclass
+class _TokenBucket:
+    tokens: float
+    updated_at: float
+
+
 class DigiFlowRuntimeService:
-    def __init__(self, *, poll_interval: float = 0.5, aprsis_client: AprsisClientService | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        poll_interval: float = 0.5,
+        aprsis_client: AprsisClientService | None = None,
+        aprsis_rf_delay_override: float | None = None,
+    ) -> None:
         self._poll_interval = poll_interval
         self._aprsis_client = aprsis_client
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
@@ -80,7 +142,13 @@ class DigiFlowRuntimeService:
         self._viscous_delay_lock = asyncio.Lock()
         self._viscous_delay_entries: dict[tuple[int, int, str, str], _ViscousDelayEntry] = {}
         self._pending_viscous_wait_count = 0
-        self._rate_limit_last_passed: dict[tuple[int, int, str], float] = {}
+        self._rate_limit_last_passed: dict[tuple[int, int, str, str], float] = {}
+        self._aprsis_rf_delay_override = aprsis_rf_delay_override
+        self._aprsis_rf_seen: OrderedDict[str, _AprsisRfSeenEntry] = OrderedDict()
+        self._aprsis_rf_pending: dict[tuple[int, str], _AprsisRfPendingEntry] = {}
+        self._aprsis_rf_flow_buckets: dict[tuple[int, str], _TokenBucket] = {}
+        self._aprsis_rf_source_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
+        self._aprsis_rf_recipient_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
 
     async def start(self) -> None:
         if self._task is not None:
@@ -100,6 +168,21 @@ class DigiFlowRuntimeService:
             self._viscous_delay_entries.clear()
             self._pending_viscous_wait_count = 0
             self._rate_limit_last_passed.clear()
+        aprsis_rf_tasks = [
+            entry.cleanup_task
+            for entry in self._aprsis_rf_pending.values()
+            if entry.cleanup_task is not None and not entry.cleanup_task.done()
+        ]
+        self._aprsis_rf_pending.clear()
+        self._aprsis_rf_seen.clear()
+        self._aprsis_rf_flow_buckets.clear()
+        self._aprsis_rf_source_buckets.clear()
+        self._aprsis_rf_recipient_buckets.clear()
+        for task in aprsis_rf_tasks:
+            task.cancel()
+        for task in aprsis_rf_tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         for task in cleanup_tasks:
             task.cancel()
         for task in cleanup_tasks:
@@ -119,7 +202,7 @@ class DigiFlowRuntimeService:
         while True:
             async with self._viscous_delay_lock:
                 pending = self._pending_viscous_wait_count
-            if pending <= 0:
+            if pending <= 0 and not self._aprsis_rf_pending:
                 return
             await asyncio.sleep(0.01)
 
@@ -146,8 +229,9 @@ class DigiFlowRuntimeService:
             metadata=metadata,
         )
         self._queue.put_nowait(frame)
+        source_is_aprsis = str(frame["source_kind"]) == APRSIS_FLOW_SOURCE_KIND
         log_event(
-            "INFO",
+            "DEBUG" if source_is_aprsis else "INFO",
             "digi_flow_runtime",
             (
                 "Enqueued DIGI Flow frame "
@@ -170,6 +254,18 @@ class DigiFlowRuntimeService:
         rx_received_at: str | None = None,
         rx_received_monotonic: float | None = None,
     ) -> None:
+        parsed = parse_tnc2_frame(line)
+        packet_hash = logical_packet_hash(parsed)
+        if packet_hash:
+            now = time.monotonic()
+            self._prune_aprsis_rf_state(now)
+            seen = self._aprsis_rf_seen.setdefault(packet_hash, _AprsisRfSeenEntry())
+            seen.rf_seen_at = now
+            self._aprsis_rf_seen.move_to_end(packet_hash)
+            for (pending_flow_id, pending_hash), entry in list(self._aprsis_rf_pending.items()):
+                _ = pending_flow_id
+                if pending_hash == packet_hash:
+                    entry.cancel_event.set()
         matching_flows = self._matching_flows(source_kind="receiver_rf", source_ref=source_ref)
         if not matching_flows:
             log_event(
@@ -184,6 +280,36 @@ class DigiFlowRuntimeService:
             raw_payload=line,
             created_at=rx_received_at,
             rx_received_monotonic=rx_received_monotonic,
+        )
+
+    def enqueue_aprsis_tnc2_frame(
+        self,
+        line: str,
+        *,
+        source_ref: str,
+        source_interface_id: int | None = None,
+        rx_received_at: str | None = None,
+        rx_received_monotonic: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        matching_flows = self._matching_flows(source_kind=APRSIS_FLOW_SOURCE_KIND, source_ref=source_ref)
+        if not matching_flows:
+            log_event(
+                "DEBUG",
+                "digi_flow_runtime",
+                f"Ignored APRS-IS frame for interface {source_ref}: no enabled Packet Routing flow matched.",
+            )
+            return
+        normalized_metadata = dict(metadata or {})
+        if source_interface_id is not None:
+            normalized_metadata["aprsis_interface_id"] = int(source_interface_id)
+        self.enqueue_tnc2_frame(
+            source_kind=APRSIS_FLOW_SOURCE_KIND,
+            source_ref=source_ref,
+            raw_payload=line,
+            created_at=rx_received_at,
+            rx_received_monotonic=rx_received_monotonic,
+            metadata=normalized_metadata,
         )
 
     async def _run(self) -> None:
@@ -211,6 +337,8 @@ class DigiFlowRuntimeService:
 
         for flow in flows:
             flow_id = int(flow["id"])
+            if str(frame.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
+                record_aprsis_rf_stat(flow_id, "received_from_aprsis")
             flow_name = str(flow.get("name") or f"flow-{flow_id}")
             source_label = f"{frame['source_kind']}:{frame['source_ref']}"
             log_digi_flow_event(
@@ -242,6 +370,7 @@ class DigiFlowRuntimeService:
                 "raw_payload": str(frame["raw_payload"]),
                 "current_line": str(frame["raw_payload"]),
                 "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
+                "original_parsed": dict(frame["parsed"]) if frame["parsed"] else None,
                 "metadata": dict(frame.get("metadata") or {}),
             }
             await self._execute_flow(context)
@@ -317,7 +446,20 @@ class DigiFlowRuntimeService:
                 decision="continue",
                 message=f"Source step confirmed for {context['source_kind']}:{context['source_ref']}.",
             )
+            if step_type == APRSIS_FLOW_SOURCE_KIND and not any(
+                str(candidate.get("step_type") or "") == RF_GUARD_STEP_TYPE
+                for candidate in list(context["flow"].get("steps") or [])[1:-1]
+            ):
+                return self._execute_aprsis_rf_input_guard(context, None)
             return {"decision": "continue"}
+        if step_type == RF_GUARD_STEP_TYPE:
+            return self._execute_aprsis_rf_input_guard(context, step)
+        if step_type == MESSAGE_DELIVERY_STEP_TYPE:
+            return self._execute_aprsis_message_delivery(context, step)
+        if step_type == RF_TX_GUARD_STEP_TYPE:
+            return self._execute_aprsis_rf_tx_guard(context, step)
+        if step_type == ALLOW_RULES_STEP_TYPE:
+            return self._execute_aprsis_allow_rules(context, step)
         if step_type == "filter_dupe":
             return await self._execute_duplicate_filter(context, step, step_index=step_index)
         if step_type == "filter_callsign":
@@ -339,11 +481,20 @@ class DigiFlowRuntimeService:
         if step_type == "filter_rate_limit":
             return self._execute_rate_limit_filter(context, step)
         if step_type == "action_log":
+            deny_result = self._aprsis_default_deny_result(context, step)
+            if deny_result is not None:
+                return deny_result
             return self._execute_log_only(context, step)
         if step_type == "action_drop":
+            deny_result = self._aprsis_default_deny_result(context, step)
+            if deny_result is not None:
+                return deny_result
             return self._execute_drop(context, step)
         if step_type == "tx_rf":
-            return self._execute_tx_rf(context, step)
+            deny_result = self._aprsis_default_deny_result(context, step)
+            if deny_result is not None:
+                return deny_result
+            return await self._execute_tx_rf(context, step)
         if step_type == "tx_aprsis":
             return await self._execute_tx_aprsis(context, step)
 
@@ -356,6 +507,343 @@ class DigiFlowRuntimeService:
             message=f"Step type {step_type} is not implemented in ETAP 2 and was skipped.",
         )
         return {"decision": "continue"}
+
+    def _execute_aprsis_rf_input_guard(
+        self,
+        context: dict[str, Any],
+        step: dict[str, Any] | None,
+    ) -> dict[str, str]:
+        if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
+            return {"decision": "continue"}
+        if bool(context.get("aprsis_rf_guard_input_checked")):
+            return {"decision": "continue"}
+
+        flow = dict(context.get("flow") or {})
+        flow_id = int(flow["id"])
+        step_id = _optional_int((step or {}).get("id"))
+        tx_guard_step = next(
+            (
+                candidate
+                for candidate in list(flow.get("steps") or [])[1:-1]
+                if str(candidate.get("step_type") or "") == RF_TX_GUARD_STEP_TYPE
+            ),
+            None,
+        )
+        try:
+            guard_config = normalize_rf_guard_config(
+                (tx_guard_step or {}).get("config")
+                or (step or {}).get("config")
+                or RF_GUARD_DEFAULTS
+            )
+        except ValueError:
+            guard_config = dict(RF_GUARD_DEFAULTS)
+        context["aprsis_rf_guard_config"] = guard_config
+
+        target_kind = str(flow.get("target_kind") or "").strip()
+        if target_kind not in {"tx_rf", "action_drop", "action_log"}:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=step_id,
+                reason_code="invalid_target_type",
+                stat_counter="dropped_safety_guard",
+            )
+        if target_kind == "tx_rf":
+            _target, target_reason = validate_aprsis_rf_target(flow.get("target_ref"), require_active=True)
+            if target_reason:
+                return self._drop_aprsis_rf(
+                    context,
+                    step_id=step_id,
+                    reason_code=target_reason,
+                    stat_counter="dropped_safety_guard",
+                )
+
+        parsed = context.get("parsed")
+        reject_reason = aprsis_rf_guard_reject_reason(parsed)
+        if reject_reason:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=step_id,
+                reason_code=reject_reason,
+                stat_counter="dropped_safety_guard",
+            )
+
+        packet_hash = logical_packet_hash(parsed)
+        if not packet_hash:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=step_id,
+                reason_code="invalid_aprs",
+                stat_counter="dropped_safety_guard",
+            )
+        now = time.monotonic()
+        self._prune_aprsis_rf_state(now)
+        seen = self._aprsis_rf_seen.setdefault(packet_hash, _AprsisRfSeenEntry())
+        duplicate_window = float(guard_config["duplicate_window_sec"])
+        if seen.rf_seen_at is not None and now - seen.rf_seen_at <= duplicate_window:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=step_id,
+                reason_code="duplicate_rf_seen",
+                stat_counter="dropped_duplicate",
+            )
+        if seen.queued_at is not None and now - seen.queued_at <= duplicate_window:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=step_id,
+                reason_code="duplicate_is_seen",
+                stat_counter="dropped_duplicate",
+            )
+        frame_uid = str(context.get("frame_uid") or "")
+        if (
+            seen.is_seen_at is not None
+            and seen.is_frame_uid != frame_uid
+            and now - seen.is_seen_at <= duplicate_window
+        ):
+            return self._drop_aprsis_rf(
+                context,
+                step_id=step_id,
+                reason_code="duplicate_is_seen",
+                stat_counter="dropped_duplicate",
+            )
+        seen.is_seen_at = now
+        seen.is_frame_uid = frame_uid
+        self._aprsis_rf_seen.move_to_end(packet_hash)
+        context["normalized_packet_hash"] = packet_hash
+        context["aprsis_rf_guard_input_checked"] = True
+        log_digi_flow_event(
+            frame_uid=frame_uid,
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="rf_guard",
+            decision="passed",
+            message=f"APRS-IS Input Safety Rule passed | normalized_packet_hash={packet_hash[:16]}",
+        )
+        return {"decision": "continue"}
+
+    def _execute_aprsis_rf_tx_guard(
+        self,
+        context: dict[str, Any],
+        step: dict[str, Any],
+    ) -> dict[str, str]:
+        if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
+            return {"decision": "continue"}
+
+        if not bool(context.get("aprsis_rf_guard_input_checked")):
+            input_step = next(
+                (
+                    candidate
+                    for candidate in list(context["flow"].get("steps") or [])[1:-1]
+                    if str(candidate.get("step_type") or "") == RF_GUARD_STEP_TYPE
+                ),
+                None,
+            )
+            input_result = self._execute_aprsis_rf_input_guard(context, input_step)
+            if input_result["decision"] != "continue":
+                return input_result
+
+        deny_result = self._aprsis_default_deny_result(context, step)
+        if deny_result is not None:
+            return deny_result
+
+        try:
+            guard_config = normalize_rf_guard_config(dict(step.get("config") or {}))
+        except ValueError:
+            guard_config = dict(RF_GUARD_DEFAULTS)
+        context["aprsis_rf_guard_config"] = guard_config
+
+        target_step = next(
+            (
+                candidate
+                for candidate in reversed(list(context["flow"].get("steps") or []))
+                if str(candidate.get("step_type") or "") == "tx_rf"
+            ),
+            None,
+        )
+        if target_step is None:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=_optional_int(step.get("id")),
+                reason_code="invalid_target_type",
+                stat_counter="dropped_safety_guard",
+                event_type="rf_tx_guard",
+            )
+        return self._schedule_aprsis_rf_pending(context, step, target_step)
+
+    def _execute_aprsis_message_delivery(
+        self,
+        context: dict[str, Any],
+        step: dict[str, Any],
+    ) -> dict[str, str]:
+        if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
+            return {"decision": "continue"}
+        flow = dict(context.get("flow") or {})
+        flow_id = int(flow["id"])
+        step_id = int(step["id"])
+        result = evaluate_message_delivery(
+            context.get("parsed"),
+            flow_id=flow_id,
+            local_igate=_local_station_identity(),
+        )
+        route = str(result.get("route") or "")
+        reason = str(result.get("reason") or "message_policy_rejected")
+        context["aprsis_message_delivery_result"] = dict(result)
+
+        if route == "not_applicable":
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="message_delivery",
+                decision="skipped",
+                message=_t(
+                    "APRS-IS Message Delivery Rule skipped: packet is not message traffic; "
+                    "continuing to the callsign-and-radius rule."
+                ),
+            )
+            return {"decision": "continue"}
+
+        if route in {"message", "associated_position"}:
+            context["aprsis_route_authorization"] = route
+            context["aprsis_default_deny_filter_matched"] = True
+            stat_counter = (
+                "matched_message_rule"
+                if route == "message"
+                else "matched_associated_position"
+            )
+            record_aprsis_rf_stat(flow_id, stat_counter)
+            if route == "message":
+                message = (
+                    "APRS-IS Message Delivery Rule passed "
+                    f"| route=igate_message sender={result.get('sender') or '-'} "
+                    f"recipient={result.get('recipient') or '-'} "
+                    f"heard_interface={result.get('heard_interface') or '-'} "
+                    f"heard_age={int(result.get('heard_age_seconds') or 0)}s "
+                    f"consumed_hops={int(result.get('consumed_hops') or 0)}"
+                )
+            else:
+                message = (
+                    "APRS-IS Message Delivery Rule passed "
+                    f"| route=associated_position sender={result.get('sender') or '-'}"
+                )
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="message_delivery",
+                decision="passed",
+                message=message,
+            )
+            return {"decision": "continue"}
+
+        stat_counter = {
+            "message_recipient_seen_internet": "dropped_recipient_seen_internet",
+            "message_sender_heard_local_rf": "dropped_sender_heard_rf",
+        }.get(reason, "dropped_recipient_not_local")
+        return self._drop_aprsis_rf(
+            context,
+            step_id=step_id,
+            reason_code=reason,
+            stat_counter=stat_counter,
+            event_type="message_delivery",
+        )
+
+    def _execute_aprsis_allow_rules(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
+            return {"decision": "continue"}
+        flow_id = int(context["flow"]["id"])
+        step_id = int(step["id"])
+        route_authorization = str(context.get("aprsis_route_authorization") or "")
+        if route_authorization in {"message", "associated_position"}:
+            context["aprsis_default_deny_filter_matched"] = True
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="inclusive_allow_rules",
+                decision="bypassed",
+                message=(
+                    "APRS-IS Callsign and Radius Rule bypassed because the mandatory "
+                    f"message-delivery route already authorized this packet ({route_authorization})."
+                ),
+            )
+            return {"decision": "continue"}
+        try:
+            config = normalize_default_deny_config(dict(step.get("config") or {}))
+        except ValueError:
+            config = normalize_default_deny_config({})
+        matched = matches_default_deny_filter(
+            context.get("parsed"),
+            config,
+            get_station_settings(),
+        )
+        if not matched:
+            context["aprsis_default_deny_filter_matched"] = False
+            return self._drop_aprsis_rf(
+                context,
+                step_id=step_id,
+                reason_code="default_deny_filter_mismatch",
+                stat_counter="dropped_no_allow_rule",
+                event_type="inclusive_allow_rules",
+            )
+        context["aprsis_default_deny_filter_matched"] = True
+        record_aprsis_rf_stat(flow_id, "matched_allow_rule")
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type="inclusive_allow_rules",
+            decision="passed",
+            message="APRS-IS Callsign and Radius Rule matched exact callsign AND radius from My Station.",
+        )
+        return {"decision": "continue"}
+
+    def _aprsis_default_deny_result(
+        self,
+        context: dict[str, Any],
+        step: dict[str, Any],
+    ) -> dict[str, str] | None:
+        if str(context.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND:
+            return None
+        if str(context.get("aprsis_route_authorization") or "") in {
+            "message",
+            "associated_position",
+        }:
+            return None
+        if bool(context.get("aprsis_default_deny_filter_matched")):
+            return None
+        return self._drop_aprsis_rf(
+            context,
+            step_id=_optional_int(step.get("id")),
+            reason_code="default_deny_filter_mismatch",
+            stat_counter="dropped_no_allow_rule",
+            event_type="inclusive_allow_rules",
+        )
+
+    def _drop_aprsis_rf(
+        self,
+        context: dict[str, Any],
+        *,
+        step_id: int | None,
+        reason_code: str,
+        stat_counter: str,
+        event_type: str = "rf_guard",
+    ) -> dict[str, str]:
+        flow_id = int(context["flow"]["id"])
+        record_aprsis_rf_stat(flow_id, stat_counter)
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=step_id,
+            event_type=event_type,
+            decision="rejected",
+            message=f"DROP reason={reason_code}",
+        )
+        log_event(
+            "DEBUG",
+            "aprsis_rf",
+            f"DROP reason={reason_code} flow_id={flow_id} line={str(context.get('raw_payload') or '')}",
+        )
+        return {"decision": "drop"}
 
     async def _execute_duplicate_filter(self, context: dict[str, Any], step: dict[str, Any], *, step_index: int) -> dict[str, str]:
         parsed = context.get("parsed")
@@ -615,7 +1103,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS payload starts with third-party encapsulation marker {marker}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because APRS payload starts with third-party encapsulation marker {marker}.",
                     {"reason_code": DIGI_GUARD_THIRD_PARTY, "marker": "}"},
                 ),
             )
@@ -635,7 +1123,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS message is addressed to local {identity_label} {local_identity}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because APRS message is addressed to local {identity_label} {local_identity}.",
                     {
                         "reason_code": reason_code,
                         "identity_label": identity_label,
@@ -659,7 +1147,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because APRS query is addressed to local {identity_label} {local_identity}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because APRS query is addressed to local {identity_label} {local_identity}.",
                     {
                         "reason_code": reason_code,
                         "identity_label": identity_label,
@@ -708,7 +1196,7 @@ class DigiFlowRuntimeService:
                 event_type="path_rule",
                 decision="rejected",
                 message=_tf(
-                    "Path rule and DIGI guard rejected frame ({reason_code}) because local identity {local_identity} is already marked as consumed in path {path}.",
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because local identity {local_identity} is already marked as consumed in path {path}.",
                     {
                         "reason_code": DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL,
                         "local_identity": consumed_identity,
@@ -1195,7 +1683,7 @@ class DigiFlowRuntimeService:
                 event_type="filter_rate_limit",
                 decision="passed",
                 message=_tf(
-                    "Rate limit filter skipped frame because source callsign {callsign} did not match any configured rule.",
+                    "Transmission Rate Filter skipped frame because source callsign {callsign} did not match any configured rule.",
                     {"callsign": source_callsign or "-"},
                 ),
             )
@@ -1204,7 +1692,8 @@ class DigiFlowRuntimeService:
         rate_limit_seconds = int(matched_rule["rate_limit_seconds"])
         matched_pattern = str(matched_rule["source_callsign_pattern"])
         now = time.monotonic()
-        state_key = (flow_id, step_id, matched_pattern, source_callsign)
+        timer_scope = "*" if matched_pattern == "*" else source_callsign
+        state_key = (flow_id, step_id, matched_pattern, timer_scope)
         last_passed = self._rate_limit_last_passed.get(state_key)
         if last_passed is not None:
             elapsed_seconds = now - last_passed
@@ -1216,7 +1705,7 @@ class DigiFlowRuntimeService:
                     event_type="filter_rate_limit",
                     decision="rejected",
                     message=_tf(
-                        "Rate limit filter blocked frame for source callsign {callsign} with pattern {pattern} because only {elapsed_seconds}s elapsed since the last passed frame; limit is {rate_limit_seconds}s.",
+                        "Transmission Rate Filter blocked frame for source callsign {callsign} with pattern {pattern} because only {elapsed_seconds}s elapsed since the last passed frame; limit is {rate_limit_seconds}s.",
                         {
                             "callsign": source_callsign or "-",
                             "pattern": matched_pattern,
@@ -1235,7 +1724,7 @@ class DigiFlowRuntimeService:
                 event_type="filter_rate_limit",
                 decision="passed",
                 message=_tf(
-                    "Rate limit filter passed for source callsign {callsign} with pattern {pattern} after {elapsed_seconds}s since the last passed frame; limit is {rate_limit_seconds}s.",
+                    "Transmission Rate Filter passed for source callsign {callsign} with pattern {pattern} after {elapsed_seconds}s since the last passed frame; limit is {rate_limit_seconds}s.",
                     {
                         "callsign": source_callsign or "-",
                         "pattern": matched_pattern,
@@ -1254,7 +1743,7 @@ class DigiFlowRuntimeService:
             event_type="filter_rate_limit",
             decision="passed",
             message=_tf(
-                "Rate limit filter passed for source callsign {callsign} with pattern {pattern} because no previous frame has been allowed yet; limit is {rate_limit_seconds}s.",
+                "Transmission Rate Filter passed for source callsign {callsign} with pattern {pattern} because no previous frame has been allowed yet; limit is {rate_limit_seconds}s.",
                 {
                     "callsign": source_callsign or "-",
                     "pattern": matched_pattern,
@@ -1293,7 +1782,15 @@ class DigiFlowRuntimeService:
         )
         return {"decision": "drop"}
 
-    def _execute_tx_rf(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+    async def _execute_tx_rf(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
+        if str(context.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
+            input_result = self._execute_aprsis_rf_input_guard(context, None)
+            if input_result["decision"] != "continue":
+                return input_result
+            deny_result = self._aprsis_default_deny_result(context, step)
+            if deny_result is not None:
+                return deny_result
+            return self._schedule_aprsis_rf_pending(context, None, step)
         config = dict(step.get("config") or {})
         target = str(config.get("rf_target") or "").strip()
         success, detail = enqueue_digi_tx_job(
@@ -1319,6 +1816,380 @@ class DigiFlowRuntimeService:
             message=f"{message} | line={context['current_line']}",
         )
         return {"decision": decision}
+
+    def _schedule_aprsis_rf_pending(
+        self,
+        context: dict[str, Any],
+        guard_step: dict[str, Any] | None,
+        target_step: dict[str, Any],
+    ) -> dict[str, str]:
+        flow_id = int(context["flow"]["id"])
+        guard_step_id = _optional_int((guard_step or {}).get("id"))
+        target_step_id = int(target_step["id"])
+        packet_hash = str(context.get("normalized_packet_hash") or "").strip()
+        if not packet_hash:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=guard_step_id,
+                reason_code="invalid_aprs",
+                stat_counter="dropped_safety_guard",
+                event_type="rf_tx_guard",
+            )
+        target = str(dict(target_step.get("config") or {}).get("rf_target") or "").strip()
+        _target_row, target_reason = validate_aprsis_rf_target(target, require_active=True)
+        if target_reason:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=guard_step_id,
+                reason_code=target_reason,
+                stat_counter="dropped_safety_guard",
+                event_type="rf_tx_guard",
+            )
+        pending_key = (flow_id, packet_hash)
+        if any(pending_hash == packet_hash for _pending_flow_id, pending_hash in self._aprsis_rf_pending):
+            return self._drop_aprsis_rf(
+                context,
+                step_id=guard_step_id,
+                reason_code="already_pending",
+                stat_counter="dropped_duplicate",
+                event_type="rf_tx_guard",
+            )
+        if len(self._aprsis_rf_pending) >= 256 or sum(1 for key in self._aprsis_rf_pending if key[0] == flow_id) >= 64:
+            return self._drop_aprsis_rf(
+                context,
+                step_id=guard_step_id,
+                reason_code="rate_limit_flow",
+                stat_counter="dropped_rate_limit",
+                event_type="rf_tx_guard",
+            )
+
+        guard_config = dict(context.get("aprsis_rf_guard_config") or RF_GUARD_DEFAULTS)
+        delay_sec = float(guard_config.get("viscous_delay_sec") or RF_GUARD_DEFAULTS["viscous_delay_sec"])
+        if self._aprsis_rf_delay_override is not None:
+            delay_sec = max(0.0, float(self._aprsis_rf_delay_override))
+        parsed = dict(context.get("original_parsed") or context.get("parsed") or {})
+        source_callsign = str(parsed.get("source") or "").strip().upper()
+        entry = _AprsisRfPendingEntry(
+            flow_id=flow_id,
+            guard_step_id=guard_step_id,
+            target_step_id=target_step_id,
+            packet_hash=packet_hash,
+            source_callsign=source_callsign,
+            context=context,
+            created_at=time.monotonic(),
+            delay_sec=delay_sec,
+            cancel_event=asyncio.Event(),
+        )
+        entry.cleanup_task = asyncio.create_task(
+            self._finalize_aprsis_rf_pending(pending_key, entry),
+            name=f"aprsbox-aprsis-rf-{flow_id}-{packet_hash[:10]}",
+        )
+        self._aprsis_rf_pending[pending_key] = entry
+        log_digi_flow_event(
+            frame_uid=context["frame_uid"],
+            flow_id=flow_id,
+            step_id=guard_step_id,
+            event_type="rf_tx_guard",
+            decision="waiting",
+            message=f"APRS-IS to RF TX Safety Rule pending viscous delay {delay_sec:g}s | normalized_packet_hash={packet_hash[:16]}",
+        )
+        return {"decision": "defer"}
+
+    async def _finalize_aprsis_rf_pending(
+        self,
+        pending_key: tuple[int, str],
+        entry: _AprsisRfPendingEntry,
+    ) -> None:
+        try:
+            try:
+                await asyncio.wait_for(entry.cancel_event.wait(), timeout=entry.delay_sec)
+                cancelled = True
+            except TimeoutError:
+                cancelled = False
+            if self._stop_event.is_set():
+                return
+            if cancelled:
+                self._finish_aprsis_rf_pending_drop(
+                    entry,
+                    reason_code="viscous_cancelled",
+                    stat_counter="cancelled_during_viscous_delay",
+                )
+                return
+
+            flow = get_digi_flow(entry.flow_id)
+            if flow is None:
+                log_event("DEBUG", "aprsis_rf", f"DROP reason=flow_disabled flow_id={entry.flow_id} (flow removed)")
+                return
+            if int(flow.get("enabled") or 0) != 1:
+                self._finish_aprsis_rf_pending_drop(entry, reason_code="flow_disabled", stat_counter="dropped_safety_guard")
+                return
+            if str(flow.get("source_kind") or "") != APRSIS_FLOW_SOURCE_KIND or str(flow.get("target_kind") or "") != "tx_rf":
+                self._finish_aprsis_rf_pending_drop(entry, reason_code="invalid_target_type", stat_counter="dropped_safety_guard")
+                return
+
+            target_step = next(
+                (step for step in reversed(list(flow.get("steps") or [])) if str(step.get("step_type") or "") == "tx_rf"),
+                None,
+            )
+            if target_step is None:
+                self._finish_aprsis_rf_pending_drop(entry, reason_code="invalid_target_type", stat_counter="dropped_safety_guard")
+                return
+            target_config = dict(target_step.get("config") or {})
+            target_name = str(target_config.get("rf_target") or flow.get("target_ref") or "").strip()
+            target_row, target_reason = validate_aprsis_rf_target(target_name, require_active=True)
+            if target_reason or target_row is None:
+                self._finish_aprsis_rf_pending_drop(
+                    entry,
+                    reason_code=target_reason or "target_unavailable",
+                    stat_counter="dropped_safety_guard",
+                )
+                return
+
+            guard_step = next(
+                (
+                    step
+                    for step in list(flow.get("steps") or [])[1:-1]
+                    if str(step.get("step_type") or "") == RF_TX_GUARD_STEP_TYPE
+                ),
+                None,
+            )
+            entry.guard_step_id = _optional_int((guard_step or {}).get("id"))
+            try:
+                guard_config = normalize_rf_guard_config((guard_step or {}).get("config") or RF_GUARD_DEFAULTS)
+            except ValueError:
+                guard_config = dict(RF_GUARD_DEFAULTS)
+
+            final_guard_reason = aprsis_rf_guard_reject_reason(
+                dict(entry.context.get("original_parsed") or entry.context.get("parsed") or {})
+            )
+            if final_guard_reason:
+                self._finish_aprsis_rf_pending_drop(
+                    entry,
+                    reason_code=final_guard_reason,
+                    stat_counter="dropped_safety_guard",
+                )
+                return
+
+            now = time.monotonic()
+            self._prune_aprsis_rf_state(now)
+            seen = self._aprsis_rf_seen.setdefault(entry.packet_hash, _AprsisRfSeenEntry())
+            duplicate_window = float(guard_config["duplicate_window_sec"])
+            if seen.rf_seen_at is not None and seen.rf_seen_at >= entry.created_at and now - seen.rf_seen_at <= duplicate_window:
+                self._finish_aprsis_rf_pending_drop(entry, reason_code="duplicate_rf_seen", stat_counter="dropped_duplicate")
+                return
+            if seen.queued_at is not None and now - seen.queued_at <= duplicate_window:
+                self._finish_aprsis_rf_pending_drop(entry, reason_code="duplicate_is_seen", stat_counter="dropped_duplicate")
+                return
+
+            limit_reason = self._consume_aprsis_rf_rate_limit(
+                flow_id=entry.flow_id,
+                source_callsign=entry.source_callsign,
+                recipient_callsign=str(
+                    dict(entry.context.get("aprsis_message_delivery_result") or {}).get("recipient")
+                    or ""
+                ),
+                route_class=str(entry.context.get("aprsis_route_authorization") or "allow_rule"),
+                config=guard_config,
+                now=now,
+            )
+            if limit_reason:
+                self._finish_aprsis_rf_pending_drop(entry, reason_code=limit_reason, stat_counter="dropped_rate_limit")
+                return
+
+            local_igate = _local_station_identity()
+            if not local_igate:
+                self._finish_aprsis_rf_pending_drop(entry, reason_code="invalid_aprs", stat_counter="dropped_safety_guard")
+                return
+            try:
+                tx_line = build_aprsis_third_party_tnc2(
+                    dict(entry.context.get("original_parsed") or entry.context.get("parsed") or {}),
+                    igate_callsign=local_igate,
+                    rf_path=str(target_config.get("rf_path") or ""),
+                )
+            except ValueError as exc:
+                reason = str(exc).strip() or "invalid_aprs"
+                if reason == "packet_too_long":
+                    self._finish_aprsis_rf_pending_drop(entry, reason_code=reason, stat_counter="dropped_oversize")
+                else:
+                    self._finish_aprsis_rf_pending_drop(entry, reason_code=reason, stat_counter="dropped_safety_guard")
+                return
+
+            log_digi_flow_event(
+                frame_uid=entry.context["frame_uid"],
+                flow_id=entry.flow_id,
+                step_id=entry.guard_step_id,
+                event_type="rf_tx_guard",
+                decision="passed",
+                message=(
+                    "APRS-IS to RF TX Safety Rule passed final duplicate, rate, target, encapsulation and packet-size checks "
+                    f"| normalized_packet_hash={entry.packet_hash[:16]}"
+                ),
+            )
+            metadata = dict(entry.context.get("metadata") or {})
+            success, detail = enqueue_digi_tx_job(
+                interface_name=target_name,
+                line=tx_line,
+                trigger=APRSIS_TO_RF_ORIGIN,
+                flow_id=entry.flow_id,
+                frame_uid=str(entry.context.get("frame_uid") or ""),
+                metadata={
+                    "origin": APRSIS_TO_RF_ORIGIN,
+                    "aprsis_interface_id": metadata.get("aprsis_interface_id"),
+                    "target_interface_id": int(target_row["id"]),
+                    "normalized_packet_hash": entry.packet_hash,
+                },
+            )
+            if not success:
+                reason = str(detail or "target_unavailable")
+                record_aprsis_rf_stat(entry.flow_id, "tx_failed")
+                log_digi_flow_event(
+                    frame_uid=entry.context["frame_uid"],
+                    flow_id=entry.flow_id,
+                    step_id=entry.target_step_id,
+                    event_type="output_action",
+                    decision="drop",
+                    message=f"Failed to queue APRS-IS to RF. reason={reason}",
+                )
+                log_event(
+                    "DEBUG",
+                    "aprsis_rf",
+                    f"DROP reason={reason} flow_id={entry.flow_id} line={str(entry.context.get('raw_payload') or '')}",
+                )
+                self._log_pipeline_finished(entry.context, decision="drop")
+                return
+            seen.queued_at = now
+            self._aprsis_rf_seen.move_to_end(entry.packet_hash)
+            record_aprsis_rf_stat(entry.flow_id, "queued_to_rf")
+            entry.context["current_line"] = tx_line
+            route_authorization = str(entry.context.get("aprsis_route_authorization") or "")
+            delivery_result = dict(entry.context.get("aprsis_message_delivery_result") or {})
+            if route_authorization == "message":
+                mark_pending_sender_position(
+                    flow_id=entry.flow_id,
+                    sender_key=str(delivery_result.get("sender") or entry.source_callsign),
+                )
+            elif route_authorization == "associated_position":
+                clear_pending_sender_position(
+                    flow_id=entry.flow_id,
+                    sender_key=str(delivery_result.get("sender") or entry.source_callsign),
+                )
+            log_digi_flow_event(
+                frame_uid=entry.context["frame_uid"],
+                flow_id=entry.flow_id,
+                step_id=entry.target_step_id,
+                event_type="output_action",
+                decision="tx",
+                message=f"Queued APRS-IS to RF through existing outbound queue. {detail} | line={tx_line}",
+            )
+            self._log_pipeline_finished(entry.context, decision="tx")
+        finally:
+            self._aprsis_rf_pending.pop(pending_key, None)
+
+    def _finish_aprsis_rf_pending_drop(
+        self,
+        entry: _AprsisRfPendingEntry,
+        *,
+        reason_code: str,
+        stat_counter: str,
+    ) -> None:
+        self._drop_aprsis_rf(
+            entry.context,
+            step_id=entry.guard_step_id,
+            reason_code=reason_code,
+            stat_counter=stat_counter,
+            event_type="rf_tx_guard",
+        )
+        self._log_pipeline_finished(entry.context, decision="drop")
+
+    def _consume_aprsis_rf_rate_limit(
+        self,
+        *,
+        flow_id: int,
+        source_callsign: str,
+        recipient_callsign: str,
+        route_class: str,
+        config: dict[str, int],
+        now: float,
+    ) -> str | None:
+        flow_rate = float(config["flow_rate_per_minute"])
+        flow_burst = float(config["flow_burst"])
+        source_rate = float(config["source_rate_per_minute"])
+        source_burst = float(config["source_burst"])
+        normalized_route = (
+            "message"
+            if route_class in {"message", "associated_position"}
+            else "allow_rule"
+        )
+        flow_bucket = self._refill_token_bucket(
+            self._aprsis_rf_flow_buckets,
+            (flow_id, normalized_route),
+            rate_per_minute=flow_rate,
+            burst=flow_burst,
+            now=now,
+        )
+        source_key = (flow_id, normalized_route, source_callsign)
+        source_bucket = self._refill_token_bucket(
+            self._aprsis_rf_source_buckets,
+            source_key,
+            rate_per_minute=source_rate,
+            burst=source_burst,
+            now=now,
+        )
+        if flow_bucket.tokens < 1.0:
+            return "rate_limit_flow"
+        if source_bucket.tokens < 1.0:
+            return "rate_limit_source"
+        recipient_bucket: _TokenBucket | None = None
+        if normalized_route == "message" and recipient_callsign:
+            recipient_bucket = self._refill_token_bucket(
+                self._aprsis_rf_recipient_buckets,
+                (flow_id, normalized_route, recipient_callsign),
+                rate_per_minute=source_rate,
+                burst=source_burst,
+                now=now,
+            )
+            if recipient_bucket.tokens < 1.0:
+                return "rate_limit_recipient"
+        flow_bucket.tokens -= 1.0
+        source_bucket.tokens -= 1.0
+        if recipient_bucket is not None:
+            recipient_bucket.tokens -= 1.0
+        return None
+
+    @staticmethod
+    def _refill_token_bucket(
+        buckets: dict[Any, _TokenBucket],
+        key: Any,
+        *,
+        rate_per_minute: float,
+        burst: float,
+        now: float,
+    ) -> _TokenBucket:
+        bucket = buckets.get(key)
+        if bucket is None:
+            bucket = _TokenBucket(tokens=burst, updated_at=now)
+            buckets[key] = bucket
+            return bucket
+        elapsed = max(0.0, now - bucket.updated_at)
+        bucket.tokens = min(burst, bucket.tokens + elapsed * (rate_per_minute / 60.0))
+        bucket.updated_at = now
+        return bucket
+
+    def _prune_aprsis_rf_state(self, now: float) -> None:
+        for packet_hash, entry in list(self._aprsis_rf_seen.items()):
+            timestamps = [value for value in (entry.is_seen_at, entry.rf_seen_at, entry.queued_at) if value is not None]
+            if not timestamps or now - max(timestamps) > 300.0:
+                self._aprsis_rf_seen.pop(packet_hash, None)
+        while len(self._aprsis_rf_seen) > 4096:
+            self._aprsis_rf_seen.popitem(last=False)
+        if len(self._aprsis_rf_source_buckets) > 4096:
+            oldest = sorted(self._aprsis_rf_source_buckets.items(), key=lambda item: item[1].updated_at)
+            for key, _bucket in oldest[: len(oldest) - 4096]:
+                self._aprsis_rf_source_buckets.pop(key, None)
+        if len(self._aprsis_rf_recipient_buckets) > 4096:
+            oldest = sorted(self._aprsis_rf_recipient_buckets.items(), key=lambda item: item[1].updated_at)
+            for key, _bucket in oldest[: len(oldest) - 4096]:
+                self._aprsis_rf_recipient_buckets.pop(key, None)
 
     async def _execute_tx_aprsis(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         flow_id = int(context["flow"]["id"])
@@ -1351,7 +2222,33 @@ class DigiFlowRuntimeService:
             record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
-        tx_line = _build_aprsis_uplink_line(parsed, local_igate=local_igate)
+        source_kind = str(context.get("source_kind") or "")
+        q_construct = ""
+        q_reason = "client_originated"
+        if source_kind == LOCAL_TX_SOURCE_KIND:
+            tx_line = _build_aprsis_uplink_line(
+                parsed,
+                local_igate=local_igate,
+                client_originated=True,
+            )
+        else:
+            consumed_hops = len(
+                _consumed_path_hops(_split_path_tokens(str(parsed.get("path") or "")))
+            )
+            if bool(parsed.get("is_third_party")):
+                return_capable = False
+                q_reason = "third_party_or_translated_source"
+            else:
+                return_capable, q_reason = message_return_capable_for_rf_source(
+                    str(context.get("source_ref") or ""),
+                    consumed_hops=consumed_hops,
+                )
+            q_construct = "qAR" if return_capable else "qAO"
+            tx_line = _build_aprsis_uplink_line(
+                parsed,
+                local_igate=local_igate,
+                q_construct=q_construct,
+            )
         if not tx_line:
             message = _t("APRS-IS TX rejected frame because APRS-IS uplink formatting failed.")
             log_digi_flow_event(
@@ -1399,14 +2296,25 @@ class DigiFlowRuntimeService:
             success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
         decision = "tx" if success else "drop"
         message = detail or ("APRS-IS TX queued." if success else "APRS-IS TX failed.")
+        uplink_identity = (
+            "TCPIP* client-originated"
+            if source_kind == LOCAL_TX_SOURCE_KIND
+            else f"{q_construct} ({q_reason})"
+        )
         log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
             event_type="output_action",
             decision=decision,
-            message=f"{message} | line={tx_line}",
+            message=f"{message} | uplink={uplink_identity} | line={tx_line}",
         )
+        if success and source_kind == LOCAL_TX_SOURCE_KIND:
+            persist_outbound_frame(
+                source="APRS-IS",
+                line=tx_line,
+                source_kind=APRSIS_SOURCE_KIND,
+            )
         record_aprsis_tx_result(sent=success, frame_line=tx_line)
         return {"decision": decision}
 
@@ -1471,6 +2379,13 @@ def _normalize_frame_metadata(metadata: Any) -> dict[str, Any]:
     return normalized
 
 
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _split_path_tokens(path: str) -> list[str]:
     return [item.strip().upper() for item in path.split(",") if item.strip()]
 
@@ -1496,9 +2411,6 @@ def _find_matching_path_spec(token: str, specs: list[str]) -> str | None:
     for spec in specs:
         normalized_spec = spec.strip().upper().rstrip("*")
         if normalized_token == normalized_spec:
-            return normalized_spec
-        family_match = _N_N_PATH_RE.fullmatch(normalized_token)
-        if "-" not in normalized_spec and family_match and str(family_match.group("alias")) == normalized_spec:
             return normalized_spec
     return None
 
@@ -1722,15 +2634,17 @@ def _rewrite_no_trace_path(path_tokens: list[str], token_index: int) -> list[str
     updated_tokens = list(path_tokens)
     token = updated_tokens[token_index].rstrip("*")
     match = _N_N_PATH_RE.fullmatch(token)
-    updated_tokens[token_index] = f"{token}*"
     if match is None:
+        updated_tokens[token_index] = f"{token}*"
         return updated_tokens
 
     alias = str(match.group("alias"))
     width = int(match.group("width"))
     remaining = int(match.group("remaining"))
     if remaining > 1:
-        updated_tokens.insert(token_index + 1, f"{alias}{width}-{remaining - 1}")
+        updated_tokens[token_index] = f"{alias}{width}-{remaining - 1}"
+        return updated_tokens
+    updated_tokens[token_index] = f"{alias}{width}*"
     return updated_tokens
 
 
@@ -1742,12 +2656,25 @@ def _build_tnc2_line(parsed: dict[str, Any]) -> str:
     return f"{header}:{str(parsed.get('info') or '')}"
 
 
-def _build_aprsis_uplink_line(parsed: dict[str, Any], *, local_igate: str) -> str:
+def _build_aprsis_uplink_line(
+    parsed: dict[str, Any],
+    *,
+    local_igate: str,
+    q_construct: str = "qAO",
+    client_originated: bool = False,
+) -> str:
     source = str(parsed.get("source") or "").strip()
     destination = str(parsed.get("destination") or "").strip()
     path = str(parsed.get("path") or "").strip()
     info = str(parsed.get("info") or "")
     if not source or not destination:
+        return ""
+
+    if client_originated:
+        return f"{source}>{destination},TCPIP*:{info}"
+
+    normalized_q = str(q_construct or "").strip()
+    if normalized_q not in {"qAR", "qAO"}:
         return ""
 
     if bool(parsed.get("is_third_party")):
@@ -1772,7 +2699,7 @@ def _build_aprsis_uplink_line(parsed: dict[str, Any], *, local_igate: str) -> st
     else:
         merged_path_tokens = [token for token in _split_path_tokens_keep_case(path) if token]
 
-    merged_path_tokens.extend(["qAO", local_igate])
+    merged_path_tokens.extend([normalized_q, local_igate])
     merged_path = ",".join(merged_path_tokens)
     header = f"{source}>{destination}"
     if merged_path:

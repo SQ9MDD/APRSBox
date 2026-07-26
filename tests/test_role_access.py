@@ -50,7 +50,11 @@ class RoleAccessTests(unittest.TestCase):
         current_user = SimpleNamespace(role="viewer", username="viewer")
 
         context = build_template_context(request, page_title="Dashboard", current_user=current_user, active_nav="dashboard")
+        navigation_order = [item["key"] for item in context["navigation"] if not item.get("separator")]
         navigation = {item["key"]: item for item in context["navigation"] if not item.get("separator")}
+
+        traffic_index = navigation_order.index("traffic")
+        self.assertEqual(navigation_order[traffic_index + 1 : traffic_index + 3], ["band-condition", "statistics"])
 
         for key in ("dashboard", "stations", "map", "band-condition", "modems", "traffic", "statistics"):
             self.assertIn(key, navigation)

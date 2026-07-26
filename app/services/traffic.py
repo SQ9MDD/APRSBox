@@ -9,15 +9,16 @@ import time
 from threading import Lock
 from typing import Any, Callable
 
-from app.db import fetch_all, fetch_one, get_connection, log_event, traffic_retention_cutoff, utc_now
+from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
-from app.services.band_condition import process_incoming_frame
+from app.services.content import parse_tnc2_frame
 from app.services.messages import process_incoming_tnc2_message
 from app.services.notifications import queue_radar_notifications
 from app.services.outbound import build_object_tnc2, persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
 from app.services.serial_broker import SerialKissTcpBroker
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
+from app.services.traffic_source import APRSIS_SOURCE_KIND, RF_SOURCE_KIND, normalize_source_kind, should_collect_statistics
 
 KISS_FEND = 0xC0
 KISS_FESC = 0xDB
@@ -151,6 +152,129 @@ def _decode_ax25_to_tnc2_with_reason(payload: bytes) -> tuple[str | None, str]:
 def decode_ax25_to_tnc2(payload: bytes) -> str | None:
     decoded, _reason = _decode_ax25_to_tnc2_with_reason(payload)
     return decoded
+
+
+def process_normalized_tnc2_rx(
+    line: str,
+    *,
+    source: str,
+    source_kind: str = RF_SOURCE_KIND,
+    source_interface_id: int | None = None,
+    band: str = "",
+    timestamp: str | None = None,
+    port: str = "",
+    command: str = "RX",
+    payload_hex: str = "",
+    payload_length: int | None = None,
+    frame_consumer: Callable[[str], None] | Callable[..., None] | None = None,
+    source_ref: str | None = None,
+    rx_received_monotonic: float | None = None,
+) -> bool:
+    """Validate and process one transport-neutral TNC2 RX frame.
+
+    KISS and APRS-IS both enter here after their transport-specific decoding.
+    The source kind determines statistical eligibility before any counters,
+    buffers, band-condition data, or RF Digi Flow inputs are touched.
+    """
+
+    normalized_line = str(line or "").rstrip("\r\n")
+    parsed_frame = parse_tnc2_frame(normalized_line) if normalized_line else None
+    if not normalized_line or parsed_frame is None:
+        return False
+
+    normalized_kind = normalize_source_kind(source_kind)
+    occurred_at = str(timestamp or utc_now())
+    collect_statistics = should_collect_statistics(normalized_kind)
+    frame_length = int(payload_length) if payload_length is not None else len(normalized_line.encode("latin-1", errors="replace"))
+
+    if collect_statistics and frame_consumer is not None:
+        consumer_source_ref = str(source_ref or source or "").strip()
+        enqueue_started_at = time.monotonic()
+        try:
+            frame_consumer(
+                normalized_line,
+                source_ref=consumer_source_ref,
+                rx_received_at=occurred_at,
+                rx_received_monotonic=rx_received_monotonic,
+            )
+        except TypeError:
+            frame_consumer(normalized_line, source_ref=consumer_source_ref)
+        rx_to_igate_enqueue_ms = _elapsed_ms_since(rx_received_monotonic, now=enqueue_started_at)
+    else:
+        rx_to_igate_enqueue_ms = None
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO traffic_frames(
+                source, source_kind, interface_id, direction, band,
+                format, line, port, command, length, hex, created_at
+            )
+            VALUES (?, ?, ?, 'rx', ?, 'TNC2', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(source or "").strip() or "Unknown source",
+                normalized_kind,
+                source_interface_id,
+                str(band or "").strip(),
+                normalized_line,
+                str(port or ""),
+                str(command or "RX"),
+                frame_length,
+                str(payload_hex or ""),
+                occurred_at,
+            ),
+        )
+
+    try:
+        from app.services.igate_messaging import (
+            record_aprsis_station_presence,
+            record_rf_heard_station,
+        )
+
+        if normalized_kind == RF_SOURCE_KIND:
+            record_rf_heard_station(
+                parsed_frame,
+                interface_id=source_interface_id,
+                timestamp=occurred_at,
+            )
+        elif normalized_kind == APRSIS_SOURCE_KIND:
+            record_aprsis_station_presence(
+                parsed_frame,
+                timestamp=occurred_at,
+            )
+    except Exception as exc:
+        log_event("WARNING", "igate", f"Failed to update IGate station state: {exc}")
+
+    latency_parts = [f"source={source}", f"source_kind={normalized_kind}", f"line={normalized_line[:120]}"]
+    if rx_to_igate_enqueue_ms is not None:
+        latency_parts.append(f"rx_to_igate_enqueue_ms={rx_to_igate_enqueue_ms:.3f}")
+    rx_to_db_commit_ms = _elapsed_ms_since(rx_received_monotonic)
+    if rx_to_db_commit_ms is not None:
+        latency_parts.append(f"rx_to_db_commit_ms={rx_to_db_commit_ms:.3f}")
+    log_event("DEBUG", "traffic_latency", " | ".join(latency_parts))
+
+    if collect_statistics:
+        try:
+            record_traffic_device_station_observation(
+                frame_format="TNC2",
+                line=normalized_line,
+                timestamp=occurred_at,
+            )
+        except Exception as exc:
+            log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {exc}")
+
+    # APRS-IS traffic stays excluded from RF statistics, but a numbered
+    # message addressed to this station still requires an Internet ACK.
+    # Keep that response on Internal TX so it cannot key a local TNC.
+    process_incoming_tnc2_message(
+        normalized_line,
+        timestamp=occurred_at,
+        allow_automatic_responses=collect_statistics or normalized_kind == APRSIS_SOURCE_KIND,
+        automatic_response_internal_tx_only=normalized_kind == APRSIS_SOURCE_KIND,
+    )
+    queue_radar_notifications(timestamp=occurred_at)
+    return True
 
 
 class _TrafficModemRuntime:
@@ -321,7 +445,7 @@ class _TrafficModemRuntime:
         )
         rows = fetch_all(
             """
-            SELECT source, format, line, port, command, length, hex, created_at
+            SELECT source, source_kind, format, line, port, command, length, hex, created_at
             FROM traffic_frames
             ORDER BY created_at DESC, id DESC
             LIMIT ?
@@ -332,6 +456,8 @@ class _TrafficModemRuntime:
             {
                 "timestamp": row["created_at"],
                 "source": row["source"],
+                "source_kind": normalize_source_kind(row["source_kind"]),
+                "is_rf": normalize_source_kind(row["source_kind"]) == RF_SOURCE_KIND,
                 "format": row["format"],
                 "line": row["line"],
                 "port": row["port"] or "",
@@ -405,7 +531,7 @@ class _TrafficModemRuntime:
                     await self._stop_proxy_server()
                     self._set_state(
                         status="idle",
-                        detail="No enabled TNC is configured.",
+                        detail="No enabled RF interface is configured.",
                         modem=None,
                         error=None,
                     )
@@ -2102,11 +2228,9 @@ class _TrafficModemRuntime:
         return "unknown modem"
 
     def _persist_frame(self, entry: dict[str, Any], timestamp: str) -> None:
-        cutoff = traffic_retention_cutoff()
         active_band = ""
         interface_id: int | None = None
         rx_monotonic = entry.get("_rx_monotonic")
-        rx_to_igate_enqueue_ms: float | None = None
         with self._lock:
             if self._active_modem:
                 active_band = str(self._active_modem.get("band") or "").strip()
@@ -2114,25 +2238,31 @@ class _TrafficModemRuntime:
                     interface_id = int(self._active_modem["id"])
                 except (TypeError, ValueError, KeyError):
                     interface_id = None
-        if entry["format"] == "TNC2" and self._frame_consumer is not None:
-            enqueue_started_at = time.monotonic()
-            rx_to_igate_enqueue_ms = _elapsed_ms_since(rx_monotonic, now=enqueue_started_at)
-            try:
-                self._frame_consumer(
-                    str(entry["line"]),
-                    source_ref=self._format_modem_label(),
-                    rx_received_at=timestamp,
-                    rx_received_monotonic=rx_monotonic,
-                )
-            except TypeError:
-                self._frame_consumer(str(entry["line"]), source_ref=self._format_modem_label())
+        if entry["format"] == "TNC2":
+            process_normalized_tnc2_rx(
+                str(entry["line"]),
+                source=str(entry["source"]),
+                source_kind=RF_SOURCE_KIND,
+                source_interface_id=interface_id,
+                band=active_band,
+                timestamp=timestamp,
+                port=str(entry["port"]),
+                command=str(entry["command"]),
+                payload_hex=str(entry["hex"]),
+                payload_length=int(entry["length"]),
+                frame_consumer=self._frame_consumer,
+                source_ref=self._format_modem_label(),
+                rx_received_monotonic=rx_monotonic,
+            )
+            return
+
         with get_connection() as connection:
             connection.execute(
                 """
                 INSERT INTO traffic_frames(
-                    source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+                    source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
                 )
-                VALUES (?, ?, 'rx', ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, 'rf', ?, 'rx', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry["source"],
@@ -2147,18 +2277,6 @@ class _TrafficModemRuntime:
                     timestamp,
                 ),
             )
-            connection.execute("DELETE FROM traffic_frames WHERE created_at < ?", (cutoff,))
-        rx_to_db_commit_ms = _elapsed_ms_since(rx_monotonic)
-        if entry["format"] == "TNC2":
-            details = [
-                f"source={entry['source']}",
-                f"line={str(entry['line'])[:120]}",
-            ]
-            if rx_to_igate_enqueue_ms is not None:
-                details.append(f"rx_to_igate_enqueue_ms={rx_to_igate_enqueue_ms:.3f}")
-            if rx_to_db_commit_ms is not None:
-                details.append(f"rx_to_db_commit_ms={rx_to_db_commit_ms:.3f}")
-            log_event("DEBUG", "traffic_latency", " | ".join(details))
         try:
             record_traffic_device_station_observation(
                 frame_format=entry["format"],
@@ -2167,10 +2285,6 @@ class _TrafficModemRuntime:
             )
         except Exception as exc:
             log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {exc}")
-        if entry["format"] == "TNC2":
-            process_incoming_frame(entry["line"], band=active_band, timestamp=timestamp)
-            process_incoming_tnc2_message(entry["line"], timestamp=timestamp)
-            queue_radar_notifications(timestamp=timestamp)
 
     async def _sleep(self, delay: float) -> None:
         try:
@@ -2310,7 +2424,7 @@ class TrafficMonitorService:
         summary = self._aggregate_runtime_snapshot(interfaces)
         rows = fetch_all(
             """
-            SELECT source, interface_id, direction, band, format, line, port, command, length, hex, created_at
+            SELECT source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
             FROM traffic_frames
             ORDER BY created_at DESC, id DESC
             LIMIT ?
@@ -2322,6 +2436,8 @@ class TrafficMonitorService:
             {
                 "timestamp": row["created_at"],
                 "source": row["source"],
+                "source_kind": normalize_source_kind(row["source_kind"]),
+                "is_rf": normalize_source_kind(row["source_kind"]) == RF_SOURCE_KIND,
                 "interface_id": int(row["interface_id"]) if row["interface_id"] is not None else None,
                 "direction": str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX"),
                 "band": str(row["band"] or "").strip(),
@@ -2498,7 +2614,7 @@ class TrafficMonitorService:
         if not interfaces:
             return {
                 "status": "idle",
-                "status_detail": "No enabled TNC is configured.",
+                "status_detail": "No enabled RF interface is configured.",
                 "active_modem": None,
                 "expose": {
                     "enabled": False,
@@ -2540,13 +2656,13 @@ class TrafficMonitorService:
         preferred = connected[0] if connected else interfaces[0]
         if connected:
             status = "connected"
-            detail = f"{len(connected)}/{len(interfaces)} TNC interfaces connected."
+            detail = f"{len(connected)}/{len(interfaces)} interfaces connected."
         elif connecting:
             status = "connecting"
-            detail = f"Connecting {len(connecting)} TNC interface(s)."
+            detail = f"Connecting {len(connecting)} interface(s)."
         elif errored:
             status = "error"
-            detail = str(errored[0].get("last_error") or preferred["status_detail"] or "TNC interfaces failed.")
+            detail = str(errored[0].get("last_error") or preferred["status_detail"] or "Interfaces failed.")
         else:
             status = preferred["status"]
             detail = preferred["status_detail"]

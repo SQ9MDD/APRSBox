@@ -83,13 +83,29 @@ class SettingsMaintenanceTests(unittest.TestCase):
 
     def test_settings_template_contains_event_log_controls(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('name="traffic_retention_minutes"', template_source)
         self.assertIn('name="event_log_min_level"', template_source)
         self.assertIn('name="event_log_debug_enabled"', template_source)
+        self.assertIn('{{ t("Traffic history retention") }}', template_source)
         self.assertIn('{{ t("Minimum stored log level") }}', template_source)
         self.assertIn('{{ t("Enable DEBUG logs") }}', template_source)
         self.assertIn('action="{{ request.scope.root_path }}/settings/reset-runtime-data"', template_source)
         self.assertIn("data-settings-action-id=\"reset-runtime-data\"", template_source)
         self.assertIn('{{ t("Reset runtime logs/data") }}', template_source)
+
+    def test_settings_template_keeps_global_save_button_below_coverage_controls(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('id="global-settings-form"', template_source)
+        self.assertIn('form="global-settings-form"', template_source)
+        self.assertLess(
+            template_source.index('{{ t("Coverage fill opacity") }}'),
+            template_source.index('{{ t("Save Global Settings") }}'),
+        )
+
+    def test_settings_template_uses_ten_percent_default_for_coverage_fill_opacity(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("const normalizeCoverageOpacityPercent = (value, fallback = 10) => {", template_source)
+        self.assertIn("const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 10);", template_source)
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
@@ -212,6 +228,23 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('clockModeStorageKey = "aprsbox-clock-mode"', base_source)
         self.assertIn("localStorage.setItem(clockModeStorageKey", base_source)
         self.assertIn('utcClockRoot.addEventListener("click"', base_source)
+
+    def test_base_template_supports_sidebar_collapse_persistence(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn('id="app-sidebar"', base_source)
+        self.assertIn('id="sidebar-collapse-toggle"', base_source)
+        self.assertIn('id="sidebar-collapse-toggle-icon"', base_source)
+        self.assertIn('class="sidebar-collapse-slot"', base_source)
+        self.assertIn('class="sidebar-logo-icon"', base_source)
+        self.assertIn('sidebarStateStorageKey = "aprsbox-sidebar-state"', base_source)
+        self.assertIn('root.setAttribute("data-sidebar-state"', base_source)
+        self.assertIn("--sidebar-collapsed-width", stylesheet_source)
+        self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar', stylesheet_source)
+        self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar-user-panel', stylesheet_source)
+        self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar-utc-clock', stylesheet_source)
+        self.assertIn(".sidebar-logo-icon", stylesheet_source)
+        self.assertIn(".nav-label", stylesheet_source)
 
 
 if __name__ == "__main__":

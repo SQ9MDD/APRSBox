@@ -1,13 +1,29 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
+<div class="messages-page-layout">
 <section class="panel messages-page-panel">
     <div class="messages-shell" id="messages-app" data-static-root="{{ request.scope.root_path }}/static/">
         <aside class="messages-sidebar">
             <div class="messages-sidebar-top">
-                <div class="panel-header-copy">
-                    <h2>{{ t("Conversations") }}</h2>
-                    <p class="section-lead">{{ t("Stored APRS message conversations from the local SQLite database.") }}</p>
+                <div class="panel-header">
+                    <div class="panel-header-copy">
+                        <h2>{{ t("Conversations") }}</h2>
+                        <p class="section-lead">{{ t("Stored APRS message conversations from the local SQLite database.") }}</p>
+                    </div>
+                    <button
+                        class="help-icon-button page-help-button"
+                        type="button"
+                        data-help-page="application/messages"
+                        title="{{ t('Help') }}"
+                        aria-label="{{ t('Help') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+                    </button>
                 </div>
                 <form class="messages-new-conversation" id="messages-new-conversation-form">
                     <label class="messages-new-conversation-field">
@@ -80,6 +96,40 @@
     </div>
 </section>
 
+<section class="panel messages-settings-panel">
+    <div class="panel-body">
+        <div class="panel-header messages-settings-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Message settings") }}</h2>
+            </div>
+        </div>
+        <form class="form-grid messages-settings" id="messages-settings-form">
+            <label>
+                <span>{{ t("Default path") }}</span>
+                <select id="messages-default-path" name="default_path">
+                    {% for option in messages_view.message_settings.path_options %}
+                    <option value="{{ option.value }}"{% if option.value == messages_view.message_settings.default_path %} selected{% endif %}>{{ t(option.label) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                <span>{{ t("Target groups") }}</span>
+                <input type="text" id="messages-target-groups" name="target_groups" value="{{ messages_view.message_settings.target_groups|join(', ') }}" placeholder="CQ, YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
+            </label>
+            <label class="full checkbox-row">
+                <input type="checkbox" id="messages-receive-any-ssid" name="receive_any_ssid"{% if messages_view.message_settings.receive_any_ssid %} checked{% endif %}>
+                <span>{{ t("Receive messages for any SSID of my callsign") }}</span>
+            </label>
+            <div class="form-actions messages-settings-actions">
+                <button class="button" type="submit">{{ t("Save settings") }}</button>
+            </div>
+            <small class="field-validation-error messages-settings-error" id="messages-settings-error" hidden></small>
+        </form>
+    </div>
+</section>
+</div>
+{% include "partials/help_modal.html" %}
+
 <script type="application/json" id="messages-initial-data">{{ messages_view|tojson }}</script>
 <script>
 (() => {
@@ -101,7 +151,12 @@
     const sendButton = document.getElementById("messages-send-button");
     const newConversationForm = document.getElementById("messages-new-conversation-form");
     const newConversationInput = document.getElementById("messages-new-callsign");
-    const defaultPath = String(initialData.default_path || "");
+    const settingsForm = document.getElementById("messages-settings-form");
+    const defaultPathSelect = document.getElementById("messages-default-path");
+    const receiveAnySsidInput = document.getElementById("messages-receive-any-ssid");
+    const targetGroupsInput = document.getElementById("messages-target-groups");
+    const settingsError = document.getElementById("messages-settings-error");
+    let defaultPath = String(initialData.default_path || "");
     const serviceDestinations = new Set(
         (Array.isArray(initialData.service_destinations) ? initialData.service_destinations : [])
             .map((value) => normalizeCallsign(value))
@@ -130,6 +185,12 @@
         rejectedRej: {{ t("Rejected (REJ)")|tojson }},
         received: {{ t("Received")|tojson }},
         noAckRetryHint: {{ t("No ACK received. Click to retry.")|tojson }},
+        group: {{ t("Group")|tojson }},
+        groupConversationNoAck: {{ t("Group conversation · messages are sent once without ACK.")|tojson }},
+        youWithCallsign: {{ t("You · {callsign}")|tojson }},
+        invalidTargetGroups: {{ t("Target groups must contain 1-9 letters or digits, separated by commas.")|tojson }},
+        emptyTargetGroup: {{ t("Target groups cannot contain empty entries between commas.")|tojson }},
+        bulletinTargetGroup: {{ t("Bulletin addresses are configured separately from message target groups.")|tojson }},
         typeAprsMessageText: {{ t("Type APRS message text")|tojson }},
         selectConversationToEnableComposer: {{ t("Select a conversation to enable the composer")|tojson }},
         repeatSendingMessage: {{ t("Repeat sending this APRS message?")|tojson }},
@@ -249,6 +310,30 @@
             .slice(0, 64);
     }
 
+    function validateTargetGroups(value) {
+        const raw = String(value || "");
+        if (!raw.trim()) {
+            return { valid: true, groups: [], canonical: "", error: "" };
+        }
+        const groups = [];
+        for (const rawGroup of raw.split(",")) {
+            const group = rawGroup.trim().toUpperCase();
+            if (!group) {
+                return { valid: false, groups: [], canonical: raw, error: i18n.emptyTargetGroup };
+            }
+            if (!/^[A-Z0-9]{1,9}$/.test(group)) {
+                return { valid: false, groups: [], canonical: raw, error: i18n.invalidTargetGroups };
+            }
+            if (group.startsWith("BLN")) {
+                return { valid: false, groups: [], canonical: raw, error: i18n.bulletinTargetGroup };
+            }
+            if (!groups.includes(group)) {
+                groups.push(group);
+            }
+        }
+        return { valid: true, groups, canonical: groups.join(", "), error: "" };
+    }
+
     function conversationPathStorageKey(callsign) {
         return `${pathStorageKeyPrefix}${normalizeCallsign(callsign)}`;
     }
@@ -286,6 +371,7 @@
         return {
             id: String(conversation.id || ""),
             callsign: normalizeCallsign(conversation.callsign),
+            kind: conversation.kind === "group" ? "group" : "direct",
             created_at: String(conversation.created_at || new Date().toISOString()),
             last_activity_at: String(conversation.last_activity_at || conversation.created_at || new Date().toISOString()),
             unread_count: Number(conversation.unread_count || 0),
@@ -297,6 +383,8 @@
             messages: Array.isArray(conversation.messages) ? conversation.messages.map((message) => ({
                 id: String(message.id || ""),
                 direction: message.direction === "rx" ? "rx" : "tx",
+                sender: normalizeCallsign(message.sender),
+                addressee: normalizeCallsign(message.addressee),
                 text: String(message.text || ""),
                 timestamp: String(message.timestamp || new Date().toISOString()),
                 unread: Boolean(message.unread),
@@ -442,7 +530,9 @@
                                 </span>
                             </span>
                             <span class="messages-conversation-meta-row">
-                                ${conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || i18n.heardRecently)}</span></span>` : `<span class="muted">${escapeHtml(i18n.noRecentHeardStationEntry)}</span>`}
+                                ${conversation.kind === "group"
+                                    ? `<span class="muted">${escapeHtml(i18n.groupConversationNoAck)}</span>`
+                                    : (conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || i18n.heardRecently)}</span></span>` : `<span class="muted">${escapeHtml(i18n.noRecentHeardStationEntry)}</span>`)}
                             </span>
                         </span>
                     </button>
@@ -464,11 +554,17 @@
             `;
             return;
         }
+        const isGroup = conversation.kind === "group";
         threadHeader.innerHTML = `
             <div class="panel-header-copy">
-                <h2>${escapeHtml(conversation.callsign)}</h2>
+                <div class="messages-thread-title-row">
+                    <h2>${escapeHtml(conversation.callsign)}</h2>
+                    ${isGroup ? `<span class="message-state-badge message-state-badge-read">${escapeHtml(i18n.group)}</span>` : ""}
+                </div>
                 <p class="section-lead">
-                    ${conversation.recently_heard ? escapeHtml(conversation.heard_recently_label || i18n.heardRecently) : escapeHtml(i18n.noRecentHeardStationEntry)}
+                    ${isGroup
+                        ? escapeHtml(i18n.groupConversationNoAck)
+                        : (conversation.recently_heard ? escapeHtml(conversation.heard_recently_label || i18n.heardRecently) : escapeHtml(i18n.noRecentHeardStationEntry))}
                 </p>
             </div>
         `;
@@ -515,10 +611,16 @@
                     : (message.delivery_state === "rejected" ? "message-delivery-badge-rejected" : "message-delivery-badge-pending");
                 deliveryBadge = `<span class="message-delivery-badge ${txBadgeClass}" title="${escapeHtml(message.failure_reason || "")}">${escapeHtml(deliveryLabel || i18n.sent)}</span>`;
             }
+            const senderLabel = conversation.kind === "group"
+                ? (message.direction === "tx"
+                    ? formatText(i18n.youWithCallsign, { callsign: message.sender })
+                    : message.sender)
+                : "";
             return `
                 ${showDay ? `<div class="messages-day-separator"><span>${escapeHtml(dayLabel)}</span></div>` : ""}
                 <div class="message-bubble-row ${message.direction === "rx" ? "message-bubble-row-rx" : "message-bubble-row-tx"}">
                     <div class="message-bubble ${message.direction === "rx" ? "message-bubble-rx" : "message-bubble-tx"}">
+                        ${senderLabel ? `<strong class="message-bubble-sender">${escapeHtml(senderLabel)}</strong>` : ""}
                         <p>${escapeHtml(message.text)}</p>
                         <span class="message-bubble-meta">${escapeHtml(formatDateTime(message.timestamp))}${deliveryBadge}</span>
                     </div>
@@ -555,12 +657,26 @@
             : i18n.selectConversationToEnableComposer;
     }
 
+    function syncGlobalUnreadState() {
+        const unreadCount = state.conversations.reduce(
+            (total, conversation) => total + Math.max(Number(conversation.unread_count || 0), 0),
+            0
+        );
+        window.dispatchEvent(new CustomEvent("aprsbox:messages-unread-state", {
+            detail: {
+                hasUnread: unreadCount > 0,
+                unreadCount,
+            },
+        }));
+    }
+
     function render(options = {}) {
         renderConversationList();
         const activeConversation = getActiveConversation();
         renderThreadHeader(activeConversation);
         renderThreadHistory(activeConversation, options);
         renderComposer(activeConversation);
+        syncGlobalUnreadState();
     }
 
     async function applyServerState(serverData, preferredConversationId = undefined) {
@@ -666,6 +782,56 @@
         });
     });
 
+    settingsForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        settingsError.hidden = true;
+        const groupValidation = validateTargetGroups(targetGroupsInput.value);
+        if (!groupValidation.valid) {
+            targetGroupsInput.setAttribute("aria-invalid", "true");
+            settingsError.hidden = false;
+            settingsError.textContent = groupValidation.error;
+            targetGroupsInput.focus();
+            return;
+        }
+        targetGroupsInput.removeAttribute("aria-invalid");
+        targetGroupsInput.value = groupValidation.canonical;
+        void apiRequest(`${messagesApi}/settings`, {
+            method: "PUT",
+            body: JSON.stringify({
+                default_path: normalizeFuturePath(defaultPathSelect.value),
+                receive_any_ssid: receiveAnySsidInput.checked,
+                target_groups: groupValidation.groups,
+            }),
+        }).then(async (payload) => {
+            const savedSettings = payload && payload.settings ? payload.settings : {};
+            defaultPath = String(savedSettings.default_path || "");
+            defaultPathSelect.value = defaultPath;
+            receiveAnySsidInput.checked = Boolean(savedSettings.receive_any_ssid);
+            targetGroupsInput.value = Array.isArray(savedSettings.target_groups) ? savedSettings.target_groups.join(", ") : "";
+            await applyServerState(payload.messages_view);
+        }).catch((error) => {
+            settingsError.hidden = false;
+            settingsError.textContent = error instanceof Error ? error.message : i18n.requestFailed;
+        });
+    });
+
+    targetGroupsInput.addEventListener("input", () => {
+        targetGroupsInput.removeAttribute("aria-invalid");
+        settingsError.hidden = true;
+    });
+
+    targetGroupsInput.addEventListener("blur", () => {
+        const validation = validateTargetGroups(targetGroupsInput.value);
+        if (validation.valid) {
+            targetGroupsInput.removeAttribute("aria-invalid");
+            targetGroupsInput.value = validation.canonical;
+            return;
+        }
+        targetGroupsInput.setAttribute("aria-invalid", "true");
+        settingsError.hidden = false;
+        settingsError.textContent = validation.error;
+    });
+
     composerForm.addEventListener("submit", (event) => {
         event.preventDefault();
         const conversation = getActiveConversation();
@@ -767,4 +933,8 @@
     });
 })();
 </script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endblock %}

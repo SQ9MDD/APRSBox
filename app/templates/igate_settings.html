@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 <section class="panel">
     <div class="panel-body">
@@ -8,154 +12,113 @@
                 <h2>{{ t("APRS-IS Uplink") }}</h2>
                 <p class="section-lead">{{ t("APRS-IS uplink is managed automatically from active Packet Routing flows with APRSIS target. No separate enable switch is used.") }}</p>
             </div>
+            <button
+                class="help-icon-button page-help-button"
+                type="button"
+                data-help-page="application/igate_settings"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
-        <div class="table-wrap">
-            <table class="data-table compact-table">
-                <tbody>
-                    <tr>
-                        <th>{{ t("Runtime status") }}</th>
-                        <td>
-                            <span id="igate-runtime-badge" class="tnc-badge {% if aprsis_runtime_badge == 'enabled' %}tnc-badge-enabled{% elif aprsis_runtime_badge == 'warning' %}status-pill status-unknown{% else %}tnc-badge-disabled{% endif %}">
-                                <img id="igate-runtime-icon" src="{{ request.scope.root_path }}/static/icons/{% if aprsis_runtime.status == 'connected' %}check-circle.svg{% elif aprsis_runtime.status == 'connecting' %}progress-clock.svg{% else %}close-circle.svg{% endif %}" alt="">
-                                <span id="igate-runtime-label">{{ t(aprsis_runtime.status|capitalize) }}</span>
-                            </span>
-                            <div id="igate-runtime-detail" class="muted small">{{ aprsis_runtime.status_detail or "-" }}</div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Server") }}</th>
-                        <td><code id="igate-runtime-server">{{ aprsis_runtime.server or aprsis_config.server or "-" }}{% if aprsis_runtime.port %}:{{ aprsis_runtime.port }}{% elif aprsis_config.port %}:{{ aprsis_config.port }}{% endif %}</code></td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Login") }}</th>
-                        <td><code id="igate-runtime-login">{{ aprsis_runtime.login or aprsis_config.login or "-" }}</code></td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Connected at") }}</th>
-                        <td id="igate-runtime-connected-at">{{ format_datetime(aprsis_runtime.connected_at) if aprsis_runtime.connected_at else "-" }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Last error") }}</th>
-                        <td id="igate-runtime-last-error">{{ aprsis_runtime.last_error or "-" }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
         {% set diag = aprsis_diagnostics %}
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h3>{{ t("iGATE diagnostics") }}</h3>
-                <p class="section-lead">{{ t("Live runtime counters for APRS-IS uplink activity and strict guard decisions.") }}</p>
-                <p class="muted small">{{ t("Strict APRS-IS guard rejects paths with TCPIP/TCPXX or NOGATE/RFONLY and rejects malformed third-party encapsulation.") }}</p>
-            </div>
+        <div class="igate-settings-layout">
+            {% if can_edit %}
+            <form method="post" action="{{ request.scope.root_path }}/igate" class="form-stack igate-config-form">
+                <div class="form-grid">
+                    <label>
+                        <span>{{ t("Server") }}</span>
+                        <input type="text" name="server" value="{{ aprsis_config.server }}" required>
+                    </label>
+                    <label>
+                        <span>{{ t("Port") }}</span>
+                        <input type="number" name="port" min="1" max="65535" value="{{ aprsis_config.port }}" required>
+                    </label>
+                    <label>
+                        <span>{{ t("Login callsign / callsign-SSID") }}</span>
+                        <input type="text" name="login" value="{{ '' if aprsis_config.login_is_default else aprsis_config.login }}">
+                        <span class="muted small">{{ tf("Default from My Station: {value}", {"value": aprsis_config.station_login_default or "-"}) }}</span>
+                    </label>
+                    <label>
+                        <span>{{ t("Passcode") }}</span>
+                        <input type="text" name="passcode" value="{{ '' if aprsis_config.passcode_is_default else aprsis_config.passcode }}">
+                        <span class="muted small">{{ tf("Default auto-derived passcode: {value}", {"value": aprsis_config.passcode_default or "-"}) }}</span>
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="button">{{ t("Save APRS-IS Settings") }}</button>
+                </div>
+            </form>
+            {% endif %}
+
+            <aside class="igate-status-summary" aria-live="polite">
+                <div class="igate-status-head">
+                    <span class="metric-label">{{ t("Status") }}</span>
+                    <span id="igate-runtime-badge" class="tnc-badge {% if aprsis_runtime_badge == 'enabled' %}tnc-badge-enabled{% elif aprsis_runtime_badge == 'warning' %}status-pill status-unknown{% else %}tnc-badge-disabled{% endif %}">
+                        <img id="igate-runtime-icon" src="{{ request.scope.root_path }}/static/icons/{% if aprsis_runtime.status == 'connected' %}check-circle.svg{% elif aprsis_runtime.status == 'connecting' %}progress-clock.svg{% else %}close-circle.svg{% endif %}" alt="">
+                        <span id="igate-runtime-label">{{ t(aprsis_runtime.status|capitalize) }}</span>
+                    </span>
+                </div>
+                <p id="igate-runtime-detail" class="muted small">{{ aprsis_runtime.status_detail or "-" }}</p>
+                <dl class="igate-compact-list">
+                    <div>
+                        <dt>{{ t("Server") }}</dt>
+                        <dd><code id="igate-runtime-server">{{ aprsis_runtime.server or aprsis_config.server or "-" }}{% if aprsis_runtime.port %}:{{ aprsis_runtime.port }}{% elif aprsis_config.port %}:{{ aprsis_config.port }}{% endif %}</code></dd>
+                    </div>
+                    <div>
+                        <dt>{{ t("Login") }}</dt>
+                        <dd><code id="igate-runtime-login">{{ aprsis_runtime.login or aprsis_config.login or "-" }}</code></dd>
+                    </div>
+                    <div>
+                        <dt>{{ t("Connected at") }}</dt>
+                        <dd id="igate-runtime-connected-at">{{ format_datetime(aprsis_runtime.connected_at) if aprsis_runtime.connected_at else "-" }}</dd>
+                    </div>
+                    <div>
+                        <dt>{{ t("Active APRSIS routing flows") }}</dt>
+                        <dd id="igate-diag-active-flow-count">{{ diag.active_flow_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>{{ t("Last error") }}</dt>
+                        <dd id="igate-runtime-last-error">{{ aprsis_runtime.last_error or "-" }}</dd>
+                    </div>
+                </dl>
+            </aside>
         </div>
-        <div class="table-wrap">
-            <table class="data-table compact-table">
-                <tbody>
-                    <tr>
-                        <th>{{ t("Active APRSIS routing flows") }}</th>
-                        <td id="igate-diag-active-flow-count">{{ diag.active_flow_count }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Enabled APRSIS flow names") }}</th>
-                        <td><code id="igate-diag-active-flow-names">{% if diag.active_flow_names %}{{ diag.active_flow_names|join(", ") }}{% else %}-{% endif %}</code></td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Session uptime") }}</th>
-                        <td id="igate-diag-session-uptime">{{ diag.session_uptime or "-" }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Last routing activity") }}</th>
-                        <td id="igate-diag-last-activity">{{ format_datetime(diag.last_activity_at) if diag.last_activity_at else "-" }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Last APRS-IS connect event") }}</th>
-                        <td id="igate-diag-last-connect">{{ format_datetime(diag.reconnects.last_connected_at) if diag.reconnects.last_connected_at else "-" }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Reconnects (total / 24h)") }}</th>
-                        <td id="igate-diag-reconnects">{{ diag.reconnects.total }} / {{ diag.reconnects.last_24h }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Warnings (total / 24h)") }}</th>
-                        <td id="igate-diag-warnings">{{ diag.reconnects.warning_total }} / {{ diag.reconnects.warning_24h }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="table-wrap">
-            <table class="data-table compact-table">
-                <tbody>
-                    <tr>
-                        <th>{{ t("Frames sent to APRS-IS (total / 1h / 24h)") }}</th>
-                        <td id="igate-diag-tx-sent">{{ diag.tx.sent_total }} / {{ diag.tx.sent_1h }} / {{ diag.tx.sent_24h }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Frames dropped before APRS-IS TX (total / 1h / 24h)") }}</th>
-                        <td id="igate-diag-tx-drop">{{ diag.tx.drop_total }} / {{ diag.tx.drop_1h }} / {{ diag.tx.drop_24h }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="table-wrap">
-            <table class="data-table compact-table">
-                <tbody>
-                    <tr>
-                        <th>{{ t("Strict guard rejects (total / 1h / 24h)") }}</th>
-                        <td id="igate-diag-strict-total">{{ diag.strict_rejects.total }} / {{ diag.strict_rejects.last_1h }} / {{ diag.strict_rejects.last_24h }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Blocked TCPIP/TCPXX (24h)") }}</th>
-                        <td id="igate-diag-strict-tcp">{{ diag.strict_rejects.last_24h_blocked_tcpip_tcpxx }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Blocked NOGATE/RFONLY (24h)") }}</th>
-                        <td id="igate-diag-strict-rfonly">{{ diag.strict_rejects.last_24h_blocked_nogate_rfonly }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Malformed third-party rejects (24h)") }}</th>
-                        <td id="igate-diag-strict-malformed">{{ diag.strict_rejects.last_24h_malformed_third_party }}</td>
-                    </tr>
-                    <tr>
-                        <th>{{ t("Other strict rejects (24h)") }}</th>
-                        <td id="igate-diag-strict-other">{{ diag.strict_rejects.last_24h_other }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        {% if can_edit %}
-        <form method="post" action="{{ request.scope.root_path }}/igate" class="form-stack">
-            <div class="form-grid">
-                <label>
-                    <span>{{ t("Server") }}</span>
-                    <input type="text" name="server" value="{{ aprsis_config.server }}" required>
-                </label>
-                <label>
-                    <span>{{ t("Port") }}</span>
-                    <input type="number" name="port" min="1" max="65535" value="{{ aprsis_config.port }}" required>
-                </label>
-                <label>
-                    <span>{{ t("Login callsign / callsign-SSID") }}</span>
-                    <input type="text" name="login" value="{{ '' if aprsis_config.login_is_default else aprsis_config.login }}">
-                    <span class="muted small">{{ tf("Default from My Station: {value}", {"value": aprsis_config.station_login_default or "-"}) }}</span>
-                </label>
-                <label>
-                    <span>{{ t("Passcode") }}</span>
-                    <input type="text" name="passcode" value="{{ '' if aprsis_config.passcode_is_default else aprsis_config.passcode }}">
-                    <span class="muted small">{{ tf("Default auto-derived passcode: {value}", {"value": aprsis_config.passcode_default or "-"}) }}</span>
-                </label>
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="button">{{ t("Save APRS-IS Settings") }}</button>
-            </div>
-        </form>
-        {% endif %}
+
+        <details class="igate-diagnostics-details">
+            <summary>{{ t("iGATE diagnostics") }}</summary>
+            <dl class="igate-diagnostics-list">
+                <div>
+                    <dt>{{ t("Enabled APRSIS flow names") }}</dt>
+                    <dd><code id="igate-diag-active-flow-names">{% if diag.active_flow_names %}{{ diag.active_flow_names|join(", ") }}{% else %}-{% endif %}</code></dd>
+                </div>
+                <div>
+                    <dt>{{ t("Last routing activity") }}</dt>
+                    <dd id="igate-diag-last-activity">{{ format_datetime(diag.last_activity_at) if diag.last_activity_at else "-" }}</dd>
+                </div>
+                <div>
+                    <dt>{{ t("Frames sent to APRS-IS (total / 1h / 24h)") }}</dt>
+                    <dd id="igate-diag-tx-sent">{{ diag.tx.sent_total }} / {{ diag.tx.sent_1h }} / {{ diag.tx.sent_24h }}</dd>
+                </div>
+                <div>
+                    <dt>{{ t("Frames dropped before APRS-IS TX (total / 1h / 24h)") }}</dt>
+                    <dd id="igate-diag-tx-drop">{{ diag.tx.drop_total }} / {{ diag.tx.drop_1h }} / {{ diag.tx.drop_24h }}</dd>
+                </div>
+                <div>
+                    <dt>{{ t("Strict guard rejects (total / 1h / 24h)") }}</dt>
+                    <dd id="igate-diag-strict-total">{{ diag.strict_rejects.total }} / {{ diag.strict_rejects.last_1h }} / {{ diag.strict_rejects.last_24h }}</dd>
+                </div>
+            </dl>
+        </details>
+        {% include "partials/help_modal.html" %}
     </div>
 </section>
 
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script>
 (() => {
     const rootPath = {{ request.scope.root_path|tojson }};
@@ -244,24 +207,15 @@
         const diag = diagnostics || {};
         const tx = diag.tx || {};
         const strictRejects = diag.strict_rejects || {};
-        const reconnects = diag.reconnects || {};
 
         setText("igate-diag-active-flow-count", String(Number(diag.active_flow_count || 0)));
         setText("igate-diag-active-flow-names", Array.isArray(diag.active_flow_names) && diag.active_flow_names.length ? diag.active_flow_names.join(", ") : "-");
-        setText("igate-diag-session-uptime", diag.session_uptime || "-");
         setText("igate-diag-last-activity", renderDateTime(diag.last_activity_at));
-        setText("igate-diag-last-connect", renderDateTime(reconnects.last_connected_at));
-        setText("igate-diag-reconnects", `${Number(reconnects.total || 0)} / ${Number(reconnects.last_24h || 0)}`);
-        setText("igate-diag-warnings", `${Number(reconnects.warning_total || 0)} / ${Number(reconnects.warning_24h || 0)}`);
 
         setCounterTriple("igate-diag-tx-sent", tx.sent_total, tx.sent_1h, tx.sent_24h);
         setCounterTriple("igate-diag-tx-drop", tx.drop_total, tx.drop_1h, tx.drop_24h);
 
         setCounterTriple("igate-diag-strict-total", strictRejects.total, strictRejects.last_1h, strictRejects.last_24h);
-        setText("igate-diag-strict-tcp", String(Number(strictRejects.last_24h_blocked_tcpip_tcpxx || 0)));
-        setText("igate-diag-strict-rfonly", String(Number(strictRejects.last_24h_blocked_nogate_rfonly || 0)));
-        setText("igate-diag-strict-malformed", String(Number(strictRejects.last_24h_malformed_third_party || 0)));
-        setText("igate-diag-strict-other", String(Number(strictRejects.last_24h_other || 0)));
     };
 
     const refreshDiagnostics = async () => {

@@ -7,6 +7,48 @@ from app.routers import pages
 
 
 class HelpMarkdownTests(unittest.TestCase):
+    def test_aprsis_message_delivery_rule_has_dedicated_localized_help(self) -> None:
+        expected_headings = {
+            "en": "# APRS-IS Message Delivery Rule",
+            "pl": "# Reguła dostarczania wiadomości APRS-IS",
+            "de": "# APRS-IS-Nachrichten-Zustellregel",
+            "es": "# Regla de entrega de mensajes APRS-IS",
+        }
+        for language, heading in expected_headings.items():
+            with self.subTest(language=language):
+                resolved = pages._read_help_markdown(
+                    page="application/packet_routing_flow_aprsis_message_delivery_rule",
+                    language=language,
+                )
+                self.assertIsNotNone(resolved)
+                assert resolved is not None
+                self.assertEqual(
+                    resolved[0],
+                    f"application/packet_routing_flow_aprsis_message_delivery_rule.{language}.md",
+                )
+                self.assertTrue(resolved[1].startswith(heading))
+
+    def test_aprsis_callsign_radius_rule_has_dedicated_localized_help(self) -> None:
+        expected_headings = {
+            "en": "# APRS-IS Callsign and Radius Rule",
+            "pl": "# Reguła znaku i promienia APRS-IS",
+            "de": "# APRS-IS-Rufzeichen- und Radiusregel",
+            "es": "# Regla APRS-IS de indicativo y radio",
+        }
+        for language, heading in expected_headings.items():
+            with self.subTest(language=language):
+                resolved = pages._read_help_markdown(
+                    page="application/packet_routing_flow_aprsis_callsign_radius_rule",
+                    language=language,
+                )
+                self.assertIsNotNone(resolved)
+                assert resolved is not None
+                self.assertEqual(
+                    resolved[0],
+                    f"application/packet_routing_flow_aprsis_callsign_radius_rule.{language}.md",
+                )
+                self.assertTrue(resolved[1].startswith(heading))
+
     def test_reads_german_help_file_when_available(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             help_root = Path(temp_dir) / "help"

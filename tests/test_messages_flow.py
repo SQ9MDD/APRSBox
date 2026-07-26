@@ -23,16 +23,20 @@ from app.services.messages import (
     QUERY_MESSAGE_KIND,
     _format_heard_parts,
     _heard_recently_state,
+    get_message_settings,
     get_unread_inbox_count,
     get_messages_page_data,
     mark_conversation_read,
     normalize_aprs_destination_callsign,
     normalize_aprs_message_text,
+    normalize_message_target_groups,
     process_incoming_tnc2_message,
     queue_outgoing_message,
     register_direct_message_transmission,
     retry_failed_message,
+    save_message_settings,
     split_callsign_ssid,
+    store_incoming_message,
 )
 from app.services.outbound import build_beacon_tnc2, build_message_tnc2, build_status_tnc2, claim_next_outbound_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
@@ -90,6 +94,171 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_target_group_list_is_trimmed_uppercased_and_deduplicated(self) -> None:
+        self.assertEqual(
+            normalize_message_target_groups(" cq, QST , all, WAW, bem, CQ "),
+            ["CQ", "QST", "ALL", "WAW", "BEM"],
+        )
+        self.assertEqual(normalize_message_target_groups(""), [])
+
+    def test_target_group_list_rejects_invalid_segments(self) -> None:
+        for value in ("CQ,,WAW", "CQ, ,WAW", "ABCDEFGHIJ", "WAW-1", "BLN1"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    normalize_message_target_groups(value)
+
+    def test_default_message_groups_apply_only_until_user_saves_a_value(self) -> None:
+        with temporary_database():
+            self.assertEqual(get_message_settings()["target_groups"], ["ALL", "QST", "CQ"])
+
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            process_incoming_tnc2_message(
+                "SP8ABC>APRS::CQ       :Default group{01",
+                timestamp="2026-01-01T00:01:00+00:00",
+            )
+            self.assertIsNotNone(fetch_one("SELECT id FROM aprs_messages WHERE addressee = 'CQ'"))
+
+            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": []})
+
+            self.assertEqual(get_message_settings()["target_groups"], [])
+            process_incoming_tnc2_message(
+                "SP9XYZ>APRS::QST      :Must be ignored{02",
+                timestamp="2026-01-01T00:02:00+00:00",
+            )
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE addressee = 'QST'"))
+
+    def test_message_settings_save_default_path_and_target_groups(self) -> None:
+        with temporary_database():
+            saved = save_message_settings(
+                {"default_path": "WIDE2-1", "receive_any_ssid": True, "target_groups": ["yaesu", "LOCAL", "YAESU"]}
+            )
+            self.assertEqual(saved["default_path"], "WIDE2-1")
+            self.assertTrue(saved["receive_any_ssid"])
+            self.assertEqual(saved["target_groups"], ["YAESU", "LOCAL"])
+
+    def test_conventional_group_is_received_only_when_explicitly_configured(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            inbound = "SP8ABC>APRS::BEM      :Calling group{01"
+
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:00+00:00")
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+
+            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": ["BEM"]})
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:01+00:00")
+            stored = fetch_one("SELECT addressee, message_text FROM aprs_messages WHERE direction = 'rx'")
+            assert stored is not None
+            self.assertEqual((stored["addressee"], stored["message_text"]), ("BEM", "Calling group"))
+            queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
+            assert queued_acks is not None
+            self.assertEqual(int(queued_acks["total"]), 0)
+
+    def test_group_messages_are_stored_without_acknowledgement(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "WIDE1-1", "receive_any_ssid": False, "target_groups": ["YAESU"]})
+
+            process_incoming_tnc2_message("SP8ABC>APRS::YAESU    :Group message{01", timestamp="2026-01-01T00:01:00+00:00")
+            process_incoming_tnc2_message("SP5XYZ-9>APRS::YAESU    :Second sender{02", timestamp="2026-01-01T00:02:00+00:00")
+
+            stored = fetch_one(
+                """
+                SELECT m.sender, m.addressee, m.message_text, c.remote_callsign, c.conversation_kind
+                FROM aprs_messages m
+                JOIN aprs_message_conversations c ON c.id = m.conversation_id
+                WHERE m.direction = 'rx'
+                """
+            )
+            assert stored is not None
+            self.assertEqual((stored["addressee"], stored["message_text"]), ("YAESU", "Group message"))
+            self.assertEqual(stored["sender"], "SP8ABC")
+            self.assertEqual(stored["remote_callsign"], "YAESU")
+            self.assertEqual(stored["conversation_kind"], "group")
+            queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
+            assert queued_acks is not None
+            self.assertEqual(int(queued_acks["total"]), 0)
+
+            page_data = get_messages_page_data()
+            self.assertEqual(len(page_data["conversations"]), 1)
+            self.assertEqual(page_data["conversations"][0]["kind"], "group")
+            self.assertEqual(
+                [message["sender"] for message in page_data["conversations"][0]["messages"]],
+                ["SP8ABC", "SP5XYZ-9"],
+            )
+
+    def test_outgoing_group_message_is_sent_once_without_message_number_or_retry(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "WIDE1-1", "receive_any_ssid": False, "target_groups": ["WAW"]})
+
+            message = queue_outgoing_message(callsign="WAW", message_text="Hello group", path="WIDE1-1")
+
+            self.assertIsNone(message["message_number"])
+            conversation = fetch_one("SELECT remote_callsign, conversation_kind FROM aprs_message_conversations")
+            assert conversation is not None
+            self.assertEqual((conversation["remote_callsign"], conversation["conversation_kind"]), ("WAW", "group"))
+
+            job = claim_next_outbound_job()
+            assert job is not None
+            self.assertEqual(
+                build_message_tnc2(job["payload"]),
+                "SQ9MDD-4>APBOX0,WIDE1-1::WAW      :Hello group",
+            )
+            register_direct_message_transmission(int(message["id"]), int(job["id"]))
+
+            retries = fetch_one(
+                "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                (int(message["id"]),),
+            )
+            assert retries is not None
+            self.assertEqual(int(retries["total"]), 0)
+
+    def test_existing_group_traffic_is_moved_from_sender_thread_to_group_thread(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "", "receive_any_ssid": False, "target_groups": ["WAW"]})
+            store_incoming_message(
+                sender="SP8ABC",
+                addressee="WAW",
+                message_text="Legacy placement",
+                message_number="01",
+                path="",
+                timestamp="2026-01-01T00:01:00+00:00",
+                acknowledge=False,
+            )
+
+            legacy = fetch_one("SELECT remote_callsign FROM aprs_message_conversations")
+            assert legacy is not None
+            self.assertEqual(legacy["remote_callsign"], "SP8ABC")
+
+            page_data = get_messages_page_data()
+
+            self.assertEqual(len(page_data["conversations"]), 1)
+            self.assertEqual(page_data["conversations"][0]["callsign"], "WAW")
+            self.assertEqual(page_data["conversations"][0]["kind"], "group")
+            self.assertEqual(page_data["conversations"][0]["messages"][0]["sender"], "SP8ABC")
+
+    def test_other_ssid_is_stored_without_ack_only_when_enabled(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            inbound = "SP8ABC>APRS::SQ9MDD-7 :Other SSID{01"
+
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:00+00:00")
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+
+            save_message_settings({"default_path": "", "receive_any_ssid": True, "target_groups": []})
+            process_incoming_tnc2_message(inbound, timestamp="2026-01-01T00:01:01+00:00")
+            self.assertIsNotNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+            queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
+            assert queued_acks is not None
+            self.assertEqual(int(queued_acks["total"]), 0)
+
     def test_message_text_allows_extended_printable_ascii_punctuation(self) -> None:
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
         self.assertEqual(normalize_aprs_message_text(allowed), allowed)
@@ -99,7 +268,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(normalize_aprs_destination_callsign(alias.lower()), alias)
 
     def test_destination_callsign_rejects_unknown_non_callsign_alias(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Destination callsign"):
+        with self.assertRaisesRegex(ValueError, "AX.25/APRS"):
             normalize_aprs_destination_callsign("FOO-BAR")
 
     def test_split_callsign_ssid_keeps_non_ssid_alias_intact(self) -> None:
@@ -348,6 +517,196 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 )
                 assert second_retry_jobs is not None
                 self.assertEqual(int(second_retry_jobs["total"]), 2)
+
+    async def test_all_active_direct_message_single_tnc_failure_does_not_cancel_retry_round(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="Bad TNC", device_path="127.0.0.1:9501")
+            second_interface = insert_modem(name="Good TNC", device_path="127.0.0.1:9502")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Mixed round", path="WIDE1-1")
+            message_id = int(message["id"])
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                if port == 9501:
+                    raise OSError("bad tnc link down")
+                self.assertEqual(port, 9502)
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                first_round_job = claim_next_outbound_job()
+                assert first_round_job is not None
+                await OutboundService()._process_job(first_round_job)
+
+                intermediate = fetch_one(
+                    "SELECT status, tx_attempt_count FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert intermediate is not None
+                self.assertEqual(intermediate["status"], "queued")
+                self.assertEqual(int(intermediate["tx_attempt_count"] or 0), 0)
+
+                second_round_job = claim_next_outbound_job()
+                assert second_round_job is not None
+                await OutboundService()._process_job(second_round_job)
+
+            message_row = fetch_one(
+                "SELECT status, tx_attempt_count, failure_reason FROM aprs_messages WHERE id = ?",
+                (message_id,),
+            )
+            assert message_row is not None
+            self.assertEqual(message_row["status"], MESSAGE_STATUS_SENT)
+            self.assertEqual(int(message_row["tx_attempt_count"] or 0), 1)
+            self.assertEqual(str(message_row["failure_reason"] or ""), "")
+
+            retry_jobs = fetch_one(
+                "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                (message_id,),
+            )
+            assert retry_jobs is not None
+            self.assertEqual(int(retry_jobs["total"]), 2)
+
+            statuses = fetch_all(
+                """
+                SELECT interface_id, status
+                FROM outbound_jobs
+                WHERE aprs_message_id = ?
+                ORDER BY id ASC
+                """,
+                (message_id,),
+            )
+            self.assertEqual(
+                [(first_interface, "failed"), (second_interface, "sent"), (first_interface, "queued"), (second_interface, "queued")],
+                [(int(row["interface_id"]), str(row["status"])) for row in statuses],
+            )
+
+    async def test_all_active_direct_message_success_before_later_tnc_failure_still_queues_retry(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="A Good TNC", device_path="127.0.0.1:9701")
+            second_interface = insert_modem(name="B Bad TNC", device_path="127.0.0.1:9702")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Success then fail", path="WIDE1-1")
+            message_id = int(message["id"])
+
+            class FakeWriter:
+                def write(self, _data: bytes) -> None:
+                    return None
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                if port == 9702:
+                    raise OSError("late tnc failure")
+                self.assertEqual(port, 9701)
+                return object(), FakeWriter()
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                first_round_job = claim_next_outbound_job()
+                assert first_round_job is not None
+                await OutboundService()._process_job(first_round_job)
+
+                after_success = fetch_one(
+                    "SELECT status, tx_attempt_count FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert after_success is not None
+                self.assertEqual(after_success["status"], MESSAGE_STATUS_SENT)
+                self.assertEqual(int(after_success["tx_attempt_count"] or 0), 1)
+
+                no_retry_yet = fetch_one(
+                    "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                    (message_id,),
+                )
+                assert no_retry_yet is not None
+                self.assertEqual(int(no_retry_yet["total"]), 1)
+
+                second_round_job = claim_next_outbound_job()
+                assert second_round_job is not None
+                await OutboundService()._process_job(second_round_job)
+
+            final_row = fetch_one(
+                "SELECT status, tx_attempt_count, failure_reason FROM aprs_messages WHERE id = ?",
+                (message_id,),
+            )
+            assert final_row is not None
+            self.assertEqual(final_row["status"], MESSAGE_STATUS_SENT)
+            self.assertEqual(int(final_row["tx_attempt_count"] or 0), 1)
+            self.assertEqual(str(final_row["failure_reason"] or ""), "")
+
+            retry_jobs = fetch_one(
+                "SELECT COUNT(*) AS total FROM outbound_jobs WHERE aprs_message_id = ? AND status = 'queued'",
+                (message_id,),
+            )
+            assert retry_jobs is not None
+            self.assertEqual(int(retry_jobs["total"]), 2)
+
+    async def test_all_active_direct_message_fails_only_after_entire_round_fails(self) -> None:
+        with temporary_database():
+            first_interface = insert_modem(name="Fail TNC A", device_path="127.0.0.1:9601")
+            second_interface = insert_modem(name="Fail TNC B", device_path="127.0.0.1:9602")
+            payload = station_payload(first_interface)
+            payload["beacon_interface_id"] = ALL_ACTIVE_INTERFACE_OPTION_VALUE
+            update_station_settings(payload)
+
+            message = queue_outgoing_message(callsign="SP8ABC", message_text="Fail round", path="WIDE1-1")
+            message_id = int(message["id"])
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertIn(port, {9601, 9602})
+                raise OSError(f"tnc {port} unavailable")
+
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                first_round_job = claim_next_outbound_job()
+                assert first_round_job is not None
+                await OutboundService()._process_job(first_round_job)
+
+                intermediate = fetch_one(
+                    "SELECT status, failure_reason FROM aprs_messages WHERE id = ?",
+                    (message_id,),
+                )
+                assert intermediate is not None
+                self.assertEqual(intermediate["status"], "queued")
+                self.assertEqual(str(intermediate["failure_reason"] or ""), "")
+
+                second_round_job = claim_next_outbound_job()
+                assert second_round_job is not None
+                await OutboundService()._process_job(second_round_job)
+
+            failed_row = fetch_one(
+                "SELECT status, failure_reason FROM aprs_messages WHERE id = ?",
+                (message_id,),
+            )
+            assert failed_row is not None
+            self.assertEqual(failed_row["status"], MESSAGE_STATUS_FAILED)
+            self.assertIn("unavailable", str(failed_row["failure_reason"]))
 
     def test_late_ack_marks_failed_direct_message_as_acked(self) -> None:
         with temporary_database():
@@ -1275,7 +1634,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             job = claim_next_outbound_job()
             assert job is not None
             self.assertEqual(job["kind"], "status")
-            self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APBOX0:>Station online")
+            self.assertEqual(build_status_tnc2(job["payload"]), "SQ9MDD-4>APBOX0,WIDE2-1:>Station online")
             rows = fetch_all("SELECT direction, message_text, status FROM aprs_messages ORDER BY id ASC")
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["message_text"], "?APRSS")
@@ -1422,6 +1781,16 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(conversation["callsign"], "DL1XYZ-9")
             self.assertEqual(conversation["messages"][0]["text"], "QSL")
             self.assertEqual(conversation["messages"][0]["delivery_state"], "queued")
+
+    def test_messages_template_includes_help_viewer(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('data-help-page="application/messages"', template_source)
+        self.assertIn('class="help-icon-button page-help-button"', template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+        for language in ("pl", "en", "es", "de"):
+            self.assertTrue(Path(f"help/application/messages.{language}.md").exists())
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is required for template helper rendering tests")
     def test_sidebar_messages_icon_switches_when_inbox_has_unread_messages(self) -> None:

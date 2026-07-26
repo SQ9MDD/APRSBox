@@ -4,9 +4,11 @@
 
 - [Creacion de objetos](application/objects.es.md)
 - [Boletines y anuncios](application/bulletins.es.md)
+- [Reglas de enrutamiento de paquetes](application/packet_routing.es.md)
 
 ## Protocoll
 
+- [Rutas APRS en la practica](protocoll/aprs_paths.es.md)
 - [Objetos de repetidor y QSY](protocoll/repeaters_qsy.es.md)
 - [Objetos WiRES / WiRES-X](protocoll/wires_qsy.es.md)
 - [Objetos EchoLink](protocoll/echolink_qsy.es.md)

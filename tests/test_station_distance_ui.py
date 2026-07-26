@@ -27,13 +27,16 @@ class StationDistanceUiTests(unittest.TestCase):
     def test_map_script_skips_marker_rerender_when_station_payload_is_unchanged(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("let lastStationsSignature = \"\";", script_source)
-        self.assertIn("function stationsSignature(stations)", script_source)
-        self.assertIn("if (nextSignature === lastStationsSignature)", script_source)
+        self.assertIn("function buildRenderSignature()", script_source)
+        self.assertIn("if (!forceRender && nextSignature === lastStationsSignature)", script_source)
 
     def test_map_script_renders_track_dots_for_older_positions(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("window.L.circleMarker", script_source)
         self.assertIn("points.slice(0, -1)", script_source)
+        self.assertIn("const callsignColorPalette = Object.freeze([", script_source)
+        self.assertIn("function overlayContrastColor()", script_source)
+        self.assertIn("const haloPolyline = window.L.polyline(", script_source)
 
     def test_map_template_renders_track_toggle_button(self) -> None:
         template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
@@ -64,6 +67,22 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("/static/js/map-latest-overlay.js", template_source)
         self.assertIn('id="map-interface-filters"', template_source)
         self.assertLess(template_source.find('id="map-interface-filters"'), template_source.find('class="map-info-strip"'))
+
+    def test_map_stylesheet_removes_extra_chrome_from_full_map_layout(self) -> None:
+        stylesheet_source = Path("app/static/css/map.css").read_text(encoding="utf-8")
+        self.assertIn(".page-map .content {", stylesheet_source)
+        self.assertIn(".page-map .map-panel {", stylesheet_source)
+        self.assertIn(".page-map .map-toolbar {", stylesheet_source)
+        self.assertIn(".page-map .map-stage {", stylesheet_source)
+        self.assertIn("padding: var(--space-4);", stylesheet_source)
+        self.assertIn(".page-map .map-panel {\n    padding: 0;", stylesheet_source)
+        self.assertIn("border: 0;", stylesheet_source)
+        self.assertIn("gap: var(--space-4);", stylesheet_source)
+        self.assertIn("box-shadow: none;", stylesheet_source)
+        self.assertIn("border: 1px solid var(--border);", stylesheet_source)
+        self.assertIn("border-radius: var(--radius-sm);", stylesheet_source)
+        self.assertIn("border-radius: var(--radius);", stylesheet_source)
+        self.assertIn("box-shadow: var(--shadow-soft);", stylesheet_source)
 
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -98,12 +117,22 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function filteredMapData(stations, mobileTracks, interfaces)", script_source)
         self.assertIn("interface_id", script_source)
 
+    def test_map_script_rebuilds_tracks_from_currently_visible_points(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("const mobileTrackMaxRenderedPoints = 60;", script_source)
+        self.assertIn("function rebuildVisibleTrackPoints(points, interfacesById, visibleInterfaceIds)", script_source)
+        self.assertIn("isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds)", script_source)
+        self.assertIn("isSameTrackPointPosition(previous, point)", script_source)
+        self.assertIn("return rebuilt.slice(-mobileTrackMaxRenderedPoints);", script_source)
+
     def test_station_detail_map_script_renders_station_track(self) -> None:
         script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")
         self.assertIn("function renderTrack(station, stationTrack)", script_source)
         self.assertIn("window.L.polyline(", script_source)
         self.assertIn("window.L.circleMarker(", script_source)
         self.assertIn("ensureMap(station, mapConfig, stationTrack)", script_source)
+        self.assertIn("const callsignColorPalette = Object.freeze([", script_source)
+        self.assertIn("function overlayContrastColor()", script_source)
 
     def test_map_script_initializes_ruler_with_draggable_markers(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -133,7 +162,7 @@ class StationDistanceUiTests(unittest.TestCase):
 
         self.assertIn("--map-mask-layer-opacity", map_script_source)
         self.assertIn("--map-mask-layer-opacity", detail_script_source)
-        self.assertIn("function maskLayerOpacityForMaskOpacity(opacityPercent)", map_script_source)
+        self.assertIn("function opacityFractionFromPercent(opacityPercent)", map_script_source)
         self.assertIn("function maskLayerOpacityForMaskOpacity(opacityPercent)", detail_script_source)
         self.assertIn("return Math.max(0, Math.min(100, opacityPercent)) / 100;", map_script_source)
         self.assertIn("return Math.max(0, Math.min(100, opacityPercent)) / 100;", detail_script_source)
@@ -143,6 +172,14 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('classList.add("map-mask-pane");', detail_script_source)
         self.assertIn("createPane(mapMaskPaneName)", map_script_source)
         self.assertIn("createPane(mapMaskPaneName)", detail_script_source)
+        self.assertIn("window.L.DomUtil.getPosition(mapPaneElement)", map_script_source)
+        self.assertIn("window.L.DomUtil.getPosition(mapPaneElement)", detail_script_source)
+        self.assertIn('mapMaskPane.style.left = `${-offsetX}px`;', map_script_source)
+        self.assertIn('mapMaskPane.style.left = `${-offsetX}px`;', detail_script_source)
+        self.assertIn('mapMaskPane.style.width = `${size.x}px`;', map_script_source)
+        self.assertIn('mapMaskPane.style.width = `${size.x}px`;', detail_script_source)
+        self.assertNotIn("const bleedX = size.x;", map_script_source)
+        self.assertNotIn("const bleedX = size.x;", detail_script_source)
         self.assertIn(".map-canvas .leaflet-pane.map-mask-pane", map_stylesheet_source)
         self.assertIn(".station-detail-map-canvas .leaflet-pane.map-mask-pane", app_stylesheet_source)
         self.assertIn(".map-canvas .map-mask-layer", map_stylesheet_source)

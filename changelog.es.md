@@ -1,8 +1,55 @@
 # Changelog
 
+## 1.8.57.dev - 2026-07-25
+- `Condiciones de banda / interfaces`: la evaluación de propagación ahora es opcional para cada interfaz y está desactivada de forma predeterminada; las bandas supervisadas disponibles son `2 m` y `70 cm`, sin selección manual de estaciones de referencia.
+- `Condiciones de banda / modelo W0–W5`: se añadió el aprendizaje automático del alcance y la audibilidad habituales de las estaciones fijas por separado para cada interfaz. La primera evaluación aparece después de 24 horas y la detección de aperturas considera la cantidad de estaciones, el alcance típico, las distancias, las estaciones lejanas y las nuevas áreas geográficas escuchadas.
+- `Condiciones de banda / confianza e historial`: se añadió un índice de confianza conservador que aumenta con la cantidad de datos y queda limitado al 30% tras el primer día, al 55% tras una semana y al 90% tras 30 días; la vista también incluye un indicador W0–W5 sencillo con una leyenda clara de la escala, un gráfico horario de los últimos 365 días y un bloque discreto separado con los datos recopilados, la etapa de aprendizaje y el progreso hacia las evaluaciones inicial y madura.
+- `Condiciones de banda / rendimiento`: el análisis se trasladó de la ruta crítica de recepción al agregador compartido de cinco minutos; cada trama se analiza una sola vez y las observaciones detalladas y el historial tienen una retención limitada.
+
+## 1.8.56.dev - 2026-07-24
+- `Mensajes / APRS-IS`: se corrigieron los ACK y las respuestas automáticas dirigidas a la estación local; vuelven mediante `Local TX → APRS-IS`, sin transmisión RF.
+- `Monitor de tráfico / colores`: se añadió el resaltado de filas según el origen y la dirección de las tramas, una leyenda modal y una alerta amarilla para `APRS-IS → RF` con la etiqueta `IS → RF`.
+- `APRS-IS → RF`: se añadió el borrado conjunto del indicativo y el radio para restaurar el modo solo mensajes.
+
+## 1.8.55.dev - 2026-07-23
+- `iGate / mensajes`: la regla obligatoria de entrega usa automáticamente todos los TNC activos con TX permitido; los mensajes aptos y la posición asociada del remitente omiten la regla de indicativo y radio, mientras que los campos vacíos activan el modo solo mensajes.
+- `Routing / registros`: los pasos que no se aplican a un paquete o que fueron omitidos se muestran como `omitido` en lugar de `aprobado`.
+
+## 1.8.54.dev - 2026-07-23
+- `APRS-IS / routing`: se añadió APRS-IS como interfaz y el routing seguro `APRS-IS → RF`.
+- `iGate / mensajes`: se añadió el enrutamiento bidireccional de mensajes APRS con control de alcance local y `qAR`/`qAO` correctos.
+
+## 1.8.53.dev - 2026-07-14
+- `Mensajes / conversaciones de grupo`: se añadieron hilos para los grupos de destino configurados explícitamente, con identificación del remitente; los demás grupos se ignoran y los mensajes de grupo se transmiten una sola vez, sin número, ACK ni reintentos.
+- `Mensajes / configuración / GUI`: se añadieron la ruta predeterminada, la recepción para cualquier SSID del indicativo local y una lista de grupos validada (`ALL`, `QST`, `CQ` en el primer uso); el panel se simplificó y se amplió la ayuda multilingüe.
+
+## 1.8.52.dev - 2026-07-08
+- `GUI / layout / consistencia`: se normalizaron margenes, espaciados y bordes de panel entre pantallas; `Map`, `Traffic Monitor`, `Statistics`, `My Station` y los formularios de settings siguen ahora un estilo comun, y el sidebar plegable quedo mas pulido.
+
+## 1.8.50.dev - 2026-07-05
+- `Ayuda / GUI / I18N`: se añadieron archivos locales completos de ayuda Markdown en `PL/EN/ES/DE` para `iGate settings`, `Notifications`, `Messages`, `WX`, `My Station` y `TNC`, se conectaron con el icono contextual de ayuda y se unifico su posicion en los encabezados de pagina.
+
+## 1.8.49.dev - 2026-06-29
+- `Rendimiento / runtime / SQLite`: se aligeraron las rutas calientes para hardware modesto: radar ahora comprueba `radar_enabled` antes del calculo costoso, la limpieza de `traffic_frames` salio del hot path RX y paso al mantenimiento por lotes, se añadieron caches cortos para snapshots de traffic/stations, indices SQLite para consultas hot-path de outbound/messages, el scheduler WX mueve el refresh bloqueante a un hilo y la pagina `Messages` ya no consulta `unread-status` por duplicado.
+- `Map / primera carga / render`: la primera entrada al mapa usa ahora un payload ligero de marcadores (`stations-lite`), mientras que los detalles de estacion y `mobile_tracks` se cargan aparte despues del primer render; el frontend actualiza marcadores, cobertura PHG y tracks de forma incremental en lugar de un redraw completo, acortando la espera por los puntos visibles y eliminando el parpadeo de overlays.
+
+## 1.8.48.dev - 2026-06-25
+- `Traffic Monitor / filtros`: en respuesta al GitHub `issue #53` (`Traffic monitor - filters`), la barra principal ahora ofrece filtros frontend-only para `RX`, `TX` y tramas `TX` de clientes remotos, un filtro de texto tipo grep y `Clear filters`; todos los filtros se aplican en vivo tambien sobre las siguientes actualizaciones SSE, sin cambios en backend.
+
+## 1.8.47.dev - 2026-06-25
+- `GUI / sidebar / scrolling`: en respuesta al GitHub `issue #54` (`Menu panel independent scrolling`), el sidebar en desktop ahora se desplaza de forma independiente del contenido principal y mantiene oculto su scrollbar.
+
+## 1.8.46.dev - 2026-06-23
+- `Settings / Global settings / Traffic frames`: se añadio una configuracion global de retencion del historial de trafico (`1h` a `6h` en pasos de `30 min`, mas `12h` y `24h`, valor por defecto `1h`) que controla la limpieza de `traffic_frames`; la visibilidad en el mapa de estaciones, objetos y tracks ahora sigue directamente esa ventana de retencion de datos.
+- `Messages / TX / multi-TNC`: se corrigio el manejo de errores outbound para `Transmit on all active interfaces`; un fallo de un solo TNC ya no marca todo el mensaje como `failed` mientras la misma ronda TX siga en curso en otras interfaces o una de ellas ya haya transmitido correctamente.
+- `Messages / retry`: un mensaje ahora pasa a `failed` solo cuando toda la ronda de envio para el mismo `scheduled_at` termina sin ningun job `sent`, restaurando el flujo normal de retry/ACK para los casos multi-TNC de `fail + success`.
+
 ## 1.8.45.dev - 2026-06-22
 - `My Station / Beacon`: el indicativo de la estacion en el formulario beacon se limito a un maximo de 6 caracteres ASCII imprimibles, tambien con validacion en backend.
+- `My Station / Beacon`: los campos `callsign` y `Beacon Path` ahora se normalizan a mayusculas tanto en el formulario como al guardar.
 - `My Station / Location`: se bloqueo la edicion manual de `latitude` y `longitude`; las coordenadas ahora se establecen solo mediante el boton `Get location`.
+- `Settings / Global settings`: el boton `Save Global Settings` se movio al final del bloque y `Coverage fill opacity` ahora usa `10%` por defecto, salvo que el usuario ya haya guardado un valor propio.
+- `Settings / Global settings / I18N`: se añadieron las traducciones que faltaban para el campo `Icon set`, su lista de opciones y el texto de ayuda bajo el selector.
 
 ## 1.8.44 - 2026-06-22
 
