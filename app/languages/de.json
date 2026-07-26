@@ -1479,6 +1479,7 @@
   "Unsupported TNC type.": "Nicht unterstützter TNC-Typ.",
   "Unsupported log level selection.": "Nicht unterstützte Auswahl der Protokollebene.",
   "Unsupported traffic history retention selection.": "Nicht unterstützte Auswahl der Verkehrsverlaufsaufbewahrung.",
+  "Unsupported coverage fill opacity selection.": "Nicht unterstützte Auswahl der Deckkraft für die Abdeckungsfüllung.",
   "Unsupported action mode.": "Nicht unterstützter Aktionsmodus.",
   "Minimum stored log level": "Mindeststufe der gespeicherten Protokolle",
   "Only events at or above this level are written to event logs.": "Nur Ereignisse auf oder über dieser Ebene werden in Ereignisprotokolle geschrieben.",

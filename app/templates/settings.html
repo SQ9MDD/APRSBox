@@ -101,11 +101,17 @@
         <div class="form-grid">
             <label>
                 <span>{{ t("Coverage fill opacity") }}</span>
-                <select id="map-coverage-fill-opacity" aria-label="{{ t('Coverage fill opacity') }}">
+                <select
+                    id="map-coverage-fill-opacity"
+                    name="coverage_fill_opacity"
+                    aria-label="{{ t('Coverage fill opacity') }}"
+                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
+                >
                     {% for value in range(0, 21) %}
-                    <option value="{{ value }}">{{ value }}%</option>
+                    <option value="{{ value }}" {% if coverage_fill_opacity == value %}selected{% endif %}>{{ value }}%</option>
                     {% endfor %}
                 </select>
+                <span class="muted small">{{ t("Applies globally across the GUI.") }}</span>
             </label>
             <label>
                 <span>{{ t("Coverage outline opacity") }}</span>
@@ -625,15 +631,7 @@
         const fallbackFailedLabel = {{ t("Operation failed.")|tojson }};
         const fallbackDoneLabel = {{ t("Done.")|tojson }};
         let fallbackDismissed = false;
-        const mapCoverageFillOpacityStorageKey = "aprsbox-map-coverage-fill-opacity";
         const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
-
-        const normalizeCoverageOpacityPercent = (value, fallback = 10) => {
-            if (Number.isInteger(value) && value >= 0 && value <= 20) {
-                return value;
-            }
-            return fallback;
-        };
 
         const normalizeOpacityPercent = (value, fallback = 100) => {
             if (Number.isInteger(value) && value >= 0 && value <= 100) {
@@ -641,19 +639,6 @@
             }
             return Number.isInteger(fallback) ? fallback - (fallback % 10) : 100;
         };
-
-        const coverageFillOpacitySelect = document.getElementById("map-coverage-fill-opacity");
-        if (coverageFillOpacitySelect) {
-            const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageFillOpacityStorageKey) || "", 10);
-            const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 10);
-            coverageFillOpacitySelect.value = String(normalizedOpacity);
-            coverageFillOpacitySelect.addEventListener("change", () => {
-                const nextValue = Number.parseInt(coverageFillOpacitySelect.value || "", 10);
-                const normalizedNextValue = normalizeCoverageOpacityPercent(nextValue, 10);
-                coverageFillOpacitySelect.value = String(normalizedNextValue);
-                window.localStorage.setItem(mapCoverageFillOpacityStorageKey, String(normalizedNextValue));
-            });
-        }
 
         const coverageOutlineOpacitySelect = document.getElementById("map-coverage-outline-opacity");
         if (coverageOutlineOpacitySelect) {

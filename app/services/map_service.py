@@ -4,7 +4,7 @@ import re
 from typing import Any
 from urllib.parse import quote, unquote
 
-from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, utc_now
 from app.services.content import (
     build_station_detail_href,
     format_decoded_data_for_display,
@@ -30,6 +30,22 @@ MAP_SOURCE_ZOOM_MIN = 0
 MAP_SOURCE_ZOOM_MAX = 30
 MAP_SOURCE_REQUIRED_TILE_TOKENS = ("{z}", "{x}", "{y}")
 MAP_TILE_PROXY_ENDPOINT = "/api/map/tiles"
+COVERAGE_FILL_OPACITY_SETTING_KEY = "map_coverage_fill_opacity"
+DEFAULT_COVERAGE_FILL_OPACITY_PERCENT = 5
+
+
+def normalize_coverage_fill_opacity_percent(value: Any) -> int:
+    try:
+        normalized = int(str(value).strip())
+    except (TypeError, ValueError):
+        return DEFAULT_COVERAGE_FILL_OPACITY_PERCENT
+    if normalized < 0 or normalized > 20:
+        return DEFAULT_COVERAGE_FILL_OPACITY_PERCENT
+    return normalized
+
+
+def get_coverage_fill_opacity_percent() -> int:
+    return normalize_coverage_fill_opacity_percent(get_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY))
 
 
 def list_map_sources() -> list[dict[str, Any]]:
@@ -668,6 +684,7 @@ def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
         "tile_min_zoom": tile_layer["tile_min_zoom"],
         "tile_max_zoom": tile_layer["tile_max_zoom"],
         "tile_subdomains": tile_layer["tile_subdomains"],
+        "coverage_fill_opacity": get_coverage_fill_opacity_percent(),
     }
 
 

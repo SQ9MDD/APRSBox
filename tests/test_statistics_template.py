@@ -15,7 +15,8 @@ class StatisticsTemplateTests(unittest.TestCase):
         self.assertIn('class="dashboard-activity-grid statistics-secondary-grid"', template_source)
         self.assertNotIn('id="statistics-devices-chart"', template_source)
         self.assertIn('class="dashboard-activity-card-header statistics-direct-heard-header"', template_source)
-        self.assertIn('({{ t("Max 20 direct-heard stations in selected range.") }})', template_source)
+        self.assertIn('({{ t("Max 20") }})', template_source)
+        self.assertNotIn("Max 20 direct-heard stations in selected range.", template_source)
 
         self.assertIn(".statistics-page {", stylesheet_source)
         self.assertIn(".statistics-toolbar-panel .panel-body {", stylesheet_source)

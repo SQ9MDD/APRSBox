@@ -1508,6 +1508,7 @@
   "Unsupported TNC type.": "Unsupported TNC type.",
   "Unsupported log level selection.": "Unsupported log level selection.",
   "Unsupported traffic history retention selection.": "Unsupported traffic history retention selection.",
+  "Unsupported coverage fill opacity selection.": "Unsupported coverage fill opacity selection.",
   "Unsupported action mode.": "Unsupported action mode.",
   "Minimum stored log level": "Minimum stored log level",
   "Only events at or above this level are written to event logs.": "Only events at or above this level are written to event logs.",

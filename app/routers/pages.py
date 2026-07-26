@@ -149,8 +149,11 @@ from app.services.config_backup import (
     safe_import_configuration_backup,
 )
 from app.services.map_service import (
+    COVERAGE_FILL_OPACITY_SETTING_KEY,
+    DEFAULT_COVERAGE_FILL_OPACITY_PERCENT,
     get_map_source,
     list_map_sources,
+    get_coverage_fill_opacity_percent,
     get_map_page_config,
     get_map_mobile_tracks_payload,
     get_map_station_details_payload,
@@ -162,6 +165,7 @@ from app.services.map_service import (
     safe_set_default_map_source,
     get_station_detail_map_config,
     get_station_detail_track_payload,
+    normalize_coverage_fill_opacity_percent,
 )
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job, enqueue_object_job, enqueue_status_job
@@ -850,6 +854,7 @@ def _settings_page_context(
     event_log_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
     event_log_debug_enabled = get_event_log_debug_enabled()
     traffic_retention_minutes = _normalize_traffic_retention_minutes_option(get_traffic_retention_minutes())
+    coverage_fill_opacity = get_coverage_fill_opacity_percent()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -894,6 +899,7 @@ def _settings_page_context(
             {"value": value, "label": _format_traffic_retention_minutes_option(value)}
             for value in TRAFFIC_RETENTION_ALLOWED_MINUTES
         ],
+        coverage_fill_opacity=coverage_fill_opacity,
         database_vacuum_blocked=database_vacuum_blocked,
         database_maintenance_snapshot=db_maintenance_snapshot,
         database_path=str(db_maintenance_snapshot.get("database_path") or ""),
@@ -1504,6 +1510,7 @@ def settings_update_global(
     aprs_symbol_set: str = Form(""),
     event_log_min_level: str = Form(""),
     event_log_debug_enabled: str | None = Form(None),
+    coverage_fill_opacity: str = Form(str(DEFAULT_COVERAGE_FILL_OPACITY_PERCENT)),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
@@ -1518,6 +1525,8 @@ def settings_update_global(
     raw_event_log_min_level = str(event_log_min_level or "").strip().upper()
     selected_event_log_min_level = _normalize_event_log_min_level(raw_event_log_min_level)
     selected_event_log_debug_enabled = _map_source_checkbox(event_log_debug_enabled)
+    raw_coverage_fill_opacity = str(coverage_fill_opacity or "").strip()
+    selected_coverage_fill_opacity = normalize_coverage_fill_opacity_percent(raw_coverage_fill_opacity)
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
@@ -1535,6 +1544,11 @@ def settings_update_global(
         return JSONResponse({"ok": False, "error": _translate("Unsupported icon set selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if raw_event_log_min_level not in EVENT_LOG_MIN_LEVEL_OPTIONS:
         return JSONResponse({"ok": False, "error": _translate("Unsupported log level selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if raw_coverage_fill_opacity != str(selected_coverage_fill_opacity):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Unsupported coverage fill opacity selection.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
@@ -1551,6 +1565,7 @@ def settings_update_global(
     set_app_setting(APRS_SYMBOL_SET_SETTING_KEY, selected_aprs_symbol_set)
     set_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY, selected_event_log_min_level)
     set_app_setting(EVENT_LOG_DEBUG_ENABLED_SETTING_KEY, "1" if selected_event_log_debug_enabled else "0")
+    set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY, str(selected_coverage_fill_opacity))
     return JSONResponse(
         {
             "ok": True,
@@ -1562,6 +1577,7 @@ def settings_update_global(
             "current_aprs_symbol_set": selected_aprs_symbol_set,
             "event_log_min_level": selected_event_log_min_level,
             "event_log_debug_enabled": selected_event_log_debug_enabled,
+            "coverage_fill_opacity": selected_coverage_fill_opacity,
             "reload": True,
         }
     )

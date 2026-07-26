@@ -5,10 +5,11 @@ import unittest
 from pathlib import Path
 
 from app.config import settings
-from app.db import execute, init_db
+from app.db import execute, init_db, set_app_setting
 from app.services.map_tile_proxy import clear_map_source_cache
 from app.services.map_service import (
     delete_map_source,
+    get_map_page_config,
     get_map_source,
     list_map_sources,
     move_map_source,
@@ -219,6 +220,18 @@ class MapSourcesTests(unittest.TestCase):
             )
             tile_layer = resolve_active_tile_layer(root_path="/aprsbox")
             self.assertEqual(tile_layer["tile_url"], "https://tiles.example/{z}/{x}/{y}.png")
+
+    def test_map_config_uses_global_coverage_fill_opacity_with_five_percent_default(self) -> None:
+        with temporary_database():
+            self.assertEqual(get_map_page_config()["coverage_fill_opacity"], 5)
+
+            set_app_setting("map_coverage_fill_opacity", "13")
+
+            self.assertEqual(get_map_page_config()["coverage_fill_opacity"], 13)
+
+            set_app_setting("map_coverage_fill_opacity", "99")
+
+            self.assertEqual(get_map_page_config()["coverage_fill_opacity"], 5)
 
     def test_clear_map_source_cache_removes_files_and_resets_stats(self) -> None:
         with temporary_database():

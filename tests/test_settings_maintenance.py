@@ -1,4 +1,5 @@
 import contextlib
+import importlib.util
 import os
 import re
 import tempfile
@@ -6,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.db import execute, init_db
+from app.db import execute, get_app_setting, init_db
 from app.services.content import has_enabled_modem_interface
 from app.services.system import (
     container_system_actions_disabled_message,
@@ -16,6 +17,8 @@ from app.services.system import (
     start_host_reboot_job,
     start_service_restart_job,
 )
+
+FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
 
 
 @contextlib.contextmanager
@@ -102,10 +105,35 @@ class SettingsMaintenanceTests(unittest.TestCase):
             template_source.index('{{ t("Save Global Settings") }}'),
         )
 
-    def test_settings_template_uses_ten_percent_default_for_coverage_fill_opacity(self) -> None:
+    def test_settings_template_uses_global_coverage_fill_opacity(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn("const normalizeCoverageOpacityPercent = (value, fallback = 10) => {", template_source)
-        self.assertIn("const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 10);", template_source)
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        self.assertIn('name="coverage_fill_opacity"', template_source)
+        self.assertIn('{% if coverage_fill_opacity == value %}selected{% endif %}', template_source)
+        self.assertNotIn("aprsbox-map-coverage-fill-opacity", template_source)
+        self.assertIn("set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY", router_source)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
+    def test_global_settings_save_persists_coverage_fill_opacity(self) -> None:
+        from app.models import UserIdentity
+        from app.routers.pages import settings_update_global
+
+        with temporary_database():
+            response = settings_update_global(
+                request=None,
+                language="en",
+                default_units="metric",
+                traffic_retention_minutes="60",
+                ui_palette="green-core",
+                aprs_symbol_set="legacy",
+                event_log_min_level="INFO",
+                event_log_debug_enabled=None,
+                coverage_fill_opacity="5",
+                current_user=UserIdentity(id=1, username="admin", role="admin", is_active=True),
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(get_app_setting("map_coverage_fill_opacity"), "5")
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")

@@ -38,6 +38,7 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "traffic_retention_minutes",
     "event_log_min_level",
     "event_log_debug_enabled",
+    "map_coverage_fill_opacity",
     "gui_update_branch",
     "aprsis_server",
     "aprsis_port",

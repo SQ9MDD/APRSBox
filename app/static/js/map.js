@@ -79,7 +79,6 @@
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
-    const mapCoverageFillOpacityStorageKey = "aprsbox-map-coverage-fill-opacity";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
@@ -92,7 +91,7 @@
     let tracksVisible = true;
     let coverageVisible = true;
     let rulerVisible = true;
-    let coverageFillOpacity = 0.2;
+    let coverageFillOpacity = 0.05;
     let coverageOutlineOpacity = 1;
     let latestStations = [];
     let latestMobileTracks = [];
@@ -382,8 +381,8 @@
     }
 
     function resolveDefaultCoverageFillOpacity() {
-        const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageFillOpacityStorageKey) || "", 10);
-        return normalizeCoverageOpacityPercent(storedOpacity, 20);
+        const configuredOpacity = Number.parseInt(root.dataset.coverageFillOpacity || "", 10);
+        return normalizeCoverageOpacityPercent(configuredOpacity, 5);
     }
 
     function resolveDefaultCoverageOutlineOpacity() {
@@ -392,12 +391,11 @@
     }
 
     function applyCoverageFillOpacity(opacityPercent) {
-        const normalizedOpacity = normalizeCoverageOpacityPercent(opacityPercent, 20);
+        const normalizedOpacity = normalizeCoverageOpacityPercent(opacityPercent, 5);
         coverageFillOpacity = opacityFractionFromPercent(normalizedOpacity);
         if (coverageFillOpacitySelect) {
             coverageFillOpacitySelect.value = String(normalizedOpacity);
         }
-        window.localStorage.setItem(mapCoverageFillOpacityStorageKey, String(normalizedOpacity));
     }
 
     function applyCoverageOutlineOpacity(opacityPercent) {

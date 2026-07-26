@@ -201,6 +201,16 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertNotIn("filter: brightness(var(--map-tile-brightness));", map_stylesheet_source)
         self.assertNotIn("filter: brightness(var(--map-tile-brightness));", app_stylesheet_source)
 
+    def test_map_uses_global_coverage_fill_opacity_with_five_percent_default(self) -> None:
+        map_script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        map_template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+
+        self.assertIn('data-coverage-fill-opacity="{{ map_config.coverage_fill_opacity }}"', map_template_source)
+        self.assertIn('root.dataset.coverageFillOpacity || ""', map_script_source)
+        self.assertIn("normalizeCoverageOpacityPercent(configuredOpacity, 5)", map_script_source)
+        self.assertIn("let coverageFillOpacity = 0.05;", map_script_source)
+        self.assertNotIn("aprsbox-map-coverage-fill-opacity", map_script_source)
+
     def test_map_latest_overlay_script_handles_overlay_toggle_and_qsy(self) -> None:
         script_source = Path("app/static/js/map-latest-overlay.js").read_text(encoding="utf-8")
         self.assertIn("const stationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)

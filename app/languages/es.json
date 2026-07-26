@@ -1467,6 +1467,7 @@
   "Unsupported TNC type.": "Tipo de TNC no soportado.",
   "Unsupported log level selection.": "Selección de nivel de registro no admitida.",
   "Unsupported traffic history retention selection.": "Selección de retención del historial de tráfico no admitida.",
+  "Unsupported coverage fill opacity selection.": "Selección de opacidad de relleno de cobertura no admitida.",
   "Unsupported action mode.": "Modo de acción no compatible.",
   "Minimum stored log level": "Nivel mínimo de registro almacenado",
   "Only events at or above this level are written to event logs.": "Sólo los eventos que se encuentran en este nivel o por encima de él se escriben en los registros de eventos.",
