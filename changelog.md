@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.0 - 26.07.2026
+- `Wydanie stabilne`: scalono do `main` duży pakiet zmian z wersji `1.8.45.dev–1.8.57.dev`, obejmujący APRS-IS/iGate, wiadomości, warunki pasma, monitor ruchu, mapę, GUI, wydajność i instalator Alpine.
+
 ## 1.8.57.dev - 25.07.2026
 - `Warunki pasma / interfejsy`: ocena propagacji jest teraz opcjonalna dla każdego interfejsu i domyślnie wyłączona; do wyboru pozostają `2 m` oraz `70 cm`, bez ręcznego wskazywania stacji referencyjnych.
 - `Warunki pasma / model W0–W5`: dodano automatyczne uczenie typowej słyszalności stacji stałych osobno dla każdego interfejsu. Pierwsza ocena pojawia się po 24 godzinach, a wykrywanie otwarć uwzględnia liczbę stacji, typowy zasięg, odległości, dalekie stacje i nowe obszary geograficzne.

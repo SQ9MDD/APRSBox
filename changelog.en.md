@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.0 - 2026-07-26
+- `Stable release`: merged a large batch of changes from `1.8.45.dev–1.8.57.dev` into `main`, covering APRS-IS/iGate, messages, Band Condition, Traffic Monitor, map, GUI, performance, and the Alpine installer.
+
 ## 1.8.57.dev - 2026-07-25
 - `Band Condition / interfaces`: propagation assessment is now optional per interface and disabled by default; the available monitored bands are `2 m` and `70 cm`, with no manual reference-station selection.
 - `Band Condition / W0–W5 model`: added automatic learning of the usual fixed-station footprint separately for each interface. The first assessment appears after 24 hours, while opening detection considers station counts, typical reach, distances, distant stations, and newly heard geographic areas.

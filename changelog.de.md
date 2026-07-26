@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.0 - 2026-07-26
+- `Stable release`: ein grosses Paket von Aenderungen aus `1.8.45.dev–1.8.57.dev` wurde nach `main` uebernommen, darunter APRS-IS/iGate, Nachrichten, Bandbedingungen, Traffic Monitor, Karte, GUI, Leistung und der Alpine-Installer.
+
 ## 1.8.57.dev - 2026-07-25
 - `Bandbedingungen / Schnittstellen`: die Ausbreitungsbewertung ist jetzt pro Schnittstelle optional und standardmaessig deaktiviert; als ueberwachte Baender stehen `2 m` und `70 cm` zur Wahl, ohne manuelle Auswahl von Referenzstationen.
 - `Bandbedingungen / W0–W5-Modell`: die uebliche Reichweite und Hoerbarkeit fester Stationen wird fuer jede Schnittstelle automatisch gelernt. Die erste Bewertung erscheint nach 24 Stunden; zur Erkennung von Bandoeffnungen werden Stationszahl, typische Reichweite, Entfernungen, weit entfernte Stationen und neu gehoerte geografische Gebiete beruecksichtigt.

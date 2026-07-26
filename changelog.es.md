@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.0 - 2026-07-26
+- `Stable release`: se fusionó en `main` un gran paquete de cambios de `1.8.45.dev–1.8.57.dev`, que incluye APRS-IS/iGate, mensajes, condiciones de banda, Monitor de tráfico, mapa, GUI, rendimiento y el instalador de Alpine.
+
 ## 1.8.57.dev - 2026-07-25
 - `Condiciones de banda / interfaces`: la evaluación de propagación ahora es opcional para cada interfaz y está desactivada de forma predeterminada; las bandas supervisadas disponibles son `2 m` y `70 cm`, sin selección manual de estaciones de referencia.
 - `Condiciones de banda / modelo W0–W5`: se añadió el aprendizaje automático del alcance y la audibilidad habituales de las estaciones fijas por separado para cada interfaz. La primera evaluación aparece después de 24 horas y la detección de aperturas considera la cantidad de estaciones, el alcance típico, las distancias, las estaciones lejanas y las nuevas áreas geográficas escuchadas.
