@@ -1801,5 +1801,7 @@
   "IGate Internet station state": "Stan internetowy stacji iGate",
   "IGate pending sender positions": "Oczekujące pozycje nadawców iGate",
   "APRS-IS to RF flow cannot be enabled without exactly one mandatory enabled Callsign and Radius Rule step.": "Flow APRS-IS → RF nie może zostać włączony bez dokładnie jednego obowiązkowego i włączonego kroku Reguły znaku i promienia.",
-  "APRS-IS to RF mandatory rules are not in the required order.": "Obowiązkowe reguły APRS-IS → RF nie są ułożone w wymaganej kolejności."
+  "APRS-IS to RF mandatory rules are not in the required order.": "Obowiązkowe reguły APRS-IS → RF nie są ułożone w wymaganej kolejności.",
+  "Last 24 hours": "Ostatnie 24 godziny",
+  "Current": "Aktualnie"
 }

@@ -140,9 +140,12 @@
                     <p>{{ t(dashboard_home.band_summary) }}</p>
                     <ol class="dashboard-v2-band-meter{% if dashboard_band.condition_index is none %} dashboard-v2-band-meter-empty{% endif %}" aria-label="{{ t('Propagation scale W0 to W5') }}">
                         {% for level in range(6) %}
-                        <li class="{% if dashboard_band.condition_index is not none and level <= dashboard_band.condition_index %}is-reached{% endif %}{% if dashboard_band.condition_index == level %} is-current{% endif %}">
+                        <li class="{% if dashboard_band.condition_index is not none and level < dashboard_band.condition_index %}is-reached{% endif %}{% if dashboard_band.condition_index == level %} is-current{% endif %}"{% if dashboard_band.condition_index == level %} aria-current="true"{% endif %}>
+                            {% if dashboard_band.condition_index == level %}
+                            <span class="dashboard-v2-band-meter-current">{{ t("Current") }}</span>
+                            {% endif %}
                             <span class="dashboard-v2-band-meter-bar" aria-hidden="true"></span>
-                            <span>W{{ level }}</span>
+                            <span class="dashboard-v2-band-meter-level">W{{ level }}</span>
                         </li>
                         {% endfor %}
                     </ol>
@@ -162,6 +165,7 @@
             <span class="dashboard-v2-kpi-copy">
                 <span class="dashboard-v2-kpi-label">{{ t("Heard stations") }}</span>
                 <strong class="dashboard-v2-kpi-value">{{ kpi.heard }}</strong>
+                <span class="dashboard-v2-kpi-meta">{{ t("Last 24 hours") }}</span>
             </span>
         </article>
         <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-cyan">
@@ -171,6 +175,7 @@
             <span class="dashboard-v2-kpi-copy">
                 <span class="dashboard-v2-kpi-label">{{ t("APRS frames") }}</span>
                 <strong class="dashboard-v2-kpi-value">{{ kpi.frames }}</strong>
+                <span class="dashboard-v2-kpi-meta">{{ t("Last 24 hours") }}</span>
             </span>
         </article>
         <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-violet">

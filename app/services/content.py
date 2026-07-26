@@ -79,6 +79,7 @@ MODEM_TX_MIN_GAP_SECONDS_MIN = 0.2
 MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 DASHBOARD_ACTIVITY_WINDOW_MINUTES = 60
 DASHBOARD_ACTIVITY_BUCKET_MINUTES = 5
+DASHBOARD_KPI_WINDOW_HOURS = 24
 STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
 _STATION_DETAIL_URL_PATTERN = re.compile(r"https?://[^\s<>'\"`]+")
 APRS_SYMBOL_SET_SETTING_KEY = "aprs_symbol_set"
@@ -1375,11 +1376,26 @@ def _format_monitor_timestamp(timestamp: str | None) -> str:
 
 
 def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    cutoff_utc = datetime.now(timezone.utc) - timedelta(hours=DASHBOARD_KPI_WINDOW_HOURS)
+    cutoff_iso = cutoff_utc.isoformat()
     total_frames_row = fetch_one(
-        f"SELECT COUNT(*) AS total FROM traffic_frames WHERE {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+        f"""
+        SELECT COUNT(*) AS total
+        FROM traffic_frames
+        WHERE {STATISTICS_TRAFFIC_SQL_PREDICATE}
+          AND julianday(created_at) >= julianday(?)
+        """,
+        (cutoff_iso,),
     )
     decoded_frames_row = fetch_one(
-        f"SELECT COUNT(*) AS total FROM traffic_frames WHERE format = 'TNC2' AND {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+        f"""
+        SELECT COUNT(*) AS total
+        FROM traffic_frames
+        WHERE format = 'TNC2'
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+          AND julianday(created_at) >= julianday(?)
+        """,
+        (cutoff_iso,),
     )
     unique_sources_row = fetch_one(
         f"""
@@ -1387,18 +1403,25 @@ def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = 
         FROM traffic_frames
         WHERE COALESCE(source, '') <> ''
           AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-        """
+          AND julianday(created_at) >= julianday(?)
+        """,
+        (cutoff_iso,),
     )
+    snapshots = heard_snapshots if heard_snapshots is not None else get_rf_heard_station_snapshots()
+    heard_stations = 0
+    for snapshot in snapshots:
+        last_heard_at = _parse_iso_timestamp_utc(
+            str(snapshot.get("last_heard_rf_at") or snapshot.get("last_heard_at") or "")
+        )
+        if last_heard_at is not None and last_heard_at >= cutoff_utc:
+            heard_stations += 1
 
     return {
         "received_frames": total_frames_row["total"] if total_frames_row else 0,
         "decoded_aprs": decoded_frames_row["total"] if decoded_frames_row else 0,
         "unique_sources": unique_sources_row["total"] if unique_sources_row else 0,
-        "heard_stations": (
-            len(heard_snapshots)
-            if heard_snapshots is not None
-            else len(get_rf_heard_station_snapshots())
-        ),
+        "heard_stations": heard_stations,
+        "window_hours": DASHBOARD_KPI_WINDOW_HOURS,
     }
 
 
@@ -2064,8 +2087,18 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         hero_summary.append({"label": "APRS-IS", "value": aprsis_runtime_label, "tone": aprsis_runtime_tone})
 
     stats = [
-        {"label": "Heard stations", "value": str(traffic["heard_stations"]), "suffix": ""},
-        {"label": "APRS frames", "value": str(traffic["decoded_aprs"]), "suffix": ""},
+        {
+            "label": "Heard stations",
+            "value": str(traffic["heard_stations"]),
+            "suffix": "",
+            "scope": "Last 24 hours",
+        },
+        {
+            "label": "APRS frames",
+            "value": str(traffic["decoded_aprs"]),
+            "suffix": "",
+            "scope": "Last 24 hours",
+        },
         {"label": "Interfaces", "value": f"{len(enabled_interfaces)} / {len(interfaces)}", "suffix": ""},
         {"label": "Last RF RX", "value": last_rf_rx_display, "suffix": ""},
         {"label": "Last RF TX", "value": last_rf_tx_display, "suffix": ""},

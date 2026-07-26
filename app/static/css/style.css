@@ -2242,17 +2242,17 @@ body {
 .dashboard-v2-band-meter {
     list-style: none;
     margin: 0.22rem 0 0;
-    padding: 0;
+    padding: 1.18rem 0 0;
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 0.28rem;
+    gap: 0.32rem;
 }
 
 .dashboard-v2-band-meter li {
     --dashboard-band-level: var(--muted);
     position: relative;
     display: grid;
-    gap: 0.24rem;
+    gap: 0.3rem;
     color: var(--muted);
     font-size: 0.64rem;
     font-weight: 700;
@@ -2285,34 +2285,78 @@ body {
 
 .dashboard-v2-band-meter-bar {
     display: block;
-    height: 0.58rem;
-    border: 1px solid color-mix(in srgb, var(--dashboard-band-level) 50%, transparent);
-    border-radius: 0.2rem;
-    background: color-mix(in srgb, var(--dashboard-band-level) 28%, transparent);
-    opacity: 0.46;
+    height: 0.56rem;
+    border: 1px solid color-mix(in srgb, var(--dashboard-band-level) 46%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--dashboard-band-level) 17%, transparent);
+    opacity: 0.5;
 }
 
 .dashboard-v2-band-meter .is-reached .dashboard-v2-band-meter-bar {
-    background: var(--dashboard-band-level);
-    box-shadow: 0 0 0.7rem color-mix(in srgb, var(--dashboard-band-level) 38%, transparent);
-    opacity: 0.92;
+    background: color-mix(in srgb, var(--dashboard-band-level) 60%, var(--panel-alt));
+    opacity: 0.72;
 }
 
 .dashboard-v2-band-meter .is-current {
     color: var(--text);
 }
 
-.dashboard-v2-band-meter .is-current::before {
-    position: absolute;
-    top: -0.37rem;
-    left: 50%;
-    width: 0.34rem;
-    height: 0.34rem;
-    border: 2px solid var(--text);
-    border-radius: 999px;
+.dashboard-v2-band-meter .is-current .dashboard-v2-band-meter-bar {
+    height: 0.78rem;
+    margin-top: -0.11rem;
+    border: 2px solid color-mix(in srgb, var(--text) 84%, var(--dashboard-band-level));
     background: var(--dashboard-band-level);
+    box-shadow:
+        0 0 0 0.18rem color-mix(in srgb, var(--dashboard-band-level) 24%, transparent),
+        0 0 1rem color-mix(in srgb, var(--dashboard-band-level) 66%, transparent);
+    opacity: 1;
+}
+
+.dashboard-v2-band-meter-current {
+    position: absolute;
+    bottom: calc(100% + 0.16rem);
+    left: 50%;
+    padding: 0.12rem 0.3rem;
+    border: 1px solid color-mix(in srgb, var(--dashboard-band-level) 72%, var(--border));
+    border-radius: 999px;
+    color: var(--text);
+    background: color-mix(in srgb, var(--dashboard-band-level) 22%, var(--panel));
+    font-size: 0.5rem;
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.dashboard-v2-band-meter-current::after {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-right: 0.2rem solid transparent;
+    border-left: 0.2rem solid transparent;
+    border-top: 0.24rem solid var(--dashboard-band-level);
     content: "";
     transform: translateX(-50%);
+}
+
+.dashboard-v2-band-meter-level {
+    justify-self: center;
+    min-width: 2rem;
+    padding: 0.08rem 0.25rem;
+    border-radius: 999px;
+}
+
+.dashboard-v2-band-meter .is-current .dashboard-v2-band-meter-level {
+    color: var(--text);
+    background: color-mix(in srgb, var(--dashboard-band-level) 28%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dashboard-band-level) 50%, transparent);
+}
+
+.dashboard-v2-band-meter-empty {
+    padding-top: 0;
 }
 
 .dashboard-v2-band-meter-empty .dashboard-v2-band-meter-bar {
@@ -2399,6 +2443,13 @@ body {
     font-size: 1.15rem;
     line-height: 1.16;
     overflow-wrap: anywhere;
+}
+
+.dashboard-v2-kpi-meta {
+    color: color-mix(in srgb, var(--dashboard-kpi-color) 72%, var(--muted));
+    font-size: 0.6rem;
+    font-weight: 650;
+    line-height: 1.2;
 }
 
 .dashboard-v2-kpi-value-time {

@@ -1,11 +1,12 @@
 import contextlib
+from datetime import datetime, timedelta, timezone
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_one, init_db
-from app.services.content import dashboard_home_data, update_station_settings
+from app.services.content import dashboard_home_data, dashboard_traffic_summary, update_station_settings
 
 
 @contextlib.contextmanager
@@ -80,6 +81,38 @@ def station_payload(interface_id: int) -> dict[str, str]:
 
 
 class DashboardHomeTests(unittest.TestCase):
+    def test_dashboard_kpis_use_last_24_hours_only(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+            recent_at = (now_utc - timedelta(hours=2)).isoformat()
+            old_at = (now_utc - timedelta(hours=25)).isoformat()
+            for source_kind, line, created_at in (
+                ("rf", "SP5ABC-1>APRS:!5212.00N/02057.00E-Test", recent_at),
+                ("rf", "SP5OLD-1>APRS:!5212.00N/02057.00E-Old", old_at),
+                ("aprsis", "SP5NET-1>APRS:!5212.00N/02057.00E-Net", recent_at),
+            ):
+                execute(
+                    """
+                    INSERT INTO traffic_frames(
+                        source, source_kind, interface_id, direction, band, format,
+                        line, port, command, length, hex, created_at
+                    )
+                    VALUES ('test', ?, NULL, 'RX', '2m', 'TNC2', ?, NULL, NULL, ?, NULL, ?)
+                    """,
+                    (source_kind, line, len(line), created_at),
+                )
+
+            traffic = dashboard_traffic_summary(
+                heard_snapshots=[
+                    {"last_heard_rf_at": recent_at},
+                    {"last_heard_rf_at": old_at},
+                ]
+            )
+
+            self.assertEqual(traffic["window_hours"], 24)
+            self.assertEqual(traffic["decoded_aprs"], 1)
+            self.assertEqual(traffic["heard_stations"], 1)
+
     def test_dashboard_exposes_activity_chart_series(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="Chart TNC", enabled=1, tx_blocked=0)
@@ -140,7 +173,10 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("dashboard-v2-radio-visual", template)
         self.assertIn("dashboard-v2-link-statuses", template)
         self.assertIn("dashboard-v2-kpi-icon", template)
+        self.assertIn("dashboard-v2-kpi-meta", template)
         self.assertIn("dashboard-v2-band-meter", template)
+        self.assertIn("dashboard-v2-band-meter-current", template)
+        self.assertIn('aria-current="true"', template)
         self.assertIn("dashboard-v2-event-marker", template)
         self.assertIn("Open detailed statistics", template)
         self.assertIn("point: { radius: 0", template)
