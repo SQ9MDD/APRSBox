@@ -70,14 +70,30 @@
                     <div class="band-condition-chart-heading">
                         <div>
                             <h3>{{ t("Propagation history") }}</h3>
-                            <p class="muted">{{ t("Hourly W0–W5 index for the last 365 days.") }}</p>
+                            <p class="muted">{{ t("Hourly W0–W5 index. The visible range adapts to available results.") }}</p>
                         </div>
-                        <span class="muted">{{ t("1 hour resolution") }}</span>
+                        <div class="band-condition-chart-actions">
+                            <div
+                                class="band-condition-history-range"
+                                role="group"
+                                aria-label="{{ t('Visible history range') }}"
+                                data-history-range-controls="{{ item.interface_id }}"
+                            >
+                                <button type="button" data-history-range-hours="24" aria-pressed="false">24h</button>
+                                <button type="button" data-history-range-hours="168" aria-pressed="false">7d</button>
+                                <button type="button" data-history-range-hours="720" aria-pressed="false">30d</button>
+                                <button type="button" data-history-range-hours="8760" aria-pressed="false">365d</button>
+                            </div>
+                            <span class="muted" data-history-summary="{{ item.interface_id }}"></span>
+                            <span class="muted">{{ t("1 hour resolution") }}</span>
+                        </div>
                     </div>
                     <div class="band-condition-chart-wrap">
                         <canvas
                             id="band-condition-chart-{{ item.interface_id }}"
                             data-interface-id="{{ item.interface_id }}"
+                            data-current-hour="{{ item.hour_start_utc }}"
+                            data-current-index="{{ item.condition_index if item.condition_index is not none else '' }}"
                             aria-label="{{ t('Propagation history') }} {{ item.interface_name }}"
                         ></canvas>
                         <p class="band-condition-chart-empty muted" data-history-empty="{{ item.interface_id }}">
@@ -187,6 +203,11 @@
 
         const rootPath = {{ request.scope.root_path|tojson }};
         const historyUrl = `${rootPath}/api/band-condition/history?days=365`;
+        const historyRangeHours = Object.freeze([24, 168, 720, 8760]);
+        const propagationIndexLabel = {{ t("Propagation index")|tojson }};
+        const provisionalLabel = {{ t("Current hour (provisional)")|tojson }};
+        const resultsLabel = {{ t("results")|tojson }};
+        const recordedHoursLabel = {{ t("recorded hours")|tojson }};
         const chartColors = Object.freeze({
             0: "#c97a7a",
             1: "#d59a62",
@@ -228,31 +249,101 @@
                     const interfaceId = String(canvas.dataset.interfaceId || "");
                     const item = historyItemsById.get(interfaceId);
                     const emptyNode = document.querySelector(`[data-history-empty="${interfaceId}"]`);
-                    const indexes = Array.isArray(item?.indexes) ? item.indexes : [];
-                    const hasData = indexes.some((value) => Number.isInteger(value));
+                    const summaryNode = document.querySelector(`[data-history-summary="${interfaceId}"]`);
+                    const controlsNode = document.querySelector(`[data-history-range-controls="${interfaceId}"]`);
+                    const historicalIndexes = Array.isArray(item?.indexes)
+                        ? labels.map((_, index) => Number.isInteger(item.indexes[index]) ? item.indexes[index] : null)
+                        : labels.map(() => null);
+                    const confidence = Array.isArray(item?.confidence)
+                        ? labels.map((_, index) => Number.isInteger(item.confidence[index]) ? item.confidence[index] : null)
+                        : labels.map(() => null);
+                    const chartLabels = [...labels];
+                    const provisionalIndexes = labels.map(() => null);
+                    const currentHour = String(canvas.dataset.currentHour || "");
+                    const currentIndex = Number.parseInt(String(canvas.dataset.currentIndex || ""), 10);
+                    const hasProvisionalValue = (
+                        currentHour !== ""
+                        && currentHour === String(payload.end_utc || "")
+                        && Number.isInteger(currentIndex)
+                        && currentIndex >= 0
+                        && currentIndex <= 5
+                    );
+
+                    if (hasProvisionalValue) {
+                        const existingIndex = chartLabels.indexOf(currentHour);
+                        if (existingIndex >= 0) {
+                            provisionalIndexes[existingIndex] = currentIndex;
+                        } else {
+                            chartLabels.push(currentHour);
+                            historicalIndexes.push(null);
+                            confidence.push(null);
+                            provisionalIndexes.push(currentIndex);
+                        }
+                    }
+
+                    const historicalResultCount = historicalIndexes.filter((value) => Number.isInteger(value)).length;
+                    const recordedHourCount = confidence.filter((value) => Number.isInteger(value)).length;
+                    const hasData = (
+                        historicalResultCount > 0
+                        || provisionalIndexes.some((value) => Number.isInteger(value))
+                    );
                     if (emptyNode instanceof HTMLElement) emptyNode.hidden = hasData;
                     canvas.hidden = !hasData;
                     if (!hasData) continue;
 
-                    new window.Chart(canvas.getContext("2d"), {
+                    if (summaryNode instanceof HTMLElement) {
+                        summaryNode.textContent = `${resultsLabel}: ${historicalResultCount} · ${recordedHoursLabel}: ${recordedHourCount}`;
+                    }
+
+                    const firstResultIndex = chartLabels.findIndex((_, index) => (
+                        Number.isInteger(historicalIndexes[index])
+                        || Number.isInteger(provisionalIndexes[index])
+                    ));
+                    const requiredHours = firstResultIndex >= 0
+                        ? chartLabels.length - firstResultIndex
+                        : historyRangeHours[0];
+                    const defaultRangeHours = (
+                        historyRangeHours.find((hours) => hours >= requiredHours)
+                        || historyRangeHours[historyRangeHours.length - 1]
+                    );
+                    const chart = new window.Chart(canvas.getContext("2d"), {
                         type: "line",
                         data: {
-                            labels,
-                            datasets: [{
-                                label: {{ t("Propagation index")|tojson }},
-                                data: indexes,
-                                borderColor: chartColors[2],
-                                backgroundColor: "rgba(89, 189, 119, 0.10)",
-                                borderWidth: 1.5,
-                                pointRadius: 0,
-                                pointHoverRadius: 3,
-                                stepped: true,
-                                spanGaps: false,
-                                fill: true,
-                                segment: {
-                                    borderColor: (context) => chartColors[Math.round(context.p1.parsed.y)] || chartColors[2],
+                            labels: [],
+                            datasets: [
+                                {
+                                    label: propagationIndexLabel,
+                                    data: [],
+                                    borderColor: chartColors[2],
+                                    backgroundColor: "rgba(89, 189, 119, 0.10)",
+                                    borderWidth: 1.5,
+                                    pointRadius: 2,
+                                    pointHoverRadius: 4,
+                                    pointBackgroundColor: (context) => chartColors[Math.round(context.parsed?.y)] || chartColors[2],
+                                    pointBorderColor: textColor,
+                                    pointBorderWidth: 1,
+                                    stepped: true,
+                                    spanGaps: false,
+                                    fill: true,
+                                    segment: {
+                                        borderColor: (context) => chartColors[Math.round(context.p1?.parsed?.y)] || chartColors[2],
+                                    },
                                 },
-                            }],
+                                {
+                                    label: provisionalLabel,
+                                    data: [],
+                                    borderColor: textColor,
+                                    backgroundColor: chartColors[2],
+                                    pointBackgroundColor: (context) => chartColors[Math.round(context.parsed?.y)] || chartColors[2],
+                                    pointBorderColor: textColor,
+                                    pointBorderWidth: 2,
+                                    pointRadius: 5,
+                                    pointHoverRadius: 6,
+                                    showLine: false,
+                                    spanGaps: false,
+                                    fill: false,
+                                },
+                            ],
                         },
                         options: {
                             responsive: true,
@@ -267,7 +358,9 @@
                                         autoSkip: true,
                                         maxTicksLimit: 12,
                                         maxRotation: 0,
-                                        callback: (_, index) => formatLabel(labels[index]),
+                                        callback(value) {
+                                            return formatLabel(this.getLabelForValue(value));
+                                        },
                                     },
                                     grid: { color: borderColor },
                                 },
@@ -287,15 +380,42 @@
                                 tooltip: {
                                     callbacks: {
                                         title: (items) => formatLabel(items[0]?.label),
-                                        label: (context) => `W${context.parsed.y}`,
+                                        label: (context) => `${context.dataset.label}: W${context.parsed.y}`,
                                     },
                                 },
                             },
                         },
                     });
+
+                    const applyRange = (hours) => {
+                        const normalizedHours = historyRangeHours.includes(hours)
+                            ? hours
+                            : defaultRangeHours;
+                        const startIndex = Math.max(0, chartLabels.length - normalizedHours);
+                        chart.data.labels = chartLabels.slice(startIndex);
+                        chart.data.datasets[0].data = historicalIndexes.slice(startIndex);
+                        chart.data.datasets[1].data = provisionalIndexes.slice(startIndex);
+                        chart.update("none");
+                        if (controlsNode instanceof HTMLElement) {
+                            for (const button of controlsNode.querySelectorAll("[data-history-range-hours]")) {
+                                const buttonHours = Number.parseInt(String(button.dataset.historyRangeHours || ""), 10);
+                                button.setAttribute("aria-pressed", String(buttonHours === normalizedHours));
+                            }
+                        }
+                    };
+
+                    if (controlsNode instanceof HTMLElement) {
+                        controlsNode.addEventListener("click", (event) => {
+                            const button = event.target.closest("[data-history-range-hours]");
+                            if (!(button instanceof HTMLButtonElement)) return;
+                            applyRange(Number.parseInt(String(button.dataset.historyRangeHours || ""), 10));
+                        });
+                    }
+                    applyRange(defaultRangeHours);
                 }
             })
-            .catch(() => {
+            .catch((error) => {
+                console.error("Could not render propagation history.", error);
                 for (const emptyNode of document.querySelectorAll("[data-history-empty]")) {
                     if (emptyNode instanceof HTMLElement) {
                         emptyNode.hidden = false;

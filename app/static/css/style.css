@@ -4199,6 +4199,52 @@ select:focus-visible,
     margin: 0;
 }
 
+.band-condition-chart-actions {
+    display: grid;
+    justify-items: end;
+    gap: 0.35rem;
+}
+
+.band-condition-history-range {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    padding: 0.2rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+}
+
+.band-condition-history-range button {
+    min-height: 2rem;
+    padding: 0.25rem 0.55rem;
+    border: 0;
+    border-radius: calc(var(--radius-sm) - 0.15rem);
+    color: var(--muted);
+    background: transparent;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.band-condition-history-range button:hover {
+    color: var(--text);
+    background: var(--hover-layer);
+}
+
+.band-condition-history-range button[aria-pressed="true"] {
+    color: var(--text);
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.band-condition-history-range button:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+}
+
 .band-condition-chart-wrap {
     position: relative;
     min-height: 15rem;
@@ -4217,6 +4263,10 @@ select:focus-visible,
     place-items: center;
     margin: 0;
     text-align: center;
+}
+
+.band-condition-chart-empty[hidden] {
+    display: none;
 }
 
 .band-condition-model-data {
@@ -6681,6 +6731,14 @@ button.message-delivery-badge {
 
     .band-condition-chart-heading {
         display: grid;
+    }
+
+    .band-condition-chart-actions {
+        justify-items: start;
+    }
+
+    .band-condition-history-range {
+        justify-content: flex-start;
     }
 
     .band-condition-model-stats {

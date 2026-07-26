@@ -454,6 +454,17 @@ class BandConditionHelpersTests(unittest.TestCase):
         self.assertIn("band-condition-model-data", template)
         self.assertIn("30-day baseline", template)
         self.assertIn("/api/band-condition/history?days=365", template)
+        self.assertIn("const historyRangeHours = Object.freeze([24, 168, 720, 8760]);", template)
+        self.assertIn('data-history-range-hours="24"', template)
+        self.assertIn('data-history-range-hours="168"', template)
+        self.assertIn('data-history-range-hours="720"', template)
+        self.assertIn('data-history-range-hours="8760"', template)
+        self.assertIn('data-current-hour="{{ item.hour_start_utc }}"', template)
+        self.assertIn("currentHour === String(payload.end_utc || \"\")", template)
+        self.assertIn("pointRadius: 2", template)
+        self.assertIn("pointRadius: 5", template)
+        stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".band-condition-chart-empty[hidden]", stylesheet)
         self.assertLess(
             template.index('<article class="panel band-condition-card">'),
             template.index('<article class="panel band-condition-model-card">'),
