@@ -257,6 +257,15 @@ class AprsAlertTests(unittest.TestCase):
         self.assertEqual(set(methods_by_path), mutation_paths)
         self.assertTrue(all(methods == {"POST"} for methods in methods_by_path.values()))
 
+    def test_alert_action_return_path_only_accepts_alert_list(self) -> None:
+        from app.routers.pages import _alert_action_return_path
+
+        self.assertEqual(_alert_action_return_path(7, "/alerts"), "/alerts")
+        self.assertEqual(_alert_action_return_path(7, "/alerts?page=3"), "/alerts?page=3")
+        self.assertEqual(_alert_action_return_path(7, None), "/alerts/7")
+        self.assertEqual(_alert_action_return_path(7, "https://example.com"), "/alerts/7")
+        self.assertEqual(_alert_action_return_path(7, "//example.com"), "/alerts/7")
+
     def test_alert_list_exposes_latest_frame_for_shared_modal(self) -> None:
         with temporary_database():
             receive_emergency(timestamp="2026-07-28T10:00:00+00:00")
@@ -285,6 +294,9 @@ class AprsAlertTests(unittest.TestCase):
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         map_source = Path("app/templates/map.html").read_text(encoding="utf-8")
         alerts_source = Path("app/templates/alerts.html").read_text(encoding="utf-8")
+        alert_detail_source = Path("app/templates/alert_detail.html").read_text(
+            encoding="utf-8"
+        )
         modal_source = Path("app/templates/partials/emergency_modal.html").read_text(
             encoding="utf-8"
         )
@@ -300,11 +312,17 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn('{{ t("Muted until") }}', alerts_source)
         self.assertIn("frame-type-badge-emergency", alerts_source)
         self.assertIn("file-document-alert-outline.svg", alerts_source)
+        self.assertIn('href="{{ request.scope.root_path }}{{ alert.detail_href }}"', alerts_source)
+        self.assertIn('name="return_to"', alerts_source)
+        self.assertIn("alert-emergency-panel alert-detail-panel", alert_detail_source)
+        self.assertIn("alert-emergency-panel alert-history-panel", alert_detail_source)
         self.assertIn("window.aprsboxOpenEmergencyModal", alerts_source)
         self.assertIn("aprsbox-emergency-frames-shown", modal_js_source)
         self.assertIn("playSound: !frame.alert_muted", modal_js_source)
         self.assertIn("aprs-emergency-audio", modal_js_source)
         self.assertIn("keepChannelWarm: !frame.alert_muted", modal_js_source)
+        self.assertIn("unlockEmergencyAlarmAudio", modal_js_source)
+        self.assertIn("warmEmergencyAlarmAudio", modal_js_source)
         self.assertIn('id="aprs-emergency-audio"', modal_source)
         self.assertIn("autoplay", modal_source)
         self.assertIn("muted", modal_source)

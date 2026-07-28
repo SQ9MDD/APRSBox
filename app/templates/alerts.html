@@ -115,18 +115,17 @@
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/eye-outline.svg" alt="">
                                 </button>
-                                {% if alert.last_frame_href %}
                                 <a
-                                    href="{{ request.scope.root_path }}{{ alert.last_frame_href }}"
+                                    href="{{ request.scope.root_path }}{{ alert.detail_href }}"
                                     class="table-icon-button"
-                                    title="{{ t('Frame details') }} #{{ alert.last_frame_id }}"
-                                    aria-label="{{ t('Frame details') }} #{{ alert.last_frame_id }}"
+                                    title="{{ t('Alert details') }} #{{ alert.id }}"
+                                    aria-label="{{ t('Alert details') }} #{{ alert.id }}"
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/file-document-alert-outline.svg" alt="">
                                 </a>
-                                {% endif %}
                                 {% if can_manage_alerts %}
                                 <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
+                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
                                     <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
                                         <option value="1h">{{ t("Mute for 1 hour") }}</option>
                                         <option value="4h">{{ t("Mute for 4 hours") }}</option>
@@ -139,6 +138,7 @@
                                 </form>
                                 {% if alert.muted %}
                                 <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/unmute" class="table-action-form">
+                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
                                     <button type="submit" class="table-icon-button" title="{{ t('Cancel mute') }}" aria-label="{{ t('Cancel mute') }} #{{ alert.id }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
                                     </button>

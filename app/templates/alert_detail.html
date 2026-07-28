@@ -9,19 +9,19 @@
 </section>
 {% endif %}
 
-<section class="panel">
+<section class="panel alert-emergency-panel alert-detail-panel">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Alert details") }} #{{ alert.id }}</h2>
                 <p class="section-lead">
                     <a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">{{ alert.source_callsign }}</a>
-                    · {{ alert.alert_type }}
+                    · <span class="frame-type-badge frame-type-badge-emergency">{{ alert.alert_type }}</span>
                 </p>
             </div>
             {% if can_manage_alerts %}
             <div class="alert-detail-actions">
-                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="alert-mute-form">
+                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="alert-mute-form alert-detail-mute-form">
                     <select name="duration" aria-label="{{ t('Mute') }}">
                         <option value="1h">{{ t("Mute for 1 hour") }}</option>
                         <option value="4h">{{ t("Mute for 4 hours") }}</option>
@@ -31,13 +31,14 @@
                     <button type="submit" class="button button-secondary">{{ t("Mute") }}</button>
                 </form>
                 {% if alert.muted %}
-                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/unmute">
+                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/unmute" class="alert-detail-action-form">
                     <button type="submit" class="button button-secondary">{{ t("Cancel mute") }}</button>
                 </form>
                 {% endif %}
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/delete"
+                    class="alert-detail-action-form"
                     onsubmit="return confirm({{ t('Delete this alert? Original frames remain in Traffic Monitor.')|tojson|forceescape }});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Delete") }}</button>
@@ -50,8 +51,8 @@
             <dt>{{ t("Source") }}</dt>
             <dd><a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">{{ alert.source_callsign }}</a></dd>
             <dt>{{ t("Type") }}</dt>
-            <dd>{{ alert.alert_type }}</dd>
-                <dt>{{ t("Comment") }}</dt>
+            <dd><span class="frame-type-badge frame-type-badge-emergency">{{ alert.alert_type }}</span></dd>
+            <dt>{{ t("Comment") }}</dt>
             <dd>{{ alert.message or "-" }}</dd>
             <dt>{{ t("First received") }}</dt>
             <dd>{{ alert.first_seen_label }}</dd>
@@ -91,7 +92,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel alert-emergency-panel alert-history-panel">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">

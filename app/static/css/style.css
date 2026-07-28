@@ -6075,7 +6075,7 @@ select:focus-visible,
     text-overflow: clip;
 }
 
-.alerts-table .frame-type-badge-emergency {
+.frame-type-badge-emergency {
     color: var(--danger);
     border-color: color-mix(in srgb, var(--danger) 52%, var(--border));
     background: color-mix(in srgb, var(--danger) 14%, transparent);
@@ -6134,6 +6134,43 @@ select:focus-visible,
     flex-wrap: wrap;
 }
 
+.alert-emergency-panel {
+    border-color: color-mix(in srgb, var(--danger) 52%, var(--border));
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--danger) 8%, transparent),
+        var(--shadow);
+}
+
+.alert-detail-panel .panel-header {
+    align-items: flex-start;
+}
+
+.alert-detail-actions {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+}
+
+.alert-detail-actions form {
+    margin: 0;
+}
+
+.alert-detail-actions .alert-detail-mute-form,
+.alert-detail-actions .alert-detail-action-form {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+}
+
+.alert-detail-actions .alert-detail-mute-form select {
+    width: 12rem;
+    min-width: 12rem;
+}
+
+.alert-detail-actions .button {
+    white-space: nowrap;
+}
+
 .alert-mute-form select {
     min-height: var(--icon-control-size);
     padding-block: 0.2rem;
@@ -6171,6 +6208,12 @@ select:focus-visible,
     .alerts-pagination {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .alert-detail-actions {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
     }
 }
 

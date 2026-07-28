@@ -46,7 +46,6 @@
     let newEmergencyTimer = null;
     let currentEmergencyFrame = null;
     let eventSource = null;
-    let audioUnlocked = false;
     let audioPriming = false;
     let pendingAlarmPlayback = false;
     const emergencyAlarmSrc = `${String(root.dataset.staticRoot || "/static/")}audio/aprs-audio-alert.mp3`;
@@ -221,27 +220,35 @@
         miniMap.invalidateSize();
     }
 
-    function primeEmergencyAlarmAudio() {
-        if (audioUnlocked) {
-            if (pendingAlarmPlayback && isVisible) {
-                pendingAlarmPlayback = false;
-                playOpenBeep();
+    function warmEmergencyAlarmAudio() {
+        try {
+            emergencyAlarmAudio.volume = 0;
+            emergencyAlarmAudio.muted = true;
+            const warmPromise = emergencyAlarmAudio.play();
+            if (warmPromise && typeof warmPromise.catch === "function") {
+                warmPromise.catch(() => {
+                    emergencyAlarmAudio.volume = 0;
+                    emergencyAlarmAudio.muted = true;
+                });
             }
-            return;
+        } catch (_error) {
         }
+    }
+
+    function unlockEmergencyAlarmAudio() {
         if (audioPriming) {
             return;
         }
         audioPriming = true;
         try {
+            emergencyAlarmAudio.pause();
+            emergencyAlarmAudio.currentTime = 0;
             emergencyAlarmAudio.volume = 0;
             emergencyAlarmAudio.muted = false;
-            const primePromise = emergencyAlarmAudio.play();
-            if (primePromise && typeof primePromise.then === "function") {
-                primePromise.then(() => {
-                    emergencyAlarmAudio.currentTime = 0;
+            const unlockPromise = emergencyAlarmAudio.play();
+            if (unlockPromise && typeof unlockPromise.then === "function") {
+                unlockPromise.then(() => {
                     audioPriming = false;
-                    audioUnlocked = true;
                     if (pendingAlarmPlayback && isVisible) {
                         pendingAlarmPlayback = false;
                         playOpenBeep();
@@ -253,11 +260,17 @@
                 });
                 return;
             }
+            audioPriming = false;
+            if (pendingAlarmPlayback && isVisible) {
+                pendingAlarmPlayback = false;
+                playOpenBeep();
+            }
+            return;
         } catch (_error) {
+            audioPriming = false;
         }
         emergencyAlarmAudio.volume = 0;
         emergencyAlarmAudio.muted = true;
-        audioPriming = false;
     }
 
     function playOpenBeep() {
@@ -272,7 +285,6 @@
             const playPromise = emergencyAlarmAudio.play();
             if (playPromise && typeof playPromise.catch === "function") {
                 playPromise.then(() => {
-                    audioUnlocked = true;
                     pendingAlarmPlayback = false;
                 }).catch(() => {
                     pendingAlarmPlayback = true;
@@ -302,8 +314,7 @@
             return;
         }
         if (keepChannelWarm && emergencyAlarmAudio.paused) {
-            audioUnlocked = false;
-            primeEmergencyAlarmAudio();
+            warmEmergencyAlarmAudio();
         }
     }
 
@@ -499,7 +510,7 @@
     const audioUnlockEvents = ["pointerdown", "keydown", "touchstart"];
     for (const eventType of audioUnlockEvents) {
         window.addEventListener(eventType, function () {
-            primeEmergencyAlarmAudio();
+            unlockEmergencyAlarmAudio();
         }, { once: true, passive: true });
     }
 
@@ -516,7 +527,7 @@
         return true;
     };
 
-    primeEmergencyAlarmAudio();
+    warmEmergencyAlarmAudio();
 
     if (window.__APRSBOX_TRAFFIC_SNAPSHOT__) {
         handleSnapshot(window.__APRSBOX_TRAFFIC_SNAPSHOT__);

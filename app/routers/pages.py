@@ -3104,6 +3104,13 @@ def _alerts_redirect(
     return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
 
 
+def _alert_action_return_path(alert_id: int, return_to: str | None) -> str:
+    target = str(return_to or "").strip()
+    if target == "/alerts" or target.startswith("/alerts?"):
+        return target
+    return f"/alerts/{alert_id}"
+
+
 @router.get("/alerts")
 def alerts_page(
     request: Request,
@@ -3156,31 +3163,38 @@ def alert_mute(
     alert_id: int,
     request: Request,
     duration: str = Form(...),
+    return_to: str | None = Form(None),
     _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
+    return_path = _alert_action_return_path(alert_id, return_to)
     try:
         changed = mute_alert(alert_id, duration)
     except ValueError:
         return _alerts_redirect(
             request,
-            f"/alerts/{alert_id}",
+            return_path,
             "Unsupported mute duration.",
             success=False,
         )
     if not changed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
-    return _alerts_redirect(request, f"/alerts/{alert_id}", "Alert muted.")
+    return _alerts_redirect(request, return_path, "Alert muted.")
 
 
 @router.post("/alerts/{alert_id}/unmute")
 def alert_unmute(
     alert_id: int,
     request: Request,
+    return_to: str | None = Form(None),
     _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
     if not unmute_alert(alert_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
-    return _alerts_redirect(request, f"/alerts/{alert_id}", "Alert unmuted.")
+    return _alerts_redirect(
+        request,
+        _alert_action_return_path(alert_id, return_to),
+        "Alert unmuted.",
+    )
 
 
 @router.post("/alerts/{alert_id}/delete")
