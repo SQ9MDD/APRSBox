@@ -220,6 +220,32 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
             ),
         }
     )
+    if parsed and item.get("last_frame_id") is not None:
+        emergency_data = build_emergency_frame_data(
+            parsed=parsed,
+            row={
+                "source": item.get("last_frame_source"),
+                "port": item.get("last_frame_port"),
+                "created_at": item.get("last_frame_created_at"),
+                "interface_id": item.get("last_frame_interface_id"),
+            },
+            line=str(item.get("last_frame_line") or ""),
+        )
+    else:
+        emergency_data = None
+    item["modal_frame"] = {
+        "id": int(item["last_frame_id"]) if item.get("last_frame_id") is not None else None,
+        "timestamp": str(item.get("last_frame_created_at") or item.get("last_seen_at") or ""),
+        "source": str(item.get("last_frame_source") or ""),
+        "line": str(item.get("last_frame_line") or ""),
+        "display_callsign": str(item.get("source_callsign") or ""),
+        "emergency": emergency_data is not None,
+        "emergency_data": emergency_data or {},
+        "alert_id": int(item["id"]),
+        "alert_href": f"/alerts/{int(item['id'])}",
+        "alert_muted": muted,
+        "alert_should_notify": False,
+    }
     return item
 
 
@@ -234,7 +260,11 @@ def list_alerts(*, page: int = 1, page_size: int = ALERT_PAGE_SIZE) -> dict[str,
         """
         SELECT
             alerts.*,
-            frames.line AS last_frame_line
+            frames.line AS last_frame_line,
+            frames.source AS last_frame_source,
+            frames.port AS last_frame_port,
+            frames.created_at AS last_frame_created_at,
+            frames.interface_id AS last_frame_interface_id
         FROM aprs_alerts AS alerts
         LEFT JOIN traffic_frames AS frames ON frames.id = alerts.last_frame_id
         ORDER BY alerts.last_seen_at DESC, alerts.id DESC
@@ -297,7 +327,11 @@ def get_alert(alert_id: int) -> dict[str, Any] | None:
         """
         SELECT
             alerts.*,
-            frames.line AS last_frame_line
+            frames.line AS last_frame_line,
+            frames.source AS last_frame_source,
+            frames.port AS last_frame_port,
+            frames.created_at AS last_frame_created_at,
+            frames.interface_id AS last_frame_interface_id
         FROM aprs_alerts AS alerts
         LEFT JOIN traffic_frames AS frames ON frames.id = alerts.last_frame_id
         WHERE alerts.id = ?

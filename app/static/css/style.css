@@ -6030,6 +6030,21 @@ select:focus-visible,
     min-width: 18rem;
 }
 
+.alerts-table .alerts-comment-column,
+.alerts-table .alerts-comment-cell {
+    width: 22rem;
+    min-width: 22rem;
+    max-width: 32rem;
+}
+
+.alerts-table .alerts-comment-cell {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+}
+
 .alerts-select-column {
     width: 2.5rem;
 }

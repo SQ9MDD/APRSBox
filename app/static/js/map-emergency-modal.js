@@ -1,5 +1,5 @@
 (function () {
-    const root = document.getElementById("map-root");
+    const root = document.getElementById("aprs-emergency-root");
     const modal = document.getElementById("aprs-emergency-modal");
     if (!root || !modal) {
         return;
@@ -23,8 +23,11 @@
     const openMapButton = document.getElementById("aprs-emergency-open-map");
     const openAlertLink = document.getElementById("aprs-emergency-open-alert");
     const rootPath = String(root.dataset.rootPath || "");
+    const streamEndpoint = String(root.dataset.trafficStreamEndpoint || "").trim();
     const emergencyFrameReceivedText = String(root.dataset.i18nEmergencyFrameReceived || "Emergency frame received");
     const activeEmergencyText = String(root.dataset.i18nActiveEmergency || "Active emergency");
+    const alertMutedText = String(root.dataset.i18nAlertMuted || "Alert muted");
+    const handledAlertsStorageKey = "aprsbox-emergency-alerts-shown";
 
     const mapTileUrl = String(root.dataset.tileUrl || "").trim();
     const mapTileAttribution = String(root.dataset.tileAttribution || "").trim();
@@ -42,6 +45,7 @@
     let miniMapMarker = null;
     let newEmergencyTimer = null;
     let currentEmergencyFrame = null;
+    let eventSource = null;
     const emergencyAlarmSrc = `${String(root.dataset.staticRoot || "/static/")}audio/aprs-audio-alert.mp3`;
     const emergencyAlarmAudio = new Audio(emergencyAlarmSrc);
     emergencyAlarmAudio.preload = "auto";
@@ -88,16 +92,52 @@
         return Number.isFinite(parsedTimestamp) ? parsedTimestamp : -Infinity;
     }
 
+    function readHandledAlertIds() {
+        try {
+            const parsed = JSON.parse(window.sessionStorage.getItem(handledAlertsStorageKey) || "[]");
+            if (!Array.isArray(parsed)) {
+                return new Set();
+            }
+            return new Set(parsed.map((value) => String(value || "")).filter(Boolean));
+        } catch (_error) {
+            return new Set();
+        }
+    }
+
+    function isAlertHandled(frame) {
+        const alertId = String(frame && frame.alert_id ? frame.alert_id : "").trim();
+        return Boolean(alertId) && readHandledAlertIds().has(alertId);
+    }
+
+    function markAlertHandled(frame) {
+        const alertId = String(frame && frame.alert_id ? frame.alert_id : "").trim();
+        if (!alertId) {
+            return;
+        }
+        const handledIds = readHandledAlertIds();
+        handledIds.add(alertId);
+        try {
+            window.sessionStorage.setItem(
+                handledAlertsStorageKey,
+                JSON.stringify(Array.from(handledIds).slice(-200))
+            );
+        } catch (_error) {
+        }
+    }
+
     function selectNewestEmergencyFrame(frames) {
         if (!Array.isArray(frames) || frames.length === 0) {
             return null;
         }
-        return frames.find((frame) =>
+        const candidates = frames.filter((frame) =>
             frame
             && frame.emergency
             && frame.alert_should_notify
             && !frame.alert_muted
-        ) || null;
+            && !isAlertHandled(frame)
+        );
+        candidates.sort((left, right) => emergencyFrameSortValue(right) - emergencyFrameSortValue(left));
+        return candidates[0] || null;
     }
 
     function destroyMiniMap() {
@@ -245,8 +285,7 @@
             return;
         }
         const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
-        const canCenterMap = typeof window.aprsboxCenterMapOn === "function";
-        openMapButton.disabled = !(hasCoordinates && canCenterMap);
+        openMapButton.disabled = !hasCoordinates;
     }
 
     function hideNewerNotice() {
@@ -284,7 +323,7 @@
         destroyMiniMap();
     }
 
-    function showModal() {
+    function showModal({ playSound = false } = {}) {
         if (isVisible) {
             return;
         }
@@ -294,10 +333,12 @@
         if (dialog instanceof HTMLElement) {
             dialog.focus();
         }
-        playOpenBeep();
+        if (playSound) {
+            playOpenBeep();
+        }
     }
 
-    function renderEmergencyFrame(frame) {
+    function renderEmergencyFrame(frame, { playSound = false, remember = false } = {}) {
         const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
         const call = textOrDash(emergencyData.callsign || frame.display_callsign || frame.source);
         const sourceLabel = textOrDash(
@@ -319,7 +360,7 @@
             callsign.textContent = call;
         }
         if (status) {
-            status.textContent = activeEmergencyText;
+            status.textContent = frame.alert_muted ? alertMutedText : activeEmergencyText;
         }
         if (timestamp) {
             timestamp.textContent = timestampLabel;
@@ -347,7 +388,10 @@
 
         renderMiniMap(latitude, longitude);
         updateOpenMapButton(latitude, longitude);
-        showModal();
+        if (remember) {
+            markAlertHandled(frame);
+        }
+        showModal({ playSound });
     }
 
     function handleSnapshot(snapshot) {
@@ -369,7 +413,7 @@
             showNewerNotice();
         }
         dismissedSignature = "";
-        renderEmergencyFrame(emergencyFrame);
+        renderEmergencyFrame(emergencyFrame, { playSound: true, remember: true });
     }
 
     if (closeButton) {
@@ -385,9 +429,18 @@
             const emergencyData = currentEmergencyFrame && currentEmergencyFrame.emergency_data ? currentEmergencyFrame.emergency_data : {};
             const latitude = parseCoordinate(emergencyData.latitude);
             const longitude = parseCoordinate(emergencyData.longitude);
-            if (Number.isFinite(latitude) && Number.isFinite(longitude) && typeof window.aprsboxCenterMapOn === "function") {
-                window.aprsboxCenterMapOn(latitude, longitude);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                return;
             }
+            if (typeof window.aprsboxCenterMapOn === "function") {
+                window.aprsboxCenterMapOn(latitude, longitude);
+                return;
+            }
+            const mapUrl = new URL(`${rootPath}/map`, window.location.origin);
+            mapUrl.searchParams.set("lat", String(latitude));
+            mapUrl.searchParams.set("lon", String(longitude));
+            mapUrl.searchParams.set("zoom", "15");
+            window.location.href = mapUrl.toString();
         });
     }
 
@@ -398,11 +451,42 @@
         }, { once: true, passive: true });
     }
 
-    root.addEventListener(eventName, function (event) {
+    window.addEventListener(eventName, function (event) {
         handleSnapshot(event && event.detail ? event.detail : {});
     });
+
+    window.aprsboxOpenEmergencyModal = function (frame) {
+        if (!frame || typeof frame !== "object" || !frame.emergency) {
+            return false;
+        }
+        dismissedSignature = "";
+        renderEmergencyFrame(frame, { playSound: false, remember: false });
+        return true;
+    };
 
     if (window.__APRSBOX_TRAFFIC_SNAPSHOT__) {
         handleSnapshot(window.__APRSBOX_TRAFFIC_SNAPSHOT__);
     }
+
+    if (!window.__APRSBOX_TRAFFIC_STREAM_MANAGED__ && streamEndpoint) {
+        window.__APRSBOX_TRAFFIC_STREAM_MANAGED__ = true;
+        eventSource = new window.EventSource(streamEndpoint);
+        eventSource.onmessage = function (event) {
+            try {
+                const snapshot = JSON.parse(event.data || "{}");
+                window.__APRSBOX_TRAFFIC_SNAPSHOT__ = snapshot;
+                window.dispatchEvent(new window.CustomEvent(eventName, {
+                    detail: snapshot,
+                }));
+            } catch (_error) {
+            }
+        };
+    }
+
+    window.addEventListener("beforeunload", function () {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+    }, { once: true });
 })();

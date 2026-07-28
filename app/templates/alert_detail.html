@@ -51,7 +51,7 @@
             <dd><a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">{{ alert.source_callsign }}</a></dd>
             <dt>{{ t("Type") }}</dt>
             <dd>{{ alert.alert_type }}</dd>
-            <dt>{{ t("Message") }}</dt>
+                <dt>{{ t("Comment") }}</dt>
             <dd>{{ alert.message or "-" }}</dd>
             <dt>{{ t("First received") }}</dt>
             <dd>{{ alert.first_seen_label }}</dd>

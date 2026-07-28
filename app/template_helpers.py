@@ -11,6 +11,7 @@ from app.i18n import get_app_language, get_format_translator, get_supported_lang
 from app.ui_palette import normalize_ui_palette
 from app.services.content import get_aprs_symbol_icon_fallback_path, get_aprs_symbol_set
 from app.services.alerts import attention_alert_count
+from app.services.map_service import get_map_page_config
 from app.services.messages import get_unread_inbox_count
 
 
@@ -84,6 +85,11 @@ def build_template_context(
     aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     current_alert_count = attention_alert_count() if current_user else 0
+    alert_modal_map_config = (
+        get_map_page_config(root_path=request.scope.get("root_path", ""))
+        if current_user
+        else {}
+    )
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
         visible_roles = tuple(item.get("visible_roles") or ())
@@ -120,5 +126,6 @@ def build_template_context(
         "current_ui_palette": current_ui_palette,
         "current_aprs_symbol_set": current_aprs_symbol_set,
         "aprs_symbol_icon_fallback": aprs_symbol_icon_fallback,
+        "alert_modal_map_config": alert_modal_map_config,
         **extra,
     }

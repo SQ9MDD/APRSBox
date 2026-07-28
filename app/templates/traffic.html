@@ -515,6 +515,10 @@
                 interfaces: Array.isArray(snapshot.interfaces) ? snapshot.interfaces : [],
                 frames: Array.isArray(snapshot.frames) ? snapshot.frames : [],
             };
+            window.__APRSBOX_TRAFFIC_SNAPSHOT__ = latestSnapshot;
+            window.dispatchEvent(new window.CustomEvent("aprsbox:traffic-snapshot", {
+                detail: latestSnapshot,
+            }));
             syncInterfaceVisibility(latestSnapshot.interfaces);
             const visibleFrames = filteredFrames(latestSnapshot);
             count.textContent = `${visibleFrames.length} ${entriesText}`;
@@ -559,6 +563,7 @@
         syncClearFiltersButton();
         applySnapshot(initialSnapshot);
 
+        window.__APRSBOX_TRAFFIC_STREAM_MANAGED__ = true;
         const eventSource = new EventSource({{ traffic_stream_url|tojson }});
         eventSource.onmessage = (event) => {
             applySnapshot(JSON.parse(event.data));

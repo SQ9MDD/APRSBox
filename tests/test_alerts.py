@@ -11,6 +11,7 @@ from app.services.alerts import (
     delete_alert,
     get_alert,
     get_traffic_frame,
+    list_alerts,
     mute_alert,
     unmute_alert,
 )
@@ -255,6 +256,41 @@ class AprsAlertTests(unittest.TestCase):
         }
         self.assertEqual(set(methods_by_path), mutation_paths)
         self.assertTrue(all(methods == {"POST"} for methods in methods_by_path.values()))
+
+    def test_alert_list_exposes_latest_frame_for_shared_modal(self) -> None:
+        with temporary_database():
+            receive_emergency(timestamp="2026-07-28T10:00:00+00:00")
+            receive_emergency(
+                timestamp="2026-07-28T10:30:00+00:00",
+                line=f"{EMERGENCY_LINE} with the complete operator comment",
+                source="APRS-IS",
+            )
+
+            page = list_alerts()
+            self.assertEqual(len(page["items"]), 1)
+            item = page["items"][0]
+            modal_frame = item["modal_frame"]
+
+            self.assertEqual(item["message"], "Need help with the complete operator comment")
+            self.assertTrue(modal_frame["emergency"])
+            self.assertEqual(modal_frame["alert_id"], item["id"])
+            self.assertEqual(modal_frame["source"], "APRS-IS")
+            self.assertEqual(
+                modal_frame["emergency_data"]["summary"],
+                "Need help with the complete operator comment",
+            )
+            self.assertFalse(modal_frame["alert_should_notify"])
+
+    def test_shared_modal_is_rendered_from_base_and_opened_by_alert_list(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        map_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+        alerts_source = Path("app/templates/alerts.html").read_text(encoding="utf-8")
+
+        self.assertIn('{% include "partials/emergency_modal.html" %}', base_source)
+        self.assertIn("map-emergency-modal.js", base_source)
+        self.assertNotIn('id="aprs-emergency-modal"', map_source)
+        self.assertIn('{{ t("Comment") }}', alerts_source)
+        self.assertIn("window.aprsboxOpenEmergencyModal", alerts_source)
 
 
 if __name__ == "__main__":

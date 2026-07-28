@@ -39,7 +39,7 @@
                         {% endif %}
                         <th>{{ t("Source") }}</th>
                         <th>{{ t("Type") }}</th>
-                        <th>{{ t("Message") }}</th>
+                        <th class="alerts-comment-column">{{ t("Comment") }}</th>
                         <th>{{ t("First received") }}</th>
                         <th>{{ t("Last received") }}</th>
                         <th>{{ t("Frame count") }}</th>
@@ -49,7 +49,14 @@
                 </thead>
                 <tbody>
                     {% for alert in alerts_page["items"] %}
-                    <tr class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}" data-href="{{ request.scope.root_path }}{{ alert.detail_href }}">
+                    <tr
+                        class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}"
+                        data-alert-id="{{ alert.id }}"
+                        data-alert-detail-href="{{ request.scope.root_path }}{{ alert.detail_href }}"
+                        role="button"
+                        tabindex="0"
+                        aria-label="{{ t('Alert') }} #{{ alert.id }} {{ alert.source_callsign }}"
+                    >
                         {% if can_manage_alerts %}
                         <td onclick="event.stopPropagation();">
                             <input
@@ -70,7 +77,7 @@
                             </strong>
                         </td>
                         <td><span class="frame-type-badge">{{ alert.alert_type }}</span></td>
-                        <td title="{{ alert.message }}">{{ alert.message or "-" }}</td>
+                        <td class="alerts-comment-cell">{{ alert.message or "-" }}</td>
                         <td>{{ alert.first_seen_label }}</td>
                         <td>{{ alert.last_seen_label }}</td>
                         <td>{{ alert.frame_count }}</td>
@@ -89,14 +96,16 @@
                         </td>
                         <td onclick="event.stopPropagation();">
                             <div class="table-actions">
-                                <a
-                                    href="{{ request.scope.root_path }}{{ alert.detail_href }}"
+                                <button
+                                    type="button"
                                     class="table-icon-button"
                                     title="{{ t('Details') }}"
                                     aria-label="{{ t('Details') }} #{{ alert.id }}"
+                                    aria-haspopup="dialog"
+                                    data-open-alert-modal="{{ alert.id }}"
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/eye-outline.svg" alt="">
-                                </a>
+                                </button>
                                 {% if can_manage_alerts %}
                                 <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
                                     <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
@@ -156,13 +165,57 @@
     </div>
 </section>
 
+<script type="application/json" id="alerts-modal-data">
+[
+{% for alert in alerts_page["items"] %}
+    {{ alert.modal_frame|tojson }}{% if not loop.last %},{% endif %}
+{% endfor %}
+]
+</script>
 <script>
 (() => {
-    const rows = Array.from(document.querySelectorAll(".alerts-table tr[data-href]"));
+    const modalDataNode = document.getElementById("alerts-modal-data");
+    let modalFrames = new Map();
+    try {
+        const frames = JSON.parse(modalDataNode?.textContent || "[]");
+        modalFrames = new Map(frames.map((frame) => [String(frame.alert_id || ""), frame]));
+    } catch (_) {
+        modalFrames = new Map();
+    }
+
+    const openAlertModal = (alertId, fallbackHref) => {
+        const frame = modalFrames.get(String(alertId || ""));
+        if (
+            frame
+            && typeof window.aprsboxOpenEmergencyModal === "function"
+            && window.aprsboxOpenEmergencyModal(frame)
+        ) {
+            return;
+        }
+        if (fallbackHref) {
+            window.location.href = fallbackHref;
+        }
+    };
+
+    const rows = Array.from(document.querySelectorAll(".alerts-table tr[data-alert-id]"));
     rows.forEach((row) => {
         row.addEventListener("click", (event) => {
             if (event.target.closest("a, button, input, select, form")) return;
-            window.location.href = row.dataset.href;
+            openAlertModal(row.dataset.alertId, row.dataset.alertDetailHref);
+        });
+        row.addEventListener("keydown", (event) => {
+            if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
+            event.preventDefault();
+            openAlertModal(row.dataset.alertId, row.dataset.alertDetailHref);
+        });
+    });
+
+    document.querySelectorAll("[data-open-alert-modal]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const alertId = button.dataset.openAlertModal || "";
+            const row = button.closest("tr[data-alert-id]");
+            openAlertModal(alertId, row?.dataset.alertDetailHref || "");
         });
     });
 
