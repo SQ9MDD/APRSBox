@@ -29,16 +29,6 @@
             >
                 <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
             </button>
-            {% if can_manage_alerts and alerts_page["items"] %}
-            <form
-                id="bulk-delete-form"
-                method="post"
-                action="{{ request.scope.root_path }}/alerts/delete-selected"
-                onsubmit="return confirm({{ t('Delete selected alerts? Original frames remain in Traffic Monitor.')|tojson|forceescape }});"
-            >
-                <button type="submit" class="button button-secondary button-danger">{{ t("Delete selected") }}</button>
-            </form>
-            {% endif %}
         </div>
 
         <div class="table-wrap">
@@ -181,10 +171,22 @@
         </div>
 
         <div class="alerts-pagination" aria-label="{{ t('Pagination') }}">
-            <span class="muted">
-                {{ tf("Page {page} of {pages}", {"page": alerts_page.page, "pages": alerts_page.total_pages}) }}
-                · {{ tf("{count} alerts", {"count": alerts_page.total}) }}
-            </span>
+            <div class="alerts-pagination-summary">
+                <span class="muted">
+                    {{ tf("Page {page} of {pages}", {"page": alerts_page.page, "pages": alerts_page.total_pages}) }}
+                    · {{ tf("{count} alerts", {"count": alerts_page.total}) }}
+                </span>
+                {% if can_manage_alerts and alerts_page["items"] %}
+                <form
+                    id="bulk-delete-form"
+                    method="post"
+                    action="{{ request.scope.root_path }}/alerts/delete-selected"
+                    onsubmit="return confirm({{ t('Delete selected alerts? Original frames remain in Traffic Monitor.')|tojson|forceescape }});"
+                >
+                    <button type="submit" class="button button-secondary button-danger">{{ t("Delete selected") }}</button>
+                </form>
+                {% endif %}
+            </div>
             <div class="form-actions">
                 {% if alerts_page.has_previous %}
                 <a class="button button-secondary" href="{{ request.scope.root_path }}/alerts?page={{ alerts_page.previous_page }}">{{ t("Previous") }}</a>

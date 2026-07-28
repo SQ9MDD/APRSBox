@@ -6189,6 +6189,17 @@ select:focus-visible,
     padding-top: 0;
 }
 
+.alerts-pagination-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.alerts-pagination-summary form {
+    margin: 0;
+}
+
 .alert-details-grid,
 .traffic-frame-details-grid {
     margin-top: var(--space-4);
@@ -6206,6 +6217,11 @@ select:focus-visible,
 
 @media (max-width: 700px) {
     .alerts-pagination {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .alerts-pagination-summary {
         align-items: flex-start;
         flex-direction: column;
     }

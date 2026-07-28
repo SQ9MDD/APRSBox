@@ -297,6 +297,7 @@ class AprsAlertTests(unittest.TestCase):
         alert_detail_source = Path("app/templates/alert_detail.html").read_text(
             encoding="utf-8"
         )
+        traffic_source = Path("app/templates/traffic.html").read_text(encoding="utf-8")
         modal_source = Path("app/templates/partials/emergency_modal.html").read_text(
             encoding="utf-8"
         )
@@ -320,7 +321,14 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn('data-help-page="application/alerts"', alert_detail_source)
         self.assertIn('{% include "partials/help_modal.html" %}', alerts_source)
         self.assertIn("help-viewer.js", alerts_source)
+        self.assertGreater(
+            alerts_source.index('id="bulk-delete-form"'),
+            alerts_source.index("</table>"),
+        )
         self.assertIn("window.aprsboxOpenEmergencyModal", alerts_source)
+        self.assertNotIn("frame.detail_href", traffic_source)
+        self.assertNotIn("detailsText", traffic_source)
+        self.assertIn("frame.alert_href", traffic_source)
         self.assertIn("aprsbox-emergency-frames-shown", modal_js_source)
         self.assertIn("playSound: !frame.alert_muted", modal_js_source)
         self.assertIn("aprs-emergency-audio", modal_js_source)
