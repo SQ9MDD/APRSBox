@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 {% if flash %}
 <section class="panel">
@@ -16,6 +20,15 @@
                 <h2>{{ t("Alerts") }}</h2>
                 <p class="section-lead">{{ t("Logical APRS emergency alerts consolidated by source callsign.") }}</p>
             </div>
+            <button
+                class="help-icon-button page-help-button"
+                type="button"
+                data-help-page="application/alerts"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
             {% if can_manage_alerts and alerts_page["items"] %}
             <form
                 id="bulk-delete-form"
@@ -184,6 +197,8 @@
     </div>
 </section>
 
+{% include "partials/help_modal.html" %}
+
 <script type="application/json" id="alerts-modal-data">
 [
 {% for alert in alerts_page["items"] %}
@@ -249,4 +264,8 @@
     }
 })();
 </script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 {% endblock %}

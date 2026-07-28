@@ -2,6 +2,7 @@
 
 ## Application
 
+- [APRS-Notfallalarme](application/alerts.de.md)
 - [Objekte erstellen](application/objects.de.md)
 - [Bulletins und Ankuendigungen](application/bulletins.de.md)
 - [Paket-Routing-Regeln](application/packet_routing.de.md)

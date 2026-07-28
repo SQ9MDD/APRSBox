@@ -7,6 +7,25 @@ from app.routers import pages
 
 
 class HelpMarkdownTests(unittest.TestCase):
+    def test_alerts_have_dedicated_localized_help_with_autoplay_guidance(self) -> None:
+        expected_headings = {
+            "en": "# APRS emergency alerts",
+            "pl": "# Alarmy APRS emergency",
+            "de": "# APRS-Notfallalarme",
+            "es": "# Alarmas de emergencia APRS",
+        }
+        for language, heading in expected_headings.items():
+            with self.subTest(language=language):
+                resolved = pages._read_help_markdown(
+                    page="application/alerts",
+                    language=language,
+                )
+                self.assertIsNotNone(resolved)
+                assert resolved is not None
+                self.assertEqual(resolved[0], f"application/alerts.{language}.md")
+                self.assertTrue(resolved[1].startswith(heading))
+                self.assertIn("aut", resolved[1].lower())
+
     def test_aprsis_message_delivery_rule_has_dedicated_localized_help(self) -> None:
         expected_headings = {
             "en": "# APRS-IS Message Delivery Rule",

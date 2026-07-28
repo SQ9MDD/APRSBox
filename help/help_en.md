@@ -2,6 +2,7 @@
 
 ## Application
 
+- [APRS emergency alerts](application/alerts.en.md)
 - [Creating objects](application/objects.en.md)
 - [Bulletins and announcements](application/bulletins.en.md)
 - [Packet routing rules](application/packet_routing.en.md)
