@@ -159,25 +159,6 @@
 
     function resolveInitialView() {
         try {
-            const params = new URLSearchParams(window.location.search);
-            const latitude = Number(params.get("lat"));
-            const longitude = Number(params.get("lon"));
-            const zoom = Number.parseInt(params.get("zoom") || "15", 10);
-            if (
-                Number.isFinite(latitude)
-                && latitude >= -90
-                && latitude <= 90
-                && Number.isFinite(longitude)
-                && longitude >= -180
-                && longitude <= 180
-                && Number.isInteger(zoom)
-                && zoom >= 0
-            ) {
-                return { latitude, longitude, zoom };
-            }
-        } catch (_error) {
-        }
-        try {
             const raw = window.localStorage.getItem(mapViewStorageKey);
             if (!raw) {
                 return defaultView;
@@ -192,6 +173,15 @@
                 && Number.isInteger(zoom)
                 && zoom >= 0
             ) {
+                const looksLikeModalRegressionView = (
+                    Math.abs(latitude) < 0.001
+                    && Math.abs(longitude) < 0.001
+                    && zoom === 15
+                );
+                if (looksLikeModalRegressionView) {
+                    window.localStorage.removeItem(mapViewStorageKey);
+                    return defaultView;
+                }
                 return { latitude, longitude, zoom };
             }
         } catch (_error) {

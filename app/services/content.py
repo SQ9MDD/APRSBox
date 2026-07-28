@@ -805,6 +805,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             relations.alert_id,
             alerts.source_callsign AS alert_source_callsign,
             alerts.initial_frame_id AS alert_initial_frame_id,
+            alerts.last_frame_id AS alert_last_frame_id,
             alerts.muted_until AS alert_muted_until,
             alerts.muted_indefinitely AS alert_muted_indefinitely
         FROM traffic_frames AS frames
@@ -1005,8 +1006,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "alert_muted": alert_muted,
                 "alert_should_notify": bool(
                     alert_id is not None
-                    and row["alert_initial_frame_id"] is not None
-                    and int(row["alert_initial_frame_id"]) == int(row["id"])
+                    and row["alert_last_frame_id"] is not None
+                    and int(row["alert_last_frame_id"]) == int(row["id"])
                     and not alert_muted
                 ),
                 "alert_record_deleted": bool(emergency_data and alert_id is None),

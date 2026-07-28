@@ -30,6 +30,19 @@
 
         <div class="table-wrap">
             <table class="data-table compact-table alerts-table">
+                <colgroup>
+                    {% if can_manage_alerts %}
+                    <col class="alerts-col-select">
+                    {% endif %}
+                    <col class="alerts-col-source">
+                    <col class="alerts-col-type">
+                    <col class="alerts-col-comment">
+                    <col class="alerts-col-first-seen">
+                    <col class="alerts-col-last-seen">
+                    <col class="alerts-col-frame-count">
+                    <col class="alerts-col-mute">
+                    <col class="alerts-col-actions">
+                </colgroup>
                 <thead>
                     <tr>
                         {% if can_manage_alerts %}
@@ -53,12 +66,11 @@
                         class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}"
                         data-alert-id="{{ alert.id }}"
                         data-alert-detail-href="{{ request.scope.root_path }}{{ alert.detail_href }}"
-                        role="button"
                         tabindex="0"
                         aria-label="{{ t('Alert') }} #{{ alert.id }} {{ alert.source_callsign }}"
                     >
                         {% if can_manage_alerts %}
-                        <td onclick="event.stopPropagation();">
+                        <td class="alerts-select-cell" onclick="event.stopPropagation();">
                             <input
                                 type="checkbox"
                                 name="alert_ids"
@@ -94,7 +106,7 @@
                             <span class="muted">{{ t("Not muted") }}</span>
                             {% endif %}
                         </td>
-                        <td onclick="event.stopPropagation();">
+                        <td class="alerts-actions-cell" onclick="event.stopPropagation();">
                             <div class="table-actions">
                                 <button
                                     type="button"

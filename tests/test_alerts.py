@@ -104,15 +104,15 @@ class AprsAlertTests(unittest.TestCase):
             self.assertEqual(relations[0]["alert_id"], relations[1]["alert_id"])
             self.assertNotEqual(relations[0]["frame_id"], relations[1]["frame_id"])
 
-    def test_repeated_frame_does_not_request_another_notification(self) -> None:
+    def test_each_latest_unmuted_frame_requests_modal_notification(self) -> None:
         with temporary_database():
             receive_emergency(timestamp="2026-07-28T10:00:00+00:00")
             receive_emergency(timestamp="2026-07-28T10:30:00+00:00")
 
             snapshot = traffic_snapshot(limit=10)
             frames = sorted(snapshot["frames"], key=lambda item: item["id"])
-            self.assertTrue(frames[0]["alert_should_notify"])
-            self.assertFalse(frames[1]["alert_should_notify"])
+            self.assertFalse(frames[0]["alert_should_notify"])
+            self.assertTrue(frames[1]["alert_should_notify"])
             self.assertEqual(frames[0]["alert_id"], frames[1]["alert_id"])
 
     def test_muted_alert_still_updates_and_does_not_notify(self) -> None:
@@ -285,12 +285,20 @@ class AprsAlertTests(unittest.TestCase):
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         map_source = Path("app/templates/map.html").read_text(encoding="utf-8")
         alerts_source = Path("app/templates/alerts.html").read_text(encoding="utf-8")
+        modal_js_source = Path("app/static/js/map-emergency-modal.js").read_text(
+            encoding="utf-8"
+        )
+        map_js_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
 
         self.assertIn('{% include "partials/emergency_modal.html" %}', base_source)
         self.assertIn("map-emergency-modal.js", base_source)
         self.assertNotIn('id="aprs-emergency-modal"', map_source)
         self.assertIn('{{ t("Comment") }}', alerts_source)
         self.assertIn("window.aprsboxOpenEmergencyModal", alerts_source)
+        self.assertIn("aprsbox-emergency-frames-shown", modal_js_source)
+        self.assertIn("playSound: true", modal_js_source)
+        self.assertIn("looksLikeModalRegressionView", map_js_source)
+        self.assertNotIn("URLSearchParams(window.location.search)", map_js_source)
 
 
 if __name__ == "__main__":

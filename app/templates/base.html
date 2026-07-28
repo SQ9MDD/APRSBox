@@ -33,7 +33,7 @@
         window.APRSBOX_APRS_SYMBOL_SET = {{ current_aprs_symbol_set|tojson }};
         document.documentElement.setAttribute("data-aprs-symbol-set", window.APRSBOX_APRS_SYMBOL_SET || "legacy");
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-alerts-global">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-alerts-global-2">
     {% if current_user %}
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
@@ -390,7 +390,7 @@
     {% endif %}
     {% block extra_scripts %}{% endblock %}
     {% if current_user %}
-    <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global"></script>
+    <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global-2"></script>
     {% endif %}
 </body>
 </html>

@@ -1804,5 +1804,6 @@
   "Source interface": "Quellschnittstelle",
   "Position": "Position",
   "Format": "Format",
-  "Command": "Befehl"
+  "Command": "Befehl",
+  "Close": "Schließen"
 }

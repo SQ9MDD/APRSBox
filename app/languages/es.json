@@ -1806,5 +1806,6 @@
   "Source interface": "Interfaz de origen",
   "Position": "Posición",
   "Format": "Formato",
-  "Command": "Comando"
+  "Command": "Comando",
+  "Close": "Cerrar"
 }

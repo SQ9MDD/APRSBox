@@ -1804,5 +1804,6 @@
   "Source interface": "Source interface",
   "Position": "Position",
   "Format": "Format",
-  "Command": "Command"
+  "Command": "Command",
+  "Close": "Close"
 }
