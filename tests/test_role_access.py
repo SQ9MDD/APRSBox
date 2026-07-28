@@ -54,9 +54,9 @@ class RoleAccessTests(unittest.TestCase):
         navigation = {item["key"]: item for item in context["navigation"] if not item.get("separator")}
 
         traffic_index = navigation_order.index("traffic")
-        self.assertEqual(navigation_order[traffic_index + 1 : traffic_index + 3], ["band-condition", "statistics"])
+        self.assertEqual(navigation_order[traffic_index + 1 : traffic_index + 4], ["alerts", "band-condition", "statistics"])
 
-        for key in ("dashboard", "stations", "map", "band-condition", "modems", "traffic", "statistics"):
+        for key in ("dashboard", "stations", "map", "band-condition", "modems", "traffic", "alerts", "statistics"):
             self.assertIn(key, navigation)
             self.assertFalse(bool(navigation[key].get("disabled")), key)
 
@@ -87,6 +87,7 @@ class RoleAccessTests(unittest.TestCase):
                     "/band-condition",
                     "/settings/modems",
                     "/traffic",
+                    "/alerts",
                     "/statistics",
                 ):
                     response = client.get(path)

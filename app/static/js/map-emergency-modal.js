@@ -6,7 +6,6 @@
     }
 
     const eventName = "aprsbox:traffic-snapshot";
-    const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const dialog = modal.querySelector(".aprs-emergency-dialog");
     const title = document.getElementById("aprs-emergency-title");
     const callsign = document.getElementById("aprs-emergency-callsign");
@@ -22,6 +21,10 @@
     const closeButton = document.getElementById("aprs-emergency-close");
     const copyButton = document.getElementById("aprs-emergency-copy");
     const openMapButton = document.getElementById("aprs-emergency-open-map");
+    const openAlertLink = document.getElementById("aprs-emergency-open-alert");
+    const rootPath = String(root.dataset.rootPath || "");
+    const emergencyFrameReceivedText = String(root.dataset.i18nEmergencyFrameReceived || "Emergency frame received");
+    const activeEmergencyText = String(root.dataset.i18nActiveEmergency || "Active emergency");
 
     const mapTileUrl = String(root.dataset.tileUrl || "").trim();
     const mapTileAttribution = String(root.dataset.tileAttribution || "").trim();
@@ -72,9 +75,9 @@
     function emergencySignature(frame) {
         const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
         return [
+            frame.alert_id || "",
             emergencyData.timestamp_utc || frame.timestamp || "",
             emergencyData.raw_frame || frame.line || "",
-            emergencyData.callsign || frame.display_callsign || frame.source || "",
         ].join("|");
     }
 
@@ -89,11 +92,12 @@
         if (!Array.isArray(frames) || frames.length === 0) {
             return null;
         }
-        const newestFrame = frames[0];
-        if (!newestFrame || !newestFrame.emergency) {
-            return null;
-        }
-        return newestFrame;
+        return frames.find((frame) =>
+            frame
+            && frame.emergency
+            && frame.alert_should_notify
+            && !frame.alert_muted
+        ) || null;
     }
 
     function destroyMiniMap() {
@@ -309,13 +313,13 @@
         currentEmergencyFrame = frame;
         currentSignature = emergencySignature(frame);
         if (title) {
-            title.textContent = "EMERGENCY FRAME RECEIVED";
+            title.textContent = emergencyFrameReceivedText;
         }
         if (callsign) {
             callsign.textContent = call;
         }
         if (status) {
-            status.textContent = "ACTIVE EMERGENCY";
+            status.textContent = activeEmergencyText;
         }
         if (timestamp) {
             timestamp.textContent = timestampLabel;
@@ -332,6 +336,14 @@
         if (raw) {
             raw.textContent = rawFrame;
         }
+        if (openAlertLink) {
+            if (frame.alert_href) {
+                openAlertLink.href = `${rootPath}${frame.alert_href}`;
+                openAlertLink.hidden = false;
+            } else {
+                openAlertLink.hidden = true;
+            }
+        }
 
         renderMiniMap(latitude, longitude);
         updateOpenMapButton(latitude, longitude);
@@ -347,7 +359,6 @@
 
         const nextSignature = emergencySignature(emergencyFrame);
         if (nextSignature && nextSignature === currentSignature && isVisible) {
-            playOpenBeep();
             return;
         }
         if (!isVisible && nextSignature && nextSignature === dismissedSignature) {
@@ -389,18 +400,6 @@
 
     root.addEventListener(eventName, function (event) {
         handleSnapshot(event && event.detail ? event.detail : {});
-    });
-
-    root.addEventListener(mapViewRefreshEventName, function () {
-        if (isVisible && currentEmergencyFrame) {
-            playOpenBeep();
-        }
-    });
-
-    window.addEventListener("visibilitychange", function () {
-        if (!document.hidden && isVisible && currentEmergencyFrame) {
-            playOpenBeep();
-        }
     });
 
     if (window.__APRSBOX_TRAFFIC_SNAPSHOT__) {

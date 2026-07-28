@@ -119,6 +119,15 @@ from app.services.notifications import (
     safe_save_notification_transport,
     test_notification_transport,
 )
+from app.services.alerts import (
+    delete_alert,
+    delete_alerts,
+    get_alert,
+    get_traffic_frame,
+    list_alerts,
+    mute_alert,
+    unmute_alert,
+)
 from app.services.band_condition import (
     get_band_condition_history,
     get_band_condition_page_data,
@@ -3078,6 +3087,153 @@ def changelog_page(
         changelog_markdown=_read_changelog_markdown(),
     )
     return templates.TemplateResponse("changelog.html", context)
+
+
+def _alerts_redirect(
+    request: Request,
+    path: str,
+    message: str,
+    *,
+    success: bool = True,
+) -> RedirectResponse:
+    separator = "&" if "?" in path else "?"
+    target = (
+        f"{_path(request, path)}{separator}"
+        f"flash={quote(message, safe='')}&flash_success={1 if success else 0}"
+    )
+    return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/alerts")
+def alerts_page(
+    request: Request,
+    page: int = 1,
+    flash: str | None = None,
+    flash_success: bool = True,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Alerts",
+        current_user=current_user,
+        active_nav="alerts",
+        alerts_page=list_alerts(page=page),
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_alerts=current_user.role in {"admin", "operator"},
+    )
+    return templates.TemplateResponse("alerts.html", context)
+
+
+@router.get("/alerts/{alert_id}")
+def alert_detail_page(
+    alert_id: int,
+    request: Request,
+    flash: str | None = None,
+    flash_success: bool = True,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    alert = get_alert(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Alert details",
+        current_user=current_user,
+        active_nav="alerts",
+        alert=alert,
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_alerts=current_user.role in {"admin", "operator"},
+    )
+    return templates.TemplateResponse("alert_detail.html", context)
+
+
+@router.post("/alerts/{alert_id}/mute")
+def alert_mute(
+    alert_id: int,
+    request: Request,
+    duration: str = Form(...),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    try:
+        changed = mute_alert(alert_id, duration)
+    except ValueError:
+        return _alerts_redirect(
+            request,
+            f"/alerts/{alert_id}",
+            "Unsupported mute duration.",
+            success=False,
+        )
+    if not changed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return _alerts_redirect(request, f"/alerts/{alert_id}", "Alert muted.")
+
+
+@router.post("/alerts/{alert_id}/unmute")
+def alert_unmute(
+    alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    if not unmute_alert(alert_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return _alerts_redirect(request, f"/alerts/{alert_id}", "Alert unmuted.")
+
+
+@router.post("/alerts/{alert_id}/delete")
+def alert_delete(
+    alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    if not delete_alert(alert_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return _alerts_redirect(request, "/alerts", "Alert deleted. Original frames remain in Traffic Monitor.")
+
+
+@router.post("/alerts/delete-selected")
+async def alerts_delete_selected(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    form_data = await request.form()
+    alert_ids: list[int] = []
+    for raw_id in form_data.getlist("alert_ids"):
+        try:
+            alert_ids.append(int(str(raw_id)))
+        except (TypeError, ValueError):
+            continue
+    deleted = delete_alerts(alert_ids)
+    if deleted <= 0:
+        return _alerts_redirect(request, "/alerts", "No alerts selected.", success=False)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Selected alerts deleted. Original frames remain in Traffic Monitor.",
+    )
+
+
+@router.get("/traffic/frames/{frame_id}")
+def traffic_frame_detail_page(
+    frame_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    frame = get_traffic_frame(frame_id)
+    if frame is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Frame details",
+        current_user=current_user,
+        active_nav="traffic",
+        frame=frame,
+    )
+    return templates.TemplateResponse("traffic_frame_detail.html", context)
 
 
 @router.get("/traffic")

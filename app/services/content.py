@@ -788,9 +788,29 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     )
     frame_rows = fetch_all(
         """
-        SELECT source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
-        FROM traffic_frames
-        ORDER BY created_at DESC, id DESC
+        SELECT
+            frames.id,
+            frames.source,
+            frames.source_kind,
+            frames.interface_id,
+            frames.direction,
+            frames.band,
+            frames.format,
+            frames.line,
+            frames.port,
+            frames.command,
+            frames.length,
+            frames.hex,
+            frames.created_at,
+            relations.alert_id,
+            alerts.source_callsign AS alert_source_callsign,
+            alerts.initial_frame_id AS alert_initial_frame_id,
+            alerts.muted_until AS alert_muted_until,
+            alerts.muted_indefinitely AS alert_muted_indefinitely
+        FROM traffic_frames AS frames
+        LEFT JOIN aprs_alert_frames AS relations ON relations.frame_id = frames.id
+        LEFT JOIN aprs_alerts AS alerts ON alerts.id = relations.alert_id
+        ORDER BY frames.created_at DESC, frames.id DESC
         LIMIT ?
         """,
         (limit,),
@@ -939,7 +959,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 or ""
             ).strip()
         display_icon_path = get_aprs_symbol_icon_path(symbol) if packet_group in {"object", "item"} else ""
-        emergency_data = _build_emergency_frame_data(parsed=parsed, row=row, line=line) if parsed else None
+        emergency_data = build_emergency_frame_data(parsed=parsed, row=row, line=line) if parsed else None
         source_kind = normalize_source_kind(row["source_kind"])
         row_class = _traffic_frame_row_class(
             direction=direction,
@@ -949,8 +969,16 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             wx_source_key=wx_source_key,
             source_kind=source_kind,
         )
+        alert_id = int(row["alert_id"]) if row["alert_id"] is not None else None
+        alert_muted_until = _parse_iso_timestamp_utc(str(row["alert_muted_until"] or ""))
+        alert_muted = bool(int(row["alert_muted_indefinitely"] or 0)) or (
+            alert_muted_until is not None and alert_muted_until > datetime.now(timezone.utc)
+        )
+        if emergency_data:
+            row_class = f"{row_class} traffic-log-row-emergency".strip()
         frames.append(
             {
+                "id": int(row["id"]),
                 "timestamp": _format_monitor_timestamp(row["created_at"]),
                 "source": row["source"],
                 "source_kind": source_kind,
@@ -970,6 +998,18 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "display_icon_path": display_icon_path,
                 "emergency": bool(emergency_data),
                 "emergency_data": emergency_data,
+                "detail_href": f"/traffic/frames/{int(row['id'])}",
+                "alert_id": alert_id,
+                "alert_callsign": str(row["alert_source_callsign"] or "").strip(),
+                "alert_href": f"/alerts/{alert_id}" if alert_id is not None else "",
+                "alert_muted": alert_muted,
+                "alert_should_notify": bool(
+                    alert_id is not None
+                    and row["alert_initial_frame_id"] is not None
+                    and int(row["alert_initial_frame_id"]) == int(row["id"])
+                    and not alert_muted
+                ),
+                "alert_record_deleted": bool(emergency_data and alert_id is None),
             }
         )
     result = {
@@ -1029,7 +1069,7 @@ def _extract_emergency_comment_token(text: str) -> str | None:
     return token.upper() if token else None
 
 
-def _build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) -> dict[str, Any] | None:
+def build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) -> dict[str, Any] | None:
     aprs_data = dict(parsed.get("aprs_data") or {})
     if not bool(aprs_data.get("emergency")):
         return None

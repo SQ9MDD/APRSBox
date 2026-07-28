@@ -42,7 +42,17 @@
             <div class="traffic-log-row{% if frame.row_class %} {{ frame.row_class }}{% endif %}">
                 <span class="traffic-log-time">{{ frame.timestamp }}</span>
                 <span class="traffic-log-source">{{ frame.source }}{% if frame.band %} · {{ frame.band }}{% endif %} · {{ frame.direction }}{% if frame.row_class and "traffic-log-row-aprsis-to-rf-tx" in frame.row_class %}<span class="traffic-direction-warning-badge" aria-label="{{ t('APRS-IS to RF TX') }}">IS → RF</span>{% endif %}</span>
-                <span class="traffic-log-line">{{ frame.line }}</span>
+                <span class="traffic-log-line">
+                    <span class="traffic-frame-line-text">{{ frame.line }}</span>
+                    <span class="traffic-frame-links">
+                        <a href="{{ request.scope.root_path }}{{ frame.detail_href }}">{{ t("Details") }}</a>
+                        {% if frame.alert_href %}
+                        <a class="traffic-alert-link" href="{{ request.scope.root_path }}{{ frame.alert_href }}">{{ t("Show alert") }}</a>
+                        {% elif frame.alert_record_deleted %}
+                        <span class="muted">{{ t("Alert record deleted") }}</span>
+                        {% endif %}
+                    </span>
+                </span>
             </div>
             {% endfor %}
             {% else %}
@@ -118,6 +128,10 @@
         const hiddenIconPath = `${staticIconsRoot}/eye-off.svg`;
         const noInterfacesText = {{ t("No enabled interface is configured.")|tojson }};
         const aprsisToRfWarningText = {{ t("APRS-IS to RF TX")|tojson }};
+        const detailsText = {{ t("Details")|tojson }};
+        const showAlertText = {{ t("Show alert")|tojson }};
+        const alertDeletedText = {{ t("Alert record deleted")|tojson }};
+        const rootPath = {{ request.scope.root_path|tojson }};
         const initialSnapshot = initialDataNode ? JSON.parse(initialDataNode.textContent || "{}") : { interfaces: [], frames: [] };
         const frameNodeByKey = new Map();
         const interfaceVisibilityByKey = new Map();
@@ -367,6 +381,46 @@
             }
         };
 
+        const updateFrameLine = (lineNode, frame) => {
+            const signature = [
+                frame.line || "",
+                frame.detail_href || "",
+                frame.alert_href || "",
+                frame.alert_record_deleted ? "deleted" : "",
+            ].join("|");
+            if (lineNode.dataset.lineSignature === signature) {
+                return;
+            }
+            lineNode.dataset.lineSignature = signature;
+            lineNode.textContent = "";
+
+            const rawText = document.createElement("span");
+            rawText.className = "traffic-frame-line-text";
+            rawText.textContent = frame.line || "";
+
+            const links = document.createElement("span");
+            links.className = "traffic-frame-links";
+            if (frame.detail_href) {
+                const detailsLink = document.createElement("a");
+                detailsLink.href = `${rootPath}${frame.detail_href}`;
+                detailsLink.textContent = detailsText;
+                links.appendChild(detailsLink);
+            }
+            if (frame.alert_href) {
+                const alertLink = document.createElement("a");
+                alertLink.className = "traffic-alert-link";
+                alertLink.href = `${rootPath}${frame.alert_href}`;
+                alertLink.textContent = showAlertText;
+                links.appendChild(alertLink);
+            } else if (frame.alert_record_deleted) {
+                const deletedLabel = document.createElement("span");
+                deletedLabel.className = "muted";
+                deletedLabel.textContent = alertDeletedText;
+                links.appendChild(deletedLabel);
+            }
+            lineNode.append(rawText, links);
+        };
+
         const createFrameRow = (frame, key) => {
             const row = document.createElement("div");
             row.dataset.frameKey = key;
@@ -382,7 +436,7 @@
 
             const lineNode = document.createElement("span");
             lineNode.className = "traffic-log-line";
-            lineNode.textContent = frame.line;
+            updateFrameLine(lineNode, frame);
 
             row.append(timeNode, sourceNode, lineNode);
             return row;
@@ -403,8 +457,8 @@
             if (sourceNode) {
                 updateFrameSource(sourceNode, frame);
             }
-            if (lineNode && lineNode.textContent !== frame.line) {
-                lineNode.textContent = frame.line;
+            if (lineNode) {
+                updateFrameLine(lineNode, frame);
             }
         };
 

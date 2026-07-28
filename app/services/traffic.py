@@ -10,6 +10,7 @@ from threading import Lock
 from typing import Any, Callable
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.services.alerts import process_emergency_frame
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
 from app.services.content import parse_tnc2_frame
 from app.services.messages import process_incoming_tnc2_message
@@ -203,8 +204,9 @@ def process_normalized_tnc2_rx(
     else:
         rx_to_igate_enqueue_ms = None
 
+    alert_result: dict[str, Any] | None = None
     with get_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             INSERT INTO traffic_frames(
                 source, source_kind, interface_id, direction, band,
@@ -223,6 +225,36 @@ def process_normalized_tnc2_rx(
                 frame_length,
                 str(payload_hex or ""),
                 occurred_at,
+            ),
+        )
+        frame_id = int(cursor.lastrowid)
+        alert_result = process_emergency_frame(
+            connection,
+            frame_id=frame_id,
+            parsed=parsed_frame,
+            frame_row={
+                "source": str(source or "").strip() or "Unknown source",
+                "source_kind": normalized_kind,
+                "interface_id": source_interface_id,
+                "direction": "rx",
+                "band": str(band or "").strip(),
+                "format": "TNC2",
+                "line": normalized_line,
+                "port": str(port or ""),
+                "command": str(command or "RX"),
+                "length": frame_length,
+                "hex": str(payload_hex or ""),
+                "created_at": occurred_at,
+            },
+        )
+
+    if alert_result and alert_result.get("created"):
+        log_event(
+            "WARNING",
+            "alerts",
+            (
+                f"Created APRS emergency alert {alert_result['alert_id']} "
+                f"for {alert_result['source_callsign']}"
             ),
         )
 

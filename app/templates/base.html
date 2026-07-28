@@ -116,7 +116,7 @@
             {% else %}
             <a
                 href="{{ request.scope.root_path }}{{ item.href }}"
-                class="nav-link {% if active_nav == item.key %}active{% endif %}{% if item.key == 'messages' and item.has_unread %} nav-link-unread{% endif %}"
+                class="nav-link {% if active_nav == item.key %}active{% endif %}{% if (item.key == 'messages' and item.has_unread) or item.has_attention %} nav-link-unread{% endif %}"
                 data-nav-key="{{ item.key }}"
                 aria-label="{{ item.label }}"
                 title="{{ item.label }}"
@@ -128,6 +128,9 @@
             >
                 <img class="nav-icon" src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="">
                 <span class="nav-label">{{ item.label }}</span>
+                {% if item.attention_count %}
+                <span class="nav-count-badge" aria-label="{{ item.attention_count }}">{{ item.attention_count }}</span>
+                {% endif %}
             </a>
             {% endif %}
             {% endfor %}

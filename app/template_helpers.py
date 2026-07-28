@@ -10,6 +10,7 @@ from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
 from app.ui_palette import normalize_ui_palette
 from app.services.content import get_aprs_symbol_icon_fallback_path, get_aprs_symbol_set
+from app.services.alerts import attention_alert_count
 from app.services.messages import get_unread_inbox_count
 
 
@@ -19,6 +20,7 @@ PRIMARY_NAV = [
     {"key": "map", "label": "Map", "href": "/map", "roles": ("admin", "operator", "viewer"), "icon": "map-outline.svg"},
     {"key": "modems", "label": "Interfaces", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
     {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
+    {"key": "alerts", "label": "Alerts", "href": "/alerts", "roles": ("admin", "operator", "viewer"), "icon": "alarm-light-outline.svg"},
     {"key": "band-condition", "label": "Band Condition", "href": "/band-condition", "roles": ("admin", "operator", "viewer"), "icon": "chart-line.svg"},
     {"key": "statistics", "label": "Statistics", "href": "/statistics", "roles": ("admin", "operator", "viewer"), "icon": "chart-bar-stacked.svg"},
     {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator"), "visible_roles": ("viewer",)},
@@ -81,6 +83,7 @@ def build_template_context(
     current_aprs_symbol_set = get_aprs_symbol_set()
     aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
+    current_alert_count = attention_alert_count() if current_user else 0
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
         visible_roles = tuple(item.get("visible_roles") or ())
@@ -94,6 +97,9 @@ def build_template_context(
                     translated_item["unread_count"] = unread_inbox_count
                     if unread_inbox_count > 0:
                         translated_item["icon"] = "message-alert-outline.svg"
+                elif item["key"] == "alerts" and not translated_item["disabled"]:
+                    translated_item["attention_count"] = current_alert_count
+                    translated_item["has_attention"] = current_alert_count > 0
             navigation.append(translated_item)
 
     return {

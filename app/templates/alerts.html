@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if flash %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
+    </div>
+</section>
+{% endif %}
+
+<section class="panel alerts-page-panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Alerts") }}</h2>
+                <p class="section-lead">{{ t("Logical APRS emergency alerts consolidated by source callsign.") }}</p>
+            </div>
+            {% if can_manage_alerts and alerts_page["items"] %}
+            <form
+                id="bulk-delete-form"
+                method="post"
+                action="{{ request.scope.root_path }}/alerts/delete-selected"
+                onsubmit="return confirm({{ t('Delete selected alerts? Original frames remain in Traffic Monitor.')|tojson|forceescape }});"
+            >
+                <button type="submit" class="button button-secondary button-danger">{{ t("Delete selected") }}</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <div class="table-wrap">
+            <table class="data-table compact-table alerts-table">
+                <thead>
+                    <tr>
+                        {% if can_manage_alerts %}
+                        <th class="alerts-select-column">
+                            <input type="checkbox" id="alerts-select-all" aria-label="{{ t('Select all') }}">
+                        </th>
+                        {% endif %}
+                        <th>{{ t("Source") }}</th>
+                        <th>{{ t("Type") }}</th>
+                        <th>{{ t("Message") }}</th>
+                        <th>{{ t("First received") }}</th>
+                        <th>{{ t("Last received") }}</th>
+                        <th>{{ t("Frame count") }}</th>
+                        <th>{{ t("Mute") }}</th>
+                        <th>{{ t("Actions") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in alerts_page["items"] %}
+                    <tr class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}" data-href="{{ request.scope.root_path }}{{ alert.detail_href }}">
+                        {% if can_manage_alerts %}
+                        <td onclick="event.stopPropagation();">
+                            <input
+                                type="checkbox"
+                                name="alert_ids"
+                                value="{{ alert.id }}"
+                                form="bulk-delete-form"
+                                aria-label="{{ t('Select') }} #{{ alert.id }}"
+                                data-alert-select
+                            >
+                        </td>
+                        {% endif %}
+                        <td>
+                            <strong>
+                                <a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">
+                                    {{ alert.source_callsign }}
+                                </a>
+                            </strong>
+                        </td>
+                        <td><span class="frame-type-badge">{{ alert.alert_type }}</span></td>
+                        <td title="{{ alert.message }}">{{ alert.message or "-" }}</td>
+                        <td>{{ alert.first_seen_label }}</td>
+                        <td>{{ alert.last_seen_label }}</td>
+                        <td>{{ alert.frame_count }}</td>
+                        <td>
+                            {% if alert.muted %}
+                            <span class="alert-state-badge alert-state-badge-muted">
+                                {% if alert.muted_indefinitely %}
+                                {{ t("Alert muted") }}
+                                {% else %}
+                                {{ t("Muted until") }} {{ alert.muted_until_label }}
+                                {% endif %}
+                            </span>
+                            {% else %}
+                            <span class="muted">{{ t("Not muted") }}</span>
+                            {% endif %}
+                        </td>
+                        <td onclick="event.stopPropagation();">
+                            <div class="table-actions">
+                                <a
+                                    href="{{ request.scope.root_path }}{{ alert.detail_href }}"
+                                    class="table-icon-button"
+                                    title="{{ t('Details') }}"
+                                    aria-label="{{ t('Details') }} #{{ alert.id }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/eye-outline.svg" alt="">
+                                </a>
+                                {% if can_manage_alerts %}
+                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
+                                    <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
+                                        <option value="1h">{{ t("Mute for 1 hour") }}</option>
+                                        <option value="4h">{{ t("Mute for 4 hours") }}</option>
+                                        <option value="24h">{{ t("Mute for 24 hours") }}</option>
+                                        <option value="indefinite">{{ t("Mute indefinitely") }}</option>
+                                    </select>
+                                    <button type="submit" class="table-icon-button" title="{{ t('Mute') }}" aria-label="{{ t('Mute') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/volume-off.svg" alt="">
+                                    </button>
+                                </form>
+                                {% if alert.muted %}
+                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/unmute" class="table-action-form">
+                                    <button type="submit" class="table-icon-button" title="{{ t('Cancel mute') }}" aria-label="{{ t('Cancel mute') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <form
+                                    method="post"
+                                    action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/delete"
+                                    class="table-action-form"
+                                    onsubmit="return confirm({{ t('Delete this alert? Original frames remain in Traffic Monitor.')|tojson|forceescape }});"
+                                >
+                                    <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{{ 9 if can_manage_alerts else 8 }}" class="muted">{{ t("No alerts received yet.") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="alerts-pagination" aria-label="{{ t('Pagination') }}">
+            <span class="muted">
+                {{ tf("Page {page} of {pages}", {"page": alerts_page.page, "pages": alerts_page.total_pages}) }}
+                · {{ tf("{count} alerts", {"count": alerts_page.total}) }}
+            </span>
+            <div class="form-actions">
+                {% if alerts_page.has_previous %}
+                <a class="button button-secondary" href="{{ request.scope.root_path }}/alerts?page={{ alerts_page.previous_page }}">{{ t("Previous") }}</a>
+                {% endif %}
+                {% if alerts_page.has_next %}
+                <a class="button button-secondary" href="{{ request.scope.root_path }}/alerts?page={{ alerts_page.next_page }}">{{ t("Next") }}</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+(() => {
+    const rows = Array.from(document.querySelectorAll(".alerts-table tr[data-href]"));
+    rows.forEach((row) => {
+        row.addEventListener("click", (event) => {
+            if (event.target.closest("a, button, input, select, form")) return;
+            window.location.href = row.dataset.href;
+        });
+    });
+
+    const selectAll = document.getElementById("alerts-select-all");
+    const selections = Array.from(document.querySelectorAll("[data-alert-select]"));
+    if (selectAll) {
+        selectAll.addEventListener("change", () => {
+            selections.forEach((checkbox) => {
+                checkbox.checked = selectAll.checked;
+            });
+        });
+    }
+})();
+</script>
+{% endblock %}

@@ -61,6 +61,8 @@
             data-i18n-tile-provider-recovered="{{ t('Tile provider recovered') }}"
             data-i18n-show="{{ t('Show') }}"
             data-i18n-hide="{{ t('Hide') }}"
+            data-i18n-emergency-frame-received="{{ t('Emergency frame received') }}"
+            data-i18n-active-emergency="{{ t('Active emergency') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -160,46 +162,47 @@
                                     <img src="{{ request.scope.root_path }}/static/icons/car-emergency.svg" alt="">
                                 </span>
                                 <div class="aprs-emergency-title-stack">
-                                    <div class="aprs-emergency-title" id="aprs-emergency-title">EMERGENCY FRAME RECEIVED</div>
+                                    <div class="aprs-emergency-title" id="aprs-emergency-title">{{ t("Emergency frame received") }}</div>
                                     <div class="aprs-emergency-callsign" id="aprs-emergency-callsign">-</div>
                                 </div>
                             </div>
                         </div>
-                        <div class="aprs-emergency-status-badge" id="aprs-emergency-status">ACTIVE EMERGENCY</div>
+                        <div class="aprs-emergency-status-badge" id="aprs-emergency-status">{{ t("Active emergency") }}</div>
                     </header>
                     <div class="aprs-emergency-body">
-                        <div class="aprs-emergency-newer" id="aprs-emergency-newer" hidden>Newer emergency received</div>
+                        <div class="aprs-emergency-newer" id="aprs-emergency-newer" hidden>{{ t("Newer emergency received") }}</div>
                         <dl class="aprs-emergency-grid">
                             <div class="aprs-emergency-row">
-                                <dt>UTC timestamp</dt>
+                                <dt>{{ t("UTC timestamp") }}</dt>
                                 <dd id="aprs-emergency-timestamp">-</dd>
                             </div>
                             <div class="aprs-emergency-row">
-                                <dt>Source interface</dt>
+                                <dt>{{ t("Source interface") }}</dt>
                                 <dd id="aprs-emergency-source">-</dd>
                             </div>
                             <div class="aprs-emergency-row">
-                                <dt>Path</dt>
+                                <dt>{{ t("Path") }}</dt>
                                 <dd id="aprs-emergency-path">-</dd>
                             </div>
                             <div class="aprs-emergency-row">
-                                <dt>Comment / summary</dt>
+                                <dt>{{ t("Comment / summary") }}</dt>
                                 <dd id="aprs-emergency-summary">-</dd>
                             </div>
                         </dl>
                         <div class="aprs-emergency-map-wrap">
                             <div id="aprs-emergency-map" class="aprs-emergency-map"></div>
-                            <div id="aprs-emergency-no-position" class="aprs-emergency-no-position" hidden>No position available in this frame</div>
+                            <div id="aprs-emergency-no-position" class="aprs-emergency-no-position" hidden>{{ t("No position available in this frame") }}</div>
                         </div>
                         <div class="aprs-emergency-raw-block">
-                            <div class="aprs-emergency-raw-label">Raw APRS frame</div>
+                            <div class="aprs-emergency-raw-label">{{ t("Raw APRS frame") }}</div>
                             <pre id="aprs-emergency-raw" class="aprs-emergency-raw"></pre>
                         </div>
                     </div>
                     <footer class="aprs-emergency-actions">
-                        <button type="button" class="button button-secondary" id="aprs-emergency-copy">Copy frame</button>
-                        <button type="button" class="button button-secondary" id="aprs-emergency-open-map" disabled>Open on map</button>
-                        <button type="button" class="button" id="aprs-emergency-close">Acknowledge / Close</button>
+                        <button type="button" class="button button-secondary" id="aprs-emergency-copy">{{ t("Copy frame") }}</button>
+                        <button type="button" class="button button-secondary" id="aprs-emergency-open-map" disabled>{{ t("Open on map") }}</button>
+                        <a class="button button-secondary" id="aprs-emergency-open-alert" href="{{ request.scope.root_path }}/alerts" hidden>{{ t("Show alert") }}</a>
+                        <button type="button" class="button" id="aprs-emergency-close">{{ t("Close") }}</button>
                     </footer>
                 </div>
             </div>

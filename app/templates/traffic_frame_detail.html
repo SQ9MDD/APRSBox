@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Frame details") }} #{{ frame.id }}</h2>
+                <p class="section-lead">{{ frame.created_label }}</p>
+            </div>
+        </div>
+
+        {% if frame.emergency %}
+        <div class="alert{% if frame.alert_id %} success{% endif %}">
+            {% if frame.alert_id %}
+            {{ t("Related alert") }}:
+            <a class="station-link" href="{{ request.scope.root_path }}{{ frame.alert_href }}">#{{ frame.alert_id }} {{ frame.alert_source_callsign }}</a>
+            {% else %}
+            {{ t("The related alert record was deleted.") }}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <dl class="details-grid traffic-frame-details-grid">
+            <dt>{{ t("Received") }}</dt>
+            <dd>{{ frame.created_label }}</dd>
+            <dt>{{ t("Source interface") }}</dt>
+            <dd>{{ frame.source or "-" }}</dd>
+            <dt>{{ t("Direction") }}</dt>
+            <dd>{{ frame.direction or "-" }}</dd>
+            <dt>{{ t("Band") }}</dt>
+            <dd>{{ frame.band or "-" }}</dd>
+            <dt>{{ t("Format") }}</dt>
+            <dd>{{ frame.format }}</dd>
+            <dt>{{ t("Source") }}</dt>
+            <dd>
+                {% if frame.related_entity.detail_href %}
+                <a class="station-link" href="{{ request.scope.root_path }}{{ frame.related_entity.detail_href }}">{{ frame.related_entity.label }}</a>
+                {% else %}
+                {{ frame.source_callsign or "-" }}
+                {% endif %}
+            </dd>
+            <dt>{{ t("Path") }}</dt>
+            <dd>{{ frame.path or "-" }}</dd>
+            <dt>{{ t("Position") }}</dt>
+            <dd>{{ frame.position_label or "-" }}</dd>
+            <dt>{{ t("Port") }}</dt>
+            <dd>{{ frame.port or "-" }}</dd>
+            <dt>{{ t("Command") }}</dt>
+            <dd>{{ frame.command or "-" }}</dd>
+            <dt>{{ t("Raw frame") }}</dt>
+            <dd><code class="traffic-frame-raw">{{ frame.line }}</code></dd>
+        </dl>
+    </div>
+</section>
+{% endblock %}

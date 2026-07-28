@@ -586,6 +586,35 @@ CREATE TABLE IF NOT EXISTS traffic_frames (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS aprs_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_callsign TEXT NOT NULL COLLATE NOCASE,
+    alert_type TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    frame_count INTEGER NOT NULL DEFAULT 1 CHECK (frame_count >= 1),
+    initial_frame_id INTEGER,
+    last_frame_id INTEGER,
+    latitude REAL,
+    longitude REAL,
+    muted_until TEXT,
+    muted_indefinitely INTEGER NOT NULL DEFAULT 0 CHECK (muted_indefinitely IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (initial_frame_id) REFERENCES traffic_frames(id) ON DELETE SET NULL,
+    FOREIGN KEY (last_frame_id) REFERENCES traffic_frames(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS aprs_alert_frames (
+    alert_id INTEGER NOT NULL,
+    frame_id INTEGER NOT NULL UNIQUE,
+    received_at TEXT NOT NULL,
+    PRIMARY KEY (alert_id, frame_id),
+    FOREIGN KEY (alert_id) REFERENCES aprs_alerts(id) ON DELETE CASCADE,
+    FOREIGN KEY (frame_id) REFERENCES traffic_frames(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS traffic_device_station_device_hourly (
     bucket_start_utc TEXT NOT NULL,
     station_key TEXT NOT NULL,
@@ -864,6 +893,10 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alerts_source_callsign ON aprs_alerts(source_callsign COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_aprs_alerts_last_seen_at ON aprs_alerts(last_seen_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_alert_received_at
+    ON aprs_alert_frames(alert_id, received_at DESC, frame_id DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_modems_single_aprsis
     ON modems(UPPER(modem_type))
     WHERE UPPER(modem_type) = 'APRSIS';
