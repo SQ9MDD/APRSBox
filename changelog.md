@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1.dev - 29.07.2026
+- `Alarmy APRS emergency`: dodano osobną zakładkę z konsolidacją ramek według pełnego znaku źródłowego, historią powiązanych ramek, licznikiem, wyciszaniem czasowym lub bezterminowym oraz bezpiecznym usuwaniem bez kasowania ramek z Monitora ruchu.
+- `Alarmy / GUI`: dodano globalny modal alarmowy, oznaczenia i odnośniki w Monitorze ruchu, listę i szczegóły alarmu, licznik w menu oraz ponowne wyświetlanie modala dla kolejnych niewyciszonych ramek; pomoc opisuje wymagane zezwolenie przeglądarki na automatyczne odtwarzanie dźwięku.
+- `Dashboard`: przebudowano ekran główny, dodając czytelniejsze KPI z wybranego zakresu, wykres aktywności RF oraz zwarte podsumowania konfiguracji, usług i stanu runtime.
+- `Warunki pasma / mapa`: historia propagacji ma zakresy `24h / 7d / 30d / 365d` i punkt bieżącej godziny; poprawiono również zachowanie ostatniego widoku mapy oraz globalne ustawienie wypełnienia zasięgu.
+
 ## 1.9.0 - 26.07.2026
 - `Wydanie stabilne`: scalono do `main` duży pakiet zmian z wersji `1.8.45.dev–1.8.57.dev`, obejmujący APRS-IS/iGate, wiadomości, warunki pasma, monitor ruchu, mapę, GUI, wydajność i instalator Alpine.
 

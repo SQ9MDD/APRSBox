@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1.dev - 2026-07-29
+- `Alarmas de emergencia APRS`: se añadió una pestaña que consolida las tramas por indicativo de origen completo, conserva el historial y los contadores, permite silenciar temporalmente o de forma indefinida y elimina alarmas sin borrar las tramas del Monitor de tráfico.
+- `Alarmas / GUI`: se añadieron un modal global, marcadores y enlaces en el Monitor de tráfico, lista y detalles de alarmas, contador de navegación y reapertura del modal para nuevas tramas no silenciadas; la ayuda explica el permiso de reproducción automática necesario para el sonido inmediato.
+- `Dashboard`: se rediseñó la pantalla principal con KPI más claros según el rango seleccionado, un gráfico de actividad RF y resúmenes compactos de configuración, servicios y runtime.
+- `Condiciones de banda / mapa`: el historial de propagación ofrece rangos de `24h / 7d / 30d / 365d` y un punto para la hora actual; también se corrigieron la última vista del mapa y el ajuste global del relleno de cobertura.
+
 ## 1.9.0 - 2026-07-26
 - `Stable release`: se fusionó en `main` un gran paquete de cambios de `1.8.45.dev–1.8.57.dev`, que incluye APRS-IS/iGate, mensajes, condiciones de banda, Monitor de tráfico, mapa, GUI, rendimiento y el instalador de Alpine.
 

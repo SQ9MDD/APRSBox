@@ -7,6 +7,13 @@ from app.routers import pages
 
 
 class ChangelogLocalizationTests(unittest.TestCase):
+    def test_all_localized_changelogs_include_current_version(self) -> None:
+        current_version = Path("VERSION").read_text(encoding="utf-8").strip()
+        for language, changelog_path in pages._CHANGELOG_FILES_BY_LANGUAGE.items():
+            with self.subTest(language=language):
+                changelog = changelog_path.read_text(encoding="utf-8")
+                self.assertIn(f"## {current_version} ", changelog)
+
     def _changelog_paths(self, root: Path) -> dict[str, Path]:
         return {
             "pl": root / "changelog.md",

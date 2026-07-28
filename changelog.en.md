@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1.dev - 2026-07-29
+- `APRS emergency alerts`: added a dedicated tab that consolidates frames by full source callsign, keeps related-frame history and counters, supports timed or indefinite muting, and safely deletes alerts without removing Traffic Monitor frames.
+- `Alerts / GUI`: added a global alert modal, Traffic Monitor markers and links, alert list and details, a navigation badge, and modal refreshes for subsequent unmuted frames; the help explains the browser autoplay permission required for immediate sound.
+- `Dashboard`: redesigned the home screen with clearer range-based KPIs, an RF activity chart, and compact configuration, service, and runtime summaries.
+- `Band Condition / map`: propagation history now offers `24h / 7d / 30d / 365d` ranges and a current-hour point; the last map view and the global coverage-fill setting were also corrected.
+
 ## 1.9.0 - 2026-07-26
 - `Stable release`: merged a large batch of changes from `1.8.45.dev–1.8.57.dev` into `main`, covering APRS-IS/iGate, messages, Band Condition, Traffic Monitor, map, GUI, performance, and the Alpine installer.
 
