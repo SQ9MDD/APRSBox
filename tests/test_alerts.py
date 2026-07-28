@@ -285,6 +285,9 @@ class AprsAlertTests(unittest.TestCase):
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         map_source = Path("app/templates/map.html").read_text(encoding="utf-8")
         alerts_source = Path("app/templates/alerts.html").read_text(encoding="utf-8")
+        modal_source = Path("app/templates/partials/emergency_modal.html").read_text(
+            encoding="utf-8"
+        )
         modal_js_source = Path("app/static/js/map-emergency-modal.js").read_text(
             encoding="utf-8"
         )
@@ -293,10 +296,18 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn('{% include "partials/emergency_modal.html" %}', base_source)
         self.assertIn("map-emergency-modal.js", base_source)
         self.assertNotIn('id="aprs-emergency-modal"', map_source)
-        self.assertIn('{{ t("Comment") }}', alerts_source)
+        self.assertNotIn("alerts-col-comment", alerts_source)
+        self.assertIn('{{ t("Muted until") }}', alerts_source)
+        self.assertIn("frame-type-badge-emergency", alerts_source)
+        self.assertIn("file-document-alert-outline.svg", alerts_source)
         self.assertIn("window.aprsboxOpenEmergencyModal", alerts_source)
         self.assertIn("aprsbox-emergency-frames-shown", modal_js_source)
-        self.assertIn("playSound: true", modal_js_source)
+        self.assertIn("playSound: !frame.alert_muted", modal_js_source)
+        self.assertIn("aprs-emergency-audio", modal_js_source)
+        self.assertIn("keepChannelWarm: !frame.alert_muted", modal_js_source)
+        self.assertIn('id="aprs-emergency-audio"', modal_source)
+        self.assertIn("autoplay", modal_source)
+        self.assertIn("muted", modal_source)
         self.assertIn("looksLikeModalRegressionView", map_js_source)
         self.assertNotIn("URLSearchParams(window.location.search)", map_js_source)
 

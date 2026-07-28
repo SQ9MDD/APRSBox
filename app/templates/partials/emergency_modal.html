@@ -12,6 +12,16 @@
     data-i18n-active-emergency="{{ t('Active emergency') }}"
     data-i18n-alert-muted="{{ t('Alert muted') }}"
 >
+    <audio
+        id="aprs-emergency-audio"
+        src="{{ request.scope.root_path }}/static/audio/aprs-audio-alert.mp3"
+        preload="auto"
+        autoplay
+        muted
+        loop
+        playsinline
+        hidden
+    ></audio>
     <div id="aprs-emergency-modal" class="aprs-emergency-modal" hidden>
         <div class="aprs-emergency-backdrop"></div>
         <div

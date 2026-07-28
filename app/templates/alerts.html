@@ -36,7 +36,6 @@
                     {% endif %}
                     <col class="alerts-col-source">
                     <col class="alerts-col-type">
-                    <col class="alerts-col-comment">
                     <col class="alerts-col-first-seen">
                     <col class="alerts-col-last-seen">
                     <col class="alerts-col-frame-count">
@@ -52,11 +51,10 @@
                         {% endif %}
                         <th>{{ t("Source") }}</th>
                         <th>{{ t("Type") }}</th>
-                        <th class="alerts-comment-column">{{ t("Comment") }}</th>
                         <th>{{ t("First received") }}</th>
                         <th>{{ t("Last received") }}</th>
                         <th>{{ t("Frame count") }}</th>
-                        <th>{{ t("Mute") }}</th>
+                        <th>{{ t("Muted until") }}</th>
                         <th>{{ t("Actions") }}</th>
                     </tr>
                 </thead>
@@ -88,8 +86,7 @@
                                 </a>
                             </strong>
                         </td>
-                        <td><span class="frame-type-badge">{{ alert.alert_type }}</span></td>
-                        <td class="alerts-comment-cell">{{ alert.message or "-" }}</td>
+                        <td><span class="frame-type-badge frame-type-badge-emergency">{{ alert.alert_type }}</span></td>
                         <td>{{ alert.first_seen_label }}</td>
                         <td>{{ alert.last_seen_label }}</td>
                         <td>{{ alert.frame_count }}</td>
@@ -97,13 +94,13 @@
                             {% if alert.muted %}
                             <span class="alert-state-badge alert-state-badge-muted">
                                 {% if alert.muted_indefinitely %}
-                                {{ t("Alert muted") }}
+                                {{ t("Indefinitely") }}
                                 {% else %}
-                                {{ t("Muted until") }} {{ alert.muted_until_label }}
+                                {{ alert.muted_until_label }}
                                 {% endif %}
                             </span>
                             {% else %}
-                            <span class="muted">{{ t("Not muted") }}</span>
+                            <span class="muted">-</span>
                             {% endif %}
                         </td>
                         <td class="alerts-actions-cell" onclick="event.stopPropagation();">
@@ -118,6 +115,16 @@
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/eye-outline.svg" alt="">
                                 </button>
+                                {% if alert.last_frame_href %}
+                                <a
+                                    href="{{ request.scope.root_path }}{{ alert.last_frame_href }}"
+                                    class="table-icon-button"
+                                    title="{{ t('Frame details') }} #{{ alert.last_frame_id }}"
+                                    aria-label="{{ t('Frame details') }} #{{ alert.last_frame_id }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/file-document-alert-outline.svg" alt="">
+                                </a>
+                                {% endif %}
                                 {% if can_manage_alerts %}
                                 <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
                                     <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
@@ -153,7 +160,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 9 if can_manage_alerts else 8 }}" class="muted">{{ t("No alerts received yet.") }}</td>
+                        <td colspan="{{ 8 if can_manage_alerts else 7 }}" class="muted">{{ t("No alerts received yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

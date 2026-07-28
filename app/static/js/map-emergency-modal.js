@@ -50,12 +50,14 @@
     let audioPriming = false;
     let pendingAlarmPlayback = false;
     const emergencyAlarmSrc = `${String(root.dataset.staticRoot || "/static/")}audio/aprs-audio-alert.mp3`;
-    const emergencyAlarmAudio = new Audio(emergencyAlarmSrc);
+    const emergencyAlarmAudio = document.getElementById("aprs-emergency-audio") || new Audio(emergencyAlarmSrc);
     emergencyAlarmAudio.preload = "auto";
     emergencyAlarmAudio.playsInline = true;
     emergencyAlarmAudio.loop = true;
-    emergencyAlarmAudio.volume = 1;
-    emergencyAlarmAudio.load();
+    emergencyAlarmAudio.volume = 0;
+    if (!emergencyAlarmAudio.getAttribute("src")) {
+        emergencyAlarmAudio.src = emergencyAlarmSrc;
+    }
 
     function textOrDash(value) {
         const text = String(value ?? "").trim();
@@ -232,13 +234,12 @@
         }
         audioPriming = true;
         try {
-            emergencyAlarmAudio.muted = true;
+            emergencyAlarmAudio.volume = 0;
+            emergencyAlarmAudio.muted = false;
             const primePromise = emergencyAlarmAudio.play();
             if (primePromise && typeof primePromise.then === "function") {
                 primePromise.then(() => {
-                    emergencyAlarmAudio.pause();
                     emergencyAlarmAudio.currentTime = 0;
-                    emergencyAlarmAudio.muted = false;
                     audioPriming = false;
                     audioUnlocked = true;
                     if (pendingAlarmPlayback && isVisible) {
@@ -246,14 +247,16 @@
                         playOpenBeep();
                     }
                 }).catch(() => {
-                    emergencyAlarmAudio.muted = false;
+                    emergencyAlarmAudio.volume = 0;
+                    emergencyAlarmAudio.muted = true;
                     audioPriming = false;
                 });
                 return;
             }
         } catch (_error) {
         }
-        emergencyAlarmAudio.muted = false;
+        emergencyAlarmAudio.volume = 0;
+        emergencyAlarmAudio.muted = true;
         audioPriming = false;
     }
 
@@ -263,8 +266,9 @@
             return;
         }
         try {
-            emergencyAlarmAudio.pause();
             emergencyAlarmAudio.currentTime = 0;
+            emergencyAlarmAudio.volume = 1;
+            emergencyAlarmAudio.muted = false;
             const playPromise = emergencyAlarmAudio.play();
             if (playPromise && typeof playPromise.catch === "function") {
                 playPromise.then(() => {
@@ -282,6 +286,24 @@
                 navigator.vibrate([150, 60, 150, 60, 300]);
             }
         } catch (_error) {
+        }
+    }
+
+    function stopAlarmSound({ keepChannelWarm = true } = {}) {
+        pendingAlarmPlayback = false;
+        emergencyAlarmAudio.volume = 0;
+        emergencyAlarmAudio.muted = true;
+        try {
+            emergencyAlarmAudio.currentTime = 0;
+        } catch (_error) {
+        }
+        if (!keepChannelWarm) {
+            emergencyAlarmAudio.pause();
+            return;
+        }
+        if (keepChannelWarm && emergencyAlarmAudio.paused) {
+            audioUnlocked = false;
+            primeEmergencyAlarmAudio();
         }
     }
 
@@ -347,9 +369,7 @@
 
     function hideModal() {
         isVisible = false;
-        emergencyAlarmAudio.pause();
-        emergencyAlarmAudio.currentTime = 0;
-        pendingAlarmPlayback = false;
+        stopAlarmSound();
         modal.hidden = true;
         document.body.classList.remove("modal-open");
         dismissedSignature = currentSignature;
@@ -428,7 +448,11 @@
         if (remember) {
             markFrameHandled(frame);
         }
-        showModal({ playSound });
+        const shouldPlaySound = Boolean(playSound && !frame.alert_muted);
+        if (!shouldPlaySound) {
+            stopAlarmSound({ keepChannelWarm: !frame.alert_muted });
+        }
+        showModal({ playSound: shouldPlaySound });
     }
 
     function handleSnapshot(snapshot) {
@@ -488,9 +512,11 @@
             return false;
         }
         dismissedSignature = "";
-        renderEmergencyFrame(frame, { playSound: true, remember: false });
+        renderEmergencyFrame(frame, { playSound: !frame.alert_muted, remember: false });
         return true;
     };
+
+    primeEmergencyAlarmAudio();
 
     if (window.__APRSBOX_TRAFFIC_SNAPSHOT__) {
         handleSnapshot(window.__APRSBOX_TRAFFIC_SNAPSHOT__);

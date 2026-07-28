@@ -6016,7 +6016,7 @@ select:focus-visible,
 }
 
 .alerts-table {
-    min-width: 84rem;
+    min-width: 76rem;
     table-layout: fixed;
 }
 
@@ -6025,40 +6025,33 @@ select:focus-visible,
 }
 
 .alerts-table .alerts-col-source {
-    width: 6.5rem;
+    width: 7.5rem;
 }
 
 .alerts-table .alerts-col-type {
-    width: 6.25rem;
-}
-
-.alerts-table .alerts-col-comment {
-    width: 14.5rem;
+    width: 7rem;
 }
 
 .alerts-table .alerts-col-first-seen,
 .alerts-table .alerts-col-last-seen {
-    width: 9rem;
+    width: 10.5rem;
 }
 
 .alerts-table .alerts-col-frame-count {
-    width: 6rem;
+    width: 6.5rem;
 }
 
 .alerts-table .alerts-col-mute {
-    width: 13rem;
+    width: 12rem;
 }
 
 .alerts-table .alerts-col-actions {
-    width: 17.5rem;
+    width: 19.75rem;
 }
 
-.alerts-table .alerts-comment-cell {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    overflow-wrap: anywhere;
-    line-height: 1.35;
+.alerts-table th,
+.alerts-table td {
+    white-space: nowrap;
 }
 
 .alerts-select-column,
@@ -6080,6 +6073,12 @@ select:focus-visible,
 .alerts-table .alerts-actions-cell {
     overflow: visible;
     text-overflow: clip;
+}
+
+.alerts-table .frame-type-badge-emergency {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 52%, var(--border));
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 .alerts-table .table-actions {
