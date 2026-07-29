@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.4.dev - 2026-07-29
+- `GUI / Texte`: Alle Hauptansichten wurden geprüft und überflüssige Abschnittsbeschreibungen, wiederholte Anweisungen und offensichtliche Hinweise entfernt; Statusangaben, Formatvorgaben, Validierung sowie RF- und administrative Sicherheitswarnungen bleiben erhalten.
+
 ## 1.9.3.dev - 2026-07-29
 - `Schnittstellen / APRS-IS`: Der separate Navigationseintrag `iGATE-Einstellungen` wurde entfernt; Server, Port, Login, Passcode, Filter und Verbindungsdiagnose befinden sich jetzt direkt im Formular der Schnittstelle `APRS-IS (RX/TX)`, während die alte URL dorthin weiterleitet.
 - `Schnittstellen / Formular`: Der Editor verwendet nun einen stabilen gemeinsamen Bereich und eigene Panels für SERIALL, TCP, OpenWebRX MQTT und APRS-IS, sodass Felder beim Wechsel des Verbindungstyps nicht unerwartet Spalte oder Reihenfolge ändern.

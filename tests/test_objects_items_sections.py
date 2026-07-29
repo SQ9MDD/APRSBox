@@ -35,13 +35,11 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Active from",
             "Active until",
             "Active for (hours)",
-            "Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.",
             "Active now",
             "Inactive now",
             "Activation",
             "Recurring",
             "Activation summary",
-            "Activation schedule controls when sending is allowed. Send interval remains separate.",
             "Manual activation.",
             "Manual activation. Valid until: {validUntil} UTC.",
             "Active from {fromDate} UTC to {toDate} UTC.",
@@ -512,12 +510,9 @@ class ObjectAndItemFormTests(unittest.TestCase):
         self.assertIn("Objects TX Log", template_source)
         self.assertIn("No object outbound jobs yet.", template_source)
         self.assertIn("data-clear-date-target", template_source)
-        self.assertIn("Leave empty to keep sending until manually disabled.", template_source)
         self.assertIn("National characters are blocked.", template_source)
-        self.assertIn(
-            "Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.",
-            template_source,
-        )
+        self.assertNotIn("Leave empty to keep sending until manually disabled.", template_source)
+        self.assertNotIn("Required. Use up to 43 printable ASCII characters", template_source)
 
     def test_item_name_must_be_between_three_and_nine_characters(self) -> None:
         with temporary_database():

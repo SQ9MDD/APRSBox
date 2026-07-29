@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.4.dev - 2026-07-29
+- `GUI / copy`: reviewed all primary screens and removed redundant section descriptions, repeated instructions, and obvious hints while preserving state, format requirements, validation, and RF or administrative safety warnings.
+
 ## 1.9.3.dev - 2026-07-29
 - `Interfaces / APRS-IS`: removed the separate `iGATE settings` navigation item; server, port, login, passcode, filter, and connection diagnostics now live directly in the `APRS-IS (RX/TX)` interface form, while the legacy URL redirects to that interface.
 - `Interfaces / form`: the editor now uses a stable common section and dedicated panels for SERIALL, TCP, OpenWebRX MQTT, and APRS-IS, preventing fields from unexpectedly changing columns or order when the connection type changes.

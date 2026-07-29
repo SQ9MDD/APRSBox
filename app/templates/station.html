@@ -118,12 +118,6 @@
         overflow-x: auto;
     }
 
-    .beacon-schedule-note {
-        margin: 0;
-        font-size: 0.77rem;
-        line-height: 1.36;
-    }
-
     .phg-generator-modal[hidden] {
         display: none !important;
     }
@@ -277,7 +271,6 @@
             <div class="full station-settings-group stack-sm">
                 <div class="station-settings-group-header">
                     <h2>{{ t("Position Beacon") }}</h2>
-                    <p class="section-lead">{{ t("Configure the APRS position beacon. Beacon comment stays part of the position frame.") }}</p>
                     <button
                         class="help-icon-button page-help-button"
                         type="button"
@@ -312,7 +305,6 @@
                     {% if selected_beacon_interface_id == '__INTERNAL_TX__' %}
                     <div class="full">
                         <div class="alert {% if internal_tx_routing_active %}success{% endif %}">
-                            <p>{{ t("Internal TX does not use physical RF transport. Frames are generated locally and handled by Local TX routing rules.") }}</p>
                             {% if internal_tx_routing_active %}
                             <p>{{ t("Local TX -> APRS-IS routing is active. Internal TX frames can be forwarded to APRS-IS.") }}</p>
                             {% else %}
@@ -383,16 +375,14 @@
                             </summary>
                             <pre class="beacon-schedule-lines" id="station-beacon-schedule-lines">{% for line in beacon_proportional_schedule_lines %}{{ t(line|replace("(first run)", t("(first run)"))) }}{% if not loop.last %}
 {% endif %}{% endfor %}</pre>
-                            <p class="muted beacon-schedule-note" id="station-beacon-schedule-note">{{ t("Proportional Path sends frequent local beacons and rarer wide-path beacons to reduce RF channel load.") }}</p>
                         </details>
                     </div>
-                    <label class="full">
-                        <span>{{ t("Get location") }}</span>
+                    <div class="full">
                         <button type="button" class="button button-secondary location-picker-button" id="station-open-map-picker">
                             <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
                             <span>{{ t("Get location") }}</span>
                         </button>
-                    </label>
+                    </div>
                     <label>
                         <span>{{ t("Latitude") }}</span>
                         <input type="text" name="latitude" value="{{ station.latitude }}" readonly>
@@ -451,14 +441,13 @@
                     </label>
                     <label class="checkbox-row">
                         <input type="checkbox" name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}>
-                        <span>{{ t("Enable automatic beacon transmission every selected interval") }}</span>
+                        <span>{{ t("Enable beacon transmission") }}</span>
                     </label>
                 </div>
             </div>
             <div class="full station-settings-group stack-sm">
                 <div class="station-settings-group-header">
                     <h2>{{ t("APRS Status") }}</h2>
-                    <p class="section-lead">{{ t("Status is sent as a separate APRS frame with data type identifier <code>&gt;</code>, independent from the position beacon.")|safe }}</p>
                 </div>
                 <div class="form-grid station-settings-subgrid">
                     <label>
@@ -485,7 +474,7 @@
                     </label>
                     <label class="full checkbox-row">
                         <input type="checkbox" name="status_enabled" value="1" {% if station.status_enabled %}checked{% endif %}>
-                        <span>{{ t("Enable periodic APRS Status transmission") }}</span>
+                        <span>{{ t("Enable APRS Status transmission") }}</span>
                     </label>
                 </div>
             </div>
@@ -545,7 +534,6 @@
                         <img src="{{ request.scope.root_path }}/static/icons/close-circle-outline.svg" alt="">
                     </button>
                 </div>
-                <p class="section-lead">{{ t("Set power, antenna height above ground, gain, and direction. Generated PHG is inserted at the beginning of Beacon Comment.") }}</p>
                 <div class="phg-generator-grid">
                     <label>
                         <span>{{ t("Power") }} <small class="muted" id="station-phg-power-unit">W</small></span>
@@ -631,7 +619,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Station TX Log") }}</h2>
-                <p class="section-lead">{{ t("Recent beacon and APRS Status jobs with delivery state and transmitted frame preview.") }}</p>
             </div>
         </div>
         <div class="table-wrap">
@@ -834,7 +821,6 @@
             const scheduleDetails = document.getElementById("station-beacon-schedule");
             const scheduleSummaryNode = document.getElementById("station-beacon-schedule-summary");
             const scheduleLinesNode = document.getElementById("station-beacon-schedule-lines");
-            const scheduleNoteNode = document.getElementById("station-beacon-schedule-note");
             const confirmModal = document.getElementById("station-beacon-confirm-modal");
             const confirmAcceptButton = document.getElementById("station-beacon-confirm-accept");
             const confirmCloseButtons = confirmModal ? confirmModal.querySelectorAll("[data-close-beacon-confirm]") : [];
@@ -848,7 +834,6 @@
                 || !(scheduleDetails instanceof HTMLElement)
                 || !(scheduleSummaryNode instanceof HTMLElement)
                 || !(scheduleLinesNode instanceof HTMLElement)
-                || !(scheduleNoteNode instanceof HTMLElement)
                 || !(confirmModal instanceof HTMLElement)
                 || !(confirmAcceptButton instanceof HTMLButtonElement)
             ) {
@@ -874,7 +859,6 @@
                 cycleRepeat10: {{ t("Then cycle repeats every 10 minutes (DIRECT).")|tojson|safe }},
                 cycleRepeat30: {{ t("Then cycle repeats every 30 minutes (full path every third beacon).")|tojson|safe }},
                 cycleRepeat60: {{ t("Then cycle repeats every 60 minutes (WIDE1-1 at +30m, full path at +60m).")|tojson|safe }},
-                proportionalExplain: {{ t("Proportional Path sends frequent local beacons and rarer wide-path beacons to reduce RF channel load.")|tojson|safe }},
             };
 
             let pendingSubmitter = null;
@@ -1077,7 +1061,6 @@
 
                 scheduleSummaryNode.textContent = header;
                 scheduleLinesNode.textContent = lines.join("\n");
-                scheduleNoteNode.textContent = i18n.proportionalExplain;
             };
 
             const syncModeInputs = () => {

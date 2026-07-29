@@ -98,31 +98,33 @@
                     <input type="checkbox" name="enabled" value="1" {% if notification_transport_form.enabled %}checked{% endif %}>
                     <span>{{ t("Enabled") }}</span>
                 </label>
-                <label class="full" data-notification-webhook-only>
+                <label class="full" data-notification-webhook-only {% if notification_transport_form.transport_type == "telegram" %}hidden{% endif %}>
                     <span>{{ t("URL") }}</span>
                     <input type="url" name="url" value="{{ notification_transport_form.url }}" placeholder="https://example.com/webhook" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label data-notification-webhook-only>
+                <label data-notification-webhook-only {% if notification_transport_form.transport_type == "telegram" %}hidden{% endif %}>
                     <span>{{ t("Timeout") }}</span>
                     <input type="number" name="timeout_s" min="1" max="60" value="{{ notification_transport_form.timeout_s }}" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label data-notification-webhook-only>
+                <label data-notification-webhook-only {% if notification_transport_form.transport_type == "telegram" %}hidden{% endif %}>
                     <span>{{ t("Secret header name") }}</span>
                     <input type="text" name="secret_header_name" value="{{ notification_transport_form.secret_header_name }}" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label data-notification-webhook-only>
+                <label data-notification-webhook-only {% if notification_transport_form.transport_type == "telegram" %}hidden{% endif %}>
                     <span>{{ t("Secret token") }}</span>
                     <input type="password" name="secret_token" value="{{ notification_transport_form.secret_token }}" {% if notification_transport_form.transport_type == "telegram" %}disabled{% endif %}>
                 </label>
-                <label data-notification-telegram-only>
+                <label data-notification-telegram-only {% if notification_transport_form.transport_type == "webhook" %}hidden{% endif %}>
                     <span>{{ t("Bot token") }}</span>
                     <input type="text" name="bot_token" value="{{ notification_transport_form.bot_token }}" {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
                 </label>
-                <label data-notification-telegram-only>
+                <label data-notification-telegram-only {% if notification_transport_form.transport_type == "webhook" %}hidden{% endif %}>
                     <span>{{ t("Chat ID") }}</span>
                     <input type="text" name="chat_id" value="{{ notification_transport_form.chat_id }}" {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
                 </label>
+                {% if notification_transport_form.id %}
                 <p class="muted full">{{ t("Leave blank to keep the existing secret.") }}</p>
+                {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
                     {% if notification_transport_form.id %}
@@ -158,11 +160,10 @@
                 <input type="checkbox" name="radar_enabled" value="1" {% if notification_settings.radar_enabled %}checked{% endif %}>
                 <span>{{ t("Enable radar notifications") }}</span>
             </label>
-            <label class="full">
-                <span>{{ t("Ignored radar patterns") }}</span>
-                <textarea name="radar_ignored_patterns" rows="3" placeholder="SR*, SQ2IBK-3, SQ9MDD*">{{ notification_settings.radar_ignored_patterns }}</textarea>
-            </label>
-            <p class="muted full">{{ t("Use commas or line breaks. Wildcards are supported.") }}</p>
+                <label class="full">
+                    <span>{{ t("Ignored radar patterns") }}</span>
+                    <textarea name="radar_ignored_patterns" rows="3" placeholder="SR*, SQ2IBK-3, SQ9MDD*">{{ notification_settings.radar_ignored_patterns }}</textarea>
+                </label>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save") }}</button>
             </div>
@@ -187,7 +188,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Radar rules") }}</h2>
-                <p class="section-lead">{{ t("Distance is measured from My Station coordinates.") }}</p>
             </div>
         </div>
         <div class="grid two">
@@ -308,17 +308,25 @@
             return;
         }
 
-        const telegramOnlyFields = Array.from(form.querySelectorAll("[data-notification-telegram-only] input"));
-        const webhookOnlyFields = Array.from(form.querySelectorAll("[data-notification-webhook-only] input"));
+        const telegramOnlyRows = Array.from(form.querySelectorAll("[data-notification-telegram-only]"));
+        const webhookOnlyRows = Array.from(form.querySelectorAll("[data-notification-webhook-only]"));
 
         const syncFields = () => {
             const isTelegram = String(typeSelect.value || "").toLowerCase() === "telegram";
             const isWebhook = String(typeSelect.value || "").toLowerCase() === "webhook";
-            for (const field of telegramOnlyFields) {
-                field.disabled = !isTelegram;
+            for (const row of telegramOnlyRows) {
+                row.hidden = !isTelegram;
+                const field = row.querySelector("input");
+                if (field instanceof HTMLInputElement) {
+                    field.disabled = !isTelegram;
+                }
             }
-            for (const field of webhookOnlyFields) {
-                field.disabled = !isWebhook;
+            for (const row of webhookOnlyRows) {
+                row.hidden = !isWebhook;
+                const field = row.querySelector("input");
+                if (field instanceof HTMLInputElement) {
+                    field.disabled = !isWebhook;
+                }
             }
         };
 

@@ -70,7 +70,6 @@
                     <div class="band-condition-chart-heading">
                         <div>
                             <h3>{{ t("Propagation history") }}</h3>
-                            <p class="muted">{{ t("Hourly W0–W5 index. The visible range adapts to available results.") }}</p>
                         </div>
                         <div class="band-condition-chart-actions">
                             <div
@@ -85,7 +84,6 @@
                                 <button type="button" data-history-range-hours="8760" aria-pressed="false">365d</button>
                             </div>
                             <span class="muted" data-history-summary="{{ item.interface_id }}"></span>
-                            <span class="muted">{{ t("1 hour resolution") }}</span>
                         </div>
                     </div>
                     <div class="band-condition-chart-wrap">
@@ -110,7 +108,6 @@
                     <div class="band-condition-model-heading">
                         <div>
                             <h3>{{ t("Model data") }}</h3>
-                            <p class="muted">{{ t("What has been collected and how close the model is to a stable baseline.") }}</p>
                         </div>
                         <span class="status-pill status-{% if item.model_ready %}running{% else %}unknown{% endif %}">
                             {{ t(item.model_stage_label) }}
@@ -167,9 +164,6 @@
                         </div>
                     </div>
 
-                    <p class="band-condition-model-note muted">
-                        {{ t("Confidence grows mainly with regular observations, repeatable fixed stations, and known positions.") }}
-                    </p>
                 </section>
                 </div>
             </article>
@@ -184,9 +178,6 @@
                     <p class="section-lead">{{ t("No interface is currently enabled for band condition assessment.") }}</p>
                 </div>
                 <a class="button button-secondary" href="{{ request.scope.root_path }}/settings/modems">{{ t("Configure interfaces") }}</a>
-            </div>
-            <div class="notice">
-                {{ t("Choose 2m or 70cm in an interface to start learning. The first assessment appears after 24 hours.") }}
             </div>
         </div>
     </section>

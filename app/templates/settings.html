@@ -10,7 +10,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Global Settings") }}</h2>
-                <p class="section-lead">{{ t("Configure the interface language and default measurement units for the installed GUI.") }}</p>
             </div>
         </div>
         {% if can_manage_global_settings %}
@@ -53,7 +52,6 @@
                     <option value="{{ option.value }}" {% if current_aprs_symbol_set == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Applies globally across the GUI.") }}</span>
             </label>
             <label>
                 <span>{{ t("Color palette") }}</span>
@@ -62,7 +60,6 @@
                     <option value="{{ option.value }}" {% if current_ui_palette == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Applies globally across the GUI. Green Core is the default palette.") }}</span>
             </label>
             <label>
                 <span>{{ t("Minimum stored log level") }}</span>
@@ -71,12 +68,10 @@
                     <option value="{{ option.value }}" {% if event_log_min_level == option.value %}selected{% endif %}>{{ option.label }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Only events at or above this level are written to event logs.") }}</span>
             </label>
             <label class="full checkbox-row">
                 <input type="checkbox" name="event_log_debug_enabled" value="1" {% if event_log_debug_enabled %}checked{% endif %}>
                 <span>{{ t("Enable DEBUG logs") }}</span>
-                <span class="muted small">{{ t("DEBUG entries are disabled by default and should be enabled only for troubleshooting.") }}</span>
             </label>
         </form>
         {% else %}
@@ -111,7 +106,6 @@
                     <option value="{{ value }}" {% if coverage_fill_opacity == value %}selected{% endif %}>{{ value }}%</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Applies globally across the GUI.") }}</span>
             </label>
             <label>
                 <span>{{ t("Coverage outline opacity") }}</span>
@@ -135,11 +129,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Application update") }}</h2>
-                {% if is_container_mode %}
-                <p class="section-lead">{{ t("Docker installation detected. In-app system actions are disabled. Update APRSBox by pulling a newer Docker image and recreating the container with the same volumes. Restart or stop APRSBox using Docker commands.") }}</p>
-                {% else %}
-                <p class="section-lead">{{ t("Configure the update channel and run application update from the configured repository.") }}</p>
-                {% endif %}
             </div>
         </div>
         {% if is_container_mode %}
@@ -205,8 +194,6 @@
         <div id="settings-version-result">
             {% if is_container_mode %}
             <p class="muted">{{ t("Check version can be used for informational comparison only. Docker mode updates must be done through Docker image pull and container recreate.") }}</p>
-            {% else %}
-            <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
             {% endif %}
         </div>
     </div>
@@ -218,7 +205,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Map sources") }}</h2>
-                <p class="section-lead">{{ t("Configure Leaflet-compatible tile providers. URL template must include {z}, {x}, and {y}.") }}</p>
             </div>
         </div>
         <div class="settings-map-sources-grid">
@@ -375,7 +361,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("APRS device identification") }}</h2>
-                <p class="section-lead">{{ t("Use a local cached APRS device identification database for TOCALL decoding during normal offline operation.") }}</p>
             </div>
         </div>
         <dl class="details-grid">
@@ -556,11 +541,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Danger zone") }}</h2>
-                {% if is_container_mode %}
-                <p class="section-lead">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</p>
-                {% else %}
-                <p class="section-lead">{{ t("Administrative operations that can interrupt service or shut down the host.") }}</p>
-                {% endif %}
             </div>
         </div>
         {% if is_container_mode %}

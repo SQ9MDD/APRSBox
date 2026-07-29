@@ -18,15 +18,9 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t(section.title) }}</h2>
-                <p class="section-lead">{{ t(section.description) }}</p>
             </div>
         </div>
         <div class="notice">{{ t(section.readonly_message) }}</div>
-        {% if section.slug == 'objects' %}
-        <div class="notice">{{ t("Use object names up to 9 printable ASCII characters. The sender will later pad them to the fixed APRS 9-character object field and add the mandatory timestamp automatically.") }}</div>
-        {% elif section.slug == 'items' %}
-        <div class="notice">{{ t("Use item names from 3 to 9 printable ASCII characters. Avoid item format on RF unless you specifically need it; objects are generally the safer interoperable choice.") }}</div>
-        {% endif %}
         {% if flash %}
         <div class="alert">{{ t(flash) }}</div>
         {% endif %}
@@ -275,13 +269,12 @@
                 {% else %}
                 {% for field in section.fields %}
                 {% if section.slug == 'objects' and field.name == 'latitude' %}
-                <label class="full">
-                    <span>{{ t("Get location") }}</span>
+                <div class="full">
                     <button type="button" class="button button-secondary location-picker-button" id="objects-open-map-picker">
                         <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
                         <span>{{ t("Get location") }}</span>
                     </button>
-                </label>
+                </div>
                 {% endif %}
                 {% if field.form_visible|default(true) %}
                 {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}
@@ -422,35 +415,16 @@
                     </button>
                     {% endif %}
                     {% endif %}
-                    {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
-                    <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
-                    {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
-                    <small class="muted">{{ t("Prepared scheduling only. Default is 30m.") }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'bulletin_code' %}
-                    <small class="muted">{{ t("Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.")|safe }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'group_name' %}
-                    <small class="muted">{{ t("Group suffix, 1-5 chars: <code>A-Z</code> or <code>0-9</code>.")|safe }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'path' %}
-                    <small class="muted">{{ t("Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
-                    <small class="muted">{{ t("Uses the same outbound queue and scheduler path as beacon, status and objects.") }}</small>
-                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'activation_mode' %}
-                    <small class="muted">{{ t("Activation schedule controls when sending is allowed. Send interval remains separate.") }}</small>
-                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
-                    <small class="muted">{{ t("Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.") }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
+                    {% if section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
                         <small class="field-validation-error" id="bulletins-message-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
-                    <small class="muted">{{ t("Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
                     <div class="field-counter-row">
                         <small class="muted" id="objects-comment-count">0 / 43</small>
                         <small class="field-validation-error" id="objects-comment-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
-                    {% elif section.slug == 'items' and field.name == 'comment' %}
-                    <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.") }}</small>
                     {% endif %}
                 </label>
                 {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
@@ -537,7 +511,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t('Objects TX Log' if section.slug == 'objects' else 'Bulletins TX Log') }}</h2>
-                <p class="section-lead">{{ t('Recent object jobs with delivery state and transmitted frame preview.' if section.slug == 'objects' else 'Recent bulletin jobs with delivery state and transmitted frame preview.') }}</p>
             </div>
         </div>
         <div class="table-wrap">

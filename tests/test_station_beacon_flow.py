@@ -112,9 +112,10 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
 
             template_source = Path("app/templates/station.html").read_text(encoding="utf-8")
             self.assertIn('name="tx_enabled" value="1" {% if station.tx_enabled %}checked{% endif %}', template_source)
-            self.assertIn("Enable automatic beacon transmission every selected interval", template_source)
+            self.assertIn("Enable beacon transmission", template_source)
+            self.assertNotIn("Enable automatic beacon transmission every selected interval", template_source)
             self.assertIn('name="status_enabled" value="1" {% if station.status_enabled %}checked{% endif %}', template_source)
-            self.assertIn("Status is sent as a separate APRS frame", template_source)
+            self.assertNotIn("Status is sent as a separate APRS frame", template_source)
             self.assertIn('/station/send-status', template_source)
             self.assertIn("Send status", template_source)
             self.assertIn('name="callsign" value="{{ station.callsign }}" maxlength="6" autocapitalize="characters" spellcheck="false" data-force-uppercase="true"', template_source)

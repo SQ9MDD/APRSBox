@@ -19,7 +19,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Global WX configuration") }}</h2>
-                <p class="section-lead">{{ t("Prepare one WX identity for this APRSBox instance. Callsign is read from My Settings and only the WX SSID is selected here.") }}</p>
             </div>
             <button
                 class="help-icon-button page-help-button"
@@ -60,13 +59,12 @@
                 <span>{{ t("Path") }}</span>
                 <input type="text" id="wx-path-input" name="path" value="{{ wx_config.path or '' }}" placeholder="WIDE2-2">
             </label>
-            <label class="full">
-                <span>{{ t("Get location") }}</span>
+            <div class="full">
                 <button type="button" class="button button-secondary location-picker-button" id="wx-open-map-picker">
                     <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
                     <span>{{ t("Get location") }}</span>
                 </button>
-            </label>
+            </div>
             <label>
                 <span>{{ t("Latitude") }}</span>
                 <input type="text" name="latitude" value="{{ wx_config.latitude or '' }}">
@@ -163,7 +161,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("WX data mapping") }}</h2>
-                <p class="section-lead">{{ t("Map APRS WX parameters to configured sources. The required list is based on the APRS complete WX format used by the repository documentation.") }}</p>
             </div>
         </div>
         {% if not wx_has_sources %}
@@ -348,7 +345,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("WX data sources") }}</h2>
-                <p class="section-lead">{{ t("Store HTTP source definitions for Home Assistant and Domoticz. Save first, then run connection test or discovery.") }}</p>
             </div>
         </div>
         <div class="table-wrap">
@@ -492,7 +488,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("WX TX Log") }}</h2>
-                <p class="section-lead">{{ t("Recent WX jobs with delivery state and transmitted frame preview.") }}</p>
             </div>
         </div>
         <div class="table-wrap">

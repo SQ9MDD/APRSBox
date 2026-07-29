@@ -129,7 +129,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Routing Queue Log") }}</h2>
-                <p class="section-lead">{{ t("Each block below shows one packet running through this flow from source to final outcome. The list is limited to the latest 10 frames.") }}</p>
             </div>
             <div class="form-actions">
                 <button type="button" class="button button-secondary" id="digi-flow-executions-toggle">{{ t("Freeze") }}</button>
@@ -1086,46 +1085,12 @@
             }
         };
 
-        const appendHelpLine = (container, line) => {
-            const lineNode = document.createElement("div");
-            const text = String(line ?? "");
-            const parts = text.split(/(\*\*[^*]+\*\*)/g);
-            for (const part of parts) {
-                if (!part) continue;
-                if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-                    const strong = document.createElement("strong");
-                    strong.textContent = part.slice(2, -2);
-                    lineNode.appendChild(strong);
-                    continue;
-                }
-                lineNode.appendChild(document.createTextNode(part));
-            }
-            container.appendChild(lineNode);
-        };
-
         const renderConfigField = (step, field) => {
             const wrapper = document.createElement("label");
             wrapper.className = field.type === "textarea" ? "full" : "";
             const title = document.createElement("span");
                 title.textContent = field.label;
             wrapper.appendChild(title);
-
-            const appendFieldHelp = () => {
-                if (Array.isArray(field.help_lines) && field.help_lines.length) {
-                    const hintBlock = document.createElement("div");
-                    hintBlock.className = "muted small";
-                    for (const line of field.help_lines) {
-                        appendHelpLine(hintBlock, line);
-                    }
-                    wrapper.appendChild(hintBlock);
-                }
-                if (field.help_text) {
-                    const hint = document.createElement("span");
-                    hint.className = "muted small";
-                    hint.textContent = field.help_text;
-                    wrapper.appendChild(hint);
-                }
-            };
 
             if (step.step_type === "filter_distance" && field.name === "zones" && field.type === "distance_zones") {
                 wrapper.className = "full";
@@ -1242,7 +1207,6 @@
                 }
 
                 wrapper.appendChild(zonesContainer);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1433,7 +1397,6 @@
                 wrapper.appendChild(controls);
                 renderSelectedIcons();
                 wrapper.appendChild(selectedIcons);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1456,7 +1419,6 @@
                     render();
                 });
                 wrapper.appendChild(select);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1471,7 +1433,6 @@
                     step.config[field.name] = field.name === "rate_limit_rules_text" ? textarea.value : textToLines(textarea.value);
                 });
                 wrapper.appendChild(textarea);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1489,7 +1450,6 @@
                 step.config[field.name] = field.type === "number" ? input.value : input.value;
             });
             wrapper.appendChild(input);
-            appendFieldHelp();
             return wrapper;
         };
 
@@ -1670,29 +1630,21 @@
                     editor.className = "form-grid digi-step-editor-grid";
 
                     const stepMeta = typeMeta[step.step_type] || {};
-                    if (stepMeta.description || stepMeta.help_page) {
+                    if (stepMeta.help_page) {
                         const helpBlock = document.createElement("div");
                         helpBlock.className = "full";
-                        if (stepMeta.description) {
-                            const lead = document.createElement("div");
-                            lead.className = "muted small";
-                            lead.textContent = stepMeta.description;
-                            helpBlock.appendChild(lead);
-                        }
-                        if (stepMeta.help_page) {
-                            const helpButton = document.createElement("button");
-                            helpButton.type = "button";
-                            helpButton.className = "help-icon-button";
-                            helpButton.setAttribute("data-help-page", stepMeta.help_page);
-                            const helpLabel = stepMeta.label ? `${i18n.help}: ${stepMeta.label}` : i18n.help;
-                            helpButton.title = helpLabel;
-                            helpButton.setAttribute("aria-label", helpLabel);
-                            const helpIcon = document.createElement("img");
-                            helpIcon.src = iconPath("help-circle-outline.svg");
-                            helpIcon.alt = "";
-                            helpButton.appendChild(helpIcon);
-                            helpBlock.appendChild(helpButton);
-                        }
+                        const helpButton = document.createElement("button");
+                        helpButton.type = "button";
+                        helpButton.className = "help-icon-button";
+                        helpButton.setAttribute("data-help-page", stepMeta.help_page);
+                        const helpLabel = stepMeta.label ? `${i18n.help}: ${stepMeta.label}` : i18n.help;
+                        helpButton.title = helpLabel;
+                        helpButton.setAttribute("aria-label", helpLabel);
+                        const helpIcon = document.createElement("img");
+                        helpIcon.src = iconPath("help-circle-outline.svg");
+                        helpIcon.alt = "";
+                        helpButton.appendChild(helpIcon);
+                        helpBlock.appendChild(helpButton);
                         editor.appendChild(helpBlock);
                     }
                     if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
