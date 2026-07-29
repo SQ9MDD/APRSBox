@@ -33,7 +33,7 @@
         window.APRSBOX_APRS_SYMBOL_SET = {{ current_aprs_symbol_set|tojson }};
         document.documentElement.setAttribute("data-aprs-symbol-set", window.APRSBOX_APRS_SYMBOL_SET || "legacy");
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-alerts-global-5">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-menu-1">
     {% if current_user %}
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
@@ -54,45 +54,44 @@
             >
         </div>
         <div class="sidebar-user-panel">
-            <div class="sidebar-user-meta">
-                <span class="role-badge">{{ current_user.username }}</span>
-                <span class="sidebar-role-icon" title="{{ current_user.role }}" aria-label="{{ current_user.role }}">
-                    {% if current_user.role == "admin" %}
-                    <img src="{{ request.scope.root_path }}/static/icons/shield-crown-outline.svg" alt="">
-                    {% elif current_user.role == "operator" %}
-                    <img src="{{ request.scope.root_path }}/static/icons/shield-account-outline.svg" alt="">
-                    {% else %}
-                    <img src="{{ request.scope.root_path }}/static/icons/eye-circle-outline.svg" alt="">
-                    {% endif %}
-                </span>
-            </div>
-            <div class="sidebar-user-actions">
-                <button
-                    type="button"
-                    class="sidebar-action-button"
-                    id="theme-toggle"
-                    aria-label="{{ t('Switch theme') }}"
-                    title="{{ t('Switch theme') }}"
+            <span
+                class="sidebar-role-icon"
+                title="{{ current_user.username }} · {{ current_user.role }}"
+                aria-label="{{ current_user.username }} · {{ current_user.role }}"
+            >
+                {% if current_user.role == "admin" %}
+                <img src="{{ request.scope.root_path }}/static/icons/shield-crown-outline.svg" alt="">
+                {% elif current_user.role == "operator" %}
+                <img src="{{ request.scope.root_path }}/static/icons/shield-account-outline.svg" alt="">
+                {% else %}
+                <img src="{{ request.scope.root_path }}/static/icons/eye-circle-outline.svg" alt="">
+                {% endif %}
+            </span>
+            <button
+                type="button"
+                class="sidebar-action-button"
+                id="theme-toggle"
+                aria-label="{{ t('Switch theme') }}"
+                title="{{ t('Switch theme') }}"
+            >
+                <img
+                    id="theme-toggle-icon"
+                    src="{{ request.scope.root_path }}/static/icons/theme-light-dark.svg"
+                    data-day-icon="{{ request.scope.root_path }}/static/icons/white-balance-sunny.svg"
+                    data-night-icon="{{ request.scope.root_path }}/static/icons/weather-night.svg"
+                    alt=""
                 >
-                    <img
-                        id="theme-toggle-icon"
-                        src="{{ request.scope.root_path }}/static/icons/theme-light-dark.svg"
-                        data-day-icon="{{ request.scope.root_path }}/static/icons/white-balance-sunny.svg"
-                        data-night-icon="{{ request.scope.root_path }}/static/icons/weather-night.svg"
-                        alt=""
-                    >
+            </button>
+            <form action="{{ request.scope.root_path }}/logout" method="post" class="sidebar-logout-form">
+                <button
+                    type="submit"
+                    class="sidebar-action-button sidebar-logout"
+                    aria-label="{{ t('Logout') }}"
+                    title="{{ t('Logout') }}"
+                >
+                    <img src="{{ request.scope.root_path }}/static/icons/logout-variant.svg" alt="">
                 </button>
-                <form action="{{ request.scope.root_path }}/logout" method="post" class="sidebar-logout-form">
-                    <button
-                        type="submit"
-                        class="sidebar-action-button sidebar-logout"
-                        aria-label="{{ t('Logout') }}"
-                        title="{{ t('Logout') }}"
-                    >
-                        <img src="{{ request.scope.root_path }}/static/icons/logout-variant.svg" alt="">
-                    </button>
-                </form>
-            </div>
+            </form>
         </div>
         <div class="sidebar-utc-clock" id="sidebar-utc-clock" role="button" tabindex="0">
             <div class="sidebar-utc-clock-value">

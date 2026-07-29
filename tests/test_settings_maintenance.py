@@ -274,6 +274,15 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn(".sidebar-logo-icon", stylesheet_source)
         self.assertIn(".nav-label", stylesheet_source)
 
+    def test_sidebar_user_controls_use_compact_icon_strip(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertNotIn('class="role-badge">{{ current_user.username }}', base_source)
+        self.assertIn("{{ current_user.username }} · {{ current_user.role }}", base_source)
+        self.assertIn(".sidebar-user-panel .sidebar-action-button", stylesheet_source)
+        self.assertIn("justify-content: space-between;", stylesheet_source)
+
 
 if __name__ == "__main__":
     unittest.main()

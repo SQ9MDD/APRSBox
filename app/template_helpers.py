@@ -17,14 +17,14 @@ from app.services.messages import get_unread_inbox_count
 
 PRIMARY_NAV = [
     {"key": "dashboard", "label": "Dashboard", "href": "/dashboard", "roles": ("admin", "operator", "viewer"), "icon": "view-dashboard-outline.svg"},
-    {"key": "stations", "label": "Stations", "href": "/stations", "roles": ("admin", "operator", "viewer"), "icon": "account-multiple.svg"},
     {"key": "map", "label": "Map", "href": "/map", "roles": ("admin", "operator", "viewer"), "icon": "map-outline.svg"},
-    {"key": "modems", "label": "Interfaces", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
+    {"key": "stations", "label": "Stations", "href": "/stations", "roles": ("admin", "operator", "viewer"), "icon": "account-multiple.svg"},
     {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
     {"key": "alerts", "label": "Alerts", "href": "/alerts", "roles": ("admin", "operator", "viewer"), "icon": "alarm-light-outline.svg"},
     {"key": "band-condition", "label": "Band Condition", "href": "/band-condition", "roles": ("admin", "operator", "viewer"), "icon": "chart-line.svg"},
     {"key": "statistics", "label": "Statistics", "href": "/statistics", "roles": ("admin", "operator", "viewer"), "icon": "chart-bar-stacked.svg"},
     {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator"), "visible_roles": ("viewer",)},
+    {"key": "modems", "label": "Interfaces", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
     {"key": "station", "label": "My Station", "href": "/station", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "antenna.svg"},
     {"key": "wx", "label": "WX", "href": "/wx", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "weather-partly-snowy.svg"},
     {"key": "messages", "label": "Messages", "href": "/messages", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "message-reply-text-outline.svg"},

@@ -53,8 +53,29 @@ class RoleAccessTests(unittest.TestCase):
         navigation_order = [item["key"] for item in context["navigation"] if not item.get("separator")]
         navigation = {item["key"]: item for item in context["navigation"] if not item.get("separator")}
 
-        traffic_index = navigation_order.index("traffic")
-        self.assertEqual(navigation_order[traffic_index + 1 : traffic_index + 4], ["alerts", "band-condition", "statistics"])
+        self.assertEqual(
+            navigation_order[:9],
+            [
+                "dashboard",
+                "map",
+                "stations",
+                "traffic",
+                "alerts",
+                "band-condition",
+                "statistics",
+                "modems",
+                "station",
+            ],
+        )
+        primary_separator_index = next(
+            index
+            for index, item in enumerate(context["navigation"])
+            if item.get("key") == "nav-separator-primary"
+        )
+        self.assertEqual(
+            context["navigation"][primary_separator_index + 1]["key"],
+            "modems",
+        )
 
         for key in ("dashboard", "stations", "map", "band-condition", "modems", "traffic", "alerts", "statistics"):
             self.assertIn(key, navigation)
