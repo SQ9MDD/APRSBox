@@ -945,7 +945,7 @@ body {
 
 .sidebar-username {
     min-width: 0;
-    max-width: 5.5rem;
+    max-width: 3.5rem;
     overflow: hidden;
     color: var(--accent);
     font-size: 0.76rem;
@@ -1018,6 +1018,66 @@ body {
 
 .sidebar-action-button:active {
     transform: translateY(0);
+}
+
+.sidebar-beacon-modal[hidden] {
+    display: none !important;
+}
+
+.sidebar-beacon-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1450;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+}
+
+.sidebar-beacon-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(2px);
+}
+
+.sidebar-beacon-dialog {
+    position: relative;
+    width: min(28rem, calc(100vw - 2rem));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+}
+
+.sidebar-beacon-dialog h2,
+.sidebar-beacon-dialog p {
+    margin: 0;
+}
+
+.sidebar-beacon-dialog h2 {
+    font-size: 1rem;
+}
+
+.sidebar-beacon-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.sidebar-beacon-status {
+    margin: 0;
+}
+
+.sidebar-beacon-status.tone-success {
+    color: var(--success);
+}
+
+.sidebar-beacon-status.tone-error {
+    color: var(--danger);
 }
 
 @media (min-width: 981px) {

@@ -33,7 +33,7 @@
         window.APRSBOX_APRS_SYMBOL_SET = {{ current_aprs_symbol_set|tojson }};
         document.documentElement.setAttribute("data-aprs-symbol-set", window.APRSBOX_APRS_SYMBOL_SET || "legacy");
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-menu-2">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-beacon-1">
     {% if current_user %}
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
@@ -72,6 +72,17 @@
                     {{ current_user.username }}
                 </span>
             </div>
+            {% if current_user.role in ["admin", "operator"] %}
+            <button
+                type="button"
+                class="sidebar-action-button"
+                id="sidebar-send-beacon"
+                aria-label="{{ t('Send beacon') }}"
+                title="{{ t('Send beacon') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/satellite-uplink.svg" alt="">
+            </button>
+            {% endif %}
             <button
                 type="button"
                 class="sidebar-action-button"
@@ -176,6 +187,9 @@
     </div>
     {% if current_user %}
     {% include "partials/emergency_modal.html" %}
+    {% endif %}
+    {% if current_user and current_user.role in ["admin", "operator"] %}
+    {% include "partials/sidebar_beacon_modal.html" %}
     {% endif %}
     <script>
         (() => {
@@ -395,6 +409,9 @@
     {% block extra_scripts %}{% endblock %}
     {% if current_user %}
     <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global-5"></script>
+    {% endif %}
+    {% if current_user and current_user.role in ["admin", "operator"] %}
+    <script src="{{ request.scope.root_path }}/static/js/sidebar-beacon.js?v={{ app_version }}-1"></script>
     {% endif %}
 </body>
 </html>

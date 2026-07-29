@@ -2995,6 +2995,18 @@ def station_send_beacon(
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
+@router.post("/station/send-beacon-now")
+def station_send_beacon_now(
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    station_settings = get_station_settings()
+    success, message = enqueue_beacon_job(station_settings)
+    return JSONResponse(
+        {"ok": success, "message": message},
+        status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+    )
+
+
 @router.post("/station/send-status")
 def station_send_status(
     request: Request,

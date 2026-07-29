@@ -1,5 +1,6 @@
 import contextlib
 import importlib.util
+import json
 import os
 import re
 import tempfile
@@ -285,6 +286,56 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("margin-block: calc(-1 * var(--space-2));", stylesheet_source)
         self.assertIn("background: var(--panel-emphasis);", stylesheet_source)
         self.assertIn("justify-content: space-between;", stylesheet_source)
+
+    def test_sidebar_beacon_control_uses_confirmation_and_ten_second_cooldown(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        modal_source = Path("app/templates/partials/sidebar_beacon_modal.html").read_text(encoding="utf-8")
+        script_source = Path("app/static/js/sidebar-beacon.js").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="sidebar-send-beacon"', base_source)
+        self.assertLess(
+            base_source.index('id="sidebar-send-beacon"'),
+            base_source.index('id="theme-toggle"'),
+        )
+        self.assertIn('{% include "partials/sidebar_beacon_modal.html" %}', base_source)
+        self.assertIn("sidebar-beacon.js", base_source)
+        self.assertIn('role="dialog"', modal_source)
+        self.assertIn("Are you sure you want to send the beacon now?", modal_source)
+        self.assertIn("/station/send-beacon-now", modal_source)
+        self.assertIn("const cooldownMs = 10_000;", script_source)
+        self.assertIn("aprsbox-beacon-send-cooldown-until", script_source)
+        self.assertIn("window.localStorage", script_source)
+        self.assertIn("place-items: center;", stylesheet_source)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
+    def test_sidebar_beacon_endpoint_queues_saved_station_settings(self) -> None:
+        from app.models import UserIdentity
+        from app.routers.pages import station_send_beacon_now
+
+        station_settings = {"callsign": "SQ9MDD", "ssid": "7"}
+        with (
+            patch("app.routers.pages.get_station_settings", return_value=station_settings),
+            patch(
+                "app.routers.pages.enqueue_beacon_job",
+                return_value=(True, "Beacon job queued."),
+            ) as enqueue,
+        ):
+            response = station_send_beacon_now(
+                current_user=UserIdentity(
+                    id=1,
+                    username="admin",
+                    role="admin",
+                    is_active=True,
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            json.loads(response.body),
+            {"ok": True, "message": "Beacon job queued."},
+        )
+        enqueue.assert_called_once_with(station_settings)
 
 
 if __name__ == "__main__":
