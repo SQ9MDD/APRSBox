@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.3.dev - 2026-07-29
+- `Interfaces / APRS-IS / GUI`: the APRS-IS connection is now correctly described as RX/TX; the form switch explicitly controls reception, while the TX column shows the active `TX APRS-IS` flow instead of a misleading TNC lock.
+- `Interfaces / APRS-IS / runtime`: status now accounts for the shared connection kept alive by Packet Routing TX even when RX is disabled; fields that apply only to physical TNCs are also hidden correctly.
+- `Help / I18N`: TNC help and PL/EN/ES/DE translations now document `Receiver RF → TX APRS-IS` and `Local TX → TX APRS-IS` transmission over the same connection.
+
 ## 1.9.2.dev - 2026-07-29
 - `GUI / menu`: reorganized the sidebar item and section order, and simplified the user strip into compact, aligned icons.
 - `GUI / beacon`: added a quick beacon-send button with a centered confirmation dialog and a 10-second resend cooldown indicated by a dimmed icon.

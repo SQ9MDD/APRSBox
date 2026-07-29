@@ -47,7 +47,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
     "modems": SectionDefinition(
         slug="modems",
         title="Interfaces",
-        description="Manage APRSBox interfaces used for RF monitoring, APRS-IS reception, outbound traffic and optional LAN port sharing.",
+        description="Manage APRSBox interfaces used for RF monitoring and TX, APRS-IS reception and transmission, and optional LAN port sharing.",
         table_name="modems",
         nav_key="modems",
         readonly_message="Interface settings are stored in SQLite and applied by APRSBox core.",
@@ -79,7 +79,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                     {"value": "SERIALL", "label": "SERIALL"},
                     {"value": "TCP", "label": "TCP"},
                     {"value": "OPENWEBRX_MQTT", "label": "OpenWebRX MQTT (RX only)"},
-                    {"value": "APRSIS", "label": "APRSIS"},
+                    {"value": "APRSIS", "label": "APRS-IS (RX/TX)"},
                 ],
             },
             {"name": "device_path", "label": "Path / Address / Filter", "type": "text", "required": False},

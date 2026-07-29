@@ -180,6 +180,15 @@ def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
 def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not rows:
         return []
+    aprsis_tx_enabled = fetch_one(
+        """
+        SELECT 1
+        FROM digi_flows
+        WHERE enabled = 1
+          AND target_kind = 'tx_aprsis'
+        LIMIT 1
+        """
+    ) is not None
     runtime_rows = fetch_all(
         """
         SELECT modem_id, status, status_detail, last_error
@@ -190,9 +199,11 @@ def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     aprsis_runtime_row = fetch_one(
         "SELECT status, status_detail, last_error FROM aprsis_runtime_state WHERE id = 1"
     )
-    if aprsis_runtime_row is not None:
-        for modem_row in rows:
-            if str(modem_row.get("modem_type") or "").strip().upper() == APRSIS_MODEM_TYPE:
+    for modem_row in rows:
+        if str(modem_row.get("modem_type") or "").strip().upper() == APRSIS_MODEM_TYPE:
+            modem_row["aprsis_rx_enabled"] = bool(modem_row.get("enabled"))
+            modem_row["aprsis_tx_enabled"] = aprsis_tx_enabled
+            if aprsis_runtime_row is not None:
                 runtime_by_modem_id[int(modem_row["id"])] = dict(aprsis_runtime_row)
     return [_decorate_modem_row(row, runtime_by_modem_id.get(int(row["id"]))) for row in rows]
 
@@ -200,9 +211,25 @@ def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None) -> dict[str, Any]:
     result = dict(row)
     modem_type = str(result.get("modem_type") or "").strip().upper()
+    aprsis_tx_enabled = False
     if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
         result["device_path"] = mask_mqtt_url(result.get("device_path"))
-    if not bool(result.get("enabled")):
+    if modem_type == APRSIS_MODEM_TYPE:
+        aprsis_rx_enabled = bool(result.get("aprsis_rx_enabled", result.get("enabled")))
+        aprsis_tx_enabled = bool(result.get("aprsis_tx_enabled"))
+        result["aprsis_rx_enabled"] = aprsis_rx_enabled
+        result["aprsis_tx_enabled"] = aprsis_tx_enabled
+        if aprsis_rx_enabled and aprsis_tx_enabled:
+            result["aprsis_direction_title"] = "APRS-IS RX and Packet Routing TX are active."
+        elif aprsis_rx_enabled:
+            result["aprsis_direction_title"] = "APRS-IS RX is active; no TX APRS-IS flow is enabled."
+        elif aprsis_tx_enabled:
+            result["aprsis_direction_title"] = "APRS-IS RX is disabled; Packet Routing TX is active."
+        else:
+            result["aprsis_direction_title"] = "APRS-IS RX and Packet Routing TX are disabled."
+
+    connection_required = bool(result.get("enabled")) or (modem_type == APRSIS_MODEM_TYPE and aprsis_tx_enabled)
+    if not connection_required:
         result["modem_runtime_status"] = "disabled"
         result["modem_runtime_label"] = "Disabled"
         result["modem_runtime_icon"] = "close-circle-outline.svg"
@@ -223,6 +250,18 @@ def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None)
         result["modem_runtime_label"] = "Connecting"
         result["modem_runtime_icon"] = "progress-clock.svg"
         result["modem_runtime_title"] = runtime_detail or "Connecting interface."
+        return result
+    if modem_type == APRSIS_MODEM_TYPE and runtime_status == "connected":
+        result["modem_runtime_status"] = "enabled"
+        result["modem_runtime_label"] = "Connected"
+        result["modem_runtime_icon"] = "check-circle-outline.svg"
+        result["modem_runtime_title"] = "APRS-IS connection is active."
+        return result
+    if modem_type == APRSIS_MODEM_TYPE:
+        result["modem_runtime_status"] = "disabled"
+        result["modem_runtime_label"] = "Inactive"
+        result["modem_runtime_icon"] = "close-circle-outline.svg"
+        result["modem_runtime_title"] = "APRS-IS connection is inactive."
         return result
 
     result["modem_runtime_status"] = "enabled"

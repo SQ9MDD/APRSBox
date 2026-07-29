@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.3.dev - 29.07.2026
+- `Interfejsy / APRS-IS / GUI`: połączenie APRS-IS jest teraz prawidłowo opisane jako RX/TX; przełącznik w formularzu jednoznacznie steruje odbiorem, a kolumna TX pokazuje stan aktywnego flow `TX APRS-IS` zamiast pozornej blokady TNC.
+- `Interfejsy / APRS-IS / runtime`: status uwzględnia wspólne połączenie utrzymywane przez Packet Routing TX nawet przy wyłączonym RX; poprawiono też faktyczne ukrywanie pól przeznaczonych wyłącznie dla fizycznych TNC.
+- `Pomoc / I18N`: pomoc TNC oraz tłumaczenia PL/EN/ES/DE opisują wysyłkę `Receiver RF → TX APRS-IS` i `Local TX → TX APRS-IS` przez to samo połączenie.
+
 ## 1.9.2.dev - 29.07.2026
 - `GUI / menu`: uporządkowano kolejność pozycji i sekcji menu bocznego oraz uproszczono pasek użytkownika do kompaktowych, wyrównanych ikon.
 - `GUI / beacon`: dodano podręczny przycisk wysyłania beacona z centralnym potwierdzeniem oraz 10-sekundową blokadą ponownego użycia, sygnalizowaną wyszarzeniem ikony.

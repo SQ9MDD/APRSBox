@@ -1,23 +1,23 @@
 # Interfejsy
 
-Zakładka Interfejsy konfiguruje wejścia APRSBox. Interfejsy radiowe mogą odbierać KISS/TNC2, wysyłać ramki outbound i opcjonalnie udostępniać port KISS w LAN. APRS-IS można włączyć jako interfejs tylko do odbioru.
+Zakładka Interfejsy konfiguruje połączenia wejściowe i wyjściowe APRSBox. Interfejsy radiowe mogą odbierać KISS/TNC2, wysyłać ramki outbound i opcjonalnie udostępniać port KISS w LAN. Połączenie APRS-IS obsługuje zarówno odbiór, jak i transmisję sterowaną przez `Packet Routing`.
 
 ## Lista interfejsów
 
 Tabela pokazuje skonfigurowane interfejsy. Wiersz można kliknąć, żeby przejść do edycji.
 
 - `Status` pokazuje stan konfiguracji i runtime, na przykład połączenie, błąd albo wyłączony interfejs.
-- `TX Block` pokazuje, czy nadawanie przez dany interfejs jest zablokowane.
+- `Sterowanie TX` pokazuje blokadę TX dla fizycznego TNC. Dla APRS-IS ikona routingu pokazuje, czy istnieje aktywny flow kończący się w `TX APRS-IS`.
 - `LAN` pokazuje, czy APRSBox wystawia proxy KISS/TNC dla klientów LAN.
 
-Wyłączenie interfejsu zatrzymuje jego odbiór. Wyłączenie interfejsu radiowego zatrzymuje także użycie go do wysyłki. Konfiguracje beaconu, WX, obiektów, biuletynów i wiadomości mogą nadal wskazywać taki interfejs radiowy, ale wysyłka zostanie pominięta albo zakończy się błędem zależnie od kontekstu.
+Wyłączenie interfejsu zatrzymuje jego odbiór. Wyłączenie interfejsu radiowego zatrzymuje także użycie go do wysyłki. Dla APRS-IS przełącznik `Włącz odbiór APRS-IS` steruje wyłącznie odbiorem; aktywny flow z celem `TX APRS-IS` może nadal utrzymywać to samo połączenie i wysyłać przez nie dane. Konfiguracje beaconu, WX, obiektów, biuletynów i wiadomości mogą nadal wskazywać wyłączony interfejs radiowy, ale wysyłka zostanie pominięta albo zakończy się błędem zależnie od kontekstu.
 
 ## Typy interfejsu
 
 - `TCP` łączy się z TNC lub programem wystawiającym KISS przez TCP. `Ścieżka / adres / filtr` ma zwykle format `host:port`, na przykład `127.0.0.1:8001`.
 - `SERIALL` używa lokalnego portu szeregowego, na przykład `/dev/ttyUSB0` albo `/dev/ttyACM0`, i wymaga poprawnego `Baud Rate`.
 - `OpenWebRX MQTT (RX only)` odbiera pakiety z MQTT OpenWebRX. Ten typ jest tylko odbiorczy: TX jest blokowany, a proxy LAN jest wyłączane.
-- `APRSIS` odbiera linie TNC2 przez istniejące połączenie APRS-IS skonfigurowane w ustawieniach iGate. Nie używa KISS i w tym interfejsie służy tylko do odbioru. Może istnieć tylko jeden interfejs APRSIS.
+- `APRS-IS (RX/TX)` korzysta z połączenia skonfigurowanego w ustawieniach iGate. Odbiera linie TNC2 zgodne z filtrem serwera, a ramki dopuszczone przez flow `Receiver RF -> TX APRS-IS` lub `Local TX -> TX APRS-IS` wysyła przez to samo połączenie. Nie używa KISS. Może istnieć tylko jeden interfejs APRSIS.
 
 Dla OpenWebRX MQTT pole adresu powinno być URL-em `mqtt://` albo `mqtts://` z tematem w ścieżce, na przykład `mqtt://user:pass@127.0.0.1:1883/openwebrx/aprs`.
 
@@ -27,12 +27,12 @@ Dla APRSIS pole `Ścieżka / adres / filtr` jest filtrem serwera APRS-IS. Nowy i
 
 - `Name` to nazwa widoczna w logach, listach interfejsów i wyborach TX.
 - `Band` opisuje pasmo interfejsu.
-- `Enabled` włącza interfejs w runtime APRSBox.
+- `Enabled` włącza fizyczny interfejs w runtime APRSBox. Dla APRS-IS etykieta `Włącz odbiór APRS-IS` włącza tylko odbiór; TX jest sterowany niezależnie przez flow kończące się w `TX APRS-IS`.
 - `Block TX on this interface` pozwala odbierać ruch, ale blokuje nadawanie outbound.
 - `TX Min Gap (s)` ustawia minimalną przerwę między transmisjami na tym TNC. Dozwolony zakres to `0.2` do `1.2` sekundy.
 - `RX Silence Reconnect Timeout (s)` dotyczy seriala. Po ciszy RX dłuższej od ustawionej wartości broker serial może wymusić reconnect. `0` wyłącza ten watchdog.
 
-`Baud Rate` jest używany tylko dla `SERIALL`. Dla APRSIS pola seriala, TX i proxy LAN są ukryte.
+`Baud Rate` jest używany tylko dla `SERIALL`. Dla APRSIS ukryte są pola właściwe dla fizycznego TNC: serial, blokada/pacing TX RF i proxy LAN. Nie blokuje to transmisji do APRS-IS, którą steruje `Packet Routing`.
 
 ## Expose Port
 
@@ -49,4 +49,4 @@ Nie włączaj zdalnego TX w niezaufanej sieci. Jeżeli wystawiasz port poza loka
 
 Kilka aktywnych interfejsów może działać równolegle. Ruch jest odbierany osobno per interfejs, a transmisja radiowa zależy od wyboru w danej zakładce, na przykład `My Station`, `WX`, obiektach, biuletynach, wiadomościach albo regułach `Packet Routing`. Ruch odebrany z APRS-IS jest widoczny w historii, szczegółach stacji i na mapie, ale jest wykluczony ze wszystkich statystyk APRSBox.
 
-Jeżeli potrzebujesz tylko wejścia z OpenWebRX, użyj `OpenWebRX MQTT (RX only)`. Jeżeli potrzebujesz pełnego RX/TX przez radio, użyj `TCP` albo `SERIALL`.
+Jeżeli potrzebujesz tylko wejścia z OpenWebRX, użyj `OpenWebRX MQTT (RX only)`. Jeżeli potrzebujesz pełnego RX/TX przez radio, użyj `TCP` albo `SERIALL`. Dla odbioru i/lub wysyłki przez sieć APRS-IS użyj `APRS-IS (RX/TX)` i odpowiednich flow `Packet Routing`.

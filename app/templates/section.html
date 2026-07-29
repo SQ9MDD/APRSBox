@@ -129,7 +129,7 @@
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <th>{{ t("Status") }}</th>
                             {% elif section.slug == 'modems' and field.name == 'tx_blocked' %}
-                            <th>{{ t("TX Block") }}</th>
+                            <th>{{ t("TX control") }}</th>
                             {% elif section.slug == 'modems' and field.name == 'expose_port_enabled' %}
                             <th>{{ t("LAN") }}</th>
                             {% else %}
@@ -153,7 +153,7 @@
                             <td class="modems-summary-icon-cell">
                                 <span
                                     class="tnc-status-icon tnc-status-icon-{{ row.modem_runtime_status or ('enabled' if row[field.name] else 'disabled') }}"
-                                    title="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}{% if row.modem_runtime_title %} · {{ row.modem_runtime_title }}{% endif %}"
+                                    title="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}{% if row.modem_runtime_title %} · {{ t(row.modem_runtime_title) }}{% endif %}{% if row.aprsis_direction_title %} · {{ t(row.aprsis_direction_title) }}{% endif %}"
                                     aria-label="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}"
                                 >
                                     <img
@@ -166,6 +166,19 @@
                             <td{% if section.slug == 'modems' and field.type == 'checkbox' %} class="modems-summary-icon-cell"{% endif %}>
                                 {% if field.type == 'checkbox' %}
                                 {% if section.slug == 'modems' and field.name == 'tx_blocked' %}
+                                {% if row.modem_type|upper == 'APRSIS' %}
+                                {% set aprsis_tx_enabled = row.aprsis_tx_enabled %}
+                                <span
+                                    class="tnc-status-icon {{ 'tnc-status-icon-enabled' if aprsis_tx_enabled else 'tnc-status-icon-disabled' }}"
+                                    title="{{ t('APRS-IS TX is enabled by Packet Routing.' if aprsis_tx_enabled else 'APRS-IS TX is disabled because no active TX APRS-IS flow exists.') }}"
+                                    aria-label="{{ t('APRS-IS TX is enabled by Packet Routing.' if aprsis_tx_enabled else 'APRS-IS TX is disabled because no active TX APRS-IS flow exists.') }}"
+                                >
+                                    <img
+                                        src="{{ request.scope.root_path }}/static/icons/{{ 'source-branch-check.svg' if aprsis_tx_enabled else 'source-branch-minus.svg' }}"
+                                        alt="{{ t('On' if aprsis_tx_enabled else 'Off') }}"
+                                    >
+                                </span>
+                                {% else %}
                                 {% set tx_blocked = row[field.name] %}
                                 <span
                                     class="tnc-status-icon {{ 'tnc-status-icon-error' if tx_blocked else 'tnc-status-icon-enabled' }}"
@@ -177,6 +190,7 @@
                                         alt="{{ t('On' if tx_blocked else 'Off') }}"
                                     >
                                 </span>
+                                {% endif %}
                                 {% elif section.slug == 'modems' and field.name == 'expose_port_enabled' %}
                                 {% set lan_enabled = row[field.name] %}
                                 <span
@@ -284,7 +298,7 @@
                     <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if section.slug == 'objects' and field.name == 'comment' %}id="objects-comment-text"{% endif %}{% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else (field.default if field.default is defined else '') }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-enabled"{% endif %} {% if edit_row and edit_row[field.name] %}checked{% endif %}>
-                    <span>{% if section.slug == 'modems' and field.name == 'tx_blocked' %}{{ t("Block TX on this interface") }}{% else %}{{ t(field.label) }}{% endif %}</span>
+                    <span{% if section.slug == 'modems' and field.name == 'enabled' %} id="modems-enabled-label"{% endif %}>{% if section.slug == 'modems' and field.name == 'tx_blocked' %}{{ t("Block TX on this interface") }}{% else %}{{ t(field.label) }}{% endif %}</span>
                     {% elif field.type == 'select' %}
                     <span>{{ t(field.label) }}</span>
                     <select
@@ -401,7 +415,7 @@
                     {% endif %}
                     {% endif %}
                     {% if section.slug == 'modems' and field.name == 'device_path' %}
-                    <small class="muted" id="modems-aprsis-filter-help" hidden>{{ t("APRS-IS server filter, e.g. m/20 or r/52.23/21.01/50.") }}</small>
+                    <small class="muted" id="modems-aprsis-filter-help" hidden>{{ t("APRS-IS receive filter, e.g. m/20 or r/52.23/21.01/50. Enabling this interface controls reception only; transmission uses the same connection and is controlled separately by Packet Routing flows ending in TX APRS-IS.") }}</small>
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
                     <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
@@ -744,6 +758,7 @@
             const baudInput = modemForm.querySelector('input[name="baud_rate"]');
             const devicePathInput = document.getElementById("modems-device-path");
             const aprsisFilterHelp = document.getElementById("modems-aprsis-filter-help");
+            const enabledLabel = document.getElementById("modems-enabled-label");
             const exposeToggle = document.getElementById("modems-expose-port-enabled");
             const exposeRows = [
                 document.getElementById("modems-expose-allow-tx-row"),
@@ -783,6 +798,11 @@
                     }
                     if (aprsisFilterHelp) {
                         aprsisFilterHelp.hidden = !isAprsis;
+                    }
+                    if (enabledLabel) {
+                        enabledLabel.textContent = isAprsis
+                            ? {{ t("Enable APRS-IS reception")|tojson }}
+                            : {{ t("Enabled")|tojson }};
                     }
                     if (isAprsis && devicePathInput && !devicePathInput.value.trim()) {
                         devicePathInput.value = "m/20";

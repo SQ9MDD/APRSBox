@@ -2814,6 +2814,10 @@ body {
     gap: var(--space-3);
 }
 
+.form-grid > [hidden] {
+    display: none !important;
+}
+
 .form-stack {
     display: grid;
     grid-template-columns: 1fr;
