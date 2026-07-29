@@ -4901,11 +4901,6 @@ def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
 def _decorate_aprs_message_row(row: dict[str, Any]) -> dict[str, Any]:
     result = dict(row)
     result["target_display"] = resolve_message_addressee(result).rstrip()
-    result["type_icon"] = {
-        "bulletin": "bulletin-board.svg",
-        "announcement": "bullhorn-outline.svg",
-        "group_bulletin": "account-group-outline.svg",
-    }.get(str(result.get("message_kind") or ""), "bulletin-board.svg")
     result["type_label"] = {
         "bulletin": "Bulletin",
         "announcement": "Announcement",
