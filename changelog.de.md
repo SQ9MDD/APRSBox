@@ -2,6 +2,7 @@
 
 ## 1.9.2.dev - 2026-07-29
 - `GUI / Menü`: Reihenfolge und Bereiche der Seitenleiste wurden neu geordnet und die Benutzerleiste auf kompakte, ausgerichtete Symbole reduziert.
+- `GUI / Beacon`: eine Schnellaktion zum Senden eines Beacons mit zentrierter Bestätigung und einer durch ein abgeblendetes Symbol dargestellten 10-sekündigen Sendesperre wurde hinzugefügt.
 
 ## 1.9.1.dev - 2026-07-29
 - `APRS-Notfallalarme`: eine eigene Registerkarte fasst Frames nach vollständigem Quellrufzeichen zusammen, führt Verlauf und Zähler, unterstützt zeitlich begrenztes oder unbegrenztes Stummschalten und löscht Alarme sicher, ohne Frames aus dem Traffic Monitor zu entfernen.

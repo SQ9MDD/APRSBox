@@ -2,6 +2,7 @@
 
 ## 1.9.2.dev - 29.07.2026
 - `GUI / menu`: uporządkowano kolejność pozycji i sekcji menu bocznego oraz uproszczono pasek użytkownika do kompaktowych, wyrównanych ikon.
+- `GUI / beacon`: dodano podręczny przycisk wysyłania beacona z centralnym potwierdzeniem oraz 10-sekundową blokadą ponownego użycia, sygnalizowaną wyszarzeniem ikony.
 
 ## 1.9.1.dev - 29.07.2026
 - `Alarmy APRS emergency`: dodano osobną zakładkę z konsolidacją ramek według pełnego znaku źródłowego, historią powiązanych ramek, licznikiem, wyciszaniem czasowym lub bezterminowym oraz bezpiecznym usuwaniem bez kasowania ramek z Monitora ruchu.
