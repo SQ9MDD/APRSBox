@@ -3,8 +3,9 @@
 ## 1.9.3.dev - 2026-07-29
 - `Schnittstellen / APRS-IS`: Der separate Navigationseintrag `iGATE-Einstellungen` wurde entfernt; Server, Port, Login, Passcode, Filter und Verbindungsdiagnose befinden sich jetzt direkt im Formular der Schnittstelle `APRS-IS (RX/TX)`, während die alte URL dorthin weiterleitet.
 - `Schnittstellen / Formular`: Der Editor verwendet nun einen stabilen gemeinsamen Bereich und eigene Panels für SERIALL, TCP, OpenWebRX MQTT und APRS-IS, sodass Felder beim Wechsel des Verbindungstyps nicht unerwartet Spalte oder Reihenfolge ändern.
-- `Schnittstellen / APRS-IS / GUI`: die APRS-IS-Verbindung wird jetzt korrekt als RX/TX beschrieben; der Formularschalter steuert eindeutig den Empfang, während die TX-Spalte den aktiven Flow `TX APRS-IS` statt einer irreführenden TNC-Sperre anzeigt.
-- `Schnittstellen / APRS-IS / Runtime`: der Status berücksichtigt die gemeinsame Verbindung, die Packet-Routing-TX auch bei deaktiviertem RX offen hält; außerdem werden nur für physische TNCs relevante Felder korrekt ausgeblendet.
+- `Schnittstellen / APRS-IS / GUI`: die APRS-IS-Verbindung wird jetzt korrekt als RX/TX beschrieben; der Schalter `APRS-IS-Verbindung aktivieren` steuert den gesamten gemeinsamen Transport, während die TX-Spalte den aktiven Flow `TX APRS-IS` statt einer irreführenden TNC-Sperre anzeigt.
+- `Schnittstellen / APRS-IS / Runtime`: das Deaktivieren der Verbindung stoppt jetzt sowohl APRS-IS-Empfang als auch -Senden; außerdem werden nur für physische TNCs relevante Felder korrekt ausgeblendet.
+- `Packet Routing / APRS-IS`: Quelle und Ziel APRS-IS sind erst nach Definition einer APRSIS-Schnittstelle verfügbar; die Backend-Validierung blockiert das Speichern oder erneute Aktivieren solcher Flows nach dem Entfernen der Schnittstelle.
 - `Hilfe / I18N`: die TNC-Hilfe und die Übersetzungen PL/EN/ES/DE dokumentieren jetzt das Senden über `Receiver RF → TX APRS-IS` und `Local TX → TX APRS-IS` durch dieselbe Verbindung.
 
 ## 1.9.2.dev - 2026-07-29

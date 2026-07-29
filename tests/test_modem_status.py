@@ -88,9 +88,13 @@ class ModemStatusTests(unittest.TestCase):
             inactive_row = get_section_row("modems", 1)
             assert inactive_row is not None
             self.assertFalse(inactive_row["aprsis_rx_enabled"])
-            self.assertTrue(inactive_row["aprsis_tx_enabled"])
-            self.assertEqual(inactive_row["modem_runtime_label"], "Inactive")
-            self.assertEqual(inactive_row["aprsis_direction_title"], "APRS-IS RX is disabled; Packet Routing TX is active.")
+            self.assertTrue(inactive_row["aprsis_tx_configured"])
+            self.assertFalse(inactive_row["aprsis_tx_enabled"])
+            self.assertEqual(inactive_row["modem_runtime_label"], "Disabled")
+            self.assertEqual(
+                inactive_row["aprsis_direction_title"],
+                "APRS-IS connection is disabled; the TX flow is configured but cannot transmit.",
+            )
 
             execute(
                 """
@@ -103,7 +107,7 @@ class ModemStatusTests(unittest.TestCase):
             )
             connected_row = get_section_row("modems", 1)
             assert connected_row is not None
-            self.assertEqual(connected_row["modem_runtime_label"], "Connected")
+            self.assertEqual(connected_row["modem_runtime_label"], "Disabled")
 
 
 if __name__ == "__main__":

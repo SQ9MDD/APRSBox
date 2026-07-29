@@ -10,7 +10,7 @@ La tabla muestra las interfaces configuradas. Haz clic en una fila para editarla
 - `Control TX` muestra el bloqueo TX de un TNC físico. Para APRS-IS, el icono de routing muestra si existe un flow activo que termina en `TX APRS-IS`.
 - `LAN` muestra si APRSBox expone un proxy KISS/TNC para clientes LAN.
 
-Desactivar una interfaz detiene su recepción. Desactivar una interfaz de radio también impide que el servicio outbound la use. Para APRS-IS, `Activar recepción APRS-IS` controla solo la recepción; un flow activo con destino `TX APRS-IS` puede mantener abierta la misma conexión y enviar datos por ella.
+Desactivar una interfaz detiene su recepción. Desactivar una interfaz de radio también impide que el servicio outbound la use. Para APRS-IS, `Activar conexión APRS-IS` controla toda la conexión RX/TX compartida. Cuando está desactivada, los flows activos con destino `TX APRS-IS` siguen configurados, pero no pueden transmitir.
 
 ## Tipos de interfaz
 
@@ -27,12 +27,14 @@ Para APRSIS, `Filtro de recepción APRS-IS` es el filtro del servidor APRS-IS. L
 
 - `Name` aparece en logs, listas de interfaces y selectores TX.
 - `Band` describe la banda de la interfaz.
-- `Enabled` activa una interfaz física en el runtime de APRSBox. Para APRS-IS, `Activar recepción APRS-IS` activa solo la recepción; TX se controla de forma independiente mediante flows que terminan en `TX APRS-IS`.
+- `Enabled` activa una interfaz física en el runtime de APRSBox. Para APRS-IS, `Activar conexión APRS-IS` activa la conexión compartida para recepción y transmisión; los flows que terminan en `TX APRS-IS` siguen decidiendo qué tramas pueden enviarse.
 - `Block TX on this interface` permite recibir tráfico, pero bloquea la transmisión outbound.
 - `TX Min Gap (s)` define la pausa mínima entre transmisiones en este TNC. El rango permitido es de `0.2` a `1.2` segundos.
 - `RX Silence Reconnect Timeout (s)` se aplica a interfaces serie. Tras una ausencia de RX más larga que este valor, el broker serie puede forzar una reconexión. `0` desactiva este watchdog.
 
-`Baud Rate` se usa solo para `SERIALL`. Para APRSIS se ocultan los campos propios de un TNC físico: ajustes seriales, bloqueo/pacing de TX RF y proxy LAN. Esto no bloquea la transmisión a APRS-IS, que se controla mediante `Packet Routing`.
+`Baud Rate` se usa solo para `SERIALL`. Para APRSIS se ocultan los campos propios de un TNC físico: ajustes seriales, bloqueo/pacing de TX RF y proxy LAN. La transmisión a APRS-IS requiere tanto una conexión activada como un flow de `Packet Routing` coincidente.
+
+El origen y el destino APRS-IS solo están disponibles en el editor de `Packet Routing` cuando existe una interfaz APRSIS definida. Sin esa interfaz, tampoco se puede guardar ni volver a activar un flow que haga referencia a APRS-IS.
 
 El formulario de la interfaz APRSIS también contiene:
 

@@ -550,7 +550,7 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(writer.writes), 2)
             await service._disconnect(reason="test complete", status="inactive")
 
-    async def test_disabling_rx_keeps_connection_when_tx_flow_still_requires_it(self) -> None:
+    async def test_disabling_connection_stops_shared_rx_and_tx_transport(self) -> None:
         class ExistingWriter:
             pass
 
@@ -571,8 +571,8 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
             )
 
             execute("UPDATE modems SET enabled = 0 WHERE id = ?", (interface_id,))
-            self.assertTrue(aprsis_connection_required())
-            self.assertFalse(
+            self.assertFalse(aprsis_connection_required())
+            self.assertTrue(
                 service._connection_needs_reconnect(
                     config_key=config_key,
                     desired_rx_signature=None,

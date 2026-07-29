@@ -3,8 +3,9 @@
 ## 1.9.3.dev - 2026-07-29
 - `Interfaces / APRS-IS`: removed the separate `iGATE settings` navigation item; server, port, login, passcode, filter, and connection diagnostics now live directly in the `APRS-IS (RX/TX)` interface form, while the legacy URL redirects to that interface.
 - `Interfaces / form`: the editor now uses a stable common section and dedicated panels for SERIALL, TCP, OpenWebRX MQTT, and APRS-IS, preventing fields from unexpectedly changing columns or order when the connection type changes.
-- `Interfaces / APRS-IS / GUI`: the APRS-IS connection is now correctly described as RX/TX; the form switch explicitly controls reception, while the TX column shows the active `TX APRS-IS` flow instead of a misleading TNC lock.
-- `Interfaces / APRS-IS / runtime`: status now accounts for the shared connection kept alive by Packet Routing TX even when RX is disabled; fields that apply only to physical TNCs are also hidden correctly.
+- `Interfaces / APRS-IS / GUI`: the APRS-IS connection is now correctly described as RX/TX; the `Enable APRS-IS connection` switch controls the whole shared transport, while the TX column shows the active `TX APRS-IS` flow instead of a misleading TNC lock.
+- `Interfaces / APRS-IS / runtime`: disabling the connection now stops both APRS-IS reception and transmission; fields that apply only to physical TNCs are also hidden correctly.
+- `Packet Routing / APRS-IS`: the APRS-IS source and target are available only after an APRSIS interface is defined, and backend validation blocks saving or re-enabling those flows after the interface is removed.
 - `Help / I18N`: TNC help and PL/EN/ES/DE translations now document `Receiver RF → TX APRS-IS` and `Local TX → TX APRS-IS` transmission over the same connection.
 
 ## 1.9.2.dev - 2026-07-29

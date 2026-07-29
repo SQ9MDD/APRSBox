@@ -25,6 +25,8 @@ Pakete laufen immer von oben nach unten. Wenn ein Block ein Paket verwirft, wird
 3. Nur die Blöcke hinzufügen, die für diesen Pfad gebraucht werden.
 4. Regel speichern und das Ausführungsprotokoll prüfen.
 
+Quelle und Ziel APRS-IS werden nur angezeigt, wenn unter `Schnittstellen` eine APRSIS-Schnittstelle definiert ist. Ihr Schalter `APRS-IS-Verbindung aktivieren` muss aktiv sein, damit Flows tatsächlich Daten empfangen oder senden können.
+
 ## Quellblöcke
 
 - [Empfänger RF](packet_routing_flow_receiver_rf.de.md)

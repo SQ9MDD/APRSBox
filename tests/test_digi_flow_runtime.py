@@ -82,6 +82,19 @@ def insert_modem(*, name: str = "RF-OUT", device_path: str = "127.0.0.1:9001") -
     return int(row["id"])
 
 
+def insert_aprsis_interface(*, name: str = "APRSIS-CONNECTION") -> int:
+    execute(
+        """
+        INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
+        VALUES (?, 'APRSIS', '', 'm/20', 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        """,
+        (name,),
+    )
+    row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
+    assert row is not None
+    return int(row["id"])
+
+
 def parse_utc_timestamp(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
@@ -1004,6 +1017,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_strict_filter_rejects_tcp_nogate_and_rfonly_paths(self) -> None:
         with temporary_database():
             set_local_station_identity()
+            insert_aprsis_interface()
             create_flow(
                 {
                     "name": "Strict APRSIS",
@@ -1084,6 +1098,7 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_local_tx_strict_filter_enforces_local_metadata_and_blocks_disallowed_paths(self) -> None:
         with temporary_database():
             set_local_station_identity()
+            insert_aprsis_interface()
             create_flow(
                 {
                     "name": "Local TX APRSIS",

@@ -10,7 +10,7 @@ The table shows configured interfaces. Click a row to edit it.
 - `TX control` shows the TX block for a physical TNC. For APRS-IS, the routing icon shows whether an active flow ending in `TX APRS-IS` exists.
 - `LAN` shows whether APRSBox exposes a KISS/TNC proxy for LAN clients.
 
-Disabling an interface stops its receive processing. Disabling a radio interface also stops the outbound service from using it. For APRS-IS, the `Enable APRS-IS reception` switch controls reception only; an active flow targeting `TX APRS-IS` may still keep the same connection open and send data through it. Beacon, WX, object, bulletin, and message settings can still reference a disabled radio interface, but transmission will be skipped or fail depending on context.
+Disabling an interface stops its receive processing. Disabling a radio interface also stops the outbound service from using it. For APRS-IS, the `Enable APRS-IS connection` switch controls the entire shared RX/TX connection. When it is disabled, active flows targeting `TX APRS-IS` remain configured but cannot transmit. Beacon, WX, object, bulletin, and message settings can still reference a disabled radio interface, but transmission will be skipped or fail depending on context.
 
 ## Interface types
 
@@ -27,12 +27,14 @@ For APRSIS, `APRS-IS receive filter` is the APRS-IS server filter. New interface
 
 - `Name` is displayed in logs, interface lists, and TX selectors.
 - `Band` describes the interface band.
-- `Enabled` activates a physical interface in the APRSBox runtime. For APRS-IS, the `Enable APRS-IS reception` label enables reception only; TX is controlled independently by flows ending in `TX APRS-IS`.
+- `Enabled` activates a physical interface in the APRSBox runtime. For APRS-IS, the `Enable APRS-IS connection` label enables the shared connection used for reception and transmission; flows ending in `TX APRS-IS` still decide which frames may be sent.
 - `Block TX on this interface` allows receiving traffic but blocks outbound transmission.
 - `TX Min Gap (s)` sets the minimum pause between transmissions on this TNC. The allowed range is `0.2` to `1.2` seconds.
 - `RX Silence Reconnect Timeout (s)` applies to serial interfaces. After RX silence longer than this value, the serial broker can force a reconnect. `0` disables this watchdog.
 
-`Baud Rate` is used only for `SERIALL`. For APRSIS, fields specific to a physical TNC are hidden: serial settings, RF TX block/pacing, and LAN proxy. This does not block transmission to APRS-IS, which is controlled by `Packet Routing`.
+`Baud Rate` is used only for `SERIALL`. For APRSIS, fields specific to a physical TNC are hidden: serial settings, RF TX block/pacing, and LAN proxy. Transmission to APRS-IS requires both an enabled connection and a matching `Packet Routing` flow.
+
+The APRS-IS source and target are available in the `Packet Routing` editor only when an APRSIS interface is defined. Without that interface, a flow referencing APRS-IS also cannot be saved or enabled again.
 
 The APRSIS interface form also contains:
 

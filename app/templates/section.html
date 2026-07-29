@@ -168,10 +168,12 @@
                                 {% if section.slug == 'modems' and field.name == 'tx_blocked' %}
                                 {% if row.modem_type|upper == 'APRSIS' %}
                                 {% set aprsis_tx_enabled = row.aprsis_tx_enabled %}
+                                {% set aprsis_tx_configured = row.aprsis_tx_configured %}
+                                {% set aprsis_tx_title = 'APRS-IS TX is enabled by Packet Routing.' if aprsis_tx_enabled else ('APRS-IS TX flow is configured, but the APRS-IS connection is disabled.' if aprsis_tx_configured else 'APRS-IS TX is disabled because no active TX APRS-IS flow exists.') %}
                                 <span
                                     class="tnc-status-icon {{ 'tnc-status-icon-enabled' if aprsis_tx_enabled else 'tnc-status-icon-disabled' }}"
-                                    title="{{ t('APRS-IS TX is enabled by Packet Routing.' if aprsis_tx_enabled else 'APRS-IS TX is disabled because no active TX APRS-IS flow exists.') }}"
-                                    aria-label="{{ t('APRS-IS TX is enabled by Packet Routing.' if aprsis_tx_enabled else 'APRS-IS TX is disabled because no active TX APRS-IS flow exists.') }}"
+                                    title="{{ t(aprsis_tx_title) }}"
+                                    aria-label="{{ t(aprsis_tx_title) }}"
                                 >
                                     <img
                                         src="{{ request.scope.root_path }}/static/icons/{{ 'source-branch-check.svg' if aprsis_tx_enabled else 'source-branch-minus.svg' }}"
@@ -421,7 +423,7 @@
                     {% endif %}
                     {% endif %}
                     {% if section.slug == 'modems' and field.name == 'device_path' %}
-                    <small class="muted" id="modems-aprsis-filter-help" hidden>{{ t("APRS-IS receive filter, e.g. m/20 or r/52.23/21.01/50. Enabling this interface controls reception only; transmission uses the same connection and is controlled separately by Packet Routing flows ending in TX APRS-IS.") }}</small>
+                    <small class="muted" id="modems-aprsis-filter-help" hidden>{{ t("APRS-IS receive filter, e.g. m/20 or r/52.23/21.01/50. The filter applies only to traffic received from the server.") }}</small>
                     {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
                     <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
@@ -794,7 +796,7 @@
                     }
                     if (enabledLabel) {
                         enabledLabel.textContent = isAprsis
-                            ? {{ t("Enable APRS-IS reception")|tojson }}
+                            ? {{ t("Enable APRS-IS connection")|tojson }}
                             : {{ t("Enabled")|tojson }};
                     }
                     if (aprsisStatusPanel) {

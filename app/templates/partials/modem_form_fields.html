@@ -20,7 +20,7 @@
 
 <label class="full checkbox-row">
     <input type="checkbox" name="enabled" value="1" {% if modem_values.get('enabled') %}checked{% endif %}>
-    <span id="modems-enabled-label">{{ t("Enable APRS-IS reception" if selected_modem_type == "APRSIS" else "Enabled") }}</span>
+    <span id="modems-enabled-label">{{ t("Enable APRS-IS connection" if selected_modem_type == "APRSIS" else "Enabled") }}</span>
 </label>
 
 <div class="full modem-type-slot" aria-live="polite">
@@ -192,9 +192,9 @@
             <label class="full">
                 <span>{{ t("APRS-IS receive filter") }}</span>
                 <input type="text" name="device_path" value="{{ aprsis_receive_filter }}" placeholder="m/20" required>
-                <small class="muted">{{ t("APRS-IS receive filter, e.g. m/20 or r/52.23/21.01/50. Enabling this interface controls reception only; transmission uses the same connection and is controlled separately by Packet Routing flows ending in TX APRS-IS.") }}</small>
+                <small class="muted">{{ t("APRS-IS receive filter, e.g. m/20 or r/52.23/21.01/50. The filter applies only to traffic received from the server.") }}</small>
             </label>
         </div>
-        <div class="notice">{{ t("This is one shared APRS-IS connection: the interface switch controls reception, while Packet Routing flows ending in TX APRS-IS control transmission.") }}</div>
+        <div class="notice">{{ t("Enable this shared connection to receive and transmit through APRS-IS. Packet Routing flows decide which frames may be transmitted.") }}</div>
     </fieldset>
 </div>

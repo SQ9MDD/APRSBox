@@ -215,20 +215,22 @@ def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None)
     if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
         result["device_path"] = mask_mqtt_url(result.get("device_path"))
     if modem_type == APRSIS_MODEM_TYPE:
-        aprsis_rx_enabled = bool(result.get("aprsis_rx_enabled", result.get("enabled")))
-        aprsis_tx_enabled = bool(result.get("aprsis_tx_enabled"))
-        result["aprsis_rx_enabled"] = aprsis_rx_enabled
+        aprsis_connection_enabled = bool(result.get("aprsis_rx_enabled", result.get("enabled")))
+        aprsis_tx_configured = bool(result.get("aprsis_tx_enabled"))
+        aprsis_tx_enabled = aprsis_connection_enabled and aprsis_tx_configured
+        result["aprsis_connection_enabled"] = aprsis_connection_enabled
+        result["aprsis_tx_configured"] = aprsis_tx_configured
         result["aprsis_tx_enabled"] = aprsis_tx_enabled
-        if aprsis_rx_enabled and aprsis_tx_enabled:
+        if aprsis_connection_enabled and aprsis_tx_configured:
             result["aprsis_direction_title"] = "APRS-IS RX and Packet Routing TX are active."
-        elif aprsis_rx_enabled:
+        elif aprsis_connection_enabled:
             result["aprsis_direction_title"] = "APRS-IS RX is active; no TX APRS-IS flow is enabled."
-        elif aprsis_tx_enabled:
-            result["aprsis_direction_title"] = "APRS-IS RX is disabled; Packet Routing TX is active."
+        elif aprsis_tx_configured:
+            result["aprsis_direction_title"] = "APRS-IS connection is disabled; the TX flow is configured but cannot transmit."
         else:
-            result["aprsis_direction_title"] = "APRS-IS RX and Packet Routing TX are disabled."
+            result["aprsis_direction_title"] = "APRS-IS connection is disabled; no TX APRS-IS flow is enabled."
 
-    connection_required = bool(result.get("enabled")) or (modem_type == APRSIS_MODEM_TYPE and aprsis_tx_enabled)
+    connection_required = bool(result.get("enabled"))
     if not connection_required:
         result["modem_runtime_status"] = "disabled"
         result["modem_runtime_label"] = "Disabled"
