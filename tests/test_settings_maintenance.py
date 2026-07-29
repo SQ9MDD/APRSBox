@@ -307,6 +307,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("aprsbox-beacon-send-cooldown-until", script_source)
         self.assertIn("window.localStorage", script_source)
         self.assertIn("place-items: center;", stylesheet_source)
+        self.assertIn(".sidebar-action-button:disabled", stylesheet_source)
+        self.assertIn("filter: grayscale(1) var(--icon-filter);", stylesheet_source)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
     def test_sidebar_beacon_endpoint_queues_saved_station_settings(self) -> None:

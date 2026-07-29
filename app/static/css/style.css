@@ -1005,7 +1005,7 @@ body {
     filter: var(--icon-filter);
 }
 
-.sidebar-action-button:hover {
+.sidebar-action-button:hover:not(:disabled) {
     background: var(--panel-alt);
     border-color: var(--border-hover);
     transform: translateY(-1px);
@@ -1018,6 +1018,20 @@ body {
 
 .sidebar-action-button:active {
     transform: translateY(0);
+}
+
+.sidebar-action-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.38;
+    background: color-mix(in srgb, var(--panel-emphasis) 52%, transparent);
+    border-color: var(--border);
+    box-shadow: none;
+    transform: none;
+}
+
+.sidebar-action-button:disabled img {
+    opacity: 0.55;
+    filter: grayscale(1) var(--icon-filter);
 }
 
 .sidebar-beacon-modal[hidden] {
