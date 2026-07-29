@@ -12,7 +12,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, optional filters and one target. Mandatory rules are inserted automatically for RF to RF, APRS-IS source and APRS-IS target flows.") }}</p>
             </div>
             <button
                 class="help-icon-button page-help-button"
@@ -24,7 +23,6 @@
                 <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
             </button>
         </div>
-        <div class="notice">{{ t("Source must be first and target last. RF to RF requires the RF Digipeating Path Rule; APRS-IS to RF uses four mandatory APRS-IS rules; an APRS-IS target uses the mandatory Uplink Safety Rule.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -63,17 +61,14 @@
                 <div class="digi-flow-endpoint-card">
                     <h3>{{ t("Source") }}</h3>
                     <label>
-                        <span>{{ t("Source Interface") }}</span>
-                        <select name="source_selector" id="flow-source-selector" required></select>
+                        <select name="source_selector" id="flow-source-selector" aria-label="{{ t('Source Interface') }}" required></select>
                     </label>
-                    <p class="muted small" id="flow-source-help" hidden></p>
                 </div>
 
                 <div class="digi-flow-endpoint-card">
                     <h3>{{ t("Target") }}</h3>
                     <label>
-                        <span>{{ t("Target Interface") }}</span>
-                        <select name="target_selector" id="flow-target-selector" required></select>
+                        <select name="target_selector" id="flow-target-selector" aria-label="{{ t('Target Interface') }}" required></select>
                     </label>
                 </div>
             </section>
@@ -83,7 +78,6 @@
                     <div class="panel-header">
                         <div class="panel-header-copy">
                             <h2>{{ t("Available filters and rules") }}</h2>
-                            <p class="section-lead">{{ t("Rules are mandatory and managed automatically. Click an available filter to add it before the target.") }}</p>
                         </div>
                     </div>
                     <div class="digi-step-palette" id="digi-step-palette">
@@ -112,7 +106,6 @@
                     <div class="panel-header">
                         <div class="panel-header-copy">
                             <h2>{{ t("Current flow steps") }}</h2>
-                            <p class="section-lead">{{ t("Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.") }}</p>
                         </div>
                     </div>
                     <input type="hidden" name="steps_json" id="digi-steps-json">
@@ -267,7 +260,6 @@
         const stepsChain = document.getElementById("digi-steps-chain");
         const sourceSelectorInput = document.getElementById("flow-source-selector");
         const targetSelectorInput = document.getElementById("flow-target-selector");
-        const sourceHelpNode = document.getElementById("flow-source-help");
         const sourceKindInput = document.getElementById("flow-source-kind");
         const sourceRefInput = document.getElementById("flow-source-ref-hidden");
         const targetKindInput = document.getElementById("flow-target-kind");
@@ -345,7 +337,6 @@
             release: {{ t("Release")|tojson }},
             strictGuardSummary: {{ t("Rejects TCPIP/TCPXX, NOGATE/RFONLY and invalid third-party packets")|tojson }},
             localTxFrames: {{ t("Locally generated APRSBox TX frames")|tojson }},
-            localTxSourceHelp: {{ t("Local TX includes only frames generated locally by APRSBox, such as beacons, status packets, weather, objects, items, bulletins and messages. It does not include RF-received or digipeated frames.")|tojson }},
             directPacketsOnly: {{ t("Passes only direct packets")|tojson }},
             help: {{ t("Help")|tojson }},
             LOGGED: {{ t("LOGGED")|tojson }},
@@ -1048,26 +1039,12 @@
             return Array.isArray(mapped) && mapped.length ? mapped : (endpointOptions.target || []);
         };
 
-        const updateSourceHelp = (selectedSource) => {
-            if (!sourceHelpNode) {
-                return;
-            }
-            if (selectedSource && String(selectedSource.kind || "").trim() === "receiver_local_tx") {
-                sourceHelpNode.textContent = i18n.localTxSourceHelp;
-                sourceHelpNode.hidden = false;
-                return;
-            }
-            sourceHelpNode.textContent = "";
-            sourceHelpNode.hidden = true;
-        };
-
         const syncBoundarySteps = () => {
             syncEndpointSelect(sourceSelectorInput, endpointOptions.source || [], sourceSelectorInput.value || {{ form_data.source_selector|tojson }});
             const selectedSource = selectedEndpoint(sourceSelectorInput, "source");
             const targetOptions = targetOptionsForSourceKind(selectedSource ? selectedSource.kind : "");
             syncEndpointSelect(targetSelectorInput, targetOptions, targetSelectorInput.value || {{ form_data.target_selector|tojson }});
             const selectedTarget = targetOptions.find((option) => option.value === targetSelectorInput.value) || null;
-            updateSourceHelp(selectedSource);
             if (!selectedSource || !selectedTarget) {
                 return;
             }

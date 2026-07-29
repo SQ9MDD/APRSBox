@@ -20,12 +20,18 @@ class ModemsTemplateTests(unittest.TestCase):
         for language in ("pl", "en", "es", "de"):
             self.assertTrue(Path(f"help/application/tnc.{language}.md").exists())
 
-    def test_aprsis_gui_explains_shared_connection_and_packet_routing_tx(self) -> None:
+    def test_aprsis_gui_uses_concise_connection_controls(self) -> None:
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         fields_source = Path("app/templates/partials/modem_form_fields.html").read_text(encoding="utf-8")
         self.assertIn("Enable APRS-IS connection", template_source)
-        self.assertIn("receive and transmit through APRS-IS", fields_source)
         self.assertNotIn("Enable APRS-IS reception", template_source + fields_source)
+        self.assertNotIn("receive and transmit through APRS-IS", fields_source)
+        self.assertNotIn("This interface receives OpenWebRX MQTT traffic only", fields_source)
+        self.assertNotIn("Serial-only watchdog timeout", fields_source)
+        self.assertNotIn("Per-TNC TX pacing gap", fields_source)
+        self.assertNotIn("LAN listen address", fields_source)
+        self.assertNotIn("TCP port exposed by APRSBox", fields_source)
+        self.assertNotIn("Optional allow-list", fields_source)
         self.assertIn("APRS-IS TX is enabled by Packet Routing.", template_source)
         self.assertIn("source-branch-check.svg", template_source)
 

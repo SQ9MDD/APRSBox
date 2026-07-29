@@ -6,6 +6,7 @@
 - `Interfaces / APRS-IS / GUI`: the APRS-IS connection is now correctly described as RX/TX; the `Enable APRS-IS connection` switch controls the whole shared transport, while the TX column shows the active `TX APRS-IS` flow instead of a misleading TNC lock.
 - `Interfaces / APRS-IS / runtime`: disabling the connection now stops both APRS-IS reception and transmission; fields that apply only to physical TNCs are also hidden correctly.
 - `Packet Routing / APRS-IS`: the APRS-IS source and target are available only after an APRSIS interface is defined, and backend validation blocks saving or re-enabling those flows after the interface is removed.
+- `Packet Routing / Interfaces / GUI`: simplified the forms by removing descriptions and repeated labels already covered by the full help; safety messages, validation, and dynamic configuration values remain visible.
 - `Help / I18N`: TNC help and PL/EN/ES/DE translations now document `Receiver RF → TX APRS-IS` and `Local TX → TX APRS-IS` transmission over the same connection.
 
 ## 1.9.2.dev - 2026-07-29

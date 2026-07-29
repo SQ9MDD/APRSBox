@@ -50,7 +50,6 @@
                     <option value="{{ option.value }}" {% if (modem_values.get('serial_rx_silence_reconnect_seconds', 150)|string) == (option.value|string) %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
-                <small class="muted">{{ t("Serial-only watchdog timeout. 0 disables forced reconnect on RX silence.") }}</small>
             </label>
         </div>
         <div class="modem-capability-block">
@@ -61,7 +60,6 @@
             <label>
                 <span>{{ t("TX Min Gap (s)") }}</span>
                 <input type="number" name="tx_min_gap_seconds" min="0.2" max="1.2" step="0.01" value="{{ modem_values.get('tx_min_gap_seconds', '0.35') }}" required>
-                <small class="muted">{{ t("Per-TNC TX pacing gap, from 0.2s to 1.2s.") }}</small>
             </label>
         </div>
         <div class="modem-capability-block">
@@ -77,17 +75,14 @@
                 <label>
                     <span>{{ t("Bind Address") }}</span>
                     <input type="text" name="expose_bind_address" value="{{ modem_values.get('expose_bind_address') or '0.0.0.0' }}" {% if not modem_values.get('expose_port_enabled') %}disabled{% endif %}>
-                    <small class="muted">{{ t("LAN listen address. Use <code>0.0.0.0</code> for all interfaces.")|safe }}</small>
                 </label>
                 <label>
                     <span>{{ t("Port") }}</span>
                     <input type="number" name="expose_port" min="1" max="65535" value="{{ modem_values.get('expose_port') or 8002 }}" {% if not modem_values.get('expose_port_enabled') %}disabled{% endif %}>
-                    <small class="muted">{{ t("TCP port exposed by APRSBox for LAN clients. Maximum simultaneous clients: 3.") }}</small>
                 </label>
                 <label class="full">
                     <span>{{ t("Whitelist") }}</span>
                     <textarea name="expose_whitelist" placeholder="{{ t('192.168.1.10\n192.168.1.0/24') }}" {% if not modem_values.get('expose_port_enabled') %}disabled{% endif %}>{{ modem_values.get('expose_whitelist') or '' }}</textarea>
-                    <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                 </label>
             </div>
         </div>
@@ -117,7 +112,6 @@
             <label>
                 <span>{{ t("TX Min Gap (s)") }}</span>
                 <input type="number" name="tx_min_gap_seconds" min="0.2" max="1.2" step="0.01" value="{{ modem_values.get('tx_min_gap_seconds', '0.35') }}" required>
-                <small class="muted">{{ t("Per-TNC TX pacing gap, from 0.2s to 1.2s.") }}</small>
             </label>
         </div>
         <div class="modem-capability-block">
@@ -133,17 +127,14 @@
                 <label>
                     <span>{{ t("Bind Address") }}</span>
                     <input type="text" name="expose_bind_address" value="{{ modem_values.get('expose_bind_address') or '0.0.0.0' }}" {% if not modem_values.get('expose_port_enabled') %}disabled{% endif %}>
-                    <small class="muted">{{ t("LAN listen address. Use <code>0.0.0.0</code> for all interfaces.")|safe }}</small>
                 </label>
                 <label>
                     <span>{{ t("Port") }}</span>
                     <input type="number" name="expose_port" min="1" max="65535" value="{{ modem_values.get('expose_port') or 8002 }}" {% if not modem_values.get('expose_port_enabled') %}disabled{% endif %}>
-                    <small class="muted">{{ t("TCP port exposed by APRSBox for LAN clients. Maximum simultaneous clients: 3.") }}</small>
                 </label>
                 <label class="full">
                     <span>{{ t("Whitelist") }}</span>
                     <textarea name="expose_whitelist" placeholder="{{ t('192.168.1.10\n192.168.1.0/24') }}" {% if not modem_values.get('expose_port_enabled') %}disabled{% endif %}>{{ modem_values.get('expose_whitelist') or '' }}</textarea>
-                    <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                 </label>
             </div>
         </div>
@@ -165,7 +156,6 @@
                 </select>
             </label>
         </div>
-        <div class="notice">{{ t("This interface receives OpenWebRX MQTT traffic only. RF transmission and LAN port sharing are unavailable.") }}</div>
     </fieldset>
 
     <fieldset class="modem-type-panel modem-aprsis-panel" data-modem-type-panel="APRSIS" {% if selected_modem_type != 'APRSIS' %}disabled hidden{% endif %}>
@@ -192,9 +182,7 @@
             <label class="full">
                 <span>{{ t("APRS-IS receive filter") }}</span>
                 <input type="text" name="device_path" value="{{ aprsis_receive_filter }}" placeholder="m/20" required>
-                <small class="muted">{{ t("APRS-IS receive filter, e.g. m/20 or r/52.23/21.01/50. The filter applies only to traffic received from the server.") }}</small>
             </label>
         </div>
-        <div class="notice">{{ t("Enable this shared connection to receive and transmit through APRS-IS. Packet Routing flows decide which frames may be transmitted.") }}</div>
     </fieldset>
 </div>

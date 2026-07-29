@@ -422,9 +422,6 @@
                     </button>
                     {% endif %}
                     {% endif %}
-                    {% if section.slug == 'modems' and field.name == 'device_path' %}
-                    <small class="muted" id="modems-aprsis-filter-help" hidden>{{ t("APRS-IS receive filter, e.g. m/20 or r/52.23/21.01/50. The filter applies only to traffic received from the server.") }}</small>
-                    {% endif %}
                     {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
                     <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
                     {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
@@ -446,16 +443,6 @@
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
                         <small class="field-validation-error" id="bulletins-message-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
-                    {% elif section.slug == 'modems' and field.name == 'expose_bind_address' %}
-                    <small class="muted">{{ t("LAN listen address. Use <code>0.0.0.0</code> for all interfaces.")|safe }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'expose_port' %}
-                    <small class="muted">{{ t("TCP port exposed by APRSBox for LAN clients. Maximum simultaneous clients: 3.") }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'serial_rx_silence_reconnect_seconds' %}
-                    <small class="muted">{{ t("Serial-only watchdog timeout. 0 disables forced reconnect on RX silence.") }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'tx_min_gap_seconds' %}
-                    <small class="muted">{{ t("Per-TNC TX pacing gap, from 0.2s to 1.2s.") }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'expose_whitelist' %}
-                    <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
                     <small class="muted">{{ t("Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
                     <div class="field-counter-row">

@@ -200,6 +200,20 @@ class DigiFlowsTests(unittest.TestCase):
         script_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
         self.assertNotIn('data-help-autoload="1"', script_source)
 
+    def test_digi_flow_form_keeps_instructional_copy_in_help(self) -> None:
+        template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        self.assertNotIn('id="flow-source-help"', template_source)
+        self.assertNotIn("localTxSourceHelp", template_source)
+        self.assertNotIn("Local TX includes only frames generated locally", template_source)
+        self.assertNotIn("Define one source, optional filters and one target", template_source)
+        self.assertNotIn("Source must be first and target last", template_source)
+        self.assertNotIn("Rules are mandatory and managed automatically", template_source)
+        self.assertNotIn("Vertical pipeline from top to bottom", template_source)
+        self.assertNotIn('<span>{{ t("Source Interface") }}</span>', template_source)
+        self.assertNotIn('<span>{{ t("Target Interface") }}</span>', template_source)
+        self.assertIn("aria-label=\"{{ t('Source Interface') }}\"", template_source)
+        self.assertIn("aria-label=\"{{ t('Target Interface') }}\"", template_source)
+
     def test_init_db_creates_digi_flow_tables_and_allows_duplicate_route_pairs(self) -> None:
         with temporary_database():
             insert_aprsis_interface()
