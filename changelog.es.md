@@ -2,6 +2,7 @@
 
 ## 1.9.4.dev - 2026-07-29
 - `GUI / textos`: se revisaron todas las pantallas principales y se eliminaron descripciones de sección redundantes, instrucciones repetidas y ayudas obvias; se conservaron los estados, requisitos de formato, validación y advertencias de seguridad de RF o administración.
+- `Dashboard / estación`: se eliminaron de la tarjeta principal de la estación la descripción de recepción y la fecha de la última actividad RF, y se redujeron su altura y espaciado.
 
 ## 1.9.3.dev - 2026-07-29
 - `Interfaces / APRS-IS`: se eliminó la entrada de navegación separada `Ajustes iGATE`; servidor, puerto, login, passcode, filtro y diagnóstico de conexión están ahora directamente en el formulario de la interfaz `APRS-IS (RX/TX)`, mientras que la URL antigua redirige a esa interfaz.

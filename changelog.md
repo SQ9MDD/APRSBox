@@ -2,6 +2,7 @@
 
 ## 1.9.4.dev - 29.07.2026
 - `GUI / treść`: przejrzano wszystkie główne ekrany i usunięto nadmiarowe opisy sekcji, powtórzone instrukcje oraz oczywiste podpowiedzi; zachowano stany, wymagania formatu, walidację i ostrzeżenia dotyczące RF lub operacji administracyjnych.
+- `Dashboard / stacja`: usunięto opis stanu odbioru i datę ostatniej aktywności RF z głównej karty stacji oraz zmniejszono jej wysokość i odstępy.
 
 ## 1.9.3.dev - 29.07.2026
 - `Interfejsy / APRS-IS`: usunięto osobną pozycję `Ustawienia iGATE`; serwer, port, login, passcode, filtr oraz diagnostyka połączenia są teraz dostępne bezpośrednio w formularzu interfejsu `APRS-IS (RX/TX)`, a stary adres przekierowuje do tego interfejsu.

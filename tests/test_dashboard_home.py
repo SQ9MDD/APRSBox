@@ -201,7 +201,11 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("dashboard-v2-event-marker", template)
         self.assertIn("Open detailed statistics", template)
         self.assertIn("point: { radius: 0", template)
+        self.assertNotIn("dashboard_home.hero.title", template)
+        self.assertNotIn('{{ t("Last RF activity") }}: {{ t(station.last_rf) }}', template)
+        self.assertNotIn("last_rf=", template)
         self.assertIn(".dashboard-v2-station-panel::before", stylesheet)
+        self.assertIn("min-height: 7.6rem", stylesheet)
         self.assertIn(".dashboard-v2-band-meter .is-current", stylesheet)
         self.assertIn(".dashboard-v2-event-item:not(:last-child)", stylesheet)
 

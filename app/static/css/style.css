@@ -2060,7 +2060,7 @@ body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(150px, 0.55fr);
     align-items: center;
-    min-height: 9.3rem;
+    min-height: 7.6rem;
 }
 
 .dashboard-v2-station-copy {
@@ -2079,16 +2079,6 @@ body {
     letter-spacing: 0.075em;
     line-height: 1.2;
     text-transform: uppercase;
-}
-
-.dashboard-v2-station-copy h2 {
-    margin: 0.12rem 0 0;
-    max-width: 33rem;
-    font-size: clamp(1rem, 1.45vw, 1.28rem);
-}
-
-.dashboard-v2-station-copy p {
-    margin: 0;
 }
 
 .dashboard-v2-health {
@@ -2124,8 +2114,8 @@ body {
 .dashboard-v2-station-identity {
     display: grid;
     gap: 0.08rem;
-    margin-top: 0.58rem;
-    padding-top: 0.48rem;
+    margin-top: 0.38rem;
+    padding-top: 0.38rem;
     min-width: min(15rem, 100%);
     border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
 }
@@ -2145,7 +2135,7 @@ body {
 .dashboard-v2-radio-visual {
     position: relative;
     align-self: stretch;
-    min-height: 8.5rem;
+    min-height: 6.8rem;
     pointer-events: none;
 }
 
@@ -2153,9 +2143,9 @@ body {
     position: absolute;
     z-index: 2;
     left: 50%;
-    bottom: 0.3rem;
-    width: clamp(4.5rem, 8vw, 6.7rem);
-    height: clamp(4.5rem, 8vw, 6.7rem);
+    bottom: 0.2rem;
+    width: clamp(4.2rem, 7vw, 5.8rem);
+    height: clamp(4.2rem, 7vw, 5.8rem);
     opacity: 0.72;
     filter: var(--icon-filter);
     transform: translateX(-50%);

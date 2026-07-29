@@ -3,7 +3,7 @@
 {% block content %}
 {% set runtime_check = dashboard_home.checks[0] if dashboard_home.checks and dashboard_home.checks|length > 0 else none %}
 {% set service_check = dashboard_home.checks[2] if dashboard_home.checks and dashboard_home.checks|length > 2 else none %}
-{% set station = namespace(callsign="Not set", rx_tone="neutral", rx_value="Unknown", tx_tone="neutral", tx_value="Unknown", aprsis_tone="neutral", aprsis_value="Not configured", last_rf="-") %}
+{% set station = namespace(callsign="Not set", rx_tone="neutral", rx_value="Unknown", tx_tone="neutral", tx_value="Unknown", aprsis_tone="neutral", aprsis_value="Not configured") %}
 {% for item in dashboard_home.hero_summary %}
     {% if item.label == "Callsign" %}
         {% set station.callsign = item.value %}
@@ -16,11 +16,6 @@
     {% elif item.label == "APRS-IS" %}
         {% set station.aprsis_tone = item.tone %}
         {% set station.aprsis_value = item.value %}
-    {% endif %}
-{% endfor %}
-{% for item in dashboard_home.last_rf_activity %}
-    {% if item.name == "Last RF frame time" %}
-        {% set station.last_rf = item.value %}
     {% endif %}
 {% endfor %}
 {% set health = namespace(label="DEGRADED", tone="warn") %}
@@ -60,8 +55,6 @@
                             {{ t(health.label) }}
                             <span class="dashboard-v2-health-dot" aria-hidden="true"></span>
                         </strong>
-                        <h2>{{ t(dashboard_home.hero.title) }}</h2>
-                        <p class="muted small">{{ t("Last RF activity") }}: {{ t(station.last_rf) }}</p>
                         <div class="dashboard-v2-station-identity">
                             <span>{{ t("Callsign") }}</span>
                             <strong>{{ station.callsign if station.callsign != "Not set" else t("Not set") }}</strong>
