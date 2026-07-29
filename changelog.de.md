@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.2.dev - 2026-07-29
+- `GUI / Menü`: Reihenfolge und Bereiche der Seitenleiste wurden neu geordnet und die Benutzerleiste auf kompakte, ausgerichtete Symbole reduziert.
+
 ## 1.9.1.dev - 2026-07-29
 - `APRS-Notfallalarme`: eine eigene Registerkarte fasst Frames nach vollständigem Quellrufzeichen zusammen, führt Verlauf und Zähler, unterstützt zeitlich begrenztes oder unbegrenztes Stummschalten und löscht Alarme sicher, ohne Frames aus dem Traffic Monitor zu entfernen.
 - `Alarme / GUI`: ein globales Alarm-Modal, Markierungen und Links im Traffic Monitor, Alarm-Liste und -Details, ein Navigationszähler sowie erneutes Anzeigen bei weiteren nicht stummgeschalteten Frames wurden hinzugefügt; die Hilfe erklärt die nötige Browser-Berechtigung für automatische Tonwiedergabe.

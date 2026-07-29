@@ -279,8 +279,11 @@ class SettingsMaintenanceTests(unittest.TestCase):
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
 
         self.assertNotIn('class="role-badge">{{ current_user.username }}', base_source)
-        self.assertIn("{{ current_user.username }} · {{ current_user.role }}", base_source)
-        self.assertIn(".sidebar-user-panel .sidebar-action-button", stylesheet_source)
+        self.assertIn('class="sidebar-username"', base_source)
+        self.assertIn("{{ current_user.username }}", base_source)
+        self.assertIn(".sidebar-user-identity", stylesheet_source)
+        self.assertIn("margin-block: calc(-1 * var(--space-2));", stylesheet_source)
+        self.assertIn("background: var(--panel-emphasis);", stylesheet_source)
         self.assertIn("justify-content: space-between;", stylesheet_source)
 
 

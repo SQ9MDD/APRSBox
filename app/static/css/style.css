@@ -927,12 +927,32 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-3);
+    gap: var(--space-2);
     width: 100%;
     padding: 0;
+    margin-block: calc(-1 * var(--space-2));
     background: transparent;
     border: 0;
     box-shadow: none;
+}
+
+.sidebar-user-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+}
+
+.sidebar-username {
+    min-width: 0;
+    max-width: 5.5rem;
+    overflow: hidden;
+    color: var(--accent);
+    font-size: 0.76rem;
+    font-weight: 600;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sidebar-role-icon {
@@ -943,9 +963,9 @@ body {
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    background: transparent;
-    border: 0;
-    box-shadow: none;
+    background: var(--panel-emphasis);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-soft);
 }
 
 .sidebar-role-icon img {
@@ -998,18 +1018,6 @@ body {
 
 .sidebar-action-button:active {
     transform: translateY(0);
-}
-
-.sidebar-user-panel .sidebar-action-button {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-}
-
-.sidebar-user-panel .sidebar-action-button:hover {
-    border-color: transparent;
-    background: var(--panel-alt);
-    box-shadow: none;
 }
 
 @media (min-width: 981px) {

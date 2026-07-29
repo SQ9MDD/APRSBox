@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.2.dev - 2026-07-29
+- `GUI / menu`: reorganized the sidebar item and section order, and simplified the user strip into compact, aligned icons.
+
 ## 1.9.1.dev - 2026-07-29
 - `APRS emergency alerts`: added a dedicated tab that consolidates frames by full source callsign, keeps related-frame history and counters, supports timed or indefinite muting, and safely deletes alerts without removing Traffic Monitor frames.
 - `Alerts / GUI`: added a global alert modal, Traffic Monitor markers and links, alert list and details, a navigation badge, and modal refreshes for subsequent unmuted frames; the help explains the browser autoplay permission required for immediate sound.

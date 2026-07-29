@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.2.dev - 29.07.2026
+- `GUI / menu`: uporządkowano kolejność pozycji i sekcji menu bocznego oraz uproszczono pasek użytkownika do kompaktowych, wyrównanych ikon.
+
 ## 1.9.1.dev - 29.07.2026
 - `Alarmy APRS emergency`: dodano osobną zakładkę z konsolidacją ramek według pełnego znaku źródłowego, historią powiązanych ramek, licznikiem, wyciszaniem czasowym lub bezterminowym oraz bezpiecznym usuwaniem bez kasowania ramek z Monitora ruchu.
 - `Alarmy / GUI`: dodano globalny modal alarmowy, oznaczenia i odnośniki w Monitorze ruchu, listę i szczegóły alarmu, licznik w menu oraz ponowne wyświetlanie modala dla kolejnych niewyciszonych ramek; pomoc opisuje wymagane zezwolenie przeglądarki na automatyczne odtwarzanie dźwięku.
