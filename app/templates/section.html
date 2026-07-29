@@ -261,10 +261,16 @@
                 {% endif %}
             </div>
             {% if can_edit %}
+            {% if section.slug in ['objects', 'items', 'modems', 'bulletins'] and flash %}
+            <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
+            {% endif %}
             <form method="post" class="form-grid" id="{{ section.slug }}-form">
                 {% if section.supports_editing and edit_row %}
                 <input type="hidden" name="record_id" value="{{ edit_row.id }}">
                 {% endif %}
+                {% if section.slug == 'modems' %}
+                {% include "partials/modem_form_fields.html" %}
+                {% else %}
                 {% for field in section.fields %}
                 {% if section.slug == 'objects' and field.name == 'latitude' %}
                 <label class="full">
@@ -466,6 +472,7 @@
                 {% endif %}
                 {% endif %}
                 {% endfor %}
+                {% endif %}
                 {% if section.slug in ['objects', 'items', 'bulletins'] %}
                 <div class="full activation-summary-panel">
                     <strong>{{ t("Activation summary") }}</strong>
@@ -486,6 +493,9 @@
                     {% endif %}
                 </div>
             </form>
+            {% if section.slug == 'modems' %}
+            {% include "partials/aprsis_interface_status.html" %}
+            {% endif %}
             {% if section.slug in ['objects', 'items'] %}
             <div class="location-picker-modal" id="{{ section.slug }}-location-picker" hidden>
                 <div class="location-picker-backdrop" data-close-location-picker></div>
@@ -585,6 +595,9 @@
 {% endif %}
 {% if section.slug in ['objects', 'modems', 'bulletins'] %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
+{% endif %}
+{% if section.slug == 'modems' %}
+<script src="{{ request.scope.root_path }}/static/js/aprsis-interface-status.js?v={{ app_version }}"></script>
 {% endif %}
 <script>
     (() => {
@@ -755,77 +768,46 @@
         const modemForm = document.getElementById("modems-form");
         if (modemForm) {
             const typeSelect = modemForm.querySelector('select[name="modem_type"]');
-            const baudInput = modemForm.querySelector('input[name="baud_rate"]');
-            const devicePathInput = document.getElementById("modems-device-path");
-            const aprsisFilterHelp = document.getElementById("modems-aprsis-filter-help");
+            const typePanels = Array.from(modemForm.querySelectorAll("[data-modem-type-panel]"));
             const enabledLabel = document.getElementById("modems-enabled-label");
-            const exposeToggle = document.getElementById("modems-expose-port-enabled");
-            const exposeRows = [
-                document.getElementById("modems-expose-allow-tx-row"),
-                document.getElementById("modems-expose-bind-row"),
-                document.getElementById("modems-expose-port-row"),
-                document.getElementById("modems-expose-whitelist-row"),
-            ].filter(Boolean);
-            if (typeSelect && baudInput) {
+            const aprsisStatusPanel = document.querySelector("[data-aprsis-interface-status]");
+            const exposeToggles = Array.from(modemForm.querySelectorAll("[data-expose-toggle]"));
+
+            const syncExposeFields = (toggle) => {
+                const panel = toggle.closest("[data-modem-type-panel]");
+                const details = panel ? panel.querySelector("[data-expose-details]") : null;
+                if (!details) return;
+                const showDetails = !panel.disabled && toggle.checked;
+                details.hidden = !showDetails;
+                for (const input of details.querySelectorAll("input, textarea, select")) {
+                    input.disabled = !showDetails;
+                }
+            };
+
+            if (typeSelect) {
                 const syncModemFields = () => {
-                    const isTcp = typeSelect.value === "TCP";
-                    const isOpenWebRxMqtt = typeSelect.value === "OPENWEBRX_MQTT";
                     const isAprsis = typeSelect.value === "APRSIS";
-                    const aprsisHiddenFieldNames = [
-                        "band",
-                        "baud_rate",
-                        "serial_rx_silence_reconnect_seconds",
-                        "tx_blocked",
-                        "tx_min_gap_seconds",
-                        "expose_port_enabled",
-                        "expose_allow_tx",
-                        "expose_bind_address",
-                        "expose_port",
-                        "expose_whitelist",
-                    ];
-                    for (const fieldName of aprsisHiddenFieldNames) {
-                        const row = modemForm.querySelector(`[data-modem-field-row="${fieldName}"]`);
-                        if (!row) continue;
-                        row.hidden = isAprsis;
-                        for (const input of row.querySelectorAll("input, textarea, select")) {
-                            input.disabled = isAprsis;
-                        }
-                    }
-                    const disableBaud = isTcp || isOpenWebRxMqtt || isAprsis;
-                    baudInput.disabled = disableBaud;
-                    if (disableBaud) {
-                        baudInput.value = "";
-                    }
-                    if (aprsisFilterHelp) {
-                        aprsisFilterHelp.hidden = !isAprsis;
+                    for (const panel of typePanels) {
+                        const isActive = panel.dataset.modemTypePanel === typeSelect.value;
+                        panel.hidden = !isActive;
+                        panel.disabled = !isActive;
                     }
                     if (enabledLabel) {
                         enabledLabel.textContent = isAprsis
                             ? {{ t("Enable APRS-IS reception")|tojson }}
                             : {{ t("Enabled")|tojson }};
                     }
-                    if (isAprsis && devicePathInput && !devicePathInput.value.trim()) {
-                        devicePathInput.value = "m/20";
+                    if (aprsisStatusPanel) {
+                        aprsisStatusPanel.hidden = !isAprsis;
                     }
-                    if (exposeToggle) {
-                        exposeToggle.disabled = isOpenWebRxMqtt || isAprsis;
-                        if (isOpenWebRxMqtt || isAprsis) {
-                            exposeToggle.checked = false;
-                        }
-                    }
-                    const showExposeFields = Boolean(!isOpenWebRxMqtt && !isAprsis && exposeToggle && exposeToggle.checked);
-                    for (const row of exposeRows) {
-                        row.hidden = !showExposeFields;
-                        const rowInputs = row.querySelectorAll("input, textarea, select");
-                        for (const input of rowInputs) {
-                            input.disabled = !showExposeFields;
-                        }
+                    for (const toggle of exposeToggles) {
+                        syncExposeFields(toggle);
                     }
                 };
 
                 typeSelect.addEventListener("change", syncModemFields);
-                if (exposeToggle) {
-                    exposeToggle.addEventListener("change", syncModemFields);
+                for (const toggle of exposeToggles) {
+                    toggle.addEventListener("change", () => syncExposeFields(toggle));
                 }
                 syncModemFields();
             }

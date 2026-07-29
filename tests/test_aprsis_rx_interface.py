@@ -108,7 +108,7 @@ POSITION_LINE = "SP5ABC-9>APRS,TCPIP*:!5223.45N/02101.23E>APRS-IS test"
 
 
 class AprsisInterfaceConfigurationTests(unittest.TestCase):
-    def test_new_aprsis_interface_uses_default_filter_and_existing_igate_settings(self) -> None:
+    def test_new_aprsis_interface_uses_default_filter_and_existing_connection_settings(self) -> None:
         with temporary_database():
             set_app_setting("aprsis_server", "example.aprs2.net")
             set_app_setting("aprsis_port", "10152")
@@ -155,6 +155,58 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
         )
         self.assertIn("user SQ9XYZ-10 pass 12345", line)
         self.assertTrue(line.endswith("filter r/52.23/21.01/50"))
+
+    def test_interfaces_form_saves_aprsis_connection_settings_and_legacy_route_redirects(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                create_page = client.get("/settings/modems?new_type=APRSIS")
+                self.assertEqual(create_page.status_code, 200)
+                self.assertIn('name="aprsis_server"', create_page.text)
+                self.assertIn('value="APRSIS" selected', create_page.text)
+
+                response = client.post(
+                    "/settings/modems",
+                    data={
+                        "name": "Internet",
+                        "modem_type": "APRSIS",
+                        "enabled": "1",
+                        "device_path": "m/50",
+                        "aprsis_server": "example.aprs2.net",
+                        "aprsis_port": "10152",
+                        "aprsis_login": "SQ9XYZ-10",
+                        "aprsis_passcode": "12345",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                config = get_aprsis_config()
+                self.assertEqual(config["server"], "example.aprs2.net")
+                self.assertEqual(config["port"], 10152)
+                self.assertEqual(config["login"], "SQ9XYZ-10")
+                self.assertEqual(config["passcode"], "12345")
+
+                legacy_response = client.get("/igate", follow_redirects=False)
+                self.assertEqual(legacy_response.status_code, 303)
+                interface_row = fetch_one("SELECT id FROM modems WHERE name = 'Internet'")
+                assert interface_row is not None
+                self.assertEqual(
+                    legacy_response.headers["location"],
+                    f"/settings/modems?edit={int(interface_row['id'])}",
+                )
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
 
 
 class AprsisReceivePipelineTests(unittest.TestCase):

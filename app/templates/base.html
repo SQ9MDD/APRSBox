@@ -33,7 +33,7 @@
         window.APRSBOX_APRS_SYMBOL_SET = {{ current_aprs_symbol_set|tojson }};
         document.documentElement.setAttribute("data-aprs-symbol-set", window.APRSBOX_APRS_SYMBOL_SET || "legacy");
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-beacon-2-aprsis-interface-1">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-beacon-2-aprsis-interface-3">
     {% if current_user %}
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">

@@ -138,6 +138,8 @@ from app.services.aprsis import (
     get_aprsis_config,
     get_aprsis_diagnostics,
     get_aprsis_runtime_status,
+    normalize_aprsis_config_payload,
+    save_aprsis_config,
     safe_save_aprsis_config,
 )
 from app.services.aprs_device_identification import (
@@ -278,6 +280,10 @@ def _section_template_context(
     slug: str,
     flash: str | None = None,
     edit_row: dict | None = None,
+    *,
+    flash_success: bool = False,
+    form_data: dict[str, object] | None = None,
+    initial_modem_type: str | None = None,
 ) -> dict:
     definition = SECTION_DEFINITIONS[slug]
     context = build_template_context(
@@ -290,7 +296,36 @@ def _section_template_context(
         flash=flash,
         can_edit=current_user.role in definition.create_roles,
         edit_row=edit_row,
+        flash_success=flash_success,
     )
+    if slug == "modems":
+        aprsis_config = get_aprsis_config()
+        modem_form_data: dict[str, object] = dict(edit_row or {})
+        if form_data:
+            modem_form_data.update(form_data)
+        if not edit_row and not form_data and initial_modem_type:
+            modem_form_data["modem_type"] = initial_modem_type
+        modem_form_data.setdefault("modem_type", "SERIALL")
+        modem_form_data.setdefault("aprsis_server", aprsis_config["server"])
+        modem_form_data.setdefault("aprsis_port", aprsis_config["port"])
+        modem_form_data.setdefault(
+            "aprsis_login",
+            "" if aprsis_config["login_is_default"] else aprsis_config["login"],
+        )
+        modem_form_data.setdefault(
+            "aprsis_passcode",
+            "" if aprsis_config["passcode_is_default"] else aprsis_config["passcode"],
+        )
+        aprsis_runtime = get_aprsis_runtime_status()
+        context.update(
+            {
+                "modem_form_data": modem_form_data,
+                "aprsis_config": aprsis_config,
+                "aprsis_runtime": aprsis_runtime,
+                "aprsis_diagnostics": get_aprsis_diagnostics(),
+                "aprsis_runtime_badge": aprsis_runtime_badge(aprsis_runtime.get("status", "")),
+            }
+        )
     if slug in {"objects", "items"}:
         context.update(
             {
@@ -346,6 +381,15 @@ def _station_detail_context(callsign: str, unit_system: str, *, root_path: str =
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
+
+
+def _aprsis_interface_settings_path() -> str:
+    aprsis_interface = fetch_one(
+        "SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' ORDER BY id ASC LIMIT 1"
+    )
+    if aprsis_interface is None:
+        return "/settings/modems?new_type=APRSIS"
+    return f"/settings/modems?edit={int(aprsis_interface['id'])}"
 
 
 def _safe_positive_int(value: Any) -> int:
@@ -528,30 +572,6 @@ def _digi_flow_editor_context(
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         symbol_table_options=station_form_options["symbol_table_options"],
         symbol_code_options=station_form_options["symbol_code_options"],
-        flash=flash,
-        flash_success=flash_success,
-    )
-
-
-def _igate_settings_page_context(
-    request: Request,
-    current_user: UserIdentity,
-    *,
-    flash: str | None = None,
-    flash_success: bool = False,
-) -> dict[str, object]:
-    aprsis_runtime = get_aprsis_runtime_status()
-    aprsis_diagnostics = get_aprsis_diagnostics()
-    return build_template_context(
-        request,
-        page_title="iGATE settings",
-        current_user=current_user,
-        active_nav="igate",
-        aprsis_config=get_aprsis_config(),
-        aprsis_runtime=aprsis_runtime,
-        aprsis_diagnostics=aprsis_diagnostics,
-        aprsis_runtime_badge=aprsis_runtime_badge(aprsis_runtime.get("status", "")),
-        can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=flash_success,
     )
@@ -1130,10 +1150,27 @@ def modems_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
     edit: int | None = None,
+    new_type: str | None = None,
+    flash: str | None = None,
+    success: int = 0,
 ) -> object:
     templates = request.app.state.templates
     edit_row = get_section_row("modems", edit) if edit is not None else None
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "modems", edit_row=edit_row))
+    normalized_initial_type = str(new_type or "").strip().upper()
+    if normalized_initial_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE, APRSIS_MODEM_TYPE}:
+        normalized_initial_type = None
+    return templates.TemplateResponse(
+        "section.html",
+        _section_template_context(
+            request,
+            current_user,
+            "modems",
+            edit_row=edit_row,
+            flash=flash,
+            flash_success=bool(success),
+            initial_modem_type=normalized_initial_type,
+        ),
+    )
 
 
 @router.post("/settings/modems")
@@ -1155,6 +1192,10 @@ def modems_create(
     expose_bind_address: str = Form("0.0.0.0"),
     expose_port: int | None = Form(8002),
     expose_whitelist: str = Form(""),
+    aprsis_server: str = Form(""),
+    aprsis_port: str = Form(""),
+    aprsis_login: str = Form(""),
+    aprsis_passcode: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
     normalized_modem_type = modem_type.strip().upper()
@@ -1187,6 +1228,34 @@ def modems_create(
         "expose_port": expose_port,
         "expose_whitelist": expose_whitelist,
     }
+    aprsis_form_data = {
+        "aprsis_server": aprsis_server,
+        "aprsis_port": aprsis_port,
+        "aprsis_login": aprsis_login,
+        "aprsis_passcode": aprsis_passcode,
+    }
+    normalized_aprsis_config: dict[str, Any] | None = None
+    if normalized_modem_type == APRSIS_MODEM_TYPE:
+        try:
+            normalized_aprsis_config = normalize_aprsis_config_payload(
+                {
+                    "server": aprsis_server,
+                    "port": aprsis_port,
+                    "login": aprsis_login,
+                    "passcode": aprsis_passcode,
+                }
+            )
+        except ValueError as exc:
+            edit_row = get_section_row("modems", record_id) if record_id is not None else None
+            context = _section_template_context(
+                request,
+                current_user,
+                "modems",
+                flash=str(exc),
+                edit_row=edit_row,
+                form_data={**payload, **aprsis_form_data},
+            )
+            return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     if record_id is None:
         if normalized_modem_type == APRSIS_MODEM_TYPE:
             existing_aprsis = fetch_one("SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' LIMIT 1")
@@ -1206,7 +1275,17 @@ def modems_create(
         success, error = safe_update_section_row("modems", record_id, payload)
         # Keep the form in edit mode after save; user exits via Cancel.
         edit_row = get_section_row("modems", record_id)
-    context = _section_template_context(request, current_user, "modems", flash=None if success else error, edit_row=edit_row)
+    if success and normalized_aprsis_config is not None:
+        save_aprsis_config(normalized_aprsis_config)
+    context = _section_template_context(
+        request,
+        current_user,
+        "modems",
+        flash="Interface settings updated." if success and record_id is not None else (None if success else error),
+        edit_row=edit_row,
+        flash_success=success and record_id is not None,
+        form_data=None if success else {**payload, **aprsis_form_data},
+    )
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
 
@@ -1760,27 +1839,25 @@ def servers_create(
 @router.get("/igate")
 def igate_page(
     request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
     flash: str | None = None,
     success: int = 0,
-) -> object:
-    templates = request.app.state.templates
-    return templates.TemplateResponse(
-        "igate_settings.html",
-        _igate_settings_page_context(request, current_user, flash=flash, flash_success=bool(success)),
-    )
+) -> RedirectResponse:
+    target = _aprsis_interface_settings_path()
+    if flash:
+        target += f"&flash={quote(flash)}&success={1 if success else 0}"
+    return RedirectResponse(url=_path(request, target), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/igate")
 def igate_settings_update(
     request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
     server: str = Form(""),
     port: str = Form(""),
     login: str = Form(""),
     passcode: str = Form(""),
-) -> object:
-    templates = request.app.state.templates
+) -> RedirectResponse:
     success, error = safe_save_aprsis_config(
         {
             "server": server,
@@ -1789,13 +1866,12 @@ def igate_settings_update(
             "passcode": passcode,
         }
     )
-    context = _igate_settings_page_context(
-        request,
-        current_user,
-        flash="APRS-IS settings updated." if success else error,
-        flash_success=success,
+    target = _aprsis_interface_settings_path()
+    message = "APRS-IS settings updated." if success else (error or "Failed to save APRS-IS settings.")
+    return RedirectResponse(
+        url=_path(request, f"{target}&flash={quote(message)}&success={1 if success else 0}"),
+        status_code=status.HTTP_303_SEE_OTHER,
     )
-    return templates.TemplateResponse("igate_settings.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.get("/api/igate/diagnostics")
@@ -1887,11 +1963,17 @@ def digi_flows_aprsis_config_update(
     )
     if not success:
         return RedirectResponse(
-            url=_path(request, f"/igate?flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0"),
+            url=_path(
+                request,
+                f"{_aprsis_interface_settings_path()}&flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0",
+            ),
             status_code=status.HTTP_303_SEE_OTHER,
         )
     return RedirectResponse(
-        url=_path(request, "/igate?flash=APRS-IS%20settings%20updated.&success=1"),
+        url=_path(
+            request,
+            f"{_aprsis_interface_settings_path()}&flash=APRS-IS%20settings%20updated.&success=1",
+        ),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

@@ -1,6 +1,8 @@
 # Changelog
 
 ## 1.9.3.dev - 29.07.2026
+- `Interfejsy / APRS-IS`: usunięto osobną pozycję `Ustawienia iGATE`; serwer, port, login, passcode, filtr oraz diagnostyka połączenia są teraz dostępne bezpośrednio w formularzu interfejsu `APRS-IS (RX/TX)`, a stary adres przekierowuje do tego interfejsu.
+- `Interfejsy / formularz`: formularz używa stałej części wspólnej i osobnych paneli dla SERIALL, TCP, OpenWebRX MQTT oraz APRS-IS, dzięki czemu pola nie zmieniają przypadkowo kolumn i kolejności po przełączeniu typu połączenia.
 - `Interfejsy / APRS-IS / GUI`: połączenie APRS-IS jest teraz prawidłowo opisane jako RX/TX; przełącznik w formularzu jednoznacznie steruje odbiorem, a kolumna TX pokazuje stan aktywnego flow `TX APRS-IS` zamiast pozornej blokady TNC.
 - `Interfejsy / APRS-IS / runtime`: status uwzględnia wspólne połączenie utrzymywane przez Packet Routing TX nawet przy wyłączonym RX; poprawiono też faktyczne ukrywanie pól przeznaczonych wyłącznie dla fizycznych TNC.
 - `Pomoc / I18N`: pomoc TNC oraz tłumaczenia PL/EN/ES/DE opisują wysyłkę `Receiver RF → TX APRS-IS` i `Local TX → TX APRS-IS` przez to samo połączenie.

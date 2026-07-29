@@ -2818,6 +2818,72 @@ body {
     display: none !important;
 }
 
+.modem-type-slot {
+    min-width: 0;
+}
+
+.modem-type-panel {
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--panel) 94%, var(--accent) 6%);
+}
+
+.modem-type-panel > legend {
+    padding: 0 var(--space-2);
+    color: var(--text);
+    font-weight: 700;
+}
+
+.modem-type-panel > .form-grid,
+.modem-capability-block {
+    margin-top: var(--space-2);
+}
+
+.modem-capability-block {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.modem-capability-block > .checkbox-row {
+    align-self: start;
+}
+
+.modem-expose-details {
+    grid-column: 1 / -1;
+}
+
+.modem-expose-details[hidden] {
+    display: none !important;
+}
+
+.modem-aprsis-panel .notice,
+.modem-type-panel > .notice {
+    margin-top: var(--space-3);
+}
+
+.aprsis-interface-status {
+    display: grid;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+}
+
+.aprsis-interface-status[hidden] {
+    display: none !important;
+}
+
+.aprsis-interface-status .igate-status-summary {
+    padding: 0;
+    border: 0;
+}
+
 .form-stack {
     display: grid;
     grid-template-columns: 1fr;
@@ -7462,6 +7528,7 @@ button.message-delivery-badge {
     .igate-compact-list > div,
     .igate-diagnostics-list > div,
     .form-grid,
+    .modem-capability-block,
     .station-detail-hero,
     .digi-flow-endpoints,
     .digi-flow-builder {

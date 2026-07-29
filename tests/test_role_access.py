@@ -81,9 +81,10 @@ class RoleAccessTests(unittest.TestCase):
             self.assertIn(key, navigation)
             self.assertFalse(bool(navigation[key].get("disabled")), key)
 
-        for key in ("station", "wx", "messages", "notifications", "objects", "bulletins", "digi-flows", "igate", "logs", "users", "settings", "changelog"):
+        for key in ("station", "wx", "messages", "notifications", "objects", "bulletins", "digi-flows", "logs", "users", "settings", "changelog"):
             self.assertIn(key, navigation)
             self.assertTrue(bool(navigation[key].get("disabled")), key)
+        self.assertNotIn("igate", navigation)
 
     def test_viewer_can_open_allowed_pages_and_cannot_open_restricted_pages(self) -> None:
         with temporary_database():

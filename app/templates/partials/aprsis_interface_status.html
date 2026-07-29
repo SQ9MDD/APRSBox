@@ -1,0 +1,70 @@
+{% set diag = aprsis_diagnostics %}
+{% set selected_modem_type = (modem_form_data.get('modem_type') or 'SERIALL')|upper %}
+<div
+    class="aprsis-interface-status"
+    data-aprsis-interface-status
+    data-diagnostics-url="{{ request.scope.root_path }}/api/igate/diagnostics"
+    data-static-root="{{ request.scope.root_path }}/static/"
+    {% if selected_modem_type != 'APRSIS' %}hidden{% endif %}
+>
+    <div class="igate-status-summary" aria-live="polite">
+        <div class="igate-status-head">
+            <div>
+                <strong>{{ t("APRS-IS connection status") }}</strong>
+                <p id="igate-runtime-detail" class="muted small">{{ aprsis_runtime.status_detail or "-" }}</p>
+            </div>
+            <span id="igate-runtime-badge" class="tnc-badge {% if aprsis_runtime_badge == 'enabled' %}tnc-badge-enabled{% elif aprsis_runtime_badge == 'warning' %}status-pill status-unknown{% else %}tnc-badge-disabled{% endif %}">
+                <img id="igate-runtime-icon" src="{{ request.scope.root_path }}/static/icons/{% if aprsis_runtime.status == 'connected' %}check-circle.svg{% elif aprsis_runtime.status == 'connecting' %}progress-clock.svg{% else %}close-circle.svg{% endif %}" alt="">
+                <span id="igate-runtime-label">{{ t(aprsis_runtime.status|capitalize) }}</span>
+            </span>
+        </div>
+        <dl class="igate-compact-list">
+            <div>
+                <dt>{{ t("Server") }}</dt>
+                <dd><code id="igate-runtime-server">{{ aprsis_runtime.server or aprsis_config.server or "-" }}{% if aprsis_runtime.port %}:{{ aprsis_runtime.port }}{% elif aprsis_config.port %}:{{ aprsis_config.port }}{% endif %}</code></dd>
+            </div>
+            <div>
+                <dt>{{ t("Login") }}</dt>
+                <dd><code id="igate-runtime-login">{{ aprsis_runtime.login or aprsis_config.login or "-" }}</code></dd>
+            </div>
+            <div>
+                <dt>{{ t("Connected at") }}</dt>
+                <dd id="igate-runtime-connected-at">{{ format_datetime(aprsis_runtime.connected_at) if aprsis_runtime.connected_at else "-" }}</dd>
+            </div>
+            <div>
+                <dt>{{ t("Active APRSIS routing flows") }}</dt>
+                <dd id="igate-diag-active-flow-count">{{ diag.active_flow_count }}</dd>
+            </div>
+            <div>
+                <dt>{{ t("Last error") }}</dt>
+                <dd id="igate-runtime-last-error">{{ aprsis_runtime.last_error or "-" }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <details class="igate-diagnostics-details">
+        <summary>{{ t("iGATE diagnostics") }}</summary>
+        <dl class="igate-diagnostics-list">
+            <div>
+                <dt>{{ t("Enabled APRSIS flow names") }}</dt>
+                <dd><code id="igate-diag-active-flow-names">{% if diag.active_flow_names %}{{ diag.active_flow_names|join(", ") }}{% else %}-{% endif %}</code></dd>
+            </div>
+            <div>
+                <dt>{{ t("Last routing activity") }}</dt>
+                <dd id="igate-diag-last-activity">{{ format_datetime(diag.last_activity_at) if diag.last_activity_at else "-" }}</dd>
+            </div>
+            <div>
+                <dt>{{ t("Frames sent to APRS-IS (total / 1h / 24h)") }}</dt>
+                <dd id="igate-diag-tx-sent">{{ diag.tx.sent_total }} / {{ diag.tx.sent_1h }} / {{ diag.tx.sent_24h }}</dd>
+            </div>
+            <div>
+                <dt>{{ t("Frames dropped before APRS-IS TX (total / 1h / 24h)") }}</dt>
+                <dd id="igate-diag-tx-drop">{{ diag.tx.drop_total }} / {{ diag.tx.drop_1h }} / {{ diag.tx.drop_24h }}</dd>
+            </div>
+            <div>
+                <dt>{{ t("Strict guard rejects (total / 1h / 24h)") }}</dt>
+                <dd id="igate-diag-strict-total">{{ diag.strict_rejects.total }} / {{ diag.strict_rejects.last_1h }} / {{ diag.strict_rejects.last_24h }}</dd>
+            </div>
+        </dl>
+    </details>
+</div>

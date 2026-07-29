@@ -172,17 +172,27 @@ def _normalize_aprsis_passcode_override(value: Any) -> str:
     return passcode
 
 
-def save_aprsis_config(payload: dict[str, Any]) -> dict[str, Any]:
+def normalize_aprsis_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     server = _normalize_aprsis_server(payload.get("server"))
     port = _normalize_aprsis_port(payload.get("port"))
     login_override = _normalize_aprsis_login_override(payload.get("login"))
     passcode_override = _normalize_aprsis_passcode_override(payload.get("passcode"))
+    return {
+        "server": server,
+        "port": port,
+        "login": login_override,
+        "passcode": passcode_override,
+    }
 
-    set_app_setting("aprsis_server", server)
-    set_app_setting("aprsis_port", str(port))
-    set_app_setting("aprsis_login", login_override)
-    set_app_setting("aprsis_passcode", passcode_override)
-    log_event("INFO", "config", "Updated APRS-IS Packet Routing settings")
+
+def save_aprsis_config(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalize_aprsis_config_payload(payload)
+
+    set_app_setting("aprsis_server", str(normalized["server"]))
+    set_app_setting("aprsis_port", str(normalized["port"]))
+    set_app_setting("aprsis_login", str(normalized["login"]))
+    set_app_setting("aprsis_passcode", str(normalized["passcode"]))
+    log_event("INFO", "config", "Updated APRS-IS interface connection settings")
     return get_aprsis_config()
 
 

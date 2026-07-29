@@ -1853,5 +1853,10 @@
   "Position": "Position",
   "Format": "Format",
   "Command": "Command",
+  "APRS-IS receive filter": "APRS-IS receive filter",
+  "APRS-IS connection status": "APRS-IS connection status",
+  "This interface receives OpenWebRX MQTT traffic only. RF transmission and LAN port sharing are unavailable.": "This interface receives OpenWebRX MQTT traffic only. RF transmission and LAN port sharing are unavailable.",
+  "This is one shared APRS-IS connection: the interface switch controls reception, while Packet Routing flows ending in TX APRS-IS control transmission.": "This is one shared APRS-IS connection: the interface switch controls reception, while Packet Routing flows ending in TX APRS-IS control transmission.",
+  "Interface settings updated.": "Interface settings updated.",
   "Close": "Close"
 }

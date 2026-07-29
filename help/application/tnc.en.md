@@ -17,11 +17,11 @@ Disabling an interface stops its receive processing. Disabling a radio interface
 - `TCP` connects to a TNC or software that exposes KISS over TCP. `Path / Address / Filter` usually has the `host:port` format, for example `127.0.0.1:8001`.
 - `SERIALL` uses a local serial port, for example `/dev/ttyUSB0` or `/dev/ttyACM0`, and requires a valid `Baud Rate`.
 - `OpenWebRX MQTT (RX only)` receives packets from OpenWebRX MQTT. This type is receive-only: TX is blocked and LAN proxy is disabled.
-- `APRS-IS (RX/TX)` uses the connection configured in iGate settings. It receives TNC2 lines matching the server filter and sends frames accepted by a `Receiver RF -> TX APRS-IS` or `Local TX -> TX APRS-IS` flow over the same connection. It does not use KISS. Only one APRSIS interface may exist.
+- `APRS-IS (RX/TX)` contains the complete APRS-IS connection configuration directly in the interface form. It receives TNC2 lines matching the server filter and sends frames accepted by a `Receiver RF -> TX APRS-IS` or `Local TX -> TX APRS-IS` flow over the same connection. It does not use KISS. Only one APRSIS interface may exist.
 
 For OpenWebRX MQTT, the address field should be an `mqtt://` or `mqtts://` URL with the topic in the path, for example `mqtt://user:pass@127.0.0.1:1883/openwebrx/aprs`.
 
-For APRSIS, `Path / Address / Filter` is the APRS-IS server filter. New interfaces default to `m/20`; another valid filter such as `r/52.23/21.01/50` can be entered. Server, port, callsign, and passcode continue to come from iGate settings.
+For APRSIS, `APRS-IS receive filter` is the APRS-IS server filter. New interfaces default to `m/20`; another valid filter such as `r/52.23/21.01/50` can be entered. Server, port, login, and passcode are saved from the same form. The separate `iGATE settings` tab is no longer used.
 
 ## Configuration fields
 
@@ -33,6 +33,24 @@ For APRSIS, `Path / Address / Filter` is the APRS-IS server filter. New interfac
 - `RX Silence Reconnect Timeout (s)` applies to serial interfaces. After RX silence longer than this value, the serial broker can force a reconnect. `0` disables this watchdog.
 
 `Baud Rate` is used only for `SERIALL`. For APRSIS, fields specific to a physical TNC are hidden: serial settings, RF TX block/pacing, and LAN proxy. This does not block transmission to APRS-IS, which is controlled by `Packet Routing`.
+
+The APRSIS interface form also contains:
+
+- `Server` and `Port` — the APRS-IS server address, defaulting to `rotate.aprs2.net:14580`.
+- `Login callsign / callsign-SSID` — may be left blank to use the identity from `My Station`.
+- `Passcode` — may be left blank so APRSBox derives the standard APRS-IS passcode from the login callsign.
+- `APRS-IS receive filter` — controls traffic received from the server but does not restrict frames sent by `Packet Routing`.
+
+Below the APRSIS form, the current connection state and expandable diagnostics show active flows, the last error, and TX counters. An APRS-IS passcode is not an account password; it is the standard code derived from a callsign.
+
+## iGate routing and APRS-IS safety
+
+- `Receiver RF -> TX APRS-IS` creates the classic iGate uplink from radio to APRS-IS.
+- `Local TX -> TX APRS-IS` sends APRSBox-generated frames to APRS-IS, including beacon, status, weather, objects, items, bulletins, and messages.
+
+Both modes require a verified APRS-IS login. `pass -1` identifies an unverified receive-only client and does not allow RF-received frames to be sent. For RF uplinks, APRSBox uses `qAO` when the receiving TNC has no usable TX return path, or `qAR` when the TNC permits TX and an active `APRS-IS -> RF` flow provides message return. Locally generated frames use `TCPIP*`.
+
+The `TX APRS-IS` target has a system safety filter that rejects, among other cases, frames containing `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY`, and malformed third-party encapsulation. See [Packet Routing](packet_routing.en.md) for detailed flow construction.
 
 ## Expose Port
 

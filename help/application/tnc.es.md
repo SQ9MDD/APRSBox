@@ -17,11 +17,11 @@ Desactivar una interfaz detiene su recepción. Desactivar una interfaz de radio 
 - `TCP` conecta con un TNC o software que expone KISS por TCP. `Ruta / Dirección / Filtro` normalmente tiene formato `host:port`, por ejemplo `127.0.0.1:8001`.
 - `SERIALL` usa un puerto serie local, por ejemplo `/dev/ttyUSB0` o `/dev/ttyACM0`, y requiere un `Baud Rate` válido.
 - `OpenWebRX MQTT (RX only)` recibe paquetes desde OpenWebRX MQTT. Este tipo es solo RX: TX queda bloqueado y el proxy LAN se desactiva.
-- `APRS-IS (RX/TX)` usa la conexión configurada en iGate. Recibe líneas TNC2 que coinciden con el filtro del servidor y envía por la misma conexión las tramas aceptadas por un flow `Receiver RF -> TX APRS-IS` o `Local TX -> TX APRS-IS`. No usa KISS. Solo puede existir una interfaz APRSIS.
+- `APRS-IS (RX/TX)` contiene la configuración completa de la conexión APRS-IS directamente en el formulario de la interfaz. Recibe líneas TNC2 que coinciden con el filtro del servidor y envía por la misma conexión las tramas aceptadas por un flow `Receiver RF -> TX APRS-IS` o `Local TX -> TX APRS-IS`. No usa KISS. Solo puede existir una interfaz APRSIS.
 
 Para OpenWebRX MQTT, el campo de dirección debe ser una URL `mqtt://` o `mqtts://` con el topic en la ruta, por ejemplo `mqtt://user:pass@127.0.0.1:1883/openwebrx/aprs`.
 
-Para APRSIS, `Ruta / Dirección / Filtro` es el filtro del servidor APRS-IS. Las interfaces nuevas usan `m/20` por defecto; se puede introducir otro filtro válido como `r/52.23/21.01/50`. El servidor, el puerto, el indicativo y el passcode siguen procediendo de los ajustes de iGate.
+Para APRSIS, `Filtro de recepción APRS-IS` es el filtro del servidor APRS-IS. Las interfaces nuevas usan `m/20` por defecto; se puede introducir otro filtro válido como `r/52.23/21.01/50`. El servidor, el puerto, el login y el passcode se guardan desde el mismo formulario. La pestaña separada `Ajustes iGATE` ya no se usa.
 
 ## Campos de configuración
 
@@ -33,6 +33,24 @@ Para APRSIS, `Ruta / Dirección / Filtro` es el filtro del servidor APRS-IS. Las
 - `RX Silence Reconnect Timeout (s)` se aplica a interfaces serie. Tras una ausencia de RX más larga que este valor, el broker serie puede forzar una reconexión. `0` desactiva este watchdog.
 
 `Baud Rate` se usa solo para `SERIALL`. Para APRSIS se ocultan los campos propios de un TNC físico: ajustes seriales, bloqueo/pacing de TX RF y proxy LAN. Esto no bloquea la transmisión a APRS-IS, que se controla mediante `Packet Routing`.
+
+El formulario de la interfaz APRSIS también contiene:
+
+- `Servidor` y `Puerto` — la dirección del servidor APRS-IS, por defecto `rotate.aprs2.net:14580`.
+- `Indicativo de inicio de sesión / indicativo-SSID` — puede dejarse vacío para usar la identidad de `Mi estación`.
+- `Código de acceso` — puede dejarse vacío para que APRSBox derive el passcode APRS-IS estándar del indicativo de login.
+- `Filtro de recepción APRS-IS` — controla el tráfico recibido del servidor, pero no limita las tramas enviadas por `Packet Routing`.
+
+Debajo del formulario APRSIS, el estado actual de la conexión y el diagnóstico desplegable muestran los flows activos, el último error y los contadores TX. Un passcode APRS-IS no es una contraseña de cuenta, sino el código estándar derivado del indicativo.
+
+## Routing iGate y seguridad APRS-IS
+
+- `Receiver RF -> TX APRS-IS` crea el uplink iGate clásico desde radio hacia APRS-IS.
+- `Local TX -> TX APRS-IS` envía a APRS-IS las tramas generadas por APRSBox, incluidas baliza, estado, meteorología, objetos, items, boletines y mensajes.
+
+Ambos modos requieren un login APRS-IS verificado. `pass -1` identifica un cliente no verificado de solo recepción y no permite enviar tramas recibidas por RF. Para los uplinks RF, APRSBox usa `qAO` cuando el TNC receptor no tiene una ruta de retorno TX utilizable, o `qAR` cuando el TNC permite TX y un flow activo `APRS-IS -> RF` proporciona el retorno de mensajes. Las tramas generadas localmente usan `TCPIP*`.
+
+El destino `TX APRS-IS` incluye un filtro de seguridad del sistema que rechaza, entre otros casos, tramas con `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY` y encapsulación third-party incorrecta. Consulta [Packet Routing](packet_routing.es.md) para construir los flows en detalle.
 
 ## Expose Port
 
