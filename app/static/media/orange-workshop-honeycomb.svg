@@ -1,19 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 260" aria-hidden="true">
-  <g fill="none" stroke="#fa6831" stroke-width="1.4">
-    <path opacity=".02" d="M355 3l28 16v32l-28 16-28-16V19z"/>
-    <path opacity=".035" d="M415 3l28 16v32l-28 16-28-16V19z"/>
-    <path opacity=".03" d="M295 38l28 16v32l-28 16-28-16V54z"/>
-    <path opacity=".055" d="M355 38l28 16v32l-28 16-28-16V54z"/>
-    <path opacity=".075" d="M415 38l28 16v32l-28 16-28-16V54z"/>
-    <path opacity=".035" d="M265 91l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".06" d="M325 91l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".09" d="M385 91l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".05" d="M445 91l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".03" d="M295 144l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".065" d="M355 144l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".04" d="M415 144l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".02" d="M325 197l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".035" d="M385 197l28 16v32l-28 16-28-16v-32z"/>
-    <path opacity=".018" d="M445 197l28 16v32l-28 16-28-16v-32z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 248 720" aria-hidden="true">
+  <g fill="none" stroke="#fa6831" stroke-width="1.25">
+    <path opacity=".12" d="M-7 21l28-16 28 16v32L21 69-7 53z"/>
+    <path opacity=".07" d="M53 56l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".035" d="M113 21l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".075" d="M-37 109l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".14" d="M23 109l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".055" d="M83 144l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".025" d="M143 109l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".06" d="M-7 197l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".095" d="M53 232l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".04" d="M113 197l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".025" d="M173 232l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".11" d="M-37 320l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".065" d="M23 355l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".035" d="M83 320l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".08" d="M-7 443l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".13" d="M53 478l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".045" d="M113 443l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".025" d="M173 478l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".09" d="M-37 601l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".05" d="M23 636l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".03" d="M83 601l28-16 28 16v32l-28 16-28-16z"/>
+  </g>
+  <g fill="#fa6831">
+    <path opacity=".025" d="M-7 21l28-16 28 16v32L21 69-7 53z"/>
+    <path opacity=".035" d="M23 109l28-16 28 16v32l-28 16-28-16z"/>
+    <path opacity=".02" d="M53 478l28-16 28 16v32l-28 16-28-16z"/>
   </g>
 </svg>

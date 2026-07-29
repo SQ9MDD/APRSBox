@@ -31,11 +31,17 @@ class UiPaletteTests(unittest.TestCase):
             stylesheet,
         )
         self.assertIn("--accent: #fa6831;", stylesheet)
+        self.assertGreaterEqual(stylesheet.count("--logo-accent: #fa6831;"), 2)
         self.assertIn("radial-gradient(circle at top left, var(--page-glow)", stylesheet)
         self.assertIn(
-            '--page-pattern-image: url("../media/orange-workshop-honeycomb.svg");',
+            '--sidebar-pattern-image: url("../media/orange-workshop-honeycomb.svg");',
             stylesheet,
         )
+        self.assertIn(':root[data-palette="orange-workshop"] .panel {', stylesheet)
+        self.assertIn(':root[data-palette="orange-workshop"] .nav-link.active {', stylesheet)
+        self.assertIn(':root[data-palette="orange-workshop"] .modem-type-panel {', stylesheet)
+        self.assertIn("background: var(--panel-alt);", stylesheet)
+        self.assertIn(".sidebar::before {", stylesheet)
         self.assertTrue(
             Path("app/static/media/orange-workshop-honeycomb.svg").is_file()
         )
