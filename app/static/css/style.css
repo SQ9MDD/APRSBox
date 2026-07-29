@@ -29,6 +29,8 @@
     --space-4: 0.89rem;
     --space-5: 1.13rem;
     --space-6: 1.45rem;
+    --page-glow: rgba(109, 189, 128, 0.08);
+    --page-pattern-image: none;
     --map-mask-layer-color: rgba(0, 0, 0, 0.78);
     --traffic-color-own-beacon-tx: #76a7ff;
     --traffic-color-own-beacon-rx: #7aa9ff;
@@ -544,6 +546,54 @@
     --code: rgba(58, 29, 13, 0.08);
 }
 
+:root[data-theme="dark"][data-palette="orange-workshop"] {
+    --bg: #151515;
+    --bg-layer: #1b1b1b;
+    --sidebar: rgba(20, 20, 20, 0.94);
+    --panel: rgba(42, 42, 42, 0.96);
+    --panel-alt: #333333;
+    --panel-soft: #3d3d3d;
+    --panel-emphasis: #474747;
+    --border: #5a5a5a;
+    --text: #f5f6f7;
+    --muted: #b3b3b3;
+    --text-muted: #b3b3b3;
+    --surface: #3d3d3d;
+    --accent: #fa6831;
+    --accent-strong: #e05d2d;
+    --accent-soft: rgba(250, 104, 49, 0.16);
+    --focus-ring: rgba(250, 104, 49, 0.24);
+    --hover-layer: rgba(250, 104, 49, 0.1);
+    --border-hover: rgba(250, 104, 49, 0.38);
+    --code: rgba(255, 255, 255, 0.06);
+    --page-glow: rgba(250, 104, 49, 0.08);
+    --page-pattern-image: url("../media/orange-workshop-honeycomb.svg");
+}
+
+:root[data-theme="light"][data-palette="orange-workshop"] {
+    --bg: #e0e0e0;
+    --bg-layer: #f5f6f7;
+    --sidebar: rgba(238, 238, 238, 0.96);
+    --panel: rgba(255, 255, 255, 0.98);
+    --panel-alt: #f5f5f5;
+    --panel-soft: #eeeeee;
+    --panel-emphasis: #e0e0e0;
+    --border: #c7c7c7;
+    --text: #2a2a2a;
+    --muted: #666666;
+    --text-muted: #666666;
+    --surface: #eeeeee;
+    --accent: #b9471f;
+    --accent-strong: #923517;
+    --accent-soft: rgba(250, 104, 49, 0.13);
+    --focus-ring: rgba(250, 104, 49, 0.22);
+    --hover-layer: rgba(250, 104, 49, 0.08);
+    --border-hover: rgba(224, 93, 45, 0.34);
+    --code: rgba(42, 42, 42, 0.07);
+    --page-glow: rgba(250, 104, 49, 0.06);
+    --page-pattern-image: url("../media/orange-workshop-honeycomb.svg");
+}
+
 * {
     box-sizing: border-box;
     scrollbar-width: none;
@@ -566,7 +616,8 @@ body {
     font-size: 12.75px;
     line-height: 1.42;
     background:
-        radial-gradient(circle at top left, rgba(109, 189, 128, 0.08), transparent 24%),
+        radial-gradient(circle at top left, var(--page-glow), transparent 24%),
+        var(--page-pattern-image) right 1.75rem top 3.75rem / min(31rem, 44vw) auto no-repeat,
         linear-gradient(180deg, var(--bg) 0%, var(--bg-layer) 100%);
     color: var(--text);
 }
