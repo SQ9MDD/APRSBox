@@ -386,7 +386,7 @@ def _station_rows_for_hour(interface_id: int, band: str, hour_start: datetime) -
     return result
 
 
-def _baseline_rows(interface_id: int, band: str, hour_start: datetime) -> list[dict[str, Any]]:
+def _baseline_candidate_rows(interface_id: int, band: str, hour_start: datetime) -> list[dict[str, Any]]:
     cutoff = _floor_to_hour(hour_start) - timedelta(days=BAND_CONDITION_BASELINE_DAYS)
     rows = fetch_all(
         """
@@ -406,13 +406,19 @@ def _baseline_rows(interface_id: int, band: str, hour_start: datetime) -> list[d
             _floor_to_hour(hour_start).isoformat(),
         ),
     )
-    result = [dict(row) for row in rows]
+    return [dict(row) for row in rows]
+
+
+def _select_baseline_rows(
+    candidate_rows: list[dict[str, Any]],
+    hour_start: datetime,
+) -> list[dict[str, Any]]:
     same_hour = [
         row
-        for row in result
+        for row in candidate_rows
         if (_parse_iso_datetime(row.get("hour_start_utc")) or hour_start).hour == _floor_to_hour(hour_start).hour
     ]
-    return same_hour if len(same_hour) >= 3 else result
+    return same_hour if len(same_hour) >= 3 else candidate_rows
 
 
 def _history_summary(interface_id: int, band: str, hour_start: datetime) -> dict[str, Any]:
@@ -649,7 +655,8 @@ def _evaluate_hour(
     ]
     max_confirmed_distance = max(confirmed_distances) if confirmed_distances else None
 
-    baseline = _baseline_rows(interface_id, normalized_band, hour)
+    baseline_candidates = _baseline_candidate_rows(interface_id, normalized_band, hour)
+    baseline = _select_baseline_rows(baseline_candidates, hour)
     baseline_counts = [float(row.get("fixed_station_count") or 0) for row in baseline]
     baseline_p90_values = [
         float(row["p90_distance_km"])
@@ -722,10 +729,13 @@ def _evaluate_hour(
         fixed_station_count=fixed_station_count,
     )
 
+    # The time-of-day subset becomes useful after three matching hours, but model
+    # readiness must use the full candidate pool. Otherwise readiness disappears
+    # between the third and twelfth daily sample.
     model_ready = (
         history_hours >= BAND_CONDITION_MIN_MODEL_HOURS
         and history_span_hours >= BAND_CONDITION_MIN_MODEL_HOURS
-        and len(baseline) >= BAND_CONDITION_MIN_BASELINE_ROWS
+        and len(baseline_candidates) >= BAND_CONDITION_MIN_BASELINE_ROWS
     )
     condition_index = None
     if model_ready:
@@ -879,6 +889,97 @@ def _save_hourly_evaluation(evaluation: dict[str, Any]) -> bool:
     return True
 
 
+def _update_hourly_evaluation(evaluation: dict[str, Any]) -> bool:
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE band_condition_hourly
+            SET interface_name = ?,
+                condition_index = ?,
+                confidence_score = ?,
+                fixed_station_count = ?,
+                positioned_station_count = ?,
+                direct_station_count = ?,
+                median_distance_km = ?,
+                p90_distance_km = ?,
+                max_confirmed_distance_km = ?,
+                normal_station_count = ?,
+                normal_p90_distance_km = ?,
+                far_station_count = ?,
+                very_far_station_count = ?,
+                new_area_count = ?,
+                history_hours = ?
+            WHERE hour_start_utc = ?
+              AND interface_id = ?
+              AND band = ?
+              AND condition_index IS NULL
+            """,
+            (
+                evaluation["interface_name"],
+                evaluation["condition_index"],
+                evaluation["confidence_score"],
+                evaluation["fixed_station_count"],
+                evaluation["positioned_station_count"],
+                evaluation["direct_station_count"],
+                evaluation["median_distance_km"],
+                evaluation["p90_distance_km"],
+                evaluation["max_confirmed_distance_km"],
+                evaluation["normal_station_count"],
+                evaluation["normal_p90_distance_km"],
+                evaluation["far_station_count"],
+                evaluation["very_far_station_count"],
+                evaluation["new_area_count"],
+                evaluation["history_hours"],
+                evaluation["hour_start_utc"],
+                evaluation["interface_id"],
+                evaluation["band"],
+            ),
+        )
+        return cursor.rowcount > 0
+
+
+def _repair_recent_unscored_hours(*, now_utc: datetime, limit: int = 72) -> int:
+    cutoff = _normalize_utc_datetime(now_utc) - timedelta(days=BAND_CONDITION_STATION_HISTORY_DAYS)
+    repaired = 0
+    for interface in _monitored_interfaces():
+        rows = fetch_all(
+            """
+            SELECT hour_start_utc
+            FROM band_condition_hourly
+            WHERE interface_id = ?
+              AND band = ?
+              AND hour_start_utc >= ?
+              AND condition_index IS NULL
+              AND history_hours >= ?
+              AND fixed_station_count > 0
+            ORDER BY hour_start_utc ASC
+            LIMIT ?
+            """,
+            (
+                int(interface["id"]),
+                normalize_band(interface.get("band")),
+                cutoff.isoformat(),
+                BAND_CONDITION_MIN_MODEL_HOURS,
+                max(1, int(limit)),
+            ),
+        )
+        for row in rows:
+            hour_start = _parse_iso_datetime(row["hour_start_utc"])
+            if hour_start is None:
+                continue
+            evaluation = _evaluate_hour(
+                interface_id=int(interface["id"]),
+                interface_name=str(interface.get("name") or ""),
+                band=normalize_band(interface.get("band")),
+                hour_start=hour_start,
+            )
+            if evaluation["condition_index"] is None:
+                continue
+            if _update_hourly_evaluation(evaluation):
+                repaired += 1
+    return repaired
+
+
 def finalize_band_condition_hours(*, now_utc: datetime | None = None) -> dict[str, int]:
     now = _normalize_utc_datetime(now_utc or datetime.now(timezone.utc))
     latest_closed_hour = _floor_to_hour(now) - timedelta(hours=1)
@@ -940,8 +1041,10 @@ def finalize_band_condition_hours(*, now_utc: datetime | None = None) -> dict[st
             "DELETE FROM band_condition_station_profiles WHERE last_heard_at < ?",
             (history_cutoff,),
         ).rowcount
+    repaired = _repair_recent_unscored_hours(now_utc=now)
     return {
         "processed_hours": processed,
+        "repaired_hours": repaired,
         "history_deleted": max(0, int(history_deleted or 0)),
         "station_hours_deleted": max(0, int(station_deleted or 0)),
         "profiles_deleted": max(0, int(profiles_deleted or 0)),
@@ -964,15 +1067,23 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
     item = dict(row)
     condition_index = item.get("condition_index")
     condition_index = int(condition_index) if condition_index is not None else None
-    model_ready = int(item.get("history_hours") or 0) >= BAND_CONDITION_MIN_MODEL_HOURS
+    if condition_index is None:
+        # Older rows can contain NULL because an earlier readiness check used the
+        # smaller time-of-day subset. Re-evaluate instead of treating every NULL
+        # as proof that no RF traffic was present.
+        return _evaluate_hour(
+            interface_id=int(interface["id"]),
+            interface_name=str(interface.get("name") or ""),
+            band=normalize_band(interface.get("band")),
+            hour_start=_parse_iso_datetime(item.get("hour_start_utc")) or datetime.now(timezone.utc),
+        )
+
+    model_ready = True
     label = CONDITION_LABELS.get(condition_index, "Collecting data")
     summary = CONDITION_SUMMARIES.get(
         condition_index,
         "The first assessment will appear after 24 hours of monitored RF data.",
     )
-    if condition_index is None and model_ready:
-        label = "No current RF data"
-        summary = "The model is ready, but there is not enough current RF activity for an assessment."
     item.update(
         {
             "condition_index": condition_index,
