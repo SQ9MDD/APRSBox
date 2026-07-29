@@ -146,6 +146,17 @@
                                         <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
                                     </button>
                                 </form>
+                                {% else %}
+                                <button
+                                    type="button"
+                                    class="table-icon-button"
+                                    title="{{ t('Cancel mute') }}"
+                                    aria-label="{{ t('Cancel mute') }} #{{ alert.id }}"
+                                    data-alert-unmute-placeholder
+                                    disabled
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
+                                </button>
                                 {% endif %}
                                 <form
                                     method="post"

@@ -313,10 +313,17 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn('{{ t("Muted until") }}', alerts_source)
         self.assertIn("frame-type-badge-emergency", alerts_source)
         self.assertIn("file-document-alert-outline.svg", alerts_source)
+        self.assertIn("data-alert-unmute-placeholder", alerts_source)
         self.assertIn('href="{{ request.scope.root_path }}{{ alert.detail_href }}"', alerts_source)
         self.assertIn('name="return_to"', alerts_source)
         self.assertIn("alert-emergency-panel alert-detail-panel", alert_detail_source)
         self.assertIn("alert-emergency-panel alert-history-panel", alert_detail_source)
+        self.assertIn("alert-detail-header-tools", alert_detail_source)
+        self.assertIn("alert-detail-help-button", alert_detail_source)
+        self.assertNotIn(
+            'class="help-icon-button page-help-button"',
+            alert_detail_source,
+        )
         self.assertIn('data-help-page="application/alerts"', alerts_source)
         self.assertIn('data-help-page="application/alerts"', alert_detail_source)
         self.assertIn('{% include "partials/help_modal.html" %}', alerts_source)

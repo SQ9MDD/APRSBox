@@ -6145,6 +6145,20 @@ select:focus-visible,
     align-items: flex-start;
 }
 
+.alert-detail-header-tools {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    margin-left: auto;
+    flex-wrap: nowrap;
+}
+
+.alert-detail-help-button {
+    position: static;
+    flex: 0 0 auto;
+}
+
 .alert-detail-actions {
     justify-content: flex-end;
     flex-wrap: nowrap;
@@ -6227,6 +6241,12 @@ select:focus-visible,
     }
 
     .alert-detail-actions {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .alert-detail-header-tools {
         width: 100%;
         justify-content: flex-start;
         flex-wrap: wrap;
