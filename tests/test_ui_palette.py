@@ -37,7 +37,11 @@ class UiPaletteTests(unittest.TestCase):
             '--sidebar-pattern-image: url("../media/orange-workshop-honeycomb.svg");',
             stylesheet,
         )
-        self.assertIn(':root[data-palette="orange-workshop"] .panel {', stylesheet)
+        self.assertIn(':root[data-palette="orange-workshop"] .panel,', stylesheet)
+        self.assertIn(
+            ':root[data-palette="orange-workshop"] .dashboard-activity-card {',
+            stylesheet,
+        )
         self.assertIn(':root[data-palette="orange-workshop"] .nav-link.active {', stylesheet)
         self.assertIn(':root[data-palette="orange-workshop"] .modem-type-panel {', stylesheet)
         self.assertIn("background: var(--panel-alt);", stylesheet)

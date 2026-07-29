@@ -547,18 +547,18 @@
 }
 
 :root[data-theme="dark"][data-palette="orange-workshop"] {
-    --bg: #101010;
-    --bg-layer: #171717;
+    --bg: #0d1012;
+    --bg-layer: #12171a;
     --sidebar: rgba(13, 13, 13, 0.97);
-    --panel: rgba(31, 31, 31, 0.98);
-    --panel-alt: #282828;
-    --panel-soft: #323232;
-    --panel-emphasis: #3c3c3c;
-    --border: #4b4b4b;
-    --text: #f3f3f3;
-    --muted: #a7a7a7;
-    --text-muted: #a7a7a7;
-    --surface: #323232;
+    --panel: rgba(27, 32, 36, 0.98);
+    --panel-alt: #23292e;
+    --panel-soft: #2c343a;
+    --panel-emphasis: #364049;
+    --border: #47545e;
+    --text: #f1f4f6;
+    --muted: #9faab2;
+    --text-muted: #9faab2;
+    --surface: #2c343a;
     --accent: #fa6831;
     --accent-strong: #e05d2d;
     --accent-soft: rgba(250, 104, 49, 0.16);
@@ -579,18 +579,18 @@
 }
 
 :root[data-theme="light"][data-palette="orange-workshop"] {
-    --bg: #d7d7d7;
-    --bg-layer: #ededed;
-    --sidebar: rgba(232, 232, 232, 0.97);
-    --panel: rgba(250, 250, 250, 0.99);
-    --panel-alt: #eeeeee;
-    --panel-soft: #e2e2e2;
-    --panel-emphasis: #d4d4d4;
-    --border: #b7b7b7;
-    --text: #202020;
-    --muted: #626262;
-    --text-muted: #626262;
-    --surface: #e2e2e2;
+    --bg: #d3d9dd;
+    --bg-layer: #e8edf0;
+    --sidebar: rgba(230, 233, 235, 0.97);
+    --panel: rgba(248, 250, 251, 0.99);
+    --panel-alt: #e9eef1;
+    --panel-soft: #dce3e7;
+    --panel-emphasis: #cfd8de;
+    --border: #acb8c0;
+    --text: #20272c;
+    --muted: #5e6a72;
+    --text-muted: #5e6a72;
+    --surface: #dce3e7;
     --accent: #b9471f;
     --accent-strong: #923517;
     --accent-soft: rgba(250, 104, 49, 0.13);
@@ -1314,7 +1314,8 @@ body {
     box-shadow: var(--shadow), var(--shadow-soft);
 }
 
-:root[data-palette="orange-workshop"] .panel {
+:root[data-palette="orange-workshop"] .panel,
+:root[data-palette="orange-workshop"] .dashboard-activity-card {
     border-color: color-mix(in srgb, #fa6831 38%, transparent);
     box-shadow:
         var(--shadow),
@@ -1336,6 +1337,17 @@ body {
 
 :root[data-palette="orange-workshop"] .sidebar {
     border-right-color: color-mix(in srgb, #fa6831 34%, transparent);
+}
+
+:root[data-theme="dark"][data-palette="orange-workshop"] .sidebar {
+    --panel-alt: #282828;
+    --panel-soft: #323232;
+    --panel-emphasis: #3c3c3c;
+    --border: #4b4b4b;
+    --text: #f3f3f3;
+    --muted: #a7a7a7;
+    --text-muted: #a7a7a7;
+    --surface: #323232;
 }
 
 :root[data-palette="orange-workshop"] .nav-link:hover {
