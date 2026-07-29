@@ -1101,21 +1101,38 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
 
 def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict[str, Any]:
     current_hour = _floor_to_hour(now_utc)
+    interface_id = int(interface["id"])
+    interface_name = str(interface.get("name") or "")
+    band = normalize_band(interface.get("band"))
     current = _evaluate_hour(
-        interface_id=int(interface["id"]),
-        interface_name=str(interface.get("name") or ""),
-        band=normalize_band(interface.get("band")),
+        interface_id=interface_id,
+        interface_name=interface_name,
+        band=band,
         hour_start=current_hour,
     )
     selected = current
     if current["current_segment_count"] < BAND_CONDITION_CURRENT_MIN_SEGMENTS:
         saved = _latest_saved_snapshot(interface)
         saved_hour = _parse_iso_datetime((saved or {}).get("hour_start_utc"))
-        if saved is not None and saved_hour is not None and saved_hour >= current_hour - timedelta(hours=1):
+        previous_hour = current_hour - timedelta(hours=1)
+        if saved is not None and saved_hour is not None and saved_hour >= previous_hour:
             selected = saved
+        else:
+            # The aggregator can run just before the hour changes, leaving the
+            # newly closed hour unsaved until its next cycle. Evaluate that
+            # already aggregated hour in memory so the dashboard does not
+            # briefly fall back to "No current RF data" after every full hour.
+            previous = _evaluate_hour(
+                interface_id=interface_id,
+                interface_name=interface_name,
+                band=band,
+                hour_start=previous_hour,
+            )
+            if previous.get("condition_index") is not None:
+                selected = previous
     progress = _model_progress(
-        int(interface["id"]),
-        normalize_band(interface.get("band")),
+        interface_id,
+        band,
         current_hour,
         model_ready=bool(selected.get("model_ready")),
     )

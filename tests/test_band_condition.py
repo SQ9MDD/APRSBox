@@ -558,6 +558,63 @@ class BandConditionHelpersTests(unittest.TestCase):
             self.assertIsNotNone(repaired)
             self.assertEqual(int((repaired or {"condition_index": -1})["condition_index"]), 2)
 
+    def test_snapshot_evaluates_previous_closed_hour_before_aggregator_saves_it(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            current_hour = datetime(2026, 5, 4, 15, 0, tzinfo=timezone.utc)
+            previous_hour = current_hour - timedelta(hours=1)
+            insert_normal_band_history(
+                interface_id=interface_id,
+                band="2m",
+                assessed_hour=previous_hour,
+                hours=72,
+            )
+            insert_fixed_station_observations(
+                interface_id=interface_id,
+                band="2m",
+                hour_start=previous_hour,
+                count=10,
+                segment_mask=0xFFF,
+            )
+            insert_radio_activity(
+                interface_id=interface_id,
+                band="2m",
+                bucket_start=previous_hour,
+                rx_total=50,
+            )
+
+            snapshot = get_band_condition_snapshot(
+                now_utc=current_hour + timedelta(minutes=4),
+            )["interfaces"][0]
+
+            self.assertEqual(snapshot["hour_start_utc"], previous_hour.isoformat())
+            self.assertTrue(snapshot["model_ready"])
+            self.assertEqual(snapshot["condition_index"], 2)
+            self.assertEqual(snapshot["label"], "Normal conditions")
+            self.assertEqual(snapshot["fixed_station_count"], 10)
+            self.assertEqual(snapshot["rx_total"], 50)
+
+    def test_snapshot_does_not_reuse_stale_index_when_previous_hour_has_no_rf(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            current_hour = datetime(2026, 5, 4, 15, 0, tzinfo=timezone.utc)
+            previous_hour = current_hour - timedelta(hours=1)
+            insert_normal_band_history(
+                interface_id=interface_id,
+                band="2m",
+                assessed_hour=previous_hour,
+                hours=72,
+            )
+
+            snapshot = get_band_condition_snapshot(
+                now_utc=current_hour + timedelta(minutes=4),
+            )["interfaces"][0]
+
+            self.assertEqual(snapshot["hour_start_utc"], current_hour.isoformat())
+            self.assertTrue(snapshot["model_ready"])
+            self.assertIsNone(snapshot["condition_index"])
+            self.assertEqual(snapshot["label"], "No current RF data")
+
     def test_disabled_interface_does_not_collect_band_condition_rows(self) -> None:
         with temporary_database():
             interface_id = insert_interface(band="")
