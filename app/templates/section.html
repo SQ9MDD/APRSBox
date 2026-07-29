@@ -84,7 +84,9 @@
                 <table class="data-table prepared-entity-table message-entry-table">
                     <thead>
                         <tr>
-                            <th class="prepared-entity-col-active">{{ t("Active") }}</th>
+                            <th class="prepared-entity-col-icon" title="{{ t('Icon') }}">{{ t("Icon") }}</th>
+                            <th class="prepared-entity-col-active" title="{{ t('Enabled') }}">{{ t("Enabled") }}</th>
+                            <th class="prepared-entity-col-active" title="{{ t('Active now') }}">{{ t("Active now") }}</th>
                             <th class="prepared-entity-col-schedule">{{ t("Schedule") }}</th>
                             <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
                             <th class="message-entry-col-type">{{ t("Type") }}</th>
@@ -95,10 +97,22 @@
                     <tbody>
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
+                            <td class="prepared-entity-col-icon">
+                                <img
+                                    src="{{ request.scope.root_path }}/static/icons/{{ row.type_icon }}"
+                                    alt=""
+                                    class="prepared-entity-type-icon"
+                                    title="{{ t(row.type_label) }}"
+                                >
+                            </td>
                             <td class="prepared-entity-col-active">
-                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.activation_active_now else 'tnc-badge-disabled' }}" title="{{ row.activation_summary }}">
-                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
-                                    <span>{{ t('On' if row.activation_active_now else 'Off') }}</span>
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
+                                </span>
+                            </td>
+                            <td class="prepared-entity-col-active">
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.activation_active_now else 'tnc-status-icon-disabled' }}" title="{{ row.activation_summary }}" aria-label="{{ t('Active now' if row.activation_active_now else 'Inactive now') }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'play-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
                                 </span>
                             </td>
                             <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
@@ -109,7 +123,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6">{{ t("No records yet.") }}</td>
+                            <td colspan="8">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -445,8 +459,16 @@
                 {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
-                    {% if section.slug == 'objects' and edit_row %}
-                    <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/settings/objects/{{ edit_row.id }}/send" formmethod="post">{{ t("Send now") }}</button>
+                    {% if section.slug in ['objects', 'bulletins'] and edit_row %}
+                    <button
+                        type="submit"
+                        class="button button-secondary button-label-icon"
+                        formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/send"
+                        formmethod="post"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/send-outline.svg" alt="">
+                        <span>{{ t("Send now") }}</span>
+                    </button>
                     {% endif %}
                     {% if section.supports_editing and edit_row %}
                     <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">{{ t("Cancel") }}</a>

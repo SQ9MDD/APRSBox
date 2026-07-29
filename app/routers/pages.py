@@ -179,7 +179,7 @@ from app.services.map_service import (
     normalize_coverage_fill_opacity_percent,
 )
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
-from app.services.outbound import enqueue_beacon_job, enqueue_object_job, enqueue_status_job
+from app.services.outbound import enqueue_beacon_job, enqueue_message_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
     container_system_actions_disabled_message,
     current_update_channel,
@@ -2364,10 +2364,21 @@ def bulletins_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit: int | None = None,
+    flash: str | None = None,
+    success: str | None = None,
 ) -> object:
     templates = request.app.state.templates
     edit_row = get_section_row("bulletins", edit) if edit is not None else None
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "bulletins", edit_row=edit_row))
+    context = _section_template_context(
+        request,
+        current_user,
+        "bulletins",
+        flash=flash,
+        edit_row=edit_row,
+    )
+    if success is not None:
+        context["flash_success"] = str(success).strip() not in {"0", "false", "False"}
+    return templates.TemplateResponse("section.html", context)
 
 
 @router.post("/bulletins")
@@ -2413,6 +2424,27 @@ def bulletins_create(
         edit_row = get_section_row("bulletins", record_id) if error else None
     context = _section_template_context(request, current_user, "bulletins", flash=None if success else error, edit_row=edit_row)
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/settings/bulletins/{record_id}/send")
+def bulletins_send_now(
+    record_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    row = get_section_row("bulletins", record_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bulletin not found.")
+
+    station_settings = get_station_settings()
+    success, flash = enqueue_message_job(row, station_settings, trigger="manual", force_send=True)
+    return RedirectResponse(
+        url=_path(
+            request,
+            f"/bulletins?edit={record_id}&flash={quote(str(flash or '') )}&success={'1' if success else '0'}",
+        ),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/settings/bulletins/{record_id}/delete")

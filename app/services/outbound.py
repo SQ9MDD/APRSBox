@@ -547,6 +547,7 @@ def enqueue_message_job(
     *,
     trigger: str = "scheduled",
     scheduled_for: datetime | None = None,
+    force_send: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -566,6 +567,7 @@ def enqueue_message_job(
         "path": str(bulletin.get("path") or "").strip(),
         "message_text": str(bulletin.get("message_text") or "").strip(),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
+        "force_send": bool(force_send),
     }
     scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now())
     job_ids = _enqueue_jobs_for_modems(

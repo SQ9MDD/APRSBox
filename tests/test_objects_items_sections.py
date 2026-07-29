@@ -839,6 +839,7 @@ class BulletinAndMessageFormTests(unittest.TestCase):
             decorated = get_section_row("bulletins", int(row["id"]))
             assert decorated is not None
             self.assertEqual(decorated["target_display"], "BLNA")
+            self.assertEqual(decorated["type_icon"], "bullhorn-outline.svg")
             self.assertEqual(
                 decorated["raw_frame_preview"],
             "SQ9XYZ-9>APBOX0,WIDE2-1::BLNA     :Net starts at 19:30 UTC",
@@ -972,6 +973,9 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         self.assertIn('id="bulletins-message-count"', template_source)
         self.assertIn('id="bulletins-message-error"', template_source)
+        self.assertIn("row.type_icon", template_source)
+        self.assertIn("send-outline.svg", template_source)
+        self.assertIn("/settings/{{ section.slug }}/{{ edit_row.id }}/send", template_source)
         self.assertIn("'application/tnc' if section.slug == 'modems'", template_source)
         self.assertIn("application/bulletins", template_source)
         self.assertIn('class="help-icon-button page-help-button"', template_source)

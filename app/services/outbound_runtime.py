@@ -820,6 +820,8 @@ def _skip_reason_for_inactive_aprs_content(*, kind: str, payload: dict[str, Any]
         return f"TX skipped: object #{object_id} is outside its activation window ({activation_state.reason})."
 
     if kind == "message":
+        if _payload_flag(payload.get("force_send"), default=False):
+            return None
         message_id = _normalize_payload_id(payload.get("message_id"))
         if message_id is None:
             return None

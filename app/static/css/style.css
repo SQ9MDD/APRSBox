@@ -3154,6 +3154,18 @@ textarea {
     filter: var(--icon-filter);
 }
 
+.button-label-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.button-label-icon img {
+    width: 1rem;
+    height: 1rem;
+    filter: var(--icon-filter);
+}
+
 .button-danger {
     border-color: rgba(201, 122, 122, 0.35);
     color: var(--danger);
@@ -6477,6 +6489,12 @@ code {
 .prepared-entity-col-icon {
     width: 2.75rem;
     text-align: center;
+}
+
+.prepared-entity-type-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    filter: var(--icon-filter);
 }
 
 .prepared-entity-col-active {
