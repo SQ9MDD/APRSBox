@@ -255,6 +255,7 @@
                                 </td>
                                 <td>
                                     <select name="alert_level_threshold" aria-label="{{ t('Alerts') }} — {{ t(category.label) }}">
+                                        <option value="off" {% if category.alerts == 0 %}selected{% endif %}>{{ t("Off") }}</option>
                                         {% for level in alarm_level_threshold_options %}
                                         <option value="{{ level }}" {% if category.alerts == level %}selected{% endif %}>≥ {{ level }}</option>
                                         {% endfor %}
@@ -262,6 +263,7 @@
                                 </td>
                                 <td>
                                     <select name="map_level_threshold" aria-label="{{ t('Map') }} — {{ t(category.label) }}">
+                                        <option value="off" {% if category.map == 0 %}selected{% endif %}>{{ t("Off") }}</option>
                                         {% for level in alarm_level_threshold_options %}
                                         <option value="{{ level }}" {% if category.map == level %}selected{% endif %}>≥ {{ level }}</option>
                                         {% endfor %}
@@ -272,7 +274,7 @@
                         </tbody>
                     </table>
                 </div>
-                <span class="muted small">{{ t("Alerts controls transfer from Messages to Alerts. Map controls area visibility. Unknown severity levels are kept for safety.") }}</span>
+                <span class="muted small">{{ t("Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.") }}</span>
             </div>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save alarm settings") }}</button>

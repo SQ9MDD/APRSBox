@@ -48,6 +48,8 @@
             data-i18n-hide-tracks="{{ t('Hide tracks') }}"
             data-i18n-show-coverage="{{ t('Show coverage') }}"
             data-i18n-hide-coverage="{{ t('Hide coverage') }}"
+            data-i18n-show-alarm-areas="{{ t('Show alarm areas') }}"
+            data-i18n-hide-alarm-areas="{{ t('Hide alarm areas') }}"
             data-i18n-show-latest-overlay="{{ t('Show latest packet widget') }}"
             data-i18n-hide-latest-overlay="{{ t('Hide latest packet widget') }}"
             data-i18n-show-ruler="{{ t('Show ruler') }}"
@@ -87,6 +89,16 @@
                         title="{{ t('Hide coverage') }}"
                     >
                         <img id="map-toggle-coverage-icon" src="{{ request.scope.root_path }}/static/icons/map-marker-radius.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
+                        id="map-toggle-alarm-areas"
+                        aria-label="{{ t('Hide alarm areas') }}"
+                        title="{{ t('Hide alarm areas') }}"
+                        aria-pressed="true"
+                    >
+                        <img id="map-toggle-alarm-areas-icon" src="{{ request.scope.root_path }}/static/icons/alarm-light-outline.svg" alt="">
                     </button>
                     <button
                         type="button"
@@ -149,5 +161,5 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-alerts-global-2"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-alert-areas-toggle-1"></script>
 {% endblock %}

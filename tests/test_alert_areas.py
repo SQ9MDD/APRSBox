@@ -310,6 +310,7 @@ class AlertAreaResolverTests(unittest.TestCase):
             thresholds = get_aprs_alarm_category_thresholds()
             thresholds["HEAT"]["map"] = 3
             thresholds["THUNDERSTORM"]["map"] = 1
+            thresholds["HAIL"]["map"] = "off"
             save_aprs_alarm_category_thresholds(thresholds)
             with tempfile.TemporaryDirectory() as temp_dir:
                 geodata_root = Path(temp_dir)
@@ -320,6 +321,7 @@ class AlertAreaResolverTests(unittest.TestCase):
                         _feature("area_code", "HEAT2", 20.0),
                         _feature("area_code", "HEAT3", 21.0),
                         _feature("area_code", "STORM1", 22.0),
+                        _feature("area_code", "HAIL3", 23.0),
                     ],
                 )
                 _insert_alert(
@@ -342,6 +344,13 @@ class AlertAreaResolverTests(unittest.TestCase):
                     ["STORM1"],
                     severity_level=1,
                     event_code="TSTORM1",
+                )
+                _insert_alert(
+                    "PLWX04",
+                    "PL-WARN",
+                    ["HAIL3"],
+                    severity_level=3,
+                    event_code="HAIL3",
                 )
 
                 collection = get_active_alert_area_feature_collection(
@@ -737,6 +746,37 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("fillOpacity: 0.10", source)
         self.assertIn("dashArray: null", source)
         self.assertIn("reconcileAlertAreas(payload.alert_areas);", source)
+
+    def test_map_toolbar_can_hide_and_restore_the_alarm_area_layer(self) -> None:
+        source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        template = Path("app/templates/map.html").read_text(encoding="utf-8")
+
+        self.assertIn('id="map-toggle-alarm-areas"', template)
+        self.assertIn('id="map-toggle-alarm-areas-icon"', template)
+        self.assertIn("alarm-light-outline.svg", template)
+        self.assertIn("data-i18n-show-alarm-areas", template)
+        self.assertIn("data-i18n-hide-alarm-areas", template)
+        self.assertTrue(Path("app/static/icons/alarm-light-outline.svg").is_file())
+        self.assertTrue(
+            Path("app/static/icons/alarm-light-off-outline.svg").is_file()
+        )
+
+        self.assertIn(
+            'const mapAlarmAreasVisibleStorageKey = "aprsbox-map-alarm-areas-visible";',
+            source,
+        )
+        self.assertIn("function resolveAlarmAreasVisible()", source)
+        self.assertIn("function syncAlertAreaLayerVisibility()", source)
+        self.assertIn("map.removeLayer(alertAreaLayer);", source)
+        self.assertIn("alertAreaLayer.addTo(map);", source)
+        self.assertIn(
+            "applyAlarmAreasToggleState(!alarmAreasVisible);",
+            source,
+        )
+        self.assertIn(
+            '"aria-pressed",',
+            source,
+        )
 
 
 if __name__ == "__main__":

@@ -35,6 +35,8 @@
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
     const toggleCoverageButton = document.getElementById("map-toggle-coverage");
     const toggleCoverageIcon = document.getElementById("map-toggle-coverage-icon");
+    const toggleAlarmAreasButton = document.getElementById("map-toggle-alarm-areas");
+    const toggleAlarmAreasIcon = document.getElementById("map-toggle-alarm-areas-icon");
     const toggleRulerButton = document.getElementById("map-toggle-ruler");
     const toggleRulerIcon = document.getElementById("map-toggle-ruler-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
@@ -64,6 +66,8 @@
         hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
         showCoverage: root.dataset.i18nShowCoverage || "Show coverage",
         hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
+        showAlarmAreas: root.dataset.i18nShowAlarmAreas || "Show alarm areas",
+        hideAlarmAreas: root.dataset.i18nHideAlarmAreas || "Hide alarm areas",
         showRuler: root.dataset.i18nShowRuler || "Show ruler",
         hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
         tileProviderUnavailable: root.dataset.i18nTileProviderUnavailable || "Tile provider unavailable",
@@ -79,6 +83,7 @@
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
+    const mapAlarmAreasVisibleStorageKey = "aprsbox-map-alarm-areas-visible";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
@@ -91,6 +96,7 @@
     let lastStationsSignature = "";
     let tracksVisible = true;
     let coverageVisible = true;
+    let alarmAreasVisible = true;
     let rulerVisible = true;
     let coverageFillOpacity = 0.05;
     let coverageOutlineOpacity = 1;
@@ -531,6 +537,58 @@
             const label = coverageVisible ? i18n.hideCoverage : i18n.showCoverage;
             toggleCoverageButton.setAttribute("title", label);
             toggleCoverageButton.setAttribute("aria-label", label);
+        }
+    }
+
+    function resolveAlarmAreasVisible() {
+        const storedValue = String(window.localStorage.getItem(mapAlarmAreasVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function syncAlertAreaLayerVisibility() {
+        if (!alertAreaLayer) {
+            return;
+        }
+        if (alarmAreasVisible) {
+            if (!map.hasLayer(alertAreaLayer)) {
+                alertAreaLayer.addTo(map);
+            }
+            return;
+        }
+        if (map.hasLayer(alertAreaLayer)) {
+            map.removeLayer(alertAreaLayer);
+        }
+    }
+
+    function applyAlarmAreasToggleState(visible) {
+        alarmAreasVisible = Boolean(visible);
+        window.localStorage.setItem(
+            mapAlarmAreasVisibleStorageKey,
+            alarmAreasVisible ? "1" : "0"
+        );
+        syncAlertAreaLayerVisibility();
+        if (toggleAlarmAreasIcon) {
+            toggleAlarmAreasIcon.setAttribute(
+                "src",
+                `${staticRoot}icons/${alarmAreasVisible ? "alarm-light-outline.svg" : "alarm-light-off-outline.svg"}`
+            );
+        }
+        if (toggleAlarmAreasButton) {
+            const label = alarmAreasVisible
+                ? i18n.hideAlarmAreas
+                : i18n.showAlarmAreas;
+            toggleAlarmAreasButton.setAttribute("title", label);
+            toggleAlarmAreasButton.setAttribute("aria-label", label);
+            toggleAlarmAreasButton.setAttribute(
+                "aria-pressed",
+                alarmAreasVisible ? "true" : "false"
+            );
         }
     }
 
@@ -1231,6 +1289,12 @@
                 void loadStationDetails(latestStationRevision);
             }
             applyLatestMapData({ forceRender: true });
+        });
+    }
+    applyAlarmAreasToggleState(resolveAlarmAreasVisible());
+    if (toggleAlarmAreasButton) {
+        toggleAlarmAreasButton.addEventListener("click", function () {
+            applyAlarmAreasToggleState(!alarmAreasVisible);
         });
     }
     applyRulerToggleState(resolveRulerVisible());

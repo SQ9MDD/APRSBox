@@ -20,6 +20,7 @@ APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY = "aprs.alarm_category_thresholds"
 DEFAULT_APRS_ALARM_GROUPS = ("PL-WARN",)
 DEFAULT_APRS_ALARM_LEVEL_THRESHOLD = 1
 APRS_ALARM_LEVEL_THRESHOLDS = (1, 2, 3)
+APRS_ALARM_LEVEL_OFF = 0
 APRS_ALARM_THRESHOLD_TARGETS = ("alerts", "map")
 
 _APRS_ALARM_GROUP_RE = re.compile(r"^[A-Z0-9-]{1,9}$")
@@ -149,6 +150,13 @@ def _default_category_thresholds() -> dict[str, dict[str, int]]:
     }
 
 
+def normalize_aprs_alarm_category_threshold(value: Any) -> int:
+    normalized_value = str(value if value is not None else "").strip().lower()
+    if normalized_value in {"0", "off"}:
+        return APRS_ALARM_LEVEL_OFF
+    return normalize_aprs_alarm_level_threshold(value)
+
+
 def normalize_aprs_alarm_category_thresholds(
     value: Any,
     *,
@@ -156,7 +164,7 @@ def normalize_aprs_alarm_category_thresholds(
 ) -> dict[str, dict[str, int]]:
     fallback = {
         category_key: {
-            target: normalize_aprs_alarm_level_threshold(target_values[target])
+            target: normalize_aprs_alarm_category_threshold(target_values[target])
             for target in APRS_ALARM_THRESHOLD_TARGETS
         }
         for category_key, target_values in (
@@ -178,7 +186,7 @@ def normalize_aprs_alarm_category_thresholds(
         if not isinstance(raw_targets, Mapping):
             raise ValueError(_t("Invalid APRS alarm category thresholds."))
         normalized[category_key] = {
-            target: normalize_aprs_alarm_level_threshold(
+            target: normalize_aprs_alarm_category_threshold(
                 raw_targets.get(target, fallback[category_key][target])
             )
             for target in APRS_ALARM_THRESHOLD_TARGETS
@@ -240,10 +248,10 @@ def alarm_event_meets_category_threshold(
     *,
     target: str,
 ) -> bool:
-    return alarm_severity_meets_threshold(
-        severity_level,
-        get_aprs_alarm_category_threshold(event_code, target=target),
-    )
+    threshold = get_aprs_alarm_category_threshold(event_code, target=target)
+    if threshold == APRS_ALARM_LEVEL_OFF:
+        return False
+    return alarm_severity_meets_threshold(severity_level, threshold)
 
 
 def build_automatic_aprsis_alarm_filter(groups: Any | None = None) -> str:

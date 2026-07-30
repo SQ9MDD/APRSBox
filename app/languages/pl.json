@@ -1516,6 +1516,7 @@
   "Generated PHG": "Wygenerowany PHG",
   "Height above ground": "Wysokość nad gruntem",
   "Hide coverage": "Ukryj zasięg",
+  "Hide alarm areas": "Ukryj obszary alarmów",
   "Hide ruler": "Ukryj linijkę",
   "Hide tracks": "Ukryj ślady",
   "Home Assistant": "Home Assistant",
@@ -1553,6 +1554,7 @@
   "Server": "Serwer",
   "Set power, antenna height above ground, gain, and direction. Generated PHG is inserted at the beginning of Beacon Comment.": "Ustaw moc, wysokość anteny nad gruntem, zysk i kierunek. Wygenerowany PHG zostanie wstawiony na początku komentarza beacona.",
   "Show coverage": "Pokaż zasięg",
+  "Show alarm areas": "Pokaż obszary alarmów",
   "Show ruler": "Pokaż linijkę",
   "Show tracks": "Pokaż ślady",
   "Sort order must be an integer.": "Kolejność sortowania musi być liczbą całkowitą.",
@@ -1928,5 +1930,6 @@
   "Dust / sand": "Pył / piasek",
   "Cloud": "Zachmurzenie",
   "Other / unknown": "Inne / nieznane",
+  "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Kolumna Alarmy steruje przenoszeniem z Wiadomości do Alarmów. Kolumna Mapa steruje widocznością obszarów. Wył. całkowicie wyłącza kategorię w danej kolumnie. Nieznane poziomy są poza tym zachowywane ze względów bezpieczeństwa.",
   "Close": "Zamknij"
 }

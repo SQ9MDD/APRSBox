@@ -105,6 +105,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('name="threshold_category"', template_source)
         self.assertIn('name="alert_level_threshold"', template_source)
         self.assertIn('name="map_level_threshold"', template_source)
+        self.assertIn('<option value="off"', template_source)
         self.assertIn('{{ t("Alarm thresholds by event type") }}', template_source)
         self.assertIn('{{ t("Alerts") }}', template_source)
         self.assertIn('{{ t("Map") }}', template_source)

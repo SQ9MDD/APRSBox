@@ -1490,6 +1490,7 @@
   "Generated PHG": "Generated PHG",
   "Height above ground": "Height above ground",
   "Hide coverage": "Hide coverage",
+  "Hide alarm areas": "Hide alarm areas",
   "Hide ruler": "Hide ruler",
   "Hide tracks": "Hide tracks",
   "Home Assistant": "Home Assistant",
@@ -1527,6 +1528,7 @@
   "Server": "Server",
   "Set power, antenna height above ground, gain, and direction. Generated PHG is inserted at the beginning of Beacon Comment.": "Set power, antenna height above ground, gain, and direction. Generated PHG is inserted at the beginning of Beacon Comment.",
   "Show coverage": "Show coverage",
+  "Show alarm areas": "Show alarm areas",
   "Show ruler": "Show ruler",
   "Show tracks": "Show tracks",
   "Sort order must be an integer.": "Sort order must be an integer.",
@@ -1906,5 +1908,6 @@
   "Dust / sand": "Dust / sand",
   "Cloud": "Cloud",
   "Other / unknown": "Other / unknown",
+  "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.",
   "Close": "Close"
 }

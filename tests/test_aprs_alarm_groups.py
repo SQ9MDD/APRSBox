@@ -169,9 +169,11 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
             )
             thresholds["HEAT"] = {"alerts": 2, "map": 3}
             thresholds["THUNDERSTORM"] = {"alerts": 1, "map": 1}
+            thresholds["HAIL"] = {"alerts": "off", "map": 0}
             saved = save_aprs_alarm_category_thresholds(thresholds)
 
             self.assertEqual(saved["HEAT"], {"alerts": 2, "map": 3})
+            self.assertEqual(saved["HAIL"], {"alerts": 0, "map": 0})
             self.assertIsNotNone(
                 get_app_setting(APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY)
             )
@@ -206,6 +208,20 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     "UNKNOWN",
                     None,
                     target="alerts",
+                )
+            )
+            self.assertFalse(
+                alarm_event_meets_category_threshold(
+                    "HAIL3",
+                    3,
+                    target="alerts",
+                )
+            )
+            self.assertFalse(
+                alarm_event_meets_category_threshold(
+                    "HAIL",
+                    None,
+                    target="map",
                 )
             )
 
@@ -243,15 +259,15 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                             get_aprs_alarm_category_thresholds()
                         ),
                         "alert_level_threshold": [
-                            "2"
-                            if category == "HEAT"
-                            else "1"
+                            "off"
+                            if category == "HAIL"
+                            else ("2" if category == "HEAT" else "1")
                             for category in get_aprs_alarm_category_thresholds()
                         ],
                         "map_level_threshold": [
-                            "3"
-                            if category == "HEAT"
-                            else "1"
+                            "off"
+                            if category == "HAIL"
+                            else ("3" if category == "HEAT" else "1")
                             for category in get_aprs_alarm_category_thresholds()
                         ],
                     },
@@ -265,6 +281,10 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     saved.json()["alarm_category_thresholds"]["HEAT"],
                     {"alerts": 2, "map": 3},
                 )
+                self.assertEqual(
+                    saved.json()["alarm_category_thresholds"]["HAIL"],
+                    {"alerts": 0, "map": 0},
+                )
 
                 page = client.get("/settings")
                 self.assertEqual(page.status_code, 200)
@@ -275,6 +295,7 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                 self.assertIn("Progi alarmów według typu zdarzenia", page.text)
                 self.assertIn("Upał", page.text)
                 self.assertIn('value="HEAT"', page.text)
+                self.assertIn('value="off" selected', page.text)
                 self.assertIn(
                     '<option value="2" selected>≥ 2</option>',
                     page.text,
@@ -591,14 +612,14 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             [("PLWX03", 2), ("PLWX04", None)],
         )
 
-    def test_category_threshold_filters_heat_without_filtering_thunderstorms(self) -> None:
+    def test_category_off_filters_heat_without_filtering_thunderstorms(self) -> None:
         with temporary_database():
             thresholds = get_aprs_alarm_category_thresholds()
-            thresholds["HEAT"]["alerts"] = 2
+            thresholds["HEAT"]["alerts"] = "off"
             thresholds["THUNDERSTORM"]["alerts"] = 1
             save_aprs_alarm_category_thresholds(thresholds)
 
-            for offset, event_code in enumerate(("HEAT1", "TSTORM1")):
+            for offset, event_code in enumerate(("HEAT3", "TSTORM1")):
                 self.assertTrue(
                     process_normalized_tnc2_rx(
                         self._group_alarm_line(
