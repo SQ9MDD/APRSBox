@@ -1116,7 +1116,11 @@ def build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) -
     if not bool(aprs_data.get("emergency")):
         return None
 
-    comment = str(aprs_data.get("comment") or "").strip()
+    comment = str(
+        aprs_data.get("emergency_comment")
+        or aprs_data.get("comment")
+        or ""
+    ).strip()
     summary = _strip_emergency_comment_prefix(comment)
     if not summary and aprs_data.get("data"):
         decoded_items = _format_decoded_data_for_display(dict(aprs_data["data"]), "metric")
@@ -3628,7 +3632,7 @@ def _decode_mic_e_comment(raw_payload: str) -> tuple[str, int | None]:
             altitude_ft = max(0, min(32700, altitude_value))
             payload = payload[4:].lstrip()
 
-    return _clean_decoded_tokens(payload), altitude_ft
+    return payload.strip(" /|,;:-"), altitude_ft
 
 
 def _mic_e_base91_value(char: str) -> int:
@@ -4034,6 +4038,8 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
         result["emergency"] = True
     if emergency_token is not None:
         result["emergency_code"] = emergency_token
+    if bool(result.get("emergency")) and comment:
+        result["emergency_comment"] = str(comment).strip()
     if result.get("symbol", "").endswith("_"):
         weather = _parse_weather_fields(comment)
         if weather:

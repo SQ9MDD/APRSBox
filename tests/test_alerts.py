@@ -55,6 +55,25 @@ def receive_emergency(
 
 
 class AprsAlertTests(unittest.TestCase):
+    def test_mic_e_alert_preserves_complete_operator_comment(self) -> None:
+        line = "SQ9MDD-7>521U02,RFONLY:'0SWl \x1c[/>144.800MHz op. Rysiek&"
+        with temporary_database():
+            receive_emergency(
+                timestamp="2026-07-30T09:55:00+00:00",
+                line=line,
+                source="vpdigi",
+            )
+
+            stored_alert = fetch_one("SELECT * FROM aprs_alerts")
+            self.assertIsNotNone(stored_alert)
+            assert stored_alert is not None
+            self.assertEqual(stored_alert["message"], "144.800MHz op. Rysiek&")
+
+            alert = get_alert(int(stored_alert["id"]))
+            self.assertIsNotNone(alert)
+            assert alert is not None
+            self.assertEqual(alert["message"], "144.800MHz op. Rysiek&")
+
     def test_first_emergency_frame_creates_alert(self) -> None:
         with temporary_database():
             receive_emergency(timestamp="2026-07-28T10:00:00+00:00")

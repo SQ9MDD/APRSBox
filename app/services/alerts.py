@@ -233,6 +233,14 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
         )
     else:
         emergency_data = None
+    if emergency_data:
+        full_message = str(
+            emergency_data.get("summary")
+            or emergency_data.get("comment")
+            or ""
+        ).strip()
+        if full_message:
+            item["message"] = full_message
     item["modal_frame"] = {
         "id": int(item["last_frame_id"]) if item.get("last_frame_id") is not None else None,
         "timestamp": str(item.get("last_frame_created_at") or item.get("last_seen_at") or ""),
