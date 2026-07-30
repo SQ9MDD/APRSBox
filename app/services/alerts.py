@@ -13,6 +13,7 @@ from app.services.aprs_warning_identity import (
     build_aprs_alert_part_identity_key,
     normalize_warning_area_codes,
     parse_aprs_group_warning_content,
+    resolve_aprs_expiry_utc,
 )
 from app.services.content import (
     build_emergency_frame_data,
@@ -85,6 +86,53 @@ def _integer_or_none(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _normalized_utc_datetime(value: Any = None) -> datetime:
+    parsed = parse_datetime(value) if value is not None else None
+    if parsed is None:
+        parsed = datetime.now(timezone.utc)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def expire_aprs_alerts(
+    *,
+    now: datetime | str | None = None,
+    connection: sqlite3.Connection | None = None,
+) -> int:
+    """Deactivate expired alerts while preserving their traffic frames."""
+
+    timestamp = _normalized_utc_datetime(now).replace(microsecond=0).isoformat()
+
+    def expire(target: sqlite3.Connection) -> int:
+        cursor = target.execute(
+            """
+            UPDATE aprs_alerts
+            SET is_active = 0,
+                updated_at = ?
+            WHERE superseded_by_alert_id IS NULL
+              AND is_active = 1
+              AND (
+                    (
+                        expires_at IS NOT NULL
+                        AND julianday(expires_at) <= julianday(?)
+                    )
+                    OR (
+                        valid_until_utc IS NOT NULL
+                        AND julianday(valid_until_utc) <= julianday(?)
+                    )
+              )
+            """,
+            (timestamp, timestamp, timestamp),
+        )
+        return max(0, int(cursor.rowcount or 0))
+
+    if connection is not None:
+        return expire(connection)
+    with get_connection() as managed_connection:
+        return expire(managed_connection)
 
 
 def _recalculate_logical_alert(
@@ -218,6 +266,12 @@ def accept_aprs_warning_frame(
         if warning.get("expiry") is not None
         else parsed_warning["expiry"]
     ).strip()
+    resolved_expiry = resolve_aprs_expiry_utc(expiry, received_at)
+    expires_at = str(warning.get("expires_at") or "").strip() or (
+        resolved_expiry.replace(microsecond=0).isoformat()
+        if resolved_expiry is not None
+        else None
+    )
     event_code = str(
         warning.get("event_code")
         if warning.get("event_code") is not None
@@ -263,6 +317,16 @@ def accept_aprs_warning_frame(
     ).strip()
     area_codes_json = json.dumps(area_codes, ensure_ascii=False, separators=(",", ":"))
     is_active = 1 if bool(warning.get("is_active", True)) else 0
+    received_datetime = parse_datetime(received_at)
+    expires_datetime = parse_datetime(expires_at)
+    if (
+        is_active
+        and received_datetime is not None
+        and expires_datetime is not None
+        and expires_datetime.astimezone(timezone.utc)
+        <= received_datetime.astimezone(timezone.utc)
+    ):
+        is_active = 0
     valid_until_utc = str(warning.get("valid_until_utc") or "").strip() or None
     identity_key = str(warning.get("identity_key") or "").strip() or build_aprs_alert_identity_key(
         source_callsign=source_callsign,
@@ -302,7 +366,7 @@ def accept_aprs_warning_frame(
             INSERT INTO aprs_alerts(
                 identity_key, source_callsign, alert_type, message,
                 alarm_group, area_codes_json, is_active, valid_until_utc,
-                expiry, event_code, area_code, message_id,
+                expiry, expires_at, event_code, area_code, message_id,
                 logical_alert_id, severity_level,
                 received_parts, parts_total, completion_status,
                 first_seen_at, last_seen_at, frame_count,
@@ -314,7 +378,7 @@ def accept_aprs_warning_frame(
             VALUES (
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 ?, ?,
                 0, ?, 'incomplete',
                 ?, ?, 1,
@@ -335,6 +399,7 @@ def accept_aprs_warning_frame(
                 is_active,
                 valid_until_utc,
                 expiry or None,
+                expires_at,
                 event_code or None,
                 area_code or None,
                 message_id or None,
@@ -456,7 +521,8 @@ def accept_aprs_warning_frame(
                 area_codes_json = ?,
                 is_active = ?,
                 valid_until_utc = ?,
-                expiry = ?,
+                expiry = COALESCE(?, expiry),
+                expires_at = COALESCE(?, expires_at),
                 event_code = ?,
                 area_code = ?,
                 message_id = ?,
@@ -478,6 +544,7 @@ def accept_aprs_warning_frame(
                 is_active,
                 valid_until_utc,
                 expiry or None,
+                expires_at,
                 event_code or None,
                 area_code or None,
                 message_id or None,
@@ -498,6 +565,10 @@ def accept_aprs_warning_frame(
             connection,
             alert_id=alert_id,
             updated_at=received_at,
+        )
+        expire_aprs_alerts(
+            now=received_at,
+            connection=connection,
         )
 
     return {
@@ -623,15 +694,22 @@ def process_alert_frame(
 def attention_alert_count(*, now: str | None = None) -> int:
     timestamp = now or utc_now()
     try:
+        expire_aprs_alerts(now=timestamp)
         row = fetch_one(
             """
             SELECT COUNT(*) AS total
             FROM aprs_alerts
             WHERE superseded_by_alert_id IS NULL
+              AND is_active = 1
+              AND (expires_at IS NULL OR julianday(expires_at) > julianday(?))
+              AND (
+                    valid_until_utc IS NULL
+                    OR julianday(valid_until_utc) > julianday(?)
+              )
               AND muted_indefinitely = 0
               AND (muted_until IS NULL OR julianday(muted_until) <= julianday(?))
             """,
-            (timestamp,),
+            (timestamp, timestamp, timestamp),
         )
     except sqlite3.OperationalError:
         # Template rendering can happen before the application lifespan has
@@ -664,13 +742,17 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
     muted = _is_muted(item, now=now)
     muted_until = str(item.get("muted_until") or "").strip()
     area_codes = _stored_area_codes(item.get("area_codes_json"))
-    active_until = parse_datetime(item.get("valid_until_utc"))
+    expires_at = parse_datetime(item.get("expires_at"))
+    valid_until = parse_datetime(item.get("valid_until_utc"))
     active_reference = now or datetime.now(timezone.utc)
     if active_reference.tzinfo is None:
         active_reference = active_reference.replace(tzinfo=timezone.utc)
     active = bool(int(item.get("is_active") or 0)) and (
-        active_until is None
-        or active_until.astimezone(timezone.utc) > active_reference.astimezone(timezone.utc)
+        expires_at is None
+        or expires_at.astimezone(timezone.utc) > active_reference.astimezone(timezone.utc)
+    ) and (
+        valid_until is None
+        or valid_until.astimezone(timezone.utc) > active_reference.astimezone(timezone.utc)
     )
     item.update(
         {
@@ -690,6 +772,11 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
             "active": active,
             "muted": muted,
             "muted_until_label": format_display_datetime(muted_until) if muted_until else "",
+            "expires_at_label": (
+                format_display_datetime(item.get("expires_at"))
+                if item.get("expires_at")
+                else ""
+            ),
             "first_seen_label": format_display_datetime(item.get("first_seen_at")),
             "last_seen_label": format_display_datetime(item.get("last_seen_at")),
             "created_label": format_display_datetime(item.get("created_at")),
@@ -742,14 +829,29 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
     return item
 
 
-def list_alerts(*, page: int = 1, page_size: int = ALERT_PAGE_SIZE) -> dict[str, Any]:
+def list_alerts(
+    *,
+    page: int = 1,
+    page_size: int = ALERT_PAGE_SIZE,
+    now: datetime | str | None = None,
+) -> dict[str, Any]:
+    reference = _normalized_utc_datetime(now)
+    timestamp = reference.replace(microsecond=0).isoformat()
+    expire_aprs_alerts(now=reference)
     normalized_page_size = min(max(1, int(page_size)), 100)
     count_row = fetch_one(
         """
         SELECT COUNT(*) AS total
         FROM aprs_alerts
         WHERE superseded_by_alert_id IS NULL
-        """
+          AND is_active = 1
+          AND (expires_at IS NULL OR julianday(expires_at) > julianday(?))
+          AND (
+                valid_until_utc IS NULL
+                OR julianday(valid_until_utc) > julianday(?)
+          )
+        """,
+        (timestamp, timestamp),
     )
     total = int(count_row["total"] or 0) if count_row is not None else 0
     total_pages = max(1, (total + normalized_page_size - 1) // normalized_page_size)
@@ -767,14 +869,22 @@ def list_alerts(*, page: int = 1, page_size: int = ALERT_PAGE_SIZE) -> dict[str,
         FROM aprs_alerts AS alerts
         LEFT JOIN traffic_frames AS frames ON frames.id = alerts.last_frame_id
         WHERE alerts.superseded_by_alert_id IS NULL
+          AND alerts.is_active = 1
+          AND (
+                alerts.expires_at IS NULL
+                OR julianday(alerts.expires_at) > julianday(?)
+          )
+          AND (
+                alerts.valid_until_utc IS NULL
+                OR julianday(alerts.valid_until_utc) > julianday(?)
+          )
         ORDER BY alerts.last_seen_at DESC, alerts.id DESC
         LIMIT ? OFFSET ?
         """,
-        (normalized_page_size, offset),
+        (timestamp, timestamp, normalized_page_size, offset),
     )
-    now = datetime.now(timezone.utc)
     return {
-        "items": [_serialize_alert(dict(row), now=now) for row in rows],
+        "items": [_serialize_alert(dict(row), now=reference) for row in rows],
         "page": normalized_page,
         "page_size": normalized_page_size,
         "total": total,

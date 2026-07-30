@@ -3,12 +3,19 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 
 _APRS_MESSAGE_ID_RE = re.compile(r"^[A-Za-z0-9]{1,5}$", re.ASCII)
 _ALERT_PART_RE = re.compile(r"^(?P<number>[1-9][0-9]*)/(?P<total>[1-9][0-9]*)$", re.ASCII)
 _SEVERITY_SUFFIX_RE = re.compile(r"(?P<severity>[0-9]+)$", re.ASCII)
+_APRS_EXPIRY_RE = re.compile(
+    r"^(?P<day>0[1-9]|[12][0-9]|3[01])"
+    r"(?P<hour>[01][0-9]|2[0-3])"
+    r"(?P<minute>[0-5][0-9])z$",
+    re.IGNORECASE | re.ASCII,
+)
 
 
 def normalize_warning_area_codes(values: Any) -> list[str]:
@@ -27,6 +34,76 @@ def normalize_warning_area_codes(values: Any) -> list[str]:
         seen.add(comparison_key)
         normalized.append(text)
     return normalized
+
+
+def _reference_datetime_utc(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        reference = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.endswith(("Z", "z")):
+            text = f"{text[:-1]}+00:00"
+        try:
+            reference = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return reference.astimezone(timezone.utc)
+
+
+def _shift_year_month(year: int, month: int, offset: int) -> tuple[int, int]:
+    absolute_month = (year * 12) + (month - 1) + offset
+    shifted_year, shifted_month_zero_based = divmod(absolute_month, 12)
+    return shifted_year, shifted_month_zero_based + 1
+
+
+def resolve_aprs_expiry_utc(
+    expiry: Any,
+    received_at: Any,
+) -> datetime | None:
+    """Resolve ``DDHHMMz`` to the closest valid UTC date around reception."""
+
+    match = _APRS_EXPIRY_RE.fullmatch(str(expiry or "").strip())
+    reference = _reference_datetime_utc(received_at)
+    if match is None or reference is None:
+        return None
+
+    day = int(match.group("day"))
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute"))
+    candidates: list[datetime] = []
+    for month_offset in range(-2, 3):
+        year, month = _shift_year_month(
+            reference.year,
+            reference.month,
+            month_offset,
+        )
+        try:
+            candidates.append(
+                datetime(
+                    year,
+                    month,
+                    day,
+                    hour,
+                    minute,
+                    tzinfo=timezone.utc,
+                )
+            )
+        except ValueError:
+            continue
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda candidate: (
+            abs((candidate - reference).total_seconds()),
+            0 if candidate >= reference else 1,
+            candidate,
+        ),
+    )
 
 
 def parse_aprs_group_warning_content(raw_content: Any) -> dict[str, Any]:

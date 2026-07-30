@@ -86,16 +86,19 @@ def _insert_alert(
     *,
     is_active: bool = True,
     valid_until_utc: str | None = None,
+    expires_at: str | None = None,
+    severity_level: int | None = None,
 ) -> None:
     execute(
         """
         INSERT INTO aprs_alerts(
             identity_key, source_callsign, alert_type, message,
-            alarm_group, area_codes_json, is_active, valid_until_utc,
+            alarm_group, area_codes_json, severity_level,
+            is_active, valid_until_utc, expires_at,
             first_seen_at, last_seen_at, frame_count,
             created_at, updated_at
         )
-        VALUES (?, ?, ?, '', ?, ?, ?, ?,
+        VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?,
                 '2026-01-01T00:00:00+00:00',
                 '2026-01-01T00:00:00+00:00',
                 1,
@@ -112,8 +115,10 @@ def _insert_alert(
             alarm_group,
             alarm_group,
             json.dumps(area_codes),
+            severity_level,
             1 if is_active else 0,
             valid_until_utc,
+            expires_at,
         ),
     )
 
@@ -123,7 +128,7 @@ def _receive_group_alert(area_code: str, message_id: str) -> None:
         f"PLWXSR>APRS,TCPIP*::PL-WARN  :310100z,TSTORM1,{area_code}{{{message_id}",
         source="APRS-IS · Internet RX",
         source_kind="aprsis",
-        timestamp=f"2026-01-01T00:10:{len(message_id):02d}+00:00",
+        timestamp=f"2026-01-30T00:10:{len(message_id):02d}+00:00",
     )
     if not accepted:
         raise AssertionError("Alarm-group frame was rejected")
@@ -149,7 +154,7 @@ def _receive_multipart_group_alert(
         f"PLWXSR>APRS,TCPIP*::PL-WARN  :{content}{{{message_id}",
         source="APRS-IS · Internet RX",
         source_kind="aprsis",
-        timestamp=f"2026-01-01T00:20:0{part_number}+00:00",
+        timestamp=f"2026-01-30T20:20:0{part_number}+00:00",
     )
     if not accepted:
         raise AssertionError("Multipart alarm-group frame was rejected")
@@ -224,6 +229,151 @@ class AlertAreaResolverTests(unittest.TestCase):
             collection["features"][0]["properties"]["aprsbox_area_code"],
             "0012",
         )
+
+    def test_polygon_colors_follow_severity_levels_and_unknown_is_gray(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "pl",
+                [_feature("area_code", "1465", 20.0)],
+            )
+            observed_colors = {}
+            for severity_level in (1, 2, 3, None, 9):
+                collection = build_alert_area_feature_collection(
+                    [
+                        {
+                            "alarm_group": "PL-WARN",
+                            "area_codes": ["1465"],
+                            "severity_level": severity_level,
+                        }
+                    ],
+                    geodata_root=geodata_root,
+                )
+                observed_colors[severity_level] = collection["features"][0][
+                    "properties"
+                ]["aprsbox_alert_color"]
+
+        self.assertEqual(
+            observed_colors,
+            {
+                1: "yellow",
+                2: "orange",
+                3: "red",
+                None: "gray",
+                9: "gray",
+            },
+        )
+
+    def test_shared_area_uses_highest_active_severity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "pl",
+                [_feature("area_code", "1465", 20.0)],
+            )
+            collection = build_alert_area_feature_collection(
+                [
+                    {
+                        "alarm_group": "PL-WARN",
+                        "area_codes": ["1465"],
+                        "severity_level": 1,
+                    },
+                    {
+                        "alarm_group": "PL-WARN",
+                        "area_codes": ["1465"],
+                        "severity_level": 3,
+                    },
+                    {
+                        "alarm_group": "PL-WARN",
+                        "area_codes": ["1465"],
+                        "severity_level": 2,
+                    },
+                ],
+                geodata_root=geodata_root,
+            )
+
+        self.assertEqual(len(collection["features"]), 1)
+        self.assertEqual(
+            collection["features"][0]["properties"]["aprsbox_severity_level"],
+            3,
+        )
+        self.assertEqual(
+            collection["features"][0]["properties"]["aprsbox_alert_color"],
+            "red",
+        )
+
+    def test_shared_area_downgrades_after_stronger_alert_expires(self) -> None:
+        with temporary_database():
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "pl",
+                    [_feature("area_code", "1465", 20.0)],
+                )
+                _insert_alert(
+                    "PLWX1",
+                    "PL-WARN",
+                    ["1465"],
+                    severity_level=1,
+                    expires_at="2026-01-01T02:00:00+00:00",
+                )
+                _insert_alert(
+                    "PLWX3",
+                    "PL-WARN",
+                    ["1465"],
+                    severity_level=3,
+                    expires_at="2026-01-01T00:30:00+00:00",
+                )
+
+                before = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T00:20:00+00:00",
+                )
+                after = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T00:40:00+00:00",
+                )
+
+        self.assertEqual(
+            before["features"][0]["properties"]["aprsbox_alert_color"],
+            "red",
+        )
+        self.assertEqual(
+            after["features"][0]["properties"]["aprsbox_alert_color"],
+            "yellow",
+        )
+
+    def test_polygon_disappears_after_last_alert_expires(self) -> None:
+        with temporary_database():
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "pl",
+                    [_feature("area_code", "1465", 20.0)],
+                )
+                _insert_alert(
+                    "PLWX3",
+                    "PL-WARN",
+                    ["1465"],
+                    severity_level=3,
+                    expires_at="2026-01-01T00:30:00+00:00",
+                )
+
+                before = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T00:20:00+00:00",
+                )
+                after = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T00:40:00+00:00",
+                )
+
+        self.assertEqual(len(before["features"]), 1)
+        self.assertEqual(after["features"], [])
 
     def test_multiple_countries_and_alerts_are_combined_without_duplicate_polygons(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -307,7 +457,8 @@ class AlertAreaResolverTests(unittest.TestCase):
                 execute(
                     """
                     UPDATE aprs_alerts
-                    SET valid_until_utc = '2026-01-01T02:00:00+00:00'
+                    SET valid_until_utc = '2026-01-01T02:00:00+00:00',
+                        is_active = 1
                     WHERE source_callsign = 'PLWXSR'
                     """
                 )
@@ -486,8 +637,11 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("alertAreasPane.style.pointerEvents = \"none\";", source)
         self.assertIn("alertAreaLayer.clearLayers();", source)
         self.assertIn("alertAreaLayer.addData(featureCollection);", source)
-        self.assertIn('color: "red"', source)
-        self.assertIn('fillColor: "red"', source)
+        self.assertIn("aprsbox_alert_color", source)
+        self.assertIn('["yellow", "orange", "red", "gray"]', source)
+        self.assertIn("color,", source)
+        self.assertIn("fillColor: color", source)
+        self.assertIn("weight: 2", source)
         self.assertIn("fillOpacity: 0.10", source)
         self.assertIn("dashArray: null", source)
         self.assertIn("reconcileAlertAreas(payload.alert_areas);", source)

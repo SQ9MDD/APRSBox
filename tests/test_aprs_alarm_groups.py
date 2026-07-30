@@ -21,7 +21,10 @@ from app.services.aprsis import (
     build_aprsis_login_line,
     get_enabled_aprsis_interface,
 )
-from app.services.aprs_warning_identity import parse_aprs_group_warning_content
+from app.services.aprs_warning_identity import (
+    parse_aprs_group_warning_content,
+    resolve_aprs_expiry_utc,
+)
 from app.services.messages import (
     DEFAULT_MESSAGE_TARGET_GROUPS,
     get_effective_message_target_groups,
@@ -220,6 +223,38 @@ class AprsAlarmGroupFilterTests(unittest.TestCase):
             )
 
 
+class AprsAlarmExpiryResolutionTests(unittest.TestCase):
+    def test_ddhhmmz_is_resolved_to_full_utc_datetime(self) -> None:
+        resolved = resolve_aprs_expiry_utc(
+            "302200z",
+            "2026-07-30T20:15:00+00:00",
+        )
+
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved.isoformat(), "2026-07-30T22:00:00+00:00")
+
+    def test_expiry_resolution_crosses_month_boundary(self) -> None:
+        resolved = resolve_aprs_expiry_utc(
+            "010030z",
+            "2026-01-31T23:45:00+00:00",
+        )
+
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved.isoformat(), "2026-02-01T00:30:00+00:00")
+
+    def test_expiry_resolution_crosses_year_boundary(self) -> None:
+        resolved = resolve_aprs_expiry_utc(
+            "010015z",
+            "2026-12-31T23:50:00+00:00",
+        )
+
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved.isoformat(), "2027-01-01T00:15:00+00:00")
+
+
 class AprsAlarmGroupReceiveTests(unittest.TestCase):
     _ALARM_LINE = (
         "PLWXSR>APRS::PL-WARN  :310100z,TSTORM1,1465{129AA"
@@ -230,7 +265,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         *,
         source: str = "PLWXSR",
         group: str = "PL-WARN",
-        expiry: str = "310100z",
+        expiry: str = "020100z",
         event_code: str = "TSTORM1",
         area_code: str,
         message_id: str | None,
@@ -250,7 +285,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         parts_total: int = 3,
         area_codes: tuple[str, ...],
         message_id: str,
-        expiry: str = "302200z",
+        expiry: str = "022200z",
         event_code: str = "TSTORM2",
     ) -> str:
         content = ",".join(
@@ -329,6 +364,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(alert["alarm_group"], "PL-WARN")
         self.assertEqual(json.loads(alert["area_codes_json"]), ["1465"])
         self.assertEqual(alert["expiry"], "310100z")
+        self.assertEqual(alert["expires_at"], "2026-01-31T01:00:00+00:00")
         self.assertEqual(alert["event_code"], "TSTORM1")
         self.assertEqual(alert["area_code"], "1465")
         self.assertEqual(alert["message_id"], "129AA")
@@ -356,7 +392,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 source="Main RF",
                 source_kind="rf",
                 band="2m",
-                timestamp="2026-01-01T00:01:00+00:00",
+                timestamp="2026-01-30T00:01:00+00:00",
             )
             self.assertTrue(accepted)
             self._assert_alarm_message_stored(source_kind="rf")
@@ -367,7 +403,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 self._ALARM_LINE,
                 source="APRS-IS · Internet RX",
                 source_kind="aprsis",
-                timestamp="2026-01-01T00:01:00+00:00",
+                timestamp="2026-01-30T00:01:00+00:00",
             )
             self.assertTrue(accepted)
             self._assert_alarm_message_stored(source_kind="aprsis")
@@ -489,7 +525,10 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 ORDER BY id ASC
                 """
             )
-            alert_page = list_alerts(page_size=10)
+            alert_page = list_alerts(
+                page_size=10,
+                now="2026-01-01T00:10:00+00:00",
+            )
 
         self.assertEqual(len(alerts), 3)
         self.assertEqual(len(alert_page["items"]), 3)
@@ -497,7 +536,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             {(row["area_code"], row["message_id"]) for row in alerts},
             set(frames),
         )
-        self.assertTrue(all(row["expiry"] == "310100z" for row in alerts))
+        self.assertTrue(all(row["expiry"] == "020100z" for row in alerts))
         self.assertTrue(all(row["event_code"] == "TSTORM1" for row in alerts))
         self.assertEqual(len({row["identity_key"] for row in alerts}), 3)
 
@@ -778,7 +817,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 timestamp="2026-01-01T01:05:01+00:00",
             )
             parent = fetch_one("SELECT area_codes_json FROM aprs_alerts")
-            page = list_alerts()
+            page = list_alerts(now="2026-01-01T02:00:00+00:00")
 
         assert parent is not None
         self.assertEqual(
@@ -798,7 +837,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                     message_id=message_id,
                     timestamp=f"2026-01-01T01:06:0{part_number}+00:00",
                 )
-            page = list_alerts()
+            page = list_alerts(now="2026-01-01T02:00:00+00:00")
             snapshot = traffic_snapshot(limit=10)
 
         self.assertEqual(len(page["items"]), 1)

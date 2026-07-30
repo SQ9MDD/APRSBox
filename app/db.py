@@ -595,6 +595,7 @@ CREATE TABLE IF NOT EXISTS aprs_alerts (
     message TEXT NOT NULL DEFAULT '',
     alarm_group TEXT,
     expiry TEXT,
+    expires_at TEXT,
     event_code TEXT,
     area_code TEXT,
     message_id TEXT,
@@ -1063,6 +1064,13 @@ def init_db() -> None:
                 """
                 ALTER TABLE aprs_alerts
                 ADD COLUMN expiry TEXT
+                """
+            )
+        if "expires_at" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN expires_at TEXT
                 """
             )
         if "event_code" not in alert_columns:
@@ -1793,6 +1801,7 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
         build_aprs_alert_identity_key,
         build_aprs_alert_part_identity_key,
         parse_aprs_group_warning_content,
+        resolve_aprs_expiry_utc,
     )
 
     connection.execute("DROP INDEX IF EXISTS idx_aprs_alerts_identity_key")
@@ -1800,7 +1809,7 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
         """
         SELECT
             id, identity_key, source_callsign, alert_type, message,
-            alarm_group, expiry, event_code, area_code, message_id,
+            alarm_group, expiry, expires_at, event_code, area_code, message_id,
             logical_alert_id, severity_level,
             area_codes_json, frame_count,
             initial_frame_id, last_frame_id,
@@ -1844,6 +1853,15 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
         )
 
         expiry = str(row["expiry"] or parsed["expiry"] or "").strip()
+        resolved_expiry = resolve_aprs_expiry_utc(
+            expiry,
+            row["first_seen_at"],
+        )
+        expires_at = str(row["expires_at"] or "").strip() or (
+            resolved_expiry.replace(microsecond=0).isoformat()
+            if resolved_expiry is not None
+            else ""
+        )
         event_code = str(row["event_code"] or parsed["event_code"] or "").strip()
         message_id = str(row["message_id"] or parsed["message_id"] or "").strip()
         logical_alert_id = str(
@@ -1914,6 +1932,7 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
             SET identity_key = ?,
                 alarm_group = ?,
                 expiry = ?,
+                expires_at = ?,
                 event_code = ?,
                 area_code = ?,
                 message_id = ?,
@@ -1926,6 +1945,7 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
                 identity_key,
                 alarm_group or None,
                 expiry or None,
+                expires_at or None,
                 event_code or None,
                 area_code or None,
                 message_id or None,
@@ -2198,6 +2218,7 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
             UPDATE aprs_alerts
             SET message = ?,
                 expiry = ?,
+                expires_at = ?,
                 event_code = ?,
                 area_code = ?,
                 message_id = ?,
@@ -2221,6 +2242,7 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
             (
                 newest["message"],
                 newest["expiry"],
+                newest["expires_at"],
                 newest["event_code"],
                 aggregate_area_codes[0] if aggregate_area_codes else None,
                 newest["message_id"],

@@ -16,6 +16,7 @@ from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
 from app.services.content import monitoring_public_snapshot, traffic_snapshot as get_traffic_snapshot
+from app.services.alerts import expire_aprs_alerts
 from app.services.traffic_stream import TrafficSnapshotBroadcaster
 
 
@@ -42,6 +43,7 @@ def get_client_ip(request: Request) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    expire_aprs_alerts()
     app.state.traffic_stream_broadcaster = TrafficSnapshotBroadcaster(
         snapshot_provider=get_traffic_snapshot,
         tick_seconds=settings.traffic_stream_tick_seconds,

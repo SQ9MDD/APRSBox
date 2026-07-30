@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.db import fetch_all, utc_now
+from app.services.alerts import expire_aprs_alerts
 from app.services.aprs_warning_identity import normalize_warning_area_codes
 
 
@@ -22,6 +23,12 @@ _EXPLICIT_IDENTIFIER_KEYS = (
     "identifier_property",
     "identifierProperty",
 )
+ALERT_SEVERITY_COLORS = {
+    1: "yellow",
+    2: "orange",
+    3: "red",
+}
+UNKNOWN_ALERT_SEVERITY_COLOR = "gray"
 
 
 def country_code_from_alarm_group(alarm_group: Any) -> str | None:
@@ -44,6 +51,14 @@ def _decode_area_codes(value: Any) -> list[str]:
         except (TypeError, ValueError, json.JSONDecodeError):
             return []
     return normalize_warning_area_codes(value)
+
+
+def _alert_severity_level(value: Any) -> int | None:
+    try:
+        severity_level = int(value)
+    except (TypeError, ValueError):
+        return None
+    return severity_level if severity_level in ALERT_SEVERITY_COLORS else None
 
 
 def _is_position(value: Any) -> bool:
@@ -182,8 +197,9 @@ def _matching_features(
     document: Mapping[str, Any],
     *,
     country_code: str,
-    requested_codes: set[str],
+    severity_by_code: Mapping[str, int],
 ) -> list[dict[str, Any]]:
+    requested_codes = set(severity_by_code)
     features = [
         feature
         for feature in document.get("features", [])
@@ -202,10 +218,16 @@ def _matching_features(
         if normalized_identifier not in requested_codes:
             continue
         properties = dict(feature.get("properties") or {})
+        severity_level = severity_by_code.get(normalized_identifier, 0)
         properties.update(
             {
                 "aprsbox_country": country_code,
                 "aprsbox_area_code": str(identifier).strip(),
+                "aprsbox_severity_level": severity_level or None,
+                "aprsbox_alert_color": ALERT_SEVERITY_COLORS.get(
+                    severity_level,
+                    UNKNOWN_ALERT_SEVERITY_COLOR,
+                ),
             }
         )
         matched.append(
@@ -224,7 +246,7 @@ def build_alert_area_feature_collection(
     geodata_root: Path | None = None,
 ) -> dict[str, Any]:
     root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
-    codes_by_country: dict[str, set[str]] = {}
+    severity_by_country_code: dict[str, dict[str, int]] = {}
     for alert in alerts:
         country_code = country_code_from_alarm_group(alert.get("alarm_group"))
         if country_code is None:
@@ -239,12 +261,17 @@ def build_alert_area_feature_collection(
             for code in _decode_area_codes(raw_area_codes)
             if _normalize_identifier(code)
         }
-        if normalized_codes:
-            codes_by_country.setdefault(country_code, set()).update(normalized_codes)
+        severity_level = _alert_severity_level(alert.get("severity_level")) or 0
+        country_severities = severity_by_country_code.setdefault(country_code, {})
+        for normalized_code in normalized_codes:
+            country_severities[normalized_code] = max(
+                country_severities.get(normalized_code, 0),
+                severity_level,
+            )
 
     output_features: list[dict[str, Any]] = []
-    seen_geometries: set[str] = set()
-    for country_code in sorted(codes_by_country):
+    feature_indexes_by_geometry: dict[str, int] = {}
+    for country_code in sorted(severity_by_country_code):
         country_directory = root / country_code
         if not country_directory.is_dir():
             continue
@@ -263,7 +290,7 @@ def build_alert_area_feature_collection(
             for feature in _matching_features(
                 document,
                 country_code=country_code,
-                requested_codes=codes_by_country[country_code],
+                severity_by_code=severity_by_country_code[country_code],
             ):
                 try:
                     geometry_key = json.dumps(
@@ -275,9 +302,21 @@ def build_alert_area_feature_collection(
                 except (TypeError, ValueError):
                     continue
                 deduplication_key = f"{country_code}:{geometry_key}"
-                if deduplication_key in seen_geometries:
+                existing_index = feature_indexes_by_geometry.get(deduplication_key)
+                if existing_index is not None:
+                    existing_severity = int(
+                        output_features[existing_index]["properties"].get(
+                            "aprsbox_severity_level"
+                        )
+                        or 0
+                    )
+                    candidate_severity = int(
+                        feature["properties"].get("aprsbox_severity_level") or 0
+                    )
+                    if candidate_severity > existing_severity:
+                        output_features[existing_index] = feature
                     continue
-                seen_geometries.add(deduplication_key)
+                feature_indexes_by_geometry[deduplication_key] = len(output_features)
                 output_features.append(feature)
 
     return {
@@ -293,19 +332,24 @@ def get_active_alert_area_feature_collection(
 ) -> dict[str, Any]:
     timestamp = str(now or utc_now())
     try:
+        expire_aprs_alerts(now=timestamp)
         rows = fetch_all(
             """
-            SELECT id, alarm_group, area_codes_json
+            SELECT id, alarm_group, area_codes_json, severity_level
             FROM aprs_alerts
             WHERE is_active = 1
               AND superseded_by_alert_id IS NULL
+              AND (
+                    expires_at IS NULL
+                    OR julianday(expires_at) > julianday(?)
+              )
               AND (
                     valid_until_utc IS NULL
                     OR julianday(valid_until_utc) > julianday(?)
               )
             ORDER BY id ASC
             """,
-            (timestamp,),
+            (timestamp, timestamp),
         )
     except sqlite3.OperationalError:
         return {"type": "FeatureCollection", "features": []}

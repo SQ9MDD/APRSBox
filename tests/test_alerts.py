@@ -4,9 +4,11 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
-from app.db import fetch_all, fetch_one, init_db
+from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.alerts import (
     attention_alert_count,
     delete_alert,
@@ -17,10 +19,14 @@ from app.services.alerts import (
     unmute_alert,
 )
 from app.services.content import traffic_snapshot
+from app.services.maintenance_scheduler import MaintenanceSchedulerService
 from app.services.traffic import process_normalized_tnc2_rx
 
 
 EMERGENCY_LINE = "SP8ABC-9>APRS:!5218.37N\\02104.87E$!EMERGENCY!Need help"
+GROUP_WARNING_LINE = (
+    "PLWXSR>APRS,TCPIP*::PL-WARN  :302200z,TSTORM3,@A7F3,1/1,1465{91AC2"
+)
 
 
 @contextlib.contextmanager
@@ -56,6 +62,87 @@ def receive_emergency(
 
 
 class AprsAlertTests(unittest.TestCase):
+    def test_backend_maintenance_expires_group_alert_without_open_map_and_preserves_frame(self) -> None:
+        with temporary_database():
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    GROUP_WARNING_LINE,
+                    source="APRS-IS",
+                    source_kind="aprsis",
+                    timestamp="2026-07-30T20:00:00+00:00",
+                )
+            )
+            stored = fetch_one(
+                "SELECT id, is_active, expires_at FROM aprs_alerts"
+            )
+            assert stored is not None
+            self.assertEqual(stored["expires_at"], "2026-07-30T22:00:00+00:00")
+            self.assertEqual(int(stored["is_active"]), 1)
+
+            scheduler = MaintenanceSchedulerService()
+            with patch(
+                "app.services.maintenance_scheduler.prune_traffic_frames_batch"
+            ):
+                scheduler._tick(
+                    now=datetime(2026, 7, 30, 22, 1, tzinfo=timezone.utc)
+                )
+
+            expired = fetch_one(
+                "SELECT is_active FROM aprs_alerts WHERE id = ?",
+                (int(stored["id"]),),
+            )
+            frame_count = fetch_one(
+                "SELECT COUNT(*) AS total FROM traffic_frames"
+            )
+            relation_count = fetch_one(
+                "SELECT COUNT(*) AS total FROM aprs_alert_frames"
+            )
+            active_page = list_alerts(
+                now="2026-07-30T22:01:00+00:00"
+            )
+
+        assert expired is not None
+        assert frame_count is not None
+        assert relation_count is not None
+        self.assertEqual(int(expired["is_active"]), 0)
+        self.assertEqual(active_page["items"], [])
+        self.assertEqual(int(frame_count["total"]), 1)
+        self.assertEqual(int(relation_count["total"]), 1)
+
+    def test_application_restart_expires_overdue_alert(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        with temporary_database():
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    GROUP_WARNING_LINE,
+                    source="APRS-IS",
+                    source_kind="aprsis",
+                    timestamp="2026-07-30T20:00:00+00:00",
+                )
+            )
+            execute(
+                """
+                UPDATE aprs_alerts
+                SET expires_at = '2000-01-01T00:00:00+00:00',
+                    is_active = 1
+                """
+            )
+
+            with TestClient(app):
+                restarted = fetch_one(
+                    "SELECT is_active FROM aprs_alerts"
+                )
+                preserved_frame = fetch_one(
+                    "SELECT id FROM traffic_frames LIMIT 1"
+                )
+
+        assert restarted is not None
+        self.assertEqual(int(restarted["is_active"]), 0)
+        self.assertIsNotNone(preserved_frame)
+
     def test_mic_e_alert_preserves_complete_operator_comment(self) -> None:
         line = "SQ9MDD-7>521U02,RFONLY:'0SWl \x1c[/>144.800MHz op. Rysiek&"
         with temporary_database():
@@ -398,24 +485,24 @@ class AprsAlertTests(unittest.TestCase):
                         (11, 'old-part-1', 'PLWXSR', 'PL-WARN',
                          '302200z,TSTORM2,@A7F3,1/3,1465,1466{91AC2',
                          'PL-WARN', '["@A7F3","1/3","1465","1466"]',
-                         '2026-01-01T00:00:01+00:00',
-                         '2026-01-01T00:00:01+00:00', 1,
-                         '2026-01-01T00:00:01+00:00',
-                         '2026-01-01T00:00:01+00:00'),
+                         '2026-01-30T20:00:01+00:00',
+                         '2026-01-30T20:00:01+00:00', 1,
+                         '2026-01-30T20:00:01+00:00',
+                         '2026-01-30T20:00:01+00:00'),
                         (12, 'old-part-2', 'PLWXSR', 'PL-WARN',
                          '302200z,TSTORM2,@A7F3,2/3,1466,1412{77BD1',
                          'PL-WARN', '["@A7F3","2/3","1466","1412"]',
-                         '2026-01-01T00:00:02+00:00',
-                         '2026-01-01T00:00:02+00:00', 1,
-                         '2026-01-01T00:00:02+00:00',
-                         '2026-01-01T00:00:02+00:00'),
+                         '2026-01-30T20:00:02+00:00',
+                         '2026-01-30T20:00:02+00:00', 1,
+                         '2026-01-30T20:00:02+00:00',
+                         '2026-01-30T20:00:02+00:00'),
                         (13, 'old-part-3', 'PLWXSR', 'PL-WARN',
                          '302200z,TSTORM2,@A7F3,3/3,1415{A40E8',
                          'PL-WARN', '["@A7F3","3/3","1415"]',
-                         '2026-01-01T00:00:03+00:00',
-                         '2026-01-01T00:00:03+00:00', 1,
-                         '2026-01-01T00:00:03+00:00',
-                         '2026-01-01T00:00:03+00:00');
+                         '2026-01-30T20:00:03+00:00',
+                         '2026-01-30T20:00:03+00:00', 1,
+                         '2026-01-30T20:00:03+00:00',
+                         '2026-01-30T20:00:03+00:00');
                     """
                 )
                 connection.commit()
@@ -425,7 +512,7 @@ class AprsAlertTests(unittest.TestCase):
                 init_db()
                 physical_rows = fetch_all(
                     """
-                    SELECT id, identity_key, superseded_by_alert_id
+                    SELECT id, identity_key, superseded_by_alert_id, expires_at
                     FROM aprs_alerts
                     ORDER BY id
                     """
@@ -437,7 +524,7 @@ class AprsAlertTests(unittest.TestCase):
                     ORDER BY part_number
                     """
                 )
-                page = list_alerts()
+                page = list_alerts(now="2026-01-30T21:00:00+00:00")
             finally:
                 if previous is None:
                     os.environ.pop("APRSBOX_DB_PATH", None)
@@ -451,6 +538,10 @@ class AprsAlertTests(unittest.TestCase):
             [11, 11],
         )
         self.assertIn("aprs-group-logical", physical_rows[0]["identity_key"])
+        self.assertEqual(
+            physical_rows[0]["expires_at"],
+            "2026-01-30T22:00:00+00:00",
+        )
         self.assertEqual(len(parts), 3)
         self.assertTrue(all(int(part["alert_id"]) == 11 for part in parts))
         self.assertEqual(

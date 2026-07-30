@@ -317,15 +317,23 @@
     alertAreaLayer = window.L.geoJSON(null, {
         pane: alertAreasPaneName,
         interactive: false,
-        style: {
-            stroke: true,
-            color: "red",
-            opacity: 1,
-            weight: 2,
-            dashArray: null,
-            fill: true,
-            fillColor: "red",
-            fillOpacity: 0.10,
+        style: (feature) => {
+            const requestedColor = String(
+                feature?.properties?.aprsbox_alert_color || "gray"
+            ).toLowerCase();
+            const color = ["yellow", "orange", "red", "gray"].includes(requestedColor)
+                ? requestedColor
+                : "gray";
+            return {
+                stroke: true,
+                color,
+                opacity: 1,
+                weight: 2,
+                dashArray: null,
+                fill: true,
+                fillColor: color,
+                fillOpacity: 0.10,
+            };
         },
     }).addTo(map);
     coverageLayerGroup.addTo(map);
