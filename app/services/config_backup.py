@@ -44,6 +44,7 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "aprsis_port",
     "aprsis_login",
     "aprsis_passcode",
+    "aprs.alarm_groups",
 )
 
 

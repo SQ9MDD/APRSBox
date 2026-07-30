@@ -154,7 +154,7 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
             server_filter="r/52.23/21.01/50",
         )
         self.assertIn("user SQ9XYZ-10 pass 12345", line)
-        self.assertTrue(line.endswith("filter r/52.23/21.01/50"))
+        self.assertTrue(line.endswith("filter r/52.23/21.01/50 g/PL-WARN"))
 
     def test_interfaces_form_saves_aprsis_connection_settings_and_legacy_route_redirects(self) -> None:
         with temporary_database():
@@ -542,7 +542,7 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(opener.await_count, 1)
             self.assertIs(service._writer, writer)
-            self.assertIn(b" filter m/20\r\n", writer.writes[0])
+            self.assertIn(b" filter m/20 g/PL-WARN\r\n", writer.writes[0])
             self.assertTrue(service._process_server_line(POSITION_LINE))
             sent, _detail = await service.send_tnc2_line("SQ9XYZ-10>APRS:>TX test")
             self.assertTrue(sent)

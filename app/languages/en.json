@@ -1850,5 +1850,15 @@
   "APRS-IS TX flow is configured, but the APRS-IS connection is disabled.": "APRS-IS TX flow is configured, but the APRS-IS connection is disabled.",
   "APRS-IS target requires a defined APRSIS interface.": "APRS-IS target requires a defined APRSIS interface.",
   "Interface settings updated.": "Interface settings updated.",
+  "APRS alarm groups": "APRS alarm groups",
+  "Alarm groups": "Alarm groups",
+  "Saving APRS alarm groups...": "Saving APRS alarm groups...",
+  "Enter one or more APRS alarm group names separated by commas.": "Enter one or more APRS alarm group names separated by commas.",
+  "Save alarm groups": "Save alarm groups",
+  "RF receive groups": "RF receive groups",
+  "Automatic APRS-IS filter": "Automatic APRS-IS filter",
+  "APRS alarm group settings updated.": "APRS alarm group settings updated.",
+  "Alarm groups must contain 1-9 letters, digits, or hyphens, separated by commas.": "Alarm groups must contain 1-9 letters, digits, or hyphens, separated by commas.",
+  "Bulletin addresses cannot be used as APRS alarm groups.": "Bulletin addresses cannot be used as APRS alarm groups.",
   "Close": "Close"
 }

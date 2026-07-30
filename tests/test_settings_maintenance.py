@@ -97,6 +97,17 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("data-settings-action-id=\"reset-runtime-data\"", template_source)
         self.assertIn('{{ t("Reset runtime logs/data") }}', template_source)
 
+    def test_settings_template_contains_aprs_alarm_group_configuration_and_diagnostics(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('{{ t("APRS alarm groups") }}', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/alarm-groups"', template_source)
+        self.assertIn('name="alarm_groups"', template_source)
+        self.assertIn("aprs_alarm_groups|join(', ')", template_source)
+        self.assertIn('{{ t("RF receive groups") }}', template_source)
+        self.assertIn("effective_rf_message_groups|join(', ')", template_source)
+        self.assertIn('{{ t("Automatic APRS-IS filter") }}', template_source)
+        self.assertIn("automatic_aprsis_alarm_filter", template_source)
+
     def test_settings_template_keeps_global_save_button_below_coverage_controls(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('id="global-settings-form"', template_source)

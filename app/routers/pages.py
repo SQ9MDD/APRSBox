@@ -80,6 +80,11 @@ from app.services.content import (
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
+from app.services.alarm_groups import (
+    build_automatic_aprsis_alarm_filter,
+    get_aprs_alarm_groups,
+    save_aprs_alarm_groups,
+)
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -103,9 +108,11 @@ from app.services.messages import (
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
     get_messages_page_data as get_live_messages_page_data,
+    get_effective_message_target_groups,
     get_unread_inbox_count,
     mark_conversation_read,
     queue_outgoing_message,
+    reconcile_effective_message_group_conversations,
     retry_failed_message,
     save_message_settings,
     update_conversation_path,
@@ -891,6 +898,13 @@ def _settings_page_context(
         for name in (update_channels.get("channels") or [selected_update_channel])
     ]
     update_log_snapshot = read_update_log()
+    aprs_alarm_groups = get_aprs_alarm_groups()
+    effective_rf_message_groups = get_effective_message_target_groups(
+        alarm_groups=aprs_alarm_groups
+    )
+    automatic_aprsis_alarm_filter = build_automatic_aprsis_alarm_filter(
+        aprs_alarm_groups
+    )
     return build_template_context(
         request,
         page_title="Settings",
@@ -960,6 +974,9 @@ def _settings_page_context(
         update_log_content=str(update_log_snapshot.get("content") or ""),
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
+        aprs_alarm_groups=aprs_alarm_groups,
+        effective_rf_message_groups=effective_rf_message_groups,
+        automatic_aprsis_alarm_filter=automatic_aprsis_alarm_filter,
         is_container_mode=container_mode,
         map_sources=map_sources,
         map_source_form=resolved_map_source_form,
@@ -1667,6 +1684,30 @@ def settings_update_global(
             "event_log_min_level": selected_event_log_min_level,
             "event_log_debug_enabled": selected_event_log_debug_enabled,
             "coverage_fill_opacity": selected_coverage_fill_opacity,
+            "reload": True,
+        }
+    )
+
+
+@router.post("/settings/alarm-groups")
+def settings_update_alarm_groups(
+    _: Request,
+    alarm_groups: str = Form(""),
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    try:
+        saved_groups = save_aprs_alarm_groups(alarm_groups)
+        reconcile_effective_message_group_conversations(alarm_groups=saved_groups)
+    except ValueError as exc:
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(exc))},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _translate("APRS alarm group settings updated."),
+            "alarm_groups": saved_groups,
             "reload": True,
         }
     )
