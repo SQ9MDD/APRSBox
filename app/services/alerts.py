@@ -8,6 +8,11 @@ from typing import Any, Mapping
 from app.datetime_utils import format_display_datetime, parse_datetime
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.alarm_groups import get_aprs_alarm_groups
+from app.services.aprs_warning_identity import (
+    build_aprs_alert_identity_key,
+    normalize_warning_area_codes,
+    parse_aprs_group_warning_content,
+)
 from app.services.content import (
     build_emergency_frame_data,
     build_station_detail_href,
@@ -37,21 +42,7 @@ def _normalized_source_callsign(parsed: Mapping[str, Any]) -> str:
 
 
 def normalize_alert_area_codes(values: Any) -> list[str]:
-    if values is None:
-        return []
-    candidates = values if isinstance(values, (list, tuple, set)) else [values]
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for value in candidates:
-        text = str(value).strip()
-        if not text:
-            continue
-        comparison_key = text.casefold()
-        if comparison_key in seen:
-            continue
-        seen.add(comparison_key)
-        normalized.append(text)
-    return normalized
+    return normalize_warning_area_codes(values)
 
 
 def extract_aprs_warning_area_codes(raw_content: Any) -> list[str]:
@@ -62,11 +53,7 @@ def extract_aprs_warning_area_codes(raw_content: Any) -> list[str]:
     parser or Alert Hub adapter can replace this small transport-level helper.
     """
 
-    content_without_message_id = str(raw_content or "").split("{", 1)[0]
-    fields = content_without_message_id.split(",")
-    if len(fields) < 3:
-        return []
-    return normalize_alert_area_codes(fields[2:])
+    return list(parse_aprs_group_warning_content(raw_content)["area_codes"])
 
 
 def _stored_area_codes(value: Any) -> list[str]:
@@ -132,26 +119,69 @@ def accept_aprs_warning_frame(
     warning_kind = str(warning.get("warning_kind") or "aprs_warning").strip().lower()
     emergency_notification = bool(warning.get("emergency_notification"))
     alarm_group = str(warning.get("alarm_group") or "").strip().upper() or None
-    area_codes = normalize_alert_area_codes(warning.get("area_codes"))
+    parsed_warning = (
+        parse_aprs_group_warning_content(message)
+        if alarm_group is not None
+        else {
+            "expiry": "",
+            "event_code": "",
+            "area_code": "",
+            "area_codes": [],
+            "message_id": "",
+        }
+    )
+    expiry = str(
+        warning.get("expiry")
+        if warning.get("expiry") is not None
+        else parsed_warning["expiry"]
+    ).strip()
+    event_code = str(
+        warning.get("event_code")
+        if warning.get("event_code") is not None
+        else parsed_warning["event_code"]
+    ).strip()
+    message_id = str(
+        warning.get("message_id")
+        if warning.get("message_id") is not None
+        else parsed_warning["message_id"]
+    ).strip()
+    area_codes = normalize_alert_area_codes(
+        warning.get("area_codes")
+        if warning.get("area_codes") is not None
+        else parsed_warning["area_codes"]
+    )
+    area_code = str(
+        warning.get("area_code")
+        if warning.get("area_code") is not None
+        else (area_codes[0] if area_codes else parsed_warning["area_code"])
+    ).strip()
     area_codes_json = json.dumps(area_codes, ensure_ascii=False, separators=(",", ":"))
     is_active = 1 if bool(warning.get("is_active", True)) else 0
     valid_until_utc = str(warning.get("valid_until_utc") or "").strip() or None
+    identity_key = str(warning.get("identity_key") or "").strip() or build_aprs_alert_identity_key(
+        source_callsign=source_callsign,
+        alarm_group=alarm_group,
+        message_id=message_id,
+        raw_content=message,
+    )
 
     insert_cursor = connection.execute(
         """
         INSERT INTO aprs_alerts(
-            source_callsign, alert_type, message,
+            identity_key, source_callsign, alert_type, message,
             alarm_group, area_codes_json, is_active, valid_until_utc,
+            expiry, event_code, area_code, message_id,
             first_seen_at, last_seen_at, frame_count,
             initial_frame_id, last_frame_id,
             latitude, longitude,
             muted_until, muted_indefinitely,
             created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, 0, ?, ?)
-        ON CONFLICT(source_callsign) DO NOTHING
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, 0, ?, ?)
+        ON CONFLICT(identity_key) DO NOTHING
         """,
         (
+            identity_key,
             source_callsign,
             alert_type,
             message,
@@ -159,6 +189,10 @@ def accept_aprs_warning_frame(
             area_codes_json,
             is_active,
             valid_until_utc,
+            expiry or None,
+            event_code or None,
+            area_code or None,
+            message_id or None,
             received_at,
             received_at,
             frame_id,
@@ -172,8 +206,8 @@ def accept_aprs_warning_frame(
     created = int(insert_cursor.rowcount or 0) == 1
 
     alert_row = connection.execute(
-        "SELECT id FROM aprs_alerts WHERE source_callsign = ? COLLATE NOCASE",
-        (source_callsign,),
+        "SELECT id FROM aprs_alerts WHERE identity_key = ?",
+        (identity_key,),
     ).fetchone()
     if alert_row is None:
         raise RuntimeError(f"APRS warning upsert failed for {source_callsign}")
@@ -199,6 +233,10 @@ def accept_aprs_warning_frame(
                 area_codes_json = ?,
                 is_active = ?,
                 valid_until_utc = ?,
+                expiry = ?,
+                event_code = ?,
+                area_code = ?,
+                message_id = ?,
                 last_seen_at = ?,
                 frame_count = frame_count + ?,
                 last_frame_id = ?,
@@ -214,6 +252,10 @@ def accept_aprs_warning_frame(
                 area_codes_json,
                 is_active,
                 valid_until_utc,
+                expiry or None,
+                event_code or None,
+                area_code or None,
+                message_id or None,
                 received_at,
                 1 if relation_created else 0,
                 frame_id,
@@ -229,6 +271,7 @@ def accept_aprs_warning_frame(
         "source_callsign": source_callsign,
         "created": created,
         "warning_kind": warning_kind,
+        "identity_key": identity_key,
         "notification_required": emergency_notification and created,
     }
 
@@ -298,6 +341,7 @@ def process_alarm_group_message_frame(
     addressee = str(aprs_data.get("addressee") or raw_addressee).strip().upper()
     if not addressee or addressee not in set(get_aprs_alarm_groups()):
         return None
+    warning_fields = parse_aprs_group_warning_content(raw_content)
 
     return accept_aprs_warning_frame(
         connection,
@@ -308,7 +352,7 @@ def process_alarm_group_message_frame(
             "alert_type": addressee,
             "raw_content": raw_content,
             "alarm_group": addressee,
-            "area_codes": extract_aprs_warning_area_codes(raw_content),
+            **warning_fields,
             "latitude": aprs_data.get("latitude"),
             "longitude": aprs_data.get("longitude"),
             "warning_kind": "alarm_group",

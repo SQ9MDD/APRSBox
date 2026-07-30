@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.db import fetch_all, utc_now
-from app.services.alerts import normalize_alert_area_codes
+from app.services.aprs_warning_identity import normalize_warning_area_codes
 
 
 GEODATA_ROOT = Path(__file__).resolve().parents[1] / "static" / "geodata"
@@ -43,7 +43,7 @@ def _decode_area_codes(value: Any) -> list[str]:
             value = json.loads(value)
         except (TypeError, ValueError, json.JSONDecodeError):
             return []
-    return normalize_alert_area_codes(value)
+    return normalize_warning_area_codes(value)
 
 
 def _is_position(value: Any) -> bool:

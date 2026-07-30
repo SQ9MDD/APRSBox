@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -588,10 +589,15 @@ CREATE TABLE IF NOT EXISTS traffic_frames (
 
 CREATE TABLE IF NOT EXISTS aprs_alerts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    identity_key TEXT NOT NULL,
     source_callsign TEXT NOT NULL COLLATE NOCASE,
     alert_type TEXT NOT NULL,
     message TEXT NOT NULL DEFAULT '',
     alarm_group TEXT,
+    expiry TEXT,
+    event_code TEXT,
+    area_code TEXT,
+    message_id TEXT,
     area_codes_json TEXT NOT NULL DEFAULT '[]',
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     valid_until_utc TEXT,
@@ -897,7 +903,6 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alerts_source_callsign ON aprs_alerts(source_callsign COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_aprs_alerts_last_seen_at ON aprs_alerts(last_seen_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_alert_received_at
     ON aprs_alert_frames(alert_id, received_at DESC, frame_id DESC);
@@ -1009,6 +1014,41 @@ def init_db() -> None:
                 ADD COLUMN alarm_group TEXT
                 """
             )
+        if "identity_key" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN identity_key TEXT
+                """
+            )
+        if "expiry" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN expiry TEXT
+                """
+            )
+        if "event_code" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN event_code TEXT
+                """
+            )
+        if "area_code" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN area_code TEXT
+                """
+            )
+        if "message_id" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN message_id TEXT
+                """
+            )
         if "area_codes_json" not in alert_columns:
             connection.execute(
                 """
@@ -1031,6 +1071,7 @@ def init_db() -> None:
                 ADD COLUMN valid_until_utc TEXT
                 """
             )
+        _migrate_aprs_alert_identity(connection)
         if "default_units" not in station_columns:
             connection.execute(
                 """
@@ -1656,6 +1697,116 @@ CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
         _normalize_map_sources_table(connection)
         connection.commit()
         _run_database_index_repair_for_update(connection)
+
+
+def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
+    from app.services.aprs_warning_identity import (
+        build_aprs_alert_identity_key,
+        parse_aprs_group_warning_content,
+    )
+
+    rows = connection.execute(
+        """
+        SELECT
+            id, identity_key, source_callsign, alert_type, message,
+            alarm_group, expiry, event_code, area_code, message_id,
+            area_codes_json
+        FROM aprs_alerts
+        ORDER BY id ASC
+        """
+    ).fetchall()
+    for row in rows:
+        message = str(row["message"] or "")
+        parsed_candidate = parse_aprs_group_warning_content(message)
+        alarm_group = str(row["alarm_group"] or "").strip().upper()
+        alert_type = str(row["alert_type"] or "").strip().upper()
+        looks_like_country_warning_group = (
+            len(alert_type) == 7
+            and alert_type[2:] == "-WARN"
+            and alert_type[:2].isascii()
+            and alert_type[:2].isalpha()
+        )
+        if (
+            not alarm_group
+            and looks_like_country_warning_group
+            and parsed_candidate["area_code"]
+        ):
+            alarm_group = alert_type
+        parsed = (
+            parsed_candidate
+            if alarm_group
+            else {
+                "expiry": "",
+                "event_code": "",
+                "area_code": "",
+                "area_codes": [],
+                "message_id": "",
+            }
+        )
+
+        expiry = str(row["expiry"] or parsed["expiry"] or "").strip()
+        event_code = str(row["event_code"] or parsed["event_code"] or "").strip()
+        area_code = str(row["area_code"] or parsed["area_code"] or "").strip()
+        message_id = str(row["message_id"] or parsed["message_id"] or "").strip()
+        area_codes_json = str(row["area_codes_json"] or "").strip()
+        try:
+            stored_area_codes = json.loads(area_codes_json) if area_codes_json else []
+        except (TypeError, ValueError, json.JSONDecodeError):
+            stored_area_codes = []
+        if not stored_area_codes and parsed["area_codes"]:
+            area_codes_json = json.dumps(
+                parsed["area_codes"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        elif not area_codes_json:
+            area_codes_json = "[]"
+
+        identity_key = str(row["identity_key"] or "").strip()
+        if not identity_key:
+            identity_key = build_aprs_alert_identity_key(
+                source_callsign=row["source_callsign"],
+                alarm_group=alarm_group,
+                message_id=message_id,
+                raw_content=message,
+            )
+        connection.execute(
+            """
+            UPDATE aprs_alerts
+            SET identity_key = ?,
+                alarm_group = ?,
+                expiry = ?,
+                event_code = ?,
+                area_code = ?,
+                message_id = ?,
+                area_codes_json = ?
+            WHERE id = ?
+            """,
+            (
+                identity_key,
+                alarm_group or None,
+                expiry or None,
+                event_code or None,
+                area_code or None,
+                message_id or None,
+                area_codes_json,
+                int(row["id"]),
+            ),
+        )
+
+    connection.execute("DROP INDEX IF EXISTS idx_aprs_alerts_source_callsign")
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_aprs_alerts_source_callsign
+        ON aprs_alerts(source_callsign COLLATE NOCASE)
+        """
+    )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alerts_identity_key
+        ON aprs_alerts(identity_key)
+        """
+    )
 
 
 def _normalize_map_sources_table(connection: sqlite3.Connection) -> None:

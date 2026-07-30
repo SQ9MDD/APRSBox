@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.db import execute, fetch_one, get_app_setting, init_db, set_app_setting
+from app.db import execute, fetch_all, fetch_one, get_app_setting, init_db, set_app_setting
+from app.services.alerts import list_alerts
 from app.services.alarm_groups import (
     APRS_ALARM_GROUPS_SETTING_KEY,
     DEFAULT_APRS_ALARM_GROUPS,
@@ -20,6 +21,7 @@ from app.services.aprsis import (
     build_aprsis_login_line,
     get_enabled_aprsis_interface,
 )
+from app.services.aprs_warning_identity import parse_aprs_group_warning_content
 from app.services.messages import (
     DEFAULT_MESSAGE_TARGET_GROUPS,
     get_effective_message_target_groups,
@@ -223,6 +225,21 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         "PLWXSR>APRS::PL-WARN  :310100z,TSTORM1,1465{129AA"
     )
 
+    @staticmethod
+    def _group_alarm_line(
+        *,
+        source: str = "PLWXSR",
+        group: str = "PL-WARN",
+        expiry: str = "310100z",
+        event_code: str = "TSTORM1",
+        area_code: str,
+        message_id: str | None,
+    ) -> str:
+        content = f"{expiry},{event_code},{area_code}"
+        if message_id is not None:
+            content = f"{content}{{{message_id}"
+        return f"{source}>APRS,TCPIP*::{group:<9}:{content}"
+
     def _assert_alarm_message_stored(self, *, source_kind: str) -> None:
         stored = fetch_one(
             """
@@ -259,6 +276,11 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(alert["message"], "310100z,TSTORM1,1465{129AA")
         self.assertEqual(alert["alarm_group"], "PL-WARN")
         self.assertEqual(json.loads(alert["area_codes_json"]), ["1465"])
+        self.assertEqual(alert["expiry"], "310100z")
+        self.assertEqual(alert["event_code"], "TSTORM1")
+        self.assertEqual(alert["area_code"], "1465")
+        self.assertEqual(alert["message_id"], "129AA")
+        self.assertIn("aprs-group-message", alert["identity_key"])
         self.assertEqual(int(alert["is_active"]), 1)
         self.assertEqual(int(alert["frame_count"]), 1)
         self.assertEqual(alert["initial_frame_id"], alert["frame_id"])
@@ -356,6 +378,168 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 ("LOCALWARN", "Ordinary group"),
             )
             self.assertIsNone(fetch_one("SELECT id FROM aprs_alerts"))
+
+    def test_group_warning_parser_extracts_generic_event_and_identity_fields(self) -> None:
+        parsed = parse_aprs_group_warning_content(
+            "310100z,FLOOD9,0012{Ab123"
+        )
+
+        self.assertEqual(
+            parsed,
+            {
+                "expiry": "310100z",
+                "event_code": "FLOOD9",
+                "area_code": "0012",
+                "area_codes": ["0012"],
+                "message_id": "Ab123",
+            },
+        )
+
+    def test_three_message_ids_create_three_area_alerts(self) -> None:
+        frames = (
+            ("1465", "129AA"),
+            ("2401", "82BCD"),
+            ("3262", "F913A"),
+        )
+        with temporary_database():
+            for offset, (area_code, message_id) in enumerate(frames):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        self._group_alarm_line(
+                            area_code=area_code,
+                            message_id=message_id,
+                        ),
+                        source="APRS-IS · Internet RX",
+                        source_kind="aprsis",
+                        timestamp=f"2026-01-01T00:03:0{offset}+00:00",
+                    )
+                )
+
+            alerts = fetch_all(
+                """
+                SELECT source_callsign, alarm_group, expiry, event_code,
+                       area_code, message_id, identity_key
+                FROM aprs_alerts
+                ORDER BY id ASC
+                """
+            )
+            alert_page = list_alerts(page_size=10)
+
+        self.assertEqual(len(alerts), 3)
+        self.assertEqual(len(alert_page["items"]), 3)
+        self.assertEqual(
+            {(row["area_code"], row["message_id"]) for row in alerts},
+            set(frames),
+        )
+        self.assertTrue(all(row["expiry"] == "310100z" for row in alerts))
+        self.assertTrue(all(row["event_code"] == "TSTORM1" for row in alerts))
+        self.assertEqual(len({row["identity_key"] for row in alerts}), 3)
+
+    def test_repeated_identical_frame_updates_one_alarm(self) -> None:
+        line = self._group_alarm_line(area_code="1465", message_id="129AA")
+        with temporary_database():
+            for offset in range(2):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        line,
+                        source="Main RF",
+                        source_kind="rf",
+                        band="2m",
+                        timestamp=f"2026-01-01T00:04:0{offset}+00:00",
+                    )
+                )
+
+            alerts = fetch_all("SELECT id, frame_count FROM aprs_alerts")
+            relations = fetch_all("SELECT alert_id, frame_id FROM aprs_alert_frames")
+
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(int(alerts[0]["frame_count"]), 2)
+        self.assertEqual(len(relations), 2)
+        self.assertTrue(all(relations[0]["alert_id"] == row["alert_id"] for row in relations))
+
+    def test_same_message_id_from_another_sender_does_not_collide(self) -> None:
+        with temporary_database():
+            for offset, source_callsign in enumerate(("PLWXSR", "PLWXS2")):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        self._group_alarm_line(
+                            source=source_callsign,
+                            area_code="1465",
+                            message_id="129AA",
+                        ),
+                        source="APRS-IS",
+                        source_kind="aprsis",
+                        timestamp=f"2026-01-01T00:05:0{offset}+00:00",
+                    )
+                )
+
+            alerts = fetch_all(
+                "SELECT source_callsign, message_id FROM aprs_alerts ORDER BY id"
+            )
+
+        self.assertEqual(
+            [(row["source_callsign"], row["message_id"]) for row in alerts],
+            [("PLWXSR", "129AA"), ("PLWXS2", "129AA")],
+        )
+
+    def test_same_message_id_for_another_group_does_not_collide(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("PL-WARN,DE-WARN")
+            for offset, group in enumerate(("PL-WARN", "DE-WARN")):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        self._group_alarm_line(
+                            group=group,
+                            area_code="1465",
+                            message_id="129AA",
+                        ),
+                        source="APRS-IS",
+                        source_kind="aprsis",
+                        timestamp=f"2026-01-01T00:06:0{offset}+00:00",
+                    )
+                )
+
+            alerts = fetch_all(
+                "SELECT alarm_group, message_id FROM aprs_alerts ORDER BY id"
+            )
+
+        self.assertEqual(
+            [(row["alarm_group"], row["message_id"]) for row in alerts],
+            [("PL-WARN", "129AA"), ("DE-WARN", "129AA")],
+        )
+
+    def test_messages_without_message_id_use_stable_content_fallback(self) -> None:
+        with temporary_database():
+            for offset, area_code in enumerate(("1465", "2401", "1465")):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        self._group_alarm_line(
+                            area_code=area_code,
+                            message_id=None,
+                        ),
+                        source="Main RF",
+                        source_kind="rf",
+                        band="2m",
+                        timestamp=f"2026-01-01T00:07:0{offset}+00:00",
+                    )
+                )
+
+            alerts = fetch_all(
+                """
+                SELECT area_code, message_id, frame_count, identity_key
+                FROM aprs_alerts
+                ORDER BY area_code
+                """
+            )
+
+        self.assertEqual(len(alerts), 2)
+        self.assertEqual([row["area_code"] for row in alerts], ["1465", "2401"])
+        self.assertTrue(all(row["message_id"] is None for row in alerts))
+        self.assertEqual(
+            {row["area_code"]: int(row["frame_count"]) for row in alerts},
+            {"1465": 2, "2401": 1},
+        )
+        self.assertEqual(len({row["identity_key"] for row in alerts}), 2)
 
 
 if __name__ == "__main__":

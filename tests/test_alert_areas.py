@@ -5,13 +5,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.db import execute, init_db
+from app.db import execute, fetch_all, init_db
+from app.services.alerts import delete_alert
 from app.services.alert_areas import (
     build_alert_area_feature_collection,
     country_code_from_alarm_group,
     get_active_alert_area_feature_collection,
 )
+from app.services.aprs_warning_identity import build_aprs_alert_identity_key
 from app.services.map_service import get_map_station_markers_payload
+from app.services.traffic import process_normalized_tnc2_rx
 
 
 @contextlib.contextmanager
@@ -87,12 +90,12 @@ def _insert_alert(
     execute(
         """
         INSERT INTO aprs_alerts(
-            source_callsign, alert_type, message,
+            identity_key, source_callsign, alert_type, message,
             alarm_group, area_codes_json, is_active, valid_until_utc,
             first_seen_at, last_seen_at, frame_count,
             created_at, updated_at
         )
-        VALUES (?, ?, '', ?, ?, ?, ?,
+        VALUES (?, ?, ?, '', ?, ?, ?, ?,
                 '2026-01-01T00:00:00+00:00',
                 '2026-01-01T00:00:00+00:00',
                 1,
@@ -100,6 +103,11 @@ def _insert_alert(
                 '2026-01-01T00:00:00+00:00')
         """,
         (
+            build_aprs_alert_identity_key(
+                source_callsign=source_callsign,
+                alarm_group=alarm_group,
+                message_id=f"test-{source_callsign}",
+            ),
             source_callsign,
             alarm_group,
             alarm_group,
@@ -108,6 +116,17 @@ def _insert_alert(
             valid_until_utc,
         ),
     )
+
+
+def _receive_group_alert(area_code: str, message_id: str) -> None:
+    accepted = process_normalized_tnc2_rx(
+        f"PLWXSR>APRS,TCPIP*::PL-WARN  :310100z,TSTORM1,{area_code}{{{message_id}",
+        source="APRS-IS · Internet RX",
+        source_kind="aprsis",
+        timestamp=f"2026-01-01T00:10:{len(message_id):02d}+00:00",
+    )
+    if not accepted:
+        raise AssertionError("Alarm-group frame was rejected")
 
 
 class AlertAreaResolverTests(unittest.TestCase):
@@ -278,6 +297,94 @@ class AlertAreaResolverTests(unittest.TestCase):
                     now="2026-01-01T01:00:00+00:00",
                 )
                 self.assertEqual(deleted["features"], [])
+
+    def test_three_area_alerts_are_visible_together_and_delete_independently(self) -> None:
+        with temporary_database():
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "pl",
+                    [
+                        _feature("area_code", "1465", 20.0),
+                        _feature("area_code", "2401", 21.0),
+                        _feature("area_code", "3262", 22.0),
+                    ],
+                )
+                for area_code, message_id in (
+                    ("1465", "129AA"),
+                    ("2401", "82BCD"),
+                    ("3262", "F913A"),
+                ):
+                    _receive_group_alert(area_code, message_id)
+
+                together = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+                alerts = fetch_all(
+                    "SELECT id, area_code FROM aprs_alerts ORDER BY id"
+                )
+                removed_id = next(
+                    int(row["id"])
+                    for row in alerts
+                    if row["area_code"] == "2401"
+                )
+                self.assertTrue(delete_alert(removed_id))
+                after_delete = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+
+        self.assertEqual(
+            {
+                feature["properties"]["aprsbox_area_code"]
+                for feature in together["features"]
+            },
+            {"1465", "2401", "3262"},
+        )
+        self.assertEqual(
+            {
+                feature["properties"]["aprsbox_area_code"]
+                for feature in after_delete["features"]
+            },
+            {"1465", "3262"},
+        )
+
+    def test_shared_area_remains_until_last_active_alarm_is_removed(self) -> None:
+        with temporary_database():
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "pl",
+                    [_feature("area_code", "1465", 20.0)],
+                )
+                _receive_group_alert("1465", "129AA")
+                _receive_group_alert("1465", "82BCD")
+                alert_ids = [
+                    int(row["id"])
+                    for row in fetch_all("SELECT id FROM aprs_alerts ORDER BY id")
+                ]
+
+                both_active = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+                self.assertTrue(delete_alert(alert_ids[0]))
+                one_active = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+                self.assertTrue(delete_alert(alert_ids[1]))
+                none_active = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+
+        self.assertEqual(len(both_active["features"]), 1)
+        self.assertEqual(len(one_active["features"]), 1)
+        self.assertEqual(none_active["features"], [])
 
     def test_active_area_is_exposed_in_the_existing_map_refresh_payload(self) -> None:
         with temporary_database():

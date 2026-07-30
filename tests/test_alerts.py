@@ -1,6 +1,7 @@
 import concurrent.futures
 import contextlib
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -244,7 +245,7 @@ class AprsAlertTests(unittest.TestCase):
                 2,
             )
 
-    def test_database_schema_has_source_uniqueness_and_safe_relations(self) -> None:
+    def test_database_schema_has_identity_uniqueness_and_safe_relations(self) -> None:
         with temporary_database():
             indexes = {
                 row["name"]: int(row["unique"])
@@ -252,12 +253,97 @@ class AprsAlertTests(unittest.TestCase):
             }
             foreign_keys = fetch_all("PRAGMA foreign_key_list(aprs_alert_frames)")
 
-            self.assertEqual(indexes.get("idx_aprs_alerts_source_callsign"), 1)
+            self.assertEqual(indexes.get("idx_aprs_alerts_source_callsign"), 0)
+            self.assertEqual(indexes.get("idx_aprs_alerts_identity_key"), 1)
             self.assertEqual(
                 {row["table"] for row in foreign_keys},
                 {"aprs_alerts", "traffic_frames"},
             )
             self.assertTrue(all(str(row["on_delete"]).upper() == "CASCADE" for row in foreign_keys))
+
+    def test_identity_migration_preserves_and_backfills_existing_alerts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "legacy-alerts.db"
+            previous = os.environ.get("APRSBOX_DB_PATH")
+            os.environ["APRSBOX_DB_PATH"] = str(database_path)
+            try:
+                connection = sqlite3.connect(database_path)
+                connection.executescript(
+                    """
+                    CREATE TABLE aprs_alerts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        source_callsign TEXT NOT NULL COLLATE NOCASE,
+                        alert_type TEXT NOT NULL,
+                        message TEXT NOT NULL DEFAULT '',
+                        first_seen_at TEXT NOT NULL,
+                        last_seen_at TEXT NOT NULL,
+                        frame_count INTEGER NOT NULL DEFAULT 1,
+                        initial_frame_id INTEGER,
+                        last_frame_id INTEGER,
+                        latitude REAL,
+                        longitude REAL,
+                        muted_until TEXT,
+                        muted_indefinitely INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE UNIQUE INDEX idx_aprs_alerts_source_callsign
+                    ON aprs_alerts(source_callsign COLLATE NOCASE);
+                    INSERT INTO aprs_alerts(
+                        id, source_callsign, alert_type, message,
+                        first_seen_at, last_seen_at, frame_count,
+                        created_at, updated_at
+                    )
+                    VALUES
+                        (7, 'SP8ABC-9', 'EMERGENCY', 'Need help',
+                         '2026-01-01T00:00:00+00:00',
+                         '2026-01-01T00:00:00+00:00', 1,
+                         '2026-01-01T00:00:00+00:00',
+                         '2026-01-01T00:00:00+00:00'),
+                        (9, 'PLWXSR', 'PL-WARN',
+                         '310100z,TSTORM1,1465{129AA',
+                         '2026-01-01T00:01:00+00:00',
+                         '2026-01-01T00:01:00+00:00', 1,
+                         '2026-01-01T00:01:00+00:00',
+                         '2026-01-01T00:01:00+00:00');
+                    """
+                )
+                connection.commit()
+                connection.close()
+
+                init_db()
+                rows = fetch_all(
+                    """
+                    SELECT id, source_callsign, alarm_group, area_code,
+                           message_id, identity_key
+                    FROM aprs_alerts
+                    ORDER BY id
+                    """
+                )
+                indexes = {
+                    row["name"]: int(row["unique"])
+                    for row in fetch_all("PRAGMA index_list(aprs_alerts)")
+                }
+            finally:
+                if previous is None:
+                    os.environ.pop("APRSBOX_DB_PATH", None)
+                else:
+                    os.environ["APRSBOX_DB_PATH"] = previous
+
+        self.assertEqual([int(row["id"]) for row in rows], [7, 9])
+        self.assertIsNone(rows[0]["alarm_group"])
+        self.assertIn("aprs-emergency", rows[0]["identity_key"])
+        self.assertEqual(
+            (
+                rows[1]["alarm_group"],
+                rows[1]["area_code"],
+                rows[1]["message_id"],
+            ),
+            ("PL-WARN", "1465", "129AA"),
+        )
+        self.assertIn("aprs-group-message", rows[1]["identity_key"])
+        self.assertEqual(indexes["idx_aprs_alerts_source_callsign"], 0)
+        self.assertEqual(indexes["idx_aprs_alerts_identity_key"], 1)
 
     def test_mutating_alert_routes_are_post_only(self) -> None:
         from app.routers.pages import router
