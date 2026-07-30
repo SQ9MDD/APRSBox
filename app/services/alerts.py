@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from app.datetime_utils import format_display_datetime, parse_datetime
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.alarm_groups import get_aprs_alarm_groups
+from app.services.alert_event_icons import resolve_alert_event_icon
 from app.services.aprs_warning_identity import (
     build_aprs_alert_identity_key,
     build_aprs_alert_part_identity_key,
@@ -761,6 +762,10 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
             "alarm_group": str(item.get("alarm_group") or "").strip().upper(),
             "destination_group": str(item.get("alarm_group") or "").strip().upper(),
             "logical_alert_id": str(item.get("logical_alert_id") or "").strip().upper(),
+            "event_icon": resolve_alert_event_icon(
+                item.get("event_code"),
+                alert_type=item.get("alert_type"),
+            ),
             "severity_level": _integer_or_none(item.get("severity_level")),
             "received_parts": int(item.get("received_parts") or 0),
             "parts_total": _integer_or_none(item.get("parts_total")),

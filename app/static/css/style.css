@@ -6386,9 +6386,17 @@ select:focus-visible,
 }
 
 .alert-category-badge {
+    gap: 0.32rem;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.alert-category-event-icon {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    filter: var(--icon-filter);
 }
 
 .alert-category-badge-level-1 {

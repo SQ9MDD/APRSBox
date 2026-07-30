@@ -98,6 +98,12 @@
                         <td>
                             <div class="alert-list-category">
                                 <span class="frame-type-badge alert-category-badge {{ category_class }}">
+                                    <img
+                                        class="alert-category-event-icon"
+                                        src="{{ request.scope.root_path }}/static/icons/{{ alert.event_icon }}"
+                                        alt=""
+                                        aria-hidden="true"
+                                    >
                                     {{ alert.event_code or alert.alert_type }}
                                 </span>
                                 {% if alert.muted %}
