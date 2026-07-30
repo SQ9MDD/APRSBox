@@ -47,6 +47,7 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "aprs.alarm_groups",
     "aprs.map_alarm_level_threshold",
     "aprs.global_alarm_level_threshold",
+    "aprs.alarm_category_thresholds",
 )
 
 

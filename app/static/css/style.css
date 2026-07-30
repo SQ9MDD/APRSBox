@@ -3458,6 +3458,33 @@ select:focus-visible,
     padding: 0.39rem 0.46rem;
 }
 
+.alarm-thresholds-title {
+    display: block;
+    margin-bottom: 0.38rem;
+    font-weight: 600;
+}
+
+.alarm-thresholds-table {
+    table-layout: auto;
+}
+
+.alarm-thresholds-table th:nth-child(2),
+.alarm-thresholds-table td:nth-child(2),
+.alarm-thresholds-table th:nth-child(3),
+.alarm-thresholds-table td:nth-child(3) {
+    width: 7rem;
+}
+
+.alarm-thresholds-table select {
+    min-width: 5rem;
+}
+
+.alarm-threshold-event-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+}
+
 .data-table td code {
     display: inline-block;
     max-width: 100%;

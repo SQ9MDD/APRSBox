@@ -227,24 +227,53 @@
                 >
                 <span class="muted small">{{ t("Enter one or more APRS alarm group names separated by commas.") }}</span>
             </label>
-            <label>
-                <span>{{ t("Map alarm level threshold") }}</span>
-                <select name="map_alarm_level_threshold">
-                    {% for level in alarm_level_threshold_options %}
-                    <option value="{{ level }}" {% if map_alarm_level_threshold == level %}selected{% endif %}>≥ {{ level }}</option>
-                    {% endfor %}
-                </select>
-                <span class="muted small">{{ t("Only alerts at or above this level are shown on the map.") }}</span>
-            </label>
-            <label>
-                <span>{{ t("Ignore alerts below level") }}</span>
-                <select name="global_alarm_level_threshold">
-                    {% for level in alarm_level_threshold_options %}
-                    <option value="{{ level }}" {% if global_alarm_level_threshold == level %}selected{% endif %}>≥ {{ level }}</option>
-                    {% endfor %}
-                </select>
-                <span class="muted small">{{ t("Group messages below this level remain in Messages and Traffic Monitor but do not create alerts.") }}</span>
-            </label>
+            <div class="full">
+                <span class="alarm-thresholds-title">{{ t("Alarm thresholds by event type") }}</span>
+                <div class="table-wrap">
+                    <table class="data-table compact-table alarm-thresholds-table">
+                        <thead>
+                            <tr>
+                                <th>{{ t("Type") }}</th>
+                                <th>{{ t("Alerts") }}</th>
+                                <th>{{ t("Map") }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for category in alarm_category_threshold_rows %}
+                            <tr>
+                                <td>
+                                    <input type="hidden" name="threshold_category" value="{{ category.key }}">
+                                    <span class="alarm-threshold-event-type">
+                                        <img
+                                            class="alert-category-event-icon"
+                                            src="{{ request.scope.root_path }}/static/icons/{{ category.icon }}"
+                                            alt=""
+                                            aria-hidden="true"
+                                        >
+                                        {{ t(category.label) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <select name="alert_level_threshold" aria-label="{{ t('Alerts') }} — {{ t(category.label) }}">
+                                        {% for level in alarm_level_threshold_options %}
+                                        <option value="{{ level }}" {% if category.alerts == level %}selected{% endif %}>≥ {{ level }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td>
+                                    <select name="map_level_threshold" aria-label="{{ t('Map') }} — {{ t(category.label) }}">
+                                        {% for level in alarm_level_threshold_options %}
+                                        <option value="{{ level }}" {% if category.map == level %}selected{% endif %}>≥ {{ level }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <span class="muted small">{{ t("Alerts controls transfer from Messages to Alerts. Map controls area visibility. Unknown severity levels are kept for safety.") }}</span>
+            </div>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save alarm settings") }}</button>
             </div>
@@ -257,10 +286,6 @@
             <dd><code>{{ effective_rf_message_groups|join(', ') }}</code></dd>
             <dt>{{ t("Automatic APRS-IS filter") }}</dt>
             <dd><code>{{ automatic_aprsis_alarm_filter if automatic_aprsis_alarm_filter else t("none") }}</code></dd>
-            <dt>{{ t("Map alarm level threshold") }}</dt>
-            <dd><code>≥ {{ map_alarm_level_threshold }}</code></dd>
-            <dt>{{ t("Ignore alerts below level") }}</dt>
-            <dd><code>≥ {{ global_alarm_level_threshold }}</code></dd>
         </dl>
     </div>
 </section>

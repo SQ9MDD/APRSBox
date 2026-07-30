@@ -9,8 +9,7 @@ from typing import Any, Mapping
 
 from app.db import fetch_all, utc_now
 from app.services.alarm_groups import (
-    alarm_severity_meets_threshold,
-    get_map_alarm_level_threshold,
+    alarm_event_meets_category_threshold,
 )
 from app.services.alerts import expire_aprs_alerts
 from app.services.aprs_warning_identity import normalize_warning_area_codes
@@ -339,7 +338,7 @@ def get_active_alert_area_feature_collection(
         expire_aprs_alerts(now=timestamp)
         rows = fetch_all(
             """
-            SELECT id, alarm_group, area_codes_json, severity_level
+            SELECT id, alarm_group, area_codes_json, event_code, severity_level
             FROM aprs_alerts
             WHERE is_active = 1
               AND superseded_by_alert_id IS NULL
@@ -357,14 +356,14 @@ def get_active_alert_area_feature_collection(
         )
     except sqlite3.OperationalError:
         return {"type": "FeatureCollection", "features": []}
-    map_threshold = get_map_alarm_level_threshold()
     return build_alert_area_feature_collection(
         [
             dict(row)
             for row in rows
-            if alarm_severity_meets_threshold(
+            if alarm_event_meets_category_threshold(
+                row["event_code"],
                 row["severity_level"],
-                map_threshold,
+                target="map",
             )
         ],
         geodata_root=geodata_root,

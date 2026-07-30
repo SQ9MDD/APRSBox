@@ -2,8 +2,10 @@ import unittest
 from pathlib import Path
 
 from app.services.alert_event_icons import (
+    ALERT_EVENT_CATEGORIES,
     DEFAULT_ALERT_EVENT_ICON,
     normalize_alert_event_family,
+    resolve_alert_event_category,
     resolve_alert_event_icon,
 )
 
@@ -36,6 +38,16 @@ class AlertEventIconTests(unittest.TestCase):
                     (Path("app/static/icons") / expected_icon).is_file(),
                     expected_icon,
                 )
+
+    def test_event_codes_resolve_to_stable_threshold_categories(self) -> None:
+        self.assertEqual(resolve_alert_event_category("TSTORM2"), "THUNDERSTORM")
+        self.assertEqual(resolve_alert_event_category("HEAT3"), "HEAT")
+        self.assertEqual(resolve_alert_event_category("FLASHFLOOD1"), "FLOOD")
+        self.assertEqual(resolve_alert_event_category("UNLISTED2"), "OTHER")
+        self.assertEqual(
+            len({str(category["key"]) for category in ALERT_EVENT_CATEGORIES}),
+            len(ALERT_EVENT_CATEGORIES),
+        )
 
     def test_unknown_and_emergency_categories_use_neutral_fallback(self) -> None:
         self.assertEqual(resolve_alert_event_icon("OTHER7"), DEFAULT_ALERT_EVENT_ICON)

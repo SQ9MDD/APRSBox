@@ -83,15 +83,19 @@ from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
 from app.services.alarm_groups import (
     APRS_ALARM_LEVEL_THRESHOLDS,
     build_automatic_aprsis_alarm_filter,
+    get_aprs_alarm_category_thresholds,
     get_aprs_alarm_groups,
     get_global_alarm_level_threshold,
     get_map_alarm_level_threshold,
+    normalize_aprs_alarm_category_thresholds,
     normalize_aprs_alarm_groups,
     normalize_aprs_alarm_level_threshold,
+    save_aprs_alarm_category_thresholds,
     save_aprs_alarm_groups,
     save_global_alarm_level_threshold,
     save_map_alarm_level_threshold,
 )
+from app.services.alert_event_icons import ALERT_EVENT_CATEGORIES
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -912,8 +916,14 @@ def _settings_page_context(
     automatic_aprsis_alarm_filter = build_automatic_aprsis_alarm_filter(
         aprs_alarm_groups
     )
-    map_alarm_level_threshold = get_map_alarm_level_threshold()
-    global_alarm_level_threshold = get_global_alarm_level_threshold()
+    alarm_category_thresholds = get_aprs_alarm_category_thresholds()
+    alarm_category_threshold_rows = [
+        {
+            **category,
+            **alarm_category_thresholds[str(category["key"])],
+        }
+        for category in ALERT_EVENT_CATEGORIES
+    ]
     return build_template_context(
         request,
         page_title="Settings",
@@ -985,8 +995,7 @@ def _settings_page_context(
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
         aprs_alarm_groups=aprs_alarm_groups,
         alarm_level_threshold_options=APRS_ALARM_LEVEL_THRESHOLDS,
-        map_alarm_level_threshold=map_alarm_level_threshold,
-        global_alarm_level_threshold=global_alarm_level_threshold,
+        alarm_category_threshold_rows=alarm_category_threshold_rows,
         effective_rf_message_groups=effective_rf_message_groups,
         automatic_aprsis_alarm_filter=automatic_aprsis_alarm_filter,
         is_container_mode=container_mode,
@@ -1705,27 +1714,73 @@ def settings_update_global(
 def settings_update_alarm_groups(
     _: Request,
     alarm_groups: str = Form(""),
+    threshold_category: list[str] | None = Form(None),
+    alert_level_threshold: list[str] | None = Form(None),
+    map_level_threshold: list[str] | None = Form(None),
     map_alarm_level_threshold: str | None = Form(None),
     global_alarm_level_threshold: str | None = Form(None),
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     try:
         normalized_groups = normalize_aprs_alarm_groups(alarm_groups)
-        selected_map_threshold = (
-            get_map_alarm_level_threshold()
-            if map_alarm_level_threshold is None
-            else normalize_aprs_alarm_level_threshold(
-                map_alarm_level_threshold
+        selected_category_thresholds = get_aprs_alarm_category_thresholds()
+        if (
+            threshold_category is not None
+            or alert_level_threshold is not None
+            or map_level_threshold is not None
+        ):
+            categories = threshold_category or []
+            alert_thresholds = alert_level_threshold or []
+            map_thresholds = map_level_threshold or []
+            expected_categories = {
+                str(category["key"])
+                for category in ALERT_EVENT_CATEGORIES
+            }
+            if (
+                len(categories) != len(alert_thresholds)
+                or len(categories) != len(map_thresholds)
+                or len(categories) != len(expected_categories)
+                or set(categories) != expected_categories
+            ):
+                raise ValueError(_translate("Invalid APRS alarm category thresholds."))
+            selected_category_thresholds = normalize_aprs_alarm_category_thresholds(
+                {
+                    category: {
+                        "alerts": alerts,
+                        "map": map_level,
+                    }
+                    for category, alerts, map_level in zip(
+                        categories,
+                        alert_thresholds,
+                        map_thresholds,
+                    )
+                }
             )
-        )
-        selected_global_threshold = (
-            get_global_alarm_level_threshold()
-            if global_alarm_level_threshold is None
-            else normalize_aprs_alarm_level_threshold(
-                global_alarm_level_threshold
+        elif (
+            map_alarm_level_threshold is not None
+            or global_alarm_level_threshold is not None
+        ):
+            selected_map_threshold = (
+                get_map_alarm_level_threshold()
+                if map_alarm_level_threshold is None
+                else normalize_aprs_alarm_level_threshold(
+                    map_alarm_level_threshold
+                )
             )
-        )
+            selected_global_threshold = (
+                get_global_alarm_level_threshold()
+                if global_alarm_level_threshold is None
+                else normalize_aprs_alarm_level_threshold(
+                    global_alarm_level_threshold
+                )
+            )
+            for thresholds in selected_category_thresholds.values():
+                thresholds["map"] = selected_map_threshold
+                thresholds["alerts"] = selected_global_threshold
         saved_groups = save_aprs_alarm_groups(normalized_groups)
+        saved_category_thresholds = save_aprs_alarm_category_thresholds(
+            selected_category_thresholds
+        )
         if map_alarm_level_threshold is not None:
             save_map_alarm_level_threshold(selected_map_threshold)
         if global_alarm_level_threshold is not None:
@@ -1741,8 +1796,9 @@ def settings_update_alarm_groups(
             "ok": True,
             "message": _translate("APRS alarm settings updated."),
             "alarm_groups": saved_groups,
-            "map_alarm_level_threshold": selected_map_threshold,
-            "global_alarm_level_threshold": selected_global_threshold,
+            "alarm_category_thresholds": saved_category_thresholds,
+            "map_alarm_level_threshold": get_map_alarm_level_threshold(),
+            "global_alarm_level_threshold": get_global_alarm_level_threshold(),
             "reload": True,
         }
     )

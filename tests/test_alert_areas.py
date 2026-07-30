@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_all, init_db
-from app.services.alarm_groups import save_map_alarm_level_threshold
+from app.services.alarm_groups import (
+    get_aprs_alarm_category_thresholds,
+    save_aprs_alarm_category_thresholds,
+    save_map_alarm_level_threshold,
+)
 from app.services.alerts import delete_alert
 from app.services.alert_areas import (
     build_alert_area_feature_collection,
@@ -89,17 +93,18 @@ def _insert_alert(
     valid_until_utc: str | None = None,
     expires_at: str | None = None,
     severity_level: int | None = None,
+    event_code: str = "TSTORM1",
 ) -> None:
     execute(
         """
         INSERT INTO aprs_alerts(
             identity_key, source_callsign, alert_type, message,
-            alarm_group, area_codes_json, severity_level,
+            alarm_group, area_codes_json, event_code, severity_level,
             is_active, valid_until_utc, expires_at,
             first_seen_at, last_seen_at, frame_count,
             created_at, updated_at
         )
-        VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?,
+        VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?,
                 '2026-01-01T00:00:00+00:00',
                 '2026-01-01T00:00:00+00:00',
                 1,
@@ -116,6 +121,7 @@ def _insert_alert(
             alarm_group,
             alarm_group,
             json.dumps(area_codes),
+            event_code,
             severity_level,
             1 if is_active else 0,
             valid_until_utc,
@@ -297,6 +303,58 @@ class AlertAreaResolverTests(unittest.TestCase):
                 for feature in collection["features"]
             },
             {"L2", "L3", "UNK"},
+        )
+
+    def test_map_thresholds_are_applied_per_event_category(self) -> None:
+        with temporary_database():
+            thresholds = get_aprs_alarm_category_thresholds()
+            thresholds["HEAT"]["map"] = 3
+            thresholds["THUNDERSTORM"]["map"] = 1
+            save_aprs_alarm_category_thresholds(thresholds)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "pl",
+                    [
+                        _feature("area_code", "HEAT2", 20.0),
+                        _feature("area_code", "HEAT3", 21.0),
+                        _feature("area_code", "STORM1", 22.0),
+                    ],
+                )
+                _insert_alert(
+                    "PLWX01",
+                    "PL-WARN",
+                    ["HEAT2"],
+                    severity_level=2,
+                    event_code="HEAT2",
+                )
+                _insert_alert(
+                    "PLWX02",
+                    "PL-WARN",
+                    ["HEAT3"],
+                    severity_level=3,
+                    event_code="HEAT3",
+                )
+                _insert_alert(
+                    "PLWX03",
+                    "PL-WARN",
+                    ["STORM1"],
+                    severity_level=1,
+                    event_code="TSTORM1",
+                )
+
+                collection = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+
+        self.assertEqual(
+            {
+                feature["properties"]["aprsbox_area_code"]
+                for feature in collection["features"]
+            },
+            {"HEAT3", "STORM1"},
         )
 
     def test_shared_area_uses_highest_active_severity(self) -> None:

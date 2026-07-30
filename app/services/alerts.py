@@ -8,9 +8,8 @@ from typing import Any, Mapping
 from app.datetime_utils import format_display_datetime, parse_datetime
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.alarm_groups import (
-    alarm_severity_meets_threshold,
+    alarm_event_meets_category_threshold,
     get_aprs_alarm_groups,
-    get_global_alarm_level_threshold,
 )
 from app.services.alert_event_icons import resolve_alert_event_icon
 from app.services.aprs_warning_identity import (
@@ -652,9 +651,10 @@ def process_alarm_group_message_frame(
     if not addressee or addressee not in set(get_aprs_alarm_groups()):
         return None
     warning_fields = parse_aprs_group_warning_content(raw_content)
-    if not alarm_severity_meets_threshold(
+    if not alarm_event_meets_category_threshold(
+        warning_fields.get("event_code"),
         warning_fields.get("severity_level"),
-        get_global_alarm_level_threshold(),
+        target="alerts",
     ):
         return None
 

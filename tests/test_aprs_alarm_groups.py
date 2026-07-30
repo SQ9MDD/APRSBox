@@ -8,19 +8,24 @@ from pathlib import Path
 from app.db import execute, fetch_all, fetch_one, get_app_setting, init_db, set_app_setting
 from app.services.alerts import get_alert, list_alerts
 from app.services.alarm_groups import (
+    APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY,
     APRS_ALARM_GROUPS_SETTING_KEY,
     APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
     APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
     DEFAULT_APRS_ALARM_LEVEL_THRESHOLD,
     DEFAULT_APRS_ALARM_GROUPS,
+    alarm_event_meets_category_threshold,
     alarm_severity_meets_threshold,
     build_automatic_aprsis_alarm_filter,
     build_effective_aprsis_filter,
+    get_aprs_alarm_category_threshold,
+    get_aprs_alarm_category_thresholds,
     get_aprs_alarm_groups,
     get_global_alarm_level_threshold,
     get_map_alarm_level_threshold,
     normalize_aprs_alarm_groups,
     normalize_aprs_alarm_level_threshold,
+    save_aprs_alarm_category_thresholds,
     save_aprs_alarm_groups,
     save_global_alarm_level_threshold,
     save_map_alarm_level_threshold,
@@ -153,6 +158,57 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
         self.assertTrue(alarm_severity_meets_threshold(None, 3))
         self.assertTrue(alarm_severity_meets_threshold(9, 3))
 
+    def test_event_categories_have_independent_alert_and_map_thresholds(self) -> None:
+        with temporary_database():
+            thresholds = get_aprs_alarm_category_thresholds()
+            self.assertTrue(
+                all(
+                    values == {"alerts": 1, "map": 1}
+                    for values in thresholds.values()
+                )
+            )
+            thresholds["HEAT"] = {"alerts": 2, "map": 3}
+            thresholds["THUNDERSTORM"] = {"alerts": 1, "map": 1}
+            saved = save_aprs_alarm_category_thresholds(thresholds)
+
+            self.assertEqual(saved["HEAT"], {"alerts": 2, "map": 3})
+            self.assertIsNotNone(
+                get_app_setting(APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY)
+            )
+            self.assertEqual(
+                get_aprs_alarm_category_threshold("HEAT1", target="alerts"),
+                2,
+            )
+            self.assertEqual(
+                get_aprs_alarm_category_threshold("HEAT3", target="map"),
+                3,
+            )
+            self.assertEqual(
+                get_aprs_alarm_category_threshold("TSTORM1", target="alerts"),
+                1,
+            )
+            self.assertFalse(
+                alarm_event_meets_category_threshold(
+                    "HEAT1",
+                    1,
+                    target="alerts",
+                )
+            )
+            self.assertTrue(
+                alarm_event_meets_category_threshold(
+                    "TSTORM1",
+                    1,
+                    target="alerts",
+                )
+            )
+            self.assertTrue(
+                alarm_event_meets_category_threshold(
+                    "UNKNOWN",
+                    None,
+                    target="alerts",
+                )
+            )
+
     def test_effective_rf_groups_append_alarm_groups_without_changing_standard_groups(self) -> None:
         with temporary_database():
             standard_groups = get_message_settings()["target_groups"]
@@ -183,8 +239,21 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     "/settings/alarm-groups",
                     data={
                         "alarm_groups": " pl-warn, , localwarn, PL-WARN ",
-                        "map_alarm_level_threshold": "2",
-                        "global_alarm_level_threshold": "3",
+                        "threshold_category": list(
+                            get_aprs_alarm_category_thresholds()
+                        ),
+                        "alert_level_threshold": [
+                            "2"
+                            if category == "HEAT"
+                            else "1"
+                            for category in get_aprs_alarm_category_thresholds()
+                        ],
+                        "map_level_threshold": [
+                            "3"
+                            if category == "HEAT"
+                            else "1"
+                            for category in get_aprs_alarm_category_thresholds()
+                        ],
                     },
                 )
                 self.assertEqual(saved.status_code, 200)
@@ -192,8 +261,10 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     saved.json()["alarm_groups"],
                     ["PL-WARN", "LOCALWARN"],
                 )
-                self.assertEqual(saved.json()["map_alarm_level_threshold"], 2)
-                self.assertEqual(saved.json()["global_alarm_level_threshold"], 3)
+                self.assertEqual(
+                    saved.json()["alarm_category_thresholds"]["HEAT"],
+                    {"alerts": 2, "map": 3},
+                )
 
                 page = client.get("/settings")
                 self.assertEqual(page.status_code, 200)
@@ -201,8 +272,9 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                 self.assertIn("PL-WARN, LOCALWARN", page.text)
                 self.assertIn("ALL, QST, CQ, PL-WARN, LOCALWARN", page.text)
                 self.assertIn("g/PL-WARN/LOCALWARN", page.text)
-                self.assertIn("Próg poziomu alarmów na mapie", page.text)
-                self.assertIn("Ignoruj alarmy poniżej poziomu", page.text)
+                self.assertIn("Progi alarmów według typu zdarzenia", page.text)
+                self.assertIn("Upał", page.text)
+                self.assertIn('value="HEAT"', page.text)
                 self.assertIn(
                     '<option value="2" selected>≥ 2</option>',
                     page.text,
@@ -518,6 +590,44 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             ],
             [("PLWX03", 2), ("PLWX04", None)],
         )
+
+    def test_category_threshold_filters_heat_without_filtering_thunderstorms(self) -> None:
+        with temporary_database():
+            thresholds = get_aprs_alarm_category_thresholds()
+            thresholds["HEAT"]["alerts"] = 2
+            thresholds["THUNDERSTORM"]["alerts"] = 1
+            save_aprs_alarm_category_thresholds(thresholds)
+
+            for offset, event_code in enumerate(("HEAT1", "TSTORM1")):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        self._group_alarm_line(
+                            source=f"PLWX0{offset + 1}",
+                            event_code=event_code,
+                            area_code=f"150{offset}",
+                            message_id=f"20{offset}AA",
+                        ),
+                        source="Main RF",
+                        source_kind="rf",
+                        timestamp=f"2026-01-01T00:20:0{offset}+00:00",
+                    )
+                )
+
+            alerts = fetch_all(
+                "SELECT source_callsign, event_code FROM aprs_alerts ORDER BY id"
+            )
+            message_count = fetch_one(
+                "SELECT COUNT(*) AS total FROM aprs_messages WHERE direction = 'rx'"
+            )
+            frame_count = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames")
+
+        self.assertEqual(
+            [(row["source_callsign"], row["event_code"]) for row in alerts],
+            [("PLWX02", "TSTORM1")],
+        )
+        assert message_count is not None and frame_count is not None
+        self.assertEqual(int(message_count["total"]), 2)
+        self.assertEqual(int(frame_count["total"]), 2)
 
     def test_direct_messages_and_existing_standard_groups_still_work(self) -> None:
         with temporary_database():
