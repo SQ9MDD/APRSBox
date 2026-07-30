@@ -1842,5 +1842,7 @@
   "Received count": "Empfangszähler",
   "Raw message": "Rohmeldung",
   "Original frame": "Originalrahmen",
+  "Expires at": "Läuft ab",
+  "Expiry / last received": "Ablauf / letzter Empfang",
   "Close": "Schließen"
 }

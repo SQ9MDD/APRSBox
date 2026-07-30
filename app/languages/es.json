@@ -1844,5 +1844,7 @@
   "Received count": "Número de recepciones",
   "Raw message": "Mensaje sin procesar",
   "Original frame": "Trama original",
+  "Expires at": "Caduca",
+  "Expiry / last received": "Caducidad / última recepción",
   "Close": "Cerrar"
 }

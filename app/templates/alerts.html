@@ -37,16 +37,9 @@
                     <col class="alerts-col-select">
                     {% endif %}
                     <col class="alerts-col-source">
-                    <col class="alerts-col-group">
-                    <col class="alerts-col-logical-id">
-                    <col class="alerts-col-event">
-                    <col class="alerts-col-severity">
-                    <col class="alerts-col-parts">
+                    <col class="alerts-col-category">
                     <col class="alerts-col-areas">
-                    <col class="alerts-col-status">
-                    <col class="alerts-col-first-seen">
-                    <col class="alerts-col-last-seen">
-                    <col class="alerts-col-mute">
+                    <col class="alerts-col-relevant-time">
                     <col class="alerts-col-actions">
                 </colgroup>
                 <thead>
@@ -57,21 +50,25 @@
                         </th>
                         {% endif %}
                         <th>{{ t("Source") }}</th>
-                        <th>{{ t("Destination group") }}</th>
-                        <th>{{ t("Logical alert ID") }}</th>
-                        <th>{{ t("Event code") }}</th>
-                        <th>{{ t("Severity level") }}</th>
-                        <th>{{ t("Received parts") }}</th>
+                        <th>{{ t("Category") }}</th>
                         <th>{{ t("Area count") }}</th>
-                        <th>{{ t("Completion status") }}</th>
-                        <th>{{ t("First received") }}</th>
-                        <th>{{ t("Last received") }}</th>
-                        <th>{{ t("Muted until") }}</th>
+                        <th>{{ t("Expiry / last received") }}</th>
                         <th>{{ t("Actions") }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for alert in alerts_page["items"] %}
+                    {% if not alert.destination_group %}
+                    {% set category_class = "alert-category-badge-emergency" %}
+                    {% elif alert.severity_level == 1 %}
+                    {% set category_class = "alert-category-badge-level-1" %}
+                    {% elif alert.severity_level == 2 %}
+                    {% set category_class = "alert-category-badge-level-2" %}
+                    {% elif alert.severity_level == 3 %}
+                    {% set category_class = "alert-category-badge-level-3" %}
+                    {% else %}
+                    {% set category_class = "alert-category-badge-unknown" %}
+                    {% endif %}
                     <tr
                         class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}"
                         data-alert-id="{{ alert.id }}"
@@ -98,40 +95,37 @@
                                 </a>
                             </strong>
                         </td>
-                        <td>{{ alert.destination_group or "-" }}</td>
-                        <td>{% if alert.logical_alert_id %}<code>{{ alert.logical_alert_id }}</code>{% else %}<span class="muted">-</span>{% endif %}</td>
-                        <td><span class="frame-type-badge frame-type-badge-emergency">{{ alert.event_code or alert.alert_type }}</span></td>
-                        <td>{{ alert.severity_level if alert.severity_level is not none else "-" }}</td>
                         <td>
-                            {% if alert.destination_group %}
-                            {{ alert.received_parts }} / {{ alert.parts_total or "?" }}
-                            {% else %}
-                            <span class="muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ alert.area_count if alert.destination_group else "-" }}</td>
-                        <td>
-                            {% if alert.destination_group %}
-                            <span class="alert-state-badge alert-state-badge-{{ alert.completion_status }}">
-                                {{ t("Complete alert") if alert.completion_status == "complete" else t("Incomplete") }}
-                            </span>
-                            {% else %}
-                            <span class="muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ alert.first_seen_label }}</td>
-                        <td>{{ alert.last_seen_label }}</td>
-                        <td>
-                            {% if alert.muted %}
-                            <span class="alert-state-badge alert-state-badge-muted">
-                                {% if alert.muted_indefinitely %}
-                                {{ t("Indefinitely") }}
-                                {% else %}
-                                {{ alert.muted_until_label }}
+                            <div class="alert-list-category">
+                                <span class="frame-type-badge alert-category-badge {{ category_class }}">
+                                    {{ alert.event_code or alert.alert_type }}
+                                </span>
+                                {% if alert.muted %}
+                                <span
+                                    class="alert-list-muted-indicator"
+                                    role="img"
+                                    title="{% if alert.muted_indefinitely %}{{ t('Alert muted indefinitely') }}{% else %}{{ t('Muted until') }} {{ alert.muted_until_label }}{% endif %}"
+                                    aria-label="{% if alert.muted_indefinitely %}{{ t('Alert muted indefinitely') }}{% else %}{{ t('Muted until') }} {{ alert.muted_until_label }}{% endif %}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/volume-off.svg" alt="">
+                                </span>
                                 {% endif %}
-                            </span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if alert.destination_group %}
+                            {{ alert.area_count }}
                             {% else %}
                             <span class="muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="alert-list-time">
+                            {% if alert.destination_group and alert.expires_at_label %}
+                            <time title="{{ t('Expires at') }}">{{ alert.expires_at_label }}</time>
+                            {% elif alert.destination_group %}
+                            <span class="muted">-</span>
+                            {% else %}
+                            <time title="{{ t('Last received') }}">{{ alert.last_seen_label }}</time>
                             {% endif %}
                         </td>
                         <td class="alerts-actions-cell" onclick="event.stopPropagation();">
@@ -155,37 +149,6 @@
                                     <img src="{{ request.scope.root_path }}/static/icons/file-document-alert-outline.svg" alt="">
                                 </a>
                                 {% if can_manage_alerts %}
-                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
-                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
-                                    <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
-                                        <option value="1h">{{ t("Mute for 1 hour") }}</option>
-                                        <option value="4h">{{ t("Mute for 4 hours") }}</option>
-                                        <option value="24h">{{ t("Mute for 24 hours") }}</option>
-                                        <option value="indefinite">{{ t("Mute indefinitely") }}</option>
-                                    </select>
-                                    <button type="submit" class="table-icon-button" title="{{ t('Mute') }}" aria-label="{{ t('Mute') }} #{{ alert.id }}">
-                                        <img src="{{ request.scope.root_path }}/static/icons/volume-off.svg" alt="">
-                                    </button>
-                                </form>
-                                {% if alert.muted %}
-                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/unmute" class="table-action-form">
-                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
-                                    <button type="submit" class="table-icon-button" title="{{ t('Cancel mute') }}" aria-label="{{ t('Cancel mute') }} #{{ alert.id }}">
-                                        <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
-                                    </button>
-                                </form>
-                                {% else %}
-                                <button
-                                    type="button"
-                                    class="table-icon-button"
-                                    title="{{ t('Cancel mute') }}"
-                                    aria-label="{{ t('Cancel mute') }} #{{ alert.id }}"
-                                    data-alert-unmute-placeholder
-                                    disabled
-                                >
-                                    <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
-                                </button>
-                                {% endif %}
                                 <form
                                     method="post"
                                     action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/delete"
@@ -202,7 +165,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 13 if can_manage_alerts else 12 }}" class="muted">{{ t("No alerts received yet.") }}</td>
+                        <td colspan="{{ 6 if can_manage_alerts else 5 }}" class="muted">{{ t("No alerts received yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1842,5 +1842,7 @@
   "Received count": "Received count",
   "Raw message": "Raw message",
   "Original frame": "Original frame",
+  "Expires at": "Expires at",
+  "Expiry / last received": "Expiry / last received",
   "Close": "Close"
 }

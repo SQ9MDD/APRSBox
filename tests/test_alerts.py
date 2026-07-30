@@ -4,7 +4,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -607,6 +607,48 @@ class AprsAlertTests(unittest.TestCase):
             )
             self.assertFalse(modal_frame["alert_should_notify"])
 
+    def test_alert_list_renders_compact_color_categorization_and_contextual_time(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from app.dependencies import get_current_user
+        from app.main import app
+        from app.models import UserIdentity
+
+        with temporary_database():
+            received_at = datetime.now(timezone.utc).replace(microsecond=0)
+            expires_at = received_at + timedelta(hours=6)
+            expiry = f"{expires_at.day:02d}{expires_at.hour:02d}{expires_at.minute:02d}z"
+            receive_emergency(timestamp=received_at.isoformat())
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    (
+                        "PLWXSR>APRS,TCPIP*::PL-WARN  :"
+                        f"{expiry},TSTORM2,@A7F4,1/1,1465{{91AC3"
+                    ),
+                    source="APRS-IS",
+                    source_kind="aprsis",
+                    timestamp=received_at.isoformat(),
+                )
+            )
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                response = TestClient(app).get("/alerts")
+            finally:
+                app.dependency_overrides.clear()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("alert-category-badge-level-2", response.text)
+        self.assertIn("alert-category-badge-emergency", response.text)
+        self.assertIn("Expiry / last received", response.text)
+        self.assertNotIn("<th>Destination group</th>", response.text)
+        self.assertNotIn("<th>Logical alert ID</th>", response.text)
+        self.assertNotIn("<th>Completion status</th>", response.text)
+
     def test_shared_modal_is_rendered_from_base_and_opened_by_alert_list(self) -> None:
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         map_source = Path("app/templates/map.html").read_text(encoding="utf-8")
@@ -622,19 +664,41 @@ class AprsAlertTests(unittest.TestCase):
             encoding="utf-8"
         )
         map_js_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
 
         self.assertIn('{% include "partials/emergency_modal.html" %}', base_source)
         self.assertIn("map-emergency-modal.js", base_source)
         self.assertNotIn('id="aprs-emergency-modal"', map_source)
         self.assertNotIn("alerts-col-comment", alerts_source)
-        self.assertIn('{{ t("Muted until") }}', alerts_source)
-        self.assertIn("frame-type-badge-emergency", alerts_source)
+        self.assertIn("alerts-col-category", alerts_source)
+        self.assertIn('{{ t("Expiry / last received") }}', alerts_source)
+        self.assertNotIn("alerts-col-group", alerts_source)
+        self.assertNotIn("alerts-col-logical-id", alerts_source)
+        self.assertNotIn("alerts-col-severity", alerts_source)
+        self.assertNotIn("alerts-col-parts", alerts_source)
+        self.assertNotIn("alerts-col-status", alerts_source)
+        self.assertNotIn("alerts-col-first-seen", alerts_source)
+        self.assertNotIn("alerts-col-last-seen", alerts_source)
+        self.assertIn("alert-category-badge-level-1", alerts_source)
+        self.assertIn("alert-category-badge-level-2", alerts_source)
+        self.assertIn("alert-category-badge-level-3", alerts_source)
+        self.assertIn("alert-category-badge-unknown", alerts_source)
+        self.assertIn("alert-category-badge-emergency", alerts_source)
+        self.assertIn("alert.expires_at_label", alerts_source)
+        self.assertIn("alert.last_seen_label", alerts_source)
+        self.assertIn("alert-list-muted-indicator", alerts_source)
+        self.assertNotIn("alert-mute-form", alerts_source)
+        self.assertIn("min-width: 42rem", style_source)
+        self.assertIn(".alert-category-badge-level-1", style_source)
+        self.assertIn(".alert-category-badge-level-2", style_source)
+        self.assertIn(".alert-category-badge-level-3", style_source)
+        self.assertIn(".alert-category-badge-unknown", style_source)
         self.assertIn("file-document-alert-outline.svg", alerts_source)
-        self.assertIn("data-alert-unmute-placeholder", alerts_source)
+        self.assertNotIn("data-alert-unmute-placeholder", alerts_source)
         self.assertIn('href="{{ request.scope.root_path }}{{ alert.detail_href }}"', alerts_source)
-        self.assertIn('name="return_to"', alerts_source)
         self.assertIn("alert-emergency-panel alert-detail-panel", alert_detail_source)
         self.assertIn("alert-emergency-panel alert-history-panel", alert_detail_source)
+        self.assertIn('{{ t("Expires at") }}', alert_detail_source)
         self.assertIn("alert-detail-header-tools", alert_detail_source)
         self.assertIn("alert-detail-help-button", alert_detail_source)
         self.assertNotIn(

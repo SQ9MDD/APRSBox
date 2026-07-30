@@ -88,6 +88,8 @@
             <dd>{{ alert.area_count }}</dd>
             <dt>{{ t("Area codes") }}</dt>
             <dd>{% if alert.area_codes %}<code>{{ alert.area_codes|join(", ") }}</code>{% else %}-{% endif %}</dd>
+            <dt>{{ t("Expires at") }}</dt>
+            <dd>{{ alert.expires_at_label or "-" }}</dd>
             {% endif %}
             <dt>{{ t("Comment") }}</dt>
             <dd>{{ alert.message or "-" }}</dd>

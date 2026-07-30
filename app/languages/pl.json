@@ -1898,5 +1898,7 @@
   "Received count": "Liczba odbiorów",
   "Raw message": "Surowa wiadomość",
   "Original frame": "Oryginalna ramka",
+  "Expires at": "Wygasa",
+  "Expiry / last received": "Wygaśnięcie / ostatni odbiór",
   "Close": "Zamknij"
 }
