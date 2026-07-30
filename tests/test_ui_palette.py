@@ -42,6 +42,25 @@ class UiPaletteTests(unittest.TestCase):
             ':root[data-palette="orange-workshop"] .dashboard-activity-card {',
             stylesheet,
         )
+        self.assertIn(
+            ':root[data-palette="orange-workshop"] :is(',
+            stylesheet,
+        )
+        for window_selector in (
+            ".page-map .map-toolbar",
+            ".page-map .map-stage",
+            ".map-latest-overlay",
+            ".map-scroller-overlay",
+            ".traffic-toolbar",
+            ".traffic-stream",
+            ".traffic-legend-dialog",
+            ".station-settings-group",
+            ".location-picker-dialog",
+            ".phg-generator-dialog",
+            ".beacon-confirm-dialog",
+        ):
+            with self.subTest(window_selector=window_selector):
+                self.assertIn(window_selector, stylesheet)
         self.assertIn(':root[data-palette="orange-workshop"] .nav-link.active {', stylesheet)
         self.assertIn(':root[data-palette="orange-workshop"] .modem-type-panel {', stylesheet)
         self.assertIn("background: var(--panel-alt);", stylesheet)

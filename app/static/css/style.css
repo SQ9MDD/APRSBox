@@ -1323,6 +1323,22 @@ body {
         0 0 0 1px color-mix(in srgb, #fa6831 5%, transparent);
 }
 
+:root[data-palette="orange-workshop"] :is(
+    .page-map .map-toolbar,
+    .page-map .map-stage,
+    .map-latest-overlay,
+    .map-scroller-overlay,
+    .traffic-toolbar,
+    .traffic-stream,
+    .traffic-legend-dialog,
+    .station-settings-group,
+    .location-picker-dialog,
+    .phg-generator-dialog,
+    .beacon-confirm-dialog
+) {
+    border-color: color-mix(in srgb, #fa6831 38%, transparent);
+}
+
 :root[data-palette="orange-workshop"] .panel h2::before {
     content: "";
     display: inline-block;
