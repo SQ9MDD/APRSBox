@@ -204,7 +204,7 @@
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
-                <h2>{{ t("APRS alarm groups") }}</h2>
+                <h2>{{ t("APRS alarm settings") }}</h2>
             </div>
         </div>
         {% if can_manage_global_settings %}
@@ -213,7 +213,7 @@
             action="{{ request.scope.root_path }}/settings/alarm-groups"
             class="form-grid"
             data-settings-action-id="save-aprs-alarm-groups"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-aprs-alarm-groups', message: {{ t('Saving APRS alarm groups...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-aprs-alarm-groups', message: {{ t('Saving APRS alarm settings...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <label class="full">
                 <span>{{ t("Alarm groups") }}</span>
@@ -227,8 +227,26 @@
                 >
                 <span class="muted small">{{ t("Enter one or more APRS alarm group names separated by commas.") }}</span>
             </label>
+            <label>
+                <span>{{ t("Map alarm level threshold") }}</span>
+                <select name="map_alarm_level_threshold">
+                    {% for level in alarm_level_threshold_options %}
+                    <option value="{{ level }}" {% if map_alarm_level_threshold == level %}selected{% endif %}>≥ {{ level }}</option>
+                    {% endfor %}
+                </select>
+                <span class="muted small">{{ t("Only alerts at or above this level are shown on the map.") }}</span>
+            </label>
+            <label>
+                <span>{{ t("Ignore alerts below level") }}</span>
+                <select name="global_alarm_level_threshold">
+                    {% for level in alarm_level_threshold_options %}
+                    <option value="{{ level }}" {% if global_alarm_level_threshold == level %}selected{% endif %}>≥ {{ level }}</option>
+                    {% endfor %}
+                </select>
+                <span class="muted small">{{ t("Group messages below this level remain in Messages and Traffic Monitor but do not create alerts.") }}</span>
+            </label>
             <div class="form-actions">
-                <button type="submit" class="button">{{ t("Save alarm groups") }}</button>
+                <button type="submit" class="button">{{ t("Save alarm settings") }}</button>
             </div>
         </form>
         {% endif %}
@@ -239,6 +257,10 @@
             <dd><code>{{ effective_rf_message_groups|join(', ') }}</code></dd>
             <dt>{{ t("Automatic APRS-IS filter") }}</dt>
             <dd><code>{{ automatic_aprsis_alarm_filter if automatic_aprsis_alarm_filter else t("none") }}</code></dd>
+            <dt>{{ t("Map alarm level threshold") }}</dt>
+            <dd><code>≥ {{ map_alarm_level_threshold }}</code></dd>
+            <dt>{{ t("Ignore alerts below level") }}</dt>
+            <dd><code>≥ {{ global_alarm_level_threshold }}</code></dd>
         </dl>
     </div>
 </section>

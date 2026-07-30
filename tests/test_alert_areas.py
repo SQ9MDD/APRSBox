@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_all, init_db
+from app.services.alarm_groups import save_map_alarm_level_threshold
 from app.services.alerts import delete_alert
 from app.services.alert_areas import (
     build_alert_area_feature_collection,
@@ -263,6 +264,39 @@ class AlertAreaResolverTests(unittest.TestCase):
                 None: "gray",
                 9: "gray",
             },
+        )
+
+    def test_map_threshold_hides_only_known_levels_below_the_setting(self) -> None:
+        with temporary_database():
+            save_map_alarm_level_threshold(2)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "pl",
+                    [
+                        _feature("area_code", "L1", 20.0),
+                        _feature("area_code", "L2", 21.0),
+                        _feature("area_code", "L3", 22.0),
+                        _feature("area_code", "UNK", 23.0),
+                    ],
+                )
+                _insert_alert("PLWX01", "PL-WARN", ["L1"], severity_level=1)
+                _insert_alert("PLWX02", "PL-WARN", ["L2"], severity_level=2)
+                _insert_alert("PLWX03", "PL-WARN", ["L3"], severity_level=3)
+                _insert_alert("PLWX04", "PL-WARN", ["UNK"], severity_level=None)
+
+                collection = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+
+        self.assertEqual(
+            {
+                feature["properties"]["aprsbox_area_code"]
+                for feature in collection["features"]
+            },
+            {"L2", "L3", "UNK"},
         )
 
     def test_shared_area_uses_highest_active_severity(self) -> None:

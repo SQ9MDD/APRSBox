@@ -9,7 +9,11 @@ from app.services.traffic_source import normalize_aprsis_filter
 
 
 APRS_ALARM_GROUPS_SETTING_KEY = "aprs.alarm_groups"
+APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY = "aprs.map_alarm_level_threshold"
+APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY = "aprs.global_alarm_level_threshold"
 DEFAULT_APRS_ALARM_GROUPS = ("PL-WARN",)
+DEFAULT_APRS_ALARM_LEVEL_THRESHOLD = 1
+APRS_ALARM_LEVEL_THRESHOLDS = (1, 2, 3)
 
 _APRS_ALARM_GROUP_RE = re.compile(r"^[A-Z0-9-]{1,9}$")
 
@@ -56,6 +60,70 @@ def save_aprs_alarm_groups(value: Any) -> list[str]:
     groups = normalize_aprs_alarm_groups(value)
     set_app_setting(APRS_ALARM_GROUPS_SETTING_KEY, ",".join(groups))
     return groups
+
+
+def normalize_aprs_alarm_level_threshold(value: Any) -> int:
+    try:
+        threshold = int(str(value).strip())
+    except (TypeError, ValueError):
+        threshold = 0
+    if threshold not in APRS_ALARM_LEVEL_THRESHOLDS:
+        raise ValueError(_t("Alarm level threshold must be 1, 2, or 3."))
+    return threshold
+
+
+def _get_aprs_alarm_level_threshold(setting_key: str) -> int:
+    saved_threshold = get_app_setting(setting_key)
+    if saved_threshold is None:
+        return DEFAULT_APRS_ALARM_LEVEL_THRESHOLD
+    try:
+        return normalize_aprs_alarm_level_threshold(saved_threshold)
+    except ValueError:
+        return DEFAULT_APRS_ALARM_LEVEL_THRESHOLD
+
+
+def get_map_alarm_level_threshold() -> int:
+    return _get_aprs_alarm_level_threshold(
+        APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY
+    )
+
+
+def save_map_alarm_level_threshold(value: Any) -> int:
+    threshold = normalize_aprs_alarm_level_threshold(value)
+    set_app_setting(
+        APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
+        str(threshold),
+    )
+    return threshold
+
+
+def get_global_alarm_level_threshold() -> int:
+    return _get_aprs_alarm_level_threshold(
+        APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY
+    )
+
+
+def save_global_alarm_level_threshold(value: Any) -> int:
+    threshold = normalize_aprs_alarm_level_threshold(value)
+    set_app_setting(
+        APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
+        str(threshold),
+    )
+    return threshold
+
+
+def alarm_severity_meets_threshold(
+    severity_level: Any,
+    threshold: Any,
+) -> bool:
+    """Keep unknown levels visible instead of silently discarding new formats."""
+    try:
+        normalized_severity = int(severity_level)
+    except (TypeError, ValueError):
+        return True
+    if normalized_severity not in APRS_ALARM_LEVEL_THRESHOLDS:
+        return True
+    return normalized_severity >= normalize_aprs_alarm_level_threshold(threshold)
 
 
 def build_automatic_aprsis_alarm_filter(groups: Any | None = None) -> str:

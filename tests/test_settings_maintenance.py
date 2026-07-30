@@ -99,9 +99,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
 
     def test_settings_template_contains_aprs_alarm_group_configuration_and_diagnostics(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn('{{ t("APRS alarm groups") }}', template_source)
+        self.assertIn('{{ t("APRS alarm settings") }}', template_source)
         self.assertIn('action="{{ request.scope.root_path }}/settings/alarm-groups"', template_source)
         self.assertIn('name="alarm_groups"', template_source)
+        self.assertIn('name="map_alarm_level_threshold"', template_source)
+        self.assertIn('name="global_alarm_level_threshold"', template_source)
+        self.assertIn('{{ t("Map alarm level threshold") }}', template_source)
+        self.assertIn('{{ t("Ignore alerts below level") }}', template_source)
         self.assertIn("aprs_alarm_groups|join(', ')", template_source)
         self.assertIn('{{ t("RF receive groups") }}', template_source)
         self.assertIn("effective_rf_message_groups|join(', ')", template_source)

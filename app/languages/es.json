@@ -1846,5 +1846,14 @@
   "Original frame": "Trama original",
   "Expires at": "Caduca",
   "Expiry / last received": "Caducidad / última recepción",
+  "APRS alarm settings": "Configuración de alarmas APRS",
+  "Saving APRS alarm settings...": "Guardando la configuración de alarmas APRS...",
+  "Map alarm level threshold": "Umbral de nivel de alarma del mapa",
+  "Ignore alerts below level": "Ignorar alertas por debajo del nivel",
+  "Only alerts at or above this level are shown on the map.": "En el mapa solo se muestran las alertas de este nivel o superior.",
+  "Group messages below this level remain in Messages and Traffic Monitor but do not create alerts.": "Los mensajes de grupo por debajo de este nivel permanecen en Mensajes y Monitor de tráfico, pero no crean alertas.",
+  "Save alarm settings": "Guardar configuración de alarmas",
+  "APRS alarm settings updated.": "Se actualizó la configuración de alarmas APRS.",
+  "Alarm level threshold must be 1, 2, or 3.": "El umbral de nivel de alarma debe ser 1, 2 o 3.",
   "Close": "Cerrar"
 }

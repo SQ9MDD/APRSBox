@@ -81,9 +81,16 @@ from app.services.content import (
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
 from app.services.alarm_groups import (
+    APRS_ALARM_LEVEL_THRESHOLDS,
     build_automatic_aprsis_alarm_filter,
     get_aprs_alarm_groups,
+    get_global_alarm_level_threshold,
+    get_map_alarm_level_threshold,
+    normalize_aprs_alarm_groups,
+    normalize_aprs_alarm_level_threshold,
     save_aprs_alarm_groups,
+    save_global_alarm_level_threshold,
+    save_map_alarm_level_threshold,
 )
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
@@ -905,6 +912,8 @@ def _settings_page_context(
     automatic_aprsis_alarm_filter = build_automatic_aprsis_alarm_filter(
         aprs_alarm_groups
     )
+    map_alarm_level_threshold = get_map_alarm_level_threshold()
+    global_alarm_level_threshold = get_global_alarm_level_threshold()
     return build_template_context(
         request,
         page_title="Settings",
@@ -975,6 +984,9 @@ def _settings_page_context(
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
         aprs_alarm_groups=aprs_alarm_groups,
+        alarm_level_threshold_options=APRS_ALARM_LEVEL_THRESHOLDS,
+        map_alarm_level_threshold=map_alarm_level_threshold,
+        global_alarm_level_threshold=global_alarm_level_threshold,
         effective_rf_message_groups=effective_rf_message_groups,
         automatic_aprsis_alarm_filter=automatic_aprsis_alarm_filter,
         is_container_mode=container_mode,
@@ -1693,10 +1705,31 @@ def settings_update_global(
 def settings_update_alarm_groups(
     _: Request,
     alarm_groups: str = Form(""),
+    map_alarm_level_threshold: str | None = Form(None),
+    global_alarm_level_threshold: str | None = Form(None),
     __: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     try:
-        saved_groups = save_aprs_alarm_groups(alarm_groups)
+        normalized_groups = normalize_aprs_alarm_groups(alarm_groups)
+        selected_map_threshold = (
+            get_map_alarm_level_threshold()
+            if map_alarm_level_threshold is None
+            else normalize_aprs_alarm_level_threshold(
+                map_alarm_level_threshold
+            )
+        )
+        selected_global_threshold = (
+            get_global_alarm_level_threshold()
+            if global_alarm_level_threshold is None
+            else normalize_aprs_alarm_level_threshold(
+                global_alarm_level_threshold
+            )
+        )
+        saved_groups = save_aprs_alarm_groups(normalized_groups)
+        if map_alarm_level_threshold is not None:
+            save_map_alarm_level_threshold(selected_map_threshold)
+        if global_alarm_level_threshold is not None:
+            save_global_alarm_level_threshold(selected_global_threshold)
         reconcile_effective_message_group_conversations(alarm_groups=saved_groups)
     except ValueError as exc:
         return JSONResponse(
@@ -1706,8 +1739,10 @@ def settings_update_alarm_groups(
     return JSONResponse(
         {
             "ok": True,
-            "message": _translate("APRS alarm group settings updated."),
+            "message": _translate("APRS alarm settings updated."),
             "alarm_groups": saved_groups,
+            "map_alarm_level_threshold": selected_map_threshold,
+            "global_alarm_level_threshold": selected_global_threshold,
             "reload": True,
         }
     )

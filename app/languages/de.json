@@ -1844,5 +1844,14 @@
   "Original frame": "Originalrahmen",
   "Expires at": "Läuft ab",
   "Expiry / last received": "Ablauf / letzter Empfang",
+  "APRS alarm settings": "APRS-Alarmeinstellungen",
+  "Saving APRS alarm settings...": "APRS-Alarmeinstellungen werden gespeichert...",
+  "Map alarm level threshold": "Alarmstufenschwelle der Karte",
+  "Ignore alerts below level": "Alarme unterhalb dieser Stufe ignorieren",
+  "Only alerts at or above this level are shown on the map.": "Auf der Karte werden nur Alarme ab dieser Stufe angezeigt.",
+  "Group messages below this level remain in Messages and Traffic Monitor but do not create alerts.": "Gruppennachrichten unterhalb dieser Stufe bleiben in Nachrichten und im Traffic Monitor, erzeugen aber keine Alarme.",
+  "Save alarm settings": "Alarmeinstellungen speichern",
+  "APRS alarm settings updated.": "APRS-Alarmeinstellungen wurden aktualisiert.",
+  "Alarm level threshold must be 1, 2, or 3.": "Die Alarmstufenschwelle muss 1, 2 oder 3 sein.",
   "Close": "Schließen"
 }

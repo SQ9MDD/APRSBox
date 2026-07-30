@@ -9,12 +9,21 @@ from app.db import execute, fetch_all, fetch_one, get_app_setting, init_db, set_
 from app.services.alerts import get_alert, list_alerts
 from app.services.alarm_groups import (
     APRS_ALARM_GROUPS_SETTING_KEY,
+    APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
+    APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
+    DEFAULT_APRS_ALARM_LEVEL_THRESHOLD,
     DEFAULT_APRS_ALARM_GROUPS,
+    alarm_severity_meets_threshold,
     build_automatic_aprsis_alarm_filter,
     build_effective_aprsis_filter,
     get_aprs_alarm_groups,
+    get_global_alarm_level_threshold,
+    get_map_alarm_level_threshold,
     normalize_aprs_alarm_groups,
+    normalize_aprs_alarm_level_threshold,
     save_aprs_alarm_groups,
+    save_global_alarm_level_threshold,
+    save_map_alarm_level_threshold,
 )
 from app.services.aprsis import (
     AprsisClientService,
@@ -107,6 +116,43 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
             self.assertIsNone(get_app_setting("messages.target_groups"))
             self.assertEqual(get_message_settings()["target_groups"], ["ALL", "QST", "CQ"])
 
+    def test_alarm_level_thresholds_default_to_one_and_are_stored_separately(self) -> None:
+        with temporary_database():
+            self.assertEqual(DEFAULT_APRS_ALARM_LEVEL_THRESHOLD, 1)
+            self.assertEqual(get_map_alarm_level_threshold(), 1)
+            self.assertEqual(get_global_alarm_level_threshold(), 1)
+            self.assertIsNone(
+                get_app_setting(APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY)
+            )
+            self.assertIsNone(
+                get_app_setting(APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY)
+            )
+
+            self.assertEqual(save_map_alarm_level_threshold("2"), 2)
+            self.assertEqual(save_global_alarm_level_threshold(3), 3)
+
+            self.assertEqual(get_map_alarm_level_threshold(), 2)
+            self.assertEqual(get_global_alarm_level_threshold(), 3)
+            self.assertEqual(
+                get_app_setting(APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY),
+                "2",
+            )
+            self.assertEqual(
+                get_app_setting(APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY),
+                "3",
+            )
+
+    def test_alarm_level_threshold_validation_keeps_unknown_levels_safe(self) -> None:
+        for invalid in ("", "0", "4", "high", None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    normalize_aprs_alarm_level_threshold(invalid)
+        self.assertFalse(alarm_severity_meets_threshold(1, 2))
+        self.assertTrue(alarm_severity_meets_threshold(2, 2))
+        self.assertTrue(alarm_severity_meets_threshold(3, 2))
+        self.assertTrue(alarm_severity_meets_threshold(None, 3))
+        self.assertTrue(alarm_severity_meets_threshold(9, 3))
+
     def test_effective_rf_groups_append_alarm_groups_without_changing_standard_groups(self) -> None:
         with temporary_database():
             standard_groups = get_message_settings()["target_groups"]
@@ -135,20 +181,36 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                 client = TestClient(app)
                 saved = client.post(
                     "/settings/alarm-groups",
-                    data={"alarm_groups": " pl-warn, , localwarn, PL-WARN "},
+                    data={
+                        "alarm_groups": " pl-warn, , localwarn, PL-WARN ",
+                        "map_alarm_level_threshold": "2",
+                        "global_alarm_level_threshold": "3",
+                    },
                 )
                 self.assertEqual(saved.status_code, 200)
                 self.assertEqual(
                     saved.json()["alarm_groups"],
                     ["PL-WARN", "LOCALWARN"],
                 )
+                self.assertEqual(saved.json()["map_alarm_level_threshold"], 2)
+                self.assertEqual(saved.json()["global_alarm_level_threshold"], 3)
 
                 page = client.get("/settings")
                 self.assertEqual(page.status_code, 200)
-                self.assertIn("Grupy alarmowe APRS", page.text)
+                self.assertIn("Ustawienia alarmów APRS", page.text)
                 self.assertIn("PL-WARN, LOCALWARN", page.text)
                 self.assertIn("ALL, QST, CQ, PL-WARN, LOCALWARN", page.text)
                 self.assertIn("g/PL-WARN/LOCALWARN", page.text)
+                self.assertIn("Próg poziomu alarmów na mapie", page.text)
+                self.assertIn("Ignoruj alarmy poniżej poziomu", page.text)
+                self.assertIn(
+                    '<option value="2" selected>≥ 2</option>',
+                    page.text,
+                )
+                self.assertIn(
+                    '<option value="3" selected>≥ 3</option>',
+                    page.text,
+                )
             finally:
                 app.dependency_overrides.clear()
 
@@ -407,6 +469,55 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             )
             self.assertTrue(accepted)
             self._assert_alarm_message_stored(source_kind="aprsis")
+
+    def test_global_threshold_ignores_lower_group_alerts_but_keeps_messages_and_frames(self) -> None:
+        cases = (
+            ("PLWX01", "TSTORM1", "101AA", "rf"),
+            ("PLWX02", "RAIN1", "102AA", "aprsis"),
+            ("PLWX03", "WIND2", "103AA", "rf"),
+            ("PLWX04", "OTHER", "104AA", "aprsis"),
+        )
+        with temporary_database():
+            save_global_alarm_level_threshold(2)
+            for offset, (source, event_code, message_id, source_kind) in enumerate(cases):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        self._group_alarm_line(
+                            source=source,
+                            event_code=event_code,
+                            area_code=f"14{offset:02d}",
+                            message_id=message_id,
+                        ),
+                        source="Main RF" if source_kind == "rf" else "APRS-IS · Internet RX",
+                        source_kind=source_kind,
+                        timestamp=f"2026-01-01T00:10:0{offset}+00:00",
+                    )
+                )
+
+            message_count = fetch_one(
+                "SELECT COUNT(*) AS total FROM aprs_messages WHERE direction = 'rx'"
+            )
+            frame_count = fetch_one(
+                "SELECT COUNT(*) AS total FROM traffic_frames"
+            )
+            alerts = fetch_all(
+                """
+                SELECT source_callsign, severity_level
+                FROM aprs_alerts
+                ORDER BY source_callsign
+                """
+            )
+
+        assert message_count is not None and frame_count is not None
+        self.assertEqual(int(message_count["total"]), 4)
+        self.assertEqual(int(frame_count["total"]), 4)
+        self.assertEqual(
+            [
+                (row["source_callsign"], row["severity_level"])
+                for row in alerts
+            ],
+            [("PLWX03", 2), ("PLWX04", None)],
+        )
 
     def test_direct_messages_and_existing_standard_groups_still_work(self) -> None:
         with temporary_database():

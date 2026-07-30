@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.db import fetch_all, utc_now
+from app.services.alarm_groups import (
+    alarm_severity_meets_threshold,
+    get_map_alarm_level_threshold,
+)
 from app.services.alerts import expire_aprs_alerts
 from app.services.aprs_warning_identity import normalize_warning_area_codes
 
@@ -353,7 +357,15 @@ def get_active_alert_area_feature_collection(
         )
     except sqlite3.OperationalError:
         return {"type": "FeatureCollection", "features": []}
+    map_threshold = get_map_alarm_level_threshold()
     return build_alert_area_feature_collection(
-        [dict(row) for row in rows],
+        [
+            dict(row)
+            for row in rows
+            if alarm_severity_meets_threshold(
+                row["severity_level"],
+                map_threshold,
+            )
+        ],
         geodata_root=geodata_root,
     )
