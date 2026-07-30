@@ -149,6 +149,37 @@
                                     <img src="{{ request.scope.root_path }}/static/icons/file-document-alert-outline.svg" alt="">
                                 </a>
                                 {% if can_manage_alerts %}
+                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
+                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
+                                    <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
+                                        <option value="1h">{{ t("Mute for 1 hour") }}</option>
+                                        <option value="4h">{{ t("Mute for 4 hours") }}</option>
+                                        <option value="24h">{{ t("Mute for 24 hours") }}</option>
+                                        <option value="indefinite">{{ t("Mute indefinitely") }}</option>
+                                    </select>
+                                    <button type="submit" class="table-icon-button" title="{{ t('Mute') }}" aria-label="{{ t('Mute') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/volume-off.svg" alt="">
+                                    </button>
+                                </form>
+                                {% if alert.muted %}
+                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/unmute" class="table-action-form">
+                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
+                                    <button type="submit" class="table-icon-button" title="{{ t('Cancel mute') }}" aria-label="{{ t('Cancel mute') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
+                                    </button>
+                                </form>
+                                {% else %}
+                                <button
+                                    type="button"
+                                    class="table-icon-button"
+                                    title="{{ t('Cancel mute') }}"
+                                    aria-label="{{ t('Cancel mute') }} #{{ alert.id }}"
+                                    data-alert-unmute-placeholder
+                                    disabled
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
+                                </button>
+                                {% endif %}
                                 <form
                                     method="post"
                                     action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/delete"

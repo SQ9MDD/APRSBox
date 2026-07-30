@@ -6342,7 +6342,7 @@ select:focus-visible,
 }
 
 .alerts-table .alerts-col-actions {
-    width: 7.75rem;
+    width: 19.75rem;
 }
 
 .alerts-table th,
@@ -6454,9 +6454,21 @@ select:focus-visible,
     gap: 0.28rem;
 }
 
-.alerts-table .table-action-form {
+.alerts-table .table-action-form,
+.alerts-table .alert-mute-form {
     flex: 0 0 auto;
     margin: 0;
+}
+
+.alerts-table .alert-mute-form {
+    flex-wrap: nowrap;
+    gap: 0.24rem;
+}
+
+.alerts-table .alert-mute-form select {
+    width: 9rem;
+    min-width: 9rem;
+    max-width: 9rem;
 }
 
 .alert-row-muted {
