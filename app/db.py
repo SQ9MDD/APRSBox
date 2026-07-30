@@ -591,6 +591,10 @@ CREATE TABLE IF NOT EXISTS aprs_alerts (
     source_callsign TEXT NOT NULL COLLATE NOCASE,
     alert_type TEXT NOT NULL,
     message TEXT NOT NULL DEFAULT '',
+    alarm_group TEXT,
+    area_codes_json TEXT NOT NULL DEFAULT '[]',
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    valid_until_utc TEXT,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     frame_count INTEGER NOT NULL DEFAULT 1 CHECK (frame_count >= 1),
@@ -976,6 +980,7 @@ def init_db() -> None:
             row["name"] for row in connection.execute("PRAGMA table_info(aprs_message_conversations)").fetchall()
         }
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
+        alert_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_alerts)").fetchall()}
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         traffic_runtime_interface_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_interfaces)").fetchall()
@@ -995,6 +1000,35 @@ def init_db() -> None:
                 """
                 ALTER TABLE users
                 ADD COLUMN last_login_at TEXT
+                """
+            )
+        if "alarm_group" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN alarm_group TEXT
+                """
+            )
+        if "area_codes_json" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN area_codes_json TEXT NOT NULL DEFAULT '[]'
+                """
+            )
+        if "is_active" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1
+                CHECK (is_active IN (0, 1))
+                """
+            )
+        if "valid_until_utc" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN valid_until_utc TEXT
                 """
             )
         if "default_units" not in station_columns:

@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 import tempfile
 import unittest
@@ -256,6 +257,9 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(alert["source_callsign"], "PLWXSR")
         self.assertEqual(alert["alert_type"], "PL-WARN")
         self.assertEqual(alert["message"], "310100z,TSTORM1,1465{129AA")
+        self.assertEqual(alert["alarm_group"], "PL-WARN")
+        self.assertEqual(json.loads(alert["area_codes_json"]), ["1465"])
+        self.assertEqual(int(alert["is_active"]), 1)
         self.assertEqual(int(alert["frame_count"]), 1)
         self.assertEqual(alert["initial_frame_id"], alert["frame_id"])
         self.assertEqual(alert["last_frame_id"], alert["frame_id"])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
@@ -33,6 +34,48 @@ def _float_or_none(value: Any) -> float | None:
 
 def _normalized_source_callsign(parsed: Mapping[str, Any]) -> str:
     return str(parsed.get("logical_source_key") or parsed.get("source_key") or "").strip().upper()
+
+
+def normalize_alert_area_codes(values: Any) -> list[str]:
+    if values is None:
+        return []
+    candidates = values if isinstance(values, (list, tuple, set)) else [values]
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in candidates:
+        text = str(value).strip()
+        if not text:
+            continue
+        comparison_key = text.casefold()
+        if comparison_key in seen:
+            continue
+        seen.add(comparison_key)
+        normalized.append(text)
+    return normalized
+
+
+def extract_aprs_warning_area_codes(raw_content: Any) -> list[str]:
+    """Extract only the area-code fields from the current warning envelope.
+
+    Timestamp, event type, severity, and validity remain intentionally opaque.
+    The generic alert intake also accepts explicit ``area_codes`` so a future
+    parser or Alert Hub adapter can replace this small transport-level helper.
+    """
+
+    content_without_message_id = str(raw_content or "").split("{", 1)[0]
+    fields = content_without_message_id.split(",")
+    if len(fields) < 3:
+        return []
+    return normalize_alert_area_codes(fields[2:])
+
+
+def _stored_area_codes(value: Any) -> list[str]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+    return normalize_alert_area_codes(value)
 
 
 def _is_muted(row: Mapping[str, Any], *, now: datetime | None = None) -> bool:
@@ -88,24 +131,34 @@ def accept_aprs_warning_frame(
     longitude = _float_or_none(warning.get("longitude"))
     warning_kind = str(warning.get("warning_kind") or "aprs_warning").strip().lower()
     emergency_notification = bool(warning.get("emergency_notification"))
+    alarm_group = str(warning.get("alarm_group") or "").strip().upper() or None
+    area_codes = normalize_alert_area_codes(warning.get("area_codes"))
+    area_codes_json = json.dumps(area_codes, ensure_ascii=False, separators=(",", ":"))
+    is_active = 1 if bool(warning.get("is_active", True)) else 0
+    valid_until_utc = str(warning.get("valid_until_utc") or "").strip() or None
 
     insert_cursor = connection.execute(
         """
         INSERT INTO aprs_alerts(
             source_callsign, alert_type, message,
+            alarm_group, area_codes_json, is_active, valid_until_utc,
             first_seen_at, last_seen_at, frame_count,
             initial_frame_id, last_frame_id,
             latitude, longitude,
             muted_until, muted_indefinitely,
             created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, 0, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, 0, ?, ?)
         ON CONFLICT(source_callsign) DO NOTHING
         """,
         (
             source_callsign,
             alert_type,
             message,
+            alarm_group,
+            area_codes_json,
+            is_active,
+            valid_until_utc,
             received_at,
             received_at,
             frame_id,
@@ -142,6 +195,10 @@ def accept_aprs_warning_frame(
             UPDATE aprs_alerts
             SET alert_type = ?,
                 message = ?,
+                alarm_group = ?,
+                area_codes_json = ?,
+                is_active = ?,
+                valid_until_utc = ?,
                 last_seen_at = ?,
                 frame_count = frame_count + ?,
                 last_frame_id = ?,
@@ -153,6 +210,10 @@ def accept_aprs_warning_frame(
             (
                 alert_type,
                 message,
+                alarm_group,
+                area_codes_json,
+                is_active,
+                valid_until_utc,
                 received_at,
                 1 if relation_created else 0,
                 frame_id,
@@ -246,6 +307,8 @@ def process_alarm_group_message_frame(
         warning={
             "alert_type": addressee,
             "raw_content": raw_content,
+            "alarm_group": addressee,
+            "area_codes": extract_aprs_warning_area_codes(raw_content),
             "latitude": aprs_data.get("latitude"),
             "longitude": aprs_data.get("longitude"),
             "warning_kind": "alarm_group",
@@ -321,10 +384,22 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
     related_entity = _related_entity(parsed, str(item.get("source_callsign") or ""))
     muted = _is_muted(item, now=now)
     muted_until = str(item.get("muted_until") or "").strip()
+    area_codes = _stored_area_codes(item.get("area_codes_json"))
+    active_until = parse_datetime(item.get("valid_until_utc"))
+    active_reference = now or datetime.now(timezone.utc)
+    if active_reference.tzinfo is None:
+        active_reference = active_reference.replace(tzinfo=timezone.utc)
+    active = bool(int(item.get("is_active") or 0)) and (
+        active_until is None
+        or active_until.astimezone(timezone.utc) > active_reference.astimezone(timezone.utc)
+    )
     item.update(
         {
             "id": int(item["id"]),
             "frame_count": int(item.get("frame_count") or 0),
+            "alarm_group": str(item.get("alarm_group") or "").strip().upper(),
+            "area_codes": area_codes,
+            "active": active,
             "muted": muted,
             "muted_until_label": format_display_datetime(muted_until) if muted_until else "",
             "first_seen_label": format_display_datetime(item.get("first_seen_at")),

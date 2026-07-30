@@ -75,6 +75,7 @@
     const trackLayerGroup = window.L.layerGroup();
     const markerLayerGroup = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
+    let alertAreaLayer = null;
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
@@ -101,6 +102,7 @@
     let latestTrackRevision = "";
     let detailsLoadingRevision = "";
     let tracksLoadingRevision = "";
+    let lastAlertAreasSignature = "";
     const interfaceVisibilityByKey = new Map();
     const markerLayersByKey = new Map();
     const coverageLayersByKey = new Map();
@@ -155,6 +157,48 @@
             return "";
         }
         return String(value);
+    }
+
+    function normalizeAlertAreaFeatureCollection(value) {
+        if (!value || value.type !== "FeatureCollection" || !Array.isArray(value.features)) {
+            return { type: "FeatureCollection", features: [] };
+        }
+        return {
+            type: "FeatureCollection",
+            features: value.features.filter((feature) => (
+                feature
+                && feature.type === "Feature"
+                && feature.geometry
+                && typeof feature.geometry === "object"
+            )),
+        };
+    }
+
+    function reconcileAlertAreas(value) {
+        if (!alertAreaLayer) {
+            return;
+        }
+        const featureCollection = normalizeAlertAreaFeatureCollection(value);
+        let nextSignature = "";
+        try {
+            nextSignature = JSON.stringify(featureCollection);
+        } catch (_error) {
+            nextSignature = '{"type":"FeatureCollection","features":[]}';
+            featureCollection.features = [];
+        }
+        if (nextSignature === lastAlertAreasSignature) {
+            return;
+        }
+        lastAlertAreasSignature = nextSignature;
+        alertAreaLayer.clearLayers();
+        if (featureCollection.features.length === 0) {
+            return;
+        }
+        try {
+            alertAreaLayer.addData(featureCollection);
+        } catch (_error) {
+            alertAreaLayer.clearLayers();
+        }
     }
 
     function resolveInitialView() {
@@ -266,6 +310,24 @@
     map.on("resize zoom move", syncMapMaskLayerViewport);
     mapMaskLayer = ensureMapMaskLayer(map);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
+    const alertAreasPaneName = "alert-areas-pane";
+    const alertAreasPane = map.createPane(alertAreasPaneName);
+    alertAreasPane.style.zIndex = "350";
+    alertAreasPane.style.pointerEvents = "none";
+    alertAreaLayer = window.L.geoJSON(null, {
+        pane: alertAreasPaneName,
+        interactive: false,
+        style: {
+            stroke: true,
+            color: "red",
+            opacity: 1,
+            weight: 2,
+            dashArray: null,
+            fill: true,
+            fillColor: "red",
+            fillOpacity: 0.10,
+        },
+    }).addTo(map);
     coverageLayerGroup.addTo(map);
     trackLayerGroup.addTo(map);
     markerLayerGroup.addTo(map);
@@ -1809,6 +1871,7 @@
                 return;
             }
             const payload = await response.json();
+            reconcileAlertAreas(payload.alert_areas);
             const stations = payload.stations || [];
             const interfaces = payload.interfaces || [];
             const payloadRevision = normalizeRevision(payload.revision);
