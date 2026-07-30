@@ -10,7 +10,7 @@ from threading import Lock
 from typing import Any, Callable
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
-from app.services.alerts import process_emergency_frame
+from app.services.alerts import process_alert_frame
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
 from app.services.content import parse_tnc2_frame
 from app.services.messages import process_incoming_tnc2_message
@@ -228,7 +228,7 @@ def process_normalized_tnc2_rx(
             ),
         )
         frame_id = int(cursor.lastrowid)
-        alert_result = process_emergency_frame(
+        alert_result = process_alert_frame(
             connection,
             frame_id=frame_id,
             parsed=parsed_frame,
@@ -249,11 +249,12 @@ def process_normalized_tnc2_rx(
         )
 
     if alert_result and alert_result.get("created"):
+        warning_kind = str(alert_result.get("warning_kind") or "warning").strip()
         log_event(
             "WARNING",
             "alerts",
             (
-                f"Created APRS emergency alert {alert_result['alert_id']} "
+                f"Created APRS {warning_kind} alert {alert_result['alert_id']} "
                 f"for {alert_result['source_callsign']}"
             ),
         )

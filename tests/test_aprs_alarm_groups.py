@@ -23,7 +23,9 @@ from app.services.messages import (
     DEFAULT_MESSAGE_TARGET_GROUPS,
     get_effective_message_target_groups,
     get_message_settings,
+    save_message_settings,
 )
+from app.services.content import traffic_snapshot
 from app.services.traffic import process_normalized_tnc2_rx
 
 
@@ -220,7 +222,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         "PLWXSR>APRS::PL-WARN  :310100z,TSTORM1,1465{129AA"
     )
 
-    def _assert_alarm_message_stored(self) -> None:
+    def _assert_alarm_message_stored(self, *, source_kind: str) -> None:
         stored = fetch_one(
             """
             SELECT m.direction, m.sender, m.addressee, m.message_text,
@@ -240,10 +242,36 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
         self.assertEqual(stored["remote_callsign"], "PL-WARN")
         self.assertEqual(stored["conversation_kind"], "group")
-        alert_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_alerts")
-        self.assertEqual(int((alert_count or {"total": -1})["total"]), 0)
 
-    def test_rf_alarm_group_message_uses_existing_message_storage(self) -> None:
+        alert = fetch_one(
+            """
+            SELECT alerts.*, frames.id AS frame_id, frames.line, frames.source_kind,
+                   relations.received_at
+            FROM aprs_alerts AS alerts
+            JOIN aprs_alert_frames AS relations ON relations.alert_id = alerts.id
+            JOIN traffic_frames AS frames ON frames.id = relations.frame_id
+            """
+        )
+        assert alert is not None
+        self.assertEqual(alert["source_callsign"], "PLWXSR")
+        self.assertEqual(alert["alert_type"], "PL-WARN")
+        self.assertEqual(alert["message"], "310100z,TSTORM1,1465{129AA")
+        self.assertEqual(int(alert["frame_count"]), 1)
+        self.assertEqual(alert["initial_frame_id"], alert["frame_id"])
+        self.assertEqual(alert["last_frame_id"], alert["frame_id"])
+        self.assertEqual(alert["line"], self._ALARM_LINE)
+        self.assertEqual(alert["source_kind"], source_kind)
+
+        snapshot_frame = next(
+            frame
+            for frame in traffic_snapshot(limit=10)["frames"]
+            if int(frame["id"]) == int(alert["frame_id"])
+        )
+        self.assertEqual(snapshot_frame["alert_id"], int(alert["id"]))
+        self.assertFalse(snapshot_frame["emergency"])
+        self.assertFalse(snapshot_frame["alert_should_notify"])
+
+    def test_rf_alarm_group_message_creates_alert_and_keeps_message_and_traffic_frame(self) -> None:
         with temporary_database():
             accepted = process_normalized_tnc2_rx(
                 self._ALARM_LINE,
@@ -253,9 +281,9 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 timestamp="2026-01-01T00:01:00+00:00",
             )
             self.assertTrue(accepted)
-            self._assert_alarm_message_stored()
+            self._assert_alarm_message_stored(source_kind="rf")
 
-    def test_aprsis_alarm_group_message_uses_existing_message_storage(self) -> None:
+    def test_aprsis_alarm_group_message_creates_alert_and_keeps_message_and_traffic_frame(self) -> None:
         with temporary_database():
             accepted = process_normalized_tnc2_rx(
                 self._ALARM_LINE,
@@ -264,7 +292,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 timestamp="2026-01-01T00:01:00+00:00",
             )
             self.assertTrue(accepted)
-            self._assert_alarm_message_stored()
+            self._assert_alarm_message_stored(source_kind="aprsis")
 
     def test_direct_messages_and_existing_standard_groups_still_work(self) -> None:
         with temporary_database():
@@ -291,6 +319,39 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 """
             )
             self.assertEqual(int((rows or {"total": -1})["total"]), 2)
+            alert_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_alerts")
+            self.assertEqual(int((alert_count or {"total": -1})["total"]), 0)
+
+    def test_standard_message_group_not_configured_as_alarm_remains_message_only(self) -> None:
+        with temporary_database():
+            save_message_settings(
+                {
+                    "default_path": "",
+                    "receive_any_ssid": False,
+                    "target_groups": ["LOCALWARN"],
+                }
+            )
+            accepted = process_normalized_tnc2_rx(
+                "SP7ABC>APRS::LOCALWARN:Ordinary group{03",
+                source="Main RF",
+                source_kind="rf",
+                band="2m",
+                timestamp="2026-01-01T00:02:00+00:00",
+            )
+            self.assertTrue(accepted)
+            stored = fetch_one(
+                """
+                SELECT addressee, message_text
+                FROM aprs_messages
+                WHERE direction = 'rx'
+                """
+            )
+            assert stored is not None
+            self.assertEqual(
+                (stored["addressee"], stored["message_text"]),
+                ("LOCALWARN", "Ordinary group"),
+            )
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_alerts"))
 
 
 if __name__ == "__main__":

@@ -1046,7 +1046,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "alert_href": f"/alerts/{alert_id}" if alert_id is not None else "",
                 "alert_muted": alert_muted,
                 "alert_should_notify": bool(
-                    alert_id is not None
+                    emergency_data is not None
+                    and alert_id is not None
                     and row["alert_last_frame_id"] is not None
                     and int(row["alert_last_frame_id"]) == int(row["id"])
                     and not alert_muted

@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from app.datetime_utils import format_display_datetime, parse_datetime
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.services.alarm_groups import get_aprs_alarm_groups
 from app.services.content import (
     build_emergency_frame_data,
     build_station_detail_href,
@@ -46,34 +47,47 @@ def _is_muted(row: Mapping[str, Any], *, now: datetime | None = None) -> bool:
     return muted_until.astimezone(timezone.utc) > reference.astimezone(timezone.utc)
 
 
-def process_emergency_frame(
+def accept_aprs_warning_frame(
     connection: sqlite3.Connection,
     *,
     frame_id: int,
-    parsed: dict[str, Any],
+    parsed: Mapping[str, Any],
     frame_row: Mapping[str, Any],
+    warning: Mapping[str, Any],
 ) -> dict[str, Any] | None:
-    """Create or update one logical emergency alert inside the frame transaction."""
+    """Store a warning in the existing alert model and relate its source frame.
 
-    line = str(frame_row.get("line") or "")
-    emergency_data = build_emergency_frame_data(parsed=parsed, row=frame_row, line=line)
-    if emergency_data is None:
-        return None
+    The warning mapping is intentionally format-neutral so later stages can
+    populate parsed event type, severity, validity, areas, and external-source
+    metadata without adding a second alert intake path.
+    """
 
-    source_callsign = _normalized_source_callsign(parsed)
+    source_callsign = str(
+        warning.get("source_callsign")
+        or _normalized_source_callsign(parsed)
+    ).strip().upper()
     if not source_callsign:
         return None
 
-    received_at = str(frame_row.get("created_at") or utc_now())
+    received_at = str(
+        warning.get("received_at")
+        or frame_row.get("created_at")
+        or utc_now()
+    )
     alert_type = str(
-        emergency_data.get("emergency_code")
-        or emergency_data.get("mice_message")
-        or emergency_data.get("emergency_source")
-        or "EMERGENCY"
+        warning.get("alert_type")
+        or warning.get("warning_type")
+        or "APRS WARNING"
     ).strip().upper()
-    message = str(emergency_data.get("summary") or emergency_data.get("comment") or "").strip()
-    latitude = _float_or_none(emergency_data.get("latitude"))
-    longitude = _float_or_none(emergency_data.get("longitude"))
+    message = str(
+        warning.get("raw_content")
+        if warning.get("raw_content") is not None
+        else warning.get("message") or ""
+    )
+    latitude = _float_or_none(warning.get("latitude"))
+    longitude = _float_or_none(warning.get("longitude"))
+    warning_kind = str(warning.get("warning_kind") or "aprs_warning").strip().lower()
+    emergency_notification = bool(warning.get("emergency_notification"))
 
     insert_cursor = connection.execute(
         """
@@ -109,7 +123,7 @@ def process_emergency_frame(
         (source_callsign,),
     ).fetchone()
     if alert_row is None:
-        raise RuntimeError(f"Emergency alert upsert failed for {source_callsign}")
+        raise RuntimeError(f"APRS warning upsert failed for {source_callsign}")
     alert_id = int(alert_row["id"])
 
     relation_cursor = connection.execute(
@@ -153,8 +167,116 @@ def process_emergency_frame(
         "alert_id": alert_id,
         "source_callsign": source_callsign,
         "created": created,
-        "notification_required": created,
+        "warning_kind": warning_kind,
+        "notification_required": emergency_notification and created,
     }
+
+
+def process_emergency_frame(
+    connection: sqlite3.Connection,
+    *,
+    frame_id: int,
+    parsed: dict[str, Any],
+    frame_row: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Translate an APRS emergency packet into the shared warning intake."""
+
+    line = str(frame_row.get("line") or "")
+    emergency_data = build_emergency_frame_data(parsed=parsed, row=frame_row, line=line)
+    if emergency_data is None:
+        return None
+
+    alert_type = str(
+        emergency_data.get("emergency_code")
+        or emergency_data.get("mice_message")
+        or emergency_data.get("emergency_source")
+        or "EMERGENCY"
+    ).strip().upper()
+    message = str(emergency_data.get("summary") or emergency_data.get("comment") or "").strip()
+    latitude = _float_or_none(emergency_data.get("latitude"))
+    longitude = _float_or_none(emergency_data.get("longitude"))
+    return accept_aprs_warning_frame(
+        connection,
+        frame_id=frame_id,
+        parsed=parsed,
+        frame_row=frame_row,
+        warning={
+            "alert_type": alert_type,
+            "message": message,
+            "latitude": latitude,
+            "longitude": longitude,
+            "warning_kind": "emergency",
+            "emergency_notification": True,
+        },
+    )
+
+
+def _raw_aprs_message_fields(parsed: Mapping[str, Any]) -> tuple[str, str]:
+    info = str(parsed.get("logical_info") or parsed.get("info") or "")
+    if not info.startswith(":") or len(info) < 11 or info[10] != ":":
+        return "", ""
+    return info[1:10].rstrip().upper(), info[11:]
+
+
+def process_alarm_group_message_frame(
+    connection: sqlite3.Connection,
+    *,
+    frame_id: int,
+    parsed: dict[str, Any],
+    frame_row: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Route a configured APRS alarm-group message into the shared intake."""
+
+    aprs_data = dict(parsed.get("aprs_data") or {})
+    if str(aprs_data.get("packet_group") or "").strip().lower() != "message":
+        return None
+    if str(aprs_data.get("packet_type_code") or "").strip().lower() != "message":
+        return None
+
+    raw_addressee, raw_content = _raw_aprs_message_fields(parsed)
+    addressee = str(aprs_data.get("addressee") or raw_addressee).strip().upper()
+    if not addressee or addressee not in set(get_aprs_alarm_groups()):
+        return None
+
+    return accept_aprs_warning_frame(
+        connection,
+        frame_id=frame_id,
+        parsed=parsed,
+        frame_row=frame_row,
+        warning={
+            "alert_type": addressee,
+            "raw_content": raw_content,
+            "latitude": aprs_data.get("latitude"),
+            "longitude": aprs_data.get("longitude"),
+            "warning_kind": "alarm_group",
+            "emergency_notification": False,
+        },
+    )
+
+
+def process_alert_frame(
+    connection: sqlite3.Connection,
+    *,
+    frame_id: int,
+    parsed: dict[str, Any],
+    frame_row: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Recognize one alert candidate and feed it into the shared intake."""
+
+    emergency_result = process_emergency_frame(
+        connection,
+        frame_id=frame_id,
+        parsed=parsed,
+        frame_row=frame_row,
+    )
+    if emergency_result is not None:
+        return emergency_result
+    return process_alarm_group_message_frame(
+        connection,
+        frame_id=frame_id,
+        parsed=parsed,
+        frame_row=frame_row,
+    )
 
 
 def attention_alert_count(*, now: str | None = None) -> int:
