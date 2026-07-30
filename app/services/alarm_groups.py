@@ -21,7 +21,7 @@ DEFAULT_APRS_ALARM_GROUPS = ("PL-WARN",)
 DEFAULT_APRS_ALARM_LEVEL_THRESHOLD = 1
 APRS_ALARM_LEVEL_THRESHOLDS = (1, 2, 3)
 APRS_ALARM_LEVEL_OFF = 0
-APRS_ALARM_THRESHOLD_TARGETS = ("alerts", "map")
+APRS_ALARM_THRESHOLD_TARGETS = ("alerts", "map", "popup")
 
 _APRS_ALARM_GROUP_RE = re.compile(r"^[A-Z0-9-]{1,9}$")
 
@@ -145,6 +145,7 @@ def _default_category_thresholds() -> dict[str, dict[str, int]]:
         str(category["key"]): {
             "alerts": alert_threshold,
             "map": map_threshold,
+            "popup": APRS_ALARM_LEVEL_OFF,
         }
         for category in ALERT_EVENT_CATEGORIES
     }
@@ -247,8 +248,17 @@ def alarm_event_meets_category_threshold(
     severity_level: Any,
     *,
     target: str,
+    thresholds: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> bool:
-    threshold = get_aprs_alarm_category_threshold(event_code, target=target)
+    if target not in APRS_ALARM_THRESHOLD_TARGETS:
+        raise ValueError(_t("Invalid APRS alarm threshold target."))
+    if thresholds is None:
+        threshold = get_aprs_alarm_category_threshold(event_code, target=target)
+    else:
+        category_key = resolve_alert_event_category(event_code)
+        threshold = normalize_aprs_alarm_category_threshold(
+            thresholds[category_key][target]
+        )
     if threshold == APRS_ALARM_LEVEL_OFF:
         return False
     return alarm_severity_meets_threshold(severity_level, threshold)

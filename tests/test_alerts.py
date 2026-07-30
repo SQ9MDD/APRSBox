@@ -670,6 +670,10 @@ class AprsAlertTests(unittest.TestCase):
 
         self.assertIn('{% include "partials/emergency_modal.html" %}', base_source)
         self.assertIn("map-emergency-modal.js", base_source)
+        self.assertIn("frame.alert_popup || frame.emergency", modal_js_source)
+        self.assertIn("alarm-group|${frame.alert_id}", modal_js_source)
+        self.assertIn("value === null || value === undefined", modal_js_source)
+        self.assertIn("data-i18n-aprs-alert-received", modal_source)
         self.assertNotIn('id="aprs-emergency-modal"', map_source)
         self.assertNotIn("alerts-col-comment", alerts_source)
         self.assertIn("alerts-col-category", alerts_source)

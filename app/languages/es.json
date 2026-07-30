@@ -1877,5 +1877,9 @@
   "Cloud": "Nubosidad",
   "Other / unknown": "Otro / desconocido",
   "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alertas controla el traslado de Mensajes a Alertas. Mapa controla la visibilidad de las áreas. Apagado desactiva por completo la categoría en esa columna. Los niveles desconocidos se conservan en los demás casos por seguridad.",
+  "Alert popup": "Ventana emergente de alerta",
+  "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alertas controla el traslado de Mensajes a Alertas. Mapa controla la visibilidad de las áreas. La ventana emergente de alerta controla el aviso de estilo emergencia. Apagado desactiva por completo la categoría en esa columna. Los niveles desconocidos se conservan en los demás casos por seguridad.",
+  "APRS alert received": "Alerta APRS recibida",
+  "Active APRS alert": "Alerta APRS activa",
   "Close": "Cerrar"
 }

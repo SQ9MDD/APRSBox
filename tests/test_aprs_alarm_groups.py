@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.db import execute, fetch_all, fetch_one, get_app_setting, init_db, set_app_setting
@@ -163,17 +164,23 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
             thresholds = get_aprs_alarm_category_thresholds()
             self.assertTrue(
                 all(
-                    values == {"alerts": 1, "map": 1}
+                    values == {"alerts": 1, "map": 1, "popup": 0}
                     for values in thresholds.values()
                 )
             )
-            thresholds["HEAT"] = {"alerts": 2, "map": 3}
-            thresholds["THUNDERSTORM"] = {"alerts": 1, "map": 1}
-            thresholds["HAIL"] = {"alerts": "off", "map": 0}
+            thresholds["HEAT"] = {"alerts": 2, "map": 3, "popup": "off"}
+            thresholds["THUNDERSTORM"] = {"alerts": 1, "map": 1, "popup": 2}
+            thresholds["HAIL"] = {"alerts": "off", "map": 0, "popup": 0}
             saved = save_aprs_alarm_category_thresholds(thresholds)
 
-            self.assertEqual(saved["HEAT"], {"alerts": 2, "map": 3})
-            self.assertEqual(saved["HAIL"], {"alerts": 0, "map": 0})
+            self.assertEqual(
+                saved["HEAT"],
+                {"alerts": 2, "map": 3, "popup": 0},
+            )
+            self.assertEqual(
+                saved["HAIL"],
+                {"alerts": 0, "map": 0, "popup": 0},
+            )
             self.assertIsNotNone(
                 get_app_setting(APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY)
             )
@@ -188,6 +195,10 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
             self.assertEqual(
                 get_aprs_alarm_category_threshold("TSTORM1", target="alerts"),
                 1,
+            )
+            self.assertEqual(
+                get_aprs_alarm_category_threshold("TSTORM1", target="popup"),
+                2,
             )
             self.assertFalse(
                 alarm_event_meets_category_threshold(
@@ -224,6 +235,36 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     target="map",
                 )
             )
+            self.assertFalse(
+                alarm_event_meets_category_threshold(
+                    "TSTORM1",
+                    1,
+                    target="popup",
+                )
+            )
+            self.assertTrue(
+                alarm_event_meets_category_threshold(
+                    "TSTORM2",
+                    2,
+                    target="popup",
+                )
+            )
+
+    def test_existing_category_settings_without_popup_default_to_off(self) -> None:
+        with temporary_database():
+            legacy_thresholds = get_aprs_alarm_category_thresholds()
+            for values in legacy_thresholds.values():
+                values.pop("popup")
+            set_app_setting(
+                APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY,
+                json.dumps(legacy_thresholds),
+            )
+
+            restored = get_aprs_alarm_category_thresholds()
+
+        self.assertTrue(
+            all(values["popup"] == 0 for values in restored.values())
+        )
 
     def test_effective_rf_groups_append_alarm_groups_without_changing_standard_groups(self) -> None:
         with temporary_database():
@@ -270,6 +311,10 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                             else ("3" if category == "HEAT" else "1")
                             for category in get_aprs_alarm_category_thresholds()
                         ],
+                        "popup_level_threshold": [
+                            "3" if category == "TORNADO" else "off"
+                            for category in get_aprs_alarm_category_thresholds()
+                        ],
                     },
                 )
                 self.assertEqual(saved.status_code, 200)
@@ -279,11 +324,15 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     saved.json()["alarm_category_thresholds"]["HEAT"],
-                    {"alerts": 2, "map": 3},
+                    {"alerts": 2, "map": 3, "popup": 0},
                 )
                 self.assertEqual(
                     saved.json()["alarm_category_thresholds"]["HAIL"],
-                    {"alerts": 0, "map": 0},
+                    {"alerts": 0, "map": 0, "popup": 0},
+                )
+                self.assertEqual(
+                    saved.json()["alarm_category_thresholds"]["TORNADO"]["popup"],
+                    3,
                 )
 
                 page = client.get("/settings")
@@ -304,6 +353,7 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     '<option value="3" selected>≥ 3</option>',
                     page.text,
                 )
+                self.assertIn("Popup alarmowy", page.text)
             finally:
                 app.dependency_overrides.clear()
 
@@ -465,6 +515,8 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         group: str = "PL-WARN",
         logical_alert_id: str = "A7F3",
         parts_total: int = 3,
+        event_code: str = "TSTORM2",
+        expiry: str = "022200z",
     ) -> None:
         accepted = process_normalized_tnc2_rx(
             self._multipart_alarm_line(
@@ -475,6 +527,8 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 parts_total=parts_total,
                 area_codes=area_codes,
                 message_id=message_id,
+                event_code=event_code,
+                expiry=expiry,
             ),
             source="APRS-IS · Internet RX",
             source_kind="aprsis",
@@ -538,6 +592,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
         self.assertEqual(snapshot_frame["alert_id"], int(alert["id"]))
         self.assertFalse(snapshot_frame["emergency"])
+        self.assertFalse(snapshot_frame["alert_popup"])
         self.assertFalse(snapshot_frame["alert_should_notify"])
 
     def test_rf_alarm_group_message_creates_alert_and_keeps_message_and_traffic_frame(self) -> None:
@@ -1089,6 +1144,80 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
         self.assertFalse(
             any(frame["alert_should_notify"] for frame in snapshot["frames"])
+        )
+
+    def test_tornado_level_three_popup_uses_one_logical_alert_candidate(self) -> None:
+        with temporary_database():
+            thresholds = get_aprs_alarm_category_thresholds()
+            thresholds["TORNADO"]["popup"] = 3
+            save_aprs_alarm_category_thresholds(thresholds)
+            received_at = datetime.now(timezone.utc).replace(microsecond=0)
+            expiry = (received_at + timedelta(days=1)).strftime("%d%H%Mz")
+
+            self._receive_multipart_alarm(
+                logical_alert_id="LOW2",
+                part_number=1,
+                parts_total=1,
+                area_codes=("1401",),
+                message_id="LOW21",
+                event_code="TORNADO2",
+                expiry=expiry,
+                timestamp=received_at.isoformat(),
+            )
+            for part_number, message_id in ((1, "HIGH1"), (2, "HIGH2")):
+                self._receive_multipart_alarm(
+                    logical_alert_id="HIGH3",
+                    part_number=part_number,
+                    parts_total=2,
+                    area_codes=(f"146{part_number}",),
+                    message_id=message_id,
+                    event_code="TORNADO3",
+                    expiry=expiry,
+                    timestamp=(
+                        received_at + timedelta(seconds=part_number)
+                    ).isoformat(),
+                )
+
+            alerts = fetch_all(
+                """
+                SELECT id, logical_alert_id, initial_frame_id
+                FROM aprs_alerts
+                ORDER BY id
+                """
+            )
+            snapshot = traffic_snapshot(limit=10)
+
+        alert_by_logical_id = {
+            str(row["logical_alert_id"]): row
+            for row in alerts
+        }
+        low_frames = [
+            frame
+            for frame in snapshot["frames"]
+            if frame["alert_id"] == int(alert_by_logical_id["LOW2"]["id"])
+        ]
+        high_candidates = [
+            frame
+            for frame in snapshot["frames"]
+            if frame["alert_id"] == int(alert_by_logical_id["HIGH3"]["id"])
+            and frame["alert_should_notify"]
+        ]
+
+        self.assertTrue(low_frames)
+        self.assertFalse(any(frame["alert_popup"] for frame in low_frames))
+        self.assertEqual(len(high_candidates), 1)
+        self.assertEqual(
+            high_candidates[0]["id"],
+            int(alert_by_logical_id["HIGH3"]["initial_frame_id"]),
+        )
+        self.assertTrue(high_candidates[0]["alert_popup"])
+        self.assertEqual(
+            high_candidates[0]["alert_popup_kind"],
+            "alarm_group",
+        )
+        self.assertEqual(
+            high_candidates[0]["alert_popup_data"]["event_code"],
+            "TORNADO3",
         )
 
 

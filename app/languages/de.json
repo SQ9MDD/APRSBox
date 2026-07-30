@@ -1875,5 +1875,9 @@
   "Cloud": "Bewölkung",
   "Other / unknown": "Sonstige / unbekannt",
   "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alarme steuert die Übernahme von Nachrichten zu Alarmen. Karte steuert die Sichtbarkeit der Gebiete. Aus deaktiviert die Kategorie in dieser Spalte vollständig. Unbekannte Stufen bleiben ansonsten zur Sicherheit erhalten.",
+  "Alert popup": "Alarm-Popup",
+  "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alarme steuert die Übernahme von Nachrichten zu Alarmen. Karte steuert die Sichtbarkeit der Gebiete. Alarm-Popup steuert das Popup im Notfallstil. Aus deaktiviert die Kategorie in dieser Spalte vollständig. Unbekannte Stufen bleiben ansonsten zur Sicherheit erhalten.",
+  "APRS alert received": "APRS-Alarm empfangen",
+  "Active APRS alert": "Aktiver APRS-Alarm",
   "Close": "Schließen"
 }

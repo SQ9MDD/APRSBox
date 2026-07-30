@@ -1717,6 +1717,7 @@ def settings_update_alarm_groups(
     threshold_category: list[str] | None = Form(None),
     alert_level_threshold: list[str] | None = Form(None),
     map_level_threshold: list[str] | None = Form(None),
+    popup_level_threshold: list[str] | None = Form(None),
     map_alarm_level_threshold: str | None = Form(None),
     global_alarm_level_threshold: str | None = Form(None),
     __: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -1728,10 +1729,12 @@ def settings_update_alarm_groups(
             threshold_category is not None
             or alert_level_threshold is not None
             or map_level_threshold is not None
+            or popup_level_threshold is not None
         ):
             categories = threshold_category or []
             alert_thresholds = alert_level_threshold or []
             map_thresholds = map_level_threshold or []
+            popup_thresholds = popup_level_threshold
             expected_categories = {
                 str(category["key"])
                 for category in ALERT_EVENT_CATEGORIES
@@ -1739,6 +1742,10 @@ def settings_update_alarm_groups(
             if (
                 len(categories) != len(alert_thresholds)
                 or len(categories) != len(map_thresholds)
+                or (
+                    popup_thresholds is not None
+                    and len(categories) != len(popup_thresholds)
+                )
                 or len(categories) != len(expected_categories)
                 or set(categories) != expected_categories
             ):
@@ -1748,12 +1755,17 @@ def settings_update_alarm_groups(
                     category: {
                         "alerts": alerts,
                         "map": map_level,
+                        "popup": (
+                            popup_thresholds[index]
+                            if popup_thresholds is not None
+                            else selected_category_thresholds[category]["popup"]
+                        ),
                     }
-                    for category, alerts, map_level in zip(
+                    for index, (category, alerts, map_level) in enumerate(zip(
                         categories,
                         alert_thresholds,
                         map_thresholds,
-                    )
+                    ))
                 }
             )
         elif (

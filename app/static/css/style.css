@@ -3471,7 +3471,9 @@ select:focus-visible,
 .alarm-thresholds-table th:nth-child(2),
 .alarm-thresholds-table td:nth-child(2),
 .alarm-thresholds-table th:nth-child(3),
-.alarm-thresholds-table td:nth-child(3) {
+.alarm-thresholds-table td:nth-child(3),
+.alarm-thresholds-table th:nth-child(4),
+.alarm-thresholds-table td:nth-child(4) {
     width: 7rem;
 }
 

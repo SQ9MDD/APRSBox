@@ -1931,5 +1931,9 @@
   "Cloud": "Zachmurzenie",
   "Other / unknown": "Inne / nieznane",
   "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Kolumna Alarmy steruje przenoszeniem z Wiadomości do Alarmów. Kolumna Mapa steruje widocznością obszarów. Wył. całkowicie wyłącza kategorię w danej kolumnie. Nieznane poziomy są poza tym zachowywane ze względów bezpieczeństwa.",
+  "Alert popup": "Popup alarmowy",
+  "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Kolumna Alarmy steruje przenoszeniem z Wiadomości do Alarmów. Kolumna Mapa steruje widocznością obszarów. Kolumna Popup alarmowy steruje popupem w stylu alarmu emergency. Wył. całkowicie wyłącza kategorię w danej kolumnie. Nieznane poziomy są poza tym zachowywane ze względów bezpieczeństwa.",
+  "APRS alert received": "Odebrano alarm APRS",
+  "Active APRS alert": "Aktywny alarm APRS",
   "Close": "Zamknij"
 }

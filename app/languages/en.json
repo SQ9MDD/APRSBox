@@ -1909,5 +1909,9 @@
   "Cloud": "Cloud",
   "Other / unknown": "Other / unknown",
   "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.",
+  "Alert popup": "Alert popup",
+  "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.",
+  "APRS alert received": "APRS alert received",
+  "Active APRS alert": "Active APRS alert",
   "Close": "Close"
 }
