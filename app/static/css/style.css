@@ -6317,7 +6317,7 @@ select:focus-visible,
 }
 
 .alerts-table {
-    min-width: 76rem;
+    min-width: 110rem;
     table-layout: fixed;
 }
 
@@ -6329,17 +6329,25 @@ select:focus-visible,
     width: 7.5rem;
 }
 
-.alerts-table .alerts-col-type {
+.alerts-table .alerts-col-group,
+.alerts-table .alerts-col-event,
+.alerts-table .alerts-col-logical-id {
     width: 7rem;
+}
+
+.alerts-table .alerts-col-severity,
+.alerts-table .alerts-col-areas {
+    width: 6rem;
+}
+
+.alerts-table .alerts-col-parts,
+.alerts-table .alerts-col-status {
+    width: 8rem;
 }
 
 .alerts-table .alerts-col-first-seen,
 .alerts-table .alerts-col-last-seen {
     width: 10.5rem;
-}
-
-.alerts-table .alerts-col-frame-count {
-    width: 6.5rem;
 }
 
 .alerts-table .alerts-col-mute {
@@ -6425,6 +6433,18 @@ select:focus-visible,
     color: var(--warning);
     border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
     background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.alert-state-badge-incomplete {
+    color: var(--warning);
+    border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+    background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.alert-state-badge-complete {
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+    background: color-mix(in srgb, var(--success) 12%, transparent);
 }
 
 .alert-mute-form,
@@ -6523,6 +6543,16 @@ select:focus-visible,
 .alert-history-table {
     min-width: 62rem;
     table-layout: auto;
+}
+
+.alert-parts-table {
+    min-width: 86rem;
+    table-layout: auto;
+}
+
+.alert-parts-table .traffic-frame-raw {
+    display: inline-block;
+    min-width: 18rem;
 }
 
 .traffic-frame-raw {

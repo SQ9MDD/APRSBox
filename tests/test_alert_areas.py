@@ -129,6 +129,32 @@ def _receive_group_alert(area_code: str, message_id: str) -> None:
         raise AssertionError("Alarm-group frame was rejected")
 
 
+def _receive_multipart_group_alert(
+    *,
+    part_number: int,
+    parts_total: int,
+    area_codes: tuple[str, ...],
+    message_id: str,
+) -> None:
+    content = ",".join(
+        (
+            "302200z",
+            "TSTORM2",
+            "@A7F3",
+            f"{part_number}/{parts_total}",
+            *area_codes,
+        )
+    )
+    accepted = process_normalized_tnc2_rx(
+        f"PLWXSR>APRS,TCPIP*::PL-WARN  :{content}{{{message_id}",
+        source="APRS-IS · Internet RX",
+        source_kind="aprsis",
+        timestamp=f"2026-01-01T00:20:0{part_number}+00:00",
+    )
+    if not accepted:
+        raise AssertionError("Multipart alarm-group frame was rejected")
+
+
 class AlertAreaResolverTests(unittest.TestCase):
     def test_country_directory_is_derived_dynamically_from_warning_group(self) -> None:
         self.assertEqual(country_code_from_alarm_group("PL-WARN"), "pl")
@@ -349,6 +375,59 @@ class AlertAreaResolverTests(unittest.TestCase):
                 for feature in after_delete["features"]
             },
             {"1465", "3262"},
+        )
+
+    def test_incomplete_logical_alert_draws_all_areas_received_in_its_parts(self) -> None:
+        with temporary_database():
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "pl",
+                    [
+                        _feature("area_code", "1465", 20.0),
+                        _feature("area_code", "1466", 21.0),
+                        _feature("area_code", "1412", 22.0),
+                    ],
+                )
+                _receive_multipart_group_alert(
+                    part_number=2,
+                    parts_total=3,
+                    area_codes=("1412", "1466"),
+                    message_id="77BD1",
+                )
+                _receive_multipart_group_alert(
+                    part_number=1,
+                    parts_total=3,
+                    area_codes=("1465", "1466"),
+                    message_id="91AC2",
+                )
+
+                parent = fetch_all(
+                    """
+                    SELECT received_parts, parts_total, completion_status,
+                           area_codes_json
+                    FROM aprs_alerts
+                    """
+                )[0]
+                collection = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+
+        self.assertEqual(int(parent["received_parts"]), 2)
+        self.assertEqual(int(parent["parts_total"]), 3)
+        self.assertEqual(parent["completion_status"], "incomplete")
+        self.assertEqual(
+            json.loads(parent["area_codes_json"]),
+            ["1465", "1466", "1412"],
+        )
+        self.assertEqual(
+            {
+                feature["properties"]["aprsbox_area_code"]
+                for feature in collection["features"]
+            },
+            {"1465", "1466", "1412"},
         )
 
     def test_shared_area_remains_until_last_active_alarm_is_removed(self) -> None:

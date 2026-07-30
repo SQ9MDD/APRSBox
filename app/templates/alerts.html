@@ -37,10 +37,15 @@
                     <col class="alerts-col-select">
                     {% endif %}
                     <col class="alerts-col-source">
-                    <col class="alerts-col-type">
+                    <col class="alerts-col-group">
+                    <col class="alerts-col-logical-id">
+                    <col class="alerts-col-event">
+                    <col class="alerts-col-severity">
+                    <col class="alerts-col-parts">
+                    <col class="alerts-col-areas">
+                    <col class="alerts-col-status">
                     <col class="alerts-col-first-seen">
                     <col class="alerts-col-last-seen">
-                    <col class="alerts-col-frame-count">
                     <col class="alerts-col-mute">
                     <col class="alerts-col-actions">
                 </colgroup>
@@ -52,10 +57,15 @@
                         </th>
                         {% endif %}
                         <th>{{ t("Source") }}</th>
-                        <th>{{ t("Type") }}</th>
+                        <th>{{ t("Destination group") }}</th>
+                        <th>{{ t("Logical alert ID") }}</th>
+                        <th>{{ t("Event code") }}</th>
+                        <th>{{ t("Severity level") }}</th>
+                        <th>{{ t("Received parts") }}</th>
+                        <th>{{ t("Area count") }}</th>
+                        <th>{{ t("Completion status") }}</th>
                         <th>{{ t("First received") }}</th>
                         <th>{{ t("Last received") }}</th>
-                        <th>{{ t("Frame count") }}</th>
                         <th>{{ t("Muted until") }}</th>
                         <th>{{ t("Actions") }}</th>
                     </tr>
@@ -88,10 +98,29 @@
                                 </a>
                             </strong>
                         </td>
-                        <td><span class="frame-type-badge frame-type-badge-emergency">{{ alert.alert_type }}</span></td>
+                        <td>{{ alert.destination_group or "-" }}</td>
+                        <td>{% if alert.logical_alert_id %}<code>{{ alert.logical_alert_id }}</code>{% else %}<span class="muted">-</span>{% endif %}</td>
+                        <td><span class="frame-type-badge frame-type-badge-emergency">{{ alert.event_code or alert.alert_type }}</span></td>
+                        <td>{{ alert.severity_level if alert.severity_level is not none else "-" }}</td>
+                        <td>
+                            {% if alert.destination_group %}
+                            {{ alert.received_parts }} / {{ alert.parts_total or "?" }}
+                            {% else %}
+                            <span class="muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ alert.area_count if alert.destination_group else "-" }}</td>
+                        <td>
+                            {% if alert.destination_group %}
+                            <span class="alert-state-badge alert-state-badge-{{ alert.completion_status }}">
+                                {{ t("Complete alert") if alert.completion_status == "complete" else t("Incomplete") }}
+                            </span>
+                            {% else %}
+                            <span class="muted">-</span>
+                            {% endif %}
+                        </td>
                         <td>{{ alert.first_seen_label }}</td>
                         <td>{{ alert.last_seen_label }}</td>
-                        <td>{{ alert.frame_count }}</td>
                         <td>
                             {% if alert.muted %}
                             <span class="alert-state-badge alert-state-badge-muted">
@@ -173,7 +202,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 8 if can_manage_alerts else 7 }}" class="muted">{{ t("No alerts received yet.") }}</td>
+                        <td colspan="{{ 13 if can_manage_alerts else 12 }}" class="muted">{{ t("No alerts received yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -598,6 +598,13 @@ CREATE TABLE IF NOT EXISTS aprs_alerts (
     event_code TEXT,
     area_code TEXT,
     message_id TEXT,
+    logical_alert_id TEXT,
+    severity_level INTEGER,
+    received_parts INTEGER NOT NULL DEFAULT 0 CHECK (received_parts >= 0),
+    parts_total INTEGER CHECK (parts_total IS NULL OR parts_total >= 1),
+    completion_status TEXT NOT NULL DEFAULT 'incomplete'
+        CHECK (completion_status IN ('incomplete', 'complete')),
+    superseded_by_alert_id INTEGER,
     area_codes_json TEXT NOT NULL DEFAULT '[]',
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     valid_until_utc TEXT,
@@ -616,13 +623,36 @@ CREATE TABLE IF NOT EXISTS aprs_alerts (
     FOREIGN KEY (last_frame_id) REFERENCES traffic_frames(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS aprs_alert_parts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_id INTEGER NOT NULL,
+    part_identity_key TEXT NOT NULL,
+    part_number INTEGER,
+    parts_total INTEGER,
+    aprs_message_id TEXT,
+    area_codes_json TEXT NOT NULL DEFAULT '[]',
+    raw_message TEXT NOT NULL DEFAULT '',
+    first_received_at TEXT NOT NULL,
+    last_received_at TEXT NOT NULL,
+    received_count INTEGER NOT NULL DEFAULT 1 CHECK (received_count >= 1),
+    initial_frame_id INTEGER,
+    last_frame_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (alert_id) REFERENCES aprs_alerts(id) ON DELETE CASCADE,
+    FOREIGN KEY (initial_frame_id) REFERENCES traffic_frames(id) ON DELETE SET NULL,
+    FOREIGN KEY (last_frame_id) REFERENCES traffic_frames(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS aprs_alert_frames (
     alert_id INTEGER NOT NULL,
     frame_id INTEGER NOT NULL UNIQUE,
+    part_id INTEGER,
     received_at TEXT NOT NULL,
     PRIMARY KEY (alert_id, frame_id),
     FOREIGN KEY (alert_id) REFERENCES aprs_alerts(id) ON DELETE CASCADE,
-    FOREIGN KEY (frame_id) REFERENCES traffic_frames(id) ON DELETE CASCADE
+    FOREIGN KEY (frame_id) REFERENCES traffic_frames(id) ON DELETE CASCADE,
+    FOREIGN KEY (part_id) REFERENCES aprs_alert_parts(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS traffic_device_station_device_hourly (
@@ -904,6 +934,10 @@ CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DE
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_alerts_last_seen_at ON aprs_alerts(last_seen_at DESC, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alert_parts_identity
+    ON aprs_alert_parts(part_identity_key);
+CREATE INDEX IF NOT EXISTS idx_aprs_alert_parts_alert_part
+    ON aprs_alert_parts(alert_id, part_number, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_alert_received_at
     ON aprs_alert_frames(alert_id, received_at DESC, frame_id DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_modems_single_aprsis
@@ -986,6 +1020,9 @@ def init_db() -> None:
         }
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         alert_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_alerts)").fetchall()}
+        alert_frame_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(aprs_alert_frames)").fetchall()
+        }
         traffic_runtime_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_state)").fetchall()}
         traffic_runtime_interface_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(traffic_runtime_interfaces)").fetchall()
@@ -1049,6 +1086,51 @@ def init_db() -> None:
                 ADD COLUMN message_id TEXT
                 """
             )
+        if "logical_alert_id" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN logical_alert_id TEXT
+                """
+            )
+        if "severity_level" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN severity_level INTEGER
+                """
+            )
+        if "received_parts" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN received_parts INTEGER NOT NULL DEFAULT 0
+                CHECK (received_parts >= 0)
+                """
+            )
+        if "parts_total" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN parts_total INTEGER
+                CHECK (parts_total IS NULL OR parts_total >= 1)
+                """
+            )
+        if "completion_status" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN completion_status TEXT NOT NULL DEFAULT 'incomplete'
+                CHECK (completion_status IN ('incomplete', 'complete'))
+                """
+            )
+        if "superseded_by_alert_id" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN superseded_by_alert_id INTEGER
+                """
+            )
         if "area_codes_json" not in alert_columns:
             connection.execute(
                 """
@@ -1069,6 +1151,13 @@ def init_db() -> None:
                 """
                 ALTER TABLE aprs_alerts
                 ADD COLUMN valid_until_utc TEXT
+                """
+            )
+        if "part_id" not in alert_frame_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alert_frames
+                ADD COLUMN part_id INTEGER
                 """
             )
         _migrate_aprs_alert_identity(connection)
@@ -1702,16 +1791,22 @@ CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
 def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
     from app.services.aprs_warning_identity import (
         build_aprs_alert_identity_key,
+        build_aprs_alert_part_identity_key,
         parse_aprs_group_warning_content,
     )
 
+    connection.execute("DROP INDEX IF EXISTS idx_aprs_alerts_identity_key")
     rows = connection.execute(
         """
         SELECT
             id, identity_key, source_callsign, alert_type, message,
             alarm_group, expiry, event_code, area_code, message_id,
-            area_codes_json
+            logical_alert_id, severity_level,
+            area_codes_json, frame_count,
+            initial_frame_id, last_frame_id,
+            first_seen_at, last_seen_at
         FROM aprs_alerts
+        WHERE superseded_by_alert_id IS NULL
         ORDER BY id ASC
         """
     ).fetchall()
@@ -1738,6 +1833,10 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
             else {
                 "expiry": "",
                 "event_code": "",
+                "severity_level": None,
+                "logical_alert_id": "",
+                "part_number": None,
+                "parts_total": None,
                 "area_code": "",
                 "area_codes": [],
                 "message_id": "",
@@ -1746,14 +1845,44 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
 
         expiry = str(row["expiry"] or parsed["expiry"] or "").strip()
         event_code = str(row["event_code"] or parsed["event_code"] or "").strip()
-        area_code = str(row["area_code"] or parsed["area_code"] or "").strip()
         message_id = str(row["message_id"] or parsed["message_id"] or "").strip()
+        logical_alert_id = str(
+            row["logical_alert_id"] or parsed["logical_alert_id"] or ""
+        ).strip().upper()
+        has_stored_parts = (
+            connection.execute(
+                """
+                SELECT 1
+                FROM aprs_alert_parts
+                WHERE alert_id = ?
+                LIMIT 1
+                """,
+                (int(row["id"]),),
+            ).fetchone()
+            is not None
+        )
+        area_code = str(
+            parsed["area_code"]
+            if logical_alert_id and not has_stored_parts
+            else row["area_code"] or parsed["area_code"] or ""
+        ).strip()
+        severity_level = (
+            int(row["severity_level"])
+            if row["severity_level"] is not None
+            else parsed["severity_level"]
+        )
         area_codes_json = str(row["area_codes_json"] or "").strip()
         try:
             stored_area_codes = json.loads(area_codes_json) if area_codes_json else []
         except (TypeError, ValueError, json.JSONDecodeError):
             stored_area_codes = []
-        if not stored_area_codes and parsed["area_codes"]:
+        if logical_alert_id and parsed["area_codes"] and not has_stored_parts:
+            area_codes_json = json.dumps(
+                parsed["area_codes"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        elif not stored_area_codes and parsed["area_codes"]:
             area_codes_json = json.dumps(
                 parsed["area_codes"],
                 ensure_ascii=False,
@@ -1763,10 +1892,19 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
             area_codes_json = "[]"
 
         identity_key = str(row["identity_key"] or "").strip()
-        if not identity_key:
+        if logical_alert_id:
             identity_key = build_aprs_alert_identity_key(
                 source_callsign=row["source_callsign"],
                 alarm_group=alarm_group,
+                logical_alert_id=logical_alert_id,
+                message_id=message_id,
+                raw_content=message,
+            )
+        elif not identity_key:
+            identity_key = build_aprs_alert_identity_key(
+                source_callsign=row["source_callsign"],
+                alarm_group=alarm_group,
+                logical_alert_id=logical_alert_id,
                 message_id=message_id,
                 raw_content=message,
             )
@@ -1779,6 +1917,8 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
                 event_code = ?,
                 area_code = ?,
                 message_id = ?,
+                logical_alert_id = ?,
+                severity_level = ?,
                 area_codes_json = ?
             WHERE id = ?
             """,
@@ -1789,8 +1929,321 @@ def _migrate_aprs_alert_identity(connection: sqlite3.Connection) -> None:
                 event_code or None,
                 area_code or None,
                 message_id or None,
+                logical_alert_id or None,
+                severity_level,
                 area_codes_json,
                 int(row["id"]),
+            ),
+        )
+        if alarm_group:
+            part_identity_key = build_aprs_alert_part_identity_key(
+                source_callsign=row["source_callsign"],
+                alarm_group=alarm_group,
+                message_id=message_id,
+                raw_content=message,
+            )
+            part_number = parsed["part_number"] or 1
+            parts_total = parsed["parts_total"] or 1
+            part_cursor = connection.execute(
+                """
+                INSERT INTO aprs_alert_parts(
+                    alert_id, part_identity_key,
+                    part_number, parts_total, aprs_message_id,
+                    area_codes_json, raw_message,
+                    first_received_at, last_received_at, received_count,
+                    initial_frame_id, last_frame_id,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(part_identity_key) DO NOTHING
+                """,
+                (
+                    int(row["id"]),
+                    part_identity_key,
+                    part_number,
+                    parts_total,
+                    message_id or None,
+                    area_codes_json,
+                    message,
+                    row["first_seen_at"],
+                    row["last_seen_at"],
+                    max(1, int(row["frame_count"] or 1)),
+                    row["initial_frame_id"],
+                    row["last_frame_id"],
+                    row["first_seen_at"],
+                    row["last_seen_at"],
+                ),
+            )
+            if int(part_cursor.rowcount or 0) == 1:
+                part_id = int(part_cursor.lastrowid)
+            else:
+                part_row = connection.execute(
+                    """
+                    SELECT id
+                    FROM aprs_alert_parts
+                    WHERE part_identity_key = ?
+                    """,
+                    (part_identity_key,),
+                ).fetchone()
+                part_id = int(part_row["id"]) if part_row is not None else None
+            if part_id is not None:
+                connection.execute(
+                    """
+                    UPDATE aprs_alert_frames
+                    SET part_id = ?
+                    WHERE alert_id = ?
+                    """,
+                    (part_id, int(row["id"])),
+                )
+            received_part_numbers = {
+                int(part_row["part_number"])
+                for part_row in connection.execute(
+                    """
+                    SELECT part_number
+                    FROM aprs_alert_parts
+                    WHERE alert_id = ?
+                      AND part_number IS NOT NULL
+                    """,
+                    (int(row["id"]),),
+                ).fetchall()
+            }
+            aggregate_parts_total = max(
+                [
+                    int(part_row["parts_total"])
+                    for part_row in connection.execute(
+                        """
+                        SELECT parts_total
+                        FROM aprs_alert_parts
+                        WHERE alert_id = ?
+                          AND parts_total IS NOT NULL
+                        """,
+                        (int(row["id"]),),
+                    ).fetchall()
+                ]
+                or [1]
+            )
+            completion_status = (
+                "complete"
+                if set(range(1, aggregate_parts_total + 1)).issubset(
+                    received_part_numbers
+                )
+                else "incomplete"
+            )
+            connection.execute(
+                """
+                UPDATE aprs_alerts
+                SET received_parts = ?,
+                    parts_total = ?,
+                    completion_status = ?
+                WHERE id = ?
+                """,
+                (
+                    len(
+                        {
+                            number
+                            for number in received_part_numbers
+                            if 1 <= number <= aggregate_parts_total
+                        }
+                    ),
+                    aggregate_parts_total,
+                    completion_status,
+                    int(row["id"]),
+                ),
+            )
+
+    duplicate_logical_groups = connection.execute(
+        """
+        SELECT
+            UPPER(source_callsign) AS source_key,
+            UPPER(alarm_group) AS group_key,
+            UPPER(logical_alert_id) AS logical_key
+        FROM aprs_alerts
+        WHERE alarm_group IS NOT NULL
+          AND TRIM(alarm_group) != ''
+          AND logical_alert_id IS NOT NULL
+          AND TRIM(logical_alert_id) != ''
+          AND superseded_by_alert_id IS NULL
+        GROUP BY
+            UPPER(source_callsign),
+            UPPER(alarm_group),
+            UPPER(logical_alert_id)
+        HAVING COUNT(*) > 1
+        """
+    ).fetchall()
+    for duplicate_group in duplicate_logical_groups:
+        logical_rows = connection.execute(
+            """
+            SELECT *
+            FROM aprs_alerts
+            WHERE UPPER(source_callsign) = ?
+              AND UPPER(alarm_group) = ?
+              AND UPPER(logical_alert_id) = ?
+              AND superseded_by_alert_id IS NULL
+            ORDER BY first_seen_at ASC, id ASC
+            """,
+            (
+                duplicate_group["source_key"],
+                duplicate_group["group_key"],
+                duplicate_group["logical_key"],
+            ),
+        ).fetchall()
+        if len(logical_rows) < 2:
+            continue
+
+        canonical = logical_rows[0]
+        canonical_id = int(canonical["id"])
+        newest = max(
+            logical_rows,
+            key=lambda candidate: (
+                str(candidate["last_seen_at"] or ""),
+                int(candidate["id"]),
+            ),
+        )
+        for duplicate in logical_rows[1:]:
+            duplicate_id = int(duplicate["id"])
+            connection.execute(
+                "UPDATE aprs_alert_parts SET alert_id = ? WHERE alert_id = ?",
+                (canonical_id, duplicate_id),
+            )
+            connection.execute(
+                "UPDATE aprs_alert_frames SET alert_id = ? WHERE alert_id = ?",
+                (canonical_id, duplicate_id),
+            )
+            superseded_identity = json.dumps(
+                [
+                    "aprs-alert-superseded",
+                    duplicate_id,
+                    str(duplicate["identity_key"] or ""),
+                ],
+                ensure_ascii=True,
+                separators=(",", ":"),
+            )
+            connection.execute(
+                """
+                UPDATE aprs_alerts
+                SET identity_key = ?,
+                    superseded_by_alert_id = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    superseded_identity,
+                    canonical_id,
+                    newest["updated_at"],
+                    duplicate_id,
+                ),
+            )
+
+        part_rows = connection.execute(
+            """
+            SELECT part_number, parts_total, area_codes_json
+            FROM aprs_alert_parts
+            WHERE alert_id = ?
+            ORDER BY
+                CASE WHEN part_number IS NULL THEN 1 ELSE 0 END,
+                part_number ASC,
+                id ASC
+            """,
+            (canonical_id,),
+        ).fetchall()
+        aggregate_area_codes: list[str] = []
+        seen_area_codes: set[str] = set()
+        received_part_numbers: set[int] = set()
+        declared_totals: list[int] = []
+        for part_row in part_rows:
+            if part_row["part_number"] is not None:
+                part_number = int(part_row["part_number"])
+                if part_number >= 1:
+                    received_part_numbers.add(part_number)
+            if part_row["parts_total"] is not None:
+                declared_total = int(part_row["parts_total"])
+                if declared_total >= 1:
+                    declared_totals.append(declared_total)
+            try:
+                stored_codes = json.loads(part_row["area_codes_json"] or "[]")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                stored_codes = []
+            for value in stored_codes if isinstance(stored_codes, list) else []:
+                area_code = str(value).strip()
+                comparison_key = area_code.casefold()
+                if not area_code or comparison_key in seen_area_codes:
+                    continue
+                seen_area_codes.add(comparison_key)
+                aggregate_area_codes.append(area_code)
+
+        aggregate_parts_total = max(declared_totals) if declared_totals else None
+        valid_part_numbers = {
+            number
+            for number in received_part_numbers
+            if aggregate_parts_total is None or number <= aggregate_parts_total
+        }
+        complete = bool(aggregate_parts_total) and set(
+            range(1, aggregate_parts_total + 1)
+        ).issubset(valid_part_numbers)
+        relation_count_row = connection.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM aprs_alert_frames
+            WHERE alert_id = ?
+            """,
+            (canonical_id,),
+        ).fetchone()
+        relation_count = int(relation_count_row["total"] or 0)
+        preserved_frame_count = sum(
+            max(1, int(candidate["frame_count"] or 1))
+            for candidate in logical_rows
+        )
+        connection.execute(
+            """
+            UPDATE aprs_alerts
+            SET message = ?,
+                expiry = ?,
+                event_code = ?,
+                area_code = ?,
+                message_id = ?,
+                severity_level = ?,
+                area_codes_json = ?,
+                received_parts = ?,
+                parts_total = ?,
+                completion_status = ?,
+                is_active = ?,
+                valid_until_utc = ?,
+                first_seen_at = ?,
+                last_seen_at = ?,
+                frame_count = ?,
+                initial_frame_id = ?,
+                last_frame_id = ?,
+                latitude = ?,
+                longitude = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                newest["message"],
+                newest["expiry"],
+                newest["event_code"],
+                aggregate_area_codes[0] if aggregate_area_codes else None,
+                newest["message_id"],
+                newest["severity_level"],
+                json.dumps(
+                    aggregate_area_codes,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                len(valid_part_numbers),
+                aggregate_parts_total,
+                "complete" if complete else "incomplete",
+                max(int(candidate["is_active"] or 0) for candidate in logical_rows),
+                newest["valid_until_utc"],
+                min(str(candidate["first_seen_at"]) for candidate in logical_rows),
+                max(str(candidate["last_seen_at"]) for candidate in logical_rows),
+                max(1, relation_count or preserved_frame_count),
+                canonical["initial_frame_id"],
+                newest["last_frame_id"],
+                newest["latitude"],
+                newest["longitude"],
+                newest["updated_at"],
+                canonical_id,
             ),
         )
 

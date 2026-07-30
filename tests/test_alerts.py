@@ -257,9 +257,15 @@ class AprsAlertTests(unittest.TestCase):
             self.assertEqual(indexes.get("idx_aprs_alerts_identity_key"), 1)
             self.assertEqual(
                 {row["table"] for row in foreign_keys},
-                {"aprs_alerts", "traffic_frames"},
+                {"aprs_alerts", "aprs_alert_parts", "traffic_frames"},
             )
-            self.assertTrue(all(str(row["on_delete"]).upper() == "CASCADE" for row in foreign_keys))
+            delete_modes = {
+                row["table"]: str(row["on_delete"]).upper()
+                for row in foreign_keys
+            }
+            self.assertEqual(delete_modes["aprs_alerts"], "CASCADE")
+            self.assertEqual(delete_modes["traffic_frames"], "CASCADE")
+            self.assertEqual(delete_modes["aprs_alert_parts"], "SET NULL")
 
     def test_identity_migration_preserves_and_backfills_existing_alerts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -344,6 +350,121 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn("aprs-group-message", rows[1]["identity_key"])
         self.assertEqual(indexes["idx_aprs_alerts_source_callsign"], 0)
         self.assertEqual(indexes["idx_aprs_alerts_identity_key"], 1)
+
+    def test_multipart_migration_preserves_rows_and_builds_one_visible_logical_alert(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "multipart-alerts.db"
+            previous = os.environ.get("APRSBOX_DB_PATH")
+            os.environ["APRSBOX_DB_PATH"] = str(database_path)
+            try:
+                connection = sqlite3.connect(database_path)
+                connection.executescript(
+                    """
+                    CREATE TABLE aprs_alerts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        identity_key TEXT,
+                        source_callsign TEXT NOT NULL COLLATE NOCASE,
+                        alert_type TEXT NOT NULL,
+                        message TEXT NOT NULL DEFAULT '',
+                        alarm_group TEXT,
+                        expiry TEXT,
+                        event_code TEXT,
+                        area_code TEXT,
+                        message_id TEXT,
+                        area_codes_json TEXT NOT NULL DEFAULT '[]',
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        valid_until_utc TEXT,
+                        first_seen_at TEXT NOT NULL,
+                        last_seen_at TEXT NOT NULL,
+                        frame_count INTEGER NOT NULL DEFAULT 1,
+                        initial_frame_id INTEGER,
+                        last_frame_id INTEGER,
+                        latitude REAL,
+                        longitude REAL,
+                        muted_until TEXT,
+                        muted_indefinitely INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE UNIQUE INDEX idx_aprs_alerts_identity_key
+                    ON aprs_alerts(identity_key);
+                    INSERT INTO aprs_alerts(
+                        id, identity_key, source_callsign, alert_type, message,
+                        alarm_group, area_codes_json,
+                        first_seen_at, last_seen_at, frame_count,
+                        created_at, updated_at
+                    )
+                    VALUES
+                        (11, 'old-part-1', 'PLWXSR', 'PL-WARN',
+                         '302200z,TSTORM2,@A7F3,1/3,1465,1466{91AC2',
+                         'PL-WARN', '["@A7F3","1/3","1465","1466"]',
+                         '2026-01-01T00:00:01+00:00',
+                         '2026-01-01T00:00:01+00:00', 1,
+                         '2026-01-01T00:00:01+00:00',
+                         '2026-01-01T00:00:01+00:00'),
+                        (12, 'old-part-2', 'PLWXSR', 'PL-WARN',
+                         '302200z,TSTORM2,@A7F3,2/3,1466,1412{77BD1',
+                         'PL-WARN', '["@A7F3","2/3","1466","1412"]',
+                         '2026-01-01T00:00:02+00:00',
+                         '2026-01-01T00:00:02+00:00', 1,
+                         '2026-01-01T00:00:02+00:00',
+                         '2026-01-01T00:00:02+00:00'),
+                        (13, 'old-part-3', 'PLWXSR', 'PL-WARN',
+                         '302200z,TSTORM2,@A7F3,3/3,1415{A40E8',
+                         'PL-WARN', '["@A7F3","3/3","1415"]',
+                         '2026-01-01T00:00:03+00:00',
+                         '2026-01-01T00:00:03+00:00', 1,
+                         '2026-01-01T00:00:03+00:00',
+                         '2026-01-01T00:00:03+00:00');
+                    """
+                )
+                connection.commit()
+                connection.close()
+
+                init_db()
+                init_db()
+                physical_rows = fetch_all(
+                    """
+                    SELECT id, identity_key, superseded_by_alert_id
+                    FROM aprs_alerts
+                    ORDER BY id
+                    """
+                )
+                parts = fetch_all(
+                    """
+                    SELECT alert_id, part_number, aprs_message_id
+                    FROM aprs_alert_parts
+                    ORDER BY part_number
+                    """
+                )
+                page = list_alerts()
+            finally:
+                if previous is None:
+                    os.environ.pop("APRSBOX_DB_PATH", None)
+                else:
+                    os.environ["APRSBOX_DB_PATH"] = previous
+
+        self.assertEqual([int(row["id"]) for row in physical_rows], [11, 12, 13])
+        self.assertIsNone(physical_rows[0]["superseded_by_alert_id"])
+        self.assertEqual(
+            [int(row["superseded_by_alert_id"]) for row in physical_rows[1:]],
+            [11, 11],
+        )
+        self.assertIn("aprs-group-logical", physical_rows[0]["identity_key"])
+        self.assertEqual(len(parts), 3)
+        self.assertTrue(all(int(part["alert_id"]) == 11 for part in parts))
+        self.assertEqual(
+            [part["aprs_message_id"] for part in parts],
+            ["91AC2", "77BD1", "A40E8"],
+        )
+        self.assertEqual(len(page["items"]), 1)
+        self.assertEqual(page["items"][0]["logical_alert_id"], "A7F3")
+        self.assertEqual(page["items"][0]["received_parts"], 3)
+        self.assertEqual(page["items"][0]["completion_status"], "complete")
+        self.assertEqual(
+            page["items"][0]["area_codes"],
+            ["1465", "1466", "1412", "1415"],
+        )
 
     def test_mutating_alert_routes_are_post_only(self) -> None:
         from app.routers.pages import router

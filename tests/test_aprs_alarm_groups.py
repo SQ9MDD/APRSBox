@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_all, fetch_one, get_app_setting, init_db, set_app_setting
-from app.services.alerts import list_alerts
+from app.services.alerts import get_alert, list_alerts
 from app.services.alarm_groups import (
     APRS_ALARM_GROUPS_SETTING_KEY,
     DEFAULT_APRS_ALARM_GROUPS,
@@ -240,6 +240,58 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             content = f"{content}{{{message_id}"
         return f"{source}>APRS,TCPIP*::{group:<9}:{content}"
 
+    @staticmethod
+    def _multipart_alarm_line(
+        *,
+        source: str = "PLWXSR",
+        group: str = "PL-WARN",
+        logical_alert_id: str = "A7F3",
+        part_number: int,
+        parts_total: int = 3,
+        area_codes: tuple[str, ...],
+        message_id: str,
+        expiry: str = "302200z",
+        event_code: str = "TSTORM2",
+    ) -> str:
+        content = ",".join(
+            (
+                expiry,
+                event_code,
+                f"@{logical_alert_id}",
+                f"{part_number}/{parts_total}",
+                *area_codes,
+            )
+        )
+        return f"{source}>APRS,TCPIP*::{group:<9}:{content}{{{message_id}"
+
+    def _receive_multipart_alarm(
+        self,
+        *,
+        part_number: int,
+        area_codes: tuple[str, ...],
+        message_id: str,
+        timestamp: str,
+        source: str = "PLWXSR",
+        group: str = "PL-WARN",
+        logical_alert_id: str = "A7F3",
+        parts_total: int = 3,
+    ) -> None:
+        accepted = process_normalized_tnc2_rx(
+            self._multipart_alarm_line(
+                source=source,
+                group=group,
+                logical_alert_id=logical_alert_id,
+                part_number=part_number,
+                parts_total=parts_total,
+                area_codes=area_codes,
+                message_id=message_id,
+            ),
+            source="APRS-IS · Internet RX",
+            source_kind="aprsis",
+            timestamp=timestamp,
+        )
+        self.assertTrue(accepted)
+
     def _assert_alarm_message_stored(self, *, source_kind: str) -> None:
         stored = fetch_one(
             """
@@ -389,11 +441,25 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             {
                 "expiry": "310100z",
                 "event_code": "FLOOD9",
+                "severity_level": 9,
+                "logical_alert_id": "",
+                "part_number": None,
+                "parts_total": None,
                 "area_code": "0012",
                 "area_codes": ["0012"],
                 "message_id": "Ab123",
             },
         )
+
+        multipart = parse_aprs_group_warning_content(
+            "302200z,FLOOD12,@a7f3,2/3,0012,0013{Ab123"
+        )
+        self.assertEqual(multipart["event_code"], "FLOOD12")
+        self.assertEqual(multipart["severity_level"], 12)
+        self.assertEqual(multipart["logical_alert_id"], "A7F3")
+        self.assertEqual(multipart["part_number"], 2)
+        self.assertEqual(multipart["parts_total"], 3)
+        self.assertEqual(multipart["area_codes"], ["0012", "0013"])
 
     def test_three_message_ids_create_three_area_alerts(self) -> None:
         frames = (
@@ -540,6 +606,209 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             {"1465": 2, "2401": 1},
         )
         self.assertEqual(len({row["identity_key"] for row in alerts}), 2)
+
+    def test_three_parts_create_one_logical_alert_with_three_preserved_parts(self) -> None:
+        with temporary_database():
+            for index, (area_codes, message_id) in enumerate(
+                (
+                    (("1465", "1466", "1405"), "91AC2"),
+                    (("1412", "1413", "1414"), "77BD1"),
+                    (("1415", "1416"), "A40E8"),
+                ),
+                start=1,
+            ):
+                self._receive_multipart_alarm(
+                    part_number=index,
+                    area_codes=area_codes,
+                    message_id=message_id,
+                    timestamp=f"2026-01-01T01:00:0{index}+00:00",
+                )
+
+            parents = fetch_all("SELECT * FROM aprs_alerts")
+            parts = fetch_all(
+                """
+                SELECT part_number, parts_total, aprs_message_id,
+                       area_codes_json, raw_message
+                FROM aprs_alert_parts
+                ORDER BY part_number
+                """
+            )
+            alert = get_alert(int(parents[0]["id"]))
+
+        self.assertEqual(len(parents), 1)
+        self.assertEqual(parents[0]["logical_alert_id"], "A7F3")
+        self.assertIn("aprs-group-logical", parents[0]["identity_key"])
+        self.assertEqual(int(parents[0]["received_parts"]), 3)
+        self.assertEqual(int(parents[0]["parts_total"]), 3)
+        self.assertEqual(parents[0]["completion_status"], "complete")
+        self.assertEqual(len(parts), 3)
+        self.assertEqual(
+            [row["aprs_message_id"] for row in parts],
+            ["91AC2", "77BD1", "A40E8"],
+        )
+        self.assertTrue(all(row["raw_message"] for row in parts))
+        assert alert is not None
+        self.assertEqual(len(alert["parts"]), 3)
+        self.assertEqual(alert["received_parts"], 3)
+        self.assertEqual(alert["completion_status"], "complete")
+
+    def test_out_of_order_parts_are_visible_immediately_and_become_complete(self) -> None:
+        with temporary_database():
+            expected_states = (
+                (2, "77BD1", ("1412",), 1, "incomplete"),
+                (1, "91AC2", ("1465",), 2, "incomplete"),
+                (3, "A40E8", ("1415",), 3, "complete"),
+            )
+            parent_id = None
+            for offset, (
+                part_number,
+                message_id,
+                area_codes,
+                received_parts,
+                status,
+            ) in enumerate(expected_states):
+                self._receive_multipart_alarm(
+                    part_number=part_number,
+                    area_codes=area_codes,
+                    message_id=message_id,
+                    timestamp=f"2026-01-01T01:01:0{offset}+00:00",
+                )
+                parent = fetch_one(
+                    """
+                    SELECT id, received_parts, parts_total, completion_status
+                    FROM aprs_alerts
+                    """
+                )
+                assert parent is not None
+                parent_id = parent_id or int(parent["id"])
+                self.assertEqual(int(parent["id"]), parent_id)
+                self.assertEqual(int(parent["received_parts"]), received_parts)
+                self.assertEqual(int(parent["parts_total"]), 3)
+                self.assertEqual(parent["completion_status"], status)
+
+            ordered_parts = fetch_all(
+                "SELECT part_number FROM aprs_alert_parts ORDER BY part_number"
+            )
+
+        self.assertEqual([int(row["part_number"]) for row in ordered_parts], [1, 2, 3])
+
+    def test_repeated_multipart_message_id_updates_one_part(self) -> None:
+        line = self._multipart_alarm_line(
+            part_number=1,
+            parts_total=3,
+            area_codes=("1465",),
+            message_id="91AC2",
+        )
+        with temporary_database():
+            for offset in range(2):
+                self.assertTrue(
+                    process_normalized_tnc2_rx(
+                        line,
+                        source="Main RF",
+                        source_kind="rf",
+                        timestamp=f"2026-01-01T01:02:0{offset}+00:00",
+                    )
+                )
+            parent_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_alerts")
+            part = fetch_one("SELECT * FROM aprs_alert_parts")
+            relation_count = fetch_one(
+                "SELECT COUNT(*) AS total FROM aprs_alert_frames"
+            )
+
+        assert parent_count is not None and part is not None and relation_count is not None
+        self.assertEqual(int(parent_count["total"]), 1)
+        self.assertEqual(int(part["received_count"]), 2)
+        self.assertEqual(int(relation_count["total"]), 2)
+
+    def test_logical_alert_id_is_scoped_by_sender(self) -> None:
+        with temporary_database():
+            for offset, source in enumerate(("PLWXSR", "PLWXS2")):
+                self._receive_multipart_alarm(
+                    source=source,
+                    part_number=1,
+                    parts_total=1,
+                    area_codes=("1465",),
+                    message_id=f"9{offset}AC2",
+                    timestamp=f"2026-01-01T01:03:0{offset}+00:00",
+                )
+            parents = fetch_all(
+                "SELECT source_callsign, logical_alert_id FROM aprs_alerts ORDER BY id"
+            )
+
+        self.assertEqual(
+            [(row["source_callsign"], row["logical_alert_id"]) for row in parents],
+            [("PLWXSR", "A7F3"), ("PLWXS2", "A7F3")],
+        )
+
+    def test_logical_alert_id_is_scoped_by_destination_group(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("PL-WARN,DE-WARN")
+            for offset, group in enumerate(("PL-WARN", "DE-WARN")):
+                self._receive_multipart_alarm(
+                    group=group,
+                    part_number=1,
+                    parts_total=1,
+                    area_codes=("1465",),
+                    message_id=f"8{offset}BD1",
+                    timestamp=f"2026-01-01T01:04:0{offset}+00:00",
+                )
+            parents = fetch_all(
+                "SELECT alarm_group, logical_alert_id FROM aprs_alerts ORDER BY id"
+            )
+
+        self.assertEqual(
+            [(row["alarm_group"], row["logical_alert_id"]) for row in parents],
+            [("PL-WARN", "A7F3"), ("DE-WARN", "A7F3")],
+        )
+
+    def test_logical_alert_aggregates_unique_area_codes_from_all_parts(self) -> None:
+        with temporary_database():
+            self._receive_multipart_alarm(
+                part_number=1,
+                parts_total=2,
+                area_codes=("0012", "0013"),
+                message_id="91AC2",
+                timestamp="2026-01-01T01:05:00+00:00",
+            )
+            self._receive_multipart_alarm(
+                part_number=2,
+                parts_total=2,
+                area_codes=("0013", "0014"),
+                message_id="77BD1",
+                timestamp="2026-01-01T01:05:01+00:00",
+            )
+            parent = fetch_one("SELECT area_codes_json FROM aprs_alerts")
+            page = list_alerts()
+
+        assert parent is not None
+        self.assertEqual(
+            json.loads(parent["area_codes_json"]),
+            ["0012", "0013", "0014"],
+        )
+        self.assertEqual(page["items"][0]["area_codes"], ["0012", "0013", "0014"])
+        self.assertEqual(page["items"][0]["area_count"], 3)
+
+    def test_logical_group_alert_has_only_one_modal_candidate(self) -> None:
+        with temporary_database():
+            for part_number, message_id in ((1, "91AC2"), (2, "77BD1")):
+                self._receive_multipart_alarm(
+                    part_number=part_number,
+                    parts_total=2,
+                    area_codes=(f"146{part_number}",),
+                    message_id=message_id,
+                    timestamp=f"2026-01-01T01:06:0{part_number}+00:00",
+                )
+            page = list_alerts()
+            snapshot = traffic_snapshot(limit=10)
+
+        self.assertEqual(len(page["items"]), 1)
+        self.assertEqual(
+            len({item["modal_frame"]["alert_id"] for item in page["items"]}),
+            1,
+        )
+        self.assertFalse(
+            any(frame["alert_should_notify"] for frame in snapshot["frames"])
+        )
 
 
 if __name__ == "__main__":

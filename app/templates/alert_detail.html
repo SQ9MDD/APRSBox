@@ -67,6 +67,28 @@
             <dd><a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">{{ alert.source_callsign }}</a></dd>
             <dt>{{ t("Type") }}</dt>
             <dd><span class="frame-type-badge frame-type-badge-emergency">{{ alert.alert_type }}</span></dd>
+            {% if alert.destination_group %}
+            <dt>{{ t("Destination group") }}</dt>
+            <dd>{{ alert.destination_group }}</dd>
+            <dt>{{ t("Logical alert ID") }}</dt>
+            <dd>{% if alert.logical_alert_id %}<code>{{ alert.logical_alert_id }}</code>{% else %}-{% endif %}</dd>
+            <dt>{{ t("Event code") }}</dt>
+            <dd>{{ alert.event_code or "-" }}</dd>
+            <dt>{{ t("Severity level") }}</dt>
+            <dd>{{ alert.severity_level if alert.severity_level is not none else "-" }}</dd>
+            <dt>{{ t("Received parts") }}</dt>
+            <dd>{{ alert.received_parts }} / {{ alert.parts_total or "?" }}</dd>
+            <dt>{{ t("Completion status") }}</dt>
+            <dd>
+                <span class="alert-state-badge alert-state-badge-{{ alert.completion_status }}">
+                    {{ t("Complete alert") if alert.completion_status == "complete" else t("Incomplete") }}
+                </span>
+            </dd>
+            <dt>{{ t("Area count") }}</dt>
+            <dd>{{ alert.area_count }}</dd>
+            <dt>{{ t("Area codes") }}</dt>
+            <dd>{% if alert.area_codes %}<code>{{ alert.area_codes|join(", ") }}</code>{% else %}-{% endif %}</dd>
+            {% endif %}
             <dt>{{ t("Comment") }}</dt>
             <dd>{{ alert.message or "-" }}</dd>
             <dt>{{ t("First received") }}</dt>
@@ -106,6 +128,54 @@
         </dl>
     </div>
 </section>
+
+{% if alert.parts %}
+<section class="panel alert-emergency-panel alert-parts-panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Alert parts") }}</h2>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table alert-parts-table">
+                <thead>
+                    <tr>
+                        <th>{{ t("Part") }}</th>
+                        <th>{{ t("APRS message ID") }}</th>
+                        <th>{{ t("Area codes") }}</th>
+                        <th>{{ t("First received") }}</th>
+                        <th>{{ t("Last received") }}</th>
+                        <th>{{ t("Received count") }}</th>
+                        <th>{{ t("Raw message") }}</th>
+                        <th>{{ t("Original frame") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for part in alert.parts %}
+                    <tr>
+                        <td>{{ part.part_number or "?" }} / {{ part.parts_total or "?" }}</td>
+                        <td>{% if part.aprs_message_id %}<code>{{ part.aprs_message_id }}</code>{% else %}-{% endif %}</td>
+                        <td>{% if part.area_codes %}<code>{{ part.area_codes|join(", ") }}</code>{% else %}-{% endif %}</td>
+                        <td>{{ part.first_received_label }}</td>
+                        <td>{{ part.last_received_label }}</td>
+                        <td>{{ part.received_count }}</td>
+                        <td><code class="traffic-frame-raw">{{ part.raw_message }}</code></td>
+                        <td>
+                            {% if part.initial_frame_href %}
+                            <a class="station-link" href="{{ request.scope.root_path }}{{ part.initial_frame_href }}">#{{ part.initial_frame_id }}</a>
+                            {% else %}
+                            <span class="muted">{{ t("Frame is no longer available in Traffic Monitor.") }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endif %}
 
 <section class="panel alert-emergency-panel alert-history-panel">
     <div class="panel-body">
