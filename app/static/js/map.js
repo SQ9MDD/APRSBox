@@ -37,6 +37,9 @@
     const toggleCoverageIcon = document.getElementById("map-toggle-coverage-icon");
     const toggleAlarmAreasButton = document.getElementById("map-toggle-alarm-areas");
     const toggleAlarmAreasIcon = document.getElementById("map-toggle-alarm-areas-icon");
+    const alertsOverlay = document.getElementById("map-alerts-overlay");
+    const alertsOverlayList = document.getElementById("map-alerts-overlay-list");
+    const alertsOverlayClose = document.getElementById("map-alerts-overlay-close");
     const toggleRulerButton = document.getElementById("map-toggle-ruler");
     const toggleRulerIcon = document.getElementById("map-toggle-ruler-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
@@ -66,8 +69,16 @@
         hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
         showCoverage: root.dataset.i18nShowCoverage || "Show coverage",
         hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
-        showAlarmAreas: root.dataset.i18nShowAlarmAreas || "Show alarm areas",
-        hideAlarmAreas: root.dataset.i18nHideAlarmAreas || "Hide alarm areas",
+        showAlarmList: root.dataset.i18nShowAlarmList || "Show alarm list",
+        hideAlarmList: root.dataset.i18nHideAlarmList || "Hide alarm list",
+        activeAlarms: root.dataset.i18nActiveAlarms || "Active alarms",
+        noActiveMapAlarms: root.dataset.i18nNoActiveMapAlarms || "No active alarms with map areas.",
+        visibleOnMap: root.dataset.i18nVisibleOnMap || "Visible on map",
+        noMapArea: root.dataset.i18nNoMapArea || "No map area available",
+        areaCount: root.dataset.i18nAreaCount || "Area count",
+        expiresAt: root.dataset.i18nExpiresAt || "Expires at",
+        details: root.dataset.i18nDetails || "Details",
+        severityLevel: root.dataset.i18nSeverityLevel || "Severity level",
         showRuler: root.dataset.i18nShowRuler || "Show ruler",
         hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
         tileProviderUnavailable: root.dataset.i18nTileProviderUnavailable || "Tile provider unavailable",
@@ -83,7 +94,7 @@
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
-    const mapAlarmAreasVisibleStorageKey = "aprsbox-map-alarm-areas-visible";
+    const mapHiddenAlertIdsStorageKey = "aprsbox-map-hidden-alert-ids";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
@@ -96,7 +107,7 @@
     let lastStationsSignature = "";
     let tracksVisible = true;
     let coverageVisible = true;
-    let alarmAreasVisible = true;
+    let alertsOverlayOpen = false;
     let rulerVisible = true;
     let coverageFillOpacity = 0.05;
     let coverageOutlineOpacity = 1;
@@ -109,6 +120,10 @@
     let detailsLoadingRevision = "";
     let tracksLoadingRevision = "";
     let lastAlertAreasSignature = "";
+    let lastAlertPanelSignature = "";
+    let latestAlertAreaCollection = { type: "FeatureCollection", features: [] };
+    let latestMapAlerts = [];
+    let hiddenAlertIds = resolveHiddenAlertIds();
     const interfaceVisibilityByKey = new Map();
     const markerLayersByKey = new Map();
     const coverageLayersByKey = new Map();
@@ -167,7 +182,7 @@
 
     function normalizeAlertAreaFeatureCollection(value) {
         if (!value || value.type !== "FeatureCollection" || !Array.isArray(value.features)) {
-            return { type: "FeatureCollection", features: [] };
+            return { type: "FeatureCollection", features: [], alerts: [] };
         }
         return {
             type: "FeatureCollection",
@@ -177,14 +192,89 @@
                 && feature.geometry
                 && typeof feature.geometry === "object"
             )),
+            alerts: Array.isArray(value.alerts)
+                ? value.alerts.filter((alert) => alert && Number.isInteger(Number(alert.id)))
+                : [],
         };
     }
 
-    function reconcileAlertAreas(value) {
+    function resolveHiddenAlertIds() {
+        try {
+            const parsed = JSON.parse(window.localStorage.getItem(mapHiddenAlertIdsStorageKey) || "[]");
+            if (!Array.isArray(parsed)) {
+                return new Set();
+            }
+            return new Set(
+                parsed
+                    .map((value) => Number.parseInt(String(value), 10))
+                    .filter((value) => Number.isInteger(value) && value > 0)
+            );
+        } catch (_error) {
+            return new Set();
+        }
+    }
+
+    function persistHiddenAlertIds() {
+        window.localStorage.setItem(
+            mapHiddenAlertIdsStorageKey,
+            JSON.stringify(Array.from(hiddenAlertIds).sort((left, right) => left - right))
+        );
+    }
+
+    function alertSeverityColor(severityLevel) {
+        const normalizedLevel = Number.parseInt(String(severityLevel ?? ""), 10);
+        if (normalizedLevel === 1) {
+            return "yellow";
+        }
+        if (normalizedLevel === 2) {
+            return "orange";
+        }
+        if (normalizedLevel === 3) {
+            return "red";
+        }
+        return "gray";
+    }
+
+    function visibleAlertAreaFeatureCollection() {
+        const features = latestAlertAreaCollection.features.flatMap((feature) => {
+            const properties = feature?.properties && typeof feature.properties === "object"
+                ? feature.properties
+                : {};
+            const hasContributorMetadata = Array.isArray(properties.aprsbox_alerts);
+            const contributors = hasContributorMetadata
+                ? properties.aprsbox_alerts.filter((contributor) => {
+                    const alertId = Number.parseInt(String(contributor?.id ?? ""), 10);
+                    return Number.isInteger(alertId) && !hiddenAlertIds.has(alertId);
+                })
+                : [];
+            if (!hasContributorMetadata) {
+                return [feature];
+            }
+            if (contributors.length === 0) {
+                return [];
+            }
+            const strongestSeverity = contributors.reduce((strongest, contributor) => {
+                const severity = Number.parseInt(String(contributor?.severity_level ?? ""), 10);
+                return [1, 2, 3].includes(severity) ? Math.max(strongest, severity) : strongest;
+            }, 0);
+            return [{
+                ...feature,
+                properties: {
+                    ...properties,
+                    aprsbox_alerts: contributors,
+                    aprsbox_severity_level: strongestSeverity || null,
+                    aprsbox_alert_color: alertSeverityColor(strongestSeverity),
+                },
+            }];
+        });
+        return { type: "FeatureCollection", features };
+    }
+
+    function renderVisibleAlertAreas() {
         if (!alertAreaLayer) {
             return;
         }
-        const featureCollection = normalizeAlertAreaFeatureCollection(value);
+        const featureCollection = visibleAlertAreaFeatureCollection();
         let nextSignature = "";
         try {
             nextSignature = JSON.stringify(featureCollection);
@@ -205,6 +295,189 @@
         } catch (_error) {
             alertAreaLayer.clearLayers();
         }
+    }
+
+    function formatAlertExpiry(value) {
+        const normalized = String(value || "").trim();
+        if (!normalized) {
+            return "";
+        }
+        const parsed = new Date(normalized);
+        if (Number.isNaN(parsed.getTime())) {
+            return normalized;
+        }
+        return parsed.toLocaleString(locale, {
+            dateStyle: "short",
+            timeStyle: "short",
+        });
+    }
+
+    function severityBadgeClass(severityLevel) {
+        const normalizedLevel = Number.parseInt(String(severityLevel ?? ""), 10);
+        return [1, 2, 3].includes(normalizedLevel)
+            ? `alert-category-badge-level-${normalizedLevel}`
+            : "alert-category-badge-unknown";
+    }
+
+    function renderAlertPanel() {
+        if (!alertsOverlayList) {
+            return;
+        }
+        const nextPanelSignature = JSON.stringify({
+            alerts: latestMapAlerts,
+            hidden: Array.from(hiddenAlertIds).sort((left, right) => left - right),
+        });
+        if (nextPanelSignature === lastAlertPanelSignature) {
+            syncAlertPanelButton();
+            return;
+        }
+        lastAlertPanelSignature = nextPanelSignature;
+        alertsOverlayList.replaceChildren();
+        if (latestMapAlerts.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "map-alerts-overlay-empty";
+            empty.textContent = i18n.noActiveMapAlarms;
+            alertsOverlayList.appendChild(empty);
+            syncAlertPanelButton();
+            return;
+        }
+        for (const alert of latestMapAlerts) {
+            const alertId = Number.parseInt(String(alert.id), 10);
+            const hasGeometry = Boolean(alert.has_geometry);
+            const isVisible = hasGeometry && !hiddenAlertIds.has(alertId);
+            const item = document.createElement("article");
+            item.className = "map-alert-item";
+            item.dataset.visible = isVisible ? "true" : "false";
+            item.dataset.hasGeometry = hasGeometry ? "true" : "false";
+
+            const heading = document.createElement("div");
+            heading.className = "map-alert-item-heading";
+            const category = document.createElement("span");
+            category.className = `frame-type-badge alert-category-badge ${severityBadgeClass(alert.severity_level)}`;
+            const eventIcon = document.createElement("img");
+            eventIcon.className = "alert-category-event-icon";
+            eventIcon.src = `${staticRoot}icons/${String(alert.event_icon || "alert-outline.svg")}`;
+            eventIcon.alt = "";
+            category.appendChild(eventIcon);
+            category.append(document.createTextNode(String(alert.event_code || i18n.activeAlarms)));
+            heading.appendChild(category);
+
+            const switchLabel = document.createElement("label");
+            switchLabel.className = "map-alert-visibility-toggle";
+            switchLabel.title = hasGeometry ? i18n.visibleOnMap : i18n.noMapArea;
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = isVisible;
+            checkbox.disabled = !hasGeometry;
+            checkbox.setAttribute("role", "switch");
+            checkbox.setAttribute(
+                "aria-label",
+                `${i18n.visibleOnMap}: ${String(alert.event_code || alert.source_callsign || alertId)}`
+            );
+            const switchTrack = document.createElement("span");
+            switchTrack.className = "map-alert-switch-track";
+            switchLabel.append(checkbox, switchTrack);
+            heading.appendChild(switchLabel);
+            item.appendChild(heading);
+
+            const source = document.createElement("div");
+            source.className = "map-alert-item-source";
+            source.textContent = [alert.source_callsign, alert.alarm_group]
+                .map((value) => String(value || "").trim())
+                .filter(Boolean)
+                .join(" · ");
+            item.appendChild(source);
+
+            const meta = document.createElement("div");
+            meta.className = "map-alert-item-meta";
+            const severity = Number.parseInt(String(alert.severity_level ?? ""), 10);
+            if (Number.isInteger(severity)) {
+                const severityText = document.createElement("span");
+                severityText.textContent = `${i18n.severityLevel}: ${severity}`;
+                meta.appendChild(severityText);
+            }
+            const areaCount = document.createElement("span");
+            areaCount.textContent = `${i18n.areaCount}: ${Number.parseInt(String(alert.area_count || 0), 10)}`;
+            meta.appendChild(areaCount);
+            const expiry = formatAlertExpiry(alert.expires_at);
+            if (expiry) {
+                const expiryText = document.createElement("span");
+                expiryText.textContent = `${i18n.expiresAt}: ${expiry}`;
+                meta.appendChild(expiryText);
+            }
+            if (!hasGeometry) {
+                const noArea = document.createElement("span");
+                noArea.className = "map-alert-item-no-area";
+                noArea.textContent = i18n.noMapArea;
+                meta.appendChild(noArea);
+            }
+            item.appendChild(meta);
+
+            if (alert.detail_href) {
+                const detailsLink = document.createElement("a");
+                detailsLink.className = "map-alert-item-details";
+                detailsLink.href = `${rootPath}${String(alert.detail_href)}`;
+                detailsLink.textContent = i18n.details;
+                item.appendChild(detailsLink);
+            }
+
+            checkbox.addEventListener("change", function () {
+                if (checkbox.checked) {
+                    hiddenAlertIds.delete(alertId);
+                } else {
+                    hiddenAlertIds.add(alertId);
+                }
+                persistHiddenAlertIds();
+                renderVisibleAlertAreas();
+                renderAlertPanel();
+            });
+            alertsOverlayList.appendChild(item);
+        }
+        syncAlertPanelButton();
+    }
+
+    function syncAlertPanelButton() {
+        const alertsWithGeometry = latestMapAlerts.filter((alert) => Boolean(alert.has_geometry));
+        const visibleCount = alertsWithGeometry.filter((alert) => (
+            !hiddenAlertIds.has(Number.parseInt(String(alert.id), 10))
+        )).length;
+        if (toggleAlarmAreasIcon) {
+            toggleAlarmAreasIcon.setAttribute(
+                "src",
+                `${staticRoot}icons/${alertsWithGeometry.length > 0 && visibleCount === 0 ? "alarm-light-off-outline.svg" : "alarm-light-outline.svg"}`
+            );
+        }
+        if (toggleAlarmAreasButton) {
+            const label = alertsOverlayOpen ? i18n.hideAlarmList : i18n.showAlarmList;
+            toggleAlarmAreasButton.setAttribute("title", label);
+            toggleAlarmAreasButton.setAttribute("aria-label", label);
+            toggleAlarmAreasButton.setAttribute("aria-expanded", alertsOverlayOpen ? "true" : "false");
+        }
+    }
+
+    function setAlertsOverlayOpen(open) {
+        alertsOverlayOpen = Boolean(open);
+        if (alertsOverlay) {
+            alertsOverlay.hidden = !alertsOverlayOpen;
+        }
+        syncAlertPanelButton();
+    }
+
+    function reconcileAlertAreas(value) {
+        latestAlertAreaCollection = normalizeAlertAreaFeatureCollection(value);
+        latestMapAlerts = latestAlertAreaCollection.alerts;
+        const activeAlertIds = new Set(
+            latestMapAlerts.map((alert) => Number.parseInt(String(alert.id), 10))
+        );
+        const retainedHiddenIds = new Set(
+            Array.from(hiddenAlertIds).filter((alertId) => activeAlertIds.has(alertId))
+        );
+        if (retainedHiddenIds.size !== hiddenAlertIds.size) {
+            hiddenAlertIds = retainedHiddenIds;
+            persistHiddenAlertIds();
+        }
+        renderVisibleAlertAreas();
+        renderAlertPanel();
     }
 
     function resolveInitialView() {
@@ -537,58 +810,6 @@
             const label = coverageVisible ? i18n.hideCoverage : i18n.showCoverage;
             toggleCoverageButton.setAttribute("title", label);
             toggleCoverageButton.setAttribute("aria-label", label);
-        }
-    }
-
-    function resolveAlarmAreasVisible() {
-        const storedValue = String(window.localStorage.getItem(mapAlarmAreasVisibleStorageKey) || "").trim();
-        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
-            return false;
-        }
-        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
-            return true;
-        }
-        return true;
-    }
-
-    function syncAlertAreaLayerVisibility() {
-        if (!alertAreaLayer) {
-            return;
-        }
-        if (alarmAreasVisible) {
-            if (!map.hasLayer(alertAreaLayer)) {
-                alertAreaLayer.addTo(map);
-            }
-            return;
-        }
-        if (map.hasLayer(alertAreaLayer)) {
-            map.removeLayer(alertAreaLayer);
-        }
-    }
-
-    function applyAlarmAreasToggleState(visible) {
-        alarmAreasVisible = Boolean(visible);
-        window.localStorage.setItem(
-            mapAlarmAreasVisibleStorageKey,
-            alarmAreasVisible ? "1" : "0"
-        );
-        syncAlertAreaLayerVisibility();
-        if (toggleAlarmAreasIcon) {
-            toggleAlarmAreasIcon.setAttribute(
-                "src",
-                `${staticRoot}icons/${alarmAreasVisible ? "alarm-light-outline.svg" : "alarm-light-off-outline.svg"}`
-            );
-        }
-        if (toggleAlarmAreasButton) {
-            const label = alarmAreasVisible
-                ? i18n.hideAlarmAreas
-                : i18n.showAlarmAreas;
-            toggleAlarmAreasButton.setAttribute("title", label);
-            toggleAlarmAreasButton.setAttribute("aria-label", label);
-            toggleAlarmAreasButton.setAttribute(
-                "aria-pressed",
-                alarmAreasVisible ? "true" : "false"
-            );
         }
     }
 
@@ -1291,10 +1512,16 @@
             applyLatestMapData({ forceRender: true });
         });
     }
-    applyAlarmAreasToggleState(resolveAlarmAreasVisible());
+    setAlertsOverlayOpen(false);
     if (toggleAlarmAreasButton) {
         toggleAlarmAreasButton.addEventListener("click", function () {
-            applyAlarmAreasToggleState(!alarmAreasVisible);
+            setAlertsOverlayOpen(!alertsOverlayOpen);
+        });
+    }
+    if (alertsOverlayClose) {
+        alertsOverlayClose.addEventListener("click", function () {
+            setAlertsOverlayOpen(false);
+            toggleAlarmAreasButton?.focus();
         });
     }
     applyRulerToggleState(resolveRulerVisible());

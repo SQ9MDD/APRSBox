@@ -48,8 +48,16 @@
             data-i18n-hide-tracks="{{ t('Hide tracks') }}"
             data-i18n-show-coverage="{{ t('Show coverage') }}"
             data-i18n-hide-coverage="{{ t('Hide coverage') }}"
-            data-i18n-show-alarm-areas="{{ t('Show alarm areas') }}"
-            data-i18n-hide-alarm-areas="{{ t('Hide alarm areas') }}"
+            data-i18n-show-alarm-list="{{ t('Show alarm list') }}"
+            data-i18n-hide-alarm-list="{{ t('Hide alarm list') }}"
+            data-i18n-active-alarms="{{ t('Active alarms') }}"
+            data-i18n-no-active-map-alarms="{{ t('No active alarms with map areas.') }}"
+            data-i18n-visible-on-map="{{ t('Visible on map') }}"
+            data-i18n-no-map-area="{{ t('No map area available') }}"
+            data-i18n-area-count="{{ t('Area count') }}"
+            data-i18n-expires-at="{{ t('Expires at') }}"
+            data-i18n-details="{{ t('Details') }}"
+            data-i18n-severity-level="{{ t('Severity level') }}"
             data-i18n-show-latest-overlay="{{ t('Show latest packet widget') }}"
             data-i18n-hide-latest-overlay="{{ t('Hide latest packet widget') }}"
             data-i18n-show-ruler="{{ t('Show ruler') }}"
@@ -94,9 +102,10 @@
                         type="button"
                         class="button button-secondary button-icon"
                         id="map-toggle-alarm-areas"
-                        aria-label="{{ t('Hide alarm areas') }}"
-                        title="{{ t('Hide alarm areas') }}"
-                        aria-pressed="true"
+                        aria-label="{{ t('Show alarm list') }}"
+                        title="{{ t('Show alarm list') }}"
+                        aria-expanded="false"
+                        aria-controls="map-alerts-overlay"
                     >
                         <img id="map-toggle-alarm-areas-icon" src="{{ request.scope.root_path }}/static/icons/alarm-light-outline.svg" alt="">
                     </button>
@@ -148,6 +157,28 @@
             </div>
             <div id="map-stage" class="map-stage">
                 <div id="map-canvas" class="map-canvas" aria-label="{{ t('Map viewer') }}"></div>
+                <aside
+                    id="map-alerts-overlay"
+                    class="map-alerts-overlay"
+                    aria-labelledby="map-alerts-overlay-title"
+                    hidden
+                >
+                    <div class="map-alerts-overlay-header">
+                        <h2 id="map-alerts-overlay-title">{{ t("Active alarms") }}</h2>
+                        <button
+                            type="button"
+                            class="map-alerts-overlay-close"
+                            id="map-alerts-overlay-close"
+                            aria-label="{{ t('Close') }}"
+                            title="{{ t('Close') }}"
+                        >
+                            <img src="{{ request.scope.root_path }}/static/icons/close.svg" alt="">
+                        </button>
+                    </div>
+                    <div id="map-alerts-overlay-list" class="map-alerts-overlay-list" aria-live="polite">
+                        <p class="map-alerts-overlay-empty">{{ t("No active alarms with map areas.") }}</p>
+                    </div>
+                </aside>
                 <div id="map-overlay-stack" class="map-overlay-stack">
                     <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>
                     <aside id="map-scroller-overlay" class="map-scroller-overlay" aria-live="polite"></aside>
@@ -161,5 +192,5 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-alert-areas-toggle-1"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-alert-panel-1"></script>
 {% endblock %}

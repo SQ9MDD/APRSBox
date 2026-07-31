@@ -106,13 +106,16 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('name="alarm_groups"', template_source)
         self.assertIn('name="threshold_category"', template_source)
         self.assertIn('name="alert_level_threshold"', template_source)
-        self.assertIn('name="map_level_threshold"', template_source)
+        self.assertNotIn('name="map_level_threshold"', template_source)
         self.assertIn('name="popup_level_threshold"', template_source)
         self.assertIn('<option value="off"', template_source)
         self.assertIn('{{ t("Alarm thresholds by event type") }}', template_source)
         self.assertIn('{{ t("Alerts") }}', template_source)
-        self.assertIn('{{ t("Map") }}', template_source)
         self.assertIn('{{ t("Alert popup") }}', template_source)
+        self.assertIn(
+            '{{ t("Alarm visibility on the map is managed directly from the alarm panel on the Map page.") }}',
+            template_source,
+        )
         self.assertIn("alarm_category_threshold_rows", template_source)
         self.assertIn("aprs_alarm_groups|join(', ')", template_source)
         self.assertIn('{{ t("RF receive groups") }}', template_source)

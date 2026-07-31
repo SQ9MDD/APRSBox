@@ -284,7 +284,7 @@ class AlertAreaResolverTests(unittest.TestCase):
             },
         )
 
-    def test_map_threshold_hides_only_known_levels_below_the_setting(self) -> None:
+    def test_legacy_map_threshold_does_not_hide_active_alerts_from_map_panel(self) -> None:
         with temporary_database():
             save_map_alarm_level_threshold(2)
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -314,10 +314,14 @@ class AlertAreaResolverTests(unittest.TestCase):
                 feature["properties"]["aprsbox_area_code"]
                 for feature in collection["features"]
             },
-            {"L2", "L3", "UNK"},
+            {"L1", "L2", "L3", "UNK"},
+        )
+        self.assertEqual(
+            {alert["source_callsign"] for alert in collection["alerts"]},
+            {"PLWX01", "PLWX02", "PLWX03", "PLWX04"},
         )
 
-    def test_map_thresholds_are_applied_per_event_category(self) -> None:
+    def test_legacy_category_map_thresholds_do_not_filter_map_panel(self) -> None:
         with temporary_database():
             thresholds = get_aprs_alarm_category_thresholds()
             thresholds["HEAT"]["map"] = 3
@@ -375,7 +379,7 @@ class AlertAreaResolverTests(unittest.TestCase):
                 feature["properties"]["aprsbox_area_code"]
                 for feature in collection["features"]
             },
-            {"HEAT3", "STORM1"},
+            {"HEAT2", "HEAT3", "STORM1", "HAIL3"},
         )
 
     def test_shared_area_uses_highest_active_severity(self) -> None:
@@ -389,16 +393,19 @@ class AlertAreaResolverTests(unittest.TestCase):
             collection = build_alert_area_feature_collection(
                 [
                     {
+                        "id": 11,
                         "alarm_group": "PL-WARN",
                         "area_codes": ["1465"],
                         "severity_level": 1,
                     },
                     {
+                        "id": 12,
                         "alarm_group": "PL-WARN",
                         "area_codes": ["1465"],
                         "severity_level": 3,
                     },
                     {
+                        "id": 13,
                         "alarm_group": "PL-WARN",
                         "area_codes": ["1465"],
                         "severity_level": 2,
@@ -415,6 +422,15 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertEqual(
             collection["features"][0]["properties"]["aprsbox_alert_color"],
             "red",
+        )
+        self.assertEqual(
+            {
+                contributor["id"]
+                for contributor in collection["features"][0]["properties"][
+                    "aprsbox_alerts"
+                ]
+            },
+            {11, 12, 13},
         )
 
     def test_shared_area_downgrades_after_stronger_alert_expires(self) -> None:
@@ -741,6 +757,18 @@ class AlertAreaResolverTests(unittest.TestCase):
             payload["alert_areas"]["features"][0]["properties"]["aprsbox_area_code"],
             "1465",
         )
+        self.assertEqual(len(payload["alert_areas"]["alerts"]), 1)
+        self.assertEqual(
+            payload["alert_areas"]["alerts"][0]["source_callsign"],
+            "PLWXSR",
+        )
+        self.assertTrue(payload["alert_areas"]["alerts"][0]["has_geometry"])
+        self.assertEqual(
+            payload["alert_areas"]["features"][0]["properties"][
+                "aprsbox_alerts"
+            ][0]["id"],
+            payload["alert_areas"]["alerts"][0]["id"],
+        )
 
     def test_map_script_uses_a_noninteractive_layer_between_tiles_and_markers(self) -> None:
         source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -759,36 +787,35 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("dashArray: null", source)
         self.assertIn("reconcileAlertAreas(payload.alert_areas);", source)
 
-    def test_map_toolbar_can_hide_and_restore_the_alarm_area_layer(self) -> None:
+    def test_map_toolbar_opens_panel_with_per_alert_visibility_switches(self) -> None:
         source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         template = Path("app/templates/map.html").read_text(encoding="utf-8")
 
         self.assertIn('id="map-toggle-alarm-areas"', template)
         self.assertIn('id="map-toggle-alarm-areas-icon"', template)
+        self.assertIn('id="map-alerts-overlay"', template)
+        self.assertIn('id="map-alerts-overlay-list"', template)
+        self.assertIn('aria-controls="map-alerts-overlay"', template)
         self.assertIn("alarm-light-outline.svg", template)
-        self.assertIn("data-i18n-show-alarm-areas", template)
-        self.assertIn("data-i18n-hide-alarm-areas", template)
+        self.assertIn("data-i18n-show-alarm-list", template)
+        self.assertIn("data-i18n-hide-alarm-list", template)
+        self.assertIn("data-i18n-visible-on-map", template)
         self.assertTrue(Path("app/static/icons/alarm-light-outline.svg").is_file())
         self.assertTrue(
             Path("app/static/icons/alarm-light-off-outline.svg").is_file()
         )
 
         self.assertIn(
-            'const mapAlarmAreasVisibleStorageKey = "aprsbox-map-alarm-areas-visible";',
+            'const mapHiddenAlertIdsStorageKey = "aprsbox-map-hidden-alert-ids";',
             source,
         )
-        self.assertIn("function resolveAlarmAreasVisible()", source)
-        self.assertIn("function syncAlertAreaLayerVisibility()", source)
-        self.assertIn("map.removeLayer(alertAreaLayer);", source)
-        self.assertIn("alertAreaLayer.addTo(map);", source)
-        self.assertIn(
-            "applyAlarmAreasToggleState(!alarmAreasVisible);",
-            source,
-        )
-        self.assertIn(
-            '"aria-pressed",',
-            source,
-        )
+        self.assertIn("function resolveHiddenAlertIds()", source)
+        self.assertIn("function visibleAlertAreaFeatureCollection()", source)
+        self.assertIn("function renderAlertPanel()", source)
+        self.assertIn('checkbox.setAttribute("role", "switch");', source)
+        self.assertIn("hiddenAlertIds.add(alertId);", source)
+        self.assertIn("hiddenAlertIds.delete(alertId);", source)
+        self.assertIn("setAlertsOverlayOpen(!alertsOverlayOpen);", source)
 
 
 if __name__ == "__main__":

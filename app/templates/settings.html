@@ -219,7 +219,7 @@
                 <input type="checkbox" name="alarm_enabled" value="1" {% if aprs_alarm_enabled %}checked{% endif %}>
                 <span>{{ t("Enable APRS alarms") }}</span>
             </label>
-            <p class="muted small full">{{ t("Controls alarm intake, active alarm visibility, map areas, popups, and the automatic APRS-IS alarm-group filter.") }}</p>
+            <p class="muted small full">{{ t("Controls alarm intake, active alarm visibility, popups, and the automatic APRS-IS alarm-group filter.") }}</p>
             <label class="full">
                 <span>{{ t("Alarm groups") }}</span>
                 <input
@@ -240,7 +240,6 @@
                             <tr>
                                 <th>{{ t("Type") }}</th>
                                 <th>{{ t("Alerts") }}</th>
-                                <th>{{ t("Map") }}</th>
                                 <th>{{ t("Alert popup") }}</th>
                             </tr>
                         </thead>
@@ -268,14 +267,6 @@
                                     </select>
                                 </td>
                                 <td>
-                                    <select name="map_level_threshold" aria-label="{{ t('Map') }} — {{ t(category.label) }}">
-                                        <option value="off" {% if category.map == 0 %}selected{% endif %}>{{ t("Off") }}</option>
-                                        {% for level in alarm_level_threshold_options %}
-                                        <option value="{{ level }}" {% if category.map == level %}selected{% endif %}>≥ {{ level }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </td>
-                                <td>
                                     <select name="popup_level_threshold" aria-label="{{ t('Alert popup') }} — {{ t(category.label) }}">
                                         <option value="off" {% if category.popup == 0 %}selected{% endif %}>{{ t("Off") }}</option>
                                         {% for level in alarm_level_threshold_options %}
@@ -288,7 +279,8 @@
                         </tbody>
                     </table>
                 </div>
-                <span class="muted small">{{ t("Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.") }}</span>
+                <span class="muted small">{{ t("Alerts controls transfer from Messages to Alerts. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.") }}</span>
+                <span class="muted small">{{ t("Alarm visibility on the map is managed directly from the alarm panel on the Map page.") }}</span>
             </div>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save alarm settings") }}</button>

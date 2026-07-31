@@ -8,10 +8,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.db import fetch_all, utc_now
-from app.services.alarm_groups import (
-    alarm_event_meets_category_threshold,
-    get_aprs_alarm_enabled,
-)
+from app.services.alarm_groups import get_aprs_alarm_enabled
+from app.services.alert_event_icons import resolve_alert_event_icon
 from app.services.alerts import expire_aprs_alerts
 from app.services.aprs_warning_identity import normalize_warning_area_codes
 
@@ -202,6 +200,7 @@ def _matching_features(
     *,
     country_code: str,
     severity_by_code: Mapping[str, int],
+    alerts_by_code: Mapping[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     requested_codes = set(severity_by_code)
     features = [
@@ -234,6 +233,11 @@ def _matching_features(
                 ),
             }
         )
+        contributing_alerts = list(
+            (alerts_by_code or {}).get(normalized_identifier, [])
+        )
+        if contributing_alerts:
+            properties["aprsbox_alerts"] = contributing_alerts
         matched.append(
             {
                 "type": "Feature",
@@ -251,6 +255,7 @@ def build_alert_area_feature_collection(
 ) -> dict[str, Any]:
     root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
     severity_by_country_code: dict[str, dict[str, int]] = {}
+    alerts_by_country_code: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for alert in alerts:
         country_code = country_code_from_alarm_group(alert.get("alarm_group"))
         if country_code is None:
@@ -267,11 +272,25 @@ def build_alert_area_feature_collection(
         }
         severity_level = _alert_severity_level(alert.get("severity_level")) or 0
         country_severities = severity_by_country_code.setdefault(country_code, {})
+        country_alerts = alerts_by_country_code.setdefault(country_code, {})
+        try:
+            alert_id = int(alert.get("id"))
+        except (TypeError, ValueError):
+            alert_id = None
         for normalized_code in normalized_codes:
             country_severities[normalized_code] = max(
                 country_severities.get(normalized_code, 0),
                 severity_level,
             )
+            if alert_id is not None:
+                contributors = country_alerts.setdefault(normalized_code, [])
+                if not any(item["id"] == alert_id for item in contributors):
+                    contributors.append(
+                        {
+                            "id": alert_id,
+                            "severity_level": severity_level or None,
+                        }
+                    )
 
     output_features: list[dict[str, Any]] = []
     feature_indexes_by_geometry: dict[str, int] = {}
@@ -295,6 +314,7 @@ def build_alert_area_feature_collection(
                 document,
                 country_code=country_code,
                 severity_by_code=severity_by_country_code[country_code],
+                alerts_by_code=alerts_by_country_code.get(country_code),
             ):
                 try:
                     geometry_key = json.dumps(
@@ -308,8 +328,10 @@ def build_alert_area_feature_collection(
                 deduplication_key = f"{country_code}:{geometry_key}"
                 existing_index = feature_indexes_by_geometry.get(deduplication_key)
                 if existing_index is not None:
+                    existing_feature = output_features[existing_index]
+                    existing_properties = existing_feature["properties"]
                     existing_severity = int(
-                        output_features[existing_index]["properties"].get(
+                        existing_properties.get(
                             "aprsbox_severity_level"
                         )
                         or 0
@@ -318,7 +340,32 @@ def build_alert_area_feature_collection(
                         feature["properties"].get("aprsbox_severity_level") or 0
                     )
                     if candidate_severity > existing_severity:
-                        output_features[existing_index] = feature
+                        existing_properties["aprsbox_severity_level"] = (
+                            feature["properties"].get("aprsbox_severity_level")
+                        )
+                        existing_properties["aprsbox_alert_color"] = feature[
+                            "properties"
+                        ].get("aprsbox_alert_color")
+                    candidate_contributors = feature["properties"].get(
+                        "aprsbox_alerts",
+                        [],
+                    )
+                    existing_contributors = existing_properties.get(
+                        "aprsbox_alerts",
+                        [],
+                    )
+                    if not existing_contributors and not candidate_contributors:
+                        continue
+                    existing_properties["aprsbox_alerts"] = existing_contributors
+                    existing_ids = {
+                        int(item["id"])
+                        for item in existing_contributors
+                        if isinstance(item, dict) and item.get("id") is not None
+                    }
+                    for contributor in candidate_contributors:
+                        if int(contributor["id"]) not in existing_ids:
+                            existing_contributors.append(contributor)
+                            existing_ids.add(int(contributor["id"]))
                     continue
                 feature_indexes_by_geometry[deduplication_key] = len(output_features)
                 output_features.append(feature)
@@ -341,7 +388,17 @@ def get_active_alert_area_feature_collection(
         expire_aprs_alerts(now=timestamp)
         rows = fetch_all(
             """
-            SELECT id, alarm_group, area_codes_json, event_code, severity_level
+            SELECT
+                id,
+                source_callsign,
+                alert_type,
+                alarm_group,
+                area_codes_json,
+                event_code,
+                severity_level,
+                expires_at,
+                valid_until_utc,
+                last_seen_at
             FROM aprs_alerts
             WHERE is_active = 1
               AND superseded_by_alert_id IS NULL
@@ -353,21 +410,45 @@ def get_active_alert_area_feature_collection(
                     valid_until_utc IS NULL
                     OR julianday(valid_until_utc) > julianday(?)
               )
-            ORDER BY id ASC
+            ORDER BY last_seen_at DESC, id DESC
             """,
             (timestamp, timestamp),
         )
     except sqlite3.OperationalError:
         return {"type": "FeatureCollection", "features": []}
-    return build_alert_area_feature_collection(
-        [
-            dict(row)
-            for row in rows
-            if alarm_event_meets_category_threshold(
-                row["event_code"],
-                row["severity_level"],
-                target="map",
-            )
-        ],
+    alerts = [dict(row) for row in rows]
+    collection = build_alert_area_feature_collection(
+        alerts,
         geodata_root=geodata_root,
     )
+    alert_ids_with_geometry = {
+        int(contributor["id"])
+        for feature in collection["features"]
+        for contributor in feature.get("properties", {}).get("aprsbox_alerts", [])
+        if isinstance(contributor, dict) and contributor.get("id") is not None
+    }
+    collection["alerts"] = [
+        {
+            "id": int(alert["id"]),
+            "source_callsign": str(
+                alert.get("source_callsign") or ""
+            ).strip().upper(),
+            "alarm_group": str(alert.get("alarm_group") or "").strip().upper(),
+            "event_code": str(
+                alert.get("event_code") or alert.get("alert_type") or ""
+            ).strip().upper(),
+            "event_icon": resolve_alert_event_icon(
+                alert.get("event_code"),
+                alert_type=alert.get("alert_type"),
+            ),
+            "severity_level": _alert_severity_level(alert.get("severity_level")),
+            "area_count": len(_decode_area_codes(alert.get("area_codes_json"))),
+            "expires_at": str(
+                alert.get("expires_at") or alert.get("valid_until_utc") or ""
+            ),
+            "detail_href": f"/alerts/{int(alert['id'])}",
+            "has_geometry": int(alert["id"]) in alert_ids_with_geometry,
+        }
+        for alert in alerts
+    ]
+    return collection

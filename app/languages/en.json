@@ -1916,5 +1916,14 @@
   "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.",
   "APRS alert received": "APRS alert received",
   "Active APRS alert": "Active APRS alert",
-  "Close": "Close"
+  "Close": "Close",
+  "Show alarm list": "Show alarm list",
+  "Hide alarm list": "Hide alarm list",
+  "Active alarms": "Active alarms",
+  "No active alarms with map areas.": "No active alarms with map areas.",
+  "Visible on map": "Visible on map",
+  "No map area available": "No map area available",
+  "Controls alarm intake, active alarm visibility, popups, and the automatic APRS-IS alarm-group filter.": "Controls alarm intake, active alarm visibility, popups, and the automatic APRS-IS alarm-group filter.",
+  "Alerts controls transfer from Messages to Alerts. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alerts controls transfer from Messages to Alerts. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.",
+  "Alarm visibility on the map is managed directly from the alarm panel on the Map page.": "Alarm visibility on the map is managed directly from the alarm panel on the Map page."
 }

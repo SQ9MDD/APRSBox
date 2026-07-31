@@ -360,6 +360,40 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     3,
                 )
 
+                saved_without_map_column = client.post(
+                    "/settings/alarm-groups",
+                    data={
+                        "alarm_enabled": "1",
+                        "alarm_groups": "PL-WARN, LOCALWARN",
+                        "threshold_category": list(
+                            get_aprs_alarm_category_thresholds()
+                        ),
+                        "alert_level_threshold": [
+                            "off"
+                            if category == "HAIL"
+                            else ("2" if category == "HEAT" else "1")
+                            for category in get_aprs_alarm_category_thresholds()
+                        ],
+                        "popup_level_threshold": [
+                            "3" if category == "TORNADO" else "off"
+                            for category in get_aprs_alarm_category_thresholds()
+                        ],
+                    },
+                )
+                self.assertEqual(saved_without_map_column.status_code, 200)
+                self.assertEqual(
+                    saved_without_map_column.json()["alarm_category_thresholds"][
+                        "HEAT"
+                    ]["map"],
+                    3,
+                )
+                self.assertEqual(
+                    saved_without_map_column.json()["alarm_category_thresholds"][
+                        "HAIL"
+                    ]["map"],
+                    0,
+                )
+
                 page = client.get("/settings")
                 self.assertEqual(page.status_code, 200)
                 self.assertIn("Ustawienia alarmów APRS", page.text)

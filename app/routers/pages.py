@@ -1738,7 +1738,7 @@ def settings_update_alarm_groups(
         ):
             categories = threshold_category or []
             alert_thresholds = alert_level_threshold or []
-            map_thresholds = map_level_threshold or []
+            map_thresholds = map_level_threshold
             popup_thresholds = popup_level_threshold
             expected_categories = {
                 str(category["key"])
@@ -1746,7 +1746,10 @@ def settings_update_alarm_groups(
             }
             if (
                 len(categories) != len(alert_thresholds)
-                or len(categories) != len(map_thresholds)
+                or (
+                    map_thresholds is not None
+                    and len(categories) != len(map_thresholds)
+                )
                 or (
                     popup_thresholds is not None
                     and len(categories) != len(popup_thresholds)
@@ -1759,18 +1762,20 @@ def settings_update_alarm_groups(
                 {
                     category: {
                         "alerts": alerts,
-                        "map": map_level,
+                        "map": (
+                            map_thresholds[index]
+                            if map_thresholds is not None
+                            else selected_category_thresholds[category]["map"]
+                        ),
                         "popup": (
                             popup_thresholds[index]
                             if popup_thresholds is not None
                             else selected_category_thresholds[category]["popup"]
                         ),
                     }
-                    for index, (category, alerts, map_level) in enumerate(zip(
-                        categories,
-                        alert_thresholds,
-                        map_thresholds,
-                    ))
+                    for index, (category, alerts) in enumerate(
+                        zip(categories, alert_thresholds)
+                    )
                 }
             )
         elif (

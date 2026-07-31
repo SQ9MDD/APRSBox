@@ -1882,5 +1882,14 @@
   "Alerts controls transfer from Messages to Alerts. Map controls area visibility. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alarme steuert die Übernahme von Nachrichten zu Alarmen. Karte steuert die Sichtbarkeit der Gebiete. Alarm-Popup steuert das Popup im Notfallstil. Aus deaktiviert die Kategorie in dieser Spalte vollständig. Unbekannte Stufen bleiben ansonsten zur Sicherheit erhalten.",
   "APRS alert received": "APRS-Alarm empfangen",
   "Active APRS alert": "Aktiver APRS-Alarm",
-  "Close": "Schließen"
+  "Close": "Schließen",
+  "Show alarm list": "Alarmliste anzeigen",
+  "Hide alarm list": "Alarmliste ausblenden",
+  "Active alarms": "Aktive Alarme",
+  "No active alarms with map areas.": "Keine aktiven Alarme mit Kartengebieten.",
+  "Visible on map": "Auf der Karte sichtbar",
+  "No map area available": "Kein Kartengebiet verfügbar",
+  "Controls alarm intake, active alarm visibility, popups, and the automatic APRS-IS alarm-group filter.": "Steuert den Alarmempfang, die Sichtbarkeit aktiver Alarme, Popups und den automatischen APRS-IS-Filter für Alarmgruppen.",
+  "Alerts controls transfer from Messages to Alerts. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alarme steuert die Übernahme von Nachrichten zu Alarmen. Alarm-Popup steuert das Popup im Notfallstil. Aus deaktiviert die Kategorie in dieser Spalte vollständig. Unbekannte Stufen bleiben ansonsten zur Sicherheit erhalten.",
+  "Alarm visibility on the map is managed directly from the alarm panel on the Map page.": "Die Sichtbarkeit von Alarmen auf der Karte wird direkt im Alarmpanel der Kartenseite verwaltet."
 }
