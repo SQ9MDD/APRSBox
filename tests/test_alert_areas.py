@@ -8,6 +8,7 @@ from pathlib import Path
 from app.db import execute, fetch_all, init_db
 from app.services.alarm_groups import (
     get_aprs_alarm_category_thresholds,
+    save_aprs_alarm_enabled,
     save_aprs_alarm_category_thresholds,
     save_map_alarm_level_threshold,
 )
@@ -168,6 +169,17 @@ def _receive_multipart_group_alert(
 
 
 class AlertAreaResolverTests(unittest.TestCase):
+    def test_global_alarm_disable_hides_existing_group_alert_areas(self) -> None:
+        with temporary_database():
+            _insert_alert("PLWX01", "PL-WARN", ["1465"], severity_level=3)
+            save_aprs_alarm_enabled(False)
+
+            collection = get_active_alert_area_feature_collection(
+                now="2026-01-01T01:00:00+00:00"
+            )
+
+        self.assertEqual(collection, {"type": "FeatureCollection", "features": []})
+
     def test_country_directory_is_derived_dynamically_from_warning_group(self) -> None:
         self.assertEqual(country_code_from_alarm_group("PL-WARN"), "pl")
         self.assertEqual(country_code_from_alarm_group("de-warn"), "de")

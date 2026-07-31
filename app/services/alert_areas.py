@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from app.db import fetch_all, utc_now
 from app.services.alarm_groups import (
     alarm_event_meets_category_threshold,
+    get_aprs_alarm_enabled,
 )
 from app.services.alerts import expire_aprs_alerts
 from app.services.aprs_warning_identity import normalize_warning_area_codes
@@ -333,6 +334,8 @@ def get_active_alert_area_feature_collection(
     geodata_root: Path | None = None,
     now: str | None = None,
 ) -> dict[str, Any]:
+    if not get_aprs_alarm_enabled():
+        return {"type": "FeatureCollection", "features": []}
     timestamp = str(now or utc_now())
     try:
         expire_aprs_alerts(now=timestamp)

@@ -10,6 +10,7 @@ from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_ev
 from app.i18n import get_app_language, get_translator
 from app.services.content import get_visible_station_snapshots
 from app.services.alarm_groups import (
+    get_aprs_alarm_enabled,
     get_aprs_alarm_groups,
     is_configured_aprs_alarm_group,
     normalize_aprs_alarm_groups,
@@ -196,6 +197,8 @@ def get_effective_message_target_groups(
         if alarm_groups is None
         else normalize_aprs_alarm_groups(alarm_groups)
     )
+    if not get_aprs_alarm_enabled():
+        configured_alarm_groups = []
     return list(dict.fromkeys([*standard_groups, *configured_alarm_groups]))
 
 

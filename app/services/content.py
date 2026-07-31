@@ -28,6 +28,7 @@ from app.db import (
 from app.i18n import get_app_language, get_translator
 from app.services.alarm_groups import (
     alarm_event_meets_category_threshold,
+    get_aprs_alarm_enabled,
     get_aprs_alarm_category_thresholds,
 )
 from app.services.beacon_pathing import (
@@ -998,6 +999,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         last_error = state_row["last_error"]
     frames: list[dict[str, Any]] = []
     snapshot_now = datetime.now(timezone.utc)
+    aprs_alarm_enabled = get_aprs_alarm_enabled()
     alarm_popup_thresholds = get_aprs_alarm_category_thresholds()
     for row in frame_rows:
         direction = str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX")
@@ -1043,7 +1045,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             alert_valid_until is None or alert_valid_until > snapshot_now
         )
         alarm_group_popup = bool(
-            alert_id is not None
+            aprs_alarm_enabled
+            and alert_id is not None
             and alarm_group
             and alert_active
             and alarm_event_meets_category_threshold(

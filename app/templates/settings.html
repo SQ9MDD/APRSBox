@@ -215,6 +215,11 @@
             data-settings-action-id="save-aprs-alarm-groups"
             onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-aprs-alarm-groups', message: {{ t('Saving APRS alarm settings...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
+            <label class="full checkbox-row">
+                <input type="checkbox" name="alarm_enabled" value="1" {% if aprs_alarm_enabled %}checked{% endif %}>
+                <span>{{ t("Enable APRS alarms") }}</span>
+            </label>
+            <p class="muted small full">{{ t("Controls alarm intake, active alarm visibility, map areas, popups, and the automatic APRS-IS alarm-group filter.") }}</p>
             <label class="full">
                 <span>{{ t("Alarm groups") }}</span>
                 <input
@@ -291,6 +296,8 @@
         </form>
         {% endif %}
         <dl class="details-grid">
+            <dt>{{ t("APRS alarms") }}</dt>
+            <dd><code>{{ t("Enabled") if aprs_alarm_enabled else t("Disabled") }}</code></dd>
             <dt>{{ t("Alarm groups") }}</dt>
             <dd><code>{{ aprs_alarm_groups|join(', ') if aprs_alarm_groups else t("none") }}</code></dd>
             <dt>{{ t("RF receive groups") }}</dt>

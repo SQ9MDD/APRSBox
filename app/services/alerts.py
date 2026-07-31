@@ -9,6 +9,7 @@ from app.datetime_utils import format_display_datetime, parse_datetime
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
 from app.services.alarm_groups import (
     alarm_event_meets_category_threshold,
+    get_aprs_alarm_enabled,
     get_aprs_alarm_groups,
 )
 from app.services.alert_event_icons import resolve_alert_event_icon
@@ -640,6 +641,9 @@ def process_alarm_group_message_frame(
 ) -> dict[str, Any] | None:
     """Route a configured APRS alarm-group message into the shared intake."""
 
+    if not get_aprs_alarm_enabled():
+        return None
+
     aprs_data = dict(parsed.get("aprs_data") or {})
     if str(aprs_data.get("packet_group") or "").strip().lower() != "message":
         return None
@@ -703,6 +707,7 @@ def process_alert_frame(
 
 def attention_alert_count(*, now: str | None = None) -> int:
     timestamp = now or utc_now()
+    alarm_enabled = 1 if get_aprs_alarm_enabled() else 0
     try:
         expire_aprs_alerts(now=timestamp)
         row = fetch_one(
@@ -711,6 +716,7 @@ def attention_alert_count(*, now: str | None = None) -> int:
             FROM aprs_alerts
             WHERE superseded_by_alert_id IS NULL
               AND is_active = 1
+              AND (? = 1 OR alarm_group IS NULL)
               AND (expires_at IS NULL OR julianday(expires_at) > julianday(?))
               AND (
                     valid_until_utc IS NULL
@@ -719,7 +725,7 @@ def attention_alert_count(*, now: str | None = None) -> int:
               AND muted_indefinitely = 0
               AND (muted_until IS NULL OR julianday(muted_until) <= julianday(?))
             """,
-            (timestamp, timestamp, timestamp),
+            (alarm_enabled, timestamp, timestamp, timestamp),
         )
     except sqlite3.OperationalError:
         # Template rendering can happen before the application lifespan has
@@ -851,6 +857,7 @@ def list_alerts(
 ) -> dict[str, Any]:
     reference = _normalized_utc_datetime(now)
     timestamp = reference.replace(microsecond=0).isoformat()
+    alarm_enabled = 1 if get_aprs_alarm_enabled() else 0
     expire_aprs_alerts(now=reference)
     normalized_page_size = min(max(1, int(page_size)), 100)
     count_row = fetch_one(
@@ -859,13 +866,14 @@ def list_alerts(
         FROM aprs_alerts
         WHERE superseded_by_alert_id IS NULL
           AND is_active = 1
+          AND (? = 1 OR alarm_group IS NULL)
           AND (expires_at IS NULL OR julianday(expires_at) > julianday(?))
           AND (
                 valid_until_utc IS NULL
                 OR julianday(valid_until_utc) > julianday(?)
           )
         """,
-        (timestamp, timestamp),
+        (alarm_enabled, timestamp, timestamp),
     )
     total = int(count_row["total"] or 0) if count_row is not None else 0
     total_pages = max(1, (total + normalized_page_size - 1) // normalized_page_size)
@@ -884,6 +892,7 @@ def list_alerts(
         LEFT JOIN traffic_frames AS frames ON frames.id = alerts.last_frame_id
         WHERE alerts.superseded_by_alert_id IS NULL
           AND alerts.is_active = 1
+          AND (? = 1 OR alerts.alarm_group IS NULL)
           AND (
                 alerts.expires_at IS NULL
                 OR julianday(alerts.expires_at) > julianday(?)
@@ -895,7 +904,13 @@ def list_alerts(
         ORDER BY alerts.last_seen_at DESC, alerts.id DESC
         LIMIT ? OFFSET ?
         """,
-        (timestamp, timestamp, normalized_page_size, offset),
+        (
+            alarm_enabled,
+            timestamp,
+            timestamp,
+            normalized_page_size,
+            offset,
+        ),
     )
     return {
         "items": [_serialize_alert(dict(row), now=reference) for row in rows],

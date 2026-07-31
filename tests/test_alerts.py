@@ -18,7 +18,12 @@ from app.services.alerts import (
     mute_alert,
     unmute_alert,
 )
-from app.services.content import traffic_snapshot
+from app.services.alarm_groups import (
+    get_aprs_alarm_category_thresholds,
+    save_aprs_alarm_category_thresholds,
+    save_aprs_alarm_enabled,
+)
+from app.services.content import _TRAFFIC_SNAPSHOT_CACHE, traffic_snapshot
 from app.services.maintenance_scheduler import MaintenanceSchedulerService
 from app.services.traffic import process_normalized_tnc2_rx
 
@@ -62,6 +67,54 @@ def receive_emergency(
 
 
 class AprsAlertTests(unittest.TestCase):
+    def test_global_alarm_disable_hides_group_alert_but_preserves_emergency(self) -> None:
+        with temporary_database():
+            receive_emergency(timestamp="2026-07-30T20:00:00+00:00")
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    GROUP_WARNING_LINE,
+                    source="APRS-IS",
+                    source_kind="aprsis",
+                    timestamp="2026-07-30T20:01:00+00:00",
+                )
+            )
+            self.assertEqual(
+                list_alerts(now="2026-07-30T21:00:00+00:00")["total"],
+                2,
+            )
+
+            save_aprs_alarm_enabled(False)
+            active = list_alerts(now="2026-07-30T21:00:00+00:00")
+            attention_count = attention_alert_count(
+                now="2026-07-30T21:00:00+00:00"
+            )
+
+        self.assertEqual(active["total"], 1)
+        self.assertEqual(active["items"][0]["alarm_group"], "")
+        self.assertEqual(attention_count, 1)
+
+    def test_global_alarm_disable_suppresses_popup_for_existing_group_alert(self) -> None:
+        with temporary_database():
+            thresholds = get_aprs_alarm_category_thresholds()
+            thresholds["THUNDERSTORM"]["popup"] = 1
+            save_aprs_alarm_category_thresholds(thresholds)
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    GROUP_WARNING_LINE.replace("302200z", "012200z"),
+                    source="APRS-IS",
+                    source_kind="aprsis",
+                    timestamp="2026-07-31T20:01:00+00:00",
+                )
+            )
+            before = traffic_snapshot(limit=10)["frames"][0]
+
+            save_aprs_alarm_enabled(False)
+            _TRAFFIC_SNAPSHOT_CACHE.clear()
+            after = traffic_snapshot(limit=10)["frames"][0]
+
+        self.assertTrue(before["alert_popup"])
+        self.assertFalse(after["alert_popup"])
+
     def test_backend_maintenance_expires_group_alert_without_open_map_and_preserves_frame(self) -> None:
         with temporary_database():
             self.assertTrue(

@@ -10,10 +10,12 @@ from app.db import execute, fetch_all, fetch_one, get_app_setting, init_db, set_
 from app.services.alerts import get_alert, list_alerts
 from app.services.alarm_groups import (
     APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY,
+    APRS_ALARM_ENABLED_SETTING_KEY,
     APRS_ALARM_GROUPS_SETTING_KEY,
     APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
     APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY,
     DEFAULT_APRS_ALARM_LEVEL_THRESHOLD,
+    DEFAULT_APRS_ALARM_ENABLED,
     DEFAULT_APRS_ALARM_GROUPS,
     alarm_event_meets_category_threshold,
     alarm_severity_meets_threshold,
@@ -21,12 +23,14 @@ from app.services.alarm_groups import (
     build_effective_aprsis_filter,
     get_aprs_alarm_category_threshold,
     get_aprs_alarm_category_thresholds,
+    get_aprs_alarm_enabled,
     get_aprs_alarm_groups,
     get_global_alarm_level_threshold,
     get_map_alarm_level_threshold,
     normalize_aprs_alarm_groups,
     normalize_aprs_alarm_level_threshold,
     save_aprs_alarm_category_thresholds,
+    save_aprs_alarm_enabled,
     save_aprs_alarm_groups,
     save_global_alarm_level_threshold,
     save_map_alarm_level_threshold,
@@ -92,6 +96,25 @@ def insert_aprsis_interface(user_filter: str) -> int:
 
 
 class AprsAlarmGroupConfigurationTests(unittest.TestCase):
+    def test_aprs_alarms_are_enabled_by_default_and_setting_is_persisted(self) -> None:
+        with temporary_database():
+            self.assertTrue(DEFAULT_APRS_ALARM_ENABLED)
+            self.assertTrue(get_aprs_alarm_enabled())
+            self.assertIsNone(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY))
+
+            self.assertFalse(save_aprs_alarm_enabled(False))
+            self.assertFalse(get_aprs_alarm_enabled())
+            self.assertEqual(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY), "0")
+            self.assertEqual(
+                get_effective_message_target_groups(),
+                ["ALL", "QST", "CQ"],
+            )
+            self.assertEqual(get_aprs_alarm_groups(), ["PL-WARN"])
+
+            self.assertTrue(save_aprs_alarm_enabled("on"))
+            self.assertTrue(get_aprs_alarm_enabled())
+            self.assertEqual(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY), "1")
+
     def test_default_alarm_group_is_pl_warn_and_standard_groups_are_unchanged(self) -> None:
         with temporary_database():
             self.assertEqual(DEFAULT_APRS_ALARM_GROUPS, ("PL-WARN",))
@@ -295,6 +318,7 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                 saved = client.post(
                     "/settings/alarm-groups",
                     data={
+                        "alarm_enabled": "1",
                         "alarm_groups": " pl-warn, , localwarn, PL-WARN ",
                         "threshold_category": list(
                             get_aprs_alarm_category_thresholds()
@@ -318,6 +342,7 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(saved.status_code, 200)
+                self.assertTrue(saved.json()["alarm_enabled"])
                 self.assertEqual(
                     saved.json()["alarm_groups"],
                     ["PL-WARN", "LOCALWARN"],
@@ -354,11 +379,35 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     page.text,
                 )
                 self.assertIn("Popup alarmowy", page.text)
+
+                disabled = client.post(
+                    "/settings/alarm-groups",
+                    data={"alarm_groups": "PL-WARN"},
+                )
+                self.assertEqual(disabled.status_code, 200)
+                self.assertFalse(disabled.json()["alarm_enabled"])
+                disabled_page = client.get("/settings")
+                self.assertIn("Włącz alarmy APRS", disabled_page.text)
+                self.assertNotIn(
+                    'name="alarm_enabled" value="1" checked',
+                    disabled_page.text,
+                )
+                self.assertNotIn("g/PL-WARN", disabled_page.text)
             finally:
                 app.dependency_overrides.clear()
 
 
 class AprsAlarmGroupFilterTests(unittest.TestCase):
+    def test_global_disable_removes_only_automatic_alarm_filter(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_enabled(False)
+            self.assertEqual(build_automatic_aprsis_alarm_filter(), "")
+            self.assertEqual(build_effective_aprsis_filter("m/100"), "m/100")
+            self.assertEqual(
+                build_effective_aprsis_filter("m/100 g/PL-WARN"),
+                "m/100 g/PL-WARN",
+            )
+
     def test_automatic_filter_supports_one_or_multiple_alarm_groups(self) -> None:
         with temporary_database():
             self.assertEqual(build_automatic_aprsis_alarm_filter(), "g/PL-WARN")
@@ -420,6 +469,28 @@ class AprsAlarmGroupFilterTests(unittest.TestCase):
             save_aprs_alarm_groups("PL-WARN,LOCALWARN")
             after = get_enabled_aprsis_interface()
 
+            self.assertTrue(
+                service._connection_needs_reconnect(
+                    config_key=config_key,
+                    desired_rx_signature=service._rx_signature(after),
+                )
+            )
+
+    def test_global_alarm_toggle_uses_existing_filter_signature_reconnect(self) -> None:
+        with temporary_database():
+            insert_aprsis_interface("m/100")
+            before = get_enabled_aprsis_interface()
+            assert before is not None
+            service = AprsisClientService()
+            config_key = ("example.aprs2.net", 14580, "SP0BOX-1", "12345")
+            service._writer = object()  # type: ignore[assignment]
+            service._connected_config = config_key
+            service._connected_rx_signature = service._rx_signature(before)
+
+            save_aprs_alarm_enabled(False)
+            after = get_enabled_aprsis_interface()
+
+            self.assertEqual((after or {}).get("effective_filter"), "m/100")
             self.assertTrue(
                 service._connection_needs_reconnect(
                     config_key=config_key,
@@ -582,6 +653,23 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertFalse(snapshot_frame["emergency"])
         self.assertFalse(snapshot_frame["alert_popup"])
         self.assertFalse(snapshot_frame["alert_should_notify"])
+
+    def test_global_disable_keeps_frame_but_does_not_create_group_alert(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_enabled(False)
+            accepted = process_normalized_tnc2_rx(
+                self._ALARM_LINE,
+                source="APRS-IS · Internet RX",
+                source_kind="aprsis",
+                timestamp="2026-01-30T00:01:00+00:00",
+            )
+
+            self.assertTrue(accepted)
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_alerts"))
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages"))
+            frame_count = fetch_one("SELECT COUNT(*) AS total FROM traffic_frames")
+            assert frame_count is not None
+            self.assertEqual(int(frame_count["total"]), 1)
 
     def test_rf_alarm_group_message_creates_alert_and_keeps_only_traffic_frame(self) -> None:
         with temporary_database():

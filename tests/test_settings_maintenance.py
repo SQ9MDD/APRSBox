@@ -101,6 +101,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('{{ t("APRS alarm settings") }}', template_source)
         self.assertIn('action="{{ request.scope.root_path }}/settings/alarm-groups"', template_source)
+        self.assertIn('name="alarm_enabled"', template_source)
+        self.assertIn('{{ t("Enable APRS alarms") }}', template_source)
         self.assertIn('name="alarm_groups"', template_source)
         self.assertIn('name="threshold_category"', template_source)
         self.assertIn('name="alert_level_threshold"', template_source)

@@ -83,6 +83,7 @@ from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
 from app.services.alarm_groups import (
     APRS_ALARM_LEVEL_THRESHOLDS,
     build_automatic_aprsis_alarm_filter,
+    get_aprs_alarm_enabled,
     get_aprs_alarm_category_thresholds,
     get_aprs_alarm_groups,
     get_global_alarm_level_threshold,
@@ -91,6 +92,7 @@ from app.services.alarm_groups import (
     normalize_aprs_alarm_groups,
     normalize_aprs_alarm_level_threshold,
     save_aprs_alarm_category_thresholds,
+    save_aprs_alarm_enabled,
     save_aprs_alarm_groups,
     save_global_alarm_level_threshold,
     save_map_alarm_level_threshold,
@@ -909,6 +911,7 @@ def _settings_page_context(
         for name in (update_channels.get("channels") or [selected_update_channel])
     ]
     update_log_snapshot = read_update_log()
+    aprs_alarm_enabled = get_aprs_alarm_enabled()
     aprs_alarm_groups = get_aprs_alarm_groups()
     effective_rf_message_groups = get_effective_message_target_groups(
         alarm_groups=aprs_alarm_groups
@@ -994,6 +997,7 @@ def _settings_page_context(
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
         aprs_alarm_groups=aprs_alarm_groups,
+        aprs_alarm_enabled=aprs_alarm_enabled,
         alarm_level_threshold_options=APRS_ALARM_LEVEL_THRESHOLDS,
         alarm_category_threshold_rows=alarm_category_threshold_rows,
         effective_rf_message_groups=effective_rf_message_groups,
@@ -1713,6 +1717,7 @@ def settings_update_global(
 @router.post("/settings/alarm-groups")
 def settings_update_alarm_groups(
     _: Request,
+    alarm_enabled: bool = Form(False),
     alarm_groups: str = Form(""),
     threshold_category: list[str] | None = Form(None),
     alert_level_threshold: list[str] | None = Form(None),
@@ -1789,6 +1794,7 @@ def settings_update_alarm_groups(
             for thresholds in selected_category_thresholds.values():
                 thresholds["map"] = selected_map_threshold
                 thresholds["alerts"] = selected_global_threshold
+        saved_alarm_enabled = save_aprs_alarm_enabled(alarm_enabled)
         saved_groups = save_aprs_alarm_groups(normalized_groups)
         saved_category_thresholds = save_aprs_alarm_category_thresholds(
             selected_category_thresholds
@@ -1807,6 +1813,7 @@ def settings_update_alarm_groups(
         {
             "ok": True,
             "message": _translate("APRS alarm settings updated."),
+            "alarm_enabled": saved_alarm_enabled,
             "alarm_groups": saved_groups,
             "alarm_category_thresholds": saved_category_thresholds,
             "map_alarm_level_threshold": get_map_alarm_level_threshold(),
