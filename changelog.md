@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.5.dev - 31.07.2026
+- `Warunki pasma / GUI i runtime`: zakładka jest ukrywana, a zbieranie i przetwarzanie danych wyłączane, gdy żaden aktywny interfejs RF nie ma włączonej oceny pasma; pozostałe statystyki radiowe działają bez zmian.
+
 ## 1.9.4.dev - 29.07.2026
 - `GUI / treść`: przejrzano wszystkie główne ekrany i usunięto nadmiarowe opisy sekcji, powtórzone instrukcje oraz oczywiste podpowiedzi; zachowano stany, wymagania formatu, walidację i ostrzeżenia dotyczące RF lub operacji administracyjnych.
 - `Dashboard / stacja`: usunięto opis stanu odbioru i datę ostatniej aktywności RF z głównej karty stacji oraz zmniejszono jej wysokość i odstępy.

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.5.dev - 2026-07-31
+- `Bandbedingungen / GUI und Runtime`: Die Registerkarte wird ausgeblendet und die Datenerfassung und -verarbeitung deaktiviert, wenn keine aktive RF-Schnittstelle die Bandbewertung aktiviert hat; alle anderen Funkstatistiken funktionieren unverändert weiter.
+
 ## 1.9.4.dev - 2026-07-29
 - `GUI / Texte`: Alle Hauptansichten wurden geprüft und überflüssige Abschnittsbeschreibungen, wiederholte Anweisungen und offensichtliche Hinweise entfernt; Statusangaben, Formatvorgaben, Validierung sowie RF- und administrative Sicherheitswarnungen bleiben erhalten.
 - `Dashboard / Station`: Die Empfangsbeschreibung und der Zeitstempel der letzten RF-Aktivität wurden aus der Hauptkarte der Station entfernt; außerdem wurden Höhe und Abstände reduziert.

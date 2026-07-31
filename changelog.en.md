@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.5.dev - 2026-07-31
+- `Band Condition / GUI and runtime`: the tab is hidden and data collection and processing are disabled when no active RF interface has band assessment enabled; other radio statistics continue to work unchanged.
+
 ## 1.9.4.dev - 2026-07-29
 - `GUI / copy`: reviewed all primary screens and removed redundant section descriptions, repeated instructions, and obvious hints while preserving state, format requirements, validation, and RF or administrative safety warnings.
 - `Dashboard / station`: removed the reception description and last RF activity timestamp from the main station card, and reduced its height and spacing.

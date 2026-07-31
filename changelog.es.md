@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.5.dev - 2026-07-31
+- `Condiciones de banda / GUI y runtime`: la pestaña se oculta y la recopilación y el procesamiento de datos se desactivan cuando ninguna interfaz RF activa tiene habilitada la evaluación de banda; las demás estadísticas de radio siguen funcionando sin cambios.
+
 ## 1.9.4.dev - 2026-07-29
 - `GUI / textos`: se revisaron todas las pantallas principales y se eliminaron descripciones de sección redundantes, instrucciones repetidas y ayudas obvias; se conservaron los estados, requisitos de formato, validación y advertencias de seguridad de RF o administración.
 - `Dashboard / estación`: se eliminaron de la tarjeta principal de la estación la descripción de recepción y la fecha de la última actividad RF, y se redujeron su altura y espaciado.
