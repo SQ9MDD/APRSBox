@@ -825,8 +825,15 @@ class AlertAreaResolverTests(unittest.TestCase):
             'const mapHiddenAlertIdsStorageKey = "aprsbox-map-hidden-alert-ids";',
             source,
         )
+        self.assertIn(
+            'const mapAlertsOverlayOpenStorageKey = "aprsbox-map-alerts-overlay-open";',
+            source,
+        )
         self.assertIn("function resolveHiddenAlertIds()", source)
+        self.assertIn("function resolveAlertsOverlayOpen()", source)
+        self.assertIn("function persistAlertsOverlayOpen()", source)
         self.assertIn("function visibleAlertAreaFeatureCollection()", source)
+        self.assertIn("if (!alertsOverlayOpen)", source)
         self.assertIn("function renderAlertPanel()", source)
         self.assertIn("const maximumVisibleAlertCards = 4;", source)
         self.assertIn("function constrainAlertPanelListHeight()", source)
@@ -840,12 +847,14 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn('item.dataset.visible = checkbox.checked ? "true" : "false";', source)
         self.assertIn("lastAlertPanelSignature = alertPanelSignature();", source)
         self.assertIn("setAlertsOverlayOpen(!alertsOverlayOpen);", source)
+        self.assertIn("renderVisibleAlertAreas();", source)
+        self.assertIn("setAlertsOverlayOpen(alertsOverlayOpen, { persist: false });", source)
         self.assertIn("top: var(--map-alert-overlay-top, 5.35rem);", styles)
         self.assertIn("max-height: var(--map-alert-list-limit, none);", styles)
         self.assertIn('.map-alerts-overlay-list[data-scrollable="true"]', styles)
-        self.assertIn("padding: 0.56rem 0.56rem 1rem;", styles)
-        self.assertIn("-alert-panel-3", template)
-        self.assertIn("-map-alert-panel-3", base_template)
+        self.assertIn("padding: 0.56rem 0.56rem 2rem;", styles)
+        self.assertIn("-alert-panel-4", template)
+        self.assertIn("-map-alert-panel-4", base_template)
 
 
 if __name__ == "__main__":

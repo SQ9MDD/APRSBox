@@ -95,6 +95,7 @@
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
     const mapHiddenAlertIdsStorageKey = "aprsbox-map-hidden-alert-ids";
+    const mapAlertsOverlayOpenStorageKey = "aprsbox-map-alerts-overlay-open";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
@@ -108,7 +109,7 @@
     let lastStationsSignature = "";
     let tracksVisible = true;
     let coverageVisible = true;
-    let alertsOverlayOpen = false;
+    let alertsOverlayOpen = resolveAlertsOverlayOpen();
     let rulerVisible = true;
     let coverageFillOpacity = 0.05;
     let coverageOutlineOpacity = 1;
@@ -222,6 +223,24 @@
         );
     }
 
+    function resolveAlertsOverlayOpen() {
+        try {
+            return window.localStorage.getItem(mapAlertsOverlayOpenStorageKey) === "true";
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function persistAlertsOverlayOpen() {
+        try {
+            window.localStorage.setItem(
+                mapAlertsOverlayOpenStorageKey,
+                alertsOverlayOpen ? "true" : "false"
+            );
+        } catch (_error) {
+        }
+    }
+
     function alertSeverityColor(severityLevel) {
         const normalizedLevel = Number.parseInt(String(severityLevel ?? ""), 10);
         if (normalizedLevel === 1) {
@@ -237,6 +256,9 @@
     }
 
     function visibleAlertAreaFeatureCollection() {
+        if (!alertsOverlayOpen) {
+            return { type: "FeatureCollection", features: [] };
+        }
         const features = latestAlertAreaCollection.features.flatMap((feature) => {
             const properties = feature?.properties && typeof feature.properties === "object"
                 ? feature.properties
@@ -506,7 +528,7 @@
         if (toggleAlarmAreasIcon) {
             toggleAlarmAreasIcon.setAttribute(
                 "src",
-                `${staticRoot}icons/${alertsWithGeometry.length > 0 && visibleCount === 0 ? "alarm-light-off-outline.svg" : "alarm-light-outline.svg"}`
+                `${staticRoot}icons/${!alertsOverlayOpen || (alertsWithGeometry.length > 0 && visibleCount === 0) ? "alarm-light-off-outline.svg" : "alarm-light-outline.svg"}`
             );
         }
         if (toggleAlarmAreasButton) {
@@ -517,11 +539,15 @@
         }
     }
 
-    function setAlertsOverlayOpen(open) {
+    function setAlertsOverlayOpen(open, { persist = true } = {}) {
         alertsOverlayOpen = Boolean(open);
         if (alertsOverlay) {
             alertsOverlay.hidden = !alertsOverlayOpen;
         }
+        if (persist) {
+            persistAlertsOverlayOpen();
+        }
+        renderVisibleAlertAreas();
         syncAlertPanelButton();
         if (alertsOverlayOpen) {
             refreshAlertPanelLayout();
@@ -1577,7 +1603,7 @@
             applyLatestMapData({ forceRender: true });
         });
     }
-    setAlertsOverlayOpen(false);
+    setAlertsOverlayOpen(alertsOverlayOpen, { persist: false });
     if (toggleAlarmAreasButton) {
         toggleAlarmAreasButton.addEventListener("click", function () {
             setAlertsOverlayOpen(!alertsOverlayOpen);

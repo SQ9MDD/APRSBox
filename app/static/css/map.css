@@ -284,7 +284,7 @@
     max-height: var(--map-alert-list-limit, none);
     overflow: auto;
     overscroll-behavior: contain;
-    padding: 0.56rem 0.56rem 1rem;
+    padding: 0.56rem 0.56rem 2rem;
 }
 
 .map-alerts-overlay-list[data-scrollable="true"] {
