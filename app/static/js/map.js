@@ -373,14 +373,18 @@
         scheduleAlertPanelListConstraint();
     }
 
+    function alertPanelSignature() {
+        return JSON.stringify({
+            alerts: latestMapAlerts,
+            hidden: Array.from(hiddenAlertIds).sort((left, right) => left - right),
+        });
+    }
+
     function renderAlertPanel() {
         if (!alertsOverlayList) {
             return;
         }
-        const nextPanelSignature = JSON.stringify({
-            alerts: latestMapAlerts,
-            hidden: Array.from(hiddenAlertIds).sort((left, right) => left - right),
-        });
+        const nextPanelSignature = alertPanelSignature();
         if (nextPanelSignature === lastAlertPanelSignature) {
             syncAlertPanelButton();
             return;
@@ -484,7 +488,9 @@
                 }
                 persistHiddenAlertIds();
                 renderVisibleAlertAreas();
-                renderAlertPanel();
+                item.dataset.visible = checkbox.checked ? "true" : "false";
+                lastAlertPanelSignature = alertPanelSignature();
+                syncAlertPanelButton();
             });
             alertsOverlayList.appendChild(item);
         }

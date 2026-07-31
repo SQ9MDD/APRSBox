@@ -831,17 +831,21 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("const maximumVisibleAlertCards = 4;", source)
         self.assertIn("function constrainAlertPanelListHeight()", source)
         self.assertIn("function positionAlertPanelBelowLeafletControls()", source)
+        self.assertIn("function alertPanelSignature()", source)
         self.assertIn('mapCanvas.querySelector(".leaflet-control-zoom")', source)
         self.assertIn('alertsOverlayList.dataset.scrollable = shouldScroll ? "true" : "false";', source)
         self.assertIn('checkbox.setAttribute("role", "switch");', source)
         self.assertIn("hiddenAlertIds.add(alertId);", source)
         self.assertIn("hiddenAlertIds.delete(alertId);", source)
+        self.assertIn('item.dataset.visible = checkbox.checked ? "true" : "false";', source)
+        self.assertIn("lastAlertPanelSignature = alertPanelSignature();", source)
         self.assertIn("setAlertsOverlayOpen(!alertsOverlayOpen);", source)
         self.assertIn("top: var(--map-alert-overlay-top, 5.35rem);", styles)
         self.assertIn("max-height: var(--map-alert-list-limit, none);", styles)
         self.assertIn('.map-alerts-overlay-list[data-scrollable="true"]', styles)
-        self.assertIn("-alert-panel-2", template)
-        self.assertIn("-map-alert-panel-2", base_template)
+        self.assertIn("padding: 0.56rem 0.56rem 1rem;", styles)
+        self.assertIn("-alert-panel-3", template)
+        self.assertIn("-map-alert-panel-3", base_template)
 
 
 if __name__ == "__main__":
