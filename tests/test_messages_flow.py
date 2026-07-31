@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from app import get_version
 from app.db import execute, fetch_all, fetch_one, init_db, set_app_setting
+from app.services.alarm_groups import save_aprs_alarm_groups
 from app.services.content import update_station_settings
 from app.services.messages import (
     HEARD_FRESH_SECONDS,
@@ -94,6 +95,89 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_configured_alarm_group_is_not_stored_as_message_or_conversation(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("PL-WARN")
+
+            process_incoming_tnc2_message(
+                "PLWXSR>APRS::PL-WARN  :310100z,TSTORM1,1465{12",
+                timestamp="2026-01-30T00:01:00+00:00",
+            )
+
+            message_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            conversation_count = fetch_one(
+                "SELECT COUNT(*) AS total FROM aprs_message_conversations"
+            )
+            assert message_count is not None and conversation_count is not None
+            self.assertEqual(int(message_count["total"]), 0)
+            self.assertEqual(int(conversation_count["total"]), 0)
+            self.assertEqual(get_messages_page_data()["conversations"], [])
+            self.assertEqual(get_unread_inbox_count(), 0)
+
+    def test_existing_conversation_is_hidden_after_its_group_becomes_an_alarm_group(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_aprs_alarm_groups("")
+            save_message_settings(
+                {
+                    "default_path": "",
+                    "receive_any_ssid": False,
+                    "target_groups": ["LOCALWARN"],
+                }
+            )
+            process_incoming_tnc2_message(
+                "SP8ABC>APRS::LOCALWARN:Previously stored{01",
+                timestamp="2026-01-01T00:01:00+00:00",
+            )
+            self.assertEqual(len(get_messages_page_data()["conversations"]), 1)
+            self.assertEqual(get_unread_inbox_count(), 1)
+
+            save_aprs_alarm_groups("LOCALWARN")
+
+            self.assertEqual(get_messages_page_data()["conversations"], [])
+            self.assertEqual(get_unread_inbox_count(), 0)
+            message_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert message_count is not None
+            self.assertEqual(int(message_count["total"]), 1)
+
+    def test_legacy_alarm_message_is_filtered_without_hiding_regular_sender_message(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_aprs_alarm_groups("")
+            store_incoming_message(
+                sender="SP8ABC",
+                addressee="LOCALWARN",
+                message_text="Legacy alert",
+                message_number="01",
+                path="",
+                timestamp="2026-01-01T00:01:00+00:00",
+                acknowledge=False,
+            )
+            store_incoming_message(
+                sender="SP8ABC",
+                addressee="SQ9MDD-4",
+                message_text="Ordinary message",
+                message_number="02",
+                path="",
+                timestamp="2026-01-01T00:02:00+00:00",
+                acknowledge=False,
+            )
+
+            save_aprs_alarm_groups("LOCALWARN")
+
+            conversations = get_messages_page_data()["conversations"]
+            self.assertEqual(len(conversations), 1)
+            self.assertEqual(
+                [message["text"] for message in conversations[0]["messages"]],
+                ["Ordinary message"],
+            )
+            self.assertEqual(get_unread_inbox_count(), 1)
+            message_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+            assert message_count is not None
+            self.assertEqual(int(message_count["total"]), 2)
+
     def test_target_group_list_is_trimmed_uppercased_and_deduplicated(self) -> None:
         self.assertEqual(
             normalize_message_target_groups(" cq, QST , all, WAW, bem, CQ "),

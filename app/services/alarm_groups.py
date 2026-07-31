@@ -70,6 +70,13 @@ def save_aprs_alarm_groups(value: Any) -> list[str]:
     return groups
 
 
+def is_configured_aprs_alarm_group(value: Any) -> bool:
+    """Return whether an APRS addressee belongs to the alarm-only channel."""
+
+    normalized = str(value or "").strip().upper()
+    return bool(normalized) and normalized in set(get_aprs_alarm_groups())
+
+
 def normalize_aprs_alarm_level_threshold(value: Any) -> int:
     try:
         threshold = int(str(value).strip())

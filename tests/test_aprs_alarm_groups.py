@@ -536,26 +536,14 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
         self.assertTrue(accepted)
 
-    def _assert_alarm_message_stored(self, *, source_kind: str) -> None:
-        stored = fetch_one(
-            """
-            SELECT m.direction, m.sender, m.addressee, m.message_text,
-                   c.remote_callsign, c.conversation_kind
-            FROM aprs_messages m
-            JOIN aprs_message_conversations c ON c.id = m.conversation_id
-            WHERE m.addressee = 'PL-WARN'
-            """
+    def _assert_alarm_only_frame_stored(self, *, source_kind: str) -> None:
+        message_count = fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")
+        conversation_count = fetch_one(
+            "SELECT COUNT(*) AS total FROM aprs_message_conversations"
         )
-        assert stored is not None
-        self.assertEqual(stored["direction"], "rx")
-        self.assertEqual(stored["sender"], "PLWXSR")
-        self.assertEqual(stored["addressee"], "PL-WARN")
-        self.assertEqual(
-            stored["message_text"],
-            "310100z,TSTORM1,1465{129AA",
-        )
-        self.assertEqual(stored["remote_callsign"], "PL-WARN")
-        self.assertEqual(stored["conversation_kind"], "group")
+        assert message_count is not None and conversation_count is not None
+        self.assertEqual(int(message_count["total"]), 0)
+        self.assertEqual(int(conversation_count["total"]), 0)
 
         alert = fetch_one(
             """
@@ -595,7 +583,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertFalse(snapshot_frame["alert_popup"])
         self.assertFalse(snapshot_frame["alert_should_notify"])
 
-    def test_rf_alarm_group_message_creates_alert_and_keeps_message_and_traffic_frame(self) -> None:
+    def test_rf_alarm_group_message_creates_alert_and_keeps_only_traffic_frame(self) -> None:
         with temporary_database():
             accepted = process_normalized_tnc2_rx(
                 self._ALARM_LINE,
@@ -605,9 +593,9 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 timestamp="2026-01-30T00:01:00+00:00",
             )
             self.assertTrue(accepted)
-            self._assert_alarm_message_stored(source_kind="rf")
+            self._assert_alarm_only_frame_stored(source_kind="rf")
 
-    def test_aprsis_alarm_group_message_creates_alert_and_keeps_message_and_traffic_frame(self) -> None:
+    def test_aprsis_alarm_group_message_creates_alert_and_keeps_only_traffic_frame(self) -> None:
         with temporary_database():
             accepted = process_normalized_tnc2_rx(
                 self._ALARM_LINE,
@@ -616,9 +604,9 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
                 timestamp="2026-01-30T00:01:00+00:00",
             )
             self.assertTrue(accepted)
-            self._assert_alarm_message_stored(source_kind="aprsis")
+            self._assert_alarm_only_frame_stored(source_kind="aprsis")
 
-    def test_global_threshold_ignores_lower_group_alerts_but_keeps_messages_and_frames(self) -> None:
+    def test_global_threshold_ignores_lower_group_alerts_but_keeps_frames_out_of_messages(self) -> None:
         cases = (
             ("PLWX01", "TSTORM1", "101AA", "rf"),
             ("PLWX02", "RAIN1", "102AA", "aprsis"),
@@ -657,7 +645,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             )
 
         assert message_count is not None and frame_count is not None
-        self.assertEqual(int(message_count["total"]), 4)
+        self.assertEqual(int(message_count["total"]), 0)
         self.assertEqual(int(frame_count["total"]), 4)
         self.assertEqual(
             [
@@ -702,7 +690,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             [("PLWX02", "TSTORM1")],
         )
         assert message_count is not None and frame_count is not None
-        self.assertEqual(int(message_count["total"]), 2)
+        self.assertEqual(int(message_count["total"]), 0)
         self.assertEqual(int(frame_count["total"]), 2)
 
     def test_direct_messages_and_existing_standard_groups_still_work(self) -> None:
