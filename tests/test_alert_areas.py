@@ -87,7 +87,7 @@ def _write_geodata(
 
 def _insert_alert(
     source_callsign: str,
-    alarm_group: str,
+    alarm_group: str | None,
     area_codes: list[str],
     *,
     is_active: bool = True,
@@ -119,7 +119,7 @@ def _insert_alert(
                 message_id=f"test-{source_callsign}",
             ),
             source_callsign,
-            alarm_group,
+            alarm_group or "EMERGENCY",
             alarm_group,
             json.dumps(area_codes),
             event_code,
@@ -179,6 +179,20 @@ class AlertAreaResolverTests(unittest.TestCase):
             )
 
         self.assertEqual(collection, {"type": "FeatureCollection", "features": []})
+
+    def test_emergency_frames_are_not_added_to_the_map_alarm_panel(self) -> None:
+        with temporary_database():
+            _insert_alert("PLWX01", "PL-WARN", ["1465"], severity_level=3)
+            _insert_alert("EMERG1", None, [], severity_level=3, event_code="")
+
+            collection = get_active_alert_area_feature_collection(
+                now="2026-01-01T01:00:00+00:00"
+            )
+
+        self.assertEqual(
+            [alert["source_callsign"] for alert in collection["alerts"]],
+            ["PLWX01"],
+        )
 
     def test_country_directory_is_derived_dynamically_from_warning_group(self) -> None:
         self.assertEqual(country_code_from_alarm_group("PL-WARN"), "pl")
@@ -790,6 +804,7 @@ class AlertAreaResolverTests(unittest.TestCase):
     def test_map_toolbar_opens_panel_with_per_alert_visibility_switches(self) -> None:
         source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         template = Path("app/templates/map.html").read_text(encoding="utf-8")
+        styles = Path("app/static/css/map.css").read_text(encoding="utf-8")
 
         self.assertIn('id="map-toggle-alarm-areas"', template)
         self.assertIn('id="map-toggle-alarm-areas-icon"', template)
@@ -812,10 +827,16 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("function resolveHiddenAlertIds()", source)
         self.assertIn("function visibleAlertAreaFeatureCollection()", source)
         self.assertIn("function renderAlertPanel()", source)
+        self.assertIn("const maximumVisibleAlertCards = 4;", source)
+        self.assertIn("function constrainAlertPanelListHeight()", source)
+        self.assertIn('alertsOverlayList.dataset.scrollable = shouldScroll ? "true" : "false";', source)
         self.assertIn('checkbox.setAttribute("role", "switch");', source)
         self.assertIn("hiddenAlertIds.add(alertId);", source)
         self.assertIn("hiddenAlertIds.delete(alertId);", source)
         self.assertIn("setAlertsOverlayOpen(!alertsOverlayOpen);", source)
+        self.assertIn("top: 5.35rem;", styles)
+        self.assertIn("max-height: var(--map-alert-list-limit, none);", styles)
+        self.assertIn('.map-alerts-overlay-list[data-scrollable="true"]', styles)
 
 
 if __name__ == "__main__":

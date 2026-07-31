@@ -100,6 +100,7 @@
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const mobileTrackMaxRenderedPoints = 60;
+    const maximumVisibleAlertCards = 4;
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
@@ -319,6 +320,40 @@
             : "alert-category-badge-unknown";
     }
 
+    function constrainAlertPanelListHeight() {
+        if (!alertsOverlayList || !alertsOverlayOpen) {
+            return;
+        }
+        const cards = Array.from(alertsOverlayList.querySelectorAll(".map-alert-item"));
+        const shouldScroll = cards.length > maximumVisibleAlertCards;
+        alertsOverlayList.dataset.scrollable = shouldScroll ? "true" : "false";
+        alertsOverlayList.style.removeProperty("--map-alert-list-limit");
+        if (!shouldScroll) {
+            return;
+        }
+        const listStyle = window.getComputedStyle(alertsOverlayList);
+        let visibleHeight = (
+            Number.parseFloat(listStyle.paddingTop || "0")
+            + Number.parseFloat(listStyle.paddingBottom || "0")
+        );
+        for (const [index, card] of cards.slice(0, maximumVisibleAlertCards).entries()) {
+            visibleHeight += card.getBoundingClientRect().height;
+            if (index > 0) {
+                visibleHeight += Number.parseFloat(
+                    window.getComputedStyle(card).marginTop || "0"
+                );
+            }
+        }
+        alertsOverlayList.style.setProperty(
+            "--map-alert-list-limit",
+            `${Math.ceil(visibleHeight)}px`
+        );
+    }
+
+    function scheduleAlertPanelListConstraint() {
+        window.requestAnimationFrame(constrainAlertPanelListHeight);
+    }
+
     function renderAlertPanel() {
         if (!alertsOverlayList) {
             return;
@@ -339,6 +374,7 @@
             empty.textContent = i18n.noActiveMapAlarms;
             alertsOverlayList.appendChild(empty);
             syncAlertPanelButton();
+            scheduleAlertPanelListConstraint();
             return;
         }
         for (const alert of latestMapAlerts) {
@@ -434,6 +470,7 @@
             alertsOverlayList.appendChild(item);
         }
         syncAlertPanelButton();
+        scheduleAlertPanelListConstraint();
     }
 
     function syncAlertPanelButton() {
@@ -461,6 +498,9 @@
             alertsOverlay.hidden = !alertsOverlayOpen;
         }
         syncAlertPanelButton();
+        if (alertsOverlayOpen) {
+            scheduleAlertPanelListConstraint();
+        }
     }
 
     function reconcileAlertAreas(value) {
@@ -1524,6 +1564,7 @@
             toggleAlarmAreasButton?.focus();
         });
     }
+    window.addEventListener("resize", scheduleAlertPanelListConstraint);
     applyRulerToggleState(resolveRulerVisible());
     if (toggleRulerButton) {
         toggleRulerButton.addEventListener("click", function () {

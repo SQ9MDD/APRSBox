@@ -401,6 +401,8 @@ def get_active_alert_area_feature_collection(
                 last_seen_at
             FROM aprs_alerts
             WHERE is_active = 1
+              AND alarm_group IS NOT NULL
+              AND TRIM(alarm_group) != ''
               AND superseded_by_alert_id IS NULL
               AND (
                     expires_at IS NULL

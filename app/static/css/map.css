@@ -208,22 +208,22 @@
 
 .map-alerts-overlay {
     position: absolute;
-    top: 0.78rem;
+    top: 5.35rem;
     left: 0.78rem;
-    bottom: 0.78rem;
     z-index: 920;
     width: 23rem;
     max-width: calc(100% - 1.56rem);
+    max-height: calc(100% - 6.13rem);
     display: flex;
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
     color: var(--text);
     box-shadow: var(--shadow);
-    backdrop-filter: blur(7px);
+    backdrop-filter: blur(5px);
 }
 
 .map-toolbar #map-toggle-alarm-areas[aria-expanded="true"] {
@@ -239,7 +239,7 @@
     flex: 0 0 auto;
     padding: 0.64rem 0.7rem;
     border-bottom: 1px solid var(--border);
-    background: color-mix(in srgb, var(--panel-alt) 90%, transparent);
+    background: color-mix(in srgb, var(--panel-alt) 84%, transparent);
 }
 
 .map-alerts-overlay-header h2 {
@@ -279,10 +279,16 @@
 }
 
 .map-alerts-overlay-list {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
+    max-height: var(--map-alert-list-limit, none);
     overflow: auto;
+    overscroll-behavior: contain;
     padding: 0.56rem;
+}
+
+.map-alerts-overlay-list[data-scrollable="true"] {
+    box-shadow: inset 0 -1.2rem 1rem -1.15rem color-mix(in srgb, var(--text) 38%, transparent);
 }
 
 .map-alerts-overlay-empty {
@@ -296,16 +302,16 @@
 .map-alert-item {
     display: flex;
     flex-direction: column;
-    gap: 0.34rem;
-    padding: 0.58rem;
+    gap: 0.18rem;
+    padding: 0.42rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--panel-alt) 86%, transparent);
+    background: color-mix(in srgb, var(--panel-alt) 78%, transparent);
     transition: opacity var(--transition-fast), border-color var(--transition-fast);
 }
 
 .map-alert-item + .map-alert-item {
-    margin-top: 0.5rem;
+    margin-top: 0.35rem;
 }
 
 .map-alert-item[data-visible="false"] {
@@ -794,11 +800,11 @@
     }
 
     .map-alerts-overlay {
-        top: 0.65rem;
+        top: 5.2rem;
         left: 0.65rem;
-        bottom: 0.65rem;
         width: 23rem;
         max-width: calc(100% - 1.3rem);
+        max-height: calc(100% - 5.85rem);
     }
 }
 
