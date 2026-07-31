@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import connect, execute, fetch_one, init_db
 from app.services.radio_activity import (
@@ -116,6 +117,42 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             _floor_to_bucket_start(value, bucket_minutes=1440).isoformat(),
             datetime(2026, 5, 5, 0, 0, 0, tzinfo=timezone.utc).isoformat(),
         )
+
+    def test_band_condition_runtime_is_skipped_when_no_interface_has_assessment_enabled(self) -> None:
+        with temporary_database():
+            bucket_start = datetime(2026, 5, 4, 10, 0, tzinfo=timezone.utc)
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP8ABC-9>APRS:!5218.37N/02104.87E>Test",
+                created_at=(bucket_start + timedelta(minutes=1)).isoformat(),
+            )
+
+            with (
+                patch("app.services.radio_activity.aggregate_band_condition_parsed_bucket") as aggregate_band,
+                patch("app.services.radio_activity.finalize_band_condition_hours") as finalize_band,
+            ):
+                result = run_radio_activity_aggregation(
+                    now_utc=datetime(2026, 5, 4, 10, 7, tzinfo=timezone.utc),
+                    safety_delay_seconds=30,
+                )
+
+            self.assertGreaterEqual(int(result.get("processed_buckets") or 0), 1)
+            aggregate_band.assert_not_called()
+            finalize_band.assert_not_called()
+            activity_row = fetch_one(
+                """
+                SELECT rx_total
+                FROM radio_activity_5m
+                WHERE bucket_start_utc = ? AND source_name = 'Main TNC'
+                """,
+                (bucket_start.isoformat(),),
+            )
+            self.assertIsNotNone(activity_row)
+            assert activity_row is not None
+            self.assertEqual(int(activity_row["rx_total"]), 1)
 
     def test_aggregates_single_closed_bucket_and_saves_state(self) -> None:
         with temporary_database():

@@ -11,6 +11,7 @@ from app.i18n import get_app_language, get_format_translator, get_supported_lang
 from app.ui_palette import normalize_ui_palette
 from app.services.content import get_aprs_symbol_icon_fallback_path, get_aprs_symbol_set
 from app.services.alerts import attention_alert_count
+from app.services.band_condition import is_band_condition_enabled
 from app.services.map_service import get_map_page_config
 from app.services.messages import get_unread_inbox_count
 
@@ -84,6 +85,7 @@ def build_template_context(
     aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     current_alert_count = attention_alert_count() if current_user else 0
+    band_condition_enabled = is_band_condition_enabled() if current_user else False
     alert_modal_map_config = (
         get_map_page_config(root_path=request.scope.get("root_path", ""))
         if current_user
@@ -92,6 +94,8 @@ def build_template_context(
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
         visible_roles = tuple(item.get("visible_roles") or ())
+        if item["key"] == "band-condition" and not band_condition_enabled:
+            continue
         if current_user and (current_user.role in item["roles"] or current_user.role in visible_roles):
             translated_item = dict(item)
             translated_item["disabled"] = current_user.role not in item["roles"]
