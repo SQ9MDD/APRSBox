@@ -354,6 +354,25 @@
         window.requestAnimationFrame(constrainAlertPanelListHeight);
     }
 
+    function positionAlertPanelBelowLeafletControls() {
+        if (!alertsOverlay || !mapStage || !mapCanvas) {
+            return;
+        }
+        const zoomControl = mapCanvas.querySelector(".leaflet-control-zoom");
+        if (!zoomControl) {
+            return;
+        }
+        const mapStageRect = mapStage.getBoundingClientRect();
+        const zoomControlRect = zoomControl.getBoundingClientRect();
+        const panelTop = Math.ceil(zoomControlRect.bottom - mapStageRect.top + 10);
+        alertsOverlay.style.setProperty("--map-alert-overlay-top", `${panelTop}px`);
+    }
+
+    function refreshAlertPanelLayout() {
+        positionAlertPanelBelowLeafletControls();
+        scheduleAlertPanelListConstraint();
+    }
+
     function renderAlertPanel() {
         if (!alertsOverlayList) {
             return;
@@ -499,7 +518,7 @@
         }
         syncAlertPanelButton();
         if (alertsOverlayOpen) {
-            scheduleAlertPanelListConstraint();
+            refreshAlertPanelLayout();
         }
     }
 
@@ -1564,7 +1583,8 @@
             toggleAlarmAreasButton?.focus();
         });
     }
-    window.addEventListener("resize", scheduleAlertPanelListConstraint);
+    positionAlertPanelBelowLeafletControls();
+    window.addEventListener("resize", refreshAlertPanelLayout);
     applyRulerToggleState(resolveRulerVisible());
     if (toggleRulerButton) {
         toggleRulerButton.addEventListener("click", function () {

@@ -208,12 +208,12 @@
 
 .map-alerts-overlay {
     position: absolute;
-    top: 5.35rem;
+    top: var(--map-alert-overlay-top, 5.35rem);
     left: 0.78rem;
     z-index: 920;
     width: 23rem;
     max-width: calc(100% - 1.56rem);
-    max-height: calc(100% - 6.13rem);
+    max-height: calc(100% - var(--map-alert-overlay-top, 5.35rem) - 0.78rem);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -800,11 +800,11 @@
     }
 
     .map-alerts-overlay {
-        top: 5.2rem;
+        top: var(--map-alert-overlay-top, 5.2rem);
         left: 0.65rem;
         width: 23rem;
         max-width: calc(100% - 1.3rem);
-        max-height: calc(100% - 5.85rem);
+        max-height: calc(100% - var(--map-alert-overlay-top, 5.2rem) - 0.65rem);
     }
 }
 

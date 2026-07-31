@@ -804,6 +804,7 @@ class AlertAreaResolverTests(unittest.TestCase):
     def test_map_toolbar_opens_panel_with_per_alert_visibility_switches(self) -> None:
         source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         template = Path("app/templates/map.html").read_text(encoding="utf-8")
+        base_template = Path("app/templates/base.html").read_text(encoding="utf-8")
         styles = Path("app/static/css/map.css").read_text(encoding="utf-8")
 
         self.assertIn('id="map-toggle-alarm-areas"', template)
@@ -829,14 +830,18 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("function renderAlertPanel()", source)
         self.assertIn("const maximumVisibleAlertCards = 4;", source)
         self.assertIn("function constrainAlertPanelListHeight()", source)
+        self.assertIn("function positionAlertPanelBelowLeafletControls()", source)
+        self.assertIn('mapCanvas.querySelector(".leaflet-control-zoom")', source)
         self.assertIn('alertsOverlayList.dataset.scrollable = shouldScroll ? "true" : "false";', source)
         self.assertIn('checkbox.setAttribute("role", "switch");', source)
         self.assertIn("hiddenAlertIds.add(alertId);", source)
         self.assertIn("hiddenAlertIds.delete(alertId);", source)
         self.assertIn("setAlertsOverlayOpen(!alertsOverlayOpen);", source)
-        self.assertIn("top: 5.35rem;", styles)
+        self.assertIn("top: var(--map-alert-overlay-top, 5.35rem);", styles)
         self.assertIn("max-height: var(--map-alert-list-limit, none);", styles)
         self.assertIn('.map-alerts-overlay-list[data-scrollable="true"]', styles)
+        self.assertIn("-alert-panel-2", template)
+        self.assertIn("-map-alert-panel-2", base_template)
 
 
 if __name__ == "__main__":
