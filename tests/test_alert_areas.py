@@ -21,6 +21,7 @@ from app.services.alert_areas import (
 )
 from app.services.aprs_warning_identity import build_aprs_alert_identity_key
 from app.services.map_service import (
+    get_alert_detail_map_config,
     get_map_alert_areas_payload,
     get_map_station_markers_payload,
 )
@@ -179,6 +180,34 @@ def _receive_multipart_group_alert(
 
 
 class AlertAreaResolverTests(unittest.TestCase):
+    def test_alert_detail_map_config_contains_only_the_selected_alert_areas(self) -> None:
+        with temporary_database():
+            config = get_alert_detail_map_config(
+                {
+                    "id": 17,
+                    "alarm_group": "PL-WARN",
+                    "area_codes": ["1465"],
+                    "severity_level": 2,
+                }
+            )
+            missing = get_alert_detail_map_config(
+                {
+                    "id": 18,
+                    "alarm_group": "PL-WARN",
+                    "area_codes": ["not-defined"],
+                    "severity_level": 3,
+                }
+            )
+
+        self.assertTrue(config["has_area_definitions"])
+        self.assertEqual(len(config["feature_collection"]["features"]), 1)
+        properties = config["feature_collection"]["features"][0]["properties"]
+        self.assertEqual(properties["aprsbox_area_code"], "1465")
+        self.assertEqual(properties["aprsbox_alert_color"], "orange")
+        self.assertEqual(properties["aprsbox_alerts"], [{"id": 17, "severity_level": 2}])
+        self.assertFalse(missing["has_area_definitions"])
+        self.assertEqual(missing["feature_collection"]["features"], [])
+
     def test_global_alarm_disable_hides_existing_group_alert_areas(self) -> None:
         with temporary_database():
             _insert_alert("PLWX01", "PL-WARN", ["1465"], severity_level=3)

@@ -776,6 +776,12 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn('{{ t("Expires at") }}', alert_detail_source)
         self.assertIn("alert-detail-header-tools", alert_detail_source)
         self.assertIn("alert-detail-help-button", alert_detail_source)
+        self.assertIn('class="station-detail-hero alert-detail-hero"', alert_detail_source)
+        self.assertIn('id="alert-detail-map-root"', alert_detail_source)
+        self.assertIn('id="alert-detail-map-canvas"', alert_detail_source)
+        self.assertIn('id="alert-detail-map-placeholder"', alert_detail_source)
+        self.assertIn('{{ t("No area definitions") }}', alert_detail_source)
+        self.assertIn("alert-detail-map.js", alert_detail_source)
         self.assertNotIn(
             'class="help-icon-button page-help-button"',
             alert_detail_source,

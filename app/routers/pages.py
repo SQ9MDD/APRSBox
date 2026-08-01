@@ -191,6 +191,7 @@ from app.services.map_service import (
     get_map_station_details_payload,
     get_map_station_markers_payload,
     get_map_station_payload,
+    get_alert_detail_map_config,
     safe_move_map_source,
     safe_delete_map_source,
     safe_save_map_source,
@@ -3452,6 +3453,10 @@ def alert_detail_page(
         current_user=current_user,
         active_nav="alerts",
         alert=alert,
+        alert_map_config=get_alert_detail_map_config(
+            alert,
+            root_path=request.scope.get("root_path", ""),
+        ),
         flash=flash,
         flash_success=flash_success,
         can_manage_alerts=current_user.role in {"admin", "operator"},

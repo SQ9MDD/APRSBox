@@ -6,6 +6,7 @@ from urllib.parse import quote, unquote
 
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, utc_now
 from app.services.alert_areas import (
+    build_alert_area_feature_collection,
     get_active_alert_area_feature_collection,
     get_active_alert_area_snapshot,
 )
@@ -873,6 +874,21 @@ def get_station_detail_map_config(station: dict[str, Any], *, root_path: str = "
         "symbol_table": station.get("symbol_table", ""),
         "symbol_code": station.get("symbol_code", ""),
         "detail_href": station.get("detail_href", ""),
+    }
+
+
+def get_alert_detail_map_config(alert: dict[str, Any], *, root_path: str = "") -> dict[str, Any]:
+    tile_layer = resolve_active_tile_layer(root_path=root_path)
+    feature_collection = build_alert_area_feature_collection([alert])
+    return {
+        "tile_url": tile_layer["tile_url"],
+        "tile_attribution": tile_layer["tile_attribution"],
+        "tile_source_name": tile_layer["tile_source_name"],
+        "tile_min_zoom": tile_layer["tile_min_zoom"],
+        "tile_max_zoom": tile_layer["tile_max_zoom"],
+        "tile_subdomains": tile_layer["tile_subdomains"],
+        "feature_collection": feature_collection,
+        "has_area_definitions": bool(feature_collection["features"]),
     }
 
 

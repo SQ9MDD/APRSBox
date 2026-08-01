@@ -5,6 +5,7 @@
 {% endblock %}
 
 {% block content %}
+<div id="alert-detail-page" class="station-detail-page alert-detail-page">
 {% if flash %}
 <section class="panel">
     <div class="panel-body">
@@ -13,9 +14,9 @@
 </section>
 {% endif %}
 
-<section class="panel alert-emergency-panel alert-detail-panel">
+<section class="panel alert-emergency-panel alert-detail-toolbar-panel">
     <div class="panel-body">
-        <div class="panel-header">
+        <div class="station-detail-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Alert details") }} #{{ alert.id }}</h2>
                 <p class="section-lead">
@@ -61,7 +62,17 @@
                 </button>
             </div>
         </div>
+    </div>
+</section>
 
+<section class="station-detail-hero alert-detail-hero">
+    <article class="panel alert-emergency-panel alert-detail-panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>{{ t("Alert details") }}</h2>
+                </div>
+            </div>
         <dl class="details-grid alert-details-grid">
             <dt>{{ t("Source") }}</dt>
             <dd><a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">{{ alert.source_callsign }}</a></dd>
@@ -128,7 +139,43 @@
                 {% endif %}
             </dd>
         </dl>
-    </div>
+        </div>
+    </article>
+
+    <article class="panel alert-emergency-panel alert-detail-map-panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>{{ t("Alert areas") }}</h2>
+                </div>
+            </div>
+            <div
+                id="alert-detail-map-root"
+                class="station-detail-map-root alert-detail-map-root"
+                data-tile-url="{{ alert_map_config.tile_url }}"
+                data-tile-attribution="{{ alert_map_config.tile_attribution }}"
+                data-tile-min-zoom="{{ alert_map_config.tile_min_zoom }}"
+                data-tile-max-zoom="{{ alert_map_config.tile_max_zoom }}"
+                data-tile-subdomains="{{ alert_map_config.tile_subdomains }}"
+                data-feature-collection='{{ alert_map_config.feature_collection|tojson }}'
+                {% if not alert_map_config.has_area_definitions %}hidden{% endif %}
+            >
+                <div
+                    id="alert-detail-map-canvas"
+                    class="station-detail-map-canvas alert-detail-map-canvas"
+                    aria-label="{{ t('Alert area map') }}"
+                ></div>
+            </div>
+            <div
+                id="alert-detail-map-placeholder"
+                class="station-map-placeholder alert-detail-map-placeholder"
+                {% if alert_map_config.has_area_definitions %}hidden{% endif %}
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/earth-off.svg" alt="">
+                <strong>{{ t("No area definitions") }}</strong>
+            </div>
+        </div>
+    </article>
 </section>
 
 {% if alert.parts %}
@@ -222,9 +269,11 @@
         </div>
     </div>
 </section>
+</div>
 {% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/alert-detail-map.js?v={{ app_version }}"></script>
 {% endblock %}
