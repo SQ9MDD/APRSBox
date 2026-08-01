@@ -288,8 +288,8 @@
 }
 
 .map-alerts-overlay-bottom-gap {
-    height: 0.28rem;
-    flex: 0 0 0.28rem;
+    height: 0.56rem;
+    flex: 0 0 0.56rem;
 }
 
 .map-alerts-overlay-list[data-scrollable="true"] {

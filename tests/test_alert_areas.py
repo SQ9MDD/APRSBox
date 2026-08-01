@@ -854,9 +854,9 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("max-height: var(--map-alert-list-limit, none);", styles)
         self.assertIn('.map-alerts-overlay-list[data-scrollable="true"]', styles)
         self.assertIn("padding: 0.56rem 0.56rem 0;", styles)
-        self.assertIn("flex: 0 0 0.28rem;", styles)
+        self.assertIn("flex: 0 0 0.56rem;", styles)
         self.assertIn("-alert-panel-5", template)
-        self.assertIn("-map-alert-panel-5", base_template)
+        self.assertIn("-map-alert-panel-6", base_template)
 
 
 if __name__ == "__main__":
