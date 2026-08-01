@@ -105,6 +105,9 @@
     const maximumVisibleAlertCards = 4;
     const initialAlertTileFallbackMs = 1800;
     const alertRefreshIntervalMs = 10000;
+    const initialMarkerBatchSize = 20;
+    const markerBatchSize = 40;
+    const markerBatchTimeBudgetMs = 8;
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
@@ -133,6 +136,8 @@
     let initialAlertTileFallbackElapsed = false;
     let firstMapTileLoaded = false;
     let firstStationRefreshSettled = false;
+    let markerRenderGeneration = 0;
+    let markerRenderFrame = null;
     let lastAlertAreasSignature = "";
     let lastAlertPanelSignature = "";
     let latestAlertAreaCollection = { type: "FeatureCollection", features: [] };
@@ -2065,9 +2070,114 @@
         return group;
     }
 
+    function cancelPendingMarkerRender() {
+        markerRenderGeneration += 1;
+        if (markerRenderFrame !== null) {
+            window.cancelAnimationFrame(markerRenderFrame);
+            markerRenderFrame = null;
+        }
+        return markerRenderGeneration;
+    }
+
+    function markerBatchNow() {
+        if (window.performance && typeof window.performance.now === "function") {
+            return window.performance.now();
+        }
+        return Date.now();
+    }
+
+    function prioritizeMarkerRecords(records) {
+        let currentBounds = null;
+        try {
+            currentBounds = map.getBounds();
+        } catch (_error) {
+        }
+        for (const record of records) {
+            record.visiblePriority = currentBounds && currentBounds.contains([
+                record.station.latitude,
+                record.station.longitude,
+            ]) ? 0 : 1;
+            record.localPriority = record.station.origin === "local_tx" ? 0 : 1;
+            record.rfPriority = record.station.is_rf ? 0 : 1;
+        }
+        return records.sort((left, right) => {
+            if (left.visiblePriority !== right.visiblePriority) {
+                return left.visiblePriority - right.visiblePriority;
+            }
+            if (left.localPriority !== right.localPriority) {
+                return left.localPriority - right.localPriority;
+            }
+            if (left.rfPriority !== right.rfPriority) {
+                return left.rfPriority - right.rfPriority;
+            }
+            return left.sourceIndex - right.sourceIndex;
+        });
+    }
+
+    function reconcileMarkerRecord(record) {
+        const { key, station } = record;
+        const nextMarkerSignature = markerSignature(station);
+        const nextTooltipSignature = tooltipSignature(station);
+        const nextTooltipContent = tooltipHtml(station);
+        const existing = markerLayersByKey.get(key);
+        if (!existing) {
+            const marker = window.L.marker([station.latitude, station.longitude], {
+                icon: buildStationIcon(station),
+                keyboard: false,
+            });
+            syncMarkerInteractions(marker, station, nextTooltipContent);
+            markerLayerGroup.addLayer(marker);
+            markerLayersByKey.set(key, {
+                layer: marker,
+                markerSignature: nextMarkerSignature,
+                tooltipSignature: nextTooltipSignature,
+            });
+            return;
+        }
+        if (existing.markerSignature !== nextMarkerSignature) {
+            existing.layer.setLatLng([station.latitude, station.longitude]);
+            existing.layer.setIcon(buildStationIcon(station));
+            existing.markerSignature = nextMarkerSignature;
+            syncMarkerInteractions(existing.layer, station, nextTooltipContent);
+            existing.tooltipSignature = nextTooltipSignature;
+            return;
+        }
+        if (existing.tooltipSignature !== nextTooltipSignature) {
+            syncMarkerInteractions(existing.layer, station, nextTooltipContent);
+            existing.tooltipSignature = nextTooltipSignature;
+        }
+    }
+
+    function renderMarkerBatch(records, startIndex, renderGeneration, maximumBatchSize) {
+        if (renderGeneration !== markerRenderGeneration) {
+            return;
+        }
+        const startedAt = markerBatchNow();
+        let nextIndex = startIndex;
+        let renderedCount = 0;
+        while (nextIndex < records.length && renderedCount < maximumBatchSize) {
+            reconcileMarkerRecord(records[nextIndex]);
+            nextIndex += 1;
+            renderedCount += 1;
+            if (renderedCount > 0 && markerBatchNow() - startedAt >= markerBatchTimeBudgetMs) {
+                break;
+            }
+        }
+        if (nextIndex >= records.length || renderGeneration !== markerRenderGeneration) {
+            markerRenderFrame = null;
+            return;
+        }
+        markerRenderFrame = window.requestAnimationFrame(function () {
+            markerRenderFrame = null;
+            renderMarkerBatch(records, nextIndex, renderGeneration, markerBatchSize);
+        });
+    }
+
     function reconcileMarkers(stations) {
+        const renderGeneration = cancelPendingMarkerRender();
         const nextKeys = new Set();
-        for (const station of stations || []) {
+        const records = [];
+        for (const [sourceIndex, station] of (stations || []).entries()) {
             if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
                 continue;
             }
@@ -2076,38 +2186,11 @@
                 continue;
             }
             nextKeys.add(key);
-            const nextMarkerSignature = markerSignature(station);
-            const nextTooltipSignature = tooltipSignature(station);
-            const nextTooltipContent = tooltipHtml(station);
-            const existing = markerLayersByKey.get(key);
-            if (!existing) {
-                const marker = window.L.marker([station.latitude, station.longitude], {
-                    icon: buildStationIcon(station),
-                    keyboard: false,
-                });
-                syncMarkerInteractions(marker, station, nextTooltipContent);
-                markerLayerGroup.addLayer(marker);
-                markerLayersByKey.set(key, {
-                    layer: marker,
-                    markerSignature: nextMarkerSignature,
-                    tooltipSignature: nextTooltipSignature,
-                });
-                continue;
-            }
-            if (existing.markerSignature !== nextMarkerSignature) {
-                existing.layer.setLatLng([station.latitude, station.longitude]);
-                existing.layer.setIcon(buildStationIcon(station));
-                existing.markerSignature = nextMarkerSignature;
-                syncMarkerInteractions(existing.layer, station, nextTooltipContent);
-                existing.tooltipSignature = nextTooltipSignature;
-                continue;
-            }
-            if (existing.tooltipSignature !== nextTooltipSignature) {
-                syncMarkerInteractions(existing.layer, station, nextTooltipContent);
-                existing.tooltipSignature = nextTooltipSignature;
-            }
+            records.push({ key, sourceIndex, station });
         }
         removeMissingLayerRecords(markerLayersByKey, markerLayerGroup, nextKeys);
+        const prioritizedRecords = prioritizeMarkerRecords(records);
+        renderMarkerBatch(prioritizedRecords, 0, renderGeneration, initialMarkerBatchSize);
     }
 
     function reconcileCoverage(stations) {
@@ -2185,9 +2268,9 @@
     }
 
     function renderStations(stations, mobileTracks) {
+        reconcileMarkers(stations);
         reconcileCoverage(stations);
         reconcileTracks(mobileTracks);
-        reconcileMarkers(stations);
     }
 
     async function loadStationDetails(expectedRevision) {

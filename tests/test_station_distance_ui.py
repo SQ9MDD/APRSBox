@@ -30,6 +30,32 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function buildRenderSignature()", script_source)
         self.assertIn("if (!forceRender && nextSignature === lastStationsSignature)", script_source)
 
+    def test_map_script_progressively_renders_visible_station_markers(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+
+        self.assertIn("const initialMarkerBatchSize = 20;", script_source)
+        self.assertIn("const markerBatchSize = 40;", script_source)
+        self.assertIn("const markerBatchTimeBudgetMs = 8;", script_source)
+        self.assertIn("function cancelPendingMarkerRender()", script_source)
+        self.assertIn("function prioritizeMarkerRecords(records)", script_source)
+        self.assertIn("record.visiblePriority = currentBounds && currentBounds.contains([", script_source)
+        self.assertIn("function renderMarkerBatch(records, startIndex, renderGeneration, maximumBatchSize)", script_source)
+        self.assertIn("renderGeneration !== markerRenderGeneration", script_source)
+        self.assertIn(
+            "renderMarkerBatch(prioritizedRecords, 0, renderGeneration, initialMarkerBatchSize);",
+            script_source,
+        )
+        self.assertIn(
+            "renderMarkerBatch(records, nextIndex, renderGeneration, markerBatchSize);",
+            script_source,
+        )
+
+        render_start = script_source.index("function renderStations(stations, mobileTracks)")
+        render_end = script_source.index("async function loadStationDetails", render_start)
+        render_source = script_source[render_start:render_end]
+        self.assertLess(render_source.index("reconcileMarkers(stations);"), render_source.index("reconcileCoverage(stations);"))
+        self.assertLess(render_source.index("reconcileCoverage(stations);"), render_source.index("reconcileTracks(mobileTracks);"))
+
     def test_map_script_renders_track_dots_for_older_positions(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("window.L.circleMarker", script_source)
