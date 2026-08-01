@@ -811,6 +811,7 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn('id="map-toggle-alarm-areas-icon"', template)
         self.assertIn('id="map-alerts-overlay"', template)
         self.assertIn('id="map-alerts-overlay-list"', template)
+        self.assertIn('class="map-alerts-overlay-bottom-gap"', template)
         self.assertIn('aria-controls="map-alerts-overlay"', template)
         self.assertIn("alarm-light-outline.svg", template)
         self.assertIn("data-i18n-show-alarm-list", template)
@@ -852,9 +853,10 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("top: var(--map-alert-overlay-top, 5.35rem);", styles)
         self.assertIn("max-height: var(--map-alert-list-limit, none);", styles)
         self.assertIn('.map-alerts-overlay-list[data-scrollable="true"]', styles)
-        self.assertIn("padding: 0.56rem 0.56rem 2rem;", styles)
-        self.assertIn("-alert-panel-4", template)
-        self.assertIn("-map-alert-panel-4", base_template)
+        self.assertIn("padding: 0.56rem 0.56rem 0;", styles)
+        self.assertIn("flex: 0 0 0.28rem;", styles)
+        self.assertIn("-alert-panel-5", template)
+        self.assertIn("-map-alert-panel-5", base_template)
 
 
 if __name__ == "__main__":

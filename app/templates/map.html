@@ -178,6 +178,7 @@
                     <div id="map-alerts-overlay-list" class="map-alerts-overlay-list" aria-live="polite">
                         <p class="map-alerts-overlay-empty">{{ t("No active alarms with map areas.") }}</p>
                     </div>
+                    <div class="map-alerts-overlay-bottom-gap" aria-hidden="true"></div>
                 </aside>
                 <div id="map-overlay-stack" class="map-overlay-stack">
                     <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>
@@ -192,5 +193,5 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-alert-panel-4"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-alert-panel-5"></script>
 {% endblock %}
