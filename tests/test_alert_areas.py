@@ -19,7 +19,10 @@ from app.services.alert_areas import (
     get_active_alert_area_feature_collection,
 )
 from app.services.aprs_warning_identity import build_aprs_alert_identity_key
-from app.services.map_service import get_map_station_markers_payload
+from app.services.map_service import (
+    get_map_alert_areas_payload,
+    get_map_station_markers_payload,
+)
 from app.services.traffic import process_normalized_tnc2_rx
 
 
@@ -759,29 +762,61 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertEqual(len(one_active["features"]), 1)
         self.assertEqual(none_active["features"], [])
 
-    def test_active_area_is_exposed_in_the_existing_map_refresh_payload(self) -> None:
+    def test_active_area_uses_a_dedicated_map_refresh_payload(self) -> None:
         with temporary_database():
             _insert_alert("PLWXSR", "PL-WARN", ["1465"])
 
-            payload = get_map_station_markers_payload()
+            station_payload = get_map_station_markers_payload()
+            payload = get_map_alert_areas_payload()
 
-        self.assertEqual(payload["alert_areas"]["type"], "FeatureCollection")
-        self.assertEqual(len(payload["alert_areas"]["features"]), 1)
+        self.assertNotIn("alert_areas", station_payload)
+        self.assertTrue(payload["revision"])
+        alert_areas = payload["alert_areas"]
+        self.assertEqual(alert_areas["type"], "FeatureCollection")
+        self.assertEqual(len(alert_areas["features"]), 1)
         self.assertEqual(
-            payload["alert_areas"]["features"][0]["properties"]["aprsbox_area_code"],
+            alert_areas["features"][0]["properties"]["aprsbox_area_code"],
             "1465",
         )
-        self.assertEqual(len(payload["alert_areas"]["alerts"]), 1)
+        self.assertEqual(len(alert_areas["alerts"]), 1)
         self.assertEqual(
-            payload["alert_areas"]["alerts"][0]["source_callsign"],
+            alert_areas["alerts"][0]["source_callsign"],
             "PLWXSR",
         )
-        self.assertTrue(payload["alert_areas"]["alerts"][0]["has_geometry"])
+        self.assertTrue(alert_areas["alerts"][0]["has_geometry"])
         self.assertEqual(
-            payload["alert_areas"]["features"][0]["properties"][
-                "aprsbox_alerts"
-            ][0]["id"],
-            payload["alert_areas"]["alerts"][0]["id"],
+            alert_areas["features"][0]["properties"]["aprsbox_alerts"][0]["id"],
+            alert_areas["alerts"][0]["id"],
+        )
+
+    def test_map_alert_area_revision_changes_only_with_source_data(self) -> None:
+        with temporary_database():
+            _insert_alert(
+                "PLWXREV",
+                "PL-WARN",
+                ["1465"],
+                severity_level=1,
+            )
+
+            first = get_map_alert_areas_payload()
+            unchanged = get_map_alert_areas_payload()
+            execute(
+                """
+                UPDATE aprs_alerts
+                SET severity_level = 3,
+                    updated_at = '2026-01-01T00:01:00+00:00'
+                WHERE source_callsign = 'PLWXREV'
+                """
+            )
+            changed = get_map_alert_areas_payload()
+
+        self.assertEqual(first["revision"], unchanged["revision"])
+        self.assertNotEqual(first["revision"], changed["revision"])
+        self.assertEqual(
+            changed["alert_areas"]["features"][0]["properties"][
+                "aprsbox_alert_color"
+            ],
+            "red",
         )
 
     def test_map_script_uses_a_noninteractive_layer_between_tiles_and_markers(self) -> None:
@@ -800,6 +835,12 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("fillOpacity: 0.10", source)
         self.assertIn("dashArray: null", source)
         self.assertIn("reconcileAlertAreas(payload.alert_areas);", source)
+        self.assertIn('const alertAreasEndpoint = root.dataset.alertAreasEndpoint || "";', source)
+        self.assertIn('headers["If-None-Match"] = alertAreasEtag;', source)
+        self.assertIn("function scheduleInitialAlertLoad()", source)
+        self.assertIn("!firstStationRefreshSettled", source)
+        self.assertIn("!firstMapTileLoaded && !initialAlertTileFallbackElapsed", source)
+        self.assertIn("runWhenBrowserIdle", source)
 
     def test_map_toolbar_opens_panel_with_per_alert_visibility_switches(self) -> None:
         source = Path("app/static/js/map.js").read_text(encoding="utf-8")
@@ -847,7 +888,8 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("hiddenAlertIds.delete(alertId);", source)
         self.assertIn('item.dataset.visible = checkbox.checked ? "true" : "false";', source)
         self.assertIn("lastAlertPanelSignature = alertPanelSignature();", source)
-        self.assertIn("setAlertsOverlayOpen(!alertsOverlayOpen);", source)
+        self.assertIn("setAlertsOverlayOpen(opening);", source)
+        self.assertIn("startInitialAlertLoad();", source)
         self.assertIn("renderVisibleAlertAreas();", source)
         self.assertIn("setAlertsOverlayOpen(alertsOverlayOpen, { persist: false });", source)
         self.assertIn("top: var(--map-alert-overlay-top, 5.35rem);", styles)
@@ -855,7 +897,8 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn('.map-alerts-overlay-list[data-scrollable="true"]', styles)
         self.assertIn("padding: 0.56rem 0.56rem 0;", styles)
         self.assertIn("flex: 0 0 1.25rem;", styles)
-        self.assertIn("-alert-panel-5", template)
+        self.assertIn('data-alert-areas-endpoint="{{ map_alert_areas_endpoint }}"', template)
+        self.assertIn("-deferred-alerts-1", template)
         self.assertIn("-map-alert-panel-8", base_template)
 
 

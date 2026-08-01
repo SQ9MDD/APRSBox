@@ -185,6 +185,7 @@ from app.services.map_service import (
     get_map_source,
     list_map_sources,
     get_coverage_fill_opacity_percent,
+    get_map_alert_areas_payload,
     get_map_page_config,
     get_map_mobile_tracks_payload,
     get_map_station_details_payload,
@@ -2646,6 +2647,7 @@ def map_page(
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_station_source_key=map_station_source_key,
         map_stations_endpoint=_path(request, "/api/map/stations-lite"),
+        map_alert_areas_endpoint=_path(request, "/api/map/alert-areas"),
         map_station_details_endpoint=_path(request, "/api/map/stations-details"),
         map_mobile_tracks_endpoint=_path(request, "/api/map/mobile-tracks"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
@@ -2659,6 +2661,23 @@ def map_stations_lite(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_map_station_markers_payload())
+
+
+@router.get("/api/map/alert-areas")
+def map_alert_areas(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> Response:
+    payload = get_map_alert_areas_payload()
+    revision = str(payload.get("revision") or "empty")
+    etag = f'"map-alert-areas-{revision}"'
+    response_headers = {
+        "Cache-Control": "private, no-cache",
+        "ETag": etag,
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=response_headers)
+    return JSONResponse(payload, headers=response_headers)
 
 
 @router.get("/api/map/stations-details")

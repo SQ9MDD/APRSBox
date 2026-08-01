@@ -10,6 +10,7 @@
         zoom: Number.parseInt(root.dataset.defaultZoom || "", 10),
     };
     const stationsEndpoint = root.dataset.stationsEndpoint || "/api/map/stations";
+    const alertAreasEndpoint = root.dataset.alertAreasEndpoint || "";
     const stationDetailsEndpoint = root.dataset.stationDetailsEndpoint || "";
     const mobileTracksEndpoint = root.dataset.mobileTracksEndpoint || "";
     const mapTileEventsEndpoint = root.dataset.mapTileEventsEndpoint || "";
@@ -102,10 +103,14 @@
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const mobileTrackMaxRenderedPoints = 60;
     const maximumVisibleAlertCards = 4;
+    const initialAlertTileFallbackMs = 1800;
+    const alertRefreshIntervalMs = 10000;
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
     let refreshTimer = null;
+    let alertRefreshTimer = null;
+    let initialAlertLoadTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
     let coverageVisible = true;
@@ -121,6 +126,13 @@
     let latestTrackRevision = "";
     let detailsLoadingRevision = "";
     let tracksLoadingRevision = "";
+    let alertAreasEtag = "";
+    let alertAreasLoading = false;
+    let initialAlertLoadScheduled = false;
+    let initialAlertLoadStarted = false;
+    let initialAlertTileFallbackElapsed = false;
+    let firstMapTileLoaded = false;
+    let firstStationRefreshSettled = false;
     let lastAlertAreasSignature = "";
     let lastAlertPanelSignature = "";
     let latestAlertAreaCollection = { type: "FeatureCollection", features: [] };
@@ -794,6 +806,10 @@
     });
     tileLayer.on("tileload", function () {
         handleTileLoad();
+        if (!firstMapTileLoaded) {
+            firstMapTileLoaded = true;
+            scheduleInitialAlertLoad();
+        }
     });
 
     function resolveDefaultMaskOpacity() {
@@ -1606,7 +1622,11 @@
     setAlertsOverlayOpen(alertsOverlayOpen, { persist: false });
     if (toggleAlarmAreasButton) {
         toggleAlarmAreasButton.addEventListener("click", function () {
-            setAlertsOverlayOpen(!alertsOverlayOpen);
+            const opening = !alertsOverlayOpen;
+            setAlertsOverlayOpen(opening);
+            if (opening) {
+                startInitialAlertLoad();
+            }
         });
     }
     if (alertsOverlayClose) {
@@ -2254,6 +2274,81 @@
         });
     }
 
+    function runWhenBrowserIdle(callback) {
+        if (typeof window.requestIdleCallback === "function") {
+            window.requestIdleCallback(callback, { timeout: 1000 });
+            return;
+        }
+        window.setTimeout(callback, 0);
+    }
+
+    async function refreshAlertAreas() {
+        if (!alertAreasEndpoint || alertAreasLoading) {
+            return;
+        }
+        alertAreasLoading = true;
+        try {
+            const headers = { Accept: "application/json" };
+            if (alertAreasEtag) {
+                headers["If-None-Match"] = alertAreasEtag;
+            }
+            const response = await fetch(alertAreasEndpoint, { headers });
+            if (response.status === 304) {
+                return;
+            }
+            if (!response.ok) {
+                return;
+            }
+            const nextEtag = response.headers.get("etag");
+            if (nextEtag) {
+                alertAreasEtag = nextEtag;
+            }
+            const payload = await response.json();
+            reconcileAlertAreas(payload.alert_areas);
+        } catch (_error) {
+        } finally {
+            alertAreasLoading = false;
+        }
+    }
+
+    function startAlertPolling() {
+        if (alertRefreshTimer || !alertAreasEndpoint) {
+            return;
+        }
+        alertRefreshTimer = window.setInterval(
+            refreshAlertAreas,
+            alertRefreshIntervalMs
+        );
+    }
+
+    function startInitialAlertLoad() {
+        if (initialAlertLoadStarted) {
+            return;
+        }
+        initialAlertLoadStarted = true;
+        if (initialAlertLoadTimer) {
+            window.clearTimeout(initialAlertLoadTimer);
+            initialAlertLoadTimer = null;
+        }
+        void refreshAlertAreas();
+        startAlertPolling();
+    }
+
+    function scheduleInitialAlertLoad() {
+        if (
+            initialAlertLoadStarted
+            || initialAlertLoadScheduled
+            || !firstStationRefreshSettled
+            || (!firstMapTileLoaded && !initialAlertTileFallbackElapsed)
+        ) {
+            return;
+        }
+        initialAlertLoadScheduled = true;
+        runWhenBrowserIdle(function () {
+            startInitialAlertLoad();
+        });
+    }
+
     async function refreshStations() {
         try {
             const response = await fetch(stationsEndpoint, {
@@ -2263,7 +2358,6 @@
                 return;
             }
             const payload = await response.json();
-            reconcileAlertAreas(payload.alert_areas);
             const stations = payload.stations || [];
             const interfaces = payload.interfaces || [];
             const payloadRevision = normalizeRevision(payload.revision);
@@ -2281,6 +2375,11 @@
             applyLatestMapData({ forceRender: revisionChanged });
             scheduleDeferredMapDataLoad();
         } catch (_error) {
+        } finally {
+            if (!firstStationRefreshSettled) {
+                firstStationRefreshSettled = true;
+                scheduleInitialAlertLoad();
+            }
         }
     }
 
@@ -2306,6 +2405,21 @@
             initializeRuler();
         }, 0);
     });
+    initialAlertLoadTimer = window.setTimeout(function () {
+        initialAlertTileFallbackElapsed = true;
+        scheduleInitialAlertLoad();
+    }, initialAlertTileFallbackMs);
+    window.addEventListener("beforeunload", function () {
+        if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+        }
+        if (alertRefreshTimer) {
+            window.clearInterval(alertRefreshTimer);
+        }
+        if (initialAlertLoadTimer) {
+            window.clearTimeout(initialAlertLoadTimer);
+        }
+    }, { once: true });
     refreshStations();
     startPolling();
     syncStatus();

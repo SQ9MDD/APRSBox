@@ -11,6 +11,7 @@
             data-station-source-key="{{ map_station_source_key }}"
             data-default-zoom="{{ map_config.default_zoom }}"
             data-stations-endpoint="{{ map_stations_endpoint }}"
+            data-alert-areas-endpoint="{{ map_alert_areas_endpoint }}"
             data-station-details-endpoint="{{ map_station_details_endpoint }}"
             data-mobile-tracks-endpoint="{{ map_mobile_tracks_endpoint }}"
             data-map-tile-events-endpoint="{{ map_tile_events_endpoint }}"
@@ -193,5 +194,5 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-alert-panel-5"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-deferred-alerts-1"></script>
 {% endblock %}

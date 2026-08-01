@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -381,8 +382,99 @@ def get_active_alert_area_feature_collection(
     geodata_root: Path | None = None,
     now: str | None = None,
 ) -> dict[str, Any]:
+    return get_active_alert_area_snapshot(
+        geodata_root=geodata_root,
+        now=now,
+    )[1]
+
+
+def _alert_area_source_revision(
+    alerts_json: str,
+    *,
+    geodata_root: Path,
+    alerts: list[dict[str, Any]],
+) -> str:
+    digest = hashlib.sha256(alerts_json.encode("utf-8"))
+    country_codes = sorted(
+        {
+            country_code
+            for alert in alerts
+            if (country_code := country_code_from_alarm_group(alert.get("alarm_group")))
+        }
+    )
+    for country_code in country_codes:
+        country_directory = geodata_root / country_code
+        try:
+            paths = sorted(
+                path
+                for path in country_directory.glob("*.geojson")
+                if path.is_file()
+            )
+        except OSError:
+            continue
+        for path in paths:
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            digest.update(str(path).encode("utf-8"))
+            digest.update(str(stat.st_mtime_ns).encode("ascii"))
+            digest.update(str(stat.st_size).encode("ascii"))
+    return digest.hexdigest()[:24]
+
+
+@lru_cache(maxsize=8)
+def _build_cached_alert_area_feature_collection(
+    geodata_root_text: str,
+    source_revision: str,
+    alerts_json: str,
+) -> dict[str, Any]:
+    del source_revision
+    alerts = json.loads(alerts_json)
+    collection = build_alert_area_feature_collection(
+        alerts,
+        geodata_root=Path(geodata_root_text),
+    )
+    alert_ids_with_geometry = {
+        int(contributor["id"])
+        for feature in collection["features"]
+        for contributor in feature.get("properties", {}).get("aprsbox_alerts", [])
+        if isinstance(contributor, dict) and contributor.get("id") is not None
+    }
+    collection["alerts"] = [
+        {
+            "id": int(alert["id"]),
+            "source_callsign": str(
+                alert.get("source_callsign") or ""
+            ).strip().upper(),
+            "alarm_group": str(alert.get("alarm_group") or "").strip().upper(),
+            "event_code": str(
+                alert.get("event_code") or alert.get("alert_type") or ""
+            ).strip().upper(),
+            "event_icon": resolve_alert_event_icon(
+                alert.get("event_code"),
+                alert_type=alert.get("alert_type"),
+            ),
+            "severity_level": _alert_severity_level(alert.get("severity_level")),
+            "area_count": len(_decode_area_codes(alert.get("area_codes_json"))),
+            "expires_at": str(
+                alert.get("expires_at") or alert.get("valid_until_utc") or ""
+            ),
+            "detail_href": f"/alerts/{int(alert['id'])}",
+            "has_geometry": int(alert["id"]) in alert_ids_with_geometry,
+        }
+        for alert in alerts
+    ]
+    return collection
+
+
+def get_active_alert_area_snapshot(
+    *,
+    geodata_root: Path | None = None,
+    now: str | None = None,
+) -> tuple[str, dict[str, Any]]:
     if not get_aprs_alarm_enabled():
-        return {"type": "FeatureCollection", "features": []}
+        return "alarms-disabled", {"type": "FeatureCollection", "features": []}
     timestamp = str(now or utc_now())
     try:
         expire_aprs_alerts(now=timestamp)
@@ -417,40 +509,23 @@ def get_active_alert_area_feature_collection(
             (timestamp, timestamp),
         )
     except sqlite3.OperationalError:
-        return {"type": "FeatureCollection", "features": []}
+        return "alarms-unavailable", {"type": "FeatureCollection", "features": []}
     alerts = [dict(row) for row in rows]
-    collection = build_alert_area_feature_collection(
+    root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
+    alerts_json = json.dumps(
         alerts,
-        geodata_root=geodata_root,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
-    alert_ids_with_geometry = {
-        int(contributor["id"])
-        for feature in collection["features"]
-        for contributor in feature.get("properties", {}).get("aprsbox_alerts", [])
-        if isinstance(contributor, dict) and contributor.get("id") is not None
-    }
-    collection["alerts"] = [
-        {
-            "id": int(alert["id"]),
-            "source_callsign": str(
-                alert.get("source_callsign") or ""
-            ).strip().upper(),
-            "alarm_group": str(alert.get("alarm_group") or "").strip().upper(),
-            "event_code": str(
-                alert.get("event_code") or alert.get("alert_type") or ""
-            ).strip().upper(),
-            "event_icon": resolve_alert_event_icon(
-                alert.get("event_code"),
-                alert_type=alert.get("alert_type"),
-            ),
-            "severity_level": _alert_severity_level(alert.get("severity_level")),
-            "area_count": len(_decode_area_codes(alert.get("area_codes_json"))),
-            "expires_at": str(
-                alert.get("expires_at") or alert.get("valid_until_utc") or ""
-            ),
-            "detail_href": f"/alerts/{int(alert['id'])}",
-            "has_geometry": int(alert["id"]) in alert_ids_with_geometry,
-        }
-        for alert in alerts
-    ]
-    return collection
+    source_revision = _alert_area_source_revision(
+        alerts_json,
+        geodata_root=root,
+        alerts=alerts,
+    )
+    collection = _build_cached_alert_area_feature_collection(
+        str(root),
+        source_revision,
+        alerts_json,
+    )
+    return source_revision, collection

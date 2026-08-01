@@ -5,7 +5,10 @@ from typing import Any
 from urllib.parse import quote, unquote
 
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, utc_now
-from app.services.alert_areas import get_active_alert_area_feature_collection
+from app.services.alert_areas import (
+    get_active_alert_area_feature_collection,
+    get_active_alert_area_snapshot,
+)
 from app.services.content import (
     build_station_detail_href,
     format_decoded_data_for_display,
@@ -797,7 +800,14 @@ def get_map_station_markers_payload() -> dict[str, Any]:
         "station_count": len(stations),
         "stations": stations,
         "interfaces": interfaces,
-        "alert_areas": get_active_alert_area_feature_collection(),
+    }
+
+
+def get_map_alert_areas_payload() -> dict[str, Any]:
+    revision, alert_areas = get_active_alert_area_snapshot()
+    return {
+        "revision": revision,
+        "alert_areas": alert_areas,
     }
 
 
