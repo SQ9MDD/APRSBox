@@ -2,6 +2,9 @@
 
 ## 1.9.5.dev - 2026-07-31
 - `Bandbedingungen / GUI und Runtime`: Die Registerkarte wird ausgeblendet und die Datenerfassung und -verarbeitung deaktiviert, wenn keine aktive RF-Schnittstelle die Bandbewertung aktiviert hat; alle anderen Funkstatistiken funktionieren unverändert weiter.
+- `Alarme / Formate`: Empfang und Verarbeitung von Wetteralarmen in den Formaten `CAWF` und `NWS-WARN` wurden hinzugefügt.
+- `Alarme / Polen / Verwaltungsgebiete`: Polnische Landkreisgrenzen (`Powiat`) und die Zuordnung von Warngebietskennungen wurden ergänzt, damit Alarme die zugehörigen Gebiete auf der Karte anzeigen können.
+- `Karte / Leistung / Erstladen`: Alarmgebiete werden getrennt nach den primären Kartendaten geladen, während Stationssymbole und Rufzeichen schrittweise in priorisierten Paketen erscheinen; dadurch bleiben die Kartenkacheln nicht lange ohne Marker und die Karte bleibt reaktionsfähig.
 
 ## 1.9.4.dev - 2026-07-29
 - `GUI / Texte`: Alle Hauptansichten wurden geprüft und überflüssige Abschnittsbeschreibungen, wiederholte Anweisungen und offensichtliche Hinweise entfernt; Statusangaben, Formatvorgaben, Validierung sowie RF- und administrative Sicherheitswarnungen bleiben erhalten.

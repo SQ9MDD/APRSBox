@@ -2,6 +2,9 @@
 
 ## 1.9.5.dev - 31.07.2026
 - `Warunki pasma / GUI i runtime`: zakładka jest ukrywana, a zbieranie i przetwarzanie danych wyłączane, gdy żaden aktywny interfejs RF nie ma włączonej oceny pasma; pozostałe statystyki radiowe działają bez zmian.
+- `Alarmy / formaty`: dodano odbiór i obsługę alarmów pogodowych w formatach `CAWF` oraz `NWS-WARN`.
+- `Alarmy / Polska / obszary organizacyjne`: dodano granice powiatów oraz mapowanie identyfikatorów obszarów ostrzeżeń, dzięki czemu alarmy mogą wyświetlać odpowiadające im obszary na mapie.
+- `Mapa / wydajność / pierwsze wczytanie`: obszary alarmowe są dociągane osobno po podstawowych danych mapy, a ikony stacji z opisami pojawiają się progresywnie w priorytetyzowanych paczkach, dzięki czemu kafelki nie pozostają długo bez markerów i mapa zachowuje responsywność.
 
 ## 1.9.4.dev - 29.07.2026
 - `GUI / treść`: przejrzano wszystkie główne ekrany i usunięto nadmiarowe opisy sekcji, powtórzone instrukcje oraz oczywiste podpowiedzi; zachowano stany, wymagania formatu, walidację i ostrzeżenia dotyczące RF lub operacji administracyjnych.

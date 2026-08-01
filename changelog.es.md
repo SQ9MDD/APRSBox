@@ -2,6 +2,9 @@
 
 ## 1.9.5.dev - 2026-07-31
 - `Condiciones de banda / GUI y runtime`: la pestaña se oculta y la recopilación y el procesamiento de datos se desactivan cuando ninguna interfaz RF activa tiene habilitada la evaluación de banda; las demás estadísticas de radio siguen funcionando sin cambios.
+- `Alertas / formatos`: se añadieron la recepción y el procesamiento de alertas meteorológicas en los formatos `CAWF` y `NWS-WARN`.
+- `Alertas / Polonia / áreas administrativas`: se añadieron los límites de los distritos polacos (`powiat`) y el mapeo de identificadores de áreas de aviso para que las alertas puedan mostrar sus zonas correspondientes en el mapa.
+- `Mapa / rendimiento / carga inicial`: las áreas de alerta se cargan por separado después de los datos principales del mapa, mientras que los iconos y los indicativos de las estaciones aparecen progresivamente en lotes priorizados; así los mosaicos no permanecen mucho tiempo sin marcadores y el mapa conserva su capacidad de respuesta.
 
 ## 1.9.4.dev - 2026-07-29
 - `GUI / textos`: se revisaron todas las pantallas principales y se eliminaron descripciones de sección redundantes, instrucciones repetidas y ayudas obvias; se conservaron los estados, requisitos de formato, validación y advertencias de seguridad de RF o administración.
