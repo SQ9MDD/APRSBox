@@ -3,6 +3,7 @@
 ## 1.9.6.dev - 2026-08-01
 - `Ajustes / Ayuda`: se añadió ayuda Markdown específica para 8 paneles en EN/DE/PL/ES/TLH y se simplificó la interfaz eliminando descripciones repetidas.
 - `Ayuda / renderer`: se añadió la apertura segura de enlaces externos desde los documentos de ayuda.
+- `Alertas / ayuda`: se añadieron guías enlazadas y basadas en fuentes para CAWF y NWS-WARN en EN/DE/PL/ES/TLH, con formato de tramas, fragmentación, UGC, mapa, ciclo de vida, umbrales y límites de confianza.
 
 ## 1.9.5.dev - 2026-07-31
 - `Condiciones de banda / GUI y runtime`: la pestaña se oculta y la recopilación y el procesamiento de datos se desactivan cuando ninguna interfaz RF activa tiene habilitada la evaluación de banda; las demás estadísticas de radio siguen funcionando sin cambios.

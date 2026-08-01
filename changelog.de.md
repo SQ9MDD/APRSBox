@@ -3,6 +3,7 @@
 ## 1.9.6.dev - 2026-08-01
 - `Einstellungen / Hilfe`: Eigene Markdown-Hilfe für 8 Panels in EN/DE/PL/ES/TLH hinzugefügt und die Oberfläche durch Entfernen wiederholter Beschreibungen vereinfacht.
 - `Hilfe / Renderer`: Externe Links aus Hilfedokumenten werden nun sicher geöffnet.
+- `Alarme / Hilfe`: Verlinkte und quellenbasierte CAWF- und NWS-WARN-Anleitungen in EN/DE/PL/ES/TLH ergänzt; sie erklären Frameformat, Fragmentierung, UGC, Karte, Lebenszyklus, Schwellen und Vertrauensgrenzen.
 
 ## 1.9.5.dev - 2026-07-31
 - `Bandbedingungen / GUI und Runtime`: Die Registerkarte wird ausgeblendet und die Datenerfassung und -verarbeitung deaktiviert, wenn keine aktive RF-Schnittstelle die Bandbewertung aktiviert hat; alle anderen Funkstatistiken funktionieren unverändert weiter.

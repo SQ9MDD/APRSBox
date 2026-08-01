@@ -1,24 +1,36 @@
 # APRS-Alarmeinstellungen
 
-Dieses Panel steuert Alarmempfang, Übernahme in die Alarmliste, Notfall-Popups und den automatischen APRS-IS-Filter für Alarmgruppen.
+Dieses Panel konfiguriert den reinen Empfangskanal für APRS-Gruppenalarme. Es legt fest, welche Zielgruppen als Alarme gelten, welche Ereignisse in die Alarmliste gelangen, welche ein Notfall-Popup öffnen dürfen und welche Gruppen dem APRS-IS-Empfangsfilter hinzugefügt werden.
 
-## Hauptschalter und Gruppen
+## Schnellkonfiguration
 
-- `APRS-Alarme aktivieren` schaltet die Alarmverarbeitung ein oder aus.
-- `Alarmgruppen` akzeptiert einen oder mehrere durch Kommas getrennte APRS-Gruppennamen.
-- Gespeicherte Alarmgruppen werden den wirksamen RF-Empfangsgruppen und dem automatischen APRS-IS-Gruppenfilter hinzugefügt.
+- `APRS-Alarme` aktivieren.
+- Kommagetrennte Gruppenadressen eintragen, zum Beispiel `PL-WARN, NWS-WARN`.
+- Für jede Ereigniskategorie die Schwellen `Alarme` und `Alarm-Popup` festlegen.
+- Speichern und die unter dem Formular angezeigten wirksamen RF-Gruppen sowie den automatischen APRS-IS-Filter prüfen.
 
-Die Zusammenfassung unter dem Formular zeigt die wirksamen RF-Gruppen und den exakten automatisch erzeugten Filter.
+Ein Gruppenname darf 1–9 Großbuchstaben, Ziffern oder Bindestriche enthalten. Kleinbuchstaben werden umgewandelt, Duplikate entfernt und Bulletin-Adressen mit `BLN...` abgewiesen.
 
-## Schwellen je Ereignistyp
+## Verarbeitung eines empfangenen Frames
 
-Jede Ereigniskategorie besitzt zwei unabhängige Schwellen:
+- Nur eine APRS-Nachricht an eine aktivierte und konfigurierte Alarmgruppe gelangt in diesen Pfad.
+- Der Ereignisname wählt eine Kategorie wie Tornado, Gewitter, Hochwasser, Wind, Hitze oder `Sonstige / unbekannt`.
+- Die Endziffern des Ereigniscodes werden als Schweregrad interpretiert.
+- `Alarme` bestimmt, ob der Frame einen Eintrag in der Alarmliste anlegt oder aktualisiert.
+- `Alarm-Popup` bestimmt unabhängig, ob der erste Frame dieses Alarms das globale Popup öffnen darf.
+- Die Kartenebene besitzt auf der Kartenseite einen eigenen Sichtbarkeitsschalter und benötigt für jeden Gebietscode einen passenden lokalen Geometrieeintrag.
 
-- `Alarme` steuert die Übernahme von Nachrichten in die Alarmliste.
-- `Alarm-Popup` steuert das Notfall-Popup.
-- Ein Zahlenwert akzeptiert diese und alle höheren Schweregrade.
-- `Aus` deaktiviert die Kategorie in der jeweiligen Spalte.
+Eine numerische Schwelle akzeptiert diesen und alle höheren Grade. `Aus` deaktiviert die Kategorie in der jeweiligen Spalte. Ein unbekannter Schweregrad bleibt bei aktivierter Kategorie erhalten, damit neue oder fehlerhafte Formate nicht still verworfen werden; er hat keine gelbe, orange oder rote Einstufung und erscheint bei vorhandener Geometrie grau.
 
-Unbekannte Schweregrade werden aus Sicherheitsgründen beibehalten und nicht stillschweigend verworfen.
+## Unterstützte Warnformate
 
-Die Sichtbarkeit von Alarmen auf der Karte wird direkt im Alarmpanel der Kartenseite eingestellt. Diese Einstellungen ersetzen diesen Kartenschalter nicht.
+- [Ausführliche CAWF-Hilfe](settings_alarms_cawf.de.md) — Länderprofile wie `PL-WARN`, mehrteilige Alarme, Geometrie, Lebenszyklus und Vertrauen.
+- [Ausführliche NWS-WARN-Hilfe](settings_alarms_nws_warn.de.md) — US-County-Warnformat, UGC-Codes, Kartenabdeckung und Grenzen von APRSBox.
+- [Alarmliste, Stummschalten und Löschen](alerts.de.md) — Bedienung nach Annahme eines Alarms.
+
+## Wichtige Grenzen
+
+- Der Schalter betrifft konfigurierte Alarmgruppen. Native APRS-Emergency- und Mic-E-Emergency-Frames verwenden das gemeinsame Alarmsystem unabhängig davon.
+- Alarmgruppen-Nachrichten erscheinen nicht in normalen Unterhaltungen, lösen keine üblichen Nachrichten-Benachrichtigungstransporte aus und werden nie mit einem APRS-ACK bestätigt.
+- APRSBox authentifiziert Warnherausgeber derzeit nicht und führt keine Liste vertrauenswürdiger Absender pro Gruppe. Der Empfang über APRS-IS allein beweist keine amtliche Herkunft.
+- Eine ungültige oder fehlende Ablaufzeit `DDHHMMz` kann nicht automatisch aufgelöst werden. Ein solcher Eintrag kann aktiv bleiben, bis er ersetzt oder manuell gelöscht wird.

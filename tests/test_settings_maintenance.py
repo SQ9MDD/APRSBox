@@ -208,6 +208,45 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('target="_blank" rel="noopener noreferrer"', help_viewer_source)
         self.assertIn("/^https?:\\/\\//i.test(rawHref)", help_viewer_source)
 
+    def test_alarm_help_links_to_localized_cawf_and_nws_warn_guides(self) -> None:
+        languages = ("en", "de", "pl", "es", "tlh")
+        guide_names = ("settings_alarms_cawf", "settings_alarms_nws_warn")
+
+        for language in languages:
+            overview_path = Path(f"help/application/settings_alarms.{language}.md")
+            overview = overview_path.read_text(encoding="utf-8")
+            for guide_name in guide_names:
+                with self.subTest(language=language, guide=guide_name):
+                    guide_filename = f"{guide_name}.{language}.md"
+                    guide_path = Path("help/application") / guide_filename
+                    self.assertIn(f"({guide_filename})", overview)
+                    self.assertTrue(guide_path.exists(), str(guide_path))
+                    guide = guide_path.read_text(encoding="utf-8")
+                    self.assertTrue(guide.startswith("# "))
+                    self.assertRegex(
+                        guide,
+                        r"(?m)^## (?:Sources|Źródła|Quellen|Fuentes)$",
+                    )
+                    self.assertIn("https://", guide)
+                    self.assertIn(f"(settings_alarms.{language}.md)", guide)
+
+        cawf = Path("help/application/settings_alarms_cawf.en.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "EXPIRY,EVENT_LEVEL,ALERT_ID,PART/TOTAL,AREA[,AREA...]{MESSAGE_ID",
+            cawf,
+        )
+        self.assertIn("15 minutes", cawf)
+        self.assertIn("trusted publisher allowlist", cawf)
+
+        nws_warn = Path(
+            "help/application/settings_alarms_nws_warn.en.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("[A-Z]{2}C[0-9]{3}", nws_warn)
+        self.assertIn("NWS-CANCL", nws_warn)
+        self.assertIn("api.weather.gov", nws_warn)
+
     def test_settings_explanations_live_in_panel_help_instead_of_forms(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         moved_copy = (
@@ -230,7 +269,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
             Path("help/application/settings_global.en.md").read_text(encoding="utf-8"),
         )
         self.assertIn(
-            "Alarm visibility on the map",
+            "The map layer has its own visibility control",
             Path("help/application/settings_alarms.en.md").read_text(encoding="utf-8"),
         )
         self.assertIn(
