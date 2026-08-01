@@ -25,9 +25,53 @@
             .filter(Boolean);
     }
 
-    function alertColor(feature) {
+    function alertColorName(feature) {
         const requested = String(feature?.properties?.aprsbox_alert_color || "gray").toLowerCase();
         return ["yellow", "orange", "red", "gray"].includes(requested) ? requested : "gray";
+    }
+
+    function themeProperty(name, fallback) {
+        const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return value || fallback;
+    }
+
+    function alertColor(feature) {
+        const colorName = alertColorName(feature);
+        return themeProperty(`--alert-detail-map-area-${colorName}`, colorName);
+    }
+
+    function alertFillOpacity() {
+        const value = Number.parseFloat(
+            themeProperty("--alert-detail-map-area-fill-opacity", "0.22")
+        );
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.22;
+    }
+
+    function areaHaloStyle() {
+        return {
+            stroke: true,
+            color: themeProperty("--alert-detail-map-area-halo", "rgba(0, 0, 0, 0.85)"),
+            opacity: 0.96,
+            weight: 7,
+            lineCap: "round",
+            lineJoin: "round",
+            fill: false,
+        };
+    }
+
+    function areaStyle(feature) {
+        const color = alertColor(feature);
+        return {
+            stroke: true,
+            color,
+            opacity: 1,
+            weight: 3,
+            lineCap: "round",
+            lineJoin: "round",
+            fill: true,
+            fillColor: color,
+            fillOpacity: alertFillOpacity(),
+        };
     }
 
     const featureCollection = parseFeatureCollection(mapRoot.dataset.featureCollection);
@@ -119,24 +163,24 @@
     syncMaskViewport();
     applyMaskOpacity();
 
+    const areaHaloPaneName = "alert-detail-area-halo-pane";
+    const areaHaloPane = map.createPane(areaHaloPaneName);
+    areaHaloPane.style.zIndex = "349";
+    areaHaloPane.style.pointerEvents = "none";
+    const areaHaloLayer = window.L.geoJSON(featureCollection, {
+        pane: areaHaloPaneName,
+        interactive: false,
+        style: areaHaloStyle,
+    }).addTo(map);
+
     const areasPaneName = "alert-detail-areas-pane";
     const areasPane = map.createPane(areasPaneName);
     areasPane.style.zIndex = "350";
+    areasPane.style.pointerEvents = "none";
     const areaLayer = window.L.geoJSON(featureCollection, {
         pane: areasPaneName,
         interactive: false,
-        style: (feature) => {
-            const color = alertColor(feature);
-            return {
-                stroke: true,
-                color,
-                opacity: 1,
-                weight: 3,
-                fill: true,
-                fillColor: color,
-                fillOpacity: 0.22,
-            };
-        },
+        style: areaStyle,
     }).addTo(map);
 
     const bounds = areaLayer.getBounds();
@@ -147,6 +191,8 @@
     const themeObserver = new window.MutationObserver((mutations) => {
         if (mutations.some((mutation) => mutation.attributeName === "data-theme")) {
             applyMaskOpacity();
+            areaHaloLayer.setStyle(areaHaloStyle);
+            areaLayer.setStyle(areaStyle);
         }
     });
     themeObserver.observe(document.documentElement, {

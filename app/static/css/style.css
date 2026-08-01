@@ -83,6 +83,12 @@
     --message-bubble-tx-border: color-mix(in srgb, var(--accent) 46%, transparent);
     --map-mask-layer-color: color-mix(in srgb, #000 78%, var(--bg-layer));
     --map-mask-default-opacity: 0.2;
+    --alert-detail-map-area-yellow: #ffe066;
+    --alert-detail-map-area-orange: #ffad5c;
+    --alert-detail-map-area-red: #ff737a;
+    --alert-detail-map-area-gray: #f1f4f6;
+    --alert-detail-map-area-halo: rgba(3, 8, 5, 0.9);
+    --alert-detail-map-area-fill-opacity: 0.26;
     --logo-bg: transparent;
     --logo-bg-inner: color-mix(in srgb, var(--panel-emphasis) 76%, #08182e 24%);
     --logo-border: var(--logo-symbol);
@@ -135,6 +141,12 @@
     --traffic-color-aprsis-to-rf-tx: #725400;
     --map-mask-layer-color: color-mix(in srgb, #fff 82%, var(--panel));
     --map-mask-default-opacity: 0.16;
+    --alert-detail-map-area-yellow: #876500;
+    --alert-detail-map-area-orange: #b65300;
+    --alert-detail-map-area-red: #aa3038;
+    --alert-detail-map-area-gray: #414c55;
+    --alert-detail-map-area-halo: rgba(255, 255, 255, 0.94);
+    --alert-detail-map-area-fill-opacity: 0.16;
     --logo-bg: transparent;
     --logo-bg-inner: color-mix(in srgb, var(--panel-emphasis) 68%, #08182e 32%);
     --logo-border: var(--logo-gradient-to);

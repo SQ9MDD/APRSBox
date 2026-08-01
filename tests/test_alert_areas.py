@@ -1123,6 +1123,22 @@ class AlertAreaResolverTests(unittest.TestCase):
         self.assertIn("!firstMapTileLoaded && !initialAlertTileFallbackElapsed", source)
         self.assertIn("runWhenBrowserIdle", source)
 
+    def test_alert_detail_map_uses_theme_contrast_colors_and_outline_halo(self) -> None:
+        source = Path("app/static/js/alert-detail-map.js").read_text(encoding="utf-8")
+        styles = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        template = Path("app/templates/alert_detail.html").read_text(encoding="utf-8")
+
+        self.assertIn('const areaHaloPaneName = "alert-detail-area-halo-pane";', source)
+        self.assertIn("style: areaHaloStyle,", source)
+        self.assertIn("weight: 7", source)
+        self.assertIn("style: areaStyle,", source)
+        self.assertIn("areaHaloLayer.setStyle(areaHaloStyle);", source)
+        self.assertIn("areaLayer.setStyle(areaStyle);", source)
+        self.assertIn("--alert-detail-map-area-${colorName}", source)
+        self.assertIn("--alert-detail-map-area-gray: #f1f4f6;", styles)
+        self.assertIn("--alert-detail-map-area-gray: #414c55;", styles)
+        self.assertIn("alert-detail-map.js?v={{ app_version }}-contrast-1", template)
+
     def test_map_toolbar_opens_panel_with_per_alert_visibility_switches(self) -> None:
         source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         template = Path("app/templates/map.html").read_text(encoding="utf-8")
