@@ -4,7 +4,9 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import app.services.alert_areas as alert_areas_service
 from app.db import execute, fetch_all, init_db
 from app.services.alarm_groups import (
     get_aprs_alarm_category_thresholds,
@@ -75,12 +77,23 @@ def _feature(code_property: str, code: str, offset: float) -> dict:
     }
 
 
+def _nws_county_feature(code: str, name: str, offset: float) -> dict:
+    return {
+        "type": "Feature",
+        "properties": {
+            "JPT_KOD_JE": code,
+            "JPT_NAZWA_": name,
+        },
+        "geometry": _polygon(offset),
+    }
+
+
 def _write_geodata(
     root: Path,
     country: str,
     features: list[dict],
     *,
-    filename: str = "arbitrary-name.geojson",
+    filename: str = "powiaty.mid.geojson",
     metadata: dict | None = None,
 ) -> Path:
     country_directory = root / country
@@ -259,6 +272,233 @@ class AlertAreaResolverTests(unittest.TestCase):
             collection["features"][0]["properties"]["aprsbox_country"],
             "de",
         )
+
+    def test_nws_county_code_matches_jpt_kod_je_directly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "us",
+                [_nws_county_feature("TNC037", "Davidson", -87.0)],
+                filename="nws_counties.mid.geojson",
+            )
+
+            collection = build_alert_area_feature_collection(
+                [
+                    {
+                        "alarm_group": "NWS-WARN",
+                        "area_codes": ["TNC037"],
+                        "severity_level": 3,
+                    }
+                ],
+                geodata_root=geodata_root,
+            )
+
+        self.assertEqual(len(collection["features"]), 1)
+        properties = collection["features"][0]["properties"]
+        self.assertEqual(properties["JPT_KOD_JE"], "TNC037")
+        self.assertEqual(properties["JPT_NAZWA_"], "Davidson")
+        self.assertEqual(properties["aprsbox_area_code"], "TNC037")
+        self.assertEqual(properties["aprsbox_alert_color"], "red")
+
+    def test_nws_warning_message_renders_multiple_counties_as_one_alert(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("NWS-WARN")
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "us",
+                    [
+                        _nws_county_feature("TNC037", "Davidson", -87.0),
+                        _nws_county_feature("TNC189", "Wilson", -86.0),
+                    ],
+                    filename="nws_counties.mid.geojson",
+                )
+                accepted = process_normalized_tnc2_rx(
+                    "NWSWX>APRS,TCPIP*::NWS-WARN :"
+                    "010200z,TORNADO3,TNC037,TNC189{N1001",
+                    source="APRS-IS · Internet RX",
+                    source_kind="aprsis",
+                    timestamp="2026-01-01T00:10:00+00:00",
+                )
+                collection = get_active_alert_area_feature_collection(
+                    geodata_root=geodata_root,
+                    now="2026-01-01T01:00:00+00:00",
+                )
+                rows = fetch_all(
+                    "SELECT alarm_group, area_codes_json FROM aprs_alerts"
+                )
+
+        self.assertTrue(accepted)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["alarm_group"], "NWS-WARN")
+        self.assertEqual(
+            json.loads(rows[0]["area_codes_json"]),
+            ["TNC037", "TNC189"],
+        )
+        self.assertEqual(len(collection["alerts"]), 1)
+        self.assertEqual(
+            {
+                feature["properties"]["aprsbox_area_code"]
+                for feature in collection["features"]
+            },
+            {"TNC037", "TNC189"},
+        )
+
+    def test_nws_public_forecast_zone_is_skipped_with_debug_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "us",
+                [_nws_county_feature("TNC037", "Davidson", -87.0)],
+                filename="nws_counties.mid.geojson",
+            )
+
+            with self.assertLogs("app.services.alert_areas", level="DEBUG") as logs:
+                collection = build_alert_area_feature_collection(
+                    [{"alarm_group": "NWS-WARN", "area_codes": ["TNZ037"]}],
+                    geodata_root=geodata_root,
+                )
+
+        self.assertEqual(collection["features"], [])
+        self.assertTrue(
+            any("Skipping unsupported area code TNZ037" in entry for entry in logs.output)
+        )
+
+    def test_unknown_nws_county_is_skipped_with_debug_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "us",
+                [_nws_county_feature("TNC037", "Davidson", -87.0)],
+                filename="nws_counties.mid.geojson",
+            )
+
+            with self.assertLogs("app.services.alert_areas", level="DEBUG") as logs:
+                collection = build_alert_area_feature_collection(
+                    [{"alarm_group": "NWS-WARN", "area_codes": ["TNC999"]}],
+                    geodata_root=geodata_root,
+                )
+
+        self.assertEqual(collection["features"], [])
+        self.assertTrue(
+            any("No geometry found for area code TNC999" in entry for entry in logs.output)
+        )
+
+    def test_nws_mixed_codes_render_only_known_counties(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "us",
+                [_nws_county_feature("TNC037", "Davidson", -87.0)],
+                filename="nws_counties.mid.geojson",
+            )
+
+            with self.assertLogs("app.services.alert_areas", level="DEBUG") as logs:
+                collection = build_alert_area_feature_collection(
+                    [
+                        {
+                            "alarm_group": "NWS-WARN",
+                            "area_codes": ["TNC037", "TNZ037", "ANZ630", "TNC999"],
+                            "severity_level": 2,
+                        }
+                    ],
+                    geodata_root=geodata_root,
+                )
+
+        self.assertEqual(len(collection["features"]), 1)
+        self.assertEqual(
+            collection["features"][0]["properties"]["aprsbox_area_code"],
+            "TNC037",
+        )
+        diagnostic_text = "\n".join(logs.output)
+        self.assertIn("Skipping unsupported area code TNZ037", diagnostic_text)
+        self.assertIn("Skipping unsupported area code ANZ630", diagnostic_text)
+        self.assertIn("No geometry found for area code TNC999", diagnostic_text)
+
+    def test_pl_warn_still_matches_polish_county_geometry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "pl",
+                [_feature("JPT_KOD_JE", "1465", 20.0)],
+            )
+
+            collection = build_alert_area_feature_collection(
+                [
+                    {
+                        "alarm_group": "PL-WARN",
+                        "area_codes": ["1465"],
+                        "severity_level": 2,
+                    }
+                ],
+                geodata_root=geodata_root,
+            )
+
+        self.assertEqual(len(collection["features"]), 1)
+        self.assertEqual(
+            collection["features"][0]["properties"]["aprsbox_area_code"],
+            "1465",
+        )
+
+    def test_us_geodata_is_not_loaded_without_nws_alerts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            geodata_root = Path(temp_dir)
+            _write_geodata(
+                geodata_root,
+                "pl",
+                [_feature("JPT_KOD_JE", "1465", 20.0)],
+            )
+            us_path = _write_geodata(
+                geodata_root,
+                "us",
+                [_nws_county_feature("TNC037", "Davidson", -87.0)],
+                filename="nws_counties.mid.geojson",
+            )
+
+            with patch(
+                "app.services.alert_areas._load_geojson",
+                wraps=alert_areas_service._load_geojson,
+            ) as load_geojson:
+                collection = build_alert_area_feature_collection(
+                    [{"alarm_group": "PL-WARN", "area_codes": ["1465"]}],
+                    geodata_root=geodata_root,
+                )
+
+        self.assertEqual(len(collection["features"]), 1)
+        loaded_paths = {call.args[0] for call in load_geojson.call_args_list}
+        self.assertNotIn(us_path, loaded_paths)
+
+    def test_us_geodata_is_not_loaded_when_nws_is_not_subscribed(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("PL-WARN")
+            _insert_alert("NWSWX", "NWS-WARN", ["TNC037"], severity_level=3)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                geodata_root = Path(temp_dir)
+                _write_geodata(
+                    geodata_root,
+                    "us",
+                    [_nws_county_feature("TNC037", "Davidson", -87.0)],
+                    filename="nws_counties.mid.geojson",
+                )
+
+                with patch(
+                    "app.services.alert_areas._load_geojson",
+                    wraps=alert_areas_service._load_geojson,
+                ) as load_geojson:
+                    collection = get_active_alert_area_feature_collection(
+                        geodata_root=geodata_root,
+                        now="2026-01-01T01:00:00+00:00",
+                    )
+
+        self.assertEqual(collection["features"], [])
+        self.assertEqual(collection["alerts"], [])
+        load_geojson.assert_not_called()
 
     def test_unknown_country_missing_geojson_and_invalid_geojson_are_silent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -564,7 +804,12 @@ class AlertAreaResolverTests(unittest.TestCase):
                 _feature("code", "0001", 20.0),
                 _feature("code", "0002", 21.0),
             ]
-            _write_geodata(geodata_root, "pl", pl_features, filename="first.geojson")
+            _write_geodata(
+                geodata_root,
+                "pl",
+                pl_features,
+                filename="powiaty.mid.geojson",
+            )
             _write_geodata(
                 geodata_root,
                 "pl",

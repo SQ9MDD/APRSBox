@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
 from app.db import fetch_all, utc_now
-from app.services.alarm_groups import get_aprs_alarm_enabled
+from app.services.alarm_groups import get_aprs_alarm_enabled, get_aprs_alarm_groups
 from app.services.alert_event_icons import resolve_alert_event_icon
 from app.services.alerts import expire_aprs_alerts
 from app.services.aprs_warning_identity import normalize_warning_area_codes
@@ -17,6 +19,7 @@ from app.services.aprs_warning_identity import normalize_warning_area_codes
 
 GEODATA_ROOT = Path(__file__).resolve().parents[1] / "static" / "geodata"
 _COUNTRY_WARNING_GROUP_RE = re.compile(r"^(?P<country>[A-Z]{2})-WARN$", re.IGNORECASE | re.ASCII)
+_NWS_COUNTY_CODE_RE = re.compile(r"^[A-Z]{2}C[0-9]{3}$", re.ASCII)
 _FEATURE_ID_SENTINEL = "\0feature-id"
 _EXPLICIT_IDENTIFIER_KEYS = (
     "area_code_property",
@@ -32,6 +35,29 @@ ALERT_SEVERITY_COLORS = {
     3: "red",
 }
 UNKNOWN_ALERT_SEVERITY_COLOR = "gray"
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _WarningGeometrySource:
+    country_code: str
+    path_pattern: str
+    identifier_property: str | None = None
+    area_code_pattern: re.Pattern[str] | None = None
+
+
+_WARNING_GEOMETRY_SOURCES = {
+    "PL-WARN": _WarningGeometrySource(
+        country_code="pl",
+        path_pattern="pl/powiaty.mid.geojson",
+    ),
+    "NWS-WARN": _WarningGeometrySource(
+        country_code="us",
+        path_pattern="us/nws_counties.mid.geojson",
+        identifier_property="JPT_KOD_JE",
+        area_code_pattern=_NWS_COUNTY_CODE_RE,
+    ),
+}
 
 
 def country_code_from_alarm_group(alarm_group: Any) -> str | None:
@@ -39,6 +65,60 @@ def country_code_from_alarm_group(alarm_group: Any) -> str | None:
     if match is None:
         return None
     return match.group("country").lower()
+
+
+def _geometry_source_from_alarm_group(
+    alarm_group: Any,
+) -> tuple[str, _WarningGeometrySource] | None:
+    normalized_group = str(alarm_group or "").strip().upper()
+    explicit_source = _WARNING_GEOMETRY_SOURCES.get(normalized_group)
+    if explicit_source is not None:
+        return normalized_group, explicit_source
+    country_code = country_code_from_alarm_group(normalized_group)
+    if country_code is None:
+        return None
+    return normalized_group, _WarningGeometrySource(
+        country_code=country_code,
+        path_pattern=f"{country_code}/*.geojson",
+    )
+
+
+def _geojson_paths(
+    geodata_root: Path,
+    source: _WarningGeometrySource,
+) -> list[Path]:
+    try:
+        return sorted(
+            path
+            for path in geodata_root.glob(source.path_pattern)
+            if path.is_file()
+        )
+    except OSError:
+        return []
+
+
+def _supported_area_code(
+    code: Any,
+    *,
+    alarm_group: str,
+    source: _WarningGeometrySource,
+    log_unsupported: bool,
+) -> str:
+    text = str(code or "").strip()
+    if not text:
+        return ""
+    if (
+        source.area_code_pattern is not None
+        and source.area_code_pattern.fullmatch(text) is None
+    ):
+        if log_unsupported:
+            logger.debug(
+                "Skipping unsupported area code %s for warning group %s",
+                text,
+                alarm_group,
+            )
+        return ""
+    return text
 
 
 def _normalize_identifier(value: Any) -> str:
@@ -202,6 +282,7 @@ def _matching_features(
     country_code: str,
     severity_by_code: Mapping[str, int],
     alerts_by_code: Mapping[str, list[dict[str, Any]]] | None = None,
+    identifier_property: str | None = None,
 ) -> list[dict[str, Any]]:
     requested_codes = set(severity_by_code)
     features = [
@@ -211,7 +292,11 @@ def _matching_features(
         and feature.get("type") == "Feature"
         and _is_area_geometry(feature.get("geometry"))
     ]
-    identifier_property = _select_identifier_property(document, features, requested_codes)
+    identifier_property = identifier_property or _select_identifier_property(
+        document,
+        features,
+        requested_codes,
+    )
     if identifier_property is None:
         return []
 
@@ -255,36 +340,58 @@ def build_alert_area_feature_collection(
     geodata_root: Path | None = None,
 ) -> dict[str, Any]:
     root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
-    severity_by_country_code: dict[str, dict[str, int]] = {}
-    alerts_by_country_code: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    sources_by_group: dict[str, _WarningGeometrySource] = {}
+    severity_by_group_code: dict[str, dict[str, int]] = {}
+    alerts_by_group_code: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    code_labels_by_group: dict[str, dict[str, str]] = {}
     for alert in alerts:
-        country_code = country_code_from_alarm_group(alert.get("alarm_group"))
-        if country_code is None:
+        resolved_source = _geometry_source_from_alarm_group(alert.get("alarm_group"))
+        if resolved_source is None:
             continue
+        alarm_group, source = resolved_source
         raw_area_codes = (
             alert.get("area_codes_json")
             if "area_codes_json" in alert
             else alert.get("area_codes")
         )
+        supported_codes = [
+            supported_code
+            for code in _decode_area_codes(raw_area_codes)
+            if (
+                supported_code := _supported_area_code(
+                    code,
+                    alarm_group=alarm_group,
+                    source=source,
+                    log_unsupported=True,
+                )
+            )
+        ]
         normalized_codes = {
             _normalize_identifier(code)
-            for code in _decode_area_codes(raw_area_codes)
-            if _normalize_identifier(code)
+            for code in supported_codes
         }
+        if not normalized_codes:
+            continue
+        sources_by_group[alarm_group] = source
+        group_code_labels = code_labels_by_group.setdefault(alarm_group, {})
+        for supported_code in supported_codes:
+            normalized_code = _normalize_identifier(supported_code)
+            if normalized_code:
+                group_code_labels.setdefault(normalized_code, supported_code)
         severity_level = _alert_severity_level(alert.get("severity_level")) or 0
-        country_severities = severity_by_country_code.setdefault(country_code, {})
-        country_alerts = alerts_by_country_code.setdefault(country_code, {})
+        group_severities = severity_by_group_code.setdefault(alarm_group, {})
+        group_alerts = alerts_by_group_code.setdefault(alarm_group, {})
         try:
             alert_id = int(alert.get("id"))
         except (TypeError, ValueError):
             alert_id = None
         for normalized_code in normalized_codes:
-            country_severities[normalized_code] = max(
-                country_severities.get(normalized_code, 0),
+            group_severities[normalized_code] = max(
+                group_severities.get(normalized_code, 0),
                 severity_level,
             )
             if alert_id is not None:
-                contributors = country_alerts.setdefault(normalized_code, [])
+                contributors = group_alerts.setdefault(normalized_code, [])
                 if not any(item["id"] == alert_id for item in contributors):
                     contributors.append(
                         {
@@ -295,28 +402,25 @@ def build_alert_area_feature_collection(
 
     output_features: list[dict[str, Any]] = []
     feature_indexes_by_geometry: dict[str, int] = {}
-    for country_code in sorted(severity_by_country_code):
-        country_directory = root / country_code
-        if not country_directory.is_dir():
-            continue
-        try:
-            geojson_paths = sorted(
-                path
-                for path in country_directory.glob("*.geojson")
-                if path.is_file()
-            )
-        except OSError:
-            continue
-        for geojson_path in geojson_paths:
+    for alarm_group in sorted(sources_by_group):
+        source = sources_by_group[alarm_group]
+        matched_codes: set[str] = set()
+        for geojson_path in _geojson_paths(root, source):
             document = _load_geojson(geojson_path)
             if document is None:
                 continue
             for feature in _matching_features(
                 document,
-                country_code=country_code,
-                severity_by_code=severity_by_country_code[country_code],
-                alerts_by_code=alerts_by_country_code.get(country_code),
+                country_code=source.country_code,
+                severity_by_code=severity_by_group_code[alarm_group],
+                alerts_by_code=alerts_by_group_code.get(alarm_group),
+                identifier_property=source.identifier_property,
             ):
+                matched_codes.add(
+                    _normalize_identifier(
+                        feature.get("properties", {}).get("aprsbox_area_code")
+                    )
+                )
                 try:
                     geometry_key = json.dumps(
                         feature["geometry"],
@@ -326,7 +430,7 @@ def build_alert_area_feature_collection(
                     )
                 except (TypeError, ValueError):
                     continue
-                deduplication_key = f"{country_code}:{geometry_key}"
+                deduplication_key = f"{source.country_code}:{geometry_key}"
                 existing_index = feature_indexes_by_geometry.get(deduplication_key)
                 if existing_index is not None:
                     existing_feature = output_features[existing_index]
@@ -370,6 +474,13 @@ def build_alert_area_feature_collection(
                     continue
                 feature_indexes_by_geometry[deduplication_key] = len(output_features)
                 output_features.append(feature)
+        unmatched_codes = set(severity_by_group_code[alarm_group]) - matched_codes
+        for unmatched_code in sorted(unmatched_codes):
+            logger.debug(
+                "No geometry found for area code %s in warning group %s",
+                code_labels_by_group[alarm_group].get(unmatched_code, unmatched_code),
+                alarm_group,
+            )
 
     return {
         "type": "FeatureCollection",
@@ -395,24 +506,29 @@ def _alert_area_source_revision(
     alerts: list[dict[str, Any]],
 ) -> str:
     digest = hashlib.sha256(alerts_json.encode("utf-8"))
-    country_codes = sorted(
-        {
-            country_code
-            for alert in alerts
-            if (country_code := country_code_from_alarm_group(alert.get("alarm_group")))
-        }
-    )
-    for country_code in country_codes:
-        country_directory = geodata_root / country_code
-        try:
-            paths = sorted(
-                path
-                for path in country_directory.glob("*.geojson")
-                if path.is_file()
-            )
-        except OSError:
+    sources: dict[str, _WarningGeometrySource] = {}
+    for alert in alerts:
+        resolved_source = _geometry_source_from_alarm_group(alert.get("alarm_group"))
+        if resolved_source is None:
             continue
-        for path in paths:
+        alarm_group, source = resolved_source
+        raw_area_codes = (
+            alert.get("area_codes_json")
+            if "area_codes_json" in alert
+            else alert.get("area_codes")
+        )
+        if any(
+            _supported_area_code(
+                code,
+                alarm_group=alarm_group,
+                source=source,
+                log_unsupported=False,
+            )
+            for code in _decode_area_codes(raw_area_codes)
+        ):
+            sources[alarm_group] = source
+    for alarm_group in sorted(sources):
+        for path in _geojson_paths(geodata_root, sources[alarm_group]):
             try:
                 stat = path.stat()
             except OSError:
@@ -511,6 +627,13 @@ def get_active_alert_area_snapshot(
     except sqlite3.OperationalError:
         return "alarms-unavailable", {"type": "FeatureCollection", "features": []}
     alerts = [dict(row) for row in rows]
+    configured_alarm_groups = set(get_aprs_alarm_groups())
+    alerts = [
+        alert
+        for alert in alerts
+        if str(alert.get("alarm_group") or "").strip().upper() != "NWS-WARN"
+        or "NWS-WARN" in configured_alarm_groups
+    ]
     root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
     alerts_json = json.dumps(
         alerts,
