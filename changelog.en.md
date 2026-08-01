@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.6.dev - 2026-08-01
+- `Settings / Help`: added dedicated Markdown help for 8 panels in EN/DE/PL/ES/TLH and simplified the interface by removing repeated descriptions.
+- `Help / renderer`: added safe opening of external links from help documents.
+
 ## 1.9.5.dev - 2026-07-31
 - `Band Condition / GUI and runtime`: the tab is hidden and data collection and processing are disabled when no active RF interface has band assessment enabled; other radio statistics continue to work unchanged.
 - `Alerts / formats`: added reception and handling of weather alerts in `CAWF` and `NWS-WARN` formats.

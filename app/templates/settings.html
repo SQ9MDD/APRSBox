@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 {% if flash %}
 <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
@@ -11,6 +15,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("Global Settings") }}</h2>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_global"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Global Settings') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if can_manage_global_settings %}
         <form
@@ -43,7 +56,6 @@
                     <option value="{{ option.value }}" {% if traffic_retention_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Controls how long runtime traffic frames are kept in the database. Map and station visibility follow this window.") }}</span>
             </label>
             <label>
                 <span>{{ t("Icon set") }}</span>
@@ -130,6 +142,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("Application update") }}</h2>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_update"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Application update') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if is_container_mode %}
         <div class="alert">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</div>
@@ -164,9 +185,6 @@
         {% if not is_container_mode and update_channel_is_unstable %}
         <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
         {% endif %}
-        {% if not is_container_mode %}
-        <p class="muted">{{ t("Update fetches code from the selected channel, runs init-db, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end. GUI may temporarily lose connection.")|safe }}</p>
-        {% endif %}
         <div class="settings-update-actions">
             <form
                 method="post"
@@ -191,11 +209,7 @@
             </form>
             {% endif %}
         </div>
-        <div id="settings-version-result">
-            {% if is_container_mode %}
-            <p class="muted">{{ t("Check version can be used for informational comparison only. Docker mode updates must be done through Docker image pull and container recreate.") }}</p>
-            {% endif %}
-        </div>
+        <div id="settings-version-result"></div>
     </div>
 </section>
 </div>
@@ -206,6 +220,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("APRS alarm settings") }}</h2>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_alarms"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('APRS alarm settings') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if can_manage_global_settings %}
         <form
@@ -219,7 +242,6 @@
                 <input type="checkbox" name="alarm_enabled" value="1" {% if aprs_alarm_enabled %}checked{% endif %}>
                 <span>{{ t("Enable APRS alarms") }}</span>
             </label>
-            <p class="muted small full">{{ t("Controls alarm intake, active alarm visibility, popups, and the automatic APRS-IS alarm-group filter.") }}</p>
             <label class="full">
                 <span>{{ t("Alarm groups") }}</span>
                 <input
@@ -229,7 +251,6 @@
                     autocapitalize="characters"
                     spellcheck="false"
                 >
-                <span class="muted small">{{ t("Enter one or more APRS alarm group names separated by commas.") }}</span>
             </label>
             <div class="full">
                 <span class="alarm-thresholds-title">{{ t("Alarm thresholds by event type") }}</span>
@@ -278,8 +299,6 @@
                         </tbody>
                     </table>
                 </div>
-                <span class="muted small">{{ t("Alerts controls transfer from Messages to Alerts. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.") }}</span>
-                <span class="muted small">{{ t("Alarm visibility on the map is managed directly from the alarm panel on the Map page.") }}</span>
             </div>
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save alarm settings") }}</button>
@@ -305,6 +324,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("Map sources") }}</h2>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_map_sources"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Map sources') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <div class="settings-map-sources-grid">
             <div class="table-wrap">
@@ -429,18 +457,6 @@
                     <input type="checkbox" name="is_default" value="1" {% if map_source_form.is_default %}checked{% endif %}>
                     <span>{{ t("Set as default") }}</span>
                 </label>
-                <p class="muted full map-source-help-text">
-                    <span>{{ t("Only standard Leaflet tile providers are supported in this panel. Example: https://server/{z}/{x}/{y}.png") }}</span>
-                    <a
-                        href="https://switch2osm.org/providers/#Allows-free-usage"
-                        class="map-source-help-link"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        <span>{{ t("List of free providers you can see here") }}</span>
-                        <img src="{{ request.scope.root_path }}/static/icons/open-in-new.svg" alt="">
-                    </a>
-                </p>
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save map source") }}</button>
                     {% if map_source_form.record_id %}
@@ -461,6 +477,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("APRS device identification") }}</h2>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_device_identification"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('APRS device identification') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <dl class="details-grid">
             <dt>{{ t("Status") }}</dt>
@@ -503,15 +528,17 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Configuration backup") }}</h2>
-                <p class="section-lead">{{ t("Export and import a full GUI configuration snapshot (station, TNC, APRS-IS, WX, DIGI flows and related settings).") }}</p>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_configuration_backup"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Configuration backup') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
-        <dl class="details-grid">
-            <dt>{{ t("Format") }}</dt>
-            <dd><code>JSON</code></dd>
-            <dt>{{ t("Scope") }}</dt>
-            <dd>{{ t("Configuration tables only. Runtime traffic/events are not part of this backup.") }}</dd>
-        </dl>
         {% if can_manage_config_backup %}
         <div class="settings-update-actions">
             <a href="{{ request.scope.root_path }}/settings/config/export" class="button button-secondary">{{ t("Export configuration backup") }}</a>
@@ -548,8 +575,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Database maintenance") }}</h2>
-                <p class="section-lead">{{ t("Event logs are pruned automatically after midnight. Database vacuum and runtime history reset remain manual actions.") }}</p>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_database"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Database maintenance') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if not database_quick_check_ok %}
         <div class="alert">{{ t("Database integrity check returned a non-OK result. Review storage before running maintenance actions.") }}</div>
@@ -641,6 +676,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("Danger zone") }}</h2>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_danger_zone"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Danger zone') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if is_container_mode %}
         <div class="alert">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</div>
@@ -648,7 +692,6 @@
         <div class="danger-zone-actions">
             <div class="danger-zone-item">
                 <h3>{{ t("Restart services") }}</h3>
-                <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/restart-services"
@@ -663,7 +706,6 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Reboot host") }}</h3>
                 <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
-                <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/reboot-host"
@@ -678,7 +720,6 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Power off host") }}</h3>
                 <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
-                <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/poweroff-host"
@@ -697,9 +738,11 @@
     </div>
 </section>
 
+{% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script>
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};

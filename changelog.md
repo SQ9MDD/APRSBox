@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.6.dev - 01.08.2026
+- `Ustawienia / Pomoc`: dodano osobną pomoc Markdown dla 8 paneli w EN/DE/PL/ES/TLH i uproszczono interfejs, usuwając powtórzone opisy.
+- `Pomoc / renderer`: dodano bezpieczne otwieranie zewnętrznych linków z dokumentów pomocy.
+
 ## 1.9.5.dev - 31.07.2026
 - `Warunki pasma / GUI i runtime`: zakładka jest ukrywana, a zbieranie i przetwarzanie danych wyłączane, gdy żaden aktywny interfejs RF nie ma włączonej oceny pasma; pozostałe statystyki radiowe działają bez zmian.
 - `Alarmy / formaty`: dodano odbiór i obsługę alarmów pogodowych w formatach `CAWF` oraz `NWS-WARN`.

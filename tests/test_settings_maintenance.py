@@ -113,10 +113,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('{{ t("Alarm thresholds by event type") }}', template_source)
         self.assertIn('{{ t("Alerts") }}', template_source)
         self.assertIn('{{ t("Alert popup") }}', template_source)
-        self.assertIn(
-            '{{ t("Alarm visibility on the map is managed directly from the alarm panel on the Map page.") }}',
-            template_source,
-        )
+        self.assertNotIn("Alarm visibility on the map is managed directly", template_source)
         self.assertIn("alarm_category_threshold_rows", template_source)
         self.assertIn("aprs_alarm_groups|join(', ')", template_source)
         self.assertIn('{{ t("RF receive groups") }}', template_source)
@@ -180,7 +177,66 @@ class SettingsMaintenanceTests(unittest.TestCase):
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("{% if is_container_mode %}", template_source)
         self.assertIn("Docker installation detected. System actions are disabled inside Docker.", template_source)
-        self.assertIn("Check version can be used for informational comparison only.", template_source)
+        self.assertNotIn("Check version can be used for informational comparison only.", template_source)
+
+    def test_each_settings_panel_has_dedicated_localized_markdown_help(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        help_pages = (
+            "settings_global",
+            "settings_update",
+            "settings_alarms",
+            "settings_map_sources",
+            "settings_device_identification",
+            "settings_configuration_backup",
+            "settings_database",
+            "settings_danger_zone",
+        )
+        languages = ("en", "de", "pl", "es", "tlh")
+
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+        for page in help_pages:
+            with self.subTest(page=page):
+                self.assertEqual(template_source.count(f'data-help-page="application/{page}"'), 1)
+                for language in languages:
+                    help_path = Path(f"help/application/{page}.{language}.md")
+                    self.assertTrue(help_path.exists(), str(help_path))
+                    self.assertTrue(help_path.read_text(encoding="utf-8").startswith("# "))
+
+        help_viewer_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
+        self.assertIn('target="_blank" rel="noopener noreferrer"', help_viewer_source)
+        self.assertIn("/^https?:\\/\\//i.test(rawHref)", help_viewer_source)
+
+    def test_settings_explanations_live_in_panel_help_instead_of_forms(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        moved_copy = (
+            "Controls how long runtime traffic frames are kept",
+            "Update fetches code from the selected channel",
+            "Controls alarm intake, active alarm visibility",
+            "Only standard Leaflet tile providers are supported",
+            "Export and import a full GUI configuration snapshot",
+            "Event logs are pruned automatically after midnight",
+            "Restarts <code>aprsbox-core</code>",
+            "Type REBOOT in the confirmation dialog",
+            "Type POWER OFF in the confirmation dialog",
+        )
+        for copy in moved_copy:
+            with self.subTest(copy=copy):
+                self.assertNotIn(copy, template_source)
+
+        self.assertIn(
+            "Map and station visibility follow this window.",
+            Path("help/application/settings_global.en.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "Alarm visibility on the map",
+            Path("help/application/settings_alarms.en.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "switch2osm.org/providers",
+            Path("help/application/settings_map_sources.en.md").read_text(encoding="utf-8"),
+        )
 
     def test_settings_template_uses_shared_async_action_handler(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")

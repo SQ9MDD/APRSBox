@@ -5228,6 +5228,11 @@ select:focus-visible,
     align-items: start;
 }
 
+.settings-panel-help-button {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
 .igate-settings-layout {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
@@ -7901,6 +7906,12 @@ button.message-delivery-badge {
     .digi-step-card-header {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .panel-header:has(> .settings-panel-help-button) {
+        flex-direction: row;
+        align-items: flex-start;
+        flex-wrap: nowrap;
     }
 
     .stations-summary-toolbar {
