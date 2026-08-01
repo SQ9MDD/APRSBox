@@ -18,11 +18,11 @@ APRS_ALARM_ENABLED_SETTING_KEY = "aprs.alarm_enabled"
 APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY = "aprs.map_alarm_level_threshold"
 APRS_GLOBAL_ALARM_LEVEL_THRESHOLD_SETTING_KEY = "aprs.global_alarm_level_threshold"
 APRS_ALARM_CATEGORY_THRESHOLDS_SETTING_KEY = "aprs.alarm_category_thresholds"
-DEFAULT_APRS_ALARM_GROUPS = ("PL-WARN",)
-DEFAULT_APRS_ALARM_ENABLED = True
-DEFAULT_APRS_ALARM_LEVEL_THRESHOLD = 1
 APRS_ALARM_LEVEL_THRESHOLDS = (1, 2, 3)
 APRS_ALARM_LEVEL_OFF = 0
+DEFAULT_APRS_ALARM_GROUPS: tuple[str, ...] = ()
+DEFAULT_APRS_ALARM_ENABLED = False
+DEFAULT_APRS_ALARM_LEVEL_THRESHOLD = APRS_ALARM_LEVEL_OFF
 APRS_ALARM_THRESHOLD_TARGETS = ("alerts", "map", "popup")
 
 _APRS_ALARM_GROUP_RE = re.compile(r"^[A-Z0-9-]{1,9}$")
@@ -156,6 +156,8 @@ def alarm_severity_meets_threshold(
     threshold: Any,
 ) -> bool:
     """Keep unknown levels visible instead of silently discarding new formats."""
+    if str(threshold if threshold is not None else "").strip().lower() in {"0", "off"}:
+        return False
     try:
         normalized_severity = int(severity_level)
     except (TypeError, ValueError):

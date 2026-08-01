@@ -22,6 +22,7 @@ from app.services.alarm_groups import (
     get_aprs_alarm_category_thresholds,
     save_aprs_alarm_category_thresholds,
     save_aprs_alarm_enabled,
+    save_aprs_alarm_groups,
 )
 from app.services.content import _TRAFFIC_SNAPSHOT_CACHE, traffic_snapshot
 from app.services.maintenance_scheduler import MaintenanceSchedulerService
@@ -42,6 +43,12 @@ def temporary_database() -> Path:
         os.environ["APRSBOX_DB_PATH"] = str(database_path)
         try:
             init_db()
+            save_aprs_alarm_enabled(True)
+            save_aprs_alarm_groups("PL-WARN")
+            thresholds = get_aprs_alarm_category_thresholds()
+            for values in thresholds.values():
+                values["alerts"] = 1
+            save_aprs_alarm_category_thresholds(thresholds)
             yield database_path
         finally:
             if previous is None:
@@ -563,6 +570,12 @@ class AprsAlertTests(unittest.TestCase):
 
                 init_db()
                 init_db()
+                save_aprs_alarm_enabled(True)
+                save_aprs_alarm_groups("PL-WARN")
+                thresholds = get_aprs_alarm_category_thresholds()
+                for values in thresholds.values():
+                    values["alerts"] = 1
+                save_aprs_alarm_category_thresholds(thresholds)
                 physical_rows = fetch_all(
                     """
                     SELECT id, identity_key, superseded_by_alert_id, expires_at

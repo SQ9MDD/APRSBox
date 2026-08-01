@@ -10,6 +10,7 @@ from app.services.alarm_groups import (
     get_aprs_alarm_category_thresholds,
     save_aprs_alarm_enabled,
     save_aprs_alarm_category_thresholds,
+    save_aprs_alarm_groups,
     save_map_alarm_level_threshold,
 )
 from app.services.alerts import delete_alert
@@ -34,6 +35,12 @@ def temporary_database() -> Path:
         os.environ["APRSBOX_DB_PATH"] = str(database_path)
         try:
             init_db()
+            save_aprs_alarm_enabled(True)
+            save_aprs_alarm_groups("PL-WARN")
+            thresholds = get_aprs_alarm_category_thresholds()
+            for values in thresholds.values():
+                values["alerts"] = 1
+            save_aprs_alarm_category_thresholds(thresholds)
             yield database_path
         finally:
             if previous is None:

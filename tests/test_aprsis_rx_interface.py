@@ -16,6 +16,7 @@ from app.services.aprsis import (
     get_aprsis_config,
     get_enabled_aprsis_interface,
 )
+from app.services.alarm_groups import save_aprs_alarm_enabled, save_aprs_alarm_groups
 from app.services.content import (
     dashboard_activity_series,
     dashboard_traffic_summary,
@@ -147,14 +148,14 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
             count = fetch_one("SELECT COUNT(*) AS total FROM modems WHERE modem_type = 'APRSIS'")
             self.assertEqual(int((count or {"total": -1})["total"]), 1)
 
-    def test_login_line_contains_interface_filter_without_changing_auth_config(self) -> None:
+    def test_login_line_has_no_automatic_alarm_filter_by_default(self) -> None:
         line = build_aprsis_login_line(
             login="SQ9XYZ-10",
             passcode="12345",
             server_filter="r/52.23/21.01/50",
         )
         self.assertIn("user SQ9XYZ-10 pass 12345", line)
-        self.assertTrue(line.endswith("filter r/52.23/21.01/50 g/PL-WARN"))
+        self.assertTrue(line.endswith("filter r/52.23/21.01/50"))
 
     def test_interfaces_form_saves_aprsis_connection_settings_and_legacy_route_redirects(self) -> None:
         with temporary_database():
@@ -522,6 +523,8 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
         with temporary_database():
+            save_aprs_alarm_enabled(True)
+            save_aprs_alarm_groups("PL-WARN")
             interface_id = create_aprsis_interface(server_filter="m/20")
             received: list[str] = []
 

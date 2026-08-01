@@ -104,6 +104,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('name="alarm_enabled"', template_source)
         self.assertIn('{{ t("Enable APRS alarms") }}', template_source)
         self.assertIn('name="alarm_groups"', template_source)
+        self.assertNotIn('placeholder="PL-WARN"', template_source)
         self.assertIn('name="threshold_category"', template_source)
         self.assertIn('name="alert_level_threshold"', template_source)
         self.assertNotIn('name="map_level_threshold"', template_source)

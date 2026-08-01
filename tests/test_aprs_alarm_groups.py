@@ -77,6 +77,19 @@ def temporary_database() -> Path:
                 os.environ["APRSBOX_DB_PATH"] = previous
 
 
+@contextlib.contextmanager
+def configured_alarm_database() -> Path:
+    with temporary_database() as database_path:
+        save_aprs_alarm_enabled(True)
+        save_aprs_alarm_groups("PL-WARN")
+        thresholds = get_aprs_alarm_category_thresholds()
+        for values in thresholds.values():
+            values["alerts"] = 1
+            values["map"] = 1
+        save_aprs_alarm_category_thresholds(thresholds)
+        yield database_path
+
+
 def insert_aprsis_interface(user_filter: str) -> int:
     execute(
         """
@@ -96,29 +109,29 @@ def insert_aprsis_interface(user_filter: str) -> int:
 
 
 class AprsAlarmGroupConfigurationTests(unittest.TestCase):
-    def test_aprs_alarms_are_enabled_by_default_and_setting_is_persisted(self) -> None:
+    def test_aprs_alarms_are_disabled_by_default_and_setting_is_persisted(self) -> None:
         with temporary_database():
-            self.assertTrue(DEFAULT_APRS_ALARM_ENABLED)
-            self.assertTrue(get_aprs_alarm_enabled())
-            self.assertIsNone(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY))
-
-            self.assertFalse(save_aprs_alarm_enabled(False))
+            self.assertFalse(DEFAULT_APRS_ALARM_ENABLED)
             self.assertFalse(get_aprs_alarm_enabled())
-            self.assertEqual(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY), "0")
-            self.assertEqual(
-                get_effective_message_target_groups(),
-                ["ALL", "QST", "CQ"],
-            )
-            self.assertEqual(get_aprs_alarm_groups(), ["PL-WARN"])
+            self.assertIsNone(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY))
 
             self.assertTrue(save_aprs_alarm_enabled("on"))
             self.assertTrue(get_aprs_alarm_enabled())
             self.assertEqual(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY), "1")
+            self.assertEqual(
+                get_effective_message_target_groups(),
+                ["ALL", "QST", "CQ"],
+            )
+            self.assertEqual(get_aprs_alarm_groups(), [])
 
-    def test_default_alarm_group_is_pl_warn_and_standard_groups_are_unchanged(self) -> None:
+            self.assertFalse(save_aprs_alarm_enabled(False))
+            self.assertFalse(get_aprs_alarm_enabled())
+            self.assertEqual(get_app_setting(APRS_ALARM_ENABLED_SETTING_KEY), "0")
+
+    def test_default_alarm_groups_are_empty_and_standard_groups_are_unchanged(self) -> None:
         with temporary_database():
-            self.assertEqual(DEFAULT_APRS_ALARM_GROUPS, ("PL-WARN",))
-            self.assertEqual(get_aprs_alarm_groups(), ["PL-WARN"])
+            self.assertEqual(DEFAULT_APRS_ALARM_GROUPS, ())
+            self.assertEqual(get_aprs_alarm_groups(), [])
             self.assertEqual(DEFAULT_MESSAGE_TARGET_GROUPS, ("ALL", "QST", "CQ"))
             self.assertEqual(get_message_settings()["target_groups"], ["ALL", "QST", "CQ"])
             self.assertIsNone(get_app_setting(APRS_ALARM_GROUPS_SETTING_KEY))
@@ -145,11 +158,11 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
             self.assertIsNone(get_app_setting("messages.target_groups"))
             self.assertEqual(get_message_settings()["target_groups"], ["ALL", "QST", "CQ"])
 
-    def test_alarm_level_thresholds_default_to_one_and_are_stored_separately(self) -> None:
+    def test_alarm_level_thresholds_default_to_off_and_are_stored_separately(self) -> None:
         with temporary_database():
-            self.assertEqual(DEFAULT_APRS_ALARM_LEVEL_THRESHOLD, 1)
-            self.assertEqual(get_map_alarm_level_threshold(), 1)
-            self.assertEqual(get_global_alarm_level_threshold(), 1)
+            self.assertEqual(DEFAULT_APRS_ALARM_LEVEL_THRESHOLD, 0)
+            self.assertEqual(get_map_alarm_level_threshold(), 0)
+            self.assertEqual(get_global_alarm_level_threshold(), 0)
             self.assertIsNone(
                 get_app_setting(APRS_MAP_ALARM_LEVEL_THRESHOLD_SETTING_KEY)
             )
@@ -181,13 +194,14 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
         self.assertTrue(alarm_severity_meets_threshold(3, 2))
         self.assertTrue(alarm_severity_meets_threshold(None, 3))
         self.assertTrue(alarm_severity_meets_threshold(9, 3))
+        self.assertFalse(alarm_severity_meets_threshold(None, 0))
 
-    def test_event_categories_have_independent_alert_and_map_thresholds(self) -> None:
+    def test_event_categories_default_all_threshold_targets_to_off(self) -> None:
         with temporary_database():
             thresholds = get_aprs_alarm_category_thresholds()
             self.assertTrue(
                 all(
-                    values == {"alerts": 1, "map": 1, "popup": 0}
+                    values == {"alerts": 0, "map": 0, "popup": 0}
                     for values in thresholds.values()
                 )
             )
@@ -237,7 +251,7 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
                     target="alerts",
                 )
             )
-            self.assertTrue(
+            self.assertFalse(
                 alarm_event_meets_category_threshold(
                     "UNKNOWN",
                     None,
@@ -291,6 +305,8 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
 
     def test_effective_rf_groups_append_alarm_groups_without_changing_standard_groups(self) -> None:
         with temporary_database():
+            save_aprs_alarm_enabled(True)
+            save_aprs_alarm_groups("PL-WARN")
             standard_groups = get_message_settings()["target_groups"]
             self.assertEqual(
                 get_effective_message_target_groups(),
@@ -433,7 +449,7 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
 
 class AprsAlarmGroupFilterTests(unittest.TestCase):
     def test_global_disable_removes_only_automatic_alarm_filter(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             save_aprs_alarm_enabled(False)
             self.assertEqual(build_automatic_aprsis_alarm_filter(), "")
             self.assertEqual(build_effective_aprsis_filter("m/100"), "m/100")
@@ -443,7 +459,7 @@ class AprsAlarmGroupFilterTests(unittest.TestCase):
             )
 
     def test_automatic_filter_supports_one_or_multiple_alarm_groups(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             self.assertEqual(build_automatic_aprsis_alarm_filter(), "g/PL-WARN")
             self.assertEqual(
                 build_automatic_aprsis_alarm_filter(["PL-WARN", "LOCALWARN"]),
@@ -453,7 +469,7 @@ class AprsAlarmGroupFilterTests(unittest.TestCase):
             self.assertEqual(build_automatic_aprsis_alarm_filter(), "")
 
     def test_effective_filter_appends_missing_groups_without_mutating_manual_filter(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             interface_id = insert_aprsis_interface("m/100")
             interface = get_enabled_aprsis_interface()
             self.assertEqual((interface or {}).get("filter"), "m/100")
@@ -477,20 +493,21 @@ class AprsAlarmGroupFilterTests(unittest.TestCase):
             )
 
     def test_effective_filter_does_not_duplicate_existing_group_subscriptions(self) -> None:
-        self.assertEqual(
-            build_effective_aprsis_filter("m/100 g/PL-WARN"),
-            "m/100 g/PL-WARN",
-        )
-        self.assertEqual(
-            build_effective_aprsis_filter(
-                "m/100 g/pl-warn/LOCALWARN",
-                ["PL-WARN", "LOCALWARN", "REGIONAL"],
-            ),
-            "m/100 g/pl-warn/LOCALWARN g/REGIONAL",
-        )
+        with configured_alarm_database():
+            self.assertEqual(
+                build_effective_aprsis_filter("m/100 g/PL-WARN"),
+                "m/100 g/PL-WARN",
+            )
+            self.assertEqual(
+                build_effective_aprsis_filter(
+                    "m/100 g/pl-warn/LOCALWARN",
+                    ["PL-WARN", "LOCALWARN", "REGIONAL"],
+                ),
+                "m/100 g/pl-warn/LOCALWARN g/REGIONAL",
+            )
 
     def test_alarm_group_change_uses_existing_filter_signature_reconnect(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             insert_aprsis_interface("m/100")
             before = get_enabled_aprsis_interface()
             assert before is not None
@@ -511,7 +528,7 @@ class AprsAlarmGroupFilterTests(unittest.TestCase):
             )
 
     def test_global_alarm_toggle_uses_existing_filter_signature_reconnect(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             insert_aprsis_interface("m/100")
             before = get_enabled_aprsis_interface()
             assert before is not None
@@ -689,7 +706,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertFalse(snapshot_frame["alert_should_notify"])
 
     def test_global_disable_keeps_frame_but_does_not_create_group_alert(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             save_aprs_alarm_enabled(False)
             accepted = process_normalized_tnc2_rx(
                 self._ALARM_LINE,
@@ -706,7 +723,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             self.assertEqual(int(frame_count["total"]), 1)
 
     def test_rf_alarm_group_message_creates_alert_and_keeps_only_traffic_frame(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             accepted = process_normalized_tnc2_rx(
                 self._ALARM_LINE,
                 source="Main RF",
@@ -718,7 +735,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             self._assert_alarm_only_frame_stored(source_kind="rf")
 
     def test_aprsis_alarm_group_message_creates_alert_and_keeps_only_traffic_frame(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             accepted = process_normalized_tnc2_rx(
                 self._ALARM_LINE,
                 source="APRS-IS · Internet RX",
@@ -735,7 +752,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             ("PLWX03", "WIND2", "103AA", "rf"),
             ("PLWX04", "OTHER", "104AA", "aprsis"),
         )
-        with temporary_database():
+        with configured_alarm_database():
             save_global_alarm_level_threshold(2)
             for offset, (source, event_code, message_id, source_kind) in enumerate(cases):
                 self.assertTrue(
@@ -778,7 +795,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
 
     def test_category_off_filters_heat_without_filtering_thunderstorms(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             thresholds = get_aprs_alarm_category_thresholds()
             thresholds["HEAT"]["alerts"] = "off"
             thresholds["THUNDERSTORM"]["alerts"] = 1
@@ -816,7 +833,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(int(frame_count["total"]), 2)
 
     def test_direct_messages_and_existing_standard_groups_still_work(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             for offset, line in enumerate(
                 (
                     "SP8ABC>APRS::SP0BOX-1 :Direct message{01",
@@ -844,7 +861,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             self.assertEqual(int((alert_count or {"total": -1})["total"]), 0)
 
     def test_standard_message_group_not_configured_as_alarm_remains_message_only(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             save_message_settings(
                 {
                     "default_path": "",
@@ -910,7 +927,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             ("2401", "82BCD"),
             ("3262", "F913A"),
         )
-        with temporary_database():
+        with configured_alarm_database():
             for offset, (area_code, message_id) in enumerate(frames):
                 self.assertTrue(
                     process_normalized_tnc2_rx(
@@ -949,7 +966,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
 
     def test_repeated_identical_frame_updates_one_alarm(self) -> None:
         line = self._group_alarm_line(area_code="1465", message_id="129AA")
-        with temporary_database():
+        with configured_alarm_database():
             for offset in range(2):
                 self.assertTrue(
                     process_normalized_tnc2_rx(
@@ -970,7 +987,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertTrue(all(relations[0]["alert_id"] == row["alert_id"] for row in relations))
 
     def test_same_message_id_from_another_sender_does_not_collide(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             for offset, source_callsign in enumerate(("PLWXSR", "PLWXS2")):
                 self.assertTrue(
                     process_normalized_tnc2_rx(
@@ -995,7 +1012,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
 
     def test_same_message_id_for_another_group_does_not_collide(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             save_aprs_alarm_groups("PL-WARN,DE-WARN")
             for offset, group in enumerate(("PL-WARN", "DE-WARN")):
                 self.assertTrue(
@@ -1021,7 +1038,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
 
     def test_messages_without_message_id_use_stable_content_fallback(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             for offset, area_code in enumerate(("1465", "2401", "1465")):
                 self.assertTrue(
                     process_normalized_tnc2_rx(
@@ -1054,7 +1071,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(len({row["identity_key"] for row in alerts}), 2)
 
     def test_three_parts_create_one_logical_alert_with_three_preserved_parts(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             for index, (area_codes, message_id) in enumerate(
                 (
                     (("1465", "1466", "1405"), "91AC2"),
@@ -1099,7 +1116,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(alert["completion_status"], "complete")
 
     def test_out_of_order_parts_are_visible_immediately_and_become_complete(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             expected_states = (
                 (2, "77BD1", ("1412",), 1, "incomplete"),
                 (1, "91AC2", ("1465",), 2, "incomplete"),
@@ -1145,7 +1162,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             area_codes=("1465",),
             message_id="91AC2",
         )
-        with temporary_database():
+        with configured_alarm_database():
             for offset in range(2):
                 self.assertTrue(
                     process_normalized_tnc2_rx(
@@ -1167,7 +1184,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(int(relation_count["total"]), 2)
 
     def test_logical_alert_id_is_scoped_by_sender(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             for offset, source in enumerate(("PLWXSR", "PLWXS2")):
                 self._receive_multipart_alarm(
                     source=source,
@@ -1187,7 +1204,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
 
     def test_logical_alert_id_is_scoped_by_destination_group(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             save_aprs_alarm_groups("PL-WARN,DE-WARN")
             for offset, group in enumerate(("PL-WARN", "DE-WARN")):
                 self._receive_multipart_alarm(
@@ -1208,7 +1225,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
 
     def test_logical_alert_aggregates_unique_area_codes_from_all_parts(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             self._receive_multipart_alarm(
                 part_number=1,
                 parts_total=2,
@@ -1235,7 +1252,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         self.assertEqual(page["items"][0]["area_count"], 3)
 
     def test_logical_group_alert_has_only_one_modal_candidate(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             for part_number, message_id in ((1, "91AC2"), (2, "77BD1")):
                 self._receive_multipart_alarm(
                     part_number=part_number,
@@ -1257,7 +1274,7 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
         )
 
     def test_tornado_level_three_popup_uses_one_logical_alert_candidate(self) -> None:
-        with temporary_database():
+        with configured_alarm_database():
             thresholds = get_aprs_alarm_category_thresholds()
             thresholds["TORNADO"]["popup"] = 3
             save_aprs_alarm_category_thresholds(thresholds)
