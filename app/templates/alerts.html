@@ -75,9 +75,19 @@
                     {% endfor %}
                 </select>
             </label>
+            <label>
+                <span>{{ t("Path") }} (RF)</span>
+                <select id="own-alert-rf-path" name="tx_path">
+                    {% for path in own_alert_compose.rf_path_options %}
+                    <option value="{{ path.value }}"{% if path.value == own_alert_compose.default_rf_path %} selected{% endif %}>
+                        {{ t(path.label) }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
             <label class="own-alert-comment-field">
                 <span>{{ t("Content") }}</span>
-                <textarea id="own-alert-comment" name="comment" rows="2" placeholder="{{ t('Optional alarm comment') }}"></textarea>
+                <textarea id="own-alert-comment" name="comment" rows="1" placeholder="{{ t('Optional alarm comment') }}"></textarea>
                 <span class="field-counter-row small">
                     <span id="own-alert-character-counter">{{ t("Select an area to calculate the limit.") }}</span>
                     <span id="own-alert-parts-counter" class="muted"></span>
@@ -106,6 +116,7 @@
             <div><dt>{{ t("Hazard") }}</dt><dd data-confirm-field="event_code">-</dd></div>
             <div><dt>{{ t("Valid until") }}</dt><dd data-confirm-field="valid_until">-</dd></div>
             <div><dt>{{ t("Repeat every") }}</dt><dd data-confirm-field="repeat">-</dd></div>
+            <div><dt>{{ t("Path") }} (RF)</dt><dd data-confirm-field="tx_path">-</dd></div>
             <div><dt>{{ t("Content") }}</dt><dd data-confirm-field="comment">-</dd></div>
             <div><dt>{{ t("Frames") }}</dt><dd data-confirm-field="parts_total">-</dd></div>
         </dl>
@@ -401,7 +412,8 @@
         "previewError": {{ t("Alarm preview could not be generated.")|tojson }},
         "sending": {{ t("Sending alarm...")|tojson }},
         "sent": {{ t("Alarm queued for transmission.")|tojson }},
-        "minutes": {{ t("{count} minutes")|tojson }}
+        "minutes": {{ t("{count} minutes")|tojson }},
+        "directPath": {{ t("Direct (no path)")|tojson }}
     }
 }
 </script>

@@ -22,6 +22,7 @@ from app.services.aprs_warning_identity import (
     normalize_cawf_comment,
 )
 from app.services.alerts import process_local_aprs_warning_frame
+from app.services.aprsis_rf import normalize_outbound_rf_path
 from app.services.content import get_station_settings
 from app.services.outbound import build_message_tnc2, enqueue_alarm_group_frames
 from app.services.tx_scope import TX_SCOPE_ALL_ACTIVE, normalize_tx_scope
@@ -39,6 +40,13 @@ from app.services.warning_groups import (
 OWN_ALERT_VALIDITY_HOURS = (1, 3, 6, 12, 24, 48)
 OWN_ALERT_REPEAT_INTERVALS = (15, 30, 60)
 OWN_ALERT_STATUSES = ("active", "expired", "cancelled", "error")
+OWN_ALERT_RF_PATH_OPTIONS = (
+    ("", "Direct (no path)"),
+    ("WIDE1-1", "WIDE1-1"),
+    ("WIDE2-1", "WIDE2-1"),
+    ("WIDE1-1,WIDE2-1", "WIDE1-1,WIDE2-1"),
+    ("WIDE2-2", "WIDE2-2"),
+)
 
 
 def _utc_datetime(value: Any = None) -> datetime:
@@ -111,9 +119,31 @@ def _translated_event_options(profile_group: str) -> list[dict[str, Any]]:
     return [dict(option) for option in warning_event_options(profile_group)]
 
 
+def _normalize_own_alert_rf_path(value: Any) -> str:
+    path = normalize_outbound_rf_path(value)
+    return "" if path == "DIRECT" else path
+
+
+def _own_alert_rf_path_context(
+    station: Mapping[str, Any],
+) -> tuple[str, list[dict[str, str]]]:
+    try:
+        default_path = _normalize_own_alert_rf_path(station.get("beacon_path"))
+    except ValueError:
+        default_path = ""
+    options = [
+        {"value": value, "label": label}
+        for value, label in OWN_ALERT_RF_PATH_OPTIONS
+    ]
+    if default_path and default_path not in {option["value"] for option in options}:
+        options.insert(1, {"value": default_path, "label": default_path})
+    return default_path, options
+
+
 def get_own_alert_compose_context() -> dict[str, Any]:
     station = get_station_settings()
     tx_available, tx_error = own_alert_tx_availability(station)
+    default_rf_path, rf_path_options = _own_alert_rf_path_context(station)
     latitude = station.get("latitude")
     longitude = station.get("longitude")
     groups: list[dict[str, Any]] = []
@@ -151,6 +181,8 @@ def get_own_alert_compose_context() -> dict[str, Any]:
         "repeat_intervals": list(OWN_ALERT_REPEAT_INTERVALS),
         "default_validity_hours": 24,
         "default_repeat_interval": 30,
+        "default_rf_path": default_rf_path,
+        "rf_path_options": rf_path_options,
         "station_position_known": position_known,
         "tx_available": tx_available,
         "tx_error": tx_error,
@@ -268,7 +300,12 @@ def validate_own_alert_payload(
         alert_id=preview_alert_id,
         area_code=area["code"],
     )
-    path = str(station.get("beacon_path") or "").strip().upper()
+    path_source = (
+        payload.get("tx_path")
+        if "tx_path" in payload
+        else station.get("beacon_path")
+    )
+    path = _normalize_own_alert_rf_path(path_source)
     callsign = _station_callsign(station)
     technical_frames = [
         build_message_tnc2(
@@ -325,6 +362,7 @@ def preview_own_alert(payload: Mapping[str, Any], *, now: Any = None) -> dict[st
         "parts_total": validated["parts_total"],
         "remaining_characters": validated["remaining_characters"],
         "technical_frames": validated["technical_frames"],
+        "tx_path": validated["tx_path"],
     }
 
 

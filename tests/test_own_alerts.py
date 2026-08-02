@@ -170,6 +170,58 @@ class OwnAlertTests(unittest.TestCase):
         self.assertEqual(validated["event_family"], "TSTORM")
         self.assertEqual(validated["severity_level"], 2)
 
+    def test_selected_rf_path_is_stored_and_reused_for_repeat_and_cancel(self):
+        selected_path = "WIDE1-1,WIDE2-1"
+        with temporary_database():
+            preview = preview_own_alert(payload(tx_path=selected_path), now=NOW)
+            created = create_own_alert(payload(tx_path=selected_path), now=NOW)
+            stored = fetch_one(
+                "SELECT tx_path FROM own_aprs_alerts WHERE id = ?",
+                (created["id"],),
+            )
+            first_payload = queued_payloads()[0]
+            self.assertTrue(
+                send_own_alert_now(
+                    created["id"],
+                    now=NOW + timedelta(minutes=1),
+                )[0]
+            )
+            repeated_payload = queued_payloads()[-1]
+            self.assertTrue(
+                cancel_own_alert(
+                    created["id"],
+                    now=NOW + timedelta(minutes=2),
+                )[0]
+            )
+            cancel_payload = queued_payloads()[-1]
+
+        self.assertEqual(preview["tx_path"], selected_path)
+        self.assertIn(f">APBOX0,{selected_path}::PL-WARN", preview["technical_frames"][0])
+        self.assertEqual(stored["tx_path"], selected_path)
+        self.assertEqual(first_payload["path"], selected_path)
+        self.assertEqual(repeated_payload["path"], selected_path)
+        self.assertEqual(cancel_payload["path"], selected_path)
+
+    def test_rf_path_defaults_to_station_path_and_rejects_invalid_hops(self):
+        with temporary_database():
+            execute(
+                "UPDATE station_settings SET beacon_path = 'WIDE2-1' WHERE id = 1"
+            )
+            compose = get_own_alert_compose_context()
+            preview = preview_own_alert(payload(), now=NOW)
+            direct = preview_own_alert(payload(tx_path="DIRECT"), now=NOW)
+            with self.assertRaisesRegex(ValueError, "invalid address"):
+                preview_own_alert(payload(tx_path="WIDE1-1*"), now=NOW)
+
+        self.assertEqual(compose["default_rf_path"], "WIDE2-1")
+        self.assertIn(
+            "WIDE1-1,WIDE2-1",
+            {option["value"] for option in compose["rf_path_options"]},
+        )
+        self.assertEqual(preview["tx_path"], "WIDE2-1")
+        self.assertEqual(direct["tx_path"], "")
+        self.assertNotIn(">APBOX0,", direct["technical_frames"][0])
+
     def test_generator_builds_single_and_multipart_messages_with_one_id(self):
         single = generate_aprs_group_warning_parts(
             expiry="031000z",
@@ -575,6 +627,8 @@ class OwnAlertTests(unittest.TestCase):
         from app.main import app
         from app.models import UserIdentity
 
+        style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
         with temporary_database():
             app.dependency_overrides[get_current_user] = lambda: UserIdentity(
                 id=1,
@@ -613,6 +667,13 @@ class OwnAlertTests(unittest.TestCase):
         self.assertNotIn("My active alarms", page.text)
         self.assertIn('id="own-alert-hazard"', page.text)
         self.assertIn('id="own-alert-level"', page.text)
+        self.assertIn('id="own-alert-rf-path"', page.text)
+        self.assertIn('name="tx_path"', page.text)
+        self.assertIn('rows="1"', page.text)
+        self.assertIn(
+            "grid-template-columns: repeat(4, minmax(0, 1fr));",
+            style_source,
+        )
         self.assertNotIn('id="own-alert-area-search"', page.text)
         self.assertEqual(areas.status_code, 200)
         self.assertIn("1465", {area["code"] for area in areas.json()["areas"]})

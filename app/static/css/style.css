@@ -8012,7 +8012,7 @@ button.message-delivery-badge {
 
 .own-alert-top-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: var(--space-4);
 }
@@ -8037,7 +8037,7 @@ button.message-delivery-badge {
 
 .own-alert-compose-form {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     align-items: start;
     gap: var(--space-2);
 }
@@ -8052,11 +8052,12 @@ button.message-delivery-badge {
 }
 
 .own-alert-comment-field {
-    grid-column: 1 / -1;
+    grid-column: auto;
 }
 
 .own-alert-comment-field textarea {
-    min-height: 3.25rem;
+    min-height: 2.1rem;
+    resize: vertical;
 }
 
 .own-alert-compose-actions {
@@ -8212,9 +8213,9 @@ button.message-delivery-badge {
     flex-wrap: wrap;
 }
 
-@media (max-width: 900px) {
-    .own-alert-top-grid {
-        grid-template-columns: 1fr;
+@media (max-width: 1100px) {
+    .own-alert-compose-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

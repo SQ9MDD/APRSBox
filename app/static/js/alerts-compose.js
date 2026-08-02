@@ -63,6 +63,7 @@
     const validity = document.getElementById("own-alert-validity");
     const comment = document.getElementById("own-alert-comment");
     const repeat = document.getElementById("own-alert-repeat");
+    const rfPath = document.getElementById("own-alert-rf-path");
     const characterCounter = document.getElementById("own-alert-character-counter");
     const partsCounter = document.getElementById("own-alert-parts-counter");
     const formStatus = document.getElementById("own-alert-form-status");
@@ -84,6 +85,7 @@
         validity_hours: Number(validity?.value || 0),
         comment: comment?.value || "",
         repeat_interval_minutes: Number(repeat?.value || 0),
+        tx_path: rfPath?.value || "",
     });
     const selectedArea = () => areas.find((area) => area.code === areaSelect?.value);
     const areaLabel = (area) => {
@@ -228,7 +230,7 @@
         }
         schedulePreview();
     });
-    [hazardSelect, levelSelect, validity, repeat].forEach((field) => field?.addEventListener("change", schedulePreview));
+    [hazardSelect, levelSelect, validity, repeat, rfPath].forEach((field) => field?.addEventListener("change", schedulePreview));
     comment?.addEventListener("input", schedulePreview);
 
     const populateConfirmation = (preview) => {
@@ -248,6 +250,7 @@
         );
         setField("valid_until", new Date(preview.valid_until).toLocaleString());
         setField("repeat", format(i18n.minutes, { count: preview.repeat_interval_minutes }));
+        setField("tx_path", preview.tx_path || i18n.directPath || "-");
         setField("comment", preview.comment || "-");
         setField("parts_total", format(i18n.parts, { count: preview.parts_total }));
         if (technicalFrames) technicalFrames.textContent = (preview.technical_frames || []).join("\n");
