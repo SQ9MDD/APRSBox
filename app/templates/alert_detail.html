@@ -92,10 +92,12 @@
             <dd>{{ alert.destination_group }}</dd>
             <dt>{{ t("Logical alert ID") }}</dt>
             <dd>{% if alert.logical_alert_id %}<code>{{ alert.logical_alert_id }}</code>{% else %}-{% endif %}</dd>
-            <dt>{{ t("Event code") }}</dt>
-            <dd>{{ alert.event_code or "-" }}</dd>
-            <dt>{{ t("Severity level") }}</dt>
-            <dd>{{ alert.severity_level if alert.severity_level is not none else "-" }}</dd>
+            <dt class="alert-detail-critical-value">{{ t("Event code") }}</dt>
+            <dd class="alert-detail-critical-value">{{ alert.event_code or "-" }}</dd>
+            <dt class="alert-detail-critical-value">{{ t("Severity level") }}</dt>
+            <dd class="alert-detail-critical-value">{{ alert.severity_level if alert.severity_level is not none else "-" }}</dd>
+            <dt class="alert-detail-critical-value">{{ t("Comment") }}</dt>
+            <dd class="alert-detail-critical-value">{{ alert.protocol_comment or "-" }}</dd>
             <dt>{{ t("Received parts") }}</dt>
             <dd>{{ alert.received_parts }} / {{ alert.parts_total or "?" }}</dd>
             <dt>{{ t("Completion status") }}</dt>
@@ -110,9 +112,10 @@
             <dd>{% if alert.area_codes %}<code>{{ alert.area_codes|join(", ") }}</code>{% else %}-{% endif %}</dd>
             <dt>{{ t("Expires at") }}</dt>
             <dd>{{ alert.expires_at_label or "-" }}</dd>
+            {% else %}
+            <dt class="alert-detail-critical-value">{{ t("Comment") }}</dt>
+            <dd class="alert-detail-critical-value">{{ alert.message or "-" }}</dd>
             {% endif %}
-            <dt>{{ t("Comment") }}</dt>
-            <dd>{{ alert.message or "-" }}</dd>
             <dt>{{ t("First received") }}</dt>
             <dd>{{ alert.first_seen_label }}</dd>
             <dt>{{ t("Last received") }}</dt>

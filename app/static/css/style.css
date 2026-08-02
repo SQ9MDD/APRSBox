@@ -6685,6 +6685,11 @@ select:focus-visible,
     margin-top: var(--space-4);
 }
 
+.alert-detail-critical-value {
+    color: var(--danger);
+    font-weight: 700;
+}
+
 .alert-history-table {
     min-width: 62rem;
     table-layout: auto;

@@ -713,6 +713,10 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn("/static/icons/weather-lightning-rainy.svg", response.text)
         self.assertIn("/static/icons/alert-outline.svg", response.text)
         self.assertIn("Expiry / last received", response.text)
+        self.assertGreaterEqual(
+            response.text.count("data-alert-protocol-cancel-placeholder"),
+            2,
+        )
         self.assertNotIn("<th>Destination group</th>", response.text)
         self.assertNotIn("<th>Logical alert ID</th>", response.text)
         self.assertNotIn("<th>Completion status</th>", response.text)
@@ -728,7 +732,10 @@ class AprsAlertTests(unittest.TestCase):
             receive_emergency(timestamp="2026-07-30T20:00:00+00:00")
             self.assertTrue(
                 process_normalized_tnc2_rx(
-                    GROUP_WARNING_LINE,
+                    GROUP_WARNING_LINE.replace(
+                        "1465{91AC2",
+                        "1465|Silna burza{91AC2",
+                    ),
                     source="APRS-IS",
                     source_kind="aprsis",
                     timestamp="2026-07-30T20:01:00+00:00",
@@ -762,6 +769,7 @@ class AprsAlertTests(unittest.TestCase):
 
         self.assertEqual(group_response.status_code, 200)
         self.assertIn('id="alert-detail-map-root"', group_response.text)
+        self.assertIn("Silna burza", group_response.text)
         self.assertIn("alert-detail-map.js", group_response.text)
         self.assertNotIn('id="station-detail-map-root"', group_response.text)
         self.assertNotIn("station-detail-map.js", group_response.text)
@@ -811,9 +819,11 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn("alert.last_seen_label", alerts_source)
         self.assertIn("alert-list-muted-indicator", alerts_source)
         self.assertIn("alert-mute-form", alerts_source)
+        self.assertIn("data-alert-protocol-cancel-placeholder", alerts_source)
         self.assertIn("data-alert-unmute-placeholder", alerts_source)
         self.assertIn('name="return_to"', alerts_source)
         self.assertIn("min-width: 42rem", style_source)
+        self.assertIn(".alert-detail-critical-value", style_source)
         self.assertIn(".alert-category-badge-level-1", style_source)
         self.assertIn(".alert-category-badge-level-2", style_source)
         self.assertIn(".alert-category-badge-level-3", style_source)
@@ -823,6 +833,19 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn("alert-emergency-panel alert-detail-panel", alert_detail_source)
         self.assertIn("alert-emergency-panel alert-history-panel", alert_detail_source)
         self.assertIn('{{ t("Expires at") }}', alert_detail_source)
+        self.assertIn("alert-detail-critical-value", alert_detail_source)
+        self.assertIn(
+            '{{ alert.protocol_comment or "-" }}',
+            alert_detail_source,
+        )
+        self.assertLess(
+            alert_detail_source.index('{{ t("Severity level") }}'),
+            alert_detail_source.index('{{ alert.protocol_comment or "-" }}'),
+        )
+        self.assertLess(
+            alert_detail_source.index('{{ alert.protocol_comment or "-" }}'),
+            alert_detail_source.index('{{ t("Received parts") }}'),
+        )
         self.assertIn("alert-detail-header-tools", alert_detail_source)
         self.assertIn("alert-detail-help-button", alert_detail_source)
         self.assertIn('class="station-detail-hero alert-detail-hero"', alert_detail_source)

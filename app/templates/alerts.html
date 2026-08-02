@@ -288,6 +288,17 @@
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/alarm-off.svg" alt="">
                                 </button>
+                                {% else %}
+                                <button
+                                    type="button"
+                                    class="table-icon-button"
+                                    title="{{ t('Cancel alarm') }}"
+                                    aria-label="{{ t('Cancel alarm') }} #{{ alert.id }}"
+                                    data-alert-protocol-cancel-placeholder
+                                    disabled
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/alarm-off.svg" alt="">
+                                </button>
                                 {% endif %}
                                 {% if can_manage_alerts %}
                                 <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
