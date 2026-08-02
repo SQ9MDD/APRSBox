@@ -294,7 +294,21 @@ def validate_own_alert_payload(
         area_code=area["code"],
         comment=comment,
     )
+    capacity_per_frame = cawf_comment_capacity(
+        expiry=expiry,
+        event_code=event_code,
+        alert_id=preview_alert_id,
+        area_code=area["code"],
+        parts_total=1,
+    )
     capacity = cawf_comment_capacity(
+        expiry=expiry,
+        event_code=event_code,
+        alert_id=preview_alert_id,
+        area_code=area["code"],
+        parts_total=len(parts),
+    )
+    max_capacity = cawf_comment_capacity(
         expiry=expiry,
         event_code=event_code,
         alert_id=preview_alert_id,
@@ -335,7 +349,9 @@ def validate_own_alert_payload(
         "parts": parts,
         "parts_total": len(parts),
         "comment_capacity": capacity,
-        "remaining_characters": capacity - len(normalize_cawf_comment(comment)),
+        "comment_capacity_per_frame": capacity_per_frame,
+        "comment_max_capacity": max_capacity,
+        "remaining_characters": capacity - len(comment),
         "technical_frames": technical_frames,
         "sender_callsign": callsign,
         "tx_path": path,
@@ -360,6 +376,9 @@ def preview_own_alert(payload: Mapping[str, Any], *, now: Any = None) -> dict[st
         "repeat_interval_minutes": validated["repeat_interval_minutes"],
         "comment": validated["comment"],
         "parts_total": validated["parts_total"],
+        "comment_capacity": validated["comment_capacity"],
+        "comment_capacity_per_frame": validated["comment_capacity_per_frame"],
+        "comment_max_capacity": validated["comment_max_capacity"],
         "remaining_characters": validated["remaining_characters"],
         "technical_frames": validated["technical_frames"],
         "tx_path": validated["tx_path"],

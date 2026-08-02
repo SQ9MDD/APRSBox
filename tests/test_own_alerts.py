@@ -291,18 +291,31 @@ class OwnAlertTests(unittest.TestCase):
 
     def test_dynamic_comment_limit_counts_headers_and_parts(self):
         with temporary_database():
+            empty = preview_own_alert(payload(comment=""), now=NOW)
             short = preview_own_alert(payload(comment="A"), now=NOW)
-            long = preview_own_alert(payload(comment="A" * 100), now=NOW)
-            capacity = int(short["remaining_characters"]) + 1
-            at_limit = preview_own_alert(payload(comment="A" * capacity), now=NOW)
+            capacity = int(empty["comment_capacity_per_frame"])
+            at_frame_limit = preview_own_alert(
+                payload(comment="A" * capacity),
+                now=NOW,
+            )
+            next_frame = preview_own_alert(
+                payload(comment="A" * (capacity + 1)),
+                now=NOW,
+            )
+            max_capacity = int(empty["comment_max_capacity"])
+            at_limit = preview_own_alert(
+                payload(comment="A" * max_capacity),
+                now=NOW,
+            )
             with self.assertRaises(ValueError):
-                preview_own_alert(payload(comment="A" * (capacity + 1)), now=NOW)
-        self.assertEqual(
-            short["remaining_characters"] - long["remaining_characters"],
-            99,
-        )
+                preview_own_alert(payload(comment="A" * (max_capacity + 1)), now=NOW)
+        self.assertEqual(empty["remaining_characters"], capacity)
+        self.assertEqual(short["remaining_characters"], capacity - 1)
         self.assertEqual(short["parts_total"], 1)
-        self.assertGreater(long["parts_total"], 1)
+        self.assertEqual(at_frame_limit["remaining_characters"], 0)
+        self.assertEqual(at_frame_limit["parts_total"], 1)
+        self.assertEqual(next_frame["remaining_characters"], capacity - 1)
+        self.assertEqual(next_frame["parts_total"], 2)
         self.assertEqual(at_limit["remaining_characters"], 0)
         self.assertEqual(at_limit["parts_total"], 9)
 

@@ -163,15 +163,7 @@
             }
             const preview = await response.json();
             lastPreview = preview;
-            if (characterCounter) {
-                characterCounter.classList.remove("field-validation-error");
-                characterCounter.textContent = format(i18n.remainingCharacters, {
-                    count: preview.remaining_characters,
-                });
-            }
-            if (partsCounter) {
-                partsCounter.textContent = format(i18n.parts, { count: preview.parts_total });
-            }
+            updateCommentCounterImmediately();
             return preview;
         } catch (error) {
             if (sequence !== previewSequence) return null;
@@ -184,6 +176,36 @@
     const schedulePreview = () => {
         window.clearTimeout(previewTimer);
         previewTimer = window.setTimeout(() => void requestPreview(), 160);
+    };
+    const normalizedCommentLength = () => String(comment?.value || "")
+        .replace(/[\r\n]/g, " ")
+        .normalize("NFKD")
+        .replace(/[^\x00-\x7F]/g, "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .replaceAll("|", "/")
+        .replaceAll("{", "(")
+        .length;
+    const updateCommentCounterImmediately = () => {
+        const capacityPerFrame = Number(lastPreview?.comment_capacity_per_frame || 0);
+        const maxCapacity = Number(lastPreview?.comment_max_capacity || 0);
+        if (!capacityPerFrame || !maxCapacity) return;
+        const commentLength = normalizedCommentLength();
+        const maxParts = Math.max(1, Math.floor(maxCapacity / capacityPerFrame));
+        const partsTotal = Math.min(
+            maxParts,
+            Math.max(1, Math.ceil(commentLength / capacityPerFrame))
+        );
+        const remaining = Math.max(0, (capacityPerFrame * partsTotal) - commentLength);
+        if (characterCounter) {
+            characterCounter.classList.remove("field-validation-error");
+            characterCounter.textContent = format(i18n.remainingCharacters, {
+                count: remaining,
+            });
+        }
+        if (partsCounter) {
+            partsCounter.textContent = format(i18n.parts, { count: partsTotal });
+        }
     };
     const loadAreas = async () => {
         if (!target || !areaSelect) return;
@@ -235,7 +257,10 @@
         schedulePreview();
     });
     [hazardSelect, levelSelect, validity, repeat, rfPath].forEach((field) => field?.addEventListener("change", schedulePreview));
-    comment?.addEventListener("input", schedulePreview);
+    comment?.addEventListener("input", () => {
+        updateCommentCounterImmediately();
+        schedulePreview();
+    });
 
     const populateConfirmation = (preview) => {
         const setField = (name, value) => {

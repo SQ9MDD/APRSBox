@@ -140,6 +140,7 @@ def cawf_comment_capacity(
     event_code: Any,
     alert_id: Any,
     area_code: Any,
+    parts_total: int = CAWF_MAX_PARTS,
 ) -> int:
     normalized = _validate_cawf_generation_fields(
         expiry=expiry,
@@ -147,6 +148,8 @@ def cawf_comment_capacity(
         alert_id=alert_id,
         area_code=area_code,
     )
+    if not 1 <= parts_total <= CAWF_MAX_PARTS:
+        raise ValueError("Invalid CAWF part count.")
     return sum(
         max(0, capacity)
         for capacity in _comment_capacities(
@@ -154,7 +157,7 @@ def cawf_comment_capacity(
             event_code=normalized[1],
             alert_id=normalized[2],
             area_code=normalized[3],
-            parts_total=CAWF_MAX_PARTS,
+            parts_total=parts_total,
         )
     )
 
