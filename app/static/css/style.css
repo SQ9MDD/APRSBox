@@ -1232,6 +1232,10 @@ body {
         display: none;
     }
 
+    :root[data-sidebar-state="collapsed"] .nav-count-badge {
+        display: none;
+    }
+
     :root[data-sidebar-state="collapsed"] .nav-separator {
         width: 1.45rem;
         margin-inline: auto;

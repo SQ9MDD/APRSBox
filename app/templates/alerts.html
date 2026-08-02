@@ -13,6 +13,7 @@
 </section>
 {% endif %}
 
+{% if can_manage_alerts %}
 <div class="own-alert-modal" id="own-alert-cancel-modal" data-root-path="{{ request.scope.root_path }}" hidden>
     <div class="own-alert-modal-backdrop" data-close-own-alert-cancel></div>
     <div class="own-alert-modal-dialog own-alert-modal-dialog-small" role="dialog" aria-modal="true" aria-labelledby="own-alert-cancel-title" tabindex="-1">
@@ -27,6 +28,7 @@
         </form>
     </div>
 </div>
+{% endif %}
 
 <section class="panel alerts-page-panel">
     <div class="panel-body">
@@ -169,7 +171,7 @@
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/file-document-alert-outline.svg" alt="">
                                 </a>
-                                {% if alert.can_cancel_protocol %}
+                                {% if can_manage_alerts and alert.can_cancel_protocol %}
                                 <button
                                     type="button"
                                     class="table-icon-button table-icon-button-danger"
@@ -180,7 +182,7 @@
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/alarm-off.svg" alt="">
                                 </button>
-                                {% else %}
+                                {% elif can_manage_alerts %}
                                 <button
                                     type="button"
                                     class="table-icon-button"
@@ -263,7 +265,9 @@
                     <button type="submit" class="button button-secondary button-danger">{{ t("Delete selected") }}</button>
                 </form>
                 {% endif %}
+                {% if can_manage_alerts %}
                 <a class="button" href="{{ request.scope.root_path }}/alerts/send">{{ t("Send alarm") }}</a>
+                {% endif %}
             </div>
             <div class="form-actions">
                 {% if alerts_page.has_previous %}

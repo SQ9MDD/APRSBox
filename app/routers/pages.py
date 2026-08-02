@@ -3481,7 +3481,7 @@ def alerts_page(
 @router.get("/alerts/send")
 def own_alert_send_page(
     request: Request,
-    current_user: UserIdentity = Depends(get_current_user),
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
     context = build_template_context(
@@ -3497,7 +3497,7 @@ def own_alert_send_page(
 @router.get("/api/alerts/send/areas")
 def own_alert_area_options(
     group: str,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     try:
         payload = get_own_alert_area_options(group)
@@ -3512,7 +3512,7 @@ def own_alert_area_options(
 @router.post("/api/alerts/send/preview")
 async def own_alert_preview(
     request: Request,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     try:
         payload = await request.json()
@@ -3529,7 +3529,7 @@ async def own_alert_preview(
 @router.post("/api/alerts/send")
 async def own_alert_send(
     request: Request,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
     try:
         payload = await request.json()
@@ -3547,7 +3547,7 @@ async def own_alert_send(
 def own_alert_send_now_action(
     own_alert_id: int,
     request: Request,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
     success, message = send_own_alert_now(own_alert_id)
     return _alerts_redirect(
@@ -3562,7 +3562,7 @@ def own_alert_send_now_action(
 def own_alert_cancel_action(
     own_alert_id: int,
     request: Request,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
     success, message = cancel_own_alert(own_alert_id)
     return _alerts_redirect(
@@ -3577,7 +3577,7 @@ def own_alert_cancel_action(
 def station_alert_cancel_action(
     alert_id: int,
     request: Request,
-    _: UserIdentity = Depends(get_current_user),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
     success, message = cancel_station_aprs_alert(alert_id)
     return _alerts_redirect(

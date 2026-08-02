@@ -157,6 +157,21 @@ class RoleAccessTests(unittest.TestCase):
                 for path in ("/messages", "/settings", "/station", "/wx", "/objects", "/admin/users"):
                     response = client.get(path)
                     self.assertEqual(response.status_code, 403, path)
+
+                alerts_response = client.get("/alerts")
+                self.assertNotIn('href="/alerts/send"', alerts_response.text)
+                self.assertNotIn('id="own-alert-cancel-modal"', alerts_response.text)
+                restricted_alert_requests = (
+                    client.get("/alerts/send"),
+                    client.get("/api/alerts/send/areas", params={"group": "PL-WARN"}),
+                    client.post("/api/alerts/send/preview", json={}),
+                    client.post("/api/alerts/send", json={}),
+                    client.post("/alerts/own/1/send-now", follow_redirects=False),
+                    client.post("/alerts/own/1/cancel", follow_redirects=False),
+                    client.post("/alerts/1/cancel-protocol", follow_redirects=False),
+                )
+                for response in restricted_alert_requests:
+                    self.assertEqual(response.status_code, 403, response.request.url.path)
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
 

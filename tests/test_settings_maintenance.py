@@ -394,6 +394,10 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar', stylesheet_source)
         self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar-user-panel', stylesheet_source)
         self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar-utc-clock', stylesheet_source)
+        self.assertIn(
+            ':root[data-sidebar-state="collapsed"] .nav-count-badge {\n        display: none;\n    }',
+            stylesheet_source,
+        )
         self.assertIn(".sidebar-logo-icon", stylesheet_source)
         self.assertIn(".nav-label", stylesheet_source)
 
