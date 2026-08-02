@@ -51,12 +51,33 @@ _WARNING_GEOMETRY_SOURCES = {
         country_code="pl",
         path_pattern="pl/powiaty.mid.geojson",
     ),
+    "ES-WARN": _WarningGeometrySource(
+        country_code="es",
+        path_pattern="es/aemet_warning_zones_final.geojson",
+    ),
     "NWS-WARN": _WarningGeometrySource(
         country_code="us",
         path_pattern="us/nws_counties.mid.geojson",
         identifier_property="JPT_KOD_JE",
         area_code_pattern=_NWS_COUNTY_CODE_RE,
     ),
+}
+
+_AREA_IDENTIFIER_PROPERTIES: dict[str, str] = {
+    "PL-WARN": "JPT_KOD_JE",
+    "ES-WARN": "zone_code",
+    "NWS-WARN": "JPT_KOD_JE",
+}
+
+_AREA_LABEL_PROPERTIES: dict[str, tuple[str, ...]] = {
+    "PL-WARN": ("JPT_NAZWA_",),
+    "ES-WARN": ("zone_name",),
+    "NWS-WARN": ("JPT_NAZWA_",),
+}
+_AREA_PARENT_PROPERTIES: dict[str, tuple[str, ...]] = {
+    "PL-WARN": (),
+    "ES-WARN": ("province_name", "community_name"),
+    "NWS-WARN": (),
 }
 
 
@@ -181,6 +202,179 @@ def _is_area_geometry(value: Any) -> bool:
             and all(_is_polygon_coordinates(polygon) for polygon in coordinates)
         )
     return False
+
+
+def _property_text(properties: Mapping[str, Any], names: tuple[str, ...]) -> str:
+    for name in names:
+        text = str(properties.get(name) or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _point_on_segment(
+    longitude: float,
+    latitude: float,
+    start: list[Any],
+    end: list[Any],
+) -> bool:
+    start_x, start_y = float(start[0]), float(start[1])
+    end_x, end_y = float(end[0]), float(end[1])
+    cross = (longitude - start_x) * (end_y - start_y) - (latitude - start_y) * (end_x - start_x)
+    if abs(cross) > 1e-10:
+        return False
+    return (
+        min(start_x, end_x) - 1e-10 <= longitude <= max(start_x, end_x) + 1e-10
+        and min(start_y, end_y) - 1e-10 <= latitude <= max(start_y, end_y) + 1e-10
+    )
+
+
+def _point_in_ring(longitude: float, latitude: float, ring: list[Any]) -> bool:
+    inside = False
+    previous = ring[-1]
+    for current in ring:
+        if _point_on_segment(longitude, latitude, previous, current):
+            return True
+        current_x, current_y = float(current[0]), float(current[1])
+        previous_x, previous_y = float(previous[0]), float(previous[1])
+        intersects = ((current_y > latitude) != (previous_y > latitude)) and (
+            longitude
+            < (previous_x - current_x) * (latitude - current_y) / (previous_y - current_y)
+            + current_x
+        )
+        if intersects:
+            inside = not inside
+        previous = current
+    return inside
+
+
+def _point_in_polygon(longitude: float, latitude: float, polygon: list[Any]) -> bool:
+    if not polygon or not _point_in_ring(longitude, latitude, polygon[0]):
+        return False
+    return not any(_point_in_ring(longitude, latitude, hole) for hole in polygon[1:])
+
+
+def _geometry_contains_point(geometry: Mapping[str, Any], longitude: float, latitude: float) -> bool:
+    coordinates = geometry.get("coordinates")
+    if geometry.get("type") == "Polygon" and _is_polygon_coordinates(coordinates):
+        return _point_in_polygon(longitude, latitude, coordinates)
+    if geometry.get("type") == "MultiPolygon" and isinstance(coordinates, list):
+        return any(
+            _point_in_polygon(longitude, latitude, polygon)
+            for polygon in coordinates
+            if _is_polygon_coordinates(polygon)
+        )
+    return False
+
+
+def list_alarm_group_areas(
+    alarm_group: Any,
+    *,
+    geodata_root: Path | None = None,
+) -> list[dict[str, str]]:
+    """Load selectable areas only from the GeoJSON registered for a group."""
+
+    resolved = _geometry_source_from_alarm_group(alarm_group)
+    if resolved is None:
+        return []
+    normalized_group, source = resolved
+    identifier_property = _AREA_IDENTIFIER_PROPERTIES.get(normalized_group)
+    if identifier_property is None:
+        return []
+    root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for path in _geojson_paths(root, source):
+        document = _load_geojson(path)
+        if document is None:
+            continue
+        for feature in document.get("features", []):
+            if not isinstance(feature, dict) or feature.get("type") != "Feature":
+                continue
+            if not _is_area_geometry(feature.get("geometry")):
+                continue
+            identifier = str(_feature_identifier(feature, identifier_property) or "").strip()
+            code = _supported_area_code(
+                identifier,
+                alarm_group=normalized_group,
+                source=source,
+                log_unsupported=False,
+            )
+            comparison_key = code.casefold()
+            if not code or comparison_key in seen:
+                continue
+            properties = feature.get("properties")
+            if not isinstance(properties, dict):
+                properties = {}
+            name = _property_text(properties, _AREA_LABEL_PROPERTIES.get(normalized_group, ())) or code
+            parent_values = [
+                str(properties.get(key) or "").strip()
+                for key in _AREA_PARENT_PROPERTIES.get(normalized_group, ())
+            ]
+            parent = " · ".join(value for value in parent_values if value and value != name)
+            result.append({"code": code, "name": name, "parent": parent})
+            seen.add(comparison_key)
+    result.sort(key=lambda item: (item["name"].casefold(), item["code"].casefold()))
+    return result
+
+
+def find_alarm_group_area_for_point(
+    alarm_group: Any,
+    *,
+    latitude: Any,
+    longitude: Any,
+    geodata_root: Path | None = None,
+) -> dict[str, str] | None:
+    try:
+        normalized_latitude = float(latitude)
+        normalized_longitude = float(longitude)
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= normalized_latitude <= 90 and -180 <= normalized_longitude <= 180):
+        return None
+    resolved = _geometry_source_from_alarm_group(alarm_group)
+    if resolved is None:
+        return None
+    normalized_group, source = resolved
+    identifier_property = _AREA_IDENTIFIER_PROPERTIES.get(normalized_group)
+    if identifier_property is None:
+        return None
+    root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
+    areas_by_code = {
+        area["code"].casefold(): area
+        for area in list_alarm_group_areas(normalized_group, geodata_root=root)
+    }
+    for path in _geojson_paths(root, source):
+        document = _load_geojson(path)
+        if document is None:
+            continue
+        for feature in document.get("features", []):
+            if not isinstance(feature, dict) or feature.get("type") != "Feature":
+                continue
+            geometry = feature.get("geometry")
+            if not isinstance(geometry, dict) or not _geometry_contains_point(
+                geometry,
+                normalized_longitude,
+                normalized_latitude,
+            ):
+                continue
+            code = str(_feature_identifier(feature, identifier_property) or "").strip()
+            area = areas_by_code.get(code.casefold())
+            if area is not None:
+                return dict(area)
+    return None
+
+
+def alarm_group_has_geojson(
+    alarm_group: Any,
+    *,
+    geodata_root: Path | None = None,
+) -> bool:
+    resolved = _geometry_source_from_alarm_group(alarm_group)
+    if resolved is None or resolved[0] not in _AREA_IDENTIFIER_PROPERTIES:
+        return False
+    root = Path(geodata_root) if geodata_root is not None else GEODATA_ROOT
+    return bool(list_alarm_group_areas(resolved[0], geodata_root=root))
 
 
 @lru_cache(maxsize=32)

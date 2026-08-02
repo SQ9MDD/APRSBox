@@ -17,13 +17,19 @@ CAWF is a transport format. It does not replace the authoritative national warni
 EXPIRY,EVENT_LEVEL,ALERT_ID,PART/TOTAL,AREA[,AREA...]{MESSAGE_ID
 ```
 
+APRSBox also accepts and generates the optional comment extension:
+
+```text
+EXPIRY,EVENT_LEVEL,ALERT_ID,PART/TOTAL,AREA[,AREA...]|COMMENT{MESSAGE_ID
+```
+
 Example:
 
 ```text
 012300z,TSTORM2,@3569,1/2,0609,1206,1409{A6474
 ```
 
-A compliant CAWF v1 payload uses fixed field order, uppercase ASCII protocol tokens except for the literal lowercase `z`, no internal whitespace, and at most 67 characters including the APRS message identifier.
+A compliant CAWF v1 payload uses fixed field order and uppercase ASCII protocol tokens except for the literal lowercase `z`. APRSBox's optional comment extension starts after `|`, may contain spaces, and is transliterated to APRS-safe ASCII. The complete payload has at most 67 characters including the APRS message identifier.
 
 ## Fields
 
@@ -32,6 +38,7 @@ A compliant CAWF v1 payload uses fixed field order, uppercase ASCII protocol tok
 - `ALERT_ID` is `@` followed by four uppercase hexadecimal characters. All fragments of one logical alert share it. Its receiver scope is source callsign plus warning group plus alert ID; it is not globally unique.
 - `PART/TOTAL` starts at `1/1`. Part numbers are unique, `PART` cannot exceed `TOTAL`, and every fragment should declare the same total.
 - `AREA` contains 1–8 uppercase letters, digits, or hyphens. Leading zeros are significant and the code must exactly match the profile geometry identifier.
+- `COMMENT` is optional human-readable APRS-safe ASCII text after `|`. APRSBox calculates its capacity from the complete generated payload and splits it with the normal CAWF multipart mechanism.
 - `MESSAGE_ID` is five uppercase hexadecimal characters after `{`. It identifies one fragment, not the complete alert. An exact retransmission should keep the ID; a changed fragment needs a new one. There is no closing brace.
 
 APRSBox accepts a somewhat broader alphanumeric APRS message identifier for interoperability, but publishers should use the stricter CAWF v1 form.
@@ -71,7 +78,7 @@ APRSBox keeps the exact event code and uses known prefixes to select its UI cate
 - Further fragments and exact repeats update the same record and retain links to their Traffic Monitor frames.
 - Reusing the same `ALERT_ID` updates the same source-and-group-scoped record. A publisher should avoid reuse for at least 48 hours after expiry.
 - At `EXPIRY`, APRSBox deactivates the alert but preserves its stored frames and history.
-- CAWF v1 defines no standard explicit cancellation. A cancellation address or custom token must not be assumed to cancel an existing APRSBox alert.
+- APRSBox cancellation uses the same envelope with `EVENT_LEVEL` set to `CANCEL`, the same source callsign, warning group, `ALERT_ID`, expiry and area code. The receiver scopes cancellation by source, group and alert ID, so another station cannot cancel a sender's alert by reusing its short ID.
 
 ## Country profiles and map geometry
 

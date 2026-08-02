@@ -148,7 +148,7 @@ def _recalculate_logical_alert(
 ) -> None:
     parts = connection.execute(
         """
-        SELECT part_number, parts_total, area_codes_json
+        SELECT part_number, parts_total, area_codes_json, comment_fragment
         FROM aprs_alert_parts
         WHERE alert_id = ?
         ORDER BY
@@ -163,6 +163,7 @@ def _recalculate_logical_alert(
     seen_area_codes: set[str] = set()
     received_part_numbers: set[int] = set()
     declared_totals: list[int] = []
+    comment_fragments: list[tuple[int, str]] = []
     for part in parts:
         part_number = _integer_or_none(part["part_number"])
         parts_total = _integer_or_none(part["parts_total"])
@@ -170,6 +171,9 @@ def _recalculate_logical_alert(
             received_part_numbers.add(part_number)
         if parts_total is not None and parts_total >= 1:
             declared_totals.append(parts_total)
+        comment_fragment = str(part["comment_fragment"] or "")
+        if part_number is not None and comment_fragment:
+            comment_fragments.append((part_number, comment_fragment))
         for area_code in _stored_area_codes(part["area_codes_json"]):
             comparison_key = area_code.casefold()
             if comparison_key in seen_area_codes:
@@ -191,6 +195,7 @@ def _recalculate_logical_alert(
         UPDATE aprs_alerts
         SET area_codes_json = ?,
             area_code = ?,
+            protocol_comment = ?,
             received_parts = ?,
             parts_total = ?,
             completion_status = ?,
@@ -200,6 +205,7 @@ def _recalculate_logical_alert(
         (
             json.dumps(area_codes, ensure_ascii=False, separators=(",", ":")),
             area_codes[0] if area_codes else None,
+            "".join(fragment for _, fragment in sorted(comment_fragments)),
             len(valid_part_numbers),
             parts_total,
             "complete" if complete else "incomplete",
@@ -264,6 +270,8 @@ def accept_aprs_warning_frame(
             "area_code": "",
             "area_codes": [],
             "message_id": "",
+            "comment": "",
+            "is_cancel": False,
         }
     )
     expiry = str(
@@ -287,6 +295,16 @@ def accept_aprs_warning_frame(
         if warning.get("message_id") is not None
         else parsed_warning["message_id"]
     ).strip()
+    protocol_comment = str(
+        warning.get("comment")
+        if warning.get("comment") is not None
+        else parsed_warning.get("comment") or ""
+    )
+    is_cancel = bool(
+        warning.get("is_cancel")
+        if warning.get("is_cancel") is not None
+        else parsed_warning.get("is_cancel")
+    )
     logical_alert_id = str(
         warning.get("logical_alert_id")
         if warning.get("logical_alert_id") is not None
@@ -321,7 +339,7 @@ def accept_aprs_warning_frame(
         else (area_codes[0] if area_codes else parsed_warning["area_code"])
     ).strip()
     area_codes_json = json.dumps(area_codes, ensure_ascii=False, separators=(",", ":"))
-    is_active = 1 if bool(warning.get("is_active", True)) else 0
+    is_active = 0 if is_cancel else (1 if bool(warning.get("is_active", True)) else 0)
     received_datetime = parse_datetime(received_at)
     expires_datetime = parse_datetime(expires_at)
     if (
@@ -369,7 +387,7 @@ def accept_aprs_warning_frame(
         insert_cursor = connection.execute(
             """
             INSERT INTO aprs_alerts(
-                identity_key, source_callsign, alert_type, message,
+                identity_key, source_callsign, alert_type, message, protocol_comment,
                 alarm_group, area_codes_json, is_active, valid_until_utc,
                 expiry, expires_at, event_code, area_code, message_id,
                 logical_alert_id, severity_level,
@@ -377,11 +395,11 @@ def accept_aprs_warning_frame(
                 first_seen_at, last_seen_at, frame_count,
                 initial_frame_id, last_frame_id,
                 latitude, longitude,
-                muted_until, muted_indefinitely,
+                muted_until, muted_indefinitely, cancelled_at,
                 created_at, updated_at
             )
             VALUES (
-                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?,
@@ -389,7 +407,7 @@ def accept_aprs_warning_frame(
                 ?, ?, 1,
                 ?, ?,
                 ?, ?,
-                NULL, 0,
+                NULL, 0, ?,
                 ?, ?
             )
             ON CONFLICT(identity_key) DO NOTHING
@@ -399,6 +417,7 @@ def accept_aprs_warning_frame(
                 source_callsign,
                 alert_type,
                 message,
+                protocol_comment,
                 alarm_group,
                 area_codes_json,
                 is_active,
@@ -417,6 +436,7 @@ def accept_aprs_warning_frame(
                 frame_id,
                 latitude,
                 longitude,
+                received_at if is_cancel else None,
                 received_at,
                 received_at,
             ),
@@ -440,12 +460,12 @@ def accept_aprs_warning_frame(
             INSERT INTO aprs_alert_parts(
                 alert_id, part_identity_key,
                 part_number, parts_total, aprs_message_id,
-                area_codes_json, raw_message,
+                area_codes_json, raw_message, comment_fragment,
                 first_received_at, last_received_at, received_count,
                 initial_frame_id, last_frame_id,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
             ON CONFLICT(part_identity_key) DO NOTHING
             """,
             (
@@ -456,6 +476,7 @@ def accept_aprs_warning_frame(
                 message_id or None,
                 area_codes_json,
                 message,
+                protocol_comment,
                 received_at,
                 received_at,
                 frame_id,
@@ -487,6 +508,7 @@ def accept_aprs_warning_frame(
                     aprs_message_id = ?,
                     area_codes_json = ?,
                     raw_message = ?,
+                    comment_fragment = ?,
                     last_received_at = ?,
                     received_count = received_count + 1,
                     last_frame_id = ?,
@@ -499,6 +521,7 @@ def accept_aprs_warning_frame(
                     message_id or None,
                     area_codes_json,
                     message,
+                    protocol_comment,
                     received_at,
                     frame_id,
                     received_at,
@@ -516,20 +539,31 @@ def accept_aprs_warning_frame(
     )
     relation_created = int(relation_cursor.rowcount or 0) == 1
 
+    existing_state = connection.execute(
+        "SELECT cancelled_at FROM aprs_alerts WHERE id = ?",
+        (alert_id,),
+    ).fetchone()
+    if existing_state is not None and existing_state["cancelled_at"] and not is_cancel:
+        is_active = 0
+
     if not created:
         connection.execute(
             """
             UPDATE aprs_alerts
-            SET alert_type = ?,
-                message = ?,
+            SET alert_type = CASE WHEN ? = 1 THEN alert_type ELSE ? END,
+                message = CASE WHEN ? = 1 THEN message ELSE ? END,
+                protocol_comment = CASE
+                    WHEN ? <> '' THEN ?
+                    ELSE protocol_comment
+                END,
                 alarm_group = ?,
                 area_codes_json = ?,
                 is_active = ?,
                 valid_until_utc = ?,
                 expiry = COALESCE(?, expiry),
                 expires_at = COALESCE(?, expires_at),
-                event_code = ?,
-                area_code = ?,
+                event_code = CASE WHEN ? = 1 THEN event_code ELSE ? END,
+                area_code = CASE WHEN ? = 1 THEN area_code ELSE ? END,
                 message_id = ?,
                 logical_alert_id = COALESCE(NULLIF(?, ''), logical_alert_id),
                 severity_level = COALESCE(?, severity_level),
@@ -538,19 +572,29 @@ def accept_aprs_warning_frame(
                 last_frame_id = ?,
                 latitude = ?,
                 longitude = ?,
+                cancelled_at = CASE
+                    WHEN ? = 1 THEN ?
+                    ELSE cancelled_at
+                END,
                 updated_at = ?
             WHERE id = ?
             """,
             (
+                1 if is_cancel else 0,
                 alert_type,
+                1 if is_cancel else 0,
                 message,
+                protocol_comment,
+                protocol_comment,
                 alarm_group,
                 area_codes_json,
                 is_active,
                 valid_until_utc,
                 expiry or None,
                 expires_at,
+                1 if is_cancel else 0,
                 event_code or None,
+                1 if is_cancel else 0,
                 area_code or None,
                 message_id or None,
                 logical_alert_id,
@@ -560,6 +604,8 @@ def accept_aprs_warning_frame(
                 frame_id,
                 latitude,
                 longitude,
+                1 if is_cancel else 0,
+                received_at if is_cancel else None,
                 received_at,
                 alert_id,
             ),
@@ -655,7 +701,7 @@ def process_alarm_group_message_frame(
     if not addressee or addressee not in set(get_aprs_alarm_groups()):
         return None
     warning_fields = parse_aprs_group_warning_content(raw_content)
-    if not alarm_event_meets_category_threshold(
+    if not warning_fields.get("is_cancel") and not alarm_event_meets_category_threshold(
         warning_fields.get("event_code"),
         warning_fields.get("severity_level"),
         target="alerts",

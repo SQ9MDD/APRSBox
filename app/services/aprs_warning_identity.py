@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import secrets
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +18,237 @@ _APRS_EXPIRY_RE = re.compile(
     r"(?P<minute>[0-5][0-9])z$",
     re.IGNORECASE | re.ASCII,
 )
+_CAWF_ALERT_ID_RE = re.compile(r"^[A-F0-9]{4}$", re.ASCII)
+_CAWF_MESSAGE_ID_RE = re.compile(r"^[A-F0-9]{5}$", re.ASCII)
+_CAWF_EVENT_CODE_RE = re.compile(r"^[A-Z][A-Z0-9-]{1,15}$", re.ASCII)
+_CAWF_AREA_CODE_RE = re.compile(r"^[A-Z0-9-]{1,8}$", re.ASCII)
+
+CAWF_MAX_MESSAGE_LENGTH = 67
+CAWF_MAX_PARTS = 9
+CAWF_COMMENT_SEPARATOR = "|"
+CAWF_CANCEL_EVENT_CODE = "CANCEL"
+CAWF_EVENT_FAMILIES: tuple[tuple[str, str], ...] = (
+    ("TSTORM", "Thunderstorm"),
+    ("WIND", "Wind / gale"),
+    ("RAIN", "Rain"),
+    ("FLOOD", "Flood / surge"),
+    ("FFLOOD", "Flash flood"),
+    ("SNOW", "Snow / blizzard"),
+    ("ICE", "Ice"),
+    ("HEAT", "Heat"),
+    ("COLD", "Cold / frost / ice"),
+    ("FOG", "Fog / mist"),
+    ("COASTAL", "Coastal hazard"),
+    ("AVALANC", "Avalanche"),
+    ("FIRE", "Wildfire / fire"),
+    ("DUST", "Dust / sand"),
+    ("OTHER", "Other / unknown"),
+)
+
+
+def format_aprs_expiry(value: datetime) -> str:
+    normalized = value
+    if normalized.tzinfo is None:
+        normalized = normalized.replace(tzinfo=timezone.utc)
+    return normalized.astimezone(timezone.utc).strftime("%d%H%Mz")
+
+
+def generate_cawf_alert_id() -> str:
+    return secrets.token_hex(2).upper()
+
+
+def generate_cawf_message_id() -> str:
+    return secrets.token_hex(3).upper()[:5]
+
+
+def normalize_cawf_comment(value: Any) -> str:
+    text = str(value or "").replace("\r", " ").replace("\n", " ")
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = " ".join(text.split())
+    return text.replace(CAWF_COMMENT_SEPARATOR, "/").replace("{", "(")
+
+
+def _validate_cawf_generation_fields(
+    *,
+    expiry: Any,
+    event_code: Any,
+    alert_id: Any,
+    area_code: Any,
+) -> tuple[str, str, str, str]:
+    normalized_expiry = str(expiry or "").strip()
+    normalized_event = str(event_code or "").strip().upper()
+    normalized_alert_id = str(alert_id or "").strip().upper().removeprefix("@")
+    normalized_area = str(area_code or "").strip().upper()
+    if _APRS_EXPIRY_RE.fullmatch(normalized_expiry) is None:
+        raise ValueError("Invalid CAWF expiry.")
+    if _CAWF_EVENT_CODE_RE.fullmatch(normalized_event) is None:
+        raise ValueError("Invalid CAWF event code.")
+    if _CAWF_ALERT_ID_RE.fullmatch(normalized_alert_id) is None:
+        raise ValueError("Invalid CAWF alert ID.")
+    if _CAWF_AREA_CODE_RE.fullmatch(normalized_area) is None:
+        raise ValueError("Invalid CAWF area code.")
+    return normalized_expiry, normalized_event, normalized_alert_id, normalized_area
+
+
+def _cawf_part_prefix(
+    *,
+    expiry: str,
+    event_code: str,
+    alert_id: str,
+    part_number: int,
+    parts_total: int,
+    area_code: str,
+) -> str:
+    return (
+        f"{expiry},{event_code},@{alert_id},"
+        f"{part_number}/{parts_total},{area_code}"
+    )
+
+
+def _comment_capacities(
+    *,
+    expiry: str,
+    event_code: str,
+    alert_id: str,
+    area_code: str,
+    parts_total: int,
+) -> list[int]:
+    capacities: list[int] = []
+    for part_number in range(1, parts_total + 1):
+        prefix = _cawf_part_prefix(
+            expiry=expiry,
+            event_code=event_code,
+            alert_id=alert_id,
+            part_number=part_number,
+            parts_total=parts_total,
+            area_code=area_code,
+        )
+        capacities.append(
+            CAWF_MAX_MESSAGE_LENGTH
+            - len(prefix)
+            - len(CAWF_COMMENT_SEPARATOR)
+            - 1
+            - 5
+        )
+    return capacities
+
+
+def cawf_comment_capacity(
+    *,
+    expiry: Any,
+    event_code: Any,
+    alert_id: Any,
+    area_code: Any,
+) -> int:
+    normalized = _validate_cawf_generation_fields(
+        expiry=expiry,
+        event_code=event_code,
+        alert_id=alert_id,
+        area_code=area_code,
+    )
+    return sum(
+        max(0, capacity)
+        for capacity in _comment_capacities(
+            expiry=normalized[0],
+            event_code=normalized[1],
+            alert_id=normalized[2],
+            area_code=normalized[3],
+            parts_total=CAWF_MAX_PARTS,
+        )
+    )
+
+
+def generate_aprs_group_warning_parts(
+    *,
+    expiry: Any,
+    event_code: Any,
+    alert_id: Any,
+    area_code: Any,
+    comment: Any = "",
+    message_ids: list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """Generate all CAWF fragments using the receiver's canonical envelope."""
+
+    normalized_expiry, normalized_event, normalized_alert_id, normalized_area = (
+        _validate_cawf_generation_fields(
+            expiry=expiry,
+            event_code=event_code,
+            alert_id=alert_id,
+            area_code=area_code,
+        )
+    )
+    normalized_comment = normalize_cawf_comment(comment)
+    parts_total = 1
+    if normalized_comment:
+        for candidate_total in range(1, CAWF_MAX_PARTS + 1):
+            capacities = _comment_capacities(
+                expiry=normalized_expiry,
+                event_code=normalized_event,
+                alert_id=normalized_alert_id,
+                area_code=normalized_area,
+                parts_total=candidate_total,
+            )
+            if all(capacity > 0 for capacity in capacities) and sum(capacities) >= len(normalized_comment):
+                parts_total = candidate_total
+                break
+        else:
+            raise ValueError(
+                f"CAWF comment exceeds the {CAWF_MAX_PARTS}-part protocol limit."
+            )
+
+    if message_ids is None:
+        normalized_message_ids = []
+        seen_message_ids: set[str] = set()
+        while len(normalized_message_ids) < parts_total:
+            candidate = generate_cawf_message_id()
+            if candidate in seen_message_ids:
+                continue
+            seen_message_ids.add(candidate)
+            normalized_message_ids.append(candidate)
+    else:
+        normalized_message_ids = [str(value or "").strip().upper() for value in message_ids]
+        if len(normalized_message_ids) != parts_total:
+            raise ValueError("CAWF message ID count does not match the fragment count.")
+        if any(_CAWF_MESSAGE_ID_RE.fullmatch(value) is None for value in normalized_message_ids):
+            raise ValueError("Invalid CAWF message ID.")
+
+    capacities = _comment_capacities(
+        expiry=normalized_expiry,
+        event_code=normalized_event,
+        alert_id=normalized_alert_id,
+        area_code=normalized_area,
+        parts_total=parts_total,
+    )
+    offset = 0
+    result: list[dict[str, Any]] = []
+    for index, capacity in enumerate(capacities, start=1):
+        comment_fragment = normalized_comment[offset : offset + capacity]
+        offset += len(comment_fragment)
+        prefix = _cawf_part_prefix(
+            expiry=normalized_expiry,
+            event_code=normalized_event,
+            alert_id=normalized_alert_id,
+            part_number=index,
+            parts_total=parts_total,
+            area_code=normalized_area,
+        )
+        payload = prefix
+        if normalized_comment:
+            payload = f"{payload}{CAWF_COMMENT_SEPARATOR}{comment_fragment}"
+        payload = f"{payload}{{{normalized_message_ids[index - 1]}"
+        if len(payload) > CAWF_MAX_MESSAGE_LENGTH:
+            raise ValueError("Generated CAWF fragment exceeds the APRS message limit.")
+        result.append(
+            {
+                "part_number": index,
+                "parts_total": parts_total,
+                "message_id": normalized_message_ids[index - 1],
+                "comment_fragment": comment_fragment,
+                "payload": payload,
+                "length": len(payload),
+            }
+        )
+    return result
 
 
 def normalize_warning_area_codes(values: Any) -> list[str]:
@@ -117,7 +350,10 @@ def parse_aprs_group_warning_content(raw_content: Any) -> dict[str, Any]:
         if _APRS_MESSAGE_ID_RE.fullmatch(candidate):
             message_id = candidate
 
-    fields = [field.strip() for field in content_without_message_id.split(",")]
+    envelope, separator, comment = content_without_message_id.partition(
+        CAWF_COMMENT_SEPARATOR
+    )
+    fields = [field.strip() for field in envelope.split(",")]
     expiry = fields[0] if fields else ""
     event_code = fields[1] if len(fields) > 1 else ""
     logical_alert_id = ""
@@ -139,7 +375,7 @@ def parse_aprs_group_warning_content(raw_content: Any) -> dict[str, Any]:
         fields[area_field_offset:] if len(fields) > area_field_offset else []
     )
     severity_match = _SEVERITY_SUFFIX_RE.search(event_code)
-    return {
+    result = {
         "expiry": expiry,
         "event_code": event_code,
         "severity_level": (
@@ -154,6 +390,11 @@ def parse_aprs_group_warning_content(raw_content: Any) -> dict[str, Any]:
         "area_codes": area_codes,
         "message_id": message_id,
     }
+    if separator:
+        result["comment"] = comment
+    if event_code.strip().upper() == CAWF_CANCEL_EVENT_CODE:
+        result["is_cancel"] = True
+    return result
 
 
 def build_aprs_alert_identity_key(

@@ -8005,6 +8005,202 @@ button.message-delivery-badge {
     }
 }
 
+.own-alert-compose-panel .panel-body,
+.own-alerts-panel .panel-body {
+    gap: var(--space-3);
+}
+
+.own-alert-panel-header {
+    margin-bottom: 0;
+}
+
+.own-alert-panel-header p {
+    margin: 0.2rem 0 0;
+}
+
+.own-alert-compose-form {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.75fr) minmax(13rem, 1.7fr) minmax(12rem, 1.25fr) minmax(8rem, 0.75fr) minmax(9rem, 0.8fr);
+    align-items: start;
+    gap: var(--space-3);
+}
+
+.own-alert-area-field {
+    grid-row: span 2;
+}
+
+.own-alert-area-field input,
+.own-alert-area-field select {
+    min-height: 2.25rem;
+}
+
+.own-alert-comment-field {
+    grid-column: 1 / span 4;
+}
+
+.own-alert-comment-field textarea {
+    min-height: 4.6rem;
+}
+
+.own-alert-compose-actions {
+    grid-column: 5;
+    justify-content: flex-end;
+    align-self: end;
+}
+
+.own-alert-empty-state {
+    padding-block: var(--space-3);
+}
+
+.own-alerts-table {
+    min-width: 78rem;
+    table-layout: auto;
+}
+
+.own-alerts-table th,
+.own-alerts-table td {
+    white-space: nowrap;
+}
+
+.own-alerts-table td:nth-child(4),
+.own-alerts-table td:nth-child(9) {
+    white-space: normal;
+}
+
+.own-alert-area-code,
+.own-alert-error {
+    display: block;
+    margin-top: 0.15rem;
+}
+
+.status-active {
+    background: rgba(107, 170, 121, 0.14);
+    color: var(--success);
+}
+
+.status-error {
+    background: rgba(201, 122, 122, 0.14);
+    color: var(--danger);
+}
+
+.own-alert-modal[hidden] {
+    display: none !important;
+}
+
+.own-alert-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1460;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+}
+
+.own-alert-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(2px);
+}
+
+.own-alert-modal-dialog {
+    position: relative;
+    width: min(44rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+}
+
+.own-alert-modal-dialog-small {
+    width: min(31rem, calc(100vw - 2rem));
+}
+
+.own-alert-modal-dialog h2,
+.own-alert-modal-dialog p {
+    margin: 0;
+}
+
+.own-alert-confirm-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.own-alert-confirm-grid > div {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 1.3fr);
+    gap: var(--space-2);
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.own-alert-confirm-grid > div:nth-child(odd) {
+    border-right: 1px solid var(--border);
+}
+
+.own-alert-confirm-grid dt {
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.own-alert-confirm-grid dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.own-alert-technical-preview pre {
+    max-height: 13rem;
+    margin: var(--space-2) 0 0;
+    padding: var(--space-3);
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-alt);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.own-alert-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+@media (max-width: 1100px) {
+    .own-alert-compose-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .own-alert-area-field,
+    .own-alert-comment-field,
+    .own-alert-compose-actions {
+        grid-column: 1 / -1;
+        grid-row: auto;
+    }
+}
+
+@media (max-width: 700px) {
+    .own-alert-compose-form,
+    .own-alert-confirm-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .own-alert-confirm-grid > div:nth-child(odd) {
+        border-right: 0;
+    }
+}
+
 .copyright {
     text-align: center;
     opacity: 0.6;

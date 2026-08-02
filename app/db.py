@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS system_jobs (
     kind TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'success', 'error')),
     message TEXT NOT NULL DEFAULT '',
+    protocol_comment TEXT NOT NULL DEFAULT '',
     log_file TEXT,
     pid INTEGER,
     exit_code INTEGER,
@@ -608,6 +609,7 @@ CREATE TABLE IF NOT EXISTS aprs_alerts (
     superseded_by_alert_id INTEGER,
     area_codes_json TEXT NOT NULL DEFAULT '[]',
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    cancelled_at TEXT,
     valid_until_utc TEXT,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
@@ -633,6 +635,7 @@ CREATE TABLE IF NOT EXISTS aprs_alert_parts (
     aprs_message_id TEXT,
     area_codes_json TEXT NOT NULL DEFAULT '[]',
     raw_message TEXT NOT NULL DEFAULT '',
+    comment_fragment TEXT NOT NULL DEFAULT '',
     first_received_at TEXT NOT NULL,
     last_received_at TEXT NOT NULL,
     received_count INTEGER NOT NULL DEFAULT 1 CHECK (received_count >= 1),
@@ -654,6 +657,46 @@ CREATE TABLE IF NOT EXISTS aprs_alert_frames (
     FOREIGN KEY (alert_id) REFERENCES aprs_alerts(id) ON DELETE CASCADE,
     FOREIGN KEY (frame_id) REFERENCES traffic_frames(id) ON DELETE CASCADE,
     FOREIGN KEY (part_id) REFERENCES aprs_alert_parts(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS own_aprs_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_id TEXT NOT NULL,
+    sender_callsign TEXT NOT NULL COLLATE NOCASE,
+    target_group TEXT NOT NULL COLLATE NOCASE,
+    area_code TEXT NOT NULL,
+    area_name TEXT NOT NULL,
+    area_parent TEXT NOT NULL DEFAULT '',
+    event_code TEXT NOT NULL,
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    valid_until TEXT NOT NULL,
+    repeat_interval_minutes INTEGER NOT NULL
+        CHECK (repeat_interval_minutes IN (15, 30, 60)),
+    next_transmission_at TEXT,
+    last_transmission_at TEXT,
+    transmission_count INTEGER NOT NULL DEFAULT 0 CHECK (transmission_count >= 0),
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'expired', 'cancelled', 'error')),
+    cancelled_at TEXT,
+    message_ids_json TEXT NOT NULL DEFAULT '[]',
+    cancel_message_id TEXT,
+    parts_total INTEGER NOT NULL DEFAULT 1 CHECK (parts_total BETWEEN 1 AND 9),
+    tx_path TEXT NOT NULL DEFAULT '',
+    last_error TEXT,
+    updated_at TEXT NOT NULL,
+    UNIQUE (sender_callsign, target_group, alert_id)
+);
+
+CREATE TABLE IF NOT EXISTS own_aprs_alert_tx_jobs (
+    own_alert_id INTEGER NOT NULL,
+    outbound_job_id INTEGER NOT NULL UNIQUE,
+    dispatch_token TEXT NOT NULL,
+    dispatch_kind TEXT NOT NULL CHECK (dispatch_kind IN ('alert', 'cancel')),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (own_alert_id, outbound_job_id),
+    FOREIGN KEY (own_alert_id) REFERENCES own_aprs_alerts(id) ON DELETE CASCADE,
+    FOREIGN KEY (outbound_job_id) REFERENCES outbound_jobs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS traffic_device_station_device_hourly (
@@ -941,6 +984,10 @@ CREATE INDEX IF NOT EXISTS idx_aprs_alert_parts_alert_part
     ON aprs_alert_parts(alert_id, part_number, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_alert_received_at
     ON aprs_alert_frames(alert_id, received_at DESC, frame_id DESC);
+CREATE INDEX IF NOT EXISTS idx_own_aprs_alerts_status_next
+    ON own_aprs_alerts(status, next_transmission_at, id);
+CREATE INDEX IF NOT EXISTS idx_own_aprs_alert_tx_jobs_dispatch
+    ON own_aprs_alert_tx_jobs(dispatch_token, outbound_job_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_modems_single_aprsis
     ON modems(UPPER(modem_type))
     WHERE UPPER(modem_type) = 'APRSIS';
@@ -1021,6 +1068,9 @@ def init_db() -> None:
         }
         traffic_frame_columns = {row["name"] for row in connection.execute("PRAGMA table_info(traffic_frames)").fetchall()}
         alert_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_alerts)").fetchall()}
+        alert_part_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(aprs_alert_parts)").fetchall()
+        }
         alert_frame_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(aprs_alert_frames)").fetchall()
         }
@@ -1159,6 +1209,27 @@ def init_db() -> None:
                 """
                 ALTER TABLE aprs_alerts
                 ADD COLUMN valid_until_utc TEXT
+                """
+            )
+        if "protocol_comment" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN protocol_comment TEXT NOT NULL DEFAULT ''
+                """
+            )
+        if "cancelled_at" not in alert_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alerts
+                ADD COLUMN cancelled_at TEXT
+                """
+            )
+        if "comment_fragment" not in alert_part_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_alert_parts
+                ADD COLUMN comment_fragment TEXT NOT NULL DEFAULT ''
                 """
             )
         if "part_id" not in alert_frame_columns:

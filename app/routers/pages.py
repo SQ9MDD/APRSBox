@@ -148,6 +148,15 @@ from app.services.alerts import (
     mute_alert,
     unmute_alert,
 )
+from app.services.own_alerts import (
+    cancel_own_alert,
+    create_own_alert,
+    get_own_alert_area_options,
+    get_own_alert_compose_context,
+    list_active_own_alerts,
+    preview_own_alert,
+    send_own_alert_now,
+)
 from app.services.band_condition import (
     get_band_condition_history,
     get_band_condition_page_data,
@@ -3422,17 +3431,111 @@ def alerts_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
+    own_alert_compose = get_own_alert_compose_context()
+    translator = get_translator(get_app_language())
+    event_labels: dict[str, str] = {}
+    for group in own_alert_compose["groups"]:
+        for option in group["event_options"]:
+            option["translated_label"] = translator(option["label"])
+            event_labels[str(option["code"])] = str(option["translated_label"])
+    active_own_alerts = list_active_own_alerts()
+    for own_alert in active_own_alerts:
+        own_alert["event_label"] = event_labels.get(
+            str(own_alert.get("event_code") or ""),
+            str(own_alert.get("event_code") or ""),
+        )
     context = build_template_context(
         request,
         page_title="Alerts",
         current_user=current_user,
         active_nav="alerts",
         alerts_page=list_alerts(page=page),
+        own_alert_compose=own_alert_compose,
+        active_own_alerts=active_own_alerts,
         flash=flash,
         flash_success=flash_success,
         can_manage_alerts=current_user.role in {"admin", "operator"},
     )
     return templates.TemplateResponse("alerts.html", context)
+
+
+@router.get("/api/alerts/send/areas")
+def own_alert_area_options(
+    group: str,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = get_own_alert_area_options(group)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return JSONResponse(payload)
+
+
+@router.post("/api/alerts/send/preview")
+async def own_alert_preview(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid alarm payload.")
+        return JSONResponse(preview_own_alert(payload))
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/api/alerts/send")
+async def own_alert_send(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid alarm payload.")
+        return JSONResponse({"ok": True, **create_own_alert(payload)})
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/alerts/own/{own_alert_id}/send-now")
+def own_alert_send_now_action(
+    own_alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> RedirectResponse:
+    success, message = send_own_alert_now(own_alert_id)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Own alarm queued for transmission." if success else message,
+        success=success,
+    )
+
+
+@router.post("/alerts/own/{own_alert_id}/cancel")
+def own_alert_cancel_action(
+    own_alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> RedirectResponse:
+    success, message = cancel_own_alert(own_alert_id)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Own alarm cancelled." if success else message,
+        success=success,
+    )
 
 
 @router.get("/alerts/{alert_id}")

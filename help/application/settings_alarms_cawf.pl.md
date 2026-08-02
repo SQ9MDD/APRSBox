@@ -17,13 +17,19 @@ CAWF jest formatem transportowym. Nie zastępuje autorytatywnego krajowego źró
 EXPIRY,EVENT_LEVEL,ALERT_ID,PART/TOTAL,AREA[,AREA...]{MESSAGE_ID
 ```
 
+APRSBox dodatkowo przyjmuje i generuje opcjonalne rozszerzenie komentarza:
+
+```text
+EXPIRY,EVENT_LEVEL,ALERT_ID,PART/TOTAL,AREA[,AREA...]|COMMENT{MESSAGE_ID
+```
+
 Przykład:
 
 ```text
 012300z,TSTORM2,@3569,1/2,0609,1206,1409{A6474
 ```
 
-Zgodny payload CAWF v1 ma stałą kolejność pól, protokolarne tokeny zapisane wielkimi znakami ASCII z wyjątkiem dosłownego małego `z`, nie zawiera spacji i ma najwyżej 67 znaków łącznie z identyfikatorem wiadomości APRS.
+Zgodny payload CAWF v1 ma stałą kolejność pól i protokolarne tokeny zapisane wielkimi znakami ASCII z wyjątkiem dosłownego małego `z`. Opcjonalne rozszerzenie komentarza APRSBox zaczyna się po `|`, może zawierać spacje i jest transliterowane do znaków bezpiecznych dla APRS. Cały payload ma najwyżej 67 znaków łącznie z identyfikatorem wiadomości APRS.
 
 ## Pola
 
@@ -32,6 +38,7 @@ Zgodny payload CAWF v1 ma stałą kolejność pól, protokolarne tokeny zapisane
 - `ALERT_ID` to `@` i cztery wielkie znaki szesnastkowe. Wszystkie fragmenty jednego logicznego alarmu używają tej samej wartości. Kluczem odbiornika jest callsign źródła, grupa ostrzeżeń i ID alarmu; wartość nie jest globalnie unikatowa.
 - `PART/TOTAL` zaczyna się od `1/1`. Numery części są unikatowe, `PART` nie może być większe niż `TOTAL`, a każdy fragment powinien podawać tę samą liczbę wszystkich części.
 - `AREA` zawiera 1–8 wielkich liter, cyfr lub myślników. Zera wiodące są istotne, a kod musi dokładnie odpowiadać identyfikatorowi w geometrii profilu.
+- `COMMENT` to opcjonalny tekst dla człowieka zapisany po `|` znakami ASCII bezpiecznymi dla APRS. APRSBox oblicza jego pojemność z pełnego wygenerowanego payloadu i dzieli go zwykłym mechanizmem wieloczęściowym CAWF.
 - `MESSAGE_ID` to pięć wielkich znaków szesnastkowych po `{`. Identyfikuje pojedynczy fragment, a nie cały alarm. Dokładna retransmisja powinna zachować ID, zaś zmieniony fragment otrzymać nowe. Nawias zamykający nie występuje.
 
 Dla interoperacyjności APRSBox przyjmuje nieco szerszy alfanumeryczny identyfikator wiadomości APRS, lecz wydawcy powinni używać ścisłej postaci CAWF v1.
@@ -71,7 +78,7 @@ APRSBox zachowuje dokładny kod zdarzenia, a znane prefiksy wykorzystuje do wybo
 - Kolejne fragmenty i dokładne powtórzenia aktualizują ten sam wpis oraz zachowują odnośniki do ramek Monitora ruchu.
 - Ponowne użycie tego samego `ALERT_ID` aktualizuje wpis w zakresie tego samego źródła i grupy. Wydawca powinien unikać ponownego użycia przez co najmniej 48 godzin po wygaśnięciu.
 - W chwili `EXPIRY` APRSBox dezaktywuje alarm, lecz zachowuje ramki i historię.
-- CAWF v1 nie definiuje standardowego jawnego odwołania. Nie wolno zakładać, że adres anulowania lub własny token odwoła istniejący alarm APRSBox.
+- APRSBox odwołuje alarm tą samą otoczką z wartością `CANCEL` w polu `EVENT_LEVEL`, tym samym callsignem źródła, grupą, `ALERT_ID`, czasem wygaśnięcia i kodem obszaru. Odbiornik ogranicza odwołanie do źródła, grupy i ID alarmu, więc inna stacja nie może odwołać alarmu nadawcy przez ponowne użycie jego krótkiego ID.
 
 ## Profile krajowe i geometria mapy
 
