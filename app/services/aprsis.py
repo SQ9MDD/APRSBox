@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from app import get_version
 from app.db import fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.services.alarm_groups import build_effective_aprsis_filter
 from app.services.traffic_source import DEFAULT_APRSIS_FILTER, normalize_aprsis_filter
 
 DEFAULT_APRSIS_SERVER = "rotate.aprs2.net"
@@ -236,6 +237,7 @@ def get_enabled_aprsis_interface() -> dict[str, Any] | None:
     except ValueError as exc:
         result["filter"] = DEFAULT_APRSIS_FILTER
         log_event("WARNING", "aprsis", f"Invalid stored APRS-IS filter; using {DEFAULT_APRSIS_FILTER}: {exc}")
+    result["effective_filter"] = build_effective_aprsis_filter(result["filter"])
     return result
 
 
@@ -245,13 +247,9 @@ def aprsis_connection_required() -> bool:
 
 def build_aprsis_login_line(*, login: str, passcode: str, server_filter: str = "") -> str:
     line = f"user {login} pass {passcode or '-1'} vers APRSBox {get_version()}"
-    normalized_filter = (
-        normalize_aprsis_filter(server_filter)
-        if str(server_filter or "").strip()
-        else ""
-    )
-    if normalized_filter:
-        line += f" filter {normalized_filter}"
+    effective_filter = build_effective_aprsis_filter(server_filter)
+    if effective_filter:
+        line += f" filter {effective_filter}"
     return line
 
 
@@ -1379,7 +1377,10 @@ class AprsisClientService:
             interface_id = int(rx_interface["id"])
         except (KeyError, TypeError, ValueError):
             return None
-        return interface_id, str(rx_interface.get("filter") or "").strip()
+        effective_filter = str(rx_interface.get("effective_filter") or "").strip()
+        if not effective_filter:
+            effective_filter = build_effective_aprsis_filter(rx_interface.get("filter"))
+        return interface_id, effective_filter
 
     def _connection_needs_reconnect(
         self,

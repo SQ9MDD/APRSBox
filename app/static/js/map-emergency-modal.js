@@ -26,6 +26,8 @@
     const streamEndpoint = String(root.dataset.trafficStreamEndpoint || "").trim();
     const emergencyFrameReceivedText = String(root.dataset.i18nEmergencyFrameReceived || "Emergency frame received");
     const activeEmergencyText = String(root.dataset.i18nActiveEmergency || "Active emergency");
+    const aprsAlertReceivedText = String(root.dataset.i18nAprsAlertReceived || "APRS alert received");
+    const activeAprsAlertText = String(root.dataset.i18nActiveAprsAlert || "Active APRS alert");
     const alertMutedText = String(root.dataset.i18nAlertMuted || "Alert muted");
     const handledFramesStorageKey = "aprsbox-emergency-frames-shown";
 
@@ -64,6 +66,9 @@
     }
 
     function parseCoordinate(value) {
+        if (value === null || value === undefined || String(value).trim() === "") {
+            return null;
+        }
         const number = Number(value);
         return Number.isFinite(number) ? number : null;
     }
@@ -80,8 +85,22 @@
         return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
     }
 
+    function popupFrameData(frame) {
+        if (!frame || typeof frame !== "object") {
+            return {};
+        }
+        return frame.alert_popup_data || frame.emergency_data || {};
+    }
+
     function emergencySignature(frame) {
-        const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
+        if (
+            frame
+            && frame.alert_popup_kind === "alarm_group"
+            && frame.alert_id
+        ) {
+            return `alarm-group|${frame.alert_id}`;
+        }
+        const emergencyData = popupFrameData(frame);
         return [
             frame.alert_id || "",
             emergencyData.timestamp_utc || frame.timestamp || "",
@@ -90,7 +109,7 @@
     }
 
     function emergencyFrameSortValue(frame) {
-        const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
+        const emergencyData = popupFrameData(frame);
         const rawTimestamp = String(emergencyData.timestamp_utc || frame.timestamp || "").trim();
         const parsedTimestamp = Date.parse(rawTimestamp);
         return Number.isFinite(parsedTimestamp) ? parsedTimestamp : -Infinity;
@@ -135,7 +154,7 @@
         }
         const candidates = frames.filter((frame) =>
             frame
-            && frame.emergency
+            && (frame.alert_popup || frame.emergency)
             && frame.alert_should_notify
             && !frame.alert_muted
             && !isFrameHandled(frame)
@@ -407,7 +426,8 @@
     }
 
     function renderEmergencyFrame(frame, { playSound = false, remember = false } = {}) {
-        const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
+        const emergencyData = popupFrameData(frame);
+        const isAlarmGroupPopup = frame && frame.alert_popup_kind === "alarm_group";
         const call = textOrDash(emergencyData.callsign || frame.display_callsign || frame.source);
         const sourceLabel = textOrDash(
             [emergencyData.source_interface || frame.source, emergencyData.source_port].filter(Boolean).join(" · ")
@@ -422,13 +442,17 @@
         currentEmergencyFrame = frame;
         currentSignature = emergencySignature(frame);
         if (title) {
-            title.textContent = emergencyFrameReceivedText;
+            title.textContent = isAlarmGroupPopup
+                ? aprsAlertReceivedText
+                : emergencyFrameReceivedText;
         }
         if (callsign) {
             callsign.textContent = call;
         }
         if (status) {
-            status.textContent = frame.alert_muted ? alertMutedText : activeEmergencyText;
+            status.textContent = frame.alert_muted
+                ? alertMutedText
+                : (isAlarmGroupPopup ? activeAprsAlertText : activeEmergencyText);
         }
         if (timestamp) {
             timestamp.textContent = timestampLabel;
@@ -498,7 +522,7 @@
 
     if (openMapButton) {
         openMapButton.addEventListener("click", function () {
-            const emergencyData = currentEmergencyFrame && currentEmergencyFrame.emergency_data ? currentEmergencyFrame.emergency_data : {};
+            const emergencyData = popupFrameData(currentEmergencyFrame);
             const latitude = parseCoordinate(emergencyData.latitude);
             const longitude = parseCoordinate(emergencyData.longitude);
             if (Number.isFinite(latitude) && Number.isFinite(longitude) && typeof window.aprsboxCenterMapOn === "function") {
@@ -519,7 +543,11 @@
     });
 
     window.aprsboxOpenEmergencyModal = function (frame) {
-        if (!frame || typeof frame !== "object" || !frame.emergency) {
+        if (
+            !frame
+            || typeof frame !== "object"
+            || (!frame.emergency && !frame.alert_popup)
+        ) {
             return false;
         }
         dismissedSignature = "";

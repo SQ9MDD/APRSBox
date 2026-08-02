@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.6.dev - 2026-08-01
+- `Einstellungen / Hilfe`: Eigene Markdown-Hilfe für 8 Panels in EN/DE/PL/ES/TLH hinzugefügt und die Oberfläche durch Entfernen wiederholter Beschreibungen vereinfacht.
+- `Hilfe / Renderer`: Externe Links aus Hilfedokumenten werden nun sicher geöffnet.
+- `Alarme / Hilfe`: Verlinkte und quellenbasierte CAWF- und NWS-WARN-Anleitungen in EN/DE/PL/ES/TLH ergänzt; sie erklären Frameformat, Fragmentierung, UGC, Karte, Lebenszyklus, Schwellen und Vertrauensgrenzen.
+
+## 1.9.5.dev - 2026-07-31
+- `Bandbedingungen / GUI und Runtime`: Die Registerkarte wird ausgeblendet und die Datenerfassung und -verarbeitung deaktiviert, wenn keine aktive RF-Schnittstelle die Bandbewertung aktiviert hat; alle anderen Funkstatistiken funktionieren unverändert weiter.
+- `Alarme / Formate`: Empfang und Verarbeitung von Wetteralarmen in den Formaten `CAWF` und `NWS-WARN` wurden hinzugefügt.
+- `Alarme / Polen / Verwaltungsgebiete`: Polnische Landkreisgrenzen (`Powiat`) und die Zuordnung von Warngebietskennungen wurden ergänzt, damit Alarme die zugehörigen Gebiete auf der Karte anzeigen können.
+- `Karte / Leistung / Erstladen`: Alarmgebiete werden getrennt nach den primären Kartendaten geladen, während Stationssymbole und Rufzeichen schrittweise in priorisierten Paketen erscheinen; dadurch bleiben die Kartenkacheln nicht lange ohne Marker und die Karte bleibt reaktionsfähig.
+
 ## 1.9.4.dev - 2026-07-29
 - `GUI / Texte`: Alle Hauptansichten wurden geprüft und überflüssige Abschnittsbeschreibungen, wiederholte Anweisungen und offensichtliche Hinweise entfernt; Statusangaben, Formatvorgaben, Validierung sowie RF- und administrative Sicherheitswarnungen bleiben erhalten.
 - `Dashboard / Station`: Die Empfangsbeschreibung und der Zeitstempel der letzten RF-Aktivität wurden aus der Hauptkarte der Station entfernt; außerdem wurden Höhe und Abstände reduziert.

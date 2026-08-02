@@ -26,6 +26,11 @@ from app.db import (
     utc_now,
 )
 from app.i18n import get_app_language, get_translator
+from app.services.alarm_groups import (
+    alarm_event_meets_category_threshold,
+    get_aprs_alarm_enabled,
+    get_aprs_alarm_category_thresholds,
+)
 from app.services.beacon_pathing import (
     BEACON_INTERVAL_MODE_FIXED,
     BEACON_INTERVAL_MODE_PROPORTIONAL,
@@ -845,6 +850,14 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             frames.created_at,
             relations.alert_id,
             alerts.source_callsign AS alert_source_callsign,
+            alerts.alarm_group AS alert_alarm_group,
+            alerts.event_code AS alert_event_code,
+            alerts.logical_alert_id AS alert_logical_alert_id,
+            alerts.severity_level AS alert_severity_level,
+            alerts.is_active AS alert_is_active,
+            alerts.expires_at AS alert_expires_at,
+            alerts.valid_until_utc AS alert_valid_until_utc,
+            alerts.superseded_by_alert_id AS alert_superseded_by_alert_id,
             alerts.initial_frame_id AS alert_initial_frame_id,
             alerts.last_frame_id AS alert_last_frame_id,
             alerts.muted_until AS alert_muted_until,
@@ -985,6 +998,9 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     if last_error is None and state_row:
         last_error = state_row["last_error"]
     frames: list[dict[str, Any]] = []
+    snapshot_now = datetime.now(timezone.utc)
+    aprs_alarm_enabled = get_aprs_alarm_enabled()
+    alarm_popup_thresholds = get_aprs_alarm_category_thresholds()
     for row in frame_rows:
         direction = str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX")
         line = str(row["line"] or "")
@@ -1014,7 +1030,69 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         alert_id = int(row["alert_id"]) if row["alert_id"] is not None else None
         alert_muted_until = _parse_iso_timestamp_utc(str(row["alert_muted_until"] or ""))
         alert_muted = bool(int(row["alert_muted_indefinitely"] or 0)) or (
-            alert_muted_until is not None and alert_muted_until > datetime.now(timezone.utc)
+            alert_muted_until is not None and alert_muted_until > snapshot_now
+        )
+        alarm_group = str(row["alert_alarm_group"] or "").strip().upper()
+        alert_expires_at = _parse_iso_timestamp_utc(str(row["alert_expires_at"] or ""))
+        alert_valid_until = _parse_iso_timestamp_utc(
+            str(row["alert_valid_until_utc"] or "")
+        )
+        alert_active = bool(int(row["alert_is_active"] or 0)) and (
+            row["alert_superseded_by_alert_id"] is None
+        ) and (
+            alert_expires_at is None or alert_expires_at > snapshot_now
+        ) and (
+            alert_valid_until is None or alert_valid_until > snapshot_now
+        )
+        alarm_group_popup = bool(
+            aprs_alarm_enabled
+            and alert_id is not None
+            and alarm_group
+            and alert_active
+            and alarm_event_meets_category_threshold(
+                row["alert_event_code"],
+                row["alert_severity_level"],
+                target="popup",
+                thresholds=alarm_popup_thresholds,
+            )
+        )
+        alarm_group_popup_data = None
+        if alarm_group_popup:
+            popup_summary = " · ".join(
+                value
+                for value in (
+                    str(row["alert_event_code"] or "").strip().upper(),
+                    alarm_group,
+                    str(row["alert_logical_alert_id"] or "").strip().upper(),
+                )
+                if value
+            )
+            alarm_group_popup_data = {
+                "callsign": str(row["alert_source_callsign"] or "").strip(),
+                "summary": popup_summary,
+                "timestamp_utc": row["created_at"],
+                "raw_frame": line,
+                "source_interface": row["source"],
+                "source_port": row["port"],
+                "path": str(
+                    (parsed or {}).get("logical_path")
+                    or (parsed or {}).get("path")
+                    or ""
+                ).strip(),
+                "latitude": (aprs_data or {}).get("latitude"),
+                "longitude": (aprs_data or {}).get("longitude"),
+                "destination_group": alarm_group,
+                "event_code": str(row["alert_event_code"] or "").strip().upper(),
+                "logical_alert_id": str(
+                    row["alert_logical_alert_id"] or ""
+                ).strip().upper(),
+                "severity_level": row["alert_severity_level"],
+            }
+        alert_popup_data = emergency_data or alarm_group_popup_data
+        alert_popup_kind = (
+            "emergency"
+            if emergency_data is not None
+            else ("alarm_group" if alarm_group_popup else "")
         )
         if emergency_data:
             row_class = f"{row_class} traffic-log-row-emergency".strip()
@@ -1040,6 +1118,9 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "display_icon_path": display_icon_path,
                 "emergency": bool(emergency_data),
                 "emergency_data": emergency_data,
+                "alert_popup": bool(alert_popup_data),
+                "alert_popup_kind": alert_popup_kind,
+                "alert_popup_data": alert_popup_data,
                 "detail_href": f"/traffic/frames/{int(row['id'])}",
                 "alert_id": alert_id,
                 "alert_callsign": str(row["alert_source_callsign"] or "").strip(),
@@ -1047,9 +1128,19 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "alert_muted": alert_muted,
                 "alert_should_notify": bool(
                     alert_id is not None
-                    and row["alert_last_frame_id"] is not None
-                    and int(row["alert_last_frame_id"]) == int(row["id"])
                     and not alert_muted
+                    and (
+                        (
+                            emergency_data is not None
+                            and row["alert_last_frame_id"] is not None
+                            and int(row["alert_last_frame_id"]) == int(row["id"])
+                        )
+                        or (
+                            alarm_group_popup
+                            and row["alert_initial_frame_id"] is not None
+                            and int(row["alert_initial_frame_id"]) == int(row["id"])
+                        )
+                    )
                 ),
                 "alert_record_deleted": bool(emergency_data and alert_id is None),
             }

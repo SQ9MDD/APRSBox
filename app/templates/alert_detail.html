@@ -5,6 +5,16 @@
 {% endblock %}
 
 {% block content %}
+<div
+    id="alert-detail-page"
+    class="station-detail-page alert-detail-page"
+    {% if alert_map_config.map_mode == "station" %}
+    data-station-detail-map-page
+    data-static-root="{{ request.scope.root_path }}/static/"
+    data-root-path="{{ request.scope.root_path }}"
+    data-refresh-ms="0"
+    {% endif %}
+>
 {% if flash %}
 <section class="panel">
     <div class="panel-body">
@@ -13,9 +23,9 @@
 </section>
 {% endif %}
 
-<section class="panel alert-emergency-panel alert-detail-panel">
+<section class="panel alert-emergency-panel alert-detail-toolbar-panel">
     <div class="panel-body">
-        <div class="panel-header">
+        <div class="station-detail-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Alert details") }} #{{ alert.id }}</h2>
                 <p class="section-lead">
@@ -61,12 +71,46 @@
                 </button>
             </div>
         </div>
+    </div>
+</section>
 
+<section class="station-detail-hero alert-detail-hero">
+    <article class="panel alert-emergency-panel alert-detail-panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>{{ t("Alert details") }}</h2>
+                </div>
+            </div>
         <dl class="details-grid alert-details-grid">
             <dt>{{ t("Source") }}</dt>
             <dd><a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">{{ alert.source_callsign }}</a></dd>
             <dt>{{ t("Type") }}</dt>
             <dd><span class="frame-type-badge frame-type-badge-emergency">{{ alert.alert_type }}</span></dd>
+            {% if alert.destination_group %}
+            <dt>{{ t("Destination group") }}</dt>
+            <dd>{{ alert.destination_group }}</dd>
+            <dt>{{ t("Logical alert ID") }}</dt>
+            <dd>{% if alert.logical_alert_id %}<code>{{ alert.logical_alert_id }}</code>{% else %}-{% endif %}</dd>
+            <dt>{{ t("Event code") }}</dt>
+            <dd>{{ alert.event_code or "-" }}</dd>
+            <dt>{{ t("Severity level") }}</dt>
+            <dd>{{ alert.severity_level if alert.severity_level is not none else "-" }}</dd>
+            <dt>{{ t("Received parts") }}</dt>
+            <dd>{{ alert.received_parts }} / {{ alert.parts_total or "?" }}</dd>
+            <dt>{{ t("Completion status") }}</dt>
+            <dd>
+                <span class="alert-state-badge alert-state-badge-{{ alert.completion_status }}">
+                    {{ t("Complete alert") if alert.completion_status == "complete" else t("Incomplete") }}
+                </span>
+            </dd>
+            <dt>{{ t("Area count") }}</dt>
+            <dd>{{ alert.area_count }}</dd>
+            <dt>{{ t("Area codes") }}</dt>
+            <dd>{% if alert.area_codes %}<code>{{ alert.area_codes|join(", ") }}</code>{% else %}-{% endif %}</dd>
+            <dt>{{ t("Expires at") }}</dt>
+            <dd>{{ alert.expires_at_label or "-" }}</dd>
+            {% endif %}
             <dt>{{ t("Comment") }}</dt>
             <dd>{{ alert.message or "-" }}</dd>
             <dt>{{ t("First received") }}</dt>
@@ -104,8 +148,127 @@
                 {% endif %}
             </dd>
         </dl>
+        </div>
+    </article>
+
+    <article class="panel alert-emergency-panel alert-detail-map-panel">
+        <div class="panel-body">
+            <div class="panel-header">
+                <div class="panel-header-copy">
+                    <h2>{{ t("Station Map") if alert_map_config.map_mode == "station" else t("Alert areas") }}</h2>
+                </div>
+            </div>
+            {% if alert_map_config.map_mode == "station" %}
+            <div
+                id="station-detail-map-root"
+                class="station-detail-map-root alert-detail-map-root"
+                data-latitude="{{ alert_map_config.latitude if alert_map_config.latitude is not none else '' }}"
+                data-longitude="{{ alert_map_config.longitude if alert_map_config.longitude is not none else '' }}"
+                data-zoom="{{ alert_map_config.zoom }}"
+                data-tile-url="{{ alert_map_config.tile_url }}"
+                data-tile-attribution="{{ alert_map_config.tile_attribution }}"
+                data-tile-min-zoom="{{ alert_map_config.tile_min_zoom }}"
+                data-tile-max-zoom="{{ alert_map_config.tile_max_zoom }}"
+                data-tile-subdomains="{{ alert_map_config.tile_subdomains }}"
+                data-display-callsign="{{ alert_map_config.display_callsign }}"
+                data-symbol-icon="{{ alert_map_config.symbol_icon }}"
+                data-symbol-table="{{ alert_map_config.symbol_table }}"
+                data-symbol-code="{{ alert_map_config.symbol_code }}"
+                data-track-points='{{ alert_map_config.track_points|tojson }}'
+                {% if not alert_map_config.has_position %}hidden{% endif %}
+            >
+                <div
+                    id="station-detail-map-canvas"
+                    class="station-detail-map-canvas alert-detail-map-canvas"
+                    aria-label="{{ t('Station detail map') }}"
+                ></div>
+            </div>
+            <div
+                id="station-map-placeholder"
+                class="station-map-placeholder alert-detail-map-placeholder"
+                {% if alert_map_config.has_position %}hidden{% endif %}
+            >
+                <strong>{{ t("No position available") }}</strong>
+                <span class="muted">{{ t("No position available for this station.") }}</span>
+            </div>
+            {% else %}
+            <div
+                id="alert-detail-map-root"
+                class="station-detail-map-root alert-detail-map-root"
+                data-tile-url="{{ alert_map_config.tile_url }}"
+                data-tile-attribution="{{ alert_map_config.tile_attribution }}"
+                data-tile-min-zoom="{{ alert_map_config.tile_min_zoom }}"
+                data-tile-max-zoom="{{ alert_map_config.tile_max_zoom }}"
+                data-tile-subdomains="{{ alert_map_config.tile_subdomains }}"
+                data-feature-collection='{{ alert_map_config.feature_collection|tojson }}'
+                {% if not alert_map_config.has_area_definitions %}hidden{% endif %}
+            >
+                <div
+                    id="alert-detail-map-canvas"
+                    class="station-detail-map-canvas alert-detail-map-canvas"
+                    aria-label="{{ t('Alert area map') }}"
+                ></div>
+            </div>
+            <div
+                id="alert-detail-map-placeholder"
+                class="station-map-placeholder alert-detail-map-placeholder"
+                {% if alert_map_config.has_area_definitions %}hidden{% endif %}
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/earth-off.svg" alt="">
+                <strong>{{ t("No area definitions") }}</strong>
+            </div>
+            {% endif %}
+        </div>
+    </article>
+</section>
+
+{% if alert.parts %}
+<section class="panel alert-emergency-panel alert-parts-panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Alert parts") }}</h2>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table compact-table alert-parts-table">
+                <thead>
+                    <tr>
+                        <th>{{ t("Part") }}</th>
+                        <th>{{ t("APRS message ID") }}</th>
+                        <th>{{ t("Area codes") }}</th>
+                        <th>{{ t("First received") }}</th>
+                        <th>{{ t("Last received") }}</th>
+                        <th>{{ t("Received count") }}</th>
+                        <th>{{ t("Raw message") }}</th>
+                        <th>{{ t("Original frame") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for part in alert.parts %}
+                    <tr>
+                        <td>{{ part.part_number or "?" }} / {{ part.parts_total or "?" }}</td>
+                        <td>{% if part.aprs_message_id %}<code>{{ part.aprs_message_id }}</code>{% else %}-{% endif %}</td>
+                        <td>{% if part.area_codes %}<code>{{ part.area_codes|join(", ") }}</code>{% else %}-{% endif %}</td>
+                        <td>{{ part.first_received_label }}</td>
+                        <td>{{ part.last_received_label }}</td>
+                        <td>{{ part.received_count }}</td>
+                        <td><code class="traffic-frame-raw">{{ part.raw_message }}</code></td>
+                        <td>
+                            {% if part.initial_frame_href %}
+                            <a class="station-link" href="{{ request.scope.root_path }}{{ part.initial_frame_href }}">#{{ part.initial_frame_id }}</a>
+                            {% else %}
+                            <span class="muted">{{ t("Frame is no longer available in Traffic Monitor.") }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </section>
+{% endif %}
 
 <section class="panel alert-emergency-panel alert-history-panel">
     <div class="panel-body">
@@ -150,9 +313,15 @@
         </div>
     </div>
 </section>
+</div>
 {% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
+{% if alert_map_config.map_mode == "station" %}
+<script src="{{ request.scope.root_path }}/static/js/station-detail-map.js?v={{ app_version }}-alert-emergency-1"></script>
+{% else %}
+<script src="{{ request.scope.root_path }}/static/js/alert-detail-map.js?v={{ app_version }}-contrast-1"></script>
+{% endif %}
 {% endblock %}

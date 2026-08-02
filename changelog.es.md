@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.6.dev - 2026-08-01
+- `Ajustes / Ayuda`: se añadió ayuda Markdown específica para 8 paneles en EN/DE/PL/ES/TLH y se simplificó la interfaz eliminando descripciones repetidas.
+- `Ayuda / renderer`: se añadió la apertura segura de enlaces externos desde los documentos de ayuda.
+- `Alertas / ayuda`: se añadieron guías enlazadas y basadas en fuentes para CAWF y NWS-WARN en EN/DE/PL/ES/TLH, con formato de tramas, fragmentación, UGC, mapa, ciclo de vida, umbrales y límites de confianza.
+
+## 1.9.5.dev - 2026-07-31
+- `Condiciones de banda / GUI y runtime`: la pestaña se oculta y la recopilación y el procesamiento de datos se desactivan cuando ninguna interfaz RF activa tiene habilitada la evaluación de banda; las demás estadísticas de radio siguen funcionando sin cambios.
+- `Alertas / formatos`: se añadieron la recepción y el procesamiento de alertas meteorológicas en los formatos `CAWF` y `NWS-WARN`.
+- `Alertas / Polonia / áreas administrativas`: se añadieron los límites de los distritos polacos (`powiat`) y el mapeo de identificadores de áreas de aviso para que las alertas puedan mostrar sus zonas correspondientes en el mapa.
+- `Mapa / rendimiento / carga inicial`: las áreas de alerta se cargan por separado después de los datos principales del mapa, mientras que los iconos y los indicativos de las estaciones aparecen progresivamente en lotes priorizados; así los mosaicos no permanecen mucho tiempo sin marcadores y el mapa conserva su capacidad de respuesta.
+
 ## 1.9.4.dev - 2026-07-29
 - `GUI / textos`: se revisaron todas las pantallas principales y se eliminaron descripciones de sección redundantes, instrucciones repetidas y ayudas obvias; se conservaron los estados, requisitos de formato, validación y advertencias de seguridad de RF o administración.
 - `Dashboard / estación`: se eliminaron de la tarjeta principal de la estación la descripción de recepción y la fecha de la última actividad RF, y se redujeron su altura y espaciado.

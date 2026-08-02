@@ -80,6 +80,24 @@ from app.services.content import (
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
+from app.services.alarm_groups import (
+    APRS_ALARM_LEVEL_THRESHOLDS,
+    build_automatic_aprsis_alarm_filter,
+    get_aprs_alarm_enabled,
+    get_aprs_alarm_category_thresholds,
+    get_aprs_alarm_groups,
+    get_global_alarm_level_threshold,
+    get_map_alarm_level_threshold,
+    normalize_aprs_alarm_category_thresholds,
+    normalize_aprs_alarm_groups,
+    normalize_aprs_alarm_level_threshold,
+    save_aprs_alarm_category_thresholds,
+    save_aprs_alarm_enabled,
+    save_aprs_alarm_groups,
+    save_global_alarm_level_threshold,
+    save_map_alarm_level_threshold,
+)
+from app.services.alert_event_icons import ALERT_EVENT_CATEGORIES
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -103,9 +121,11 @@ from app.services.messages import (
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
     get_messages_page_data as get_live_messages_page_data,
+    get_effective_message_target_groups,
     get_unread_inbox_count,
     mark_conversation_read,
     queue_outgoing_message,
+    reconcile_effective_message_group_conversations,
     retry_failed_message,
     save_message_settings,
     update_conversation_path,
@@ -165,11 +185,13 @@ from app.services.map_service import (
     get_map_source,
     list_map_sources,
     get_coverage_fill_opacity_percent,
+    get_map_alert_areas_payload,
     get_map_page_config,
     get_map_mobile_tracks_payload,
     get_map_station_details_payload,
     get_map_station_markers_payload,
     get_map_station_payload,
+    get_alert_detail_map_config,
     safe_move_map_source,
     safe_delete_map_source,
     safe_save_map_source,
@@ -891,6 +913,22 @@ def _settings_page_context(
         for name in (update_channels.get("channels") or [selected_update_channel])
     ]
     update_log_snapshot = read_update_log()
+    aprs_alarm_enabled = get_aprs_alarm_enabled()
+    aprs_alarm_groups = get_aprs_alarm_groups()
+    effective_rf_message_groups = get_effective_message_target_groups(
+        alarm_groups=aprs_alarm_groups
+    )
+    automatic_aprsis_alarm_filter = build_automatic_aprsis_alarm_filter(
+        aprs_alarm_groups
+    )
+    alarm_category_thresholds = get_aprs_alarm_category_thresholds()
+    alarm_category_threshold_rows = [
+        {
+            **category,
+            **alarm_category_thresholds[str(category["key"])],
+        }
+        for category in ALERT_EVENT_CATEGORIES
+    ]
     return build_template_context(
         request,
         page_title="Settings",
@@ -960,6 +998,12 @@ def _settings_page_context(
         update_log_content=str(update_log_snapshot.get("content") or ""),
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
+        aprs_alarm_groups=aprs_alarm_groups,
+        aprs_alarm_enabled=aprs_alarm_enabled,
+        alarm_level_threshold_options=APRS_ALARM_LEVEL_THRESHOLDS,
+        alarm_category_threshold_rows=alarm_category_threshold_rows,
+        effective_rf_message_groups=effective_rf_message_groups,
+        automatic_aprsis_alarm_filter=automatic_aprsis_alarm_filter,
         is_container_mode=container_mode,
         map_sources=map_sources,
         map_source_form=resolved_map_source_form,
@@ -1667,6 +1711,120 @@ def settings_update_global(
             "event_log_min_level": selected_event_log_min_level,
             "event_log_debug_enabled": selected_event_log_debug_enabled,
             "coverage_fill_opacity": selected_coverage_fill_opacity,
+            "reload": True,
+        }
+    )
+
+
+@router.post("/settings/alarm-groups")
+def settings_update_alarm_groups(
+    _: Request,
+    alarm_enabled: bool = Form(False),
+    alarm_groups: str = Form(""),
+    threshold_category: list[str] | None = Form(None),
+    alert_level_threshold: list[str] | None = Form(None),
+    map_level_threshold: list[str] | None = Form(None),
+    popup_level_threshold: list[str] | None = Form(None),
+    map_alarm_level_threshold: str | None = Form(None),
+    global_alarm_level_threshold: str | None = Form(None),
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    try:
+        normalized_groups = normalize_aprs_alarm_groups(alarm_groups)
+        selected_category_thresholds = get_aprs_alarm_category_thresholds()
+        if (
+            threshold_category is not None
+            or alert_level_threshold is not None
+            or map_level_threshold is not None
+            or popup_level_threshold is not None
+        ):
+            categories = threshold_category or []
+            alert_thresholds = alert_level_threshold or []
+            map_thresholds = map_level_threshold
+            popup_thresholds = popup_level_threshold
+            expected_categories = {
+                str(category["key"])
+                for category in ALERT_EVENT_CATEGORIES
+            }
+            if (
+                len(categories) != len(alert_thresholds)
+                or (
+                    map_thresholds is not None
+                    and len(categories) != len(map_thresholds)
+                )
+                or (
+                    popup_thresholds is not None
+                    and len(categories) != len(popup_thresholds)
+                )
+                or len(categories) != len(expected_categories)
+                or set(categories) != expected_categories
+            ):
+                raise ValueError(_translate("Invalid APRS alarm category thresholds."))
+            selected_category_thresholds = normalize_aprs_alarm_category_thresholds(
+                {
+                    category: {
+                        "alerts": alerts,
+                        "map": (
+                            map_thresholds[index]
+                            if map_thresholds is not None
+                            else selected_category_thresholds[category]["map"]
+                        ),
+                        "popup": (
+                            popup_thresholds[index]
+                            if popup_thresholds is not None
+                            else selected_category_thresholds[category]["popup"]
+                        ),
+                    }
+                    for index, (category, alerts) in enumerate(
+                        zip(categories, alert_thresholds)
+                    )
+                }
+            )
+        elif (
+            map_alarm_level_threshold is not None
+            or global_alarm_level_threshold is not None
+        ):
+            selected_map_threshold = (
+                get_map_alarm_level_threshold()
+                if map_alarm_level_threshold is None
+                else normalize_aprs_alarm_level_threshold(
+                    map_alarm_level_threshold
+                )
+            )
+            selected_global_threshold = (
+                get_global_alarm_level_threshold()
+                if global_alarm_level_threshold is None
+                else normalize_aprs_alarm_level_threshold(
+                    global_alarm_level_threshold
+                )
+            )
+            for thresholds in selected_category_thresholds.values():
+                thresholds["map"] = selected_map_threshold
+                thresholds["alerts"] = selected_global_threshold
+        saved_alarm_enabled = save_aprs_alarm_enabled(alarm_enabled)
+        saved_groups = save_aprs_alarm_groups(normalized_groups)
+        saved_category_thresholds = save_aprs_alarm_category_thresholds(
+            selected_category_thresholds
+        )
+        if map_alarm_level_threshold is not None:
+            save_map_alarm_level_threshold(selected_map_threshold)
+        if global_alarm_level_threshold is not None:
+            save_global_alarm_level_threshold(selected_global_threshold)
+        reconcile_effective_message_group_conversations(alarm_groups=saved_groups)
+    except ValueError as exc:
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(exc))},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _translate("APRS alarm settings updated."),
+            "alarm_enabled": saved_alarm_enabled,
+            "alarm_groups": saved_groups,
+            "alarm_category_thresholds": saved_category_thresholds,
+            "map_alarm_level_threshold": get_map_alarm_level_threshold(),
+            "global_alarm_level_threshold": get_global_alarm_level_threshold(),
             "reload": True,
         }
     )
@@ -2490,6 +2648,7 @@ def map_page(
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_station_source_key=map_station_source_key,
         map_stations_endpoint=_path(request, "/api/map/stations-lite"),
+        map_alert_areas_endpoint=_path(request, "/api/map/alert-areas"),
         map_station_details_endpoint=_path(request, "/api/map/stations-details"),
         map_mobile_tracks_endpoint=_path(request, "/api/map/mobile-tracks"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
@@ -2503,6 +2662,23 @@ def map_stations_lite(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_map_station_markers_payload())
+
+
+@router.get("/api/map/alert-areas")
+def map_alert_areas(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> Response:
+    payload = get_map_alert_areas_payload()
+    revision = str(payload.get("revision") or "empty")
+    etag = f'"map-alert-areas-{revision}"'
+    response_headers = {
+        "Cache-Control": "private, no-cache",
+        "ETag": etag,
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=response_headers)
+    return JSONResponse(payload, headers=response_headers)
 
 
 @router.get("/api/map/stations-details")
@@ -3271,12 +3447,44 @@ def alert_detail_page(
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     templates = request.app.state.templates
+    root_path = request.scope.get("root_path", "")
+    alert_map_config = get_alert_detail_map_config(alert, root_path=root_path)
+    if alert_map_config.get("map_mode") == "station":
+        station_settings = get_station_settings()
+        related_entity = alert.get("related_entity")
+        related_label = (
+            str(related_entity.get("label") or "")
+            if isinstance(related_entity, dict)
+            else ""
+        )
+        station_context = _station_detail_context(
+            related_label or str(alert.get("source_callsign") or ""),
+            station_settings.get("default_units", "metric"),
+            root_path=root_path,
+        )
+        if station_context is not None:
+            station_map_config = dict(station_context["station_map_config"])
+            if station_map_config.get("latitude") is None:
+                station_map_config["latitude"] = alert_map_config.get("latitude")
+            if station_map_config.get("longitude") is None:
+                station_map_config["longitude"] = alert_map_config.get("longitude")
+            station_map_config.update(
+                {
+                    "map_mode": "station",
+                    "has_position": (
+                        station_map_config.get("latitude") is not None
+                        and station_map_config.get("longitude") is not None
+                    ),
+                }
+            )
+            alert_map_config = station_map_config
     context = build_template_context(
         request,
         page_title="Alert details",
         current_user=current_user,
         active_nav="alerts",
         alert=alert,
+        alert_map_config=alert_map_config,
         flash=flash,
         flash_success=flash_success,
         can_manage_alerts=current_user.role in {"admin", "operator"},

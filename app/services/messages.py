@@ -9,6 +9,12 @@ from app import get_version
 from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.i18n import get_app_language, get_translator
 from app.services.content import get_visible_station_snapshots
+from app.services.alarm_groups import (
+    get_aprs_alarm_enabled,
+    get_aprs_alarm_groups,
+    is_configured_aprs_alarm_group,
+    normalize_aprs_alarm_groups,
+)
 from app.services.outbound import (
     _format_aprs_latitude,
     _format_aprs_longitude,
@@ -177,6 +183,25 @@ def get_message_settings() -> dict[str, Any]:
     }
 
 
+def get_effective_message_target_groups(
+    message_target_groups: Any | None = None,
+    alarm_groups: Any | None = None,
+) -> list[str]:
+    standard_groups = (
+        get_message_settings()["target_groups"]
+        if message_target_groups is None
+        else normalize_message_target_groups(message_target_groups)
+    )
+    configured_alarm_groups = (
+        get_aprs_alarm_groups()
+        if alarm_groups is None
+        else normalize_aprs_alarm_groups(alarm_groups)
+    )
+    if not get_aprs_alarm_enabled():
+        configured_alarm_groups = []
+    return list(dict.fromkeys([*standard_groups, *configured_alarm_groups]))
+
+
 def save_message_settings(payload: dict[str, Any]) -> dict[str, Any]:
     path = normalize_aprs_path(str(payload.get("default_path") or ""))
     if path not in {value for value, _label in MESSAGE_PATH_OPTIONS}:
@@ -186,13 +211,41 @@ def save_message_settings(payload: dict[str, Any]) -> dict[str, Any]:
     set_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY, path)
     set_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY, "1" if receive_any_ssid else "0")
     set_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY, ",".join(groups))
-    _reconcile_message_group_conversations(groups)
+    reconcile_effective_message_group_conversations(message_target_groups=groups)
     return get_message_settings()
+
+
+def reconcile_effective_message_group_conversations(
+    message_target_groups: Any | None = None,
+    alarm_groups: Any | None = None,
+) -> None:
+    configured_alarm_groups = set(
+        get_aprs_alarm_groups()
+        if alarm_groups is None
+        else normalize_aprs_alarm_groups(alarm_groups)
+    )
+    _reconcile_message_group_conversations(
+        [
+            group
+            for group in get_effective_message_target_groups(
+                message_target_groups=message_target_groups,
+                alarm_groups=list(configured_alarm_groups),
+            )
+            if group not in configured_alarm_groups
+        ]
+    )
 
 
 def _reconcile_message_group_conversations(target_groups: list[str]) -> None:
     """Move previously stored group traffic into its destination-group thread."""
-    for group in normalize_message_target_groups(target_groups):
+    groups = list(
+        dict.fromkeys(
+            str(group or "").strip().upper()
+            for group in target_groups
+            if str(group or "").strip()
+        )
+    )
+    for group in groups:
         message_rows = fetch_all(
             """
             SELECT id, conversation_id
@@ -255,11 +308,19 @@ def create_or_update_conversation(
     path: str | None = None,
     conversation_kind: str | None = None,
 ) -> dict[str, Any]:
-    normalized_callsign = normalize_aprs_destination_callsign(callsign)
-    remote_callsign, remote_ssid = split_callsign_ssid(normalized_callsign)
     requested_kind = str(conversation_kind or "").strip().lower()
     if requested_kind and requested_kind not in {CONVERSATION_KIND_DIRECT, CONVERSATION_KIND_GROUP}:
         raise ValueError(_t("Unsupported message conversation type."))
+    normalized_candidate = str(callsign or "").strip().upper()
+    effective_groups = set(get_effective_message_target_groups())
+    if requested_kind == CONVERSATION_KIND_GROUP or normalized_candidate in effective_groups:
+        normalized_groups = normalize_aprs_alarm_groups([normalized_candidate])
+        if not normalized_groups:
+            raise ValueError(_t("Destination callsign is required."))
+        normalized_callsign = normalized_groups[0]
+    else:
+        normalized_callsign = normalize_aprs_destination_callsign(normalized_candidate)
+    remote_callsign, remote_ssid = split_callsign_ssid(normalized_callsign)
     timestamp = utc_now()
     with get_connection() as connection:
         row = connection.execute(
@@ -273,7 +334,7 @@ def create_or_update_conversation(
         if row is None:
             normalized_kind = requested_kind or (
                 CONVERSATION_KIND_GROUP
-                if normalized_callsign in set(get_message_settings()["target_groups"])
+                if normalized_callsign in effective_groups
                 else CONVERSATION_KIND_DIRECT
             )
             cursor = connection.execute(
@@ -323,7 +384,13 @@ def update_conversation_path(conversation_id: int, path: str) -> None:
 
 
 def _get_conversation(callsign: str) -> dict[str, Any] | None:
-    remote_callsign, remote_ssid = split_callsign_ssid(normalize_aprs_destination_callsign(callsign))
+    normalized_candidate = str(callsign or "").strip().upper()
+    if normalized_candidate in set(get_effective_message_target_groups()):
+        normalized_groups = normalize_aprs_alarm_groups([normalized_candidate])
+        normalized_callsign = normalized_groups[0] if normalized_groups else ""
+    else:
+        normalized_callsign = normalize_aprs_destination_callsign(normalized_candidate)
+    remote_callsign, remote_ssid = split_callsign_ssid(normalized_callsign)
     row = fetch_one(
         """
         SELECT id, remote_callsign, remote_ssid, conversation_kind, path, created_at, updated_at
@@ -354,7 +421,13 @@ def _resolve_auto_ack_path(*, sender: str, station_settings: dict[str, Any]) -> 
 
 
 def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") -> dict[str, Any]:
-    normalized_callsign = normalize_aprs_destination_callsign(callsign)
+    normalized_candidate = str(callsign or "").strip().upper()
+    effective_groups = set(get_effective_message_target_groups())
+    if normalized_candidate in effective_groups:
+        normalized_groups = normalize_aprs_alarm_groups([normalized_candidate])
+        normalized_callsign = normalized_groups[0] if normalized_groups else ""
+    else:
+        normalized_callsign = normalize_aprs_destination_callsign(normalized_candidate)
     normalized_text = normalize_aprs_message_text(message_text)
     normalized_path = normalize_aprs_path(path)
     timestamp = utc_now()
@@ -373,7 +446,7 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
         return duplicate
     existing_conversation = _get_conversation(normalized_callsign)
     is_group = (
-        normalized_callsign in set(get_message_settings()["target_groups"])
+        normalized_callsign in effective_groups
         or str((existing_conversation or {}).get("conversation_kind") or "") == CONVERSATION_KIND_GROUP
     )
     message_kind = QUERY_MESSAGE_KIND if normalized_text.startswith("?") else DIRECT_MESSAGE_KIND
@@ -460,7 +533,7 @@ def get_messages_page_data() -> dict[str, Any]:
         _safe_messages_warning(f"Failed to expire direct message timeouts: {exc}")
     message_settings = get_message_settings()
     try:
-        _reconcile_message_group_conversations(message_settings["target_groups"])
+        reconcile_effective_message_group_conversations()
     except sqlite3.Error as exc:
         _safe_messages_warning(f"Failed to reconcile APRS message group conversations: {exc}")
     try:
@@ -482,13 +555,16 @@ def get_messages_page_data() -> dict[str, Any]:
     conversations: list[dict[str, Any]] = []
     active_conversation_id: str | None = None
     local_sender = _local_station_identity()
+    alarm_groups = set(get_aprs_alarm_groups())
     for row in conversation_rows:
         display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
         conversation_kind = str(row["conversation_kind"] or CONVERSATION_KIND_DIRECT)
         if local_sender and _callsign_identity_matches(display_callsign, local_sender):
             continue
+        if display_callsign.strip().upper() in alarm_groups:
+            continue
         conversation_id = int(row["id"])
-        messages = [dict(item) for item in fetch_all(
+        stored_messages = [dict(item) for item in fetch_all(
             """
             SELECT id, direction, sender, addressee, message_text, path, message_number, status,
                    tx_attempt_count, is_unread, created_at, updated_at, sent_at, acked_at,
@@ -499,6 +575,13 @@ def get_messages_page_data() -> dict[str, Any]:
             """,
             (conversation_id,),
         )]
+        messages = [
+            item
+            for item in stored_messages
+            if str(item.get("addressee") or "").strip().upper() not in alarm_groups
+        ]
+        if stored_messages and not messages:
+            continue
         heard_snapshot = None
         if conversation_kind != CONVERSATION_KIND_GROUP:
             heard_snapshot = heard_by_key.get(display_callsign.casefold()) or heard_by_key.get(str(row["remote_callsign"]).casefold())
@@ -553,11 +636,12 @@ def get_unread_inbox_count() -> int:
     try:
         rows = fetch_all(
             """
-            SELECT c.remote_callsign, c.remote_ssid, COUNT(m.id) AS unread_count
+            SELECT c.remote_callsign, c.remote_ssid, m.addressee,
+                   COUNT(m.id) AS unread_count
             FROM aprs_message_conversations c
             JOIN aprs_messages m ON m.conversation_id = c.id
             WHERE m.direction = ? AND m.is_unread = 1
-            GROUP BY c.id, c.remote_callsign, c.remote_ssid
+            GROUP BY c.id, c.remote_callsign, c.remote_ssid, m.addressee
             """,
             (MESSAGE_DIRECTION_RX,),
         )
@@ -565,10 +649,15 @@ def get_unread_inbox_count() -> int:
         _safe_messages_warning(f"Failed to load unread inbox count: {exc}")
         return 0
     local_sender = _local_station_identity()
+    alarm_groups = set(get_aprs_alarm_groups())
     unread_total = 0
     for row in rows:
         display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
         if local_sender and _callsign_identity_matches(display_callsign, local_sender):
+            continue
+        if display_callsign.strip().upper() in alarm_groups:
+            continue
+        if str(row["addressee"] or "").strip().upper() in alarm_groups:
             continue
         unread_total += int(row["unread_count"] or 0)
     return unread_total
@@ -931,6 +1020,12 @@ def process_incoming_tnc2_message(
         )
         return
 
+    # Configured alarm groups are consumed by the shared alert intake before
+    # this message path runs.  Keep them out of user conversations and message
+    # notification transports while preserving their Traffic Monitor frame.
+    if is_configured_aprs_alarm_group(addressee):
+        return
+
     local_sender = _local_station_identity()
     recipient_kind = _incoming_message_recipient_kind(addressee, local_sender)
     if recipient_kind is None:
@@ -1286,6 +1381,8 @@ def store_incoming_message(
     conversation_callsign: str | None = None,
     conversation_kind: str = CONVERSATION_KIND_DIRECT,
 ) -> None:
+    if is_configured_aprs_alarm_group(addressee):
+        return
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
     conversation = create_or_update_conversation(
@@ -2099,7 +2196,7 @@ def _incoming_message_recipient_kind(addressee: str, local_sender: str) -> str |
     if get_message_settings()["receive_any_ssid"] and local_callsign == addressee_callsign:
         return "other_ssid"
 
-    if normalized_addressee in set(get_message_settings()["target_groups"]):
+    if normalized_addressee in set(get_effective_message_target_groups()):
         return "group"
     return None
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.6.dev - 2026-08-01
+- `Settings / Help`: added dedicated Markdown help for 8 panels in EN/DE/PL/ES/TLH and simplified the interface by removing repeated descriptions.
+- `Help / renderer`: added safe opening of external links from help documents.
+- `Alerts / help`: added linked, source-backed CAWF and NWS-WARN guides in EN/DE/PL/ES/TLH covering frame formats, fragmentation, UGC, maps, lifecycle, thresholds, and trust limitations.
+
+## 1.9.5.dev - 2026-07-31
+- `Band Condition / GUI and runtime`: the tab is hidden and data collection and processing are disabled when no active RF interface has band assessment enabled; other radio statistics continue to work unchanged.
+- `Alerts / formats`: added reception and handling of weather alerts in `CAWF` and `NWS-WARN` formats.
+- `Alerts / Poland / administrative areas`: added Polish county (`powiat`) boundaries and warning-area identifier mapping so alerts can display their corresponding areas on the map.
+- `Map / performance / initial load`: alert areas are loaded separately after the primary map data, while station icons and callsign labels appear progressively in prioritized batches, preventing tiles from remaining without markers for a long time and keeping the map responsive.
+
 ## 1.9.4.dev - 2026-07-29
 - `GUI / copy`: reviewed all primary screens and removed redundant section descriptions, repeated instructions, and obvious hints while preserving state, format requirements, validation, and RF or administrative safety warnings.
 - `Dashboard / station`: removed the reception description and last RF activity timestamp from the main station card, and reduced its height and spacing.

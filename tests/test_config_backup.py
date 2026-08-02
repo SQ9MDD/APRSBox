@@ -58,6 +58,12 @@ class ConfigBackupTests(unittest.TestCase):
             set_app_setting("app_language", "pl")
             set_app_setting("traffic_retention_minutes", "180")
             set_app_setting("map_coverage_fill_opacity", "5")
+            set_app_setting("aprs.map_alarm_level_threshold", "2")
+            set_app_setting("aprs.global_alarm_level_threshold", "3")
+            set_app_setting(
+                "aprs.alarm_category_thresholds",
+                '{"HEAT":{"alerts":2,"map":3}}',
+            )
             set_app_setting("scheduler.wx.last_refresh_at", "2026-01-01T00:00:00+00:00")
 
             payload = export_configuration_backup()
@@ -70,6 +76,18 @@ class ConfigBackupTests(unittest.TestCase):
             self.assertEqual("pl", payload["app_settings"]["app_language"])
             self.assertEqual("180", payload["app_settings"]["traffic_retention_minutes"])
             self.assertEqual("5", payload["app_settings"]["map_coverage_fill_opacity"])
+            self.assertEqual(
+                "2",
+                payload["app_settings"]["aprs.map_alarm_level_threshold"],
+            )
+            self.assertEqual(
+                "3",
+                payload["app_settings"]["aprs.global_alarm_level_threshold"],
+            )
+            self.assertEqual(
+                '{"HEAT":{"alerts":2,"map":3}}',
+                payload["app_settings"]["aprs.alarm_category_thresholds"],
+            )
             self.assertNotIn("scheduler.wx.last_refresh_at", payload["app_settings"])
 
     def test_import_restores_configuration_without_overwriting_runtime_app_settings(self) -> None:

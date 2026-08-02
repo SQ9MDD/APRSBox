@@ -33,9 +33,12 @@
 
     const renderInline = (value) => {
         let html = escapeHtml(value);
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => (
-            `<a href="${escapeHtml(String(href || "").trim())}" data-help-link="1">${label}</a>`
-        ));
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
+            const normalizedHref = String(href || "").trim();
+            const isExternal = /^https?:\/\//i.test(normalizedHref);
+            const externalAttributes = isExternal ? ' target="_blank" rel="noopener noreferrer"' : "";
+            return `<a href="${escapeHtml(normalizedHref)}" data-help-link="1"${externalAttributes}>${label}</a>`;
+        });
         html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
         html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
         html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
@@ -258,11 +261,16 @@
         if (!(target instanceof HTMLAnchorElement)) {
             return;
         }
-        event.preventDefault();
-        const relativePath = resolveMarkdownHelpPath(target.getAttribute("href"));
+        const rawHref = String(target.getAttribute("href") || "").trim();
+        const relativePath = resolveMarkdownHelpPath(rawHref);
         if (!relativePath) {
+            if (/^https?:\/\//i.test(rawHref)) {
+                return;
+            }
+            event.preventDefault();
             return;
         }
+        event.preventDefault();
         void loadHelp({ path: relativePath }, lastTrigger);
     });
 

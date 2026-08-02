@@ -10,6 +10,7 @@
         zoom: Number.parseInt(root.dataset.defaultZoom || "", 10),
     };
     const stationsEndpoint = root.dataset.stationsEndpoint || "/api/map/stations";
+    const alertAreasEndpoint = root.dataset.alertAreasEndpoint || "";
     const stationDetailsEndpoint = root.dataset.stationDetailsEndpoint || "";
     const mobileTracksEndpoint = root.dataset.mobileTracksEndpoint || "";
     const mapTileEventsEndpoint = root.dataset.mapTileEventsEndpoint || "";
@@ -35,6 +36,11 @@
     const toggleTracksIcon = document.getElementById("map-toggle-tracks-icon");
     const toggleCoverageButton = document.getElementById("map-toggle-coverage");
     const toggleCoverageIcon = document.getElementById("map-toggle-coverage-icon");
+    const toggleAlarmAreasButton = document.getElementById("map-toggle-alarm-areas");
+    const toggleAlarmAreasIcon = document.getElementById("map-toggle-alarm-areas-icon");
+    const alertsOverlay = document.getElementById("map-alerts-overlay");
+    const alertsOverlayList = document.getElementById("map-alerts-overlay-list");
+    const alertsOverlayClose = document.getElementById("map-alerts-overlay-close");
     const toggleRulerButton = document.getElementById("map-toggle-ruler");
     const toggleRulerIcon = document.getElementById("map-toggle-ruler-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
@@ -64,6 +70,16 @@
         hideTracks: root.dataset.i18nHideTracks || "Hide tracks",
         showCoverage: root.dataset.i18nShowCoverage || "Show coverage",
         hideCoverage: root.dataset.i18nHideCoverage || "Hide coverage",
+        showAlarmList: root.dataset.i18nShowAlarmList || "Show alarm list",
+        hideAlarmList: root.dataset.i18nHideAlarmList || "Hide alarm list",
+        activeAlarms: root.dataset.i18nActiveAlarms || "Active alarms",
+        noActiveMapAlarms: root.dataset.i18nNoActiveMapAlarms || "No active alarms with map areas.",
+        visibleOnMap: root.dataset.i18nVisibleOnMap || "Visible on map",
+        noMapArea: root.dataset.i18nNoMapArea || "No map area available",
+        areaCount: root.dataset.i18nAreaCount || "Area count",
+        expiresAt: root.dataset.i18nExpiresAt || "Expires at",
+        details: root.dataset.i18nDetails || "Details",
+        severityLevel: root.dataset.i18nSeverityLevel || "Severity level",
         showRuler: root.dataset.i18nShowRuler || "Show ruler",
         hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
         tileProviderUnavailable: root.dataset.i18nTileProviderUnavailable || "Tile provider unavailable",
@@ -75,21 +91,33 @@
     const trackLayerGroup = window.L.layerGroup();
     const markerLayerGroup = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
+    let alertAreaLayer = null;
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
     const mapCoverageVisibleStorageKey = "aprsbox-map-coverage-visible";
+    const mapHiddenAlertIdsStorageKey = "aprsbox-map-hidden-alert-ids";
+    const mapAlertsOverlayOpenStorageKey = "aprsbox-map-alerts-overlay-open";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const mobileTrackMaxRenderedPoints = 60;
+    const maximumVisibleAlertCards = 4;
+    const initialAlertTileFallbackMs = 1800;
+    const alertRefreshIntervalMs = 10000;
+    const initialMarkerBatchSize = 20;
+    const markerBatchSize = 40;
+    const markerBatchTimeBudgetMs = 8;
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
     let refreshTimer = null;
+    let alertRefreshTimer = null;
+    let initialAlertLoadTimer = null;
     let lastStationsSignature = "";
     let tracksVisible = true;
     let coverageVisible = true;
+    let alertsOverlayOpen = resolveAlertsOverlayOpen();
     let rulerVisible = true;
     let coverageFillOpacity = 0.05;
     let coverageOutlineOpacity = 1;
@@ -101,6 +129,20 @@
     let latestTrackRevision = "";
     let detailsLoadingRevision = "";
     let tracksLoadingRevision = "";
+    let alertAreasEtag = "";
+    let alertAreasLoading = false;
+    let initialAlertLoadScheduled = false;
+    let initialAlertLoadStarted = false;
+    let initialAlertTileFallbackElapsed = false;
+    let firstMapTileLoaded = false;
+    let firstStationRefreshSettled = false;
+    let markerRenderGeneration = 0;
+    let markerRenderFrame = null;
+    let lastAlertAreasSignature = "";
+    let lastAlertPanelSignature = "";
+    let latestAlertAreaCollection = { type: "FeatureCollection", features: [] };
+    let latestMapAlerts = [];
+    let hiddenAlertIds = resolveHiddenAlertIds();
     const interfaceVisibilityByKey = new Map();
     const markerLayersByKey = new Map();
     const coverageLayersByKey = new Map();
@@ -155,6 +197,395 @@
             return "";
         }
         return String(value);
+    }
+
+    function normalizeAlertAreaFeatureCollection(value) {
+        if (!value || value.type !== "FeatureCollection" || !Array.isArray(value.features)) {
+            return { type: "FeatureCollection", features: [], alerts: [] };
+        }
+        return {
+            type: "FeatureCollection",
+            features: value.features.filter((feature) => (
+                feature
+                && feature.type === "Feature"
+                && feature.geometry
+                && typeof feature.geometry === "object"
+            )),
+            alerts: Array.isArray(value.alerts)
+                ? value.alerts.filter((alert) => alert && Number.isInteger(Number(alert.id)))
+                : [],
+        };
+    }
+
+    function resolveHiddenAlertIds() {
+        try {
+            const parsed = JSON.parse(window.localStorage.getItem(mapHiddenAlertIdsStorageKey) || "[]");
+            if (!Array.isArray(parsed)) {
+                return new Set();
+            }
+            return new Set(
+                parsed
+                    .map((value) => Number.parseInt(String(value), 10))
+                    .filter((value) => Number.isInteger(value) && value > 0)
+            );
+        } catch (_error) {
+            return new Set();
+        }
+    }
+
+    function persistHiddenAlertIds() {
+        window.localStorage.setItem(
+            mapHiddenAlertIdsStorageKey,
+            JSON.stringify(Array.from(hiddenAlertIds).sort((left, right) => left - right))
+        );
+    }
+
+    function resolveAlertsOverlayOpen() {
+        try {
+            return window.localStorage.getItem(mapAlertsOverlayOpenStorageKey) === "true";
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function persistAlertsOverlayOpen() {
+        try {
+            window.localStorage.setItem(
+                mapAlertsOverlayOpenStorageKey,
+                alertsOverlayOpen ? "true" : "false"
+            );
+        } catch (_error) {
+        }
+    }
+
+    function alertSeverityColor(severityLevel) {
+        const normalizedLevel = Number.parseInt(String(severityLevel ?? ""), 10);
+        if (normalizedLevel === 1) {
+            return "yellow";
+        }
+        if (normalizedLevel === 2) {
+            return "orange";
+        }
+        if (normalizedLevel === 3) {
+            return "red";
+        }
+        return "gray";
+    }
+
+    function visibleAlertAreaFeatureCollection() {
+        if (!alertsOverlayOpen) {
+            return { type: "FeatureCollection", features: [] };
+        }
+        const features = latestAlertAreaCollection.features.flatMap((feature) => {
+            const properties = feature?.properties && typeof feature.properties === "object"
+                ? feature.properties
+                : {};
+            const hasContributorMetadata = Array.isArray(properties.aprsbox_alerts);
+            const contributors = hasContributorMetadata
+                ? properties.aprsbox_alerts.filter((contributor) => {
+                    const alertId = Number.parseInt(String(contributor?.id ?? ""), 10);
+                    return Number.isInteger(alertId) && !hiddenAlertIds.has(alertId);
+                })
+                : [];
+            if (!hasContributorMetadata) {
+                return [feature];
+            }
+            if (contributors.length === 0) {
+                return [];
+            }
+            const strongestSeverity = contributors.reduce((strongest, contributor) => {
+                const severity = Number.parseInt(String(contributor?.severity_level ?? ""), 10);
+                return [1, 2, 3].includes(severity) ? Math.max(strongest, severity) : strongest;
+            }, 0);
+            return [{
+                ...feature,
+                properties: {
+                    ...properties,
+                    aprsbox_alerts: contributors,
+                    aprsbox_severity_level: strongestSeverity || null,
+                    aprsbox_alert_color: alertSeverityColor(strongestSeverity),
+                },
+            }];
+        });
+        return { type: "FeatureCollection", features };
+    }
+
+    function renderVisibleAlertAreas() {
+        if (!alertAreaLayer) {
+            return;
+        }
+        const featureCollection = visibleAlertAreaFeatureCollection();
+        let nextSignature = "";
+        try {
+            nextSignature = JSON.stringify(featureCollection);
+        } catch (_error) {
+            nextSignature = '{"type":"FeatureCollection","features":[]}';
+            featureCollection.features = [];
+        }
+        if (nextSignature === lastAlertAreasSignature) {
+            return;
+        }
+        lastAlertAreasSignature = nextSignature;
+        alertAreaLayer.clearLayers();
+        if (featureCollection.features.length === 0) {
+            return;
+        }
+        try {
+            alertAreaLayer.addData(featureCollection);
+        } catch (_error) {
+            alertAreaLayer.clearLayers();
+        }
+    }
+
+    function formatAlertExpiry(value) {
+        const normalized = String(value || "").trim();
+        if (!normalized) {
+            return "";
+        }
+        const parsed = new Date(normalized);
+        if (Number.isNaN(parsed.getTime())) {
+            return normalized;
+        }
+        return parsed.toLocaleString(locale, {
+            dateStyle: "short",
+            timeStyle: "short",
+        });
+    }
+
+    function severityBadgeClass(severityLevel) {
+        const normalizedLevel = Number.parseInt(String(severityLevel ?? ""), 10);
+        return [1, 2, 3].includes(normalizedLevel)
+            ? `alert-category-badge-level-${normalizedLevel}`
+            : "alert-category-badge-unknown";
+    }
+
+    function constrainAlertPanelListHeight() {
+        if (!alertsOverlayList || !alertsOverlayOpen) {
+            return;
+        }
+        const cards = Array.from(alertsOverlayList.querySelectorAll(".map-alert-item"));
+        const shouldScroll = cards.length > maximumVisibleAlertCards;
+        alertsOverlayList.dataset.scrollable = shouldScroll ? "true" : "false";
+        alertsOverlayList.style.removeProperty("--map-alert-list-limit");
+        if (!shouldScroll) {
+            return;
+        }
+        const listStyle = window.getComputedStyle(alertsOverlayList);
+        let visibleHeight = (
+            Number.parseFloat(listStyle.paddingTop || "0")
+            + Number.parseFloat(listStyle.paddingBottom || "0")
+        );
+        for (const [index, card] of cards.slice(0, maximumVisibleAlertCards).entries()) {
+            visibleHeight += card.getBoundingClientRect().height;
+            if (index > 0) {
+                visibleHeight += Number.parseFloat(
+                    window.getComputedStyle(card).marginTop || "0"
+                );
+            }
+        }
+        alertsOverlayList.style.setProperty(
+            "--map-alert-list-limit",
+            `${Math.ceil(visibleHeight)}px`
+        );
+    }
+
+    function scheduleAlertPanelListConstraint() {
+        window.requestAnimationFrame(constrainAlertPanelListHeight);
+    }
+
+    function positionAlertPanelBelowLeafletControls() {
+        if (!alertsOverlay || !mapStage || !mapCanvas) {
+            return;
+        }
+        const zoomControl = mapCanvas.querySelector(".leaflet-control-zoom");
+        if (!zoomControl) {
+            return;
+        }
+        const mapStageRect = mapStage.getBoundingClientRect();
+        const zoomControlRect = zoomControl.getBoundingClientRect();
+        const panelTop = Math.ceil(zoomControlRect.bottom - mapStageRect.top + 10);
+        alertsOverlay.style.setProperty("--map-alert-overlay-top", `${panelTop}px`);
+    }
+
+    function refreshAlertPanelLayout() {
+        positionAlertPanelBelowLeafletControls();
+        scheduleAlertPanelListConstraint();
+    }
+
+    function alertPanelSignature() {
+        return JSON.stringify({
+            alerts: latestMapAlerts,
+            hidden: Array.from(hiddenAlertIds).sort((left, right) => left - right),
+        });
+    }
+
+    function renderAlertPanel() {
+        if (!alertsOverlayList) {
+            return;
+        }
+        const nextPanelSignature = alertPanelSignature();
+        if (nextPanelSignature === lastAlertPanelSignature) {
+            syncAlertPanelButton();
+            return;
+        }
+        lastAlertPanelSignature = nextPanelSignature;
+        alertsOverlayList.replaceChildren();
+        if (latestMapAlerts.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "map-alerts-overlay-empty";
+            empty.textContent = i18n.noActiveMapAlarms;
+            alertsOverlayList.appendChild(empty);
+            syncAlertPanelButton();
+            scheduleAlertPanelListConstraint();
+            return;
+        }
+        for (const alert of latestMapAlerts) {
+            const alertId = Number.parseInt(String(alert.id), 10);
+            const hasGeometry = Boolean(alert.has_geometry);
+            const isVisible = hasGeometry && !hiddenAlertIds.has(alertId);
+            const item = document.createElement("article");
+            item.className = "map-alert-item";
+            item.dataset.visible = isVisible ? "true" : "false";
+            item.dataset.hasGeometry = hasGeometry ? "true" : "false";
+
+            const heading = document.createElement("div");
+            heading.className = "map-alert-item-heading";
+            const category = document.createElement("span");
+            category.className = `frame-type-badge alert-category-badge ${severityBadgeClass(alert.severity_level)}`;
+            const eventIcon = document.createElement("img");
+            eventIcon.className = "alert-category-event-icon";
+            eventIcon.src = `${staticRoot}icons/${String(alert.event_icon || "alert-outline.svg")}`;
+            eventIcon.alt = "";
+            category.appendChild(eventIcon);
+            category.append(document.createTextNode(String(alert.event_code || i18n.activeAlarms)));
+            heading.appendChild(category);
+
+            const switchLabel = document.createElement("label");
+            switchLabel.className = "map-alert-visibility-toggle";
+            switchLabel.title = hasGeometry ? i18n.visibleOnMap : i18n.noMapArea;
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = isVisible;
+            checkbox.disabled = !hasGeometry;
+            checkbox.setAttribute("role", "switch");
+            checkbox.setAttribute(
+                "aria-label",
+                `${i18n.visibleOnMap}: ${String(alert.event_code || alert.source_callsign || alertId)}`
+            );
+            const switchTrack = document.createElement("span");
+            switchTrack.className = "map-alert-switch-track";
+            switchLabel.append(checkbox, switchTrack);
+            heading.appendChild(switchLabel);
+            item.appendChild(heading);
+
+            const source = document.createElement("div");
+            source.className = "map-alert-item-source";
+            source.textContent = [alert.source_callsign, alert.alarm_group]
+                .map((value) => String(value || "").trim())
+                .filter(Boolean)
+                .join(" · ");
+            item.appendChild(source);
+
+            const meta = document.createElement("div");
+            meta.className = "map-alert-item-meta";
+            const severity = Number.parseInt(String(alert.severity_level ?? ""), 10);
+            if (Number.isInteger(severity)) {
+                const severityText = document.createElement("span");
+                severityText.textContent = `${i18n.severityLevel}: ${severity}`;
+                meta.appendChild(severityText);
+            }
+            const areaCount = document.createElement("span");
+            areaCount.textContent = `${i18n.areaCount}: ${Number.parseInt(String(alert.area_count || 0), 10)}`;
+            meta.appendChild(areaCount);
+            const expiry = formatAlertExpiry(alert.expires_at);
+            if (expiry) {
+                const expiryText = document.createElement("span");
+                expiryText.textContent = `${i18n.expiresAt}: ${expiry}`;
+                meta.appendChild(expiryText);
+            }
+            if (!hasGeometry) {
+                const noArea = document.createElement("span");
+                noArea.className = "map-alert-item-no-area";
+                noArea.textContent = i18n.noMapArea;
+                meta.appendChild(noArea);
+            }
+            item.appendChild(meta);
+
+            if (alert.detail_href) {
+                const detailsLink = document.createElement("a");
+                detailsLink.className = "map-alert-item-details";
+                detailsLink.href = `${rootPath}${String(alert.detail_href)}`;
+                detailsLink.textContent = i18n.details;
+                item.appendChild(detailsLink);
+            }
+
+            checkbox.addEventListener("change", function () {
+                if (checkbox.checked) {
+                    hiddenAlertIds.delete(alertId);
+                } else {
+                    hiddenAlertIds.add(alertId);
+                }
+                persistHiddenAlertIds();
+                renderVisibleAlertAreas();
+                item.dataset.visible = checkbox.checked ? "true" : "false";
+                lastAlertPanelSignature = alertPanelSignature();
+                syncAlertPanelButton();
+            });
+            alertsOverlayList.appendChild(item);
+        }
+        syncAlertPanelButton();
+        scheduleAlertPanelListConstraint();
+    }
+
+    function syncAlertPanelButton() {
+        const alertsWithGeometry = latestMapAlerts.filter((alert) => Boolean(alert.has_geometry));
+        const visibleCount = alertsWithGeometry.filter((alert) => (
+            !hiddenAlertIds.has(Number.parseInt(String(alert.id), 10))
+        )).length;
+        if (toggleAlarmAreasIcon) {
+            toggleAlarmAreasIcon.setAttribute(
+                "src",
+                `${staticRoot}icons/${!alertsOverlayOpen || (alertsWithGeometry.length > 0 && visibleCount === 0) ? "alarm-light-off-outline.svg" : "alarm-light-outline.svg"}`
+            );
+        }
+        if (toggleAlarmAreasButton) {
+            const label = alertsOverlayOpen ? i18n.hideAlarmList : i18n.showAlarmList;
+            toggleAlarmAreasButton.setAttribute("title", label);
+            toggleAlarmAreasButton.setAttribute("aria-label", label);
+            toggleAlarmAreasButton.setAttribute("aria-expanded", alertsOverlayOpen ? "true" : "false");
+        }
+    }
+
+    function setAlertsOverlayOpen(open, { persist = true } = {}) {
+        alertsOverlayOpen = Boolean(open);
+        if (alertsOverlay) {
+            alertsOverlay.hidden = !alertsOverlayOpen;
+        }
+        if (persist) {
+            persistAlertsOverlayOpen();
+        }
+        renderVisibleAlertAreas();
+        syncAlertPanelButton();
+        if (alertsOverlayOpen) {
+            refreshAlertPanelLayout();
+        }
+    }
+
+    function reconcileAlertAreas(value) {
+        latestAlertAreaCollection = normalizeAlertAreaFeatureCollection(value);
+        latestMapAlerts = latestAlertAreaCollection.alerts;
+        const activeAlertIds = new Set(
+            latestMapAlerts.map((alert) => Number.parseInt(String(alert.id), 10))
+        );
+        const retainedHiddenIds = new Set(
+            Array.from(hiddenAlertIds).filter((alertId) => activeAlertIds.has(alertId))
+        );
+        if (retainedHiddenIds.size !== hiddenAlertIds.size) {
+            hiddenAlertIds = retainedHiddenIds;
+            persistHiddenAlertIds();
+        }
+        renderVisibleAlertAreas();
+        renderAlertPanel();
     }
 
     function resolveInitialView() {
@@ -266,6 +697,32 @@
     map.on("resize zoom move", syncMapMaskLayerViewport);
     mapMaskLayer = ensureMapMaskLayer(map);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
+    const alertAreasPaneName = "alert-areas-pane";
+    const alertAreasPane = map.createPane(alertAreasPaneName);
+    alertAreasPane.style.zIndex = "350";
+    alertAreasPane.style.pointerEvents = "none";
+    alertAreaLayer = window.L.geoJSON(null, {
+        pane: alertAreasPaneName,
+        interactive: false,
+        style: (feature) => {
+            const requestedColor = String(
+                feature?.properties?.aprsbox_alert_color || "gray"
+            ).toLowerCase();
+            const color = ["yellow", "orange", "red", "gray"].includes(requestedColor)
+                ? requestedColor
+                : "gray";
+            return {
+                stroke: true,
+                color,
+                opacity: 1,
+                weight: 2,
+                dashArray: null,
+                fill: true,
+                fillColor: color,
+                fillOpacity: 0.10,
+            };
+        },
+    }).addTo(map);
     coverageLayerGroup.addTo(map);
     trackLayerGroup.addTo(map);
     markerLayerGroup.addTo(map);
@@ -354,6 +811,10 @@
     });
     tileLayer.on("tileload", function () {
         handleTileLoad();
+        if (!firstMapTileLoaded) {
+            firstMapTileLoaded = true;
+            scheduleInitialAlertLoad();
+        }
     });
 
     function resolveDefaultMaskOpacity() {
@@ -1163,6 +1624,24 @@
             applyLatestMapData({ forceRender: true });
         });
     }
+    setAlertsOverlayOpen(alertsOverlayOpen, { persist: false });
+    if (toggleAlarmAreasButton) {
+        toggleAlarmAreasButton.addEventListener("click", function () {
+            const opening = !alertsOverlayOpen;
+            setAlertsOverlayOpen(opening);
+            if (opening) {
+                startInitialAlertLoad();
+            }
+        });
+    }
+    if (alertsOverlayClose) {
+        alertsOverlayClose.addEventListener("click", function () {
+            setAlertsOverlayOpen(false);
+            toggleAlarmAreasButton?.focus();
+        });
+    }
+    positionAlertPanelBelowLeafletControls();
+    window.addEventListener("resize", refreshAlertPanelLayout);
     applyRulerToggleState(resolveRulerVisible());
     if (toggleRulerButton) {
         toggleRulerButton.addEventListener("click", function () {
@@ -1591,9 +2070,114 @@
         return group;
     }
 
+    function cancelPendingMarkerRender() {
+        markerRenderGeneration += 1;
+        if (markerRenderFrame !== null) {
+            window.cancelAnimationFrame(markerRenderFrame);
+            markerRenderFrame = null;
+        }
+        return markerRenderGeneration;
+    }
+
+    function markerBatchNow() {
+        if (window.performance && typeof window.performance.now === "function") {
+            return window.performance.now();
+        }
+        return Date.now();
+    }
+
+    function prioritizeMarkerRecords(records) {
+        let currentBounds = null;
+        try {
+            currentBounds = map.getBounds();
+        } catch (_error) {
+        }
+        for (const record of records) {
+            record.visiblePriority = currentBounds && currentBounds.contains([
+                record.station.latitude,
+                record.station.longitude,
+            ]) ? 0 : 1;
+            record.localPriority = record.station.origin === "local_tx" ? 0 : 1;
+            record.rfPriority = record.station.is_rf ? 0 : 1;
+        }
+        return records.sort((left, right) => {
+            if (left.visiblePriority !== right.visiblePriority) {
+                return left.visiblePriority - right.visiblePriority;
+            }
+            if (left.localPriority !== right.localPriority) {
+                return left.localPriority - right.localPriority;
+            }
+            if (left.rfPriority !== right.rfPriority) {
+                return left.rfPriority - right.rfPriority;
+            }
+            return left.sourceIndex - right.sourceIndex;
+        });
+    }
+
+    function reconcileMarkerRecord(record) {
+        const { key, station } = record;
+        const nextMarkerSignature = markerSignature(station);
+        const nextTooltipSignature = tooltipSignature(station);
+        const nextTooltipContent = tooltipHtml(station);
+        const existing = markerLayersByKey.get(key);
+        if (!existing) {
+            const marker = window.L.marker([station.latitude, station.longitude], {
+                icon: buildStationIcon(station),
+                keyboard: false,
+            });
+            syncMarkerInteractions(marker, station, nextTooltipContent);
+            markerLayerGroup.addLayer(marker);
+            markerLayersByKey.set(key, {
+                layer: marker,
+                markerSignature: nextMarkerSignature,
+                tooltipSignature: nextTooltipSignature,
+            });
+            return;
+        }
+        if (existing.markerSignature !== nextMarkerSignature) {
+            existing.layer.setLatLng([station.latitude, station.longitude]);
+            existing.layer.setIcon(buildStationIcon(station));
+            existing.markerSignature = nextMarkerSignature;
+            syncMarkerInteractions(existing.layer, station, nextTooltipContent);
+            existing.tooltipSignature = nextTooltipSignature;
+            return;
+        }
+        if (existing.tooltipSignature !== nextTooltipSignature) {
+            syncMarkerInteractions(existing.layer, station, nextTooltipContent);
+            existing.tooltipSignature = nextTooltipSignature;
+        }
+    }
+
+    function renderMarkerBatch(records, startIndex, renderGeneration, maximumBatchSize) {
+        if (renderGeneration !== markerRenderGeneration) {
+            return;
+        }
+        const startedAt = markerBatchNow();
+        let nextIndex = startIndex;
+        let renderedCount = 0;
+        while (nextIndex < records.length && renderedCount < maximumBatchSize) {
+            reconcileMarkerRecord(records[nextIndex]);
+            nextIndex += 1;
+            renderedCount += 1;
+            if (renderedCount > 0 && markerBatchNow() - startedAt >= markerBatchTimeBudgetMs) {
+                break;
+            }
+        }
+        if (nextIndex >= records.length || renderGeneration !== markerRenderGeneration) {
+            markerRenderFrame = null;
+            return;
+        }
+        markerRenderFrame = window.requestAnimationFrame(function () {
+            markerRenderFrame = null;
+            renderMarkerBatch(records, nextIndex, renderGeneration, markerBatchSize);
+        });
+    }
+
     function reconcileMarkers(stations) {
+        const renderGeneration = cancelPendingMarkerRender();
         const nextKeys = new Set();
-        for (const station of stations || []) {
+        const records = [];
+        for (const [sourceIndex, station] of (stations || []).entries()) {
             if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
                 continue;
             }
@@ -1602,38 +2186,11 @@
                 continue;
             }
             nextKeys.add(key);
-            const nextMarkerSignature = markerSignature(station);
-            const nextTooltipSignature = tooltipSignature(station);
-            const nextTooltipContent = tooltipHtml(station);
-            const existing = markerLayersByKey.get(key);
-            if (!existing) {
-                const marker = window.L.marker([station.latitude, station.longitude], {
-                    icon: buildStationIcon(station),
-                    keyboard: false,
-                });
-                syncMarkerInteractions(marker, station, nextTooltipContent);
-                markerLayerGroup.addLayer(marker);
-                markerLayersByKey.set(key, {
-                    layer: marker,
-                    markerSignature: nextMarkerSignature,
-                    tooltipSignature: nextTooltipSignature,
-                });
-                continue;
-            }
-            if (existing.markerSignature !== nextMarkerSignature) {
-                existing.layer.setLatLng([station.latitude, station.longitude]);
-                existing.layer.setIcon(buildStationIcon(station));
-                existing.markerSignature = nextMarkerSignature;
-                syncMarkerInteractions(existing.layer, station, nextTooltipContent);
-                existing.tooltipSignature = nextTooltipSignature;
-                continue;
-            }
-            if (existing.tooltipSignature !== nextTooltipSignature) {
-                syncMarkerInteractions(existing.layer, station, nextTooltipContent);
-                existing.tooltipSignature = nextTooltipSignature;
-            }
+            records.push({ key, sourceIndex, station });
         }
         removeMissingLayerRecords(markerLayersByKey, markerLayerGroup, nextKeys);
+        const prioritizedRecords = prioritizeMarkerRecords(records);
+        renderMarkerBatch(prioritizedRecords, 0, renderGeneration, initialMarkerBatchSize);
     }
 
     function reconcileCoverage(stations) {
@@ -1711,9 +2268,9 @@
     }
 
     function renderStations(stations, mobileTracks) {
+        reconcileMarkers(stations);
         reconcileCoverage(stations);
         reconcileTracks(mobileTracks);
-        reconcileMarkers(stations);
     }
 
     async function loadStationDetails(expectedRevision) {
@@ -1800,6 +2357,81 @@
         });
     }
 
+    function runWhenBrowserIdle(callback) {
+        if (typeof window.requestIdleCallback === "function") {
+            window.requestIdleCallback(callback, { timeout: 1000 });
+            return;
+        }
+        window.setTimeout(callback, 0);
+    }
+
+    async function refreshAlertAreas() {
+        if (!alertAreasEndpoint || alertAreasLoading) {
+            return;
+        }
+        alertAreasLoading = true;
+        try {
+            const headers = { Accept: "application/json" };
+            if (alertAreasEtag) {
+                headers["If-None-Match"] = alertAreasEtag;
+            }
+            const response = await fetch(alertAreasEndpoint, { headers });
+            if (response.status === 304) {
+                return;
+            }
+            if (!response.ok) {
+                return;
+            }
+            const nextEtag = response.headers.get("etag");
+            if (nextEtag) {
+                alertAreasEtag = nextEtag;
+            }
+            const payload = await response.json();
+            reconcileAlertAreas(payload.alert_areas);
+        } catch (_error) {
+        } finally {
+            alertAreasLoading = false;
+        }
+    }
+
+    function startAlertPolling() {
+        if (alertRefreshTimer || !alertAreasEndpoint) {
+            return;
+        }
+        alertRefreshTimer = window.setInterval(
+            refreshAlertAreas,
+            alertRefreshIntervalMs
+        );
+    }
+
+    function startInitialAlertLoad() {
+        if (initialAlertLoadStarted) {
+            return;
+        }
+        initialAlertLoadStarted = true;
+        if (initialAlertLoadTimer) {
+            window.clearTimeout(initialAlertLoadTimer);
+            initialAlertLoadTimer = null;
+        }
+        void refreshAlertAreas();
+        startAlertPolling();
+    }
+
+    function scheduleInitialAlertLoad() {
+        if (
+            initialAlertLoadStarted
+            || initialAlertLoadScheduled
+            || !firstStationRefreshSettled
+            || (!firstMapTileLoaded && !initialAlertTileFallbackElapsed)
+        ) {
+            return;
+        }
+        initialAlertLoadScheduled = true;
+        runWhenBrowserIdle(function () {
+            startInitialAlertLoad();
+        });
+    }
+
     async function refreshStations() {
         try {
             const response = await fetch(stationsEndpoint, {
@@ -1826,6 +2458,11 @@
             applyLatestMapData({ forceRender: revisionChanged });
             scheduleDeferredMapDataLoad();
         } catch (_error) {
+        } finally {
+            if (!firstStationRefreshSettled) {
+                firstStationRefreshSettled = true;
+                scheduleInitialAlertLoad();
+            }
         }
     }
 
@@ -1851,6 +2488,21 @@
             initializeRuler();
         }, 0);
     });
+    initialAlertLoadTimer = window.setTimeout(function () {
+        initialAlertTileFallbackElapsed = true;
+        scheduleInitialAlertLoad();
+    }, initialAlertTileFallbackMs);
+    window.addEventListener("beforeunload", function () {
+        if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+        }
+        if (alertRefreshTimer) {
+            window.clearInterval(alertRefreshTimer);
+        }
+        if (initialAlertLoadTimer) {
+            window.clearTimeout(initialAlertLoadTimer);
+        }
+    }, { once: true });
     refreshStations();
     startPolling();
     syncStatus();

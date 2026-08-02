@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.db import fetch_all, fetch_one, init_db, set_app_setting
+from app.services.alarm_groups import save_aprs_alarm_groups
 from app.services.notifications import (
     _send_notification_event,
     build_aprs_message_event,
@@ -377,6 +378,62 @@ class NotificationTests(unittest.TestCase):
                 queue_aprs_message_notification(sender="SQ0ABC-7", destination="APRS", text="Hello")
                 queue_radar_notifications()
             submit_mock.assert_not_called()
+
+    def test_alarm_group_message_is_not_queued_for_notification_transports(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("PL-WARN")
+            set_app_setting("messages_enabled", "1")
+            set_app_setting("messages_include_content", "1")
+
+            with patch(
+                "app.services.notifications._NOTIFICATION_EXECUTOR.submit"
+            ) as submit_mock:
+                queue_aprs_message_notification(
+                    sender="PLWXSR",
+                    destination="PL-WARN",
+                    text="310100z,TSTORM1,1465",
+                )
+
+            submit_mock.assert_not_called()
+
+    def test_queued_alarm_group_event_is_blocked_before_transport_delivery(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("PL-WARN")
+            set_app_setting("messages_enabled", "1")
+            event = build_aprs_message_event(
+                sender="PLWXSR",
+                destination="PL-WARN",
+                text="310100z,TSTORM1,1465",
+                include_content=True,
+                timestamp="2026-01-30T00:01:00+00:00",
+            )
+
+            with patch(
+                "app.services.notifications.list_notification_transports",
+                return_value=[{"id": 1, "name": "Enabled", "enabled": True}],
+            ) as transports_mock, patch(
+                "app.services.notifications._deliver_event_to_transport"
+            ) as deliver_mock:
+                _send_notification_event(event)
+
+            transports_mock.assert_not_called()
+            deliver_mock.assert_not_called()
+
+    def test_regular_message_still_queues_notification(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_groups("PL-WARN")
+            set_app_setting("messages_enabled", "1")
+
+            with patch(
+                "app.services.notifications._NOTIFICATION_EXECUTOR.submit"
+            ) as submit_mock:
+                queue_aprs_message_notification(
+                    sender="SQ0ABC-7",
+                    destination="APRS",
+                    text="Hello",
+                )
+
+            submit_mock.assert_called_once()
 
     def test_notifications_template_includes_help_viewer(self) -> None:
         template_source = Path("app/templates/notifications.html").read_text(encoding="utf-8")

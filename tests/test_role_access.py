@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.db import init_db
+from app.db import execute, init_db
 
 FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
 
@@ -34,57 +34,96 @@ def temporary_database() -> Path:
 @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
 class RoleAccessTests(unittest.TestCase):
     def test_viewer_navigation_is_limited_to_monitoring_pages(self) -> None:
-        request = Request(
-            {
-                "type": "http",
-                "method": "GET",
-                "path": "/dashboard",
-                "root_path": "",
-                "headers": [],
-                "query_string": b"",
-                "client": ("127.0.0.1", 12345),
-                "server": ("testserver", 80),
-                "scheme": "http",
-            }
-        )
-        current_user = SimpleNamespace(role="viewer", username="viewer")
+        with temporary_database():
+            execute(
+                """
+                INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
+                VALUES ('RF 2m', 'TCP', '2m', '127.0.0.1:8001', 1, '', '2026-01-01', '2026-01-01')
+                """
+            )
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "path": "/dashboard",
+                    "root_path": "",
+                    "headers": [],
+                    "query_string": b"",
+                    "client": ("127.0.0.1", 12345),
+                    "server": ("testserver", 80),
+                    "scheme": "http",
+                }
+            )
+            current_user = SimpleNamespace(role="viewer", username="viewer")
 
-        context = build_template_context(request, page_title="Dashboard", current_user=current_user, active_nav="dashboard")
-        navigation_order = [item["key"] for item in context["navigation"] if not item.get("separator")]
-        navigation = {item["key"]: item for item in context["navigation"] if not item.get("separator")}
+            context = build_template_context(
+                request,
+                page_title="Dashboard",
+                current_user=current_user,
+                active_nav="dashboard",
+            )
+            navigation_order = [item["key"] for item in context["navigation"] if not item.get("separator")]
+            navigation = {item["key"]: item for item in context["navigation"] if not item.get("separator")}
 
-        self.assertEqual(
-            navigation_order[:9],
-            [
-                "dashboard",
-                "map",
-                "stations",
-                "traffic",
-                "alerts",
-                "band-condition",
-                "statistics",
+            self.assertEqual(
+                navigation_order[:9],
+                [
+                    "dashboard",
+                    "map",
+                    "stations",
+                    "traffic",
+                    "alerts",
+                    "band-condition",
+                    "statistics",
+                    "modems",
+                    "station",
+                ],
+            )
+            primary_separator_index = next(
+                index
+                for index, item in enumerate(context["navigation"])
+                if item.get("key") == "nav-separator-primary"
+            )
+            self.assertEqual(
+                context["navigation"][primary_separator_index + 1]["key"],
                 "modems",
-                "station",
-            ],
-        )
-        primary_separator_index = next(
-            index
-            for index, item in enumerate(context["navigation"])
-            if item.get("key") == "nav-separator-primary"
-        )
-        self.assertEqual(
-            context["navigation"][primary_separator_index + 1]["key"],
-            "modems",
-        )
+            )
 
-        for key in ("dashboard", "stations", "map", "band-condition", "modems", "traffic", "alerts", "statistics"):
-            self.assertIn(key, navigation)
-            self.assertFalse(bool(navigation[key].get("disabled")), key)
+            for key in ("dashboard", "stations", "map", "band-condition", "modems", "traffic", "alerts", "statistics"):
+                self.assertIn(key, navigation)
+                self.assertFalse(bool(navigation[key].get("disabled")), key)
 
-        for key in ("station", "wx", "messages", "notifications", "objects", "bulletins", "digi-flows", "logs", "users", "settings", "changelog"):
-            self.assertIn(key, navigation)
-            self.assertTrue(bool(navigation[key].get("disabled")), key)
-        self.assertNotIn("igate", navigation)
+            for key in ("station", "wx", "messages", "notifications", "objects", "bulletins", "digi-flows", "logs", "users", "settings", "changelog"):
+                self.assertIn(key, navigation)
+                self.assertTrue(bool(navigation[key].get("disabled")), key)
+            self.assertNotIn("igate", navigation)
+
+    def test_band_condition_navigation_is_hidden_without_an_enabled_assessed_interface(self) -> None:
+        with temporary_database():
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "path": "/dashboard",
+                    "root_path": "",
+                    "headers": [],
+                    "query_string": b"",
+                    "client": ("127.0.0.1", 12345),
+                    "server": ("testserver", 80),
+                    "scheme": "http",
+                }
+            )
+            current_user = SimpleNamespace(role="viewer", username="viewer")
+
+            context = build_template_context(
+                request,
+                page_title="Dashboard",
+                current_user=current_user,
+                active_nav="dashboard",
+            )
+
+            navigation_keys = {item["key"] for item in context["navigation"]}
+            self.assertNotIn("band-condition", navigation_keys)
 
     def test_viewer_can_open_allowed_pages_and_cannot_open_restricted_pages(self) -> None:
         with temporary_database():

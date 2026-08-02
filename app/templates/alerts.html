@@ -37,11 +37,9 @@
                     <col class="alerts-col-select">
                     {% endif %}
                     <col class="alerts-col-source">
-                    <col class="alerts-col-type">
-                    <col class="alerts-col-first-seen">
-                    <col class="alerts-col-last-seen">
-                    <col class="alerts-col-frame-count">
-                    <col class="alerts-col-mute">
+                    <col class="alerts-col-category">
+                    <col class="alerts-col-areas">
+                    <col class="alerts-col-relevant-time">
                     <col class="alerts-col-actions">
                 </colgroup>
                 <thead>
@@ -52,16 +50,25 @@
                         </th>
                         {% endif %}
                         <th>{{ t("Source") }}</th>
-                        <th>{{ t("Type") }}</th>
-                        <th>{{ t("First received") }}</th>
-                        <th>{{ t("Last received") }}</th>
-                        <th>{{ t("Frame count") }}</th>
-                        <th>{{ t("Muted until") }}</th>
+                        <th>{{ t("Category") }}</th>
+                        <th>{{ t("Area count") }}</th>
+                        <th>{{ t("Expiry / last received") }}</th>
                         <th>{{ t("Actions") }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for alert in alerts_page["items"] %}
+                    {% if not alert.destination_group %}
+                    {% set category_class = "alert-category-badge-emergency" %}
+                    {% elif alert.severity_level == 1 %}
+                    {% set category_class = "alert-category-badge-level-1" %}
+                    {% elif alert.severity_level == 2 %}
+                    {% set category_class = "alert-category-badge-level-2" %}
+                    {% elif alert.severity_level == 3 %}
+                    {% set category_class = "alert-category-badge-level-3" %}
+                    {% else %}
+                    {% set category_class = "alert-category-badge-unknown" %}
+                    {% endif %}
                     <tr
                         class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}"
                         data-alert-id="{{ alert.id }}"
@@ -88,21 +95,43 @@
                                 </a>
                             </strong>
                         </td>
-                        <td><span class="frame-type-badge frame-type-badge-emergency">{{ alert.alert_type }}</span></td>
-                        <td>{{ alert.first_seen_label }}</td>
-                        <td>{{ alert.last_seen_label }}</td>
-                        <td>{{ alert.frame_count }}</td>
                         <td>
-                            {% if alert.muted %}
-                            <span class="alert-state-badge alert-state-badge-muted">
-                                {% if alert.muted_indefinitely %}
-                                {{ t("Indefinitely") }}
-                                {% else %}
-                                {{ alert.muted_until_label }}
+                            <div class="alert-list-category">
+                                <span class="frame-type-badge alert-category-badge {{ category_class }}">
+                                    <img
+                                        class="alert-category-event-icon"
+                                        src="{{ request.scope.root_path }}/static/icons/{{ alert.event_icon }}"
+                                        alt=""
+                                        aria-hidden="true"
+                                    >
+                                    {{ alert.event_code or alert.alert_type }}
+                                </span>
+                                {% if alert.muted %}
+                                <span
+                                    class="alert-list-muted-indicator"
+                                    role="img"
+                                    title="{% if alert.muted_indefinitely %}{{ t('Alert muted indefinitely') }}{% else %}{{ t('Muted until') }} {{ alert.muted_until_label }}{% endif %}"
+                                    aria-label="{% if alert.muted_indefinitely %}{{ t('Alert muted indefinitely') }}{% else %}{{ t('Muted until') }} {{ alert.muted_until_label }}{% endif %}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/volume-off.svg" alt="">
+                                </span>
                                 {% endif %}
-                            </span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if alert.destination_group %}
+                            {{ alert.area_count }}
                             {% else %}
                             <span class="muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="alert-list-time">
+                            {% if alert.destination_group and alert.expires_at_label %}
+                            <time title="{{ t('Expires at') }}">{{ alert.expires_at_label }}</time>
+                            {% elif alert.destination_group %}
+                            <span class="muted">-</span>
+                            {% else %}
+                            <time title="{{ t('Last received') }}">{{ alert.last_seen_label }}</time>
                             {% endif %}
                         </td>
                         <td class="alerts-actions-cell" onclick="event.stopPropagation();">
@@ -173,7 +202,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 8 if can_manage_alerts else 7 }}" class="muted">{{ t("No alerts received yet.") }}</td>
+                        <td colspan="{{ 6 if can_manage_alerts else 5 }}" class="muted">{{ t("No alerts received yet.") }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

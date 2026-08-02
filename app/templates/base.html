@@ -33,10 +33,10 @@
         window.APRSBOX_APRS_SYMBOL_SET = {{ current_aprs_symbol_set|tojson }};
         document.documentElement.setAttribute("data-aprs-symbol-set", window.APRSBOX_APRS_SYMBOL_SET || "legacy");
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-beacon-2-aprsis-interface-3">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-beacon-2-aprsis-interface-3-alert-detail-map-2">
     {% if current_user %}
     <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}-map-alert-panel-8">
     {% endif %}
     {% block extra_head %}{% endblock %}
 </head>
@@ -408,7 +408,7 @@
     {% endif %}
     {% block extra_scripts %}{% endblock %}
     {% if current_user %}
-    <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global-5"></script>
+    <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global-7"></script>
     {% endif %}
     {% if current_user and current_user.role in ["admin", "operator"] %}
     <script src="{{ request.scope.root_path }}/static/js/sidebar-beacon.js?v={{ app_version }}-1"></script>

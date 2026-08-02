@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.db import init_db, log_event
 from app.services.aprsis import AprsisClientService
+from app.services.alerts import expire_aprs_alerts
 from app.services.beacon_scheduler import BeaconSchedulerService
 from app.services.bulletin_scheduler import BulletinSchedulerService
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
@@ -22,6 +23,7 @@ from app.services.wx_scheduler import WxSchedulerService
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     init_db()
+    expire_aprs_alerts()
     aprsis_uplink = AprsisClientService()
     digi_flow_runtime = DigiFlowRuntimeService(aprsis_client=aprsis_uplink)
     aprsis_uplink.set_frame_consumer(digi_flow_runtime.enqueue_aprsis_tnc2_frame)

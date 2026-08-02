@@ -67,6 +67,20 @@ def monitored_band_options() -> list[dict[str, str]]:
     ]
 
 
+def is_band_condition_enabled() -> bool:
+    row = fetch_one(
+        """
+        SELECT 1
+        FROM modems
+        WHERE enabled = 1
+          AND LOWER(TRIM(COALESCE(band, ''))) IN ('2m', '70cm')
+          AND UPPER(TRIM(COALESCE(modem_type, ''))) <> 'APRSIS'
+        LIMIT 1
+        """
+    )
+    return row is not None
+
+
 def _normalize_utc_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
