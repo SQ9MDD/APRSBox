@@ -148,6 +148,7 @@ from app.services.alerts import (
     mute_alert,
     unmute_alert,
 )
+from app.services.alert_event_icons import resolve_alert_event_icon
 from app.services.own_alerts import (
     cancel_own_alert,
     create_own_alert,
@@ -412,6 +413,102 @@ def _station_detail_context(callsign: str, unit_system: str, *, root_path: str =
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
+
+
+def _own_alert_list_row(
+    own_alert: dict[str, Any],
+    *,
+    event_label: str,
+) -> dict[str, Any]:
+    event_code = str(own_alert.get("event_code") or "").strip().upper()
+    severity_level = None
+    if event_code and event_code[-1].isdigit():
+        severity_level = int(event_code[-1])
+    sender_callsign = str(own_alert.get("sender_callsign") or "").strip().upper()
+    target_group = str(own_alert.get("target_group") or "").strip().upper()
+    area_code = str(own_alert.get("area_code") or "").strip().upper()
+    area_name = str(own_alert.get("area_name") or "").strip()
+    comment = str(own_alert.get("comment") or "").strip()
+    created_at = str(own_alert.get("created_at") or "").strip()
+    valid_until = str(own_alert.get("valid_until") or "").strip()
+    view_id = f"own-{int(own_alert['id'])}"
+    return {
+        "id": int(own_alert["id"]),
+        "modal_id": view_id,
+        "alert_id": str(own_alert.get("alert_id") or "").strip().upper(),
+        "source_callsign": sender_callsign,
+        "alarm_group": target_group,
+        "destination_group": target_group,
+        "logical_alert_id": str(own_alert.get("alert_id") or "").strip().upper(),
+        "event_code": event_code,
+        "event_label": event_label,
+        "event_icon": resolve_alert_event_icon(event_code, alert_type="APRS WARNING"),
+        "severity_level": severity_level,
+        "area_count": 1,
+        "expires_at_label": str(own_alert.get("valid_until_label") or ""),
+        "last_seen_label": str(own_alert.get("created_label") or ""),
+        "created_label": str(own_alert.get("created_label") or ""),
+        "updated_label": str(own_alert.get("updated_label") or ""),
+        "detail_href": "",
+        "related_entity": {
+            "label": sender_callsign,
+            "kind": "station",
+            "detail_href": "",
+        },
+        "is_own_alert": True,
+        "own_alert_id": int(own_alert["id"]),
+        "own_alert_label": (
+            f"{str(own_alert.get('alert_id') or '').strip().upper()} · "
+            f"{str(own_alert.get('target_group') or '').strip().upper()}"
+        ).strip(" ·"),
+        "own_alert_cancelled": bool(own_alert.get("cancelled_at")),
+        "modal_frame": {
+            "id": view_id,
+            "timestamp": created_at,
+            "source": sender_callsign,
+            "line": comment,
+            "display_callsign": sender_callsign,
+            "emergency": True,
+            "emergency_data": {
+                "callsign": sender_callsign,
+                "summary": " · ".join(
+                    value for value in [
+                        target_group,
+                        event_label,
+                        f"{area_name} ({area_code})" if area_name or area_code else "",
+                    ]
+                    if value
+                ),
+                "comment": comment,
+                "timestamp_utc": created_at,
+                "raw_frame": comment,
+                "path": "",
+                "source_interface": "",
+                "source_port": "",
+                "latitude": None,
+                "longitude": None,
+            },
+            "alert_popup": True,
+            "alert_popup_kind": "alarm_group",
+            "alert_popup_data": {
+                "callsign": sender_callsign,
+                "summary": " · ".join(
+                    value for value in [
+                        target_group,
+                        event_label,
+                        f"{area_name} ({area_code})" if area_name or area_code else "",
+                    ]
+                    if value
+                ),
+                "comment": comment,
+                "timestamp_utc": created_at,
+                "raw_frame": comment,
+            },
+            "alert_href": "/alerts",
+            "alert_muted": False,
+            "alert_should_notify": False,
+        },
+    }
 
 
 def _aprsis_interface_settings_path() -> str:
@@ -3448,12 +3545,32 @@ def alerts_page(
             str(own_alert.get("event_code") or ""),
             str(own_alert.get("event_code") or ""),
         )
+    alerts_page_data = list_alerts(page=page)
+    own_alert_rows = [
+        _own_alert_list_row(own_alert, event_label=str(own_alert.get("event_label") or ""))
+        for own_alert in active_own_alerts
+    ]
+    if page == 1 and own_alert_rows:
+        alerts_page_data["items"] = own_alert_rows + list(alerts_page_data["items"])
+        alerts_page_data["total"] = int(alerts_page_data.get("total") or 0) + len(own_alert_rows)
+        alerts_page_data["total_pages"] = max(
+            1,
+            (
+                int(alerts_page_data["total"]) + int(alerts_page_data["page_size"]) - 1
+            )
+            // int(alerts_page_data["page_size"]),
+        )
+        alerts_page_data["has_next"] = int(alerts_page_data["page"]) < int(
+            alerts_page_data["total_pages"]
+        )
+        alerts_page_data["previous_page"] = int(alerts_page_data["page"]) - 1
+        alerts_page_data["next_page"] = int(alerts_page_data["page"]) + 1
     context = build_template_context(
         request,
         page_title="Alerts",
         current_user=current_user,
         active_nav="alerts",
-        alerts_page=list_alerts(page=page),
+        alerts_page=alerts_page_data,
         own_alert_compose=own_alert_compose,
         active_own_alerts=active_own_alerts,
         flash=flash,
