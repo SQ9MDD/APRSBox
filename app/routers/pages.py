@@ -3422,15 +3422,7 @@ def _alert_action_return_path(alert_id: int, return_to: str | None) -> str:
     return f"/alerts/{alert_id}"
 
 
-@router.get("/alerts")
-def alerts_page(
-    request: Request,
-    page: int = 1,
-    flash: str | None = None,
-    flash_success: bool = True,
-    current_user: UserIdentity = Depends(get_current_user),
-) -> object:
-    templates = request.app.state.templates
+def _own_alert_compose_page_context() -> dict[str, Any]:
     own_alert_compose = get_own_alert_compose_context()
     translator = get_translator(get_app_language())
     for group in own_alert_compose["groups"]:
@@ -3440,6 +3432,18 @@ def alerts_page(
             option["translated_label"] = translator(option["label"])
         for option in group["level_options"]:
             option["translated_label"] = translator(option["label"])
+    return own_alert_compose
+
+
+@router.get("/alerts")
+def alerts_page(
+    request: Request,
+    page: int = 1,
+    flash: str | None = None,
+    flash_success: bool = True,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
     alerts_page_data = list_alerts(page=page)
     station = get_station_settings()
     station_callsign = str(station.get("callsign") or "").strip().upper()
@@ -3467,12 +3471,27 @@ def alerts_page(
         current_user=current_user,
         active_nav="alerts",
         alerts_page=alerts_page_data,
-        own_alert_compose=own_alert_compose,
         flash=flash,
         flash_success=flash_success,
         can_manage_alerts=current_user.role in {"admin", "operator"},
     )
     return templates.TemplateResponse("alerts.html", context)
+
+
+@router.get("/alerts/send")
+def own_alert_send_page(
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Send alarm",
+        current_user=current_user,
+        active_nav="alerts",
+        own_alert_compose=_own_alert_compose_page_context(),
+    )
+    return templates.TemplateResponse("alert_send.html", context)
 
 
 @router.get("/api/alerts/send/areas")

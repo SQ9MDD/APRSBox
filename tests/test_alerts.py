@@ -778,6 +778,9 @@ class AprsAlertTests(unittest.TestCase):
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         map_source = Path("app/templates/map.html").read_text(encoding="utf-8")
         alerts_source = Path("app/templates/alerts.html").read_text(encoding="utf-8")
+        alert_send_source = Path("app/templates/alert_send.html").read_text(
+            encoding="utf-8"
+        )
         alert_detail_source = Path("app/templates/alert_detail.html").read_text(
             encoding="utf-8"
         )
@@ -862,9 +865,28 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn('data-help-page="application/alerts"', alert_detail_source)
         self.assertIn('{% include "partials/help_modal.html" %}', alerts_source)
         self.assertIn("help-viewer.js", alerts_source)
+        self.assertNotIn("own-alert-compose-form", alerts_source)
+        self.assertNotIn("own-alert-page-data", alerts_source)
+        self.assertIn(
+            'href="{{ request.scope.root_path }}/alerts/send"',
+            alerts_source,
+        )
+        self.assertIn('data-root-path="{{ request.scope.root_path }}"', alerts_source)
+        self.assertIn("own-alert-compose-form", alert_send_source)
+        self.assertIn("own-alert-page-data", alert_send_source)
+        self.assertIn("alerts-compose.js", alert_send_source)
+        self.assertIn(
+            'href="{{ request.scope.root_path }}/alerts"',
+            alert_send_source,
+        )
+        self.assertNotIn("alerts-page-panel", alert_send_source)
         self.assertGreater(
             alerts_source.index('id="bulk-delete-form"'),
             alerts_source.index("</table>"),
+        )
+        self.assertLess(
+            alerts_source.index('id="bulk-delete-form"'),
+            alerts_source.index('href="{{ request.scope.root_path }}/alerts/send"'),
         )
         self.assertIn("window.aprsboxOpenEmergencyModal", alerts_source)
         self.assertNotIn("frame.detail_href", traffic_source)

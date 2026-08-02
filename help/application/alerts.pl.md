@@ -4,7 +4,7 @@ Zakładka `Alarmy` pokazuje logiczne alarmy utworzone z odebranych ramek APRS em
 
 Jeżeli pełny znak źródłowy alarmu jest identyczny ze znakiem skonfigurowanej stacji, na liście pojawia się przycisk `Odwołaj alarm`. Po potwierdzeniu APRSBox zatrzymuje powtórzenia i wysyła protokolarną ramkę CAWF `CANCEL` z tym samym źródłem, grupą i logicznym `ALERT_ID`.
 
-W formularzu `Wyślij alarm` pole `Ścieżka (RF)` określa ścieżkę używaną podczas nadawania radiowego. Domyślnie wybrana jest ścieżka skonfigurowana dla stacji. `Direct (bez ścieżki)` nadaje bez hopów digi. Wybrana ścieżka jest zapisywana z alarmem i pozostaje taka sama dla jego powtórzeń oraz ramki `CANCEL`. Nie jest to wybór trasy serwerowej APRS-IS.
+Przycisk `Wyślij alarm` obok `Usuń zaznaczone` otwiera osobną stronę kreatora. W formularzu pole `Ścieżka (RF)` określa ścieżkę używaną podczas nadawania radiowego. Domyślnie wybrana jest ścieżka skonfigurowana dla stacji. `Direct (bez ścieżki)` nadaje bez hopów digi. Wybrana ścieżka jest zapisywana z alarmem i pozostaje taka sama dla jego powtórzeń oraz ramki `CANCEL`. Nie jest to wybór trasy serwerowej APRS-IS.
 
 - Kliknięcie wiersza otwiera modal z najnowszą ramką emergency.
 - Przycisk szczegółów alarmu otwiera pełny rekord i historię powiązanych ramek.

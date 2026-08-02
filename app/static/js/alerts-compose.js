@@ -1,15 +1,19 @@
 (() => {
     const dataNode = document.getElementById("own-alert-page-data");
-    if (!dataNode) return;
-
-    let pageData;
-    try {
-        pageData = JSON.parse(dataNode.textContent || "{}");
-    } catch (_) {
-        return;
+    let pageData = {};
+    if (dataNode) {
+        try {
+            pageData = JSON.parse(dataNode.textContent || "{}");
+        } catch (_) {
+            pageData = {};
+        }
     }
 
-    const rootPath = String(pageData.rootPath || "");
+    const rootPath = String(
+        pageData.rootPath
+        || document.getElementById("own-alert-cancel-modal")?.dataset.rootPath
+        || ""
+    );
     const compose = pageData.compose || {};
     const i18n = pageData.i18n || {};
     const groups = new Map((compose.groups || []).map((group) => [group.group, group]));

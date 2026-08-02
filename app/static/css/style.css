@@ -8035,6 +8035,13 @@ button.message-delivery-badge {
     margin: 0.2rem 0 0;
 }
 
+.own-alert-page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+}
+
 .own-alert-compose-form {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

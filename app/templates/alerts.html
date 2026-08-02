@@ -13,126 +13,7 @@
 </section>
 {% endif %}
 
-<div class="own-alert-top-grid">
-<section class="panel own-alert-compose-panel">
-    <div class="panel-body">
-        <div class="panel-header own-alert-panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Send alarm") }}</h2>
-                <p class="muted small">{{ t("Send a CAWF alarm.") }}</p>
-            </div>
-        </div>
-
-        {% if not own_alert_compose.groups %}
-        <div class="empty-state own-alert-empty-state">
-            {{ t("No fully supported configured alarm groups are available.") }}
-        </div>
-        {% else %}
-        {% if not own_alert_compose.tx_available %}
-        <div class="alert" role="alert">{{ t(own_alert_compose.tx_error) }}</div>
-        {% endif %}
-        <form id="own-alert-compose-form" class="own-alert-compose-form" novalidate>
-            <label>
-                <span>{{ t("Target") }}</span>
-                <select id="own-alert-target" name="target_group" required>
-                    {% for group in own_alert_compose.groups %}
-                    <option value="{{ group.group }}">{{ group.group }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label class="own-alert-area-field">
-                <span>{{ t("Area") }}</span>
-                <select id="own-alert-area" name="area_code" required disabled aria-label="{{ t('Area') }}">
-                    <option value="">{{ t("Loading areas...") }}</option>
-                </select>
-                <span class="small muted" id="own-alert-area-status" role="status" aria-live="polite"></span>
-            </label>
-            <label>
-                <span>{{ t("Hazard") }}</span>
-                <select id="own-alert-hazard" name="event_family" required></select>
-            </label>
-            <label>
-                <span>{{ t("Severity level") }}</span>
-                <select id="own-alert-level" name="severity_level" required></select>
-            </label>
-            <label>
-                <span>{{ t("Repeat every") }}</span>
-                <select id="own-alert-repeat" name="repeat_interval_minutes" required>
-                    {% for minutes in own_alert_compose.repeat_intervals %}
-                    <option value="{{ minutes }}"{% if minutes == own_alert_compose.default_repeat_interval %} selected{% endif %}>
-                        {{ tf("{count} minutes", {"count": minutes}) }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                <span>{{ t("Validity") }}</span>
-                <select id="own-alert-validity" name="validity_hours" required>
-                    {% for hours in own_alert_compose.validity_hours %}
-                    <option value="{{ hours }}"{% if hours == own_alert_compose.default_validity_hours %} selected{% endif %}>
-                        {{ tf("{count} hours", {"count": hours}) if hours != 1 else t("1 hour") }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                <span>{{ t("Path") }} (RF)</span>
-                <select id="own-alert-rf-path" name="tx_path">
-                    {% for path in own_alert_compose.rf_path_options %}
-                    <option value="{{ path.value }}"{% if path.value == own_alert_compose.default_rf_path %} selected{% endif %}>
-                        {{ t(path.label) }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label class="own-alert-comment-field">
-                <span>{{ t("Content") }}</span>
-                <textarea id="own-alert-comment" name="comment" rows="1" placeholder="{{ t('Optional alarm comment') }}"></textarea>
-                <span class="field-counter-row small">
-                    <span id="own-alert-character-counter">{{ t("Select an area to calculate the limit.") }}</span>
-                    <span id="own-alert-parts-counter" class="muted"></span>
-                </span>
-            </label>
-            <div class="form-actions own-alert-compose-actions">
-                <span class="small" id="own-alert-form-status" role="status" aria-live="polite"></span>
-                <button type="submit" class="button" id="own-alert-open-confirm"{% if not own_alert_compose.tx_available %} disabled{% endif %}>
-                    {{ t("Send alarm") }}
-                </button>
-            </div>
-        </form>
-        {% endif %}
-    </div>
-</section>
-
- </div>
-
-<div class="own-alert-modal" id="own-alert-confirm-modal" hidden>
-    <div class="own-alert-modal-backdrop" data-close-own-alert-confirm></div>
-    <div class="own-alert-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="own-alert-confirm-title" tabindex="-1">
-        <h2 id="own-alert-confirm-title">{{ t("Confirm alarm transmission") }}</h2>
-        <dl class="own-alert-confirm-grid">
-            <div><dt>{{ t("Target") }}</dt><dd data-confirm-field="target_group">-</dd></div>
-            <div><dt>{{ t("Area") }}</dt><dd data-confirm-field="area">-</dd></div>
-            <div><dt>{{ t("Hazard") }}</dt><dd data-confirm-field="event_code">-</dd></div>
-            <div><dt>{{ t("Valid until") }}</dt><dd data-confirm-field="valid_until">-</dd></div>
-            <div><dt>{{ t("Repeat every") }}</dt><dd data-confirm-field="repeat">-</dd></div>
-            <div><dt>{{ t("Path") }} (RF)</dt><dd data-confirm-field="tx_path">-</dd></div>
-            <div><dt>{{ t("Content") }}</dt><dd data-confirm-field="comment">-</dd></div>
-            <div><dt>{{ t("Frames") }}</dt><dd data-confirm-field="parts_total">-</dd></div>
-        </dl>
-        <details class="own-alert-technical-preview">
-            <summary>{{ t("Technical APRS preview") }}</summary>
-            <pre id="own-alert-technical-frames"></pre>
-        </details>
-        <p class="small field-validation-error" id="own-alert-confirm-error" role="alert" hidden></p>
-        <div class="own-alert-modal-actions">
-            <button type="button" class="button button-secondary" data-close-own-alert-confirm>{{ t("Back") }}</button>
-            <button type="button" class="button" id="own-alert-confirm-send">{{ t("Send") }}</button>
-        </div>
-    </div>
-</div>
-
-<div class="own-alert-modal" id="own-alert-cancel-modal" hidden>
+<div class="own-alert-modal" id="own-alert-cancel-modal" data-root-path="{{ request.scope.root_path }}" hidden>
     <div class="own-alert-modal-backdrop" data-close-own-alert-cancel></div>
     <div class="own-alert-modal-dialog own-alert-modal-dialog-small" role="dialog" aria-modal="true" aria-labelledby="own-alert-cancel-title" tabindex="-1">
         <h2 id="own-alert-cancel-title">{{ t("Cancel alarm") }}</h2>
@@ -382,6 +263,7 @@
                     <button type="submit" class="button button-secondary button-danger">{{ t("Delete selected") }}</button>
                 </form>
                 {% endif %}
+                <a class="button" href="{{ request.scope.root_path }}/alerts/send">{{ t("Send alarm") }}</a>
             </div>
             <div class="form-actions">
                 {% if alerts_page.has_previous %}
@@ -396,27 +278,6 @@
 </section>
 
 {% include "partials/help_modal.html" %}
-
-<script type="application/json" id="own-alert-page-data">
-{
-    "rootPath": {{ request.scope.root_path|tojson }},
-    "compose": {{ own_alert_compose|tojson }},
-    "i18n": {
-        "loadingAreas": {{ t("Loading areas...")|tojson }},
-        "selectArea": {{ t("Select an area")|tojson }},
-        "positionUnknown": {{ t("Own station position is unknown. Select an area manually.")|tojson }},
-        "areaNotMatched": {{ t("Own station position does not match an area. Select one manually.")|tojson }},
-        "areasUnavailable": {{ t("Areas could not be loaded from GeoJSON.")|tojson }},
-        "remainingCharacters": {{ t("Remaining {count} characters")|tojson }},
-        "parts": {{ t("{count} frames")|tojson }},
-        "previewError": {{ t("Alarm preview could not be generated.")|tojson }},
-        "sending": {{ t("Sending alarm...")|tojson }},
-        "sent": {{ t("Alarm queued for transmission.")|tojson }},
-        "minutes": {{ t("{count} minutes")|tojson }},
-        "directPath": {{ t("Direct (no path)")|tojson }}
-    }
-}
-</script>
 
 <script type="application/json" id="alerts-modal-data">
 [

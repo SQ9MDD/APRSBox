@@ -4,7 +4,7 @@ The `Alerts` tab shows logical alerts created from APRS emergency and CAWF frame
 
 When the alert's full source callsign exactly matches the configured station callsign, the list shows a `Cancel alarm` action. After confirmation, APRSBox stops repeats and sends a CAWF `CANCEL` frame with the same source, group, and logical `ALERT_ID`.
 
-In the `Send alarm` form, `Path (RF)` selects the path used for radio transmission. The station's configured path is selected by default. `Direct (no path)` transmits without digipeater hops. The selected path is stored with the alert and remains unchanged for repeats and the `CANCEL` frame. It does not select an APRS-IS server route.
+The `Send alarm` button next to `Delete selected` opens a separate composer page. In the form, `Path (RF)` selects the path used for radio transmission. The station's configured path is selected by default. `Direct (no path)` transmits without digipeater hops. The selected path is stored with the alert and remains unchanged for repeats and the `CANCEL` frame. It does not select an APRS-IS server route.
 
 - Clicking a row opens the modal with the latest emergency frame.
 - The alert details button opens the complete record and related frame history.

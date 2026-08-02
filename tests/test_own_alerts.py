@@ -639,6 +639,7 @@ class OwnAlertTests(unittest.TestCase):
             try:
                 with TestClient(app) as client:
                     page = client.get("/alerts")
+                    send_page = client.get("/alerts/send")
                     areas = client.get("/api/alerts/send/areas", params={"group": "PL-WARN"})
                     preview = client.post("/api/alerts/send/preview", json=payload())
                     rejected = client.post(
@@ -663,18 +664,25 @@ class OwnAlertTests(unittest.TestCase):
                 app.dependency_overrides.clear()
 
         self.assertEqual(page.status_code, 200)
-        self.assertLess(page.text.index("Send alarm"), page.text.index("alerts-page-panel"))
-        self.assertNotIn("My active alarms", page.text)
-        self.assertIn('id="own-alert-hazard"', page.text)
-        self.assertIn('id="own-alert-level"', page.text)
-        self.assertIn('id="own-alert-rf-path"', page.text)
-        self.assertIn('name="tx_path"', page.text)
-        self.assertIn('rows="1"', page.text)
+        self.assertIn('href="/alerts/send"', page.text)
+        self.assertNotIn('id="own-alert-compose-form"', page.text)
+        self.assertNotIn('id="own-alert-page-data"', page.text)
+        self.assertNotIn('id="own-alert-hazard"', page.text)
+        self.assertEqual(send_page.status_code, 200)
+        self.assertIn('id="own-alert-compose-form"', send_page.text)
+        self.assertIn('id="own-alert-hazard"', send_page.text)
+        self.assertIn('id="own-alert-level"', send_page.text)
+        self.assertIn('id="own-alert-rf-path"', send_page.text)
+        self.assertIn('name="tx_path"', send_page.text)
+        self.assertIn('rows="1"', send_page.text)
+        self.assertIn('href="/alerts"', send_page.text)
+        self.assertNotIn("alerts-page-panel", send_page.text)
+        self.assertNotIn('class="alerts-table', send_page.text)
         self.assertIn(
             "grid-template-columns: repeat(4, minmax(0, 1fr));",
             style_source,
         )
-        self.assertNotIn('id="own-alert-area-search"', page.text)
+        self.assertNotIn('id="own-alert-area-search"', send_page.text)
         self.assertEqual(areas.status_code, 200)
         self.assertIn("1465", {area["code"] for area in areas.json()["areas"]})
         self.assertEqual(preview.status_code, 200)
@@ -684,6 +692,10 @@ class OwnAlertTests(unittest.TestCase):
         self.assertEqual(cancelled.status_code, 303)
         self.assertEqual(cancelled_status, "cancelled")
         self.assertIn(sent.json()["alert_id"], refreshed_before_cancel.text)
+        self.assertLess(
+            refreshed_before_cancel.text.index("Delete selected"),
+            refreshed_before_cancel.text.index('href="/alerts/send"'),
+        )
         self.assertIn(
             f'data-alert-protocol-cancel="{regular_alert_id}"',
             refreshed_before_cancel.text,
