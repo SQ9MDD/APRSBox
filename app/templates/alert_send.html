@@ -14,7 +14,6 @@
                     <p class="muted small">{{ t("Send a CAWF alarm.") }}</p>
                 </div>
                 <div class="own-alert-page-actions">
-                    <a class="button button-secondary" href="{{ request.scope.root_path }}/alerts">{{ t("Back") }}</a>
                     <button
                         class="help-icon-button page-help-button"
                         type="button"
@@ -99,6 +98,7 @@
                 </label>
                 <div class="form-actions own-alert-compose-actions">
                     <span class="small" id="own-alert-form-status" role="status" aria-live="polite"></span>
+                    <a class="button button-secondary" href="{{ request.scope.root_path }}/alerts">{{ t("Back") }}</a>
                     <button type="submit" class="button" id="own-alert-open-confirm"{% if not own_alert_compose.tx_available %} disabled{% endif %}>
                         {{ t("Send alarm") }}
                     </button>

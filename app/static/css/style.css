@@ -8059,7 +8059,7 @@ button.message-delivery-badge {
 }
 
 .own-alert-comment-field {
-    grid-column: auto;
+    grid-column: 1 / -1;
 }
 
 .own-alert-comment-field textarea {

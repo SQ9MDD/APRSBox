@@ -688,11 +688,24 @@ class OwnAlertTests(unittest.TestCase):
         self.assertIn('id="own-alert-rf-path"', send_page.text)
         self.assertIn('name="tx_path"', send_page.text)
         self.assertIn('rows="1"', send_page.text)
-        self.assertIn('href="/alerts"', send_page.text)
+        back_button = 'class="button button-secondary" href="/alerts"'
+        self.assertIn(back_button, send_page.text)
+        self.assertLess(
+            send_page.text.index('id="own-alert-form-status"'),
+            send_page.text.index(back_button),
+        )
+        self.assertLess(
+            send_page.text.index(back_button),
+            send_page.text.index('id="own-alert-open-confirm"'),
+        )
         self.assertNotIn("alerts-page-panel", send_page.text)
         self.assertNotIn('class="alerts-table', send_page.text)
         self.assertIn(
             "grid-template-columns: repeat(4, minmax(0, 1fr));",
+            style_source,
+        )
+        self.assertIn(
+            ".own-alert-comment-field {\n    grid-column: 1 / -1;",
             style_source,
         )
         self.assertNotIn('id="own-alert-area-search"', send_page.text)
