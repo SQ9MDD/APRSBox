@@ -3447,16 +3447,44 @@ def alert_detail_page(
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     templates = request.app.state.templates
+    root_path = request.scope.get("root_path", "")
+    alert_map_config = get_alert_detail_map_config(alert, root_path=root_path)
+    if alert_map_config.get("map_mode") == "station":
+        station_settings = get_station_settings()
+        related_entity = alert.get("related_entity")
+        related_label = (
+            str(related_entity.get("label") or "")
+            if isinstance(related_entity, dict)
+            else ""
+        )
+        station_context = _station_detail_context(
+            related_label or str(alert.get("source_callsign") or ""),
+            station_settings.get("default_units", "metric"),
+            root_path=root_path,
+        )
+        if station_context is not None:
+            station_map_config = dict(station_context["station_map_config"])
+            if station_map_config.get("latitude") is None:
+                station_map_config["latitude"] = alert_map_config.get("latitude")
+            if station_map_config.get("longitude") is None:
+                station_map_config["longitude"] = alert_map_config.get("longitude")
+            station_map_config.update(
+                {
+                    "map_mode": "station",
+                    "has_position": (
+                        station_map_config.get("latitude") is not None
+                        and station_map_config.get("longitude") is not None
+                    ),
+                }
+            )
+            alert_map_config = station_map_config
     context = build_template_context(
         request,
         page_title="Alert details",
         current_user=current_user,
         active_nav="alerts",
         alert=alert,
-        alert_map_config=get_alert_detail_map_config(
-            alert,
-            root_path=request.scope.get("root_path", ""),
-        ),
+        alert_map_config=alert_map_config,
         flash=flash,
         flash_success=flash_success,
         can_manage_alerts=current_user.role in {"admin", "operator"},

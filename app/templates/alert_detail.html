@@ -5,7 +5,16 @@
 {% endblock %}
 
 {% block content %}
-<div id="alert-detail-page" class="station-detail-page alert-detail-page">
+<div
+    id="alert-detail-page"
+    class="station-detail-page alert-detail-page"
+    {% if alert_map_config.map_mode == "station" %}
+    data-station-detail-map-page
+    data-static-root="{{ request.scope.root_path }}/static/"
+    data-root-path="{{ request.scope.root_path }}"
+    data-refresh-ms="0"
+    {% endif %}
+>
 {% if flash %}
 <section class="panel">
     <div class="panel-body">
@@ -146,9 +155,43 @@
         <div class="panel-body">
             <div class="panel-header">
                 <div class="panel-header-copy">
-                    <h2>{{ t("Alert areas") }}</h2>
+                    <h2>{{ t("Station Map") if alert_map_config.map_mode == "station" else t("Alert areas") }}</h2>
                 </div>
             </div>
+            {% if alert_map_config.map_mode == "station" %}
+            <div
+                id="station-detail-map-root"
+                class="station-detail-map-root alert-detail-map-root"
+                data-latitude="{{ alert_map_config.latitude if alert_map_config.latitude is not none else '' }}"
+                data-longitude="{{ alert_map_config.longitude if alert_map_config.longitude is not none else '' }}"
+                data-zoom="{{ alert_map_config.zoom }}"
+                data-tile-url="{{ alert_map_config.tile_url }}"
+                data-tile-attribution="{{ alert_map_config.tile_attribution }}"
+                data-tile-min-zoom="{{ alert_map_config.tile_min_zoom }}"
+                data-tile-max-zoom="{{ alert_map_config.tile_max_zoom }}"
+                data-tile-subdomains="{{ alert_map_config.tile_subdomains }}"
+                data-display-callsign="{{ alert_map_config.display_callsign }}"
+                data-symbol-icon="{{ alert_map_config.symbol_icon }}"
+                data-symbol-table="{{ alert_map_config.symbol_table }}"
+                data-symbol-code="{{ alert_map_config.symbol_code }}"
+                data-track-points='{{ alert_map_config.track_points|tojson }}'
+                {% if not alert_map_config.has_position %}hidden{% endif %}
+            >
+                <div
+                    id="station-detail-map-canvas"
+                    class="station-detail-map-canvas alert-detail-map-canvas"
+                    aria-label="{{ t('Station detail map') }}"
+                ></div>
+            </div>
+            <div
+                id="station-map-placeholder"
+                class="station-map-placeholder alert-detail-map-placeholder"
+                {% if alert_map_config.has_position %}hidden{% endif %}
+            >
+                <strong>{{ t("No position available") }}</strong>
+                <span class="muted">{{ t("No position available for this station.") }}</span>
+            </div>
+            {% else %}
             <div
                 id="alert-detail-map-root"
                 class="station-detail-map-root alert-detail-map-root"
@@ -174,6 +217,7 @@
                 <img src="{{ request.scope.root_path }}/static/icons/earth-off.svg" alt="">
                 <strong>{{ t("No area definitions") }}</strong>
             </div>
+            {% endif %}
         </div>
     </article>
 </section>
@@ -275,5 +319,9 @@
 
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
+{% if alert_map_config.map_mode == "station" %}
+<script src="{{ request.scope.root_path }}/static/js/station-detail-map.js?v={{ app_version }}-alert-emergency-1"></script>
+{% else %}
 <script src="{{ request.scope.root_path }}/static/js/alert-detail-map.js?v={{ app_version }}-contrast-1"></script>
+{% endif %}
 {% endblock %}

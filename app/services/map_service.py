@@ -14,6 +14,7 @@ from app.services.content import (
     build_station_detail_href,
     format_decoded_data_for_display,
     get_aprs_symbol_icon_fallback_path,
+    get_aprs_symbol_icon_path,
     get_configured_modem_interfaces,
     get_station_settings,
     get_visible_station_snapshot_revision,
@@ -879,8 +880,51 @@ def get_station_detail_map_config(station: dict[str, Any], *, root_path: str = "
 
 def get_alert_detail_map_config(alert: dict[str, Any], *, root_path: str = "") -> dict[str, Any]:
     tile_layer = resolve_active_tile_layer(root_path=root_path)
+    if not str(alert.get("alarm_group") or "").strip():
+        parsed = parse_tnc2_frame(str(alert.get("last_frame_line") or ""))
+        aprs_data = dict((parsed or {}).get("aprs_data") or {})
+        latitude = _parse_coordinate(alert.get("latitude"))
+        longitude = _parse_coordinate(alert.get("longitude"))
+        if latitude is None:
+            latitude = _parse_coordinate(aprs_data.get("latitude"))
+        if longitude is None:
+            longitude = _parse_coordinate(aprs_data.get("longitude"))
+
+        symbol = str(aprs_data.get("symbol") or "")
+        symbol_table = symbol[:1] if len(symbol) >= 2 else ""
+        symbol_code = symbol[1:2] if len(symbol) >= 2 else ""
+        related_entity = alert.get("related_entity")
+        related_label = (
+            str(related_entity.get("label") or "").strip()
+            if isinstance(related_entity, dict)
+            else ""
+        )
+        return {
+            "map_mode": "station",
+            "latitude": latitude,
+            "longitude": longitude,
+            "zoom": DETAIL_STATION_ZOOM,
+            "tile_url": tile_layer["tile_url"],
+            "tile_attribution": tile_layer["tile_attribution"],
+            "tile_source_name": tile_layer["tile_source_name"],
+            "tile_min_zoom": tile_layer["tile_min_zoom"],
+            "tile_max_zoom": tile_layer["tile_max_zoom"],
+            "tile_subdomains": tile_layer["tile_subdomains"],
+            "display_callsign": related_label or str(alert.get("source_callsign") or "").strip(),
+            "symbol_icon": (
+                get_aprs_symbol_icon_path(symbol)
+                if len(symbol) >= 2
+                else get_aprs_symbol_icon_fallback_path()
+            ),
+            "symbol_table": symbol_table,
+            "symbol_code": symbol_code,
+            "track_points": [],
+            "has_position": latitude is not None and longitude is not None,
+        }
+
     feature_collection = build_alert_area_feature_collection([alert])
     return {
+        "map_mode": "areas",
         "tile_url": tile_layer["tile_url"],
         "tile_attribution": tile_layer["tile_attribution"],
         "tile_source_name": tile_layer["tile_source_name"],

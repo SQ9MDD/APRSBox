@@ -717,6 +717,55 @@ class AprsAlertTests(unittest.TestCase):
         self.assertNotIn("<th>Logical alert ID</th>", response.text)
         self.assertNotIn("<th>Completion status</th>", response.text)
 
+    def test_alert_details_use_station_map_only_for_emergency_frames(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from app.dependencies import get_current_user
+        from app.main import app
+        from app.models import UserIdentity
+
+        with temporary_database():
+            receive_emergency(timestamp="2026-07-30T20:00:00+00:00")
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    GROUP_WARNING_LINE,
+                    source="APRS-IS",
+                    source_kind="aprsis",
+                    timestamp="2026-07-30T20:01:00+00:00",
+                )
+            )
+            emergency_id = int(
+                fetch_one("SELECT id FROM aprs_alerts WHERE alarm_group IS NULL")["id"]
+            )
+            group_id = int(
+                fetch_one("SELECT id FROM aprs_alerts WHERE alarm_group = 'PL-WARN'")["id"]
+            )
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                emergency_response = client.get(f"/alerts/{emergency_id}")
+                group_response = client.get(f"/alerts/{group_id}")
+            finally:
+                app.dependency_overrides.clear()
+
+        self.assertEqual(emergency_response.status_code, 200)
+        self.assertIn('id="station-detail-map-root"', emergency_response.text)
+        self.assertIn('data-display-callsign="SP8ABC-9"', emergency_response.text)
+        self.assertIn("station-detail-map.js", emergency_response.text)
+        self.assertNotIn('id="alert-detail-map-root"', emergency_response.text)
+        self.assertNotIn("alert-detail-map.js", emergency_response.text)
+
+        self.assertEqual(group_response.status_code, 200)
+        self.assertIn('id="alert-detail-map-root"', group_response.text)
+        self.assertIn("alert-detail-map.js", group_response.text)
+        self.assertNotIn('id="station-detail-map-root"', group_response.text)
+        self.assertNotIn("station-detail-map.js", group_response.text)
+
     def test_shared_modal_is_rendered_from_base_and_opened_by_alert_list(self) -> None:
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         map_source = Path("app/templates/map.html").read_text(encoding="utf-8")

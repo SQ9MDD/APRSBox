@@ -193,6 +193,36 @@ def _receive_multipart_group_alert(
 
 
 class AlertAreaResolverTests(unittest.TestCase):
+    def test_emergency_alert_detail_map_config_uses_station_marker_data(self) -> None:
+        with temporary_database():
+            config = get_alert_detail_map_config(
+                {
+                    "id": 16,
+                    "alarm_group": "",
+                    "alert_type": "EMERGENCY",
+                    "source_callsign": "SP8ABC-9",
+                    "latitude": 52.30617,
+                    "longitude": 21.08117,
+                    "last_frame_line": (
+                        "SP8ABC-9>APRS:!5218.37N\\02104.87E$"
+                        "!EMERGENCY!Need help"
+                    ),
+                    "related_entity": {
+                        "label": "SP8ABC-9",
+                        "kind": "station",
+                    },
+                }
+            )
+
+        self.assertEqual(config["map_mode"], "station")
+        self.assertTrue(config["has_position"])
+        self.assertEqual(config["display_callsign"], "SP8ABC-9")
+        self.assertEqual(config["latitude"], 52.30617)
+        self.assertEqual(config["longitude"], 21.08117)
+        self.assertEqual(config["symbol_table"], "\\")
+        self.assertEqual(config["symbol_code"], "$")
+        self.assertEqual(config["track_points"], [])
+
     def test_alert_detail_map_config_contains_only_the_selected_alert_areas(self) -> None:
         with temporary_database():
             config = get_alert_detail_map_config(
@@ -213,6 +243,7 @@ class AlertAreaResolverTests(unittest.TestCase):
             )
 
         self.assertTrue(config["has_area_definitions"])
+        self.assertEqual(config["map_mode"], "areas")
         self.assertEqual(len(config["feature_collection"]["features"]), 1)
         properties = config["feature_collection"]["features"][0]["properties"]
         self.assertEqual(properties["aprsbox_area_code"], "1465")
