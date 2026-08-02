@@ -8005,6 +8005,18 @@ button.message-delivery-badge {
     }
 }
 
+.own-alert-top-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--space-4);
+}
+
+.own-alert-top-grid > .panel {
+    min-width: 0;
+    height: 100%;
+}
+
 .own-alert-compose-panel .panel-body,
 .own-alerts-panel .panel-body {
     gap: var(--space-3);
@@ -8020,30 +8032,30 @@ button.message-delivery-badge {
 
 .own-alert-compose-form {
     display: grid;
-    grid-template-columns: minmax(8rem, 0.75fr) minmax(13rem, 1.7fr) minmax(12rem, 1.25fr) minmax(8rem, 0.75fr) minmax(9rem, 0.8fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: start;
-    gap: var(--space-3);
+    gap: var(--space-2);
 }
 
 .own-alert-area-field {
-    grid-row: span 2;
+    grid-row: auto;
 }
 
 .own-alert-area-field input,
 .own-alert-area-field select {
-    min-height: 2.25rem;
+    min-height: 2rem;
 }
 
 .own-alert-comment-field {
-    grid-column: 1 / span 4;
+    grid-column: 1 / -1;
 }
 
 .own-alert-comment-field textarea {
-    min-height: 4.6rem;
+    min-height: 3.25rem;
 }
 
 .own-alert-compose-actions {
-    grid-column: 5;
+    grid-column: 1 / -1;
     justify-content: flex-end;
     align-self: end;
 }
@@ -8053,13 +8065,26 @@ button.message-delivery-badge {
 }
 
 .own-alerts-table {
-    min-width: 78rem;
+    min-width: 60rem;
     table-layout: auto;
 }
 
 .own-alerts-table th,
 .own-alerts-table td {
     white-space: nowrap;
+}
+
+.own-alerts-table th:last-child,
+.own-alerts-table td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    background: var(--panel);
+    box-shadow: -0.35rem 0 0.5rem rgba(0, 0, 0, 0.12);
+}
+
+.own-alerts-table th:last-child {
+    background: var(--panel-soft);
 }
 
 .own-alerts-table td:nth-child(4),
@@ -8177,16 +8202,9 @@ button.message-delivery-badge {
     flex-wrap: wrap;
 }
 
-@media (max-width: 1100px) {
-    .own-alert-compose-form {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .own-alert-area-field,
-    .own-alert-comment-field,
-    .own-alert-compose-actions {
-        grid-column: 1 / -1;
-        grid-row: auto;
+@media (max-width: 900px) {
+    .own-alert-top-grid {
+        grid-template-columns: 1fr;
     }
 }
 

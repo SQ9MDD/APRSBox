@@ -3438,6 +3438,10 @@ def alerts_page(
         for option in group["event_options"]:
             option["translated_label"] = translator(option["label"])
             event_labels[str(option["code"])] = str(option["translated_label"])
+        for option in group["hazard_options"]:
+            option["translated_label"] = translator(option["label"])
+        for option in group["level_options"]:
+            option["translated_label"] = translator(option["label"])
     active_own_alerts = list_active_own_alerts()
     for own_alert in active_own_alerts:
         own_alert["event_label"] = event_labels.get(

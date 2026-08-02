@@ -30,6 +30,8 @@ from app.services.warning_groups import (
     list_supported_warning_groups,
     warning_event_is_supported,
     warning_event_options,
+    warning_hazard_options,
+    warning_level_options,
 )
 
 
@@ -124,6 +126,8 @@ def get_own_alert_compose_context() -> dict[str, Any]:
                 "protocol": profile.protocol,
                 "area_encoding": profile.area_encoding,
                 "event_options": _translated_event_options(profile.group),
+                "hazard_options": warning_hazard_options(profile.group),
+                "level_options": warning_level_options(),
                 "default_area_code": (
                     str(default_area.get("code") or "") if default_area else ""
                 ),
@@ -206,8 +210,29 @@ def validate_own_alert_payload(
     if area is None:
         raise ValueError("Area code does not exist in the alarm group GeoJSON.")
     event_code = str(payload.get("event_code") or "").strip().upper()
+    if not event_code:
+        event_family = str(
+            payload.get("event_family")
+            or payload.get("hazard_code")
+            or payload.get("hazard")
+            or ""
+        ).strip().upper()
+        try:
+            severity_level = int(
+                payload.get("severity_level")
+                if payload.get("severity_level") is not None
+                else payload.get("level")
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Unsupported alarm severity level.") from exc
+        event_code = f"{event_family}{severity_level}"
     if not warning_event_is_supported(group, event_code):
         raise ValueError("Unsupported alarm event type.")
+    try:
+        severity_level = int(event_code[-1])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Unsupported alarm severity level.") from exc
+    event_family = event_code[:-1]
     try:
         validity_hours = int(payload.get("validity_hours"))
     except (TypeError, ValueError) as exc:
@@ -260,6 +285,8 @@ def validate_own_alert_payload(
         "target_group": group,
         "area": area,
         "event_code": event_code,
+        "event_family": event_family,
+        "severity_level": severity_level,
         "validity_hours": validity_hours,
         "repeat_interval_minutes": repeat_interval,
         "comment": comment,
@@ -287,6 +314,8 @@ def preview_own_alert(payload: Mapping[str, Any], *, now: Any = None) -> dict[st
         "target_group": validated["target_group"],
         "area": validated["area"],
         "event_code": validated["event_code"],
+        "event_family": validated["event_family"],
+        "severity_level": validated["severity_level"],
         "valid_until": validated["valid_until"].isoformat(),
         "expiry": validated["expiry"],
         "repeat_interval_minutes": validated["repeat_interval_minutes"],

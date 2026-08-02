@@ -80,6 +80,20 @@ def payload(**overrides):
     return result
 
 
+def family_level_payload(**overrides):
+    result = {
+        "target_group": "PL-WARN",
+        "area_code": "1465",
+        "event_family": "TSTORM",
+        "severity_level": 2,
+        "validity_hours": 24,
+        "repeat_interval_minutes": 30,
+        "comment": "Silna burza",
+    }
+    result.update(overrides)
+    return result
+
+
 def queued_payloads():
     return [
         json.loads(str(row["payload_json"]))
@@ -139,6 +153,17 @@ class OwnAlertTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         validate_own_alert_payload(invalid, now=NOW, require_tx=False)
 
+    def test_backend_accepts_separate_hazard_and_severity_fields(self):
+        with temporary_database():
+            validated = validate_own_alert_payload(
+                family_level_payload(),
+                now=NOW,
+                require_tx=False,
+            )
+        self.assertEqual(validated["event_code"], "TSTORM2")
+        self.assertEqual(validated["event_family"], "TSTORM")
+        self.assertEqual(validated["severity_level"], 2)
+
     def test_generator_builds_single_and_multipart_messages_with_one_id(self):
         single = generate_aprs_group_warning_parts(
             expiry="031000z",
@@ -163,6 +188,19 @@ class OwnAlertTests(unittest.TestCase):
                 for part in multipart
             )
         )
+
+    def test_parser_keeps_area_when_legacy_comment_follows_it(self):
+        parsed = parse_aprs_group_warning_content(
+            "031000z,TSTORM2,@A7F3,1/1,1465 Silna burza, mozliwe podtopienia{AAAAA"
+        )
+        self.assertEqual(parsed["area_code"], "1465")
+        self.assertEqual(parsed["area_codes"], ["1465"])
+        self.assertEqual(parsed["comment"], "Silna burza,mozliwe podtopienia")
+        parsed_comma_comment = parse_aprs_group_warning_content(
+            "031000z,TSTORM2,@A7F3,1/1,1465,LOUD TEXT,RAIN{AAAAA"
+        )
+        self.assertEqual(parsed_comma_comment["area_codes"], ["1465"])
+        self.assertEqual(parsed_comma_comment["comment"], "LOUD TEXT,RAIN")
 
     def test_dynamic_comment_limit_counts_headers_and_parts(self):
         with temporary_database():
@@ -401,6 +439,15 @@ class OwnAlertTests(unittest.TestCase):
                         json=payload(target_group="LOCALWARN"),
                     )
                     sent = client.post("/api/alerts/send", json=payload())
+                    refreshed_before_cancel = client.get("/alerts")
+                    cancelled = client.post(
+                        f"/alerts/own/{sent.json()['id']}/cancel",
+                        follow_redirects=False,
+                    )
+                    cancelled_status = fetch_one(
+                        "SELECT status FROM own_aprs_alerts WHERE id = ?",
+                        (sent.json()["id"],),
+                    )["status"]
                     refreshed = client.get("/alerts")
             finally:
                 app.dependency_overrides.clear()
@@ -408,14 +455,18 @@ class OwnAlertTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertLess(page.text.index("Send alarm"), page.text.index("My active alarms"))
         self.assertLess(page.text.index("My active alarms"), page.text.index("alerts-page-panel"))
-        self.assertIn('type="search"', page.text)
+        self.assertIn('id="own-alert-hazard"', page.text)
+        self.assertIn('id="own-alert-level"', page.text)
+        self.assertNotIn('id="own-alert-area-search"', page.text)
         self.assertEqual(areas.status_code, 200)
         self.assertIn("1465", {area["code"] for area in areas.json()["areas"]})
         self.assertEqual(preview.status_code, 200)
         self.assertIn("remaining_characters", preview.json())
         self.assertEqual(rejected.status_code, 400)
         self.assertEqual(sent.status_code, 200)
-        self.assertIn(sent.json()["alert_id"], refreshed.text)
+        self.assertEqual(cancelled.status_code, 303)
+        self.assertEqual(cancelled_status, "cancelled")
+        self.assertIn(sent.json()["alert_id"], refreshed_before_cancel.text)
 
 
 if __name__ == "__main__":

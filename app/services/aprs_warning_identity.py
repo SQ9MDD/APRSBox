@@ -22,6 +22,7 @@ _CAWF_ALERT_ID_RE = re.compile(r"^[A-F0-9]{4}$", re.ASCII)
 _CAWF_MESSAGE_ID_RE = re.compile(r"^[A-F0-9]{5}$", re.ASCII)
 _CAWF_EVENT_CODE_RE = re.compile(r"^[A-Z][A-Z0-9-]{1,15}$", re.ASCII)
 _CAWF_AREA_CODE_RE = re.compile(r"^[A-Z0-9-]{1,8}$", re.ASCII)
+_CAWF_AREA_PREFIX_RE = re.compile(r"^(?P<area>[A-Z0-9-]{1,8})(?:\s+|$)", re.ASCII)
 
 CAWF_MAX_MESSAGE_LENGTH = 67
 CAWF_MAX_PARTS = 9
@@ -371,9 +372,40 @@ def parse_aprs_group_warning_content(raw_content: Any) -> dict[str, Any]:
                 part_number = possible_part_number
                 parts_total = possible_parts_total
                 area_field_offset = 4
-    area_codes = normalize_warning_area_codes(
-        fields[area_field_offset:] if len(fields) > area_field_offset else []
-    )
+    area_codes: list[str] = []
+    legacy_comment_parts: list[str] = []
+    legacy_comment_started = False
+    for raw_area in fields[area_field_offset:]:
+        candidate = str(raw_area or "").strip()
+        if not legacy_comment_started and _CAWF_AREA_CODE_RE.fullmatch(candidate):
+            area_codes.extend(normalize_warning_area_codes(candidate))
+            continue
+        prefix_match = (
+            _CAWF_AREA_PREFIX_RE.match(candidate)
+            if not legacy_comment_started
+            else None
+        )
+        prefix_area = prefix_match.group("area") if prefix_match is not None else ""
+        prefix_remainder = (
+            candidate[prefix_match.end() :].strip()
+            if prefix_match is not None
+            else ""
+        )
+        # Current territorial profiles use numeric county/zone identifiers.
+        # Only treat a whitespace suffix as a legacy comment after such an
+        # identifier; otherwise a normal comment like "LOUD TEXT" would
+        # incorrectly become an additional area.
+        if prefix_match is not None and (
+            not prefix_remainder or prefix_area.isdigit()
+        ):
+            area_codes.extend(normalize_warning_area_codes(prefix_area))
+            if prefix_remainder:
+                legacy_comment_parts.append(prefix_remainder)
+                legacy_comment_started = True
+        elif candidate:
+            legacy_comment_parts.append(candidate)
+            legacy_comment_started = True
+    area_codes = normalize_warning_area_codes(area_codes)
     severity_match = _SEVERITY_SUFFIX_RE.search(event_code)
     result = {
         "expiry": expiry,
@@ -392,6 +424,8 @@ def parse_aprs_group_warning_content(raw_content: Any) -> dict[str, Any]:
     }
     if separator:
         result["comment"] = comment
+    elif legacy_comment_parts:
+        result["comment"] = ",".join(legacy_comment_parts)
     if event_code.strip().upper() == CAWF_CANCEL_EVENT_CODE:
         result["is_cancel"] = True
     return result

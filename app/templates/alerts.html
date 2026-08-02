@@ -13,6 +13,7 @@
 </section>
 {% endif %}
 
+<div class="own-alert-top-grid">
 <section class="panel own-alert-compose-panel">
     <div class="panel-body">
         <div class="panel-header own-alert-panel-header">
@@ -44,14 +45,6 @@
             </label>
             <label class="own-alert-area-field">
                 <span>{{ t("Area") }}</span>
-                <input
-                    type="search"
-                    id="own-alert-area-search"
-                    placeholder="{{ t('Search areas') }}"
-                    autocomplete="off"
-                    aria-controls="own-alert-area"
-                    aria-label="{{ t('Search areas') }}"
-                >
                 <select id="own-alert-area" name="area_code" required disabled aria-label="{{ t('Area') }}">
                     <option value="">{{ t("Loading areas...") }}</option>
                 </select>
@@ -59,7 +52,11 @@
             </label>
             <label>
                 <span>{{ t("Hazard") }}</span>
-                <select id="own-alert-event" name="event_code" required></select>
+                <select id="own-alert-hazard" name="event_family" required></select>
+            </label>
+            <label>
+                <span>{{ t("Severity level") }}</span>
+                <select id="own-alert-level" name="severity_level" required></select>
             </label>
             <label>
                 <span>{{ t("Validity") }}</span>
@@ -183,6 +180,7 @@
         </div>
     </div>
 </section>
+</div>
 
 <div class="own-alert-modal" id="own-alert-confirm-modal" hidden>
     <div class="own-alert-modal-backdrop" data-close-own-alert-confirm></div>

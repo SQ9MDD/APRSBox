@@ -85,6 +85,25 @@ def warning_event_options(group: Any) -> list[dict[str, Any]]:
     ]
 
 
+def warning_hazard_options(group: Any) -> list[dict[str, Any]]:
+    """Return the profile's event families without the protocol severity suffix."""
+
+    profile = get_warning_group_profile(group)
+    if profile is None:
+        return []
+    return [
+        {"code": family, "label": label}
+        for family, label in profile.event_families
+    ]
+
+
+def warning_level_options() -> list[dict[str, Any]]:
+    return [
+        {"value": level, "label": f"Level {level}"}
+        for level in (1, 2, 3)
+    ]
+
+
 def warning_event_is_supported(group: Any, event_code: Any) -> bool:
     normalized = str(event_code or "").strip().upper()
     return any(option["code"] == normalized for option in warning_event_options(group))

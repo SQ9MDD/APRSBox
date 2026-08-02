@@ -105,10 +105,10 @@
     const form = document.getElementById("own-alert-compose-form");
     if (!form) return;
     const target = document.getElementById("own-alert-target");
-    const areaSearch = document.getElementById("own-alert-area-search");
     const areaSelect = document.getElementById("own-alert-area");
     const areaStatus = document.getElementById("own-alert-area-status");
-    const eventSelect = document.getElementById("own-alert-event");
+    const hazardSelect = document.getElementById("own-alert-hazard");
+    const levelSelect = document.getElementById("own-alert-level");
     const validity = document.getElementById("own-alert-validity");
     const comment = document.getElementById("own-alert-comment");
     const repeat = document.getElementById("own-alert-repeat");
@@ -128,7 +128,8 @@
     const collectPayload = () => ({
         target_group: target?.value || "",
         area_code: areaSelect?.value || "",
-        event_code: eventSelect?.value || "",
+        event_family: hazardSelect?.value || "",
+        severity_level: Number(levelSelect?.value || 0),
         validity_hours: Number(validity?.value || 0),
         comment: comment?.value || "",
         repeat_interval_minutes: Number(repeat?.value || 0),
@@ -139,38 +140,47 @@
         const parent = area.parent ? ` · ${area.parent}` : "";
         return `${area.name} — ${area.code}${parent}`;
     };
-    const renderAreas = (query = "") => {
+    const renderAreas = () => {
         if (!areaSelect) return;
         const selected = areaSelect.value;
-        const normalizedQuery = String(query || "").trim().toLocaleLowerCase();
-        const filtered = normalizedQuery
-            ? areas.filter((area) => areaLabel(area).toLocaleLowerCase().includes(normalizedQuery))
-            : areas;
         areaSelect.replaceChildren();
         const placeholder = document.createElement("option");
         placeholder.value = "";
         placeholder.textContent = i18n.selectArea || "Select an area";
         areaSelect.append(placeholder);
-        filtered.forEach((area) => {
+        areas.forEach((area) => {
             const option = document.createElement("option");
             option.value = area.code;
             option.textContent = areaLabel(area);
             areaSelect.append(option);
         });
-        if (filtered.some((area) => area.code === selected)) areaSelect.value = selected;
+        if (areas.some((area) => area.code === selected)) areaSelect.value = selected;
     };
-    const renderEvents = () => {
-        if (!eventSelect || !target) return;
-        const selected = eventSelect.value;
-        const options = groups.get(target.value)?.event_options || [];
-        eventSelect.replaceChildren();
+    const renderHazards = () => {
+        if (!hazardSelect || !target) return;
+        const selected = hazardSelect.value;
+        const options = groups.get(target.value)?.hazard_options || [];
+        hazardSelect.replaceChildren();
         options.forEach((event) => {
             const option = document.createElement("option");
             option.value = event.code;
-            option.textContent = `${event.translated_label || event.label} — ${event.code}`;
-            eventSelect.append(option);
+            option.textContent = event.translated_label || event.label;
+            hazardSelect.append(option);
         });
-        if (options.some((option) => option.code === selected)) eventSelect.value = selected;
+        if (options.some((option) => option.code === selected)) hazardSelect.value = selected;
+    };
+    const renderLevels = () => {
+        if (!levelSelect || !target) return;
+        const selected = levelSelect.value || "2";
+        const options = groups.get(target.value)?.level_options || [];
+        levelSelect.replaceChildren();
+        options.forEach((level) => {
+            const option = document.createElement("option");
+            option.value = level.value;
+            option.textContent = level.translated_label || level.label;
+            levelSelect.append(option);
+        });
+        if (options.some((option) => String(option.value) === selected)) levelSelect.value = selected;
     };
     const clearPreview = (message = "") => {
         lastPreview = null;
@@ -179,7 +189,7 @@
     };
     const requestPreview = async () => {
         const payload = collectPayload();
-        if (!payload.target_group || !payload.area_code || !payload.event_code) {
+        if (!payload.target_group || !payload.area_code || !payload.event_family || !payload.severity_level) {
             clearPreview(i18n.selectArea || "Select an area");
             return null;
         }
@@ -226,7 +236,6 @@
         areaSelect.disabled = true;
         areaSelect.replaceChildren(new Option(i18n.loadingAreas || "Loading areas...", ""));
         if (areaStatus) areaStatus.textContent = i18n.loadingAreas || "";
-        if (areaSearch) areaSearch.value = "";
         clearPreview();
         try {
             const response = await fetch(
@@ -258,10 +267,10 @@
     };
 
     target?.addEventListener("change", () => {
-        renderEvents();
+        renderHazards();
+        renderLevels();
         void loadAreas();
     });
-    areaSearch?.addEventListener("input", () => renderAreas(areaSearch.value));
     areaSelect?.addEventListener("change", () => {
         if (areaStatus && areaSelect.value) {
             areaStatus.textContent = areaLabel(selectedArea());
@@ -269,7 +278,7 @@
         }
         schedulePreview();
     });
-    [eventSelect, validity, repeat].forEach((field) => field?.addEventListener("change", schedulePreview));
+    [hazardSelect, levelSelect, validity, repeat].forEach((field) => field?.addEventListener("change", schedulePreview));
     comment?.addEventListener("input", schedulePreview);
 
     const populateConfirmation = (preview) => {
@@ -279,13 +288,13 @@
         };
         setField("target_group", preview.target_group);
         setField("area", areaLabel(preview.area));
-        const event = (groups.get(preview.target_group)?.event_options || [])
-            .find((option) => option.code === preview.event_code);
+        const hazard = (groups.get(preview.target_group)?.hazard_options || [])
+            .find((option) => option.code === preview.event_family);
+        const level = (groups.get(preview.target_group)?.level_options || [])
+            .find((option) => Number(option.value) === Number(preview.severity_level));
         setField(
             "event_code",
-            event
-                ? `${event.translated_label || event.label} — ${event.code}`
-                : preview.event_code
+            `${hazard?.translated_label || hazard?.label || preview.event_family} — ${level?.translated_label || level?.label || preview.severity_level}`
         );
         setField("valid_until", new Date(preview.valid_until).toLocaleString());
         setField("repeat", format(i18n.minutes, { count: preview.repeat_interval_minutes }));
@@ -350,6 +359,7 @@
         });
     });
 
-    renderEvents();
+    renderHazards();
+    renderLevels();
     void loadAreas();
 })();
